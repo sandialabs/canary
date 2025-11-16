@@ -104,10 +104,6 @@ class Session:
             raise NotASessionError(root)
         self: Session = object.__new__(cls)
         self.initialize_properties(anchor=root.parent, name=root.name)
-        # Load the configuration used to create this session
-        file = self.root / "config"
-        with open(file) as fh:
-            config.load_snapshot(fh)
         return self
 
     @property
@@ -189,11 +185,14 @@ class Session:
                 case.status.set("PENDING")
             with working_dir(str(self.work_dir)):
                 config.pluginmanager.hook.canary_runtests(cases=cases)
+        except TimeoutError:
+            logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         finally:
             returncode = compute_returncode(cases)
-            stop = time.monotonic()
-            duration = stop - start
-            logger.info(f"Finished session in {duration:.2f} s. with returncode {returncode}")
+            logger.info(
+                f"@*{{Finished}} session in {(time.monotonic() - start):.2f} s. "
+                f"with returncode {returncode}"
+            )
             return {"returncode": returncode, "cases": cases}
 
     def enter(self) -> None: ...

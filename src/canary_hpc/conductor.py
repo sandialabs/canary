@@ -153,8 +153,12 @@ class CanaryHPCConductor:
         The session returncode (0 for success)
 
         """
-        queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
-        runner = Runner()
+        try:
+            queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
+            runner = Runner()
+        except Exception:
+            logger.exception("Failed to create batch runner")
+            raise
         with ResourceQueueExecutor(queue, runner) as ex:
             return ex.run(backend=self.backend.name)
 

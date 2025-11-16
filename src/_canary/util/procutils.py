@@ -4,6 +4,7 @@
 
 import multiprocessing
 import os
+import signal
 import time
 import warnings
 from typing import Any
@@ -194,3 +195,10 @@ class MeasuredProcess(multiprocessing.Process):
                 measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
 
         return measurements
+
+    def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
+        logger.debug(f"Terminating process {self.pid}")
+        self._sample_metrics()
+        os.kill(self.pid, signum)
+        time.sleep(grace_period)
+        self.kill()

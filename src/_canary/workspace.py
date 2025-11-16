@@ -295,7 +295,7 @@ class Workspace:
         view_entries: dict[str, list[str]] = {}
         for case in session.cases:
             if case.status in ("READY", "PENDING"):
-                case.status.set("ERROR", message="Case did not run")
+                case.status.set("NOT_RUN", message="Case did not start")
             entry = {"session": session.name, **case.asdict()}
             entry["spec"]["name"] = case.spec.name
             entry["spec"]["fullname"] = case.spec.fullname
@@ -349,7 +349,7 @@ class Workspace:
         self.update_view(view_entries)
 
     def update_view(self, view_entries: dict[Path, list[Path]]) -> None:
-        logger.info(f"Updating view at {self.view}")
+        logger.info(f"@*{{Updating}} view at {self.view}")
         if self.view is None:
             return
         for root, paths in view_entries.items():
@@ -602,6 +602,7 @@ class Workspace:
     def lock(
         self,
         *,
+        paths: list[str] | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
@@ -633,6 +634,9 @@ class Workspace:
         """
         specs: list[ResolvedSpec]
         generators = self.load_testcase_generators()
+        if paths:
+            relative_to = lambda f1, f2: Path(f1.file).is_relative_to(Path(f2).absolute())
+            generators = [g for p in paths for g in generators if relative_to(g, p)]
         meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
         sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
         file = self.cache_dir / "lock" / sha[:20]
@@ -680,6 +684,7 @@ class Workspace:
     def make_selection(
         self,
         tag: str | None,
+        paths: list[str] | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
@@ -689,6 +694,7 @@ class Workspace:
     ) -> SpecSelection:
         logger.info("@*{Selecting} test cases from generators")
         kwds = dict(
+            paths=paths,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,

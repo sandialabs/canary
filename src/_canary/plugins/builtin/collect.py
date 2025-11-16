@@ -53,7 +53,7 @@ class Collector:
     @hookimpl(specname="canary_collect_generators")
     def collect_from_file(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
         root = Path(scan_path.root)
-        if not root.is_file():
+        if root.is_file():
             try:
                 if f := self.from_file(root.parent, root.name):
                     return [f]

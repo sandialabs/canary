@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 import multiprocessing as mp
 import os
+import signal
 import time
 from functools import cached_property
 from pathlib import Path
@@ -82,14 +83,13 @@ class ResourceQueueExecutor:
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
         timeout = float(config.get("timeout:session", -1))
-
-        qsize = len(self.queue)
-        qrank = 0
+        qrank, qsize = 0, len(self.queue)
         start = time.time()
         while True:
             try:
                 if timeout >= 0.0 and time.time() - start > timeout:
-                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
+                    self._terminate_all(signal.SIGUSR2)
+                    raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
 
                 self._check_keyboard_input(start)
 
@@ -101,6 +101,8 @@ class ResourceQueueExecutor:
 
                 # Get a job from the queue
                 job = self.queue.get()
+                job.qrank = qrank
+                job.qsize = qsize
 
                 # Create a result queue for this specific process
                 result_queue = mp.Queue()
@@ -111,13 +113,11 @@ class ResourceQueueExecutor:
                     args=(job, result_queue),
                     kwargs={"qsize": qsize, "qrank": qrank, **kwargs},
                 )
-
                 proc.start()
                 qrank += 1
 
                 # Store process with its result queue, job, start time, and timeout
-                job_timeout = job.timeout * self.timeout_multiplier
-                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job_timeout)
+                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job.timeout)
 
             except Busy:
                 # Queue is busy, wait and try again
@@ -129,7 +129,10 @@ class ResourceQueueExecutor:
                 break
 
             except KeyboardInterrupt:
-                self._terminate_all()
+                self._terminate_all(signal.SIGINT)
+                break
+
+            except TimeoutError:
                 break
 
             except BaseException:
@@ -145,24 +148,15 @@ class ResourceQueueExecutor:
         for pid, (proc, _, job, start_time, timeout) in list(self.inflight.items()):
             if proc.is_alive():
                 elapsed = current_time - start_time
-                if elapsed > timeout:
+                if elapsed > timeout * self.timeout_multiplier:
                     # Get measurements before killing
                     measurements = proc.get_measurements()
+                    proc.shutdown(signal.SIGUSR2, grace_period=0.1)
+                    job.refresh()
                     job.measurements.update(measurements)
-
-                    proc.kill()
                     proc.join()
-
-                    # Remove from active processes
                     self.inflight.pop(pid)
-
-                    # Send timeout result
-                    job.status.set(
-                        "TIMEOUT",
-                        message=f"Process exceeded timeout of {timeout} seconds",
-                    )
                     self.queue.done(job)
-                    job.save()
 
     def _clean_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
@@ -190,7 +184,7 @@ class ResourceQueueExecutor:
                 logger.exception(f"Error retrieving result for {job}")
 
             if result is not None:
-                job.update(**result)
+                job.put(result)
             else:
                 logger.error(f"No result found for job {job} (pid {pid})")
 
@@ -202,7 +196,6 @@ class ResourceQueueExecutor:
 
             proc.join()  # Clean up the process
             self.queue.done(job)
-            job.save()
             logger.debug(f"Process {pid} finished and cleaned up")
 
     def _wait_for_slot(self) -> None:
@@ -217,28 +210,26 @@ class ResourceQueueExecutor:
         while self.inflight:
             self._clean_finished_processes()
             if self.inflight:
-                time.sleep(0.1)
+                time.sleep(0.05)
 
-    def _terminate_all(self):
+    def _terminate_all(self, signum: int):
         """Terminate all active processes."""
         for pid, (proc, _, job, _, _) in self.inflight.items():
             if proc.is_alive():
-                logger.warning(f"Terminating process {pid} (job {job})")
-                proc.terminate()
+                measurements = proc.get_measurements()
+                proc.shutdown(signum, grace_period=0.1)
+                job.refresh()
+                job.measurements.update(measurements)
                 self.queue.done(job)
-                job.save()
-
-        # Give processes time to terminate gracefully
-        time.sleep(1)
 
         # Force kill if still alive
-        for pid, (proc, result_queue, job, start_time, timeout) in self.inflight.items():
+        for pid, (proc, _, job, _, _) in self.inflight.items():
             if proc.is_alive():
                 logger.warning(f"Killing process {pid} (job {job})")
                 proc.kill()
 
         # Clean up
-        for proc, result_queue, job, start_time, timeout in self.inflight.values():
+        for proc, _, job, _, _ in self.inflight.values():
             proc.join()
 
         self.inflight.clear()
@@ -250,7 +241,7 @@ class ResourceQueueExecutor:
                 logger.log(logging.EMIT, text, extra={"prefix": ""})
             elif key in "qQ":
                 logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
-                self._terminate_all()
+                self._terminate_all(signal.SIGTERM)
                 raise KeyboardInterrupt
 
     @cached_property

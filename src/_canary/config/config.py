@@ -61,7 +61,6 @@ def default_config_values() -> dict[str, Any]:
         "polling_frequency": {
             "testcase": 0.05,
         },
-        "options": {},
         "environment": {
             "prepend-path": {},
             "append-path": {},
@@ -125,7 +124,8 @@ class Config:
         file.write(json.dumps(snapshot, indent=2))
 
     def getoption(self, name: str, default: Any = None) -> Any:
-        return getattr(self.options, name, default)
+        value = getattr(self.options, name, None)
+        return value or default
 
     @cached_property
     def cache_dir(self) -> str | None:
@@ -193,6 +193,10 @@ class Config:
         """
         data: dict[str, Any] = {}
 
+        if args.config_file:
+            if fd := read_config_file(args.config_file):
+                data = config_schema.validate(fd)
+
         if cache_dir := getattr(args, "cache_dir", None):
             data["cache_dir"] = cache_dir
 
@@ -218,23 +222,14 @@ class Config:
         if args.config_mods:
             data.update(args.config_mods)
 
-        self.data = merge(self.data, data)
-
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
-            timeouts: dict[str, float] = data.setdefault("timeout", [])
+            timeouts: dict[str, float] = data.setdefault("timeout", {})
             for key, val in t.items():
                 timeouts[key] = float(val)
 
-        options = data.setdefault("options", {})
-        options.update({k: v for k, v in vars(args).items() if v is not None})
-
+        self.data = merge(self.data, data)
         self.options = args
-
-        if args.config_file:
-            if fd := read_config_file(args.config_file):
-                fd = config_schema.validate(fd)
-                self.data = merge(self.data, fd)
 
         if self.data["debug"]:
             logging.set_level(logging.DEBUG)

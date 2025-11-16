@@ -256,7 +256,7 @@ def is_test_file(arg: str) -> bool:
     from .... import config
     from ...types import ScanPath
 
-    p = ScanPath(root=arg, paths=[])
+    p = ScanPath(root=os.path.abspath(arg), paths=[])
     hook = config.pluginmanager.hook.canary_collect_generators
     return hook(scan_path=p) is not None
 

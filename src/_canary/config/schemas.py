@@ -23,10 +23,6 @@ def list_of_int(arg: typing.Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
 
 
-optional_dict = Or(dict, None)  # type: ignore
-optional_str = Or(str, None)  # type: ignore
-
-
 def vardict(arg: typing.Any) -> bool:
     if arg is None:
         return True
@@ -69,8 +65,10 @@ def boolean(arg: typing.Any) -> bool:
 
 positive_int = And(int, lambda x: x > 0)  # type: ignore
 nonnegative_int = And(int, lambda x: x >= 0)  # type: ignore
+optional_str = Or(str, None)  # type: ignore
 
 any_schema = Schema({}, ignore_extra_keys=True)
+
 build_schema = Schema(
     {
         Optional("project"): optional_str,
@@ -96,7 +94,6 @@ build_schema = Schema(
             Optional("mpicxx"): optional_str,
             Optional("mpifc"): optional_str,
         },
-        Optional("options"): optional_dict,
     },
     ignore_extra_keys=True,
 )
