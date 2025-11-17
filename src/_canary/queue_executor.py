@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 class StatusProtocol(Protocol):
     name: str
-    color: tuple
+    color: str
 
     def set(
         self,
@@ -139,13 +139,14 @@ class ResourceQueueExecutor:
                 self._check_keyboard_input(start)
 
                 # Clean up any finished processes and collect results
-                self._clean_finished_processes()
+                self._check_finished_processes()
 
                 # Wait for a slot if at max capacity
                 self._wait_for_slot()
 
                 # Get a job from the queue
                 job = self.queue.get()
+                qrank += 1
 
                 # Create a result queue for this specific process
                 result_queue = mp.Queue()
@@ -157,7 +158,6 @@ class ResourceQueueExecutor:
                     kwargs=kwargs,
                 )
                 proc.start()
-                qrank += 1
                 self.on_job_start(job, qrank, qsize)
 
                 self.inflight[proc.pid] = ExecutionSlot(
@@ -197,7 +197,7 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write("Starting job @*b{%s}: %s" % (job.id[:7], str(job)))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
@@ -207,7 +207,7 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write(
             "Finished job @*b{%s}: %s @*%s{%s}"
             % (job.id[:7], str(job), job.status.color[0], job.status.name)
@@ -226,6 +226,7 @@ class ResourceQueueExecutor:
                     # Get measurements before killing
                     measurements = slot.proc.get_measurements()
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.1)
+                    slot.job.refresh()
                     slot.job.set_status(
                         "TIMEOUT", message=f"Job timed out after {total_timeout} s."
                     )
@@ -236,7 +237,7 @@ class ResourceQueueExecutor:
                     self.queue.done(slot.job)
                     self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
-    def _clean_finished_processes(self) -> None:
+    def _check_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
         self._check_timeouts()
@@ -280,14 +281,14 @@ class ResourceQueueExecutor:
     def _wait_for_slot(self) -> None:
         """Wait until a process slot is available."""
         while len(self.inflight) >= self.max_workers:
-            self._clean_finished_processes()
+            self._check_finished_processes()
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
     def _wait_all(self) -> None:
         """Wait for all active processes to complete."""
         while self.inflight:
-            self._clean_finished_processes()
+            self._check_finished_processes()
             if self.inflight:
                 time.sleep(0.05)
 
@@ -297,6 +298,7 @@ class ResourceQueueExecutor:
             if slot.proc.is_alive():
                 measurements = slot.proc.get_measurements()
                 slot.proc.shutdown(signum, grace_period=0.1)
+                slot.job.refresh()
                 stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
                 slot.job.set_status(stat, f"Job terminated with code {signum}")
                 slot.job.measurements.update(measurements)
@@ -305,14 +307,14 @@ class ResourceQueueExecutor:
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
         # Force kill if still alive
-        for pid, (proc, _, job, _, _) in self.inflight.items():
-            if proc.is_alive():
+        for pid, slot in self.inflight.items():
+            if slot.proc.is_alive():
                 logger.warning(f"Killing process {pid} (job {job})")
-                proc.kill()
+                slot.proc.kill()
 
         # Clean up
-        for proc, _, job, _, _ in self.inflight.values():
-            proc.join()
+        for slot in self.inflight.values():
+            slot.proc.join()
 
         self.inflight.clear()
 
