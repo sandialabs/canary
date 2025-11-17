@@ -135,6 +135,9 @@ class TestCase:
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
+    def cost(self) -> float:
+        return math.sqrt(self.cpus**2 + self.runtime**2)
+
     @cached_property
     def runtime(self) -> float:
         try:

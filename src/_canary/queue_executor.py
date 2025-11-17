@@ -13,15 +13,13 @@ from pathlib import Path
 from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable
-from typing import MutableMapping
-from typing import Protocol
 from uuid import uuid4
 
 from . import config
-from .queue import AbstractResourceQueue
+from .protocols import JobProtocol
 from .queue import Busy
 from .queue import Empty
-from .util import cpu_count
+from .queue import ResourceQueue
 from .util import keyboard
 from .util import logging
 from .util.misc import digits
@@ -29,36 +27,6 @@ from .util.procutils import MeasuredProcess
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
-
-
-class StatusProtocol(Protocol):
-    name: str
-    color: str
-
-    def set(
-        self,
-        status: "str | int | StatusProtocol",
-        message: str | None = None,
-        code: int | None = None,
-    ) -> None: ...
-
-
-class JobProtocol(Protocol):
-    id: str
-    timeout: float
-    measurements: MutableMapping[str, Any]
-    status: StatusProtocol
-
-    def __str__(self) -> str: ...
-    def set_status(
-        self,
-        status: str | int | StatusProtocol,
-        message: str | None = None,
-        code: int | None = None,
-    ) -> None: ...
-    def refresh(sehf) -> None: ...
-    def on_result(self, result: dict[str, Any]) -> None: ...
-    def save(self) -> None: ...
 
 
 @dataclasses.dataclass
@@ -74,7 +42,13 @@ class ExecutionSlot:
 class ResourceQueueExecutor:
     """Manages a pool of worker processes with timeout support and metrics collection."""
 
-    def __init__(self, queue: AbstractResourceQueue, runner: Callable, busy_wait_time: float = 0.5):
+    def __init__(
+        self,
+        queue: ResourceQueue,
+        runner: Callable,
+        max_workers: int = -1,
+        busy_wait_time: float = 0.5,
+    ):
         """
         Initialize the process pool.
 
@@ -84,11 +58,11 @@ class ResourceQueueExecutor:
             runner: Callable that processes cases
             busy_wait_time: Time to wait when queue is busy
         """
-        self.max_workers = queue.workers
-        if self.max_workers > cpu_count():
-            logger.warning(f"workers={self.max_workers} > cpu_count={cpu_count()}")
+        self.max_workers = max_workers if max_workers > 0 else os.cpu_count()
+        if self.max_workers > os.cpu_count():
+            logger.warning(f"workers={self.max_workers} > cpu_count={os.cpu_count()}")
 
-        self.queue: AbstractResourceQueue = queue
+        self.queue: ResourceQueue = queue
         self.runner = runner
         self.busy_wait_time = busy_wait_time
 
@@ -309,7 +283,7 @@ class ResourceQueueExecutor:
         # Force kill if still alive
         for pid, slot in self.inflight.items():
             if slot.proc.is_alive():
-                logger.warning(f"Killing process {pid} (job {job})")
+                logger.warning(f"Killing process {pid} (job {slot.job})")
                 slot.proc.kill()
 
         # Clean up

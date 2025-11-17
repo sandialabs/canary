@@ -1,0 +1,87 @@
+from typing import Any
+from typing import MutableMapping
+from typing import Protocol
+
+
+class StatusProtocol(Protocol):
+    name: str
+    color: str
+
+    def set(
+        self,
+        status: "str | int | StatusProtocol",
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None: ...
+
+
+class JobProtocol(Protocol):
+    id: str
+    timeout: float
+    measurements: MutableMapping[str, Any]
+    status: StatusProtocol
+    cpus: int
+    gpus: int
+    cpu_ids: list[int]
+    gpu_ids: list[int]
+    exclusive: bool
+    runtime: float
+
+    def __str__(self) -> str: ...
+
+    def __iter__(self): ...
+
+    def set_status(
+        self,
+        status: str | int | StatusProtocol,
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None: ...
+
+    def refresh(sehf) -> None: ...
+
+    def on_result(self, result: dict[str, Any]) -> None: ...
+
+    def save(self) -> None: ...
+
+    def size(self) -> float: ...
+
+    def finish(self) -> None: ...
+
+    def required_resources(self) -> list[list[dict[str, Any]]]:
+        """Returns a list of resource
+
+        required[i] == [{"type": type, "slots": slots}, ...]
+
+        one entry per resource.  For a test requiring 1 slot from 2 cpus:
+
+        required[i] = [{"type": "cpus", "slots": 1}, {"type": "cpus": "slots": 1}]
+
+        This general way of describing resources allows for oversubscribing resources.  Each test
+        requires 1 slot per required cpu, but the machine config can specify multiple slots per cpu
+        available
+
+        """
+        pass
+
+    @property
+    def resources(self) -> list[dict[str, list[dict]]]:
+        """resources is of the form
+
+        resources[i] = {str: [{"id": str, "slots": int}]}
+
+        If the test required 2 cpus and 2 gpus, resources would look like
+
+        resources = [
+          {"cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+          {"gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+        ]
+
+        """
+        ...
+
+    def assign_resources(self, arg: list[dict[str, list[dict]]]) -> None: ...
+
+    def free_resources(self) -> list[dict[str, list[dict]]]: ...
+
+    def cost(self) -> float: ...

@@ -33,7 +33,7 @@ from typing import Type
 import psutil
 
 from .. import config
-from ..atc import AbstractTestCase
+from .atc import AbstractTestCase
 from ..error import diff_exit_status
 from ..error import skip_exit_status
 from ..error import timeout_exit_status

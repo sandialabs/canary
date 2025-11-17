@@ -3,9 +3,9 @@ import multiprocessing
 import threading
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Sequence
 
 from ... import config
+from ...protocols import JobProtocol
 from ...queue import ResourceQueue
 from ...queue_executor import ResourceQueueExecutor
 from ...resource_pool import make_resource_pool
@@ -58,20 +58,26 @@ class TestCaseExecutor:
         return fp.getvalue()
 
     @hookimpl(trylast=True)
-    def canary_runtests(self, cases: Sequence["TestCase"]) -> int:
+    def canary_runtests(self, jobs: list[JobProtocol]) -> int:
         """Run each test case in ``cases``.
 
         Args:
-        cases: test cases to run
+        jobs: test cases to run
 
         Returns:
         The session returncode (0 for success)
 
         """
-        rpool = self.get_rpool()
-        queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
+        try:
+            rpool = self.get_rpool()
+            queue = ResourceQueue(lock=global_lock, resource_pool=rpool, jobs=jobs)
+            queue.prepare()
+        except Exception:
+            logger.exception("Unable to create resource queue")
+            raise
         runner = Runner()
-        with ResourceQueueExecutor(queue, runner) as ex:
+        max_workers = config.getoption("workers") or -1
+        with ResourceQueueExecutor(queue, runner, max_workers=max_workers) as ex:
             return ex.run()
 
 

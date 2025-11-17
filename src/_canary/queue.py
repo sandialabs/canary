@@ -1,23 +1,19 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
-import abc
+import heapq
 import io
-import json
-import math
 import threading
 import time
-from datetime import datetime
+from dataclasses import dataclass
+from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Sequence
+from typing import Optional
 
-from . import config
-from .atc import AbstractTestCase
+from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
 from .third_party import color
-from .util import cpu_count
 from .util import logging
 from .util.progress import progress
 from .util.time import hhmmss
@@ -25,145 +21,154 @@ from .util.time import timestamp
 
 if TYPE_CHECKING:
     from .resource_pool.rpool import ResourcePool
-    from .testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
 
-class AbstractResourceQueue(abc.ABC):
+class Empty(Exception):
+    pass
+
+
+class Busy(Exception):
+    pass
+
+
+@dataclass(order=True)
+class HeapSlot:
+    # Negative cost so that heapq is max-heap
+    cost: float = field(init=False, repr=False)
+    job: JobProtocol = field(compare=False)
+
+    def __post_init__(self):
+        self.cost = -self.job.cost()
+
+
+class ResourceQueue:
+    """Heap-based resource queue for jobs.
+
+    Jobs with largest cost are scheduled first. Respects dependencies
+    and exclusive job semantics. Raises Busy if no job can be run
+    with available resources.
+    """
+
     def __init__(
-        self, *, lock: threading.Lock, workers: int, resource_pool: "ResourcePool"
+        self,
+        lock: threading.Lock,
+        resource_pool: "ResourcePool",
+        jobs: list[JobProtocol] | None = None,
     ) -> None:
-        self.workers: int = workers
-        self.buffer: dict[str, Any] = {}
+        self.lock = lock
+        self._heap: list[HeapSlot] = []
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
-        self._notrun: dict[str, Any] = {}
-        self.meta: dict[str, dict] = {}
-        self.lock = lock
-        self.exclusive_lock: bool = False
-        self.resource_pool = resource_pool
-        assert not self.resource_pool.empty()
-        self.prepared: bool = False
+        self.exclusive_job_id: Optional[str] = None
+        self.rpool = resource_pool
+        if jobs:
+            self.put(*jobs)
 
-    def __len__(self) -> int:
-        return len(self.buffer)
+    def __len__(self):
+        return len(self._heap)
 
-    @classmethod
-    @abc.abstractmethod
-    def factory(
-        cls, lock: threading.Lock, cases: Sequence["TestCase"], **kwds: Any
-    ) -> "AbstractResourceQueue": ...
+    def prepare(self) -> None:
+        """Empty method that a subclass can implement"""
+        if not self._heap:
+            raise EmptyHeapError()
 
-    @abc.abstractmethod
-    def iter_keys(self) -> list[str]: ...
+    def put(self, *jobs: JobProtocol) -> None:
+        # Precompute heap
+        for job in jobs:
+            if job.status.name not in ("READY", "PENDING"):
+                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
+            required = job.required_resources()
+            if not required:
+                raise ValueError("{job}: a test should require at least 1 cpu")
+            if not self.rpool.accommodates(required):
+                raise ValueError(f"Not enough resources for job {job}")
+            slot = HeapSlot(job=job)
+            heapq.heappush(self._heap, slot)
+            logger.debug(f"Job {job.id} added to queue with cost {-slot.cost}")
 
-    def retry(self, obj: Any) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def cases(self) -> list["TestCase"]: ...
-
-    @abc.abstractmethod
-    def queued(self) -> list[AbstractTestCase]: ...
-
-    @abc.abstractmethod
-    def busy(self) -> list[AbstractTestCase]: ...
-
-    @abc.abstractmethod
-    def finished(self) -> list[AbstractTestCase]: ...
-
-    @abc.abstractmethod
-    def notrun(self) -> list[AbstractTestCase]: ...
-
-    @abc.abstractmethod
-    def failed(self) -> list[AbstractTestCase]: ...
-
-    @abc.abstractmethod
-    def update_pending(self, obj: AbstractTestCase) -> None: ...
-
-    def empty(self) -> bool:
-        return len(self.buffer) == 0
-
-    @abc.abstractmethod
-    def skip(self, obj: Any) -> None: ...
-
-    @abc.abstractmethod
-    def done(self, obj: Any) -> None: ...
-
-    def available_workers(self) -> int:
-        return self.workers - len(self._busy)
-
-    def heartbeat(self) -> None:
-        return None
-
-    @property
-    def qsize(self):
-        return len(self.buffer)
-
-    def put(self, *cases: AbstractTestCase) -> None:
-        for case in cases:
-            self.buffer[case.id] = case
-
-    def prepare(self, **kwds: Any) -> None:
-        self.prepared = True
-
-    def is_active(self) -> bool:
-        return len(self.buffer) > 0
-
-    def close(self, cleanup: bool = True) -> None:
-        if cleanup:
-            for case in self.cases():
-                if case.status.name == "RUNNING":
-                    case.status.set("CANCELLED", "Case failed to stop")
-                    case.save()
-                elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY"):
-                    case.status.set("NOT_RUN", "Case failed to start")
-                    case.save()
-        keys = list(self.buffer.keys())
-        for key in keys:
-            self._notrun[key] = self.buffer.pop(key)
-
-    def get(self) -> AbstractTestCase:
-        """return (total number in queue, this number, iid, obj)"""
+    def get(self) -> JobProtocol:
         with self.lock:
-            if self.available_workers() <= 0:
-                raise Busy
-            if not len(self.buffer):
+            if not self._heap:
+                logger.debug("Queue empty on get()")
                 raise Empty
-            for id in self.iter_keys():
-                obj = self.buffer[id]
-                status = obj.status
-                if status.name not in ("RETRY", "PENDING", "READY", "RUNNING"):
-                    # job will never be ready
-                    self.skip(obj)
-                    continue
-                elif status.name == "READY":
-                    try:
-                        if self.exclusive_lock:
-                            continue
-                        required = obj.required_resources()
-                        if not required:
-                            obj.status.set("ERROR", "a test should require at least 1 cpu")
-                            self.skip(obj)
-                        elif not self.resource_pool.accommodates(required):
-                            obj.status.set(
-                                "ERROR", "resource for this job cannot be satisfied at run time"
-                            )
-                            self.skip(obj)
-                        acquired = self.resource_pool.checkout(required, timeout=obj.timeout)
-                        obj.assign_resources(acquired)
-                    except ResourceUnavailable:
-                        continue
-                    else:
-                        self._busy[obj.id] = self.buffer.pop(obj.id)
-                        if obj.exclusive:
-                            self.exclusive_lock = True
-                        return self._busy[id]
-        raise Busy
 
-    @abc.abstractmethod
-    def status(self, start: float | None = None) -> str: ...
+            deferred_slots = []
+            while self._heap:
+                slot = heapq.heappop(self._heap)
+                job = slot.job
+
+                if job.status.name not in ("READY", "PENDING", "RUNNING"):
+                    # Job will never by ready
+                    self._finished[job.id] = job
+                    continue
+
+                if self.exclusive_job_id and self.exclusive_job_id != job.id:
+                    deferred_slots.append(slot)
+                    continue
+
+                if job.status.name != "READY":
+                    deferred_slots.append(slot)
+                    continue
+
+                required = job.required_resources()
+                if not required:
+                    job.status.set("ERROR", "a test should require at least 1 cpu")
+                    self._finished[job.id] = job
+                    continue
+
+                try:
+                    acquired = self.rpool.checkout(required)
+                except ResourceUnavailable:
+                    deferred_slots.append(slot)
+                    continue
+
+                job.assign_resources(acquired)
+                self._busy[job.id] = job
+                if job.exclusive:
+                    self.exclusive_job_id = job.id
+
+                for slot in deferred_slots:
+                    heapq.heappush(self._heap, slot)
+
+                return job
+
+            # Heap exhausted without finding a runnable job
+            for slot in deferred_slots:
+                heapq.heappush(self._heap, slot)
+
+            if deferred_slots:
+                raise Busy
+            else:
+                raise Empty
+
+    def done(self, job: JobProtocol) -> None:
+        with self.lock:
+            if job.id not in self._busy:
+                raise RuntimeError(f"Job {job} is not running")
+            self._finished[job.id] = self._busy.pop(job.id)
+            if job.exclusive:
+                self.exclusive_job_id = None
+                logger.debug(f"Exclusive job {job.id} finished, exclusive lock released")
+            self.rpool.checkin(job.free_resources())
+            self.update_pending(job)
+            logger.debug(f"Job {job.id} marked done")
+
+    def update_pending(self, finished_job: Any) -> None:
+        """Update dependencies of jobs still in the heap."""
+        for slot in self._heap:
+            job = slot.job
+            for i, dep in enumerate(job.dependencies):
+                if dep.id == finished_job.id:
+                    job.dependencies[i] = finished_job
+
+    def cases(self) -> list[JobProtocol]:
+        """Return all jobs in queue, busy, and finished."""
+        cases = [slot.job for slot in self._heap]
+        cases.extend(self._busy.values())
+        cases.extend(self._finished.values())
+        return cases
 
     def update_progress_bar(self, start: float, last: bool = False) -> None:
         with self.lock:
@@ -171,112 +176,20 @@ class AbstractResourceQueue(abc.ABC):
             if last:
                 logger.log(logging.EMIT, "\n", extra={"prefix": ""})
 
-
-class ResourceQueue(AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
-        workers = int(config.getoption("workers") or -1)
-        if workers < 0:
-            workers = min(cpu_count(logical=False), 50)
-        super().__init__(lock=lock, workers=workers, resource_pool=resource_pool)
-
-    @classmethod
-    def factory(
-        cls,
-        lock: threading.Lock,
-        cases: Sequence["TestCase"],
-        resource_pool: "ResourcePool",
-        **kwds: Any,
-    ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock, resource_pool=resource_pool)
-        for case in cases:
-            if case.status.name == "SKIPPED":
-                case.save()
-            elif case.status.name not in ("READY", "PENDING"):
-                raise ValueError(f"{case}: case is not ready or pending")
-        self.put(*[case for case in cases if case.status.name in ("READY", "PENDING")])
-        self.prepare()
-        if self.empty():
-            raise ValueError("There are no cases to run in this session")
-        return self
-
-    def iter_keys(self) -> list[str]:
-        # want bigger tests first
-        norm = lambda c: math.sqrt(c.cpus**2 + c.runtime**2)
-        return sorted(self.buffer.keys(), key=lambda k: norm(self.buffer[k]), reverse=True)
-
-    def put(self, *cases: Any) -> None:
-        for case in cases:
-            if config.get("debug"):
-                # The case should have already been validated
-                check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=case)
-                if not check:
-                    raise ValueError(
-                        f"Unable to run {case} for the the following reason: {check.reason}"
-                    )
-            super().put(case)
-
-    def skip(self, obj: Any) -> None:
-        self._finished[obj.id] = self.buffer.pop(obj.id)
-        self._finished[obj.id].save()
-        for case in self.buffer.values():
-            for i, dep in enumerate(case.dependencies):
-                if dep.id == self._finished[obj.id].id:
-                    case.dependencies[i] = self._finished[obj.id]
-
-    def update_pending(self, obj: "TestCase") -> None:
-        for pending in self.buffer.values():
-            for i, dep in enumerate(pending.dependencies):
-                if dep.id == obj.id:
-                    pending.dependencies[i] = obj
-
-    def done(self, obj: Any) -> None:
-        with self.lock:
-            if obj.id not in self._busy:
-                raise RuntimeError(f"job {obj} is not running")
-            self._finished[obj.id] = self._busy.pop(obj.id)
-            if obj.exclusive:
-                self.exclusive_lock = False
-            self.resource_pool.checkin(obj.free_resources())
-            self.update_pending(obj)
-            return
-
-    def cases(self) -> list["TestCase"]:
-        return self.queued() + self.busy() + self.finished() + self.notrun()
-
-    def queued(self) -> list["TestCase"]:
-        return list(self.buffer.values())
-
-    def busy(self) -> list["TestCase"]:
-        return list(self._busy.values())
-
-    def finished(self) -> list["TestCase"]:
-        return list(self._finished.values())
-
-    def notrun(self) -> list["TestCase"]:
-        return list(self._notrun.values())
-
-    def failed(self) -> list["TestCase"]:
-        return [_ for _ in self._finished.values() if _.status.name != "SUCCESS"]
-
-    def _counts(self) -> tuple[int, int, int]:
-        done = len(self.finished())
-        busy = len(self.busy())
-        notrun = len(self.queued())
-        notrun += len(self.notrun())
-        return done, busy, notrun
-
     def status(self, start: float | None = None) -> str:
         string = io.StringIO()
         with self.lock:
             p = d = f = t = 0
-            done, busy, notrun = self._counts()
-            total = done + busy + notrun
-            for case in self.finished():
-                if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
+            done = len(self._finished)
+            busy = len(self._busy)
+            pending = len(self._heap)
+            total = done + busy + pending
+            for job in self._finished.values():
+                if job.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                     p += 1
-                elif case.status.name == "DIFFED":
+                elif job.status.name == "DIFFED":
                     d += 1
-                elif case.status.name == "TIMEOUT":
+                elif job.status.name == "TIMEOUT":
                     t += 1
                 else:
                     f += 1
@@ -285,7 +198,7 @@ class ResourceQueue(AbstractResourceQueue):
                 duration = hhmmss(time.time() - start)
                 fmt += f"in {duration} "
             fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-            text = color.colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
+            text = color.colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
             n = color.clen(text)
             header = color.colorize("@*c{%s}" % " status ".center(n + 10, "="))
             footer = color.colorize("@*c{%s}" % "=" * (n + 10))
@@ -293,26 +206,6 @@ class ResourceQueue(AbstractResourceQueue):
             string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         return string.getvalue()
 
-    def heartbeat(self) -> None:
-        """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
-        currently busy
 
-        """
-        if not config.get("debug"):
-            return None
-        hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
-        busy = self.busy()
-        hb["busy"] = [case.id for case in busy]
-        hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
-        hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
-        text = json.dumps(hb)
-        logger.log(logging.TRACE, f"Hearbeat: {text}")
-        return None
-
-
-class Empty(Exception):
-    pass
-
-
-class Busy(Exception):
+class EmptyHeapError(Exception):
     pass

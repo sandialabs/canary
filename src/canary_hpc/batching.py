@@ -129,6 +129,10 @@ class TestBatch:
             case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
         return f"TestBatch({case_repr})"
 
+    def cost(self) -> float:
+        cpus = max(case.cpus for case in self.cases)
+        return math.sqrt(cpus**2 + self.runtime**2)
+
     @property
     def cpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("cpus", [])]
@@ -184,10 +188,6 @@ class TestBatch:
         else:
             total_runtime *= 1.25
         return total_runtime
-
-    def size(self) -> float:
-        vec = [self.runtime, self.cpus, self.gpus]
-        return math.sqrt(sum(_**2 for _ in vec))
 
     @property
     def resources(self) -> dict[str, list[dict]]:

@@ -16,10 +16,10 @@ from .types import CanarySubcommand
 if TYPE_CHECKING:
     from multiprocessing import Queue
 
-    from ..atc import AbstractTestCase
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
+    from ..protocols import JobProtocol
     from ..testcase import TestCase
     from ..testexec import ExecutionPolicy
     from ..testspec import ResolvedSpec
@@ -119,7 +119,7 @@ def canary_runtests_startup() -> None:
 
 
 @hookspec(firstresult=True)
-def canary_runtests(cases: list["TestCase"]) -> int:
+def canary_runtests(jobs: list["JobProtocol"]) -> int:
     raise NotImplementedError
 
 
@@ -202,7 +202,7 @@ def canary_testcase_modify(case: "TestCase") -> None:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_setup(case: "AbstractTestCase") -> bool:
+def canary_testcase_setup(case: "TestCase") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -218,7 +218,7 @@ def canary_testcase_setup(case: "AbstractTestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "AbstractTestCase", queue: "Queue") -> bool:
+def canary_testcase_run(case: "TestCase", queue: "Queue") -> bool:
     """Called to run the test case
 
     Args:
@@ -232,7 +232,7 @@ def canary_testcase_run(case: "AbstractTestCase", queue: "Queue") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_finish(case: "AbstractTestCase") -> bool:
+def canary_testcase_finish(case: "TestCase") -> bool:
     """Called to perform the finishing tasks for the test case
 
     The default implementation runs ``case.finish()``

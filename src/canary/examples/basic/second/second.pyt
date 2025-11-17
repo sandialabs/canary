@@ -13,6 +13,7 @@ canary.directives.link("add.py")
 def test():
     print("Verifying that 2 + 3 = 5")
     import os
+
     print(os.getcwd())
     add = canary.Executable(f"{sys.executable} ./add.py")
     result = add("2", "3", stdout=str)

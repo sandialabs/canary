@@ -5,7 +5,6 @@
 import os
 
 import _canary.testinst as inst
-
 import canary
 from _canary import finder
 from _canary.util.filesystem import mkdirp

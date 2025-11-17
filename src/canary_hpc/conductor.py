@@ -14,6 +14,7 @@ import hpc_connect
 import canary
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
+from _canary.protocols import JobProtocol
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
@@ -136,23 +137,25 @@ class CanaryHPCConductor:
         return Result(True)
 
     @canary.hookimpl(tryfirst=True)
-    def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
-        """Run each test case in ``cases``.
+    def canary_runtests(self, jobs: list[JobProtocol]) -> int:
+        """Run each test case in ``jobs``.
 
         Args:
-        cases: test cases to run
+        jobs: test cases to run
 
         Returns:
         The session returncode (0 for success)
 
         """
         try:
-            queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
-            runner = Runner()
+            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=jobs)
+            queue.prepare()
         except Exception:
             logger.exception("Failed to create batch runner")
             raise
-        with ResourceQueueExecutor(queue, runner) as ex:
+        runner = Runner()
+        max_workers = canary.config.getoption("workers") or 10
+        with ResourceQueueExecutor(queue, runner, max_workers=max_workers) as ex:
             return ex.run(backend=self.backend.name)
 
     @staticmethod
@@ -229,7 +232,7 @@ class KeyboardQuit(Exception):
 
 
 class Runner:
-    """Class for running ``AbstractTestCase``."""
+    """Class for running ``ResourceQueue``."""
 
     def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess

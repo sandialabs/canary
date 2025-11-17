@@ -2,15 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
+import heapq
 import io
 import threading
 import time
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Sequence
 
 import canary
 from _canary import queue
+from _canary.protocols import JobProtocol
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
@@ -24,33 +25,30 @@ if TYPE_CHECKING:
 logger = canary.get_logger(__name__)
 
 
-class ResourceQueue(queue.AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
-        workers = int(canary.config.getoption("workers", -1))
-        super().__init__(
-            lock=lock,
-            resource_pool=resource_pool,
-            workers=5 if workers < 0 else workers,
-        )
-        self.tmp_buffer: list[canary.TestCase] = []
-
-    @classmethod
-    def factory(
-        cls,
+class ResourceQueue(queue.ResourceQueue):
+    def __init__(
+        self,
         lock: threading.Lock,
-        cases: Sequence[canary.TestCase],
         resource_pool: "ResourcePool",
-        **kwds: Any,
-    ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock, resource_pool=resource_pool)
-        self.put(*cases)
-        self.prepare(**kwds)
-        if self.empty():
-            raise ValueError("There are no cases to run in this session")
-        return self
+        jobs: list[JobProtocol] | None = None,
+    ) -> None:
+        super().__init__(lock=lock, resource_pool=resource_pool)
+        self.tmp_buffer: list[JobProtocol] = []
+        if jobs:
+            for job in jobs:
+                self.put(job)
 
-    def iter_keys(self) -> list[str]:
-        return list(self.buffer.keys())
+    def put(self, *jobs: JobProtocol) -> None:
+        for job in jobs:
+            if canary.config.get("debug"):
+                # The job should have already been validated
+                check = self.rpool.accommodates(job)
+                if not check:
+                    raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
+            if job.status.name not in ("READY", "PENDING"):
+                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
+            else:
+                self.tmp_buffer.append(job)
 
     def prepare(self, **kwds: Any) -> None:
         logger.debug("Preparing batch queue")
@@ -73,109 +71,33 @@ class ResourceQueue(queue.AbstractResourceQueue):
         fmt = "@*{Generated} %d batches from %d test cases"
         logger.info(fmt % (len(batches), len(self.tmp_buffer)))
         for batch in batches:
-            self.buffer[batch.id] = batch
+            slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
+            heapq.heappush(self._heap, slot)
+            logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
 
-    def update_pending(self, obj: Any) -> None:
-        completed = {case.id: case for case in obj}
-        for batch in self.buffer.values():
-            for case in batch:
+    def update_pending(self, job: JobProtocol) -> None:
+        completed = {case.id: case for case in job}
+        for slot in self._heap:
+            job = slot.job
+            for case in job:
                 for i, dep in enumerate(case.dependencies):
                     if dep.id in completed:
                         case.dependencies[i] = completed[dep.id]
 
-    def done(self, obj: Any) -> None:
-        with self.lock:
-            if obj.id not in self._busy:
-                raise RuntimeError(f"job {obj} is not running")
-            self._finished[obj.id] = self._busy.pop(obj.id)
-            if obj.exclusive:
-                self.exclusive_lock = False
-            self.resource_pool.checkin(obj.free_resources())
-            self.update_pending(obj)
-        return
-
-    def retry(self, obj: Any) -> None:
-        if obj.id not in self._finished:
-            raise ValueError("Cannot retry a job that is not done")
-        with self.lock:
-            meta = self.meta.setdefault(obj.id, {})
-            meta["retry"] = meta.setdefault("retry", 0) + 1
-            if meta["retry"] >= 3:
-                for case in self._finished[obj.id]:
-                    case.status.set("FAILED", "Maximum number of retries exceeded")
-                    case.save()
-            else:
-                self.buffer[obj.id] = self._finished.pop(obj.id)
-                for case in self.buffer[obj.id]:
-                    if case.status.name not in ("PENDING", "READY"):
-                        if case.dependencies:
-                            case.status.set("PENDING")
-                        else:
-                            case.status.set("READY")
-                        case.save()
-
-    def put(self, *cases: canary.TestCase) -> None:
-        pm = canary.config.pluginmanager
-        for case in cases:
-            if canary.config.get("debug"):
-                # The case should have already been validated
-                check = pm.hook.canary_resource_pool_accommodates(case=case)
-                if not check:
-                    raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
-            status = case.status
-            if status.name == "SKIPPED":
-                case.save()
-            elif status.name not in ("READY", "PENDING"):
-                logger.error(f"{case}: {case.status.name}: case is not ready or pending")
-                raise ValueError(f"{case}: {case.status.name}: case is not ready or pending")
-            else:
-                self.tmp_buffer.append(case)
-
-    def cases(self) -> list[canary.TestCase]:
-        cases: list[canary.TestCase] = []
-        cases.extend([case for batch in self.buffer.values() for case in batch])
+    def cases(self) -> list[JobProtocol]:
+        cases: list[JobProtocol] = [case for batch in self._heep for case in batch]
         cases.extend([case for batch in self._busy.values() for case in batch])
         cases.extend([case for batch in self._finished.values() for case in batch])
-        cases.extend([case for batch in self._notrun.values() for case in batch])
         return cases
-
-    def queued(self) -> list[TestBatch]:  # type: ignore[override]
-        return list(self.buffer.values())
-
-    def busy(self) -> list[TestBatch]:  # type: ignore[override]
-        return list(self._busy.values())
-
-    def finished(self) -> list[TestBatch]:  # type: ignore[override]
-        return list(self._finished.values())
-
-    def notrun(self) -> list[TestBatch]:  # type: ignore[override]
-        return list(self._notrun.values())
-
-    def failed(self) -> list[canary.TestCase]:
-        return [_ for batch in self._finished.values() for _ in batch if _.status.name != "SUCCESS"]
-
-    def skip(self, obj: Any) -> None:
-        self._finished[obj.id] = self.buffer.pop(obj.id)
-        finished = {case.id: case for case in self._finished[obj.id]}
-        for batch in self.buffer.values():
-            for case in batch:
-                for i, dep in enumerate(case.dependencies):
-                    if dep.id in finished:
-                        case.dependencies[i] = finished[dep.id]
-
-    def _counts(self) -> tuple[int, int, int]:
-        done = sum([len(_) for _ in self.finished()])
-        busy = len([len(_) for _ in self.busy()])
-        notrun = len([len(_) for _ in self.queued()])
-        notrun += len([len(_) for _ in self.notrun()])
-        return done, busy, notrun
 
     def status(self, start: float | None = None) -> str:
         string = io.StringIO()
         with self.lock:
             p = d = f = t = 0
-            done, busy, notrun = self._counts()
-            total = done + busy + notrun
+            done = sum([len(_) for _ in self._finished.values()])
+            busy = sum([len(_) for _ in self._busy.values()])
+            pending = sum([len(_) for _ in self._heap])
+            total = done + busy + pending
             for batch in self.finished():
                 for case in batch:
                     if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
@@ -191,7 +113,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
                 duration = hhmmss(time.time() - start)
                 fmt += f"in {duration} "
             fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-            text = color.colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
+            text = color.colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
             n = color.clen(text)
             header = color.colorize("@*c{%s}" % " status ".center(n + 10, "="))
             footer = color.colorize("@*c{%s}" % "=" * (n + 10))
