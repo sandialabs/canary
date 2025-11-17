@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from .batchjob import TestBatch
 import copy
 import datetime
 import json
@@ -31,6 +30,7 @@ from _canary.testcase import Measurements
 from _canary.util import cpu_count
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
+from .batchspec import BatchSpec
 
 from . import binpack
 
@@ -46,7 +46,7 @@ def batch_testcases(
     duration: float | None = None,
     width: int | None = None,
     cpus_per_node: int | None = None,
-) -> list[TestBatch]:
+) -> list[BatchSpec]:
     if duration is None and count is None:
         duration = 30 * 60  # 30 minute default
     elif duration is not None and count is not None:
@@ -59,7 +59,6 @@ def batch_testcases(
         grouper = GroupByNodes(cpus_per_node=cpus_per_node)
     # The binpacking code works with Block not TestCase.
     blocks: dict[str, binpack.Block] = {}
-    map: dict[str, canary.TestCase] = {}
     lookup: dict[str, canary.TestCase] = {case.id: case for case in cases}
     graph: dict[str, list[str]] = {}
     for case in cases:
@@ -89,8 +88,8 @@ def batch_testcases(
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
             bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
-    batches = [TestBatch([lookup[block.id] for block in bin]) for bin in bins]
-    return batches
+    specs = [BatchSpec(cases=[lookup[block.id] for block in bin]) for bin in bins]
+    return specs
 
 
 def packed_perimeter(

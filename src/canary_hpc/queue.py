@@ -15,8 +15,6 @@ from _canary.protocols import JobProtocol
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
-from .batching import TestBatch
-from .batching import batch_testcases
 
 if TYPE_CHECKING:
     from _canary.resource_pool import ResourcePool

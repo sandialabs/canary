@@ -91,7 +91,7 @@ class HPC(canary.CanarySubcommand):
             # register the CanaryHPCExector plugin so that executor.runtests is registered
             backend = args.canary_hpc_backend or canary.config.getoption("canary_hpc_scheduler")
             executor = CanaryHPCExecutor(
-                backend=backend, batch=args.batch_id, case=args.canary_hpc_case
+                workspace=args.canary_hpc_workspace, backend=backend, case=args.canary_hpc_case
             )
             executor.register(canary.config.pluginmanager)
             return executor.run(args)

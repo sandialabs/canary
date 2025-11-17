@@ -23,7 +23,8 @@ from _canary.util import cpu_count
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
-from .batching import TestBatch
+from .batchjob import TestBatch
+from .batchspec import BatchSpec
 from .batching import batch_testcases
 from .queue import ResourceQueue
 
@@ -152,20 +153,21 @@ class CanaryHPCConductor:
         try:
             if not batchspec:
                 raise ValueError("Cannot partition test cases: missing batching options")
-            batches: list[TestBatch] = batch_testcases(
+            specs: list[BatchSpec] = batch_testcases(
                 cases=jobs,
                 layout=batchspec["layout"],
                 count=batchspec["count"],
                 duration=batchspec["duration"],
                 nodes=batchspec["nodes"],
             )
-            if not batches:
+            if not specs:
                 raise ValueError(
                     "No test batches generated (this should never happen, "
                     "the default batching scheme should have been used)"
                 )
-            fmt = "@*{Generated} %d batches from %d test cases"
-            logger.info(fmt % (len(batches), len(jobs)))
+            fmt = "@*{Generated} %d batch specs from %d test cases"
+            logger.info(fmt % (len(specs), len(jobs)))
+            batches: list[TestBatch] = [TestBatch(spec) for spec in specs]
         except Exception:
             logger.exception("Failed to batch test cases")
             raise

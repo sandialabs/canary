@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from .batchspec import BatchSpec
 import copy
 import datetime
 import json
@@ -39,21 +40,28 @@ logger = canary.get_logger(__name__)
 class BatchStatus:
     def __init__(self, children: Iterable[canary.TestCase]) -> None:
         self._children: list[canary.TestCase] = list(children)
-        self._status: Status
+        self._impl: Status
         for child in self._children:
             if any(dep not in self._children for dep in child.dependencies):
-                self._status = Status.PENDING()
+                self._impl = Status.PENDING()
                 break
         else:
-            self._status = Status.READY()
+            self._impl = Status.READY()
 
     @property
     def name(self) -> str:
-        return self._status.name
+        return self._impl.name
+
+    @property
+    def cname(self) -> str:
+        return self._impl.cname
 
     @property
     def color(self) -> str:
-        return self._status.color
+        return self._impl.color
+
+    def asdict(self) -> dict:
+        return self._impl.asdict()
 
     def set(
         self,
@@ -62,7 +70,7 @@ class BatchStatus:
         code: int | None = None,
         propagate: bool = True,
     ) -> None:
-        self._status.set(status, message=message, code=code)
+        self._impl.set(status, message=message, code=code)
         if propagate:
             for child in self._children:
                 if child.status.name in ("READY", "PENDING"):
@@ -75,7 +83,7 @@ class BatchStatus:
 
     @property
     def status(self) -> Status:
-        return self._status
+        return self._impl
 
 
 class TestBatch:
@@ -86,20 +94,18 @@ class TestBatch:
 
     """
 
-    def __init__(self, cases: Sequence[canary.TestCase], runtime: float | None = None) -> None:
+    def __init__(self, spec: BatchSpec) -> None:
         super().__init__()
-        self.validate(cases)
-        self.cases = list(cases)
-        self.session = self.cases[0].workspace.session
-        self._id = hashit(",".join(case.id for case in self.cases), length=20)
+        self.cases = list(spec.cases)
+        self.spec = spec
+        self.session = self.spec.session
+        workspace = self.cases[0].workspace
+        self.workspace = workspace.root / f"canary-hpc/batches/{self.id[:2]}/{self.id[2:]}"
+        self.configfile = self.workspace / "config.json"
         self.total_duration: float = -1
-        self._runtime: float
-        if runtime is None:
-            self._runtime = self.find_approximate_runtime()
-        elif canary.config.getoption("canary_hpc_batch_timeout_strategy") == "conservative":
-            self._runtime = max(runtime, self.find_approximate_runtime())
-        else:
-            self._runtime = runtime
+        self.script = "canary-inp.sh"
+        self.stdout = "canary-out.txt"
+        self.runtime: float = self.find_approximate_runtime()
         self._status: BatchStatus = BatchStatus(self.cases)
         self._jobid: str | None = None
         self.variables = {"CANARY_BATCH_ID": str(self.id)}
@@ -116,8 +122,8 @@ class TestBatch:
         return len(self.cases)
 
     def __str__(self) -> str:
-        if self.status.status in ("READY", "PENDING"):
-            return f"{type(self).__name__}({len(self)} {self.status.status.cname})"
+        if self.status.name in ("READY", "PENDING"):
+            return f"{type(self).__name__}({len(self)} {self.status.cname})"
         combined_stat = self._combined_status()
         return f"{type(self).__name__}({combined_stat})"
 
@@ -141,10 +147,6 @@ class TestBatch:
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
-    @property
-    def runtime(self) -> float:
-        return self._runtime
-
     def find_approximate_runtime(self) -> float:
         from .batching import packed_perimeter
         if len(self.cases) == 1:
@@ -164,7 +166,7 @@ class TestBatch:
 
     @property
     def timeout(self) -> float:
-        return self.qtime() * self.timeout_multiplier
+        return self.qtime()
 
     def qtime(self) -> float:
         scheduler_args = get_scheduler_args()
@@ -267,23 +269,11 @@ class TestBatch:
 
     @property
     def id(self) -> str:
-        return self._id
-
-    def submission_script_filename(self) -> Path:
-        return self.stage(self.id) / "canary-inp.sh"
-
-    @staticmethod
-    def logfile(batch_id: str) -> Path:
-        """Get the path of the batch log file"""
-        return TestBatch.stage(batch_id) / "canary-out.txt"
+        return self.spec.id
 
     @property
     def path(self) -> Path:
         return Path(".canary/work/canary_hpc/batches", self.id[:2], self.id[2:])
-
-    @property
-    def working_directory(self) -> str:
-        return self.stage(self.id)
 
     def _combined_status(self) -> str:
         """Return a string like
@@ -325,40 +315,28 @@ class TestBatch:
         return duration, running, time_in_queue
 
     @staticmethod
-    def loadconfig(batch_id: str) -> dict[str, Any]:
-        file = TestBatch.configfile(batch_id)
+    def loadconfig(workspace: str) -> dict[str, Any]:
+        file = Path(workspace) / "config.json"
         return json.loads(file.read_text())
-
-    @staticmethod
-    def configfile(batch_id: str) -> Path:
-        return TestBatch.stage(batch_id) / "config.json"
-
-    @staticmethod
-    def stage(batch_id: str) -> Path:
-        root = canary_hpc_stage() / "batches" / batch_id[:2]
-        if (root / batch_id[2:]).exists():
-            return root / batch_id[2:]
-        for match in root.glob(f"{batch_id[2:]}*"):
-            return match
-        return root / batch_id[2:]
 
     @staticmethod
     def find(batch_id: str) -> str:
         """Find the full batch ID from batch_id"""
-        stage = canary_hpc_stage()
-        for match in stage.glob(f"batches/{batch_id[:2]}/{batch_id[2:]}*"):
+        sessions_dir = canary_hpc_sessions()
+        for match in sessions_dir.rglob(f"canary-hpc/batches/{batch_id[:2]}/{batch_id[2:]}*"):
             return "".join([match.parent.stem, match.stem])
-        raise BatchNotFound(f"cannot find stage for batch {batch_id}")
+        raise BatchNotFound(f"cannot find workspace for batch {batch_id}")
 
     def setup(self) -> None:
-        file = self.configfile(self.id)
-        file.parent.mkdir(parents=True, exist_ok=True)
+        self.configfile.parent.mkdir(parents=True, exist_ok=True)
         config = {
+            "id": self.id,
             "session": self.session,
+            "workspace": str(self.workspace),
             "cases": [case.id for case in self],
-            "status": self.status.status.asdict(),
+            "status": self.status.asdict(),
         }
-        file.write_text(json.dumps(config, indent=2))
+        self.configfile.write_text(json.dumps(config, indent=2))
 
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
@@ -373,7 +351,7 @@ class TestBatch:
         flat = batchspec["layout"] == "flat"
         timeoutx = self.timeout_multiplier
         try:
-            breadcrumb = self.stage(self.id) / ".running"
+            breadcrumb = self.workspace / ".running"
             breadcrumb.touch()
             proc: hpc_connect.HPCProcess | None = None
             logger.debug(f"Submitting batch {self.id[:7]}")
@@ -382,8 +360,6 @@ class TestBatch:
             if canary.config.get("debug"):
                 default_args.append("-d")
             if backend.supports_subscheduling and flat:
-                submit_script = self.submission_script_filename()
-                scriptdir = submit_script.parent
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -393,26 +369,26 @@ class TestBatch:
                     ],
                     cpus=[case.cpus for case in self],
                     gpus=[case.gpus for case in self],
-                    scriptname=[str(scriptdir / f"{case.id}-inp.sh") for case in self],
-                    output=[str(scriptdir / f"{case.id}-out.txt") for case in self],
-                    error=[str(scriptdir / f"{case.id}-err.txt") for case in self],
+                    scriptname=[str(self.workspace / f"{case.id}-inp.sh") for case in self],
+                    output=[str(self.workspace / f"{case.id}-out.txt") for case in self],
+                    error=[str(self.workspace / f"{case.id}-err.txt") for case in self],
                     submit_flags=list(repeat(get_scheduler_args(), len(self))),
                     variables=list(repeat(variables, len(self))),
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                qtime = self.qtime() * timeoutx
+                invocation = self.canary_batch_invocation(backend, default_args)
                 nodes = self.nodes_required(backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [self.canary_batch_invocation(backend, default_args)],
+                    [invocation],
                     nodes=nodes,
-                    scriptname=str(self.submission_script_filename()),
-                    output=str(self.logfile(self.id)),
-                    error=str(self.logfile(self.id)),
+                    scriptname=str(self.workspace / self.script),
+                    output=str(self.workspace / self.stdout),
+                    error=str(self.workspace / self.stdout),
                     submit_flags=get_scheduler_args(),
                     variables=variables,
-                    qtime=qtime,
+                    qtime=self.qtime() * timeoutx,
                 )
             assert proc is not None
             install_handlers(proc, self)
@@ -463,9 +439,9 @@ class TestBatch:
         pass
 
     def save(self):
-        cfg = self.loadconfig(self.id)
-        cfg["status"] = self.status.status.asdict()
-        with open(self.configfile(self.id), "w") as fh:
+        cfg = self.loadconfig(self.workspace)
+        cfg["status"] = self.status.asdict()
+        with open(self.configfile, "w") as fh:
             json.dump(cfg, fh, indent=2)
         for case in self:
             case.save()
@@ -501,7 +477,7 @@ class TestBatch:
         """Write the canary invocation used to run this test case"""
         args: list[str] = ["canary"]
         args.extend(default_args)
-        args.extend(["hpc", "exec", f"--backend={backend.name}", f"--case={case.id}", self.id])
+        args.extend(["hpc", "exec", f"--backend={backend.name}", f"--case={case.id}", f"--workspace={self.workspace}"])
         return shlex.join(args)
 
     def canary_batch_invocation(
@@ -511,13 +487,13 @@ class TestBatch:
         args: list[str] = ["canary"]
         args.extend(default_args)
         workers = canary.config.getoption("canary_hpc_batch_workers") or -1
-        args.extend(["hpc", "exec", f"--workers={workers}", f"--backend={backend.name}", self.id])
+        args.extend(["hpc", "exec", f"--workers={workers}", f"--backend={backend.name}", f"--workspace={self.workspace}"])
         return shlex.join(args)
 
 
-def canary_hpc_stage() -> Path:
+def canary_hpc_sessions() -> Path:
     workspace = canary.Workspace.load()
-    return workspace.cache_dir / "canary_hpc"
+    return workspace.sessions_dir
 
 
 def get_scheduler_args() -> list[str]:
