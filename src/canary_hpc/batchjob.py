@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from _canary.timekeeper import Timekeeper
 from .batchspec import BatchSpec
 import copy
 import datetime
@@ -40,28 +41,28 @@ logger = canary.get_logger(__name__)
 class BatchStatus:
     def __init__(self, children: Iterable[canary.TestCase]) -> None:
         self._children: list[canary.TestCase] = list(children)
-        self._impl: Status
+        self.base_status: Status
         for child in self._children:
             if any(dep not in self._children for dep in child.dependencies):
-                self._impl = Status.PENDING()
+                self.base_status = Status.PENDING()
                 break
         else:
-            self._impl = Status.READY()
+            self.base_status = Status.READY()
 
     @property
     def name(self) -> str:
-        return self._impl.name
+        return self.base_status.name
 
     @property
     def cname(self) -> str:
-        return self._impl.cname
+        return self.base_status.cname
 
     @property
     def color(self) -> str:
-        return self._impl.color
+        return self.base_status.color
 
     def asdict(self) -> dict:
-        return self._impl.asdict()
+        return self.base_status.asdict()
 
     def set(
         self,
@@ -70,7 +71,7 @@ class BatchStatus:
         code: int | None = None,
         propagate: bool = True,
     ) -> None:
-        self._impl.set(status, message=message, code=code)
+        self.base_status.set(status, message=message, code=code)
         if propagate:
             for child in self._children:
                 if child.status.name in ("READY", "PENDING"):
@@ -83,7 +84,7 @@ class BatchStatus:
 
     @property
     def status(self) -> Status:
-        return self._impl
+        return self.base_status
 
 
 class TestBatch:
@@ -96,24 +97,23 @@ class TestBatch:
 
     def __init__(self, spec: BatchSpec) -> None:
         super().__init__()
-        self.cases = list(spec.cases)
         self.spec = spec
+        self.cases = spec.cases
         self.session = self.spec.session
         workspace = self.cases[0].workspace
         self.workspace = workspace.root / f"canary-hpc/batches/{self.id[:2]}/{self.id[2:]}"
         self.configfile = self.workspace / "config.json"
-        self.total_duration: float = -1
         self.script = "canary-inp.sh"
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self._status: BatchStatus = BatchStatus(self.cases)
-        self._jobid: str | None = None
-        self.variables = {"CANARY_BATCH_ID": str(self.id)}
-        self.cpus = 1  # only one CPU needed to submit this batch and wait for scheduler
-        self.gpus = 1  # no GPU needed to submit this batch and wait for scheduler
-        self.exclusive = False
         self._resources: dict[str, list[dict]] = {}
+
+        self.jobid: str | None = None
+        self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
+        self.exclusive = False
         self.measurements = Measurements()
+        self.timekeeper = Timekeeper()
 
     def __iter__(self):
         return iter(self.cases)
@@ -218,37 +218,7 @@ class TestBatch:
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:
-        # Only need one CPU to launch the batch
-        return [{"type": "cpus", "slots": 1}]
-
-    @property
-    def duration(self):
-        start = min(case.start for case in self)
-        stop = max(case.stop for case in self)
-        if start == -1 or stop == -1:
-            return -1
-        return stop - start
-
-    def validate(self, cases: Sequence[canary.TestCase]):
-        errors = 0
-        for case in cases:
-            if case.mask:
-                logger.critical(f"{case}: case is masked")
-                errors += 1
-            for dep in case.dependencies:
-                if dep.mask:
-                    errors += 1
-                    logger.critical(f"{dep}: dependent of {case} is masked")
-        if errors:
-            raise ValueError("Stopping due to previous errors")
-
-    @property
-    def jobid(self) -> str | None:
-        return self._jobid
-
-    @jobid.setter
-    def jobid(self, arg: str) -> None:
-        self._jobid = arg
+        return self.spec.required_resources()
 
     @property
     def status(self) -> BatchStatus:
@@ -301,7 +271,8 @@ class TestBatch:
             f = case.timekeeper.finished_on
             return None if f == "NA" else datetime.datetime.fromisoformat(f)
 
-        duration: float | None = self.total_duration if self.total_duration > 0 else None
+        total_duration = self.timekeeper.duration
+        duration: float | None = total_duration if total_duration > 0 else None
         running: float | None = None
         time_in_queue: float | None = None
         started_on = [started(case) for case in self.cases]
@@ -335,6 +306,7 @@ class TestBatch:
             "workspace": str(self.workspace),
             "cases": [case.id for case in self],
             "status": self.status.asdict(),
+            "timekeeper": self.timekeeper.asdict(),
         }
         self.configfile.write_text(json.dumps(config, indent=2))
 
@@ -359,57 +331,58 @@ class TestBatch:
             default_args: list[str] = ["-C", str(workspace.root.parent)]
             if canary.config.get("debug"):
                 default_args.append("-d")
-            if backend.supports_subscheduling and flat:
-                variables.pop("CANARY_BATCH_ID", None)
-                proc = backend.submitn(
-                    [case.id for case in self],
-                    [
-                        [self.canary_testcase_invocation(case, backend, default_args)]
-                        for case in self
-                    ],
-                    cpus=[case.cpus for case in self],
-                    gpus=[case.gpus for case in self],
-                    scriptname=[str(self.workspace / f"{case.id}-inp.sh") for case in self],
-                    output=[str(self.workspace / f"{case.id}-out.txt") for case in self],
-                    error=[str(self.workspace / f"{case.id}-err.txt") for case in self],
-                    submit_flags=list(repeat(get_scheduler_args(), len(self))),
-                    variables=list(repeat(variables, len(self))),
-                    qtime=[case.runtime * timeoutx for case in self],
-                )
-            else:
-                invocation = self.canary_batch_invocation(backend, default_args)
-                nodes = self.nodes_required(backend)
-                proc = backend.submit(
-                    f"canary.{self.id[:7]}",
-                    [invocation],
-                    nodes=nodes,
-                    scriptname=str(self.workspace / self.script),
-                    output=str(self.workspace / self.stdout),
-                    error=str(self.workspace / self.stdout),
-                    submit_flags=get_scheduler_args(),
-                    variables=variables,
-                    qtime=self.qtime() * timeoutx,
-                )
-            assert proc is not None
-            install_handlers(proc, self)
-            if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
-                self.jobid = proc.jobid
-            while True:
-                try:
-                    if proc.poll() is not None:
+            with self.timekeeper.timeit():
+                if backend.supports_subscheduling and flat:
+                    variables.pop("CANARY_BATCH_ID", None)
+                    proc = backend.submitn(
+                        [case.id for case in self],
+                        [
+                            [self.canary_testcase_invocation(case, backend, default_args)]
+                            for case in self
+                        ],
+                        cpus=[case.cpus for case in self],
+                        gpus=[case.gpus for case in self],
+                        scriptname=[str(self.workspace / f"{case.id}-inp.sh") for case in self],
+                        output=[str(self.workspace / f"{case.id}-out.txt") for case in self],
+                        error=[str(self.workspace / f"{case.id}-err.txt") for case in self],
+                        submit_flags=list(repeat(get_scheduler_args(), len(self))),
+                        variables=list(repeat(variables, len(self))),
+                        qtime=[case.runtime * timeoutx for case in self],
+                    )
+                else:
+                    invocation = self.canary_batch_invocation(backend, default_args)
+                    nodes = self.nodes_required(backend)
+                    proc = backend.submit(
+                        f"canary.{self.id[:7]}",
+                        [invocation],
+                        nodes=nodes,
+                        scriptname=str(self.workspace / self.script),
+                        output=str(self.workspace / self.stdout),
+                        error=str(self.workspace / self.stdout),
+                        submit_flags=get_scheduler_args(),
+                        variables=variables,
+                        qtime=self.qtime() * timeoutx,
+                    )
+                assert proc is not None
+                install_handlers(proc, self)
+                if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
+                    self.jobid = proc.jobid
+                while True:
+                    try:
+                        if proc.poll() is not None:
+                            break
+                    except Exception as e:
+                        logger.exception("Batch @*b{%%s}: polling job failed!" % self.id[:7])
                         break
-                except Exception as e:
-                    logger.exception("Batch @*b{%%s}: polling job failed!" % self.id[:7])
-                    break
-                time.sleep(backend.polling_frequency)
+                    time.sleep(backend.polling_frequency)
         finally:
             breadcrumb.unlink(missing_ok=True)
             uninstall_handlers()
-            self.total_duration = time.monotonic() - start
             self.refresh()
             stat = "SUCCESS" if all(case.status == "SUCCESS" for case in self) else "FAILED"
             self.status.set(stat, propagate=False)
-            data: dict[str, Any] = {self.id: self.status.status}
+            data: dict[str, Any] = {}
+            data[self.id] =  {"status": self.status.status, "timekeeper": self.timekeeper}
             for case in self.cases:
                 if case.status.name in ("PENDING", "READY"):
                     case.status.set("NOT_RUN")
@@ -429,8 +402,13 @@ class TestBatch:
         after a run
 
         """
-        if stat := data.pop(self.id, None):
-            self.status.set(stat.name, stat.message, stat.code, propagate=False)
+        if mydata := data.pop(self.id, None):
+            if stat := mydata.get("status"):
+                self.status.set(stat.name, stat.message, stat.code, propagate=False)
+            if timekeeper := mydata.get("timekeeper"):
+                self.timekeeper.started_on = timekeeper.started_on
+                self.timekeeper.finished_on = timekeeper.finished_on
+                self.timekeeper.duration = timekeeper.duration
         for case in self.cases:
             if d := data.get(case.id):
                 case.on_result(d)
