@@ -63,9 +63,9 @@ class ResourceQueue(queue.ResourceQueue):
             p = d = f = t = 0
             done = sum([len(_) for _ in self._finished.values()])
             busy = sum([len(_) for _ in self._busy.values()])
-            pending = sum([len(_) for _ in self._heap])
+            pending = sum([len(_.job) for _ in self._heap])
             total = done + busy + pending
-            for batch in self.finished():
+            for batch in self._finished.values():
                 for case in batch:
                     if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                         p += 1
