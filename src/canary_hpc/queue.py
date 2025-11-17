@@ -63,6 +63,7 @@ class ResourceQueue(queue.ResourceQueue):
             nodes=batchspec["nodes"],
             cpus_per_node=kwds.get("cpus_per_node"),
         )
+        self._dependents = {job.id: job.dependencies for job in self.tmp_buffer}
         if not batches:
             raise ValueError(
                 "No test batches generated (this should never happen, "
@@ -70,19 +71,21 @@ class ResourceQueue(queue.ResourceQueue):
             )
         fmt = "@*{Generated} %d batches from %d test cases"
         logger.info(fmt % (len(batches), len(self.tmp_buffer)))
-        for batch in batches:
-            slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
-            heapq.heappush(self._heap, slot)
-            logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
+        with self.lock:
+            for batch in batches:
+                slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
+                heapq.heappush(self._heap, slot)
+                logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
 
-    def update_pending(self, job: JobProtocol) -> None:
-        completed = {case.id: case for case in job}
-        for slot in self._heap:
-            job = slot.job
-            for case in job:
-                for i, dep in enumerate(case.dependencies):
-                    if dep.id in completed:
-                        case.dependencies[i] = completed[dep.id]
+    def update_pending(self, finished_job: JobProtocol) -> None:
+        dependents = [dep for case in finished_job for dep in self._dependents.get(case.id, [])]
+        if not dependents:
+            return
+        completed = {case.id: case for case in finished_job}
+        for job in dependents:
+            for i, dep in enumerate(job.dependencies):
+                if dep.id in completed:
+                    job.dependencies[i] = completed[dep.id]
 
     def cases(self) -> list[JobProtocol]:
         cases: list[JobProtocol] = [case for batch in self._heep for case in batch]

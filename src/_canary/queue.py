@@ -37,9 +37,11 @@ class HeapSlot:
     # Negative cost so that heapq is max-heap
     cost: float = field(init=False, repr=False)
     job: JobProtocol = field(compare=False)
+    resources: list[dict[str, Any]] = field(compare=False, init=False, repr=False)
 
     def __post_init__(self):
         self.cost = -self.job.cost()
+        self.resources = self.job.required_resources()
 
 
 class ResourceQueue:
@@ -60,8 +62,10 @@ class ResourceQueue:
         self._heap: list[HeapSlot] = []
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
-        self.exclusive_job_id: str | None = None
+        self._dependents: dict[str, list[JobProtocol]] = {}
+        self.exclusive_job_id: Optional[str] = None
         self.rpool = resource_pool
+        self.prepared = False
         if jobs:
             self.put(*jobs)
 
@@ -70,8 +74,9 @@ class ResourceQueue:
 
     def prepare(self) -> None:
         """Empty method that a subclass can implement"""
-        if not self._heap:
-            raise EmptyHeapError()
+        with self.lock:
+            if not self._heap:
+                raise Empty()
 
     def put(self, *jobs: JobProtocol) -> None:
         # Precompute heap
@@ -86,6 +91,7 @@ class ResourceQueue:
             slot = HeapSlot(job=job)
             heapq.heappush(self._heap, slot)
             logger.debug(f"Job {job.id} added to queue with cost {-slot.cost}")
+            self._dependents[job.id] = list(job.dependencies)
 
     def get(self) -> JobProtocol:
         with self.lock:
@@ -98,27 +104,23 @@ class ResourceQueue:
                 slot = heapq.heappop(self._heap)
                 job = slot.job
 
-                if job.status.name not in ("READY", "PENDING", "RUNNING"):
-                    # Job will never by ready
-                    self._finished[job.id] = job
-                    continue
-
                 if self.exclusive_job_id and self.exclusive_job_id != job.id:
                     deferred_slots.append(slot)
+                    continue
+
+                if job.status.name not in ("READY", "PENDING"):
+                    # Job will never by ready
+                    job.status.set("ERROR", "State became unrunable for unknown reasons")
+                    logger.debug(f"Job {job.id} marked ERROR and removed from queue")
+                    self._finished[job.id] = job
                     continue
 
                 if job.status.name != "READY":
                     deferred_slots.append(slot)
                     continue
 
-                required = job.required_resources()
-                if not required:
-                    job.status.set("ERROR", "a test should require at least 1 cpu")
-                    self._finished[job.id] = job
-                    continue
-
                 try:
-                    acquired = self.rpool.checkout(required)
+                    acquired = self.rpool.checkout(job.resources)
                 except ResourceUnavailable:
                     deferred_slots.append(slot)
                     continue
@@ -156,8 +158,10 @@ class ResourceQueue:
 
     def update_pending(self, finished_job: Any) -> None:
         """Update dependencies of jobs still in the heap."""
-        for slot in self._heap:
-            job = slot.job
+        dependents = self._dependents.get(finished_job.id)
+        if not dependents:
+            return
+        for job in dependents:
             for i, dep in enumerate(job.dependencies):
                 if dep.id == finished_job.id:
                     job.dependencies[i] = finished_job
@@ -204,7 +208,3 @@ class ResourceQueue:
             pad = color.colorize("@*c{====}")
             string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         return string.getvalue()
-
-
-class EmptyHeapError(Exception):
-    pass

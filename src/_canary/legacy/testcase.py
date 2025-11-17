@@ -33,7 +33,6 @@ from typing import Type
 import psutil
 
 from .. import config
-from .atc import AbstractTestCase
 from ..error import diff_exit_status
 from ..error import skip_exit_status
 from ..error import timeout_exit_status
@@ -56,6 +55,7 @@ from ..util.time import Duration
 from ..util.time import hhmmss
 from ..util.time import timestamp
 from ..when import match_any
+from .atc import AbstractTestCase
 from .status import Status
 
 stats_version_info = (3, 0)

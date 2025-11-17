@@ -239,17 +239,6 @@ class TestBatch:
         if errors:
             raise ValueError("Stopping due to previous errors")
 
-    def command(self, stage: str = "run") -> list[str]:
-        raise NotImplementedError
-
-    @property
-    def cputime(self) -> float:
-        return sum(case.cpus * min(case.runtime, 5.0) for case in self) * 1.5
-
-    @property
-    def has_dependencies(self) -> bool:
-        return any(case.dependencies for case in self.cases)
-
     @property
     def jobid(self) -> str | None:
         return self._jobid

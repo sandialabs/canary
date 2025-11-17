@@ -16,16 +16,17 @@ class StatusProtocol(Protocol):
 
 
 class JobProtocol(Protocol):
+    cpus: int
+    cpu_ids: list[int]
+    dependencies: list["JobProtocol"]
+    exclusive: bool
+    gpus: int
+    gpu_ids: list[int]
     id: str
-    timeout: float
     measurements: MutableMapping[str, Any]
     status: StatusProtocol
-    cpus: int
-    gpus: int
-    cpu_ids: list[int]
-    gpu_ids: list[int]
-    exclusive: bool
     runtime: float
+    timeout: float
 
     def __str__(self) -> str: ...
 
