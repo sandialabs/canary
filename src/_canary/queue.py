@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 
 from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
@@ -61,7 +60,7 @@ class ResourceQueue:
         self._heap: list[HeapSlot] = []
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
-        self.exclusive_job_id: Optional[str] = None
+        self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
         if jobs:
             self.put(*jobs)
