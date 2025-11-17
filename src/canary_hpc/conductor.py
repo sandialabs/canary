@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from _canary.testexec import ExecutionSpace
 import argparse
 import multiprocessing as mp
 import threading
@@ -167,7 +168,11 @@ class CanaryHPCConductor:
                 )
             fmt = "@*{Generated} %d batch specs from %d test cases"
             logger.info(fmt % (len(specs), len(jobs)))
-            batches: list[TestBatch] = [TestBatch(spec) for spec in specs]
+            ws_root = ExecutionSpace(jobs[0].workspace.root.parent / "canary-hpc/batches"
+            batches: list[TestBatch] = []
+            for spec in specs:
+                batch = TestBatch(spec, ws_root / spec.id[:2] / spec.id[2:])
+                batches.append(batch)
         except Exception:
             logger.exception("Failed to batch test cases")
             raise

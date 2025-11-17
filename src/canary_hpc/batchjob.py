@@ -95,7 +95,7 @@ class TestBatch:
 
     """
 
-    def __init__(self, spec: BatchSpec) -> None:
+    def __init__(self, spec: BatchSpec, workspace: Path) -> None:
         super().__init__()
         self.spec = spec
         self.cases = spec.cases
