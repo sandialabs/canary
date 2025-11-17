@@ -24,6 +24,7 @@ from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
 from .batching import TestBatch
+from .batching import batch_testcases
 from .queue import ResourceQueue
 
 global_lock = threading.Lock()
@@ -147,8 +148,29 @@ class CanaryHPCConductor:
         The session returncode (0 for success)
 
         """
+        batchspec = canary.config.getoption("canary_hpc_batchspec")
         try:
-            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=jobs)
+            if not batchspec:
+                raise ValueError("Cannot partition test cases: missing batching options")
+            batches: list[TestBatch] = batch_testcases(
+                cases=jobs,
+                layout=batchspec["layout"],
+                count=batchspec["count"],
+                duration=batchspec["duration"],
+                nodes=batchspec["nodes"],
+            )
+            if not batches:
+                raise ValueError(
+                    "No test batches generated (this should never happen, "
+                    "the default batching scheme should have been used)"
+                )
+            fmt = "@*{Generated} %d batches from %d test cases"
+            logger.info(fmt % (len(batches), len(jobs)))
+        except Exception:
+            logger.exception("Failed to batch test cases")
+            raise
+        try:
+            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)
             queue.prepare()
         except Exception:
             logger.exception("Failed to create batch runner")

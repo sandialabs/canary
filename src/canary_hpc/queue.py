@@ -26,56 +26,20 @@ logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.ResourceQueue):
-    def __init__(
-        self,
-        lock: threading.Lock,
-        resource_pool: "ResourcePool",
-        jobs: list[JobProtocol] | None = None,
-    ) -> None:
-        super().__init__(lock=lock, resource_pool=resource_pool)
-        self.tmp_buffer: list[JobProtocol] = []
-        if jobs:
-            for job in jobs:
-                self.put(job)
 
     def put(self, *jobs: JobProtocol) -> None:
         for job in jobs:
-            if canary.config.get("debug"):
-                # The job should have already been validated
-                check = self.rpool.accommodates(job)
-                if not check:
-                    raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
             if job.status.name not in ("READY", "PENDING"):
                 raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
-            else:
-                self.tmp_buffer.append(job)
-
-    def prepare(self, **kwds: Any) -> None:
-        logger.debug("Preparing batch queue")
-        batchspec = canary.config.getoption("canary_hpc_batchspec")
-        if not batchspec:
-            raise ValueError("Cannot partition test cases: missing batching options")
-        batches: list[TestBatch] = batch_testcases(
-            cases=self.tmp_buffer,
-            layout=batchspec["layout"],
-            count=batchspec["count"],
-            duration=batchspec["duration"],
-            nodes=batchspec["nodes"],
-            cpus_per_node=kwds.get("cpus_per_node"),
-        )
-        self._dependents = {job.id: job.dependencies for job in self.tmp_buffer}
-        if not batches:
-            raise ValueError(
-                "No test batches generated (this should never happen, "
-                "the default batching scheme should have been used)"
-            )
-        fmt = "@*{Generated} %d batches from %d test cases"
-        logger.info(fmt % (len(batches), len(self.tmp_buffer)))
         with self.lock:
-            for batch in batches:
+            for batch in jobs:
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
+                self._dependents = {case.id: case.dependencies for case in batch}
+
+    def prepare(self, **kwds: Any) -> None:
+        pass
 
     def update_pending(self, finished_job: JobProtocol) -> None:
         dependents = [dep for case in finished_job for dep in self._dependents.get(case.id, [])]
