@@ -43,6 +43,7 @@ class TestBatch:
       cases: The list of test cases in this batch
 
     """
+
     def __init__(self, cases: Sequence[canary.TestCase], runtime: float | None = None) -> None:
         super().__init__()
         self.validate(cases)
@@ -320,7 +321,11 @@ class TestBatch:
     def setup(self) -> None:
         file = self.configfile(self.id)
         file.parent.mkdir(parents=True, exist_ok=True)
-        config = {"session": self.session, "cases": [case.id for case in self], "status": self.status.asdict()}
+        config = {
+            "session": self.session,
+            "cases": [case.id for case in self],
+            "status": self.status.asdict(),
+        }
         file.write_text(json.dumps(config, indent=2))
 
     def run(
@@ -601,6 +606,7 @@ def install_handlers(proc: hpc_connect.HPCProcess, batch: TestBatch) -> None:
         finally:
             signal.signal(signum, signal.SIG_DFL)
             os.kill(os.getpid(), signum)
+
     signal.signal(signal.SIGUSR1, cancel)
     signal.signal(signal.SIGUSR2, cancel)
     signal.signal(signal.SIGINT, cancel)

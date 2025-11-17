@@ -1,6 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import dataclasses
+import datetime
+import io
 import multiprocessing as mp
 import os
 import signal
@@ -10,6 +13,8 @@ from pathlib import Path
 from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable
+from typing import MutableMapping
+from typing import Protocol
 from uuid import uuid4
 
 from . import config
@@ -19,10 +24,50 @@ from .queue import Empty
 from .util import cpu_count
 from .util import keyboard
 from .util import logging
+from .util.misc import digits
 from .util.procutils import MeasuredProcess
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
+
+
+class StatusProtocol(Protocol):
+    name: str
+    color: tuple
+    def set(
+        self,
+        status: "str | int | StatusProtocol",
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None: ...
+
+
+class JobProtocol(Protocol):
+    id: str
+    timeout: float
+    measurements: MutableMapping[str, Any]
+    status: StatusProtocol
+
+    def __str__(self) -> str: ...
+    def set_status(
+        self,
+        status: str | int | StatusProtocol,
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None: ...
+    def refresh(sehf) -> None: ...
+    def on_result(self, result: dict[str, Any]) -> None: ...
+    def save(self) -> None: ...
+
+
+@dataclasses.dataclass
+class ExecutionSlot:
+    job: JobProtocol
+    qrank: int
+    qsize: int
+    start_time: float
+    proc: MeasuredProcess
+    queue: mp.Queue
 
 
 class ResourceQueueExecutor:
@@ -46,8 +91,7 @@ class ResourceQueueExecutor:
         self.runner = runner
         self.busy_wait_time = busy_wait_time
 
-        # Map: pid -> (MeasuredProcess, result_queue, job, start_time, timeout)
-        self.inflight: dict[int, tuple[MeasuredProcess, mp.Queue, Any, float, float]] = {}
+        self.inflight: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
 
     def __enter__(self) -> "ResourceQueueExecutor":
@@ -101,8 +145,6 @@ class ResourceQueueExecutor:
 
                 # Get a job from the queue
                 job = self.queue.get()
-                job.qrank = qrank
-                job.qsize = qsize
 
                 # Create a result queue for this specific process
                 result_queue = mp.Queue()
@@ -111,13 +153,20 @@ class ResourceQueueExecutor:
                 proc = MeasuredProcess(
                     target=self.runner,
                     args=(job, result_queue),
-                    kwargs={"qsize": qsize, "qrank": qrank, **kwargs},
+                    kwargs=kwargs,
                 )
                 proc.start()
                 qrank += 1
+                self.on_job_start(job, qrank, qsize)
 
-                # Store process with its result queue, job, start time, and timeout
-                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job.timeout)
+                self.inflight[proc.pid] = ExecutionSlot(
+                    proc=proc,
+                    queue=result_queue,
+                    job=job,
+                    start_time=time.time(),
+                    qrank=qrank,
+                    qsize=qsize,
+                )
 
             except Busy:
                 # Queue is busy, wait and try again
@@ -141,62 +190,91 @@ class ResourceQueueExecutor:
 
         return compute_returncode(self.queue.cases())
 
-    def check_timeouts(self) -> None:
+    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+            return
+        fmt = io.StringIO()
+        if os.getenv("GITLAB_CI"):
+            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write("Starting job @*b{%s}: %s" % (job.id[:7], str(job)))
+        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+
+    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+            return
+        fmt = io.StringIO()
+        if os.getenv("GITLAB_CI"):
+            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write(
+            "Finished job @*b{%s}: %s @*%s{%s}"
+            % (job.id[:7], str(job), job.status.color[0], job.status.name)
+        )
+        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+
+    def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
         current_time = time.time()
 
-        for pid, (proc, _, job, start_time, timeout) in list(self.inflight.items()):
-            if proc.is_alive():
-                elapsed = current_time - start_time
-                if elapsed > timeout * self.timeout_multiplier:
+        for pid, slot in list(self.inflight.items()):
+            if slot.proc.is_alive():
+                total_timeout = slot.job.timeout * self.timeout_multiplier
+                elapsed = current_time - slot.start_time
+                if elapsed > total_timeout:
                     # Get measurements before killing
-                    measurements = proc.get_measurements()
-                    proc.shutdown(signal.SIGUSR2, grace_period=0.1)
-                    job.refresh()
-                    job.measurements.update(measurements)
-                    proc.join()
+                    measurements = slot.proc.get_measurements()
+                    slot.proc.shutdown(signal.SIGTERM, grace_period=0.1)
+                    slot.job.set_status(
+                        "TIMEOUT", message=f"Job timed out after {total_timeout} s."
+                    )
+                    slot.job.measurements.update(measurements)
+                    slot.job.save()
+                    slot.proc.join()
                     self.inflight.pop(pid)
-                    self.queue.done(job)
+                    self.queue.done(slot.job)
+                    self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
     def _clean_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
-        self.check_timeouts()
+        self._check_timeouts()
 
-        finished_pids = [
-            pid for pid, (proc, _, _, _, _) in self.inflight.items() if not proc.is_alive()
-        ]
+        finished_pids = [pid for pid, slot in self.inflight.items() if not slot.proc.is_alive()]
 
         for pid in finished_pids:
-            proc, result_queue, job, _, _ = self.inflight.pop(pid)
+            slot = self.inflight.pop(pid)
 
             # Get measurements and store in job
-            measurements = proc.get_measurements()
-            job.measurements.update(measurements)
+            measurements = slot.proc.get_measurements()
+            slot.job.measurements.update(measurements)
 
             # Get the final result before cleaning up
             result = None
             try:
-                result = result_queue.get_nowait()
+                result = slot.queue.get_nowait()
             except (EmptyResultQueue, OSError):
                 pass
             except Exception:
-                logger.exception(f"Error retrieving result for {job}")
+                logger.exception(f"Error retrieving result for {slot.job}")
 
             if result is not None:
-                job.put(result)
+                slot.job.on_result(result)
             else:
-                logger.error(f"No result found for job {job} (pid {pid})")
+                slot.job.set_status(
+                    "ERROR", message=f"No result found for job {slot.job} (pid {pid})"
+                )
+            slot.job.save()
 
             try:
-                result_queue.close()
-                result_queue.join_thread()
+                slot.queue.close()
+                slot.queue.join_thread()
             except Exception:
                 pass
 
-            proc.join()  # Clean up the process
-            self.queue.done(job)
-            logger.debug(f"Process {pid} finished and cleaned up")
+            slot.proc.join()  # Clean up the process
+            self.queue.done(slot.job)
+            self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
     def _wait_for_slot(self) -> None:
         """Wait until a process slot is available."""
@@ -214,13 +292,15 @@ class ResourceQueueExecutor:
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
-        for pid, (proc, _, job, _, _) in self.inflight.items():
-            if proc.is_alive():
-                measurements = proc.get_measurements()
-                proc.shutdown(signum, grace_period=0.1)
-                job.refresh()
-                job.measurements.update(measurements)
-                self.queue.done(job)
+        for pid, slot in self.inflight.items():
+            if slot.proc.is_alive():
+                measurements = slot.proc.get_measurements()
+                slot.proc.shutdown(signum, grace_period=0.1)
+                slot.job.set_status("ERROR", f"Job terminated with code {signum}")
+                slot.job.measurements.update(measurements)
+                slot.job.save()
+                self.queue.done(slot.job)
+                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
         # Force kill if still alive
         for pid, (proc, _, job, _, _) in self.inflight.items():

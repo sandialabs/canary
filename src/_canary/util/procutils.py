@@ -4,7 +4,6 @@
 
 import multiprocessing
 import os
-import signal
 import time
 import warnings
 from typing import Any

@@ -21,9 +21,7 @@ def canary_testcase_setup(case: TestCase) -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_testcase_run(
-    case: TestCase, queue: Queue, qsize: int, qrank: int
-) -> Generator[None, None, bool]:
+def canary_testcase_run(case: TestCase, queue: Queue) -> Generator[None, None, bool]:
     case.run(queue)
     yield
     case.save()

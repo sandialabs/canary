@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
-from .util.misc import digits
 import dataclasses
 import datetime
 import io
@@ -58,8 +57,6 @@ class TestCase:
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
         self.dependencies = dependencies
-        self.qrank: int = -1
-        self.qsize: int = -1
 
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
@@ -89,6 +86,14 @@ class TestCase:
 
     def __repr__(self) -> str:
         return self.display_name
+
+    def set_status(
+        self,
+        status: str | int | Status,
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None:
+        self.status.set(status, message=message, code=code)
 
     def describe(self) -> str:
         """Write a string describing the test case"""
@@ -252,7 +257,6 @@ class TestCase:
             with self.workspace.openfile(self.stdout, "a") as fh:
                 prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                 fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
-            install_handlers(self)
             xstatus = self.spec.xstatus
             with self.workspace.enter(), self.timekeeper.timeit():
                 self.status.set("RUNNING")
@@ -284,20 +288,20 @@ class TestCase:
                 fp.write(message)
             self.status.set("ERROR", message=message)
         finally:
-            uninstall_handlers()
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
             self.save()
         return
 
-    def put(self, data: Any) -> None:
+    def on_result(self, data: Any) -> None:
+        """The companion of queue.put, save results from the test ran in a child process in the
+        parent process"""
         if status := data.get("status"):
             self.status.set(status.name, status.message, status.code)
         if timekeeper := data.get("timekeeper"):
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
-        self.save()
 
     def do_baseline(self) -> None:
         if not self.spec.baseline:
@@ -560,46 +564,6 @@ def load_testcase_from_state(lock_data: dict) -> TestCase:
 
     workspace = Workspace.load()
     return workspace.locate(case=lock_data["spec"]["id"])
-
-
-def install_handlers(case: TestCase) -> None:
-    def cancel(signum, frame):
-        nonlocal case
-        fmt = io.StringIO()
-        if case.qrank >= 0 and case.qsize >= 0:
-            fmt.write("@*{[%s]} " % f"{case.qrank + 1:0{digits(case.qsize)}}/{case.qsize}")
-        try:
-            if case.status.name == "RUNNING":
-                case.timekeeper.stop()
-            if signum == signal.SIGUSR2:
-                t = case.spec.timeout
-                if x := config.get("timeout:multiplier"):
-                    t *= x
-                message = f"Process exceeded {t} s."
-                case.status.set("TIMEOUT", message=message)
-            else:
-                message = f"Received {signum} from the paraent process"
-                case.status.set("CANCELLED", message=message)
-            fmt.write("Finished test case @*b{%s}: %s @*%s{%s}"
-                % (case.id[:7], case.display_name, case.status.color[0], case.status.name)
-            )
-            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-            case.put({"status": case.status, "timekeeper": case.timekeeper})
-        finally:
-            signal.signal(signum, signal.SIG_DFL)
-            os.kill(os.getpid(), signum)
-    signal.signal(signal.SIGUSR1, cancel)
-    signal.signal(signal.SIGUSR2, cancel)
-    signal.signal(signal.SIGINT, cancel)
-    signal.signal(signal.SIGTERM, cancel)
-
-
-def uninstall_handlers() -> None:
-    signal.signal(signal.SIGUSR1, signal.SIG_DFL)
-    signal.signal(signal.SIGUSR2, signal.SIG_DFL)
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    signal.signal(signal.SIGTERM, signal.SIG_DFL)
-
 
 
 @dataclasses.dataclass

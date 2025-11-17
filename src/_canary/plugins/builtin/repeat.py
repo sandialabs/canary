@@ -44,12 +44,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_until_pass(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, queue, qsize, qrank, i)
+            rerun_case(case, queue, i)
             if case.status.name == "SUCCESS":
                 return
         logger.error(
@@ -58,12 +58,12 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int)
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_after_timeout(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, queue, qsize, qrank, i)
+            rerun_case(case, queue, i)
             if not case.status.name == "TIMEOUT":
                 return
         logger.error(
@@ -72,12 +72,12 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue, qsize: int, qrank: i
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_until_fail(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
-            rerun_case(case, queue, qsize, qrank, i)
+            rerun_case(case, queue, i)
             if not case.status.name == "SUCCESS":
                 break
         else:
@@ -88,43 +88,37 @@ def repeat_until_fail(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int)
         )
 
 
-def rerun_case(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int, attempt: int) -> None:
+def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
     dont_restage = config.getoption("dont_restage")
     try:
         case.restore_workspace()
-        if summary := job_start_summary(case, qsize=qsize, qrank=qrank):
+        if summary := job_start_summary(case):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
         case.setup()
         case.run(queue=queue)
     finally:
-        if summary := job_finish_summary(case, qsize=qsize, qrank=qrank, attempt=attempt):
+        if summary := job_finish_summary(case, attempt=attempt):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
         if dont_restage:
             config.set("options:dont_restage", dont_restage, scope="command_line")
 
 
-def job_start_summary(case: "TestCase", qrank: int | None, qsize: int | None) -> str:
+def job_start_summary(case: "TestCase") -> str:
     if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
     fmt.write("Repeating @*b{%s}: %s" % (case.id[:7], case.spec.fullname))
     return fmt.getvalue().strip()
 
 
-def job_finish_summary(
-    case: "TestCase", *, qrank: int | None, qsize: int | None, attempt: int
-) -> str:
+def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
     if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
     fmt.write(
         f"Finished @*b{{%s}} (attempt {attempt + 1}): %s %s"
         % (case.id[:7], case.fullname, case.status.cname)

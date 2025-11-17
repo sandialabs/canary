@@ -9,7 +9,6 @@ from ...util import logging
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import add_filter_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -58,7 +57,9 @@ class Select(CanarySubcommand):
             "file assets.  regex is a python regular expression, see "
             "https://docs.python.org/3/library/re.html",
         )
-        parser.add_argument("-r", action="append", dest="select_paths", help="Select tests found in these paths")
+        parser.add_argument(
+            "-r", action="append", dest="select_paths", help="Select tests found in these paths"
+        )
         parser.add_argument("-t", "--tag", required=True, help="Tag this selection with TAG")
 
     def execute(self, args: "argparse.Namespace") -> int:

@@ -218,7 +218,7 @@ def canary_testcase_setup(case: "AbstractTestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "AbstractTestCase", queue: "Queue", qsize: int, qrank: int) -> bool:
+def canary_testcase_run(case: "AbstractTestCase", queue: "Queue") -> bool:
     """Called to run the test case
 
     Args:
