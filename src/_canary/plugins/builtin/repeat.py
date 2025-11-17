@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...util import logging
-from ...util.misc import digits
 from ...util.string import pluralize
 from ..hookspec import hookimpl
 

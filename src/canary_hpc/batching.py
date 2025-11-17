@@ -36,6 +36,48 @@ from . import binpack
 logger = canary.get_logger(__name__)
 
 
+class BatchStatus:
+    def __init__(self, children: Iterable[canary.TestCase]) -> None:
+        self._children: list[canary.TestCase] = list(children)
+        self._status: Status
+        for child in self._children:
+            if any(dep not in self._children for dep in child.dependencies):
+                self._status = Status.PENDING()
+                break
+        else:
+            self._status = Status.READY()
+
+    @property
+    def name(self) -> str:
+        return self._status.name
+
+    @property
+    def color(self) -> str:
+        return self._status.color
+
+    def set(
+        self,
+        status: str | int | Status,
+        message: str | None = None,
+        code: int | None = None,
+        propagate: bool = True,
+    ) -> None:
+        self._status.set(status, message=message, code=code)
+        if propagate:
+            for child in self._children:
+                if child.status.name in ("READY", "PENDING"):
+                    child.status.set("NOT_RUN")
+                elif child.status.name == "RUNNING":
+                    child.timekeeper.stop()
+                    child.status.set("CANCELLED")
+                else:
+                    child.status.set(status, message=message, code=code)
+
+    @property
+    def status(self) -> Status:
+        return self._status
+
+
 class TestBatch:
     """A batch of test cases
 
@@ -58,14 +100,8 @@ class TestBatch:
             self._runtime = max(runtime, self.find_approximate_runtime())
         else:
             self._runtime = runtime
-        self._status: Status
+        self._status: BatchStatus = BatchStatus(self.cases)
         self._jobid: str | None = None
-        for case in self.cases:
-            if any(dep not in self.cases for dep in case.dependencies):
-                self._status = Status(status="PENDING")
-                break
-        else:
-            self._status = Status(status="READY")
         self.variables = {"CANARY_BATCH_ID": str(self.id)}
         self.cpus = 1  # only one CPU needed to submit this batch and wait for scheduler
         self.gpus = 1  # no GPU needed to submit this batch and wait for scheduler
@@ -78,6 +114,12 @@ class TestBatch:
 
     def __len__(self) -> int:
         return len(self.cases)
+
+    def __str__(self) -> str:
+        if self.status.status in ("READY", "PENDING"):
+            return f"{type(self).__name__}({len(self)} {self.status.status.cname})"
+        combined_stat = self._combined_status()
+        return f"{type(self).__name__}({combined_stat})"
 
     def __repr__(self) -> str:
         case_repr: str
@@ -217,7 +259,7 @@ class TestBatch:
         self._jobid = arg
 
     @property
-    def status(self) -> Status:
+    def status(self) -> BatchStatus:
         if self._status.name == "PENDING":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             pending = 0
@@ -226,7 +268,7 @@ class TestBatch:
                     if dep.status.name in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
-                self._status.set("READY")
+                self._status.set("READY", propagate=False)
         return self._status
 
     def refresh(self) -> None:
@@ -324,17 +366,11 @@ class TestBatch:
         config = {
             "session": self.session,
             "cases": [case.id for case in self],
-            "status": self.status.asdict(),
+            "status": self.status.status.asdict(),
         }
         file.write_text(json.dumps(config, indent=2))
 
-    def run(
-        self,
-        queue: mp.Queue,
-        backend: hpc_connect.HPCSubmissionManager,
-        qsize: int = 1,
-        qrank: int = 1,
-    ) -> None:
+    def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
         start = time.monotonic()
         variables = dict(self.variables)
@@ -405,7 +441,9 @@ class TestBatch:
             uninstall_handlers()
             self.total_duration = time.monotonic() - start
             self.refresh()
-            data: dict[str, Any] = {self.id: self.status}
+            stat = "SUCCESS" if all(case.status == "SUCCESS" for case in self) else "FAILED"
+            self.status.set(stat, propagate=False)
+            data: dict[str, Any] = {self.id: self.status.status}
             for case in self.cases:
                 if case.status.name in ("PENDING", "READY"):
                     case.status.set("NOT_RUN")
@@ -418,26 +456,25 @@ class TestBatch:
 
         return
 
-    def put(self, data: dict[str, Any]):
-        """Update my state
+    def on_result(self, data: dict[str, Any]):
+        """Update my state.  This is the companion of queue.put
 
         Called by the resource queue executor with the results put into the multiprocessing queue
         after a run
 
         """
         if stat := data.pop(self.id, None):
-            self.status.set(stat.name, stat.message, stat.code)
+            self.status.set(stat.name, stat.message, stat.code, propagate=False)
         for case in self.cases:
             if d := data.get(case.id):
-                case.put(d)
-        self.save()
+                case.on_result(d)
 
     def finish(self) -> None:
         pass
 
     def save(self):
         cfg = self.loadconfig(self.id)
-        cfg["status"] = self.status.asdict()
+        cfg["status"] = self.status.status.asdict()
         with open(self.configfile(self.id), "w") as fh:
             json.dump(cfg, fh, indent=2)
         for case in self:
@@ -589,20 +626,6 @@ def install_handlers(proc: hpc_connect.HPCProcess, batch: TestBatch) -> None:
         logger.warning(f"Cancelling batch {batch} due to captured signal {signum!r}")
         try:
             proc.cancel()
-            message = f"Received {signum} from the parent process"
-            if signum == signal.SIGUSR2:
-                batch.status.set("TIMEOUT", message=message)
-            else:
-                batch.status.set("CANCELLED", message=message)
-            data: dict[str, Any] = {batch.id: batch.status}
-            for case in batch.cases:
-                if case.status.name in ("READY", "PENDING"):
-                    case.status.set("NOT_RUN", code=signum)
-                elif case.status.name == "RUNNING":
-                    case.timekeeper.stop()
-                    case.status.set("CANCELLED", code=signum)
-                data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
-            batch.put(data)
         finally:
             signal.signal(signum, signal.SIG_DFL)
             os.kill(os.getpid(), signum)

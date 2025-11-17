@@ -34,6 +34,7 @@ logger = logging.get_logger(__name__)
 class StatusProtocol(Protocol):
     name: str
     color: tuple
+
     def set(
         self,
         status: "str | int | StatusProtocol",
@@ -296,7 +297,8 @@ class ResourceQueueExecutor:
             if slot.proc.is_alive():
                 measurements = slot.proc.get_measurements()
                 slot.proc.shutdown(signum, grace_period=0.1)
-                slot.job.set_status("ERROR", f"Job terminated with code {signum}")
+                stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
+                slot.job.set_status(stat, f"Job terminated with code {signum}")
                 slot.job.measurements.update(measurements)
                 slot.job.save()
                 self.queue.done(slot.job)

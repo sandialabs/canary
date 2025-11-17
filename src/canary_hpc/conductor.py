@@ -3,12 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import io
 import multiprocessing as mp
-import os
 import threading
 from collections import Counter
-from datetime import datetime
 from typing import Any
 from typing import Sequence
 
@@ -21,10 +18,6 @@ from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
-from _canary.util import logging
-from _canary.util.misc import digits
-from _canary.util.string import pluralize
-from _canary.util.time import hhmmss
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
@@ -241,50 +234,6 @@ class Runner:
     def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
-        try:
-            backend = hpc_connect.get_backend(kwargs["backend"])
-            qrank = kwargs.get("qrank", 0)
-            qsize = kwargs.get("qsize", 1)
-            if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
-                logger.log(logging.EMIT, summary, extra={"prefix": ""})
-            batch.setup()
-            batch.run(queue, backend=backend, qsize=qsize, qrank=qrank)
-        finally:
-            if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):
-                logger.log(logging.EMIT, summary, extra={"prefix": ""})
-
-
-def batch_start_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
-    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-        return ""
-    fmt = io.StringIO()
-    if os.getenv("GITLAB_CI"):
-        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write(
-        "Submitted batch @*b{%s}: %d %s" % (batch.id[:7], len(batch), pluralize("test", len(batch)))
-    )
-    if batch.jobid:
-        fmt.write(" (jobid: %s)" % batch.jobid)
-    return fmt.getvalue().strip()
-
-
-def batch_finish_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
-    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-        return ""
-    fmt = io.StringIO()
-    if os.getenv("GITLAB_CI"):
-        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    times = batch.times()
-    combined_stat = batch._combined_status()
-    s = "Finished batch @*b{%s}: %s (time: %s)"
-    fmt.write(s % (batch.id[:7], combined_stat, hhmmss(times[0], threshold=0)))
-    if times[1]:
-        fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
-    if times[2]:
-        fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
-    fmt.write(")")
-    return fmt.getvalue().strip()
+        backend = hpc_connect.get_backend(kwargs["backend"])
+        batch.setup()
+        batch.run(queue, backend=backend)
