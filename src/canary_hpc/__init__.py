@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from typing import TYPE_CHECKING
+
+import hpc_connect
 
 import canary
 from _canary.plugins.subcommands.run import Run
@@ -10,6 +13,10 @@ from _canary.plugins.subcommands.run import Run
 from .argparsing import CanaryHPCBatchSpec
 from .conductor import CanaryHPCConductor
 from .executor import CanaryHPCExecutor
+
+if TYPE_CHECKING:
+    from .batchexec import HPCConnectRunner
+    from .batchspec import TestBatch
 
 logger = canary.get_logger(__name__)
 
@@ -89,3 +96,39 @@ class HPC(canary.CanarySubcommand):
         if args.spec:
             print(CanaryHPCBatchSpec.helppage())
         return
+
+
+class CanaryHPCHooks:
+    @canary.hookspec(firstresult=True)
+    def canary_hpc_batch_runner(
+        batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
+    ) -> "HPCConnectRunner":
+        """Return a runner for this batch"""
+        raise NotImplementedError
+
+
+@canary.hookimpl
+def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
+    pluginmanager.add_hookspecs(CanaryHPCHooks)
+
+
+@canary.hookimpl(trylast=True, specname="canary_hpc_batch_runner")
+def default_runner(
+    batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
+) -> "HPCConnectRunner | None":
+    """Default implementation"""
+    from .batchexec import HPCConnectBatchRunner
+
+    return HPCConnectBatchRunner(backend)
+
+
+@canary.hookimpl(specname="canary_hpc_batch_runner")
+def series_runner(
+    batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
+) -> "HPCConnectRunner | None":
+    """Default implementation"""
+    from .batchexec import HPCConnectSeriesRunner
+
+    if batch.spec.layout == "flat" and backend.supports_subscheduling:
+        return HPCConnectSeriesRunner(backend)
+    return None

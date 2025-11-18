@@ -40,7 +40,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
         config.pluginmanager.hook.canary_addcommand(parser=parser)
         config.pluginmanager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)

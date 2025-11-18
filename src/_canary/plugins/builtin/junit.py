@@ -121,7 +121,7 @@ class JunitDocument(xdom.Document):
 
         """
         testcase = self.create_element("testcase")
-        testcase.setAttribute("name", case.display_name)
+        testcase.setAttribute("name", case.display_name())
         testcase.setAttribute("classname", get_classname(case))
         testcase.setAttribute("time", str(case.timekeeper.duration))
         testcase.setAttribute("file", getattr(case, "relpath", case.file_path))

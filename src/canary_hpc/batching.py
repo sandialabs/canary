@@ -67,7 +67,7 @@ def batch_testcases(
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
             bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
-    specs = [BatchSpec(cases=[lookup[block.id] for block in bin]) for bin in bins]
+    specs = [BatchSpec(layout=layout, cases=[lookup[block.id] for block in bin]) for bin in bins]
     return specs
 
 

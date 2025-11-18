@@ -70,7 +70,6 @@ class TestCase:
         self.family = self.spec.family
         self.timeout = self.spec.timeout
         self.fullname = self.spec.fullname
-        self.display_name = self.spec.display_name
         self.attributes = self.instance_attributes = self.spec.attributes
         self.file_path = self.spec.file_path
         self.file_root = self.spec.file_root
@@ -82,10 +81,16 @@ class TestCase:
         return self.id == other.id
 
     def __str__(self) -> str:
-        return self.display_name
+        return self.spec.display_name
 
     def __repr__(self) -> str:
-        return self.display_name
+        return self.spec.display_name
+
+    def display_name(self, **kwargs) -> str:
+        name = self.spec.display_name
+        if kwargs.get("status"):
+            name += " @*%s{%s}" % (self.status.color[0], self.status.name)
+        return name
 
     def set_status(
         self,

@@ -25,6 +25,7 @@ from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
+from _canary.protocols import JobProtocol
 from _canary.session import Session
 from _canary.testcase import TestCase
 from _canary.testexec import ExecutionPolicy

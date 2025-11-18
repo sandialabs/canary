@@ -71,7 +71,7 @@ class HTMLReporter(CanaryReporter):
             return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
-        fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Test:</b> {case.display_name()}</td></tr>\n")
         fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.status.code}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
@@ -135,7 +135,7 @@ class HTMLReporter(CanaryReporter):
             file = os.path.join(self.cases_dir, f"{case.id}.html")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
-            link = f'<a href="file://{file}">{case.display_name}</a>'
+            link = f'<a href="file://{file}">{case.display_name()}</a>'
             html_name = case.status.html_name
             fh.write(
                 f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"
@@ -153,7 +153,7 @@ class HTMLReporter(CanaryReporter):
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
-                link = f'<a href="file://{file}">{case.display_name}</a>'
+                link = f'<a href="file://{file}">{case.display_name()}</a>'
                 html_name = case.status.html_name
                 fh.write(
                     f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"

@@ -10,6 +10,7 @@ import math
 import multiprocessing as mp
 from functools import cached_property
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
@@ -23,14 +24,17 @@ from _canary.timekeeper import Timekeeper
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
 
-from .batchexec import factory
 from .status import BatchStatus
+
+if TYPE_CHECKING:
+    from .batchexec import HPCConnectRunner
 
 logger = canary.get_logger(__name__)
 
 
 @dataclasses.dataclass
 class BatchSpec:
+    layout: str
     cases: list[canary.TestCase]
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
@@ -96,10 +100,7 @@ class TestBatch:
         return len(self.cases)
 
     def __str__(self) -> str:
-        if self.status.name in ("READY", "PENDING"):
-            return f"{type(self).__name__}({len(self)} {self.status.cname})"
-        combined_stat = self._combined_status()
-        return f"{type(self).__name__}({combined_stat})"
+        return f"batch[id={self.id[:7]}]"
 
     def __repr__(self) -> str:
         case_repr: str
@@ -108,6 +109,16 @@ class TestBatch:
         else:
             case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
         return f"TestBatch({case_repr})"
+
+    def display_name(self, **kwargs: Any) -> str:
+        name = str(self)
+        if not kwargs.get("status"):
+            return name
+        if self.status.name in ("READY", "PENDING"):
+            return f"{name} ({len(self)} {self.status.cname})"
+        else:
+            combined_stat = self._combined_status()
+            return f"{name} ({combined_stat})"
 
     def cost(self) -> float:
         cpus = max(case.cpus for case in self.cases)
@@ -218,9 +229,10 @@ class TestBatch:
 
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
-        batchspec = canary.config.getoption("canary_hpc_batchspec")
-        runner = factory(backend, batchspec["layout"])
-        rc = None
+        runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
+            backend=backend, batch=self
+        )
+        rc = -1
         try:
             logger.debug(f"Submitting batch {self.id[:7]}")
             with self.timekeeper.timeit():

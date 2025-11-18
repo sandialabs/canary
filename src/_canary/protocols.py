@@ -32,6 +32,8 @@ class JobProtocol(Protocol):
 
     def __iter__(self): ...
 
+    def display_name(self, **kwargs: Any) -> str: ...
+
     def set_status(
         self,
         status: str | int | StatusProtocol,

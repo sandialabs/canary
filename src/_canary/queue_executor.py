@@ -180,7 +180,7 @@ class ResourceQueueExecutor:
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("Starting job @*b{%s}: %s" % (job.id[:7], str(job)))
+        fmt.write("Starting job @*b{%s}: %s" % (job.id[:7], job.display_name()))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
@@ -190,10 +190,7 @@ class ResourceQueueExecutor:
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write(
-            "Finished job @*b{%s}: %s @*%s{%s}"
-            % (job.id[:7], str(job), job.status.color[0], job.status.name)
-        )
+        fmt.write("Finished job @*b{%s}: %s" % (job.id[:7], job.display_name(status=True)))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def _check_timeouts(self) -> None:

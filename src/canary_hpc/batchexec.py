@@ -172,9 +172,3 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
             ]
             invocations.append(shlex.join(args))
         return invocations
-
-
-def factory(backend: hpc_connect.HPCSubmissionManager, batch_layout: str) -> HPCConnectRunner:
-    if batch_layout == "flat" and backend.supports_subscheduling:
-        return HPCConnectSeriesRunner(backend)
-    return HPCConnectBatchRunner(backend)

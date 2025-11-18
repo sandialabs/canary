@@ -76,6 +76,7 @@ class Config:
     def __init__(self, initialize: bool = True) -> None:
         self.invocation_dir = invocation_dir
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
+        self.pluginmanager.hook.canary_addhooks(pluginmanager=self.pluginmanager)
         self.data: dict[str, Any] = {}
         self.options: argparse.Namespace = argparse.Namespace()
         if initialize:

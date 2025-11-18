@@ -253,7 +253,7 @@ class CDashXMLReporter:
 
         testlist = doc.createElement("TestList")
         for case in cases:
-            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{case.display_name}")
+            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{case.display_name()}")
         l1.appendChild(testlist)
 
         status: str
@@ -311,8 +311,8 @@ class CDashXMLReporter:
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
             name_fmt = canary.config.getoption("name_format")
-            name = case.display_name
-            fullname = f"{case.workspace.path.parent}/{case.display_name}"
+            name = case.display_name()
+            fullname = f"{case.workspace.path.parent}/{case.display_name()}"
             add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
             add_text_node(test_node, "Path", str(case.workspace.dir.parent))
             add_text_node(test_node, "FullName", f"./{fullname}")

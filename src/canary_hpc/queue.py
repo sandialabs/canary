@@ -5,7 +5,6 @@
 import heapq
 import io
 import time
-from typing import Any
 
 import canary
 from _canary import queue
@@ -27,9 +26,6 @@ class ResourceQueue(queue.ResourceQueue):
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
                 self._dependents.update({case.id: case.dependencies for case in batch})
-
-    def prepare(self, **kwds: Any) -> None:
-        pass
 
     def update_pending(self, finished_job: JobProtocol) -> None:
         dependents = [dep for case in finished_job for dep in self._dependents.get(case.id, [])]

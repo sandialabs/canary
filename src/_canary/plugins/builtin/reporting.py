@@ -283,7 +283,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     _, width = terminal_size()
     color = "g" if case.status.name == "SUCCESS" else "R" if case.status.name == "FAILED" else "y"
     fp = io.StringIO()
-    fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
+    fp.write(ccenter(" @*%s{%s} " % (color, case.display_name()), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
     fp.write(f"{bold('Execution directory')}: {case.workspace.dir}\n")
     command = case.get_attribute("command")

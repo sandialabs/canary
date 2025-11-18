@@ -58,7 +58,7 @@ class MarkdownReporter(CanaryReporter):
     def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
         if case.mask:
             return
-        fh.write(f"# {case.display_name}\n\n")
+        fh.write(f"# {case.display_name()}\n\n")
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
@@ -115,7 +115,7 @@ class MarkdownReporter(CanaryReporter):
             file = os.path.join(self.md_dir, f"{case.id}.md")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: markdown file not found")
-            link = f"[{case.display_name}](./{os.path.basename(file)})"
+            link = f"[{case.display_name()}](./{os.path.basename(file)})"
             duration = f"{case.timekeeper.duration:.2f}"
             status = case.status.name
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
@@ -129,7 +129,7 @@ class MarkdownReporter(CanaryReporter):
                 file = os.path.join(self.md_dir, f"{case.id}.md")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: markdown file not found")
-                link = f"[{case.display_name}](./{os.path.basename(file)})"
+                link = f"[{case.display_name()}](./{os.path.basename(file)})"
                 duration = f"{case.timekeeper.duration:.2f}"
                 status = case.status.name
                 fh.write(f"| {link} | {duration} | {status} |\n")

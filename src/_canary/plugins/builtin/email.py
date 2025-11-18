@@ -64,7 +64,7 @@ def generate_html_report(session: "Session") -> str:
     for group, cases in totals.items():
         for case in sorted(cases, key=lambda c: c.duration):
             file.write(
-                f"<tr><td>{case.display_name}</td>"
+                f"<tr><td>{case.display_name()}</td>"
                 f"<td>{case.timekeeper.duration:.2f}</td>"
                 f"<td>{case.status.html_name}</td></tr>\n"
             )
