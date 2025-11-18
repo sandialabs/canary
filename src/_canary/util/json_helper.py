@@ -1,4 +1,5 @@
 import json
+import json.decoder
 import os
 import time
 from pathlib import Path
@@ -63,6 +64,17 @@ def safeload(file: str, attempts: int = 8) -> dict[str, Any]:
     raise FailedToLoadError(
         f"Failed to load {file} after {attempts} {pluralize('attempt', attempts)}"
     )
+
+
+def try_loads(arg):
+    """Attempt to deserialize ``arg`` into a python object. If the deserialization fails,
+    return ``arg`` unmodified.
+
+    """
+    try:
+        return json.loads(arg)
+    except json.decoder.JSONDecodeError:
+        return arg
 
 
 class FailedToLoadError(Exception):
