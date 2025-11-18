@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
-    from ..protocols import JobProtocol
     from ..testcase import TestCase
     from ..testexec import ExecutionPolicy
     from ..testspec import ResolvedSpec
@@ -119,7 +118,7 @@ def canary_runtests_startup() -> None:
 
 
 @hookspec(firstresult=True)
-def canary_runtests(jobs: list["JobProtocol"]) -> int:
+def canary_runtests(cases: list["TestCase"]) -> int:
     raise NotImplementedError
 
 

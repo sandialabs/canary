@@ -184,7 +184,7 @@ class Session:
             for case in cases:
                 case.status.set("PENDING")
             with working_dir(str(self.work_dir)):
-                config.pluginmanager.hook.canary_runtests(jobs=cases)
+                config.pluginmanager.hook.canary_runtests(cases=cases)
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         finally:

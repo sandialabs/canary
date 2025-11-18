@@ -2,37 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
-import argparse
-import copy
-import datetime
-import json
 import math
-import multiprocessing as mp
-import os
-import shlex
-import signal
-import time
-from functools import cached_property
-from functools import lru_cache
 from graphlib import TopologicalSorter
-from itertools import repeat
-from pathlib import Path
-from typing import Any
 from typing import Iterable
 from typing import Literal
-from typing import Sequence
-
-import hpc_connect
 
 import canary
-from _canary.status import Status
-from _canary.testcase import Measurements
 from _canary.util import cpu_count
-from _canary.util.hash import hashit
-from _canary.util.time import time_in_seconds
-from .batchspec import BatchSpec
 
 from . import binpack
+from .batchspec import BatchSpec
 
 logger = canary.get_logger(__name__)
 

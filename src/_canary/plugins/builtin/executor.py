@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from ... import config
-from ...protocols import JobProtocol
 from ...queue import ResourceQueue
 from ...queue_executor import ResourceQueueExecutor
 from ...resource_pool import make_resource_pool
@@ -58,7 +57,7 @@ class TestCaseExecutor:
         return fp.getvalue()
 
     @hookimpl(trylast=True)
-    def canary_runtests(self, jobs: list[JobProtocol]) -> int:
+    def canary_runtests(self, cases: list["TestCase"]) -> int:
         """Run each test case in ``cases``.
 
         Args:
@@ -70,7 +69,7 @@ class TestCaseExecutor:
         """
         try:
             rpool = self.get_rpool()
-            queue = ResourceQueue(lock=global_lock, resource_pool=rpool, jobs=jobs)
+            queue = ResourceQueue(lock=global_lock, resource_pool=rpool, jobs=cases)  # ty: ignore[invalid-argument-type]
             queue.prepare()
         except Exception:
             logger.exception("Unable to create resource queue")

@@ -2,17 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
-from pathlib import Path
 import json
 import os
 import threading
+from pathlib import Path
 from typing import Any
 
 import hpc_connect
 
 import canary
 
-from .batchjob import TestBatch
+from .batchspec import TestBatch
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)

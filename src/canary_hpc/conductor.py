@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
-from _canary.testexec import ExecutionSpace
 import argparse
 import multiprocessing as mp
 import threading
 from collections import Counter
+from pathlib import Path
 from typing import Any
 from typing import Sequence
 
@@ -15,18 +15,18 @@ import hpc_connect
 import canary
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
-from _canary.protocols import JobProtocol
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
+from _canary.testexec import ExecutionSpace
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
-from .batchjob import TestBatch
-from .batchspec import BatchSpec
 from .batching import batch_testcases
+from .batchspec import BatchSpec
+from .batchspec import TestBatch
 from .queue import ResourceQueue
 
 global_lock = threading.Lock()
@@ -140,11 +140,11 @@ class CanaryHPCConductor:
         return Result(True)
 
     @canary.hookimpl(tryfirst=True)
-    def canary_runtests(self, jobs: list[JobProtocol]) -> int:
-        """Run each test case in ``jobs``.
+    def canary_runtests(self, cases: list[canary.TestCase]) -> int:
+        """Run each test case in ``cases``.
 
         Args:
-        jobs: test cases to run
+        cases: test cases to run
 
         Returns:
         The session returncode (0 for success)
@@ -155,7 +155,7 @@ class CanaryHPCConductor:
             if not batchspec:
                 raise ValueError("Cannot partition test cases: missing batching options")
             specs: list[BatchSpec] = batch_testcases(
-                cases=jobs,
+                cases=cases,
                 layout=batchspec["layout"],
                 count=batchspec["count"],
                 duration=batchspec["duration"],
@@ -167,17 +167,21 @@ class CanaryHPCConductor:
                     "the default batching scheme should have been used)"
                 )
             fmt = "@*{Generated} %d batch specs from %d test cases"
-            logger.info(fmt % (len(specs), len(jobs)))
-            ws_root = ExecutionSpace(jobs[0].workspace.root.parent / "canary-hpc/batches"
+            logger.info(fmt % (len(specs), len(cases)))
+            root = cases[0].workspace.root.parent / "canary-hpc"
             batches: list[TestBatch] = []
             for spec in specs:
-                batch = TestBatch(spec, ws_root / spec.id[:2] / spec.id[2:])
+                path = f"batches/{spec.id[:2]}/{spec.id[2:]}"
+                workspace = ExecutionSpace(
+                    root=root, path=Path(path), session=cases[0].workspace.session
+                )
+                batch = TestBatch(spec, workspace=workspace)
                 batches.append(batch)
         except Exception:
             logger.exception("Failed to batch test cases")
             raise
         try:
-            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)
+            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)  # ty: ignore[invalid-argument-type]
             queue.prepare()
         except Exception:
             logger.exception("Failed to create batch runner")

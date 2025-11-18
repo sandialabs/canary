@@ -34,7 +34,7 @@ index_type = tuple[int, ...] | int
 class ExecutionSpace:
     root: Path
     path: Path
-    session: str
+    session: str | None = None
     dir: Path = dataclasses.field(default_factory=Path, init=False, repr=False)
 
     def __str__(self) -> str:

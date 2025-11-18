@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
-from pathlib import Path
 
 import canary
 from _canary.plugins.subcommands.run import Run
@@ -56,20 +54,6 @@ class HPC(canary.CanarySubcommand):
         p = subparsers.add_parser("exec", help="Execute (run) the batch")
         CanaryHPCExecutor.setup_parser(p)
 
-        p = subparsers.add_parser("location", help="Print the location of the batch")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("log", help="Print the batch's log to the console")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("status", help="List statuses of each case in batch")
-        p.add_argument("batch_id")
-
-        subparsers.add_parser("list", help="List batch IDs")
-
-        p = subparsers.add_parser("describe", help="Print each test case in batch")
-        p.add_argument("batch_id")
-
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
             "--spec",
@@ -97,19 +81,6 @@ class HPC(canary.CanarySubcommand):
             return executor.run(args)
         elif args.hpc_cmd == "help":
             self.extra_help(args)
-        elif args.hpc_cmd == "location":
-            location = self.location(args.batch_id)
-            print(str(location))
-        elif args.hpc_cmd == "log":
-            location = self.location(args.batch_id)
-            display_file(location / "canary-out.txt")
-        elif args.hpc_cmd == "list":
-            batches = self.find_batches()
-            print("\n".join(batches))
-        elif args.hpc_cmd == "status":
-            self.print_status(args.batch_id)
-        elif args.hpc_cmd == "describe":
-            self.describe(args.batch_id)
         else:
             raise ValueError(f"canary hpc: unknown subcommand {args.hpc_cmd!r}")
         return 0
@@ -118,53 +89,3 @@ class HPC(canary.CanarySubcommand):
         if args.spec:
             print(CanaryHPCBatchSpec.helppage())
         return
-
-    def location(self, batch_id: str) -> Path:
-        workspace = canary.Workspace.load()
-        root = workspace.cache_dir / "canary_hpc/batches" / batch_id[:2]
-        if root.exists() and (root / batch_id[2:]).exists():
-            return root / batch_id[2:]
-        elif matches := list(root.glob(f"{batch_id[2:]}*")):
-            return matches[0]
-        raise ValueError(f"Stage directory for batch {batch_id} not found in {workspace.root}")
-
-    def find_batches(self) -> list[str]:
-        workspace = canary.Workspace.load()
-        root = workspace.cache_dir / "canary_hpc/batches"
-        batches: list[str] = []
-        for p in root.iterdir():
-            if p.is_dir():
-                batches.extend(["".join([p.stem, c.stem]) for c in p.iterdir() if c.is_dir()])
-        return batches
-
-    def print_status(self, batch_id: str) -> None:
-        location = self.location(batch_id)
-        f = location / "index"
-        case_ids = json.loads(f.read_text())
-        workspace = canary.Workspace.load()
-        for case in workspace.active_testcases():
-            if case.id not in case_ids:
-                case.mask = "[MASKED]"
-        canary.config.options.report_chars = "A"
-        canary.config.pluginmanager.hook.canary_statusreport(workspace=workspace)
-
-    def describe(self, batch_id: str) -> None:
-        print(f"Batch {batch_id}")
-        location = self.location(batch_id)
-        f = location / "index"
-        case_ids = json.loads(f.read_text())
-        workspace = canary.Workspace.load()
-        for case in workspace.active_testcases():
-            if case.id not in case_ids:
-                continue
-            print(f"- name: {case.spec.display_name}\n  location: {case.workspace.dir}")
-        return
-
-
-def display_file(file: Path) -> None:
-    import pydoc
-
-    print(f"{file}:")
-    if not file.is_file():
-        raise ValueError(f"{file}: no such file")
-    pydoc.pager(file.read_text())

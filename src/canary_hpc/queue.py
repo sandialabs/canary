@@ -4,9 +4,7 @@
 
 import heapq
 import io
-import threading
 import time
-from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
@@ -15,16 +13,10 @@ from _canary.protocols import JobProtocol
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
-
-if TYPE_CHECKING:
-    from _canary.resource_pool import ResourcePool
-
-
 logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.ResourceQueue):
-
     def put(self, *jobs: JobProtocol) -> None:
         for job in jobs:
             if job.status.name not in ("READY", "PENDING"):
