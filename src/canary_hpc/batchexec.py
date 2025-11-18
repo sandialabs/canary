@@ -7,8 +7,10 @@ import shlex
 import signal
 import sys
 import time
+from contextlib import contextmanager
 from itertools import repeat
 from typing import TYPE_CHECKING
+from typing import Generator
 
 import hpc_connect
 
@@ -27,22 +29,19 @@ class HPCConnectRunner:
 
     def execute(self, batch: "TestBatch") -> int | None:
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
-        try:
-            with batch.workspace.enter():
-                proc = self.submit(batch)
-                if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
-                    batch.jobid = proc.jobid
-                self.install_handlers(proc, batch)
+        with batch.workspace.enter():
+            proc = self.submit(batch)
+            if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
+                batch.jobid = proc.jobid
+            with self.handle_signals(proc, batch):
                 while True:
                     try:
                         if proc.poll() is not None:
                             break
-                    except Exception as e:
+                    except Exception:
                         logger.exception("Batch @*b{%%s}: polling job failed!" % batch.id[:7])
                         break
                     time.sleep(self.backend.polling_frequency)
-        finally:
-            self.uninstall_handlers()
         return getattr(proc, "returncode", None)
 
     def submit(self, batch: "TestBatch") -> hpc_connect.HPCProcess:
@@ -75,8 +74,10 @@ class HPCConnectRunner:
             options.extend(args)
         return options
 
-    @staticmethod
-    def install_handlers(proc: hpc_connect.HPCProcess, batch: "TestBatch") -> None:
+    @contextmanager
+    def handle_signals(
+        self, proc: hpc_connect.HPCProcess, batch: "TestBatch"
+    ) -> Generator[None, None, None]:
         def cancel(signum, frame):
             logger.warning(f"Cancelling batch {batch} due to captured signal {signum!r}")
             try:
@@ -85,17 +86,15 @@ class HPCConnectRunner:
                 signal.signal(signum, signal.SIG_DFL)
                 os.kill(os.getpid(), signum)
 
-        signal.signal(signal.SIGUSR1, cancel)
-        signal.signal(signal.SIGUSR2, cancel)
-        signal.signal(signal.SIGINT, cancel)
-        signal.signal(signal.SIGTERM, cancel)
-
-    @staticmethod
-    def uninstall_handlers() -> None:
-        signal.signal(signal.SIGUSR1, signal.SIG_DFL)
-        signal.signal(signal.SIGUSR2, signal.SIG_DFL)
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        current = {}
+        for signum in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGINT, signal.SIGTERM):
+            current[signum] = signal.getsignal(signum)
+            signal.signal(signum, cancel)
+        try:
+            yield
+        except:
+            for signum, handler in current.items():
+                signal.signal(signum, handler)
 
 
 class HPCConnectBatchRunner(HPCConnectRunner):

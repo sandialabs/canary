@@ -63,7 +63,7 @@ class ResourceQueue:
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
         self._dependents: dict[str, list[JobProtocol]] = {}
-        self.exclusive_job_id: Optional[str] = None
+        self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
         self.prepared = False
         if jobs:

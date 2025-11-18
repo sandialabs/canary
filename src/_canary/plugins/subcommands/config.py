@@ -81,7 +81,7 @@ class ConfigCmd(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ... import config
-        from ...config.config import try_loads
+        from ...util.json_helper import try_loads
 
         if args.subcommand == "show":
             show_config(args)
