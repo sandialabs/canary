@@ -169,7 +169,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
                 *default_args,
                 f"--backend={self.backend.name}",
                 f"--case={case.id}",
-                f"--workspace={self.workspace}",
+                f"--workspace={batch.workspace.dir}",
             ]
             invocations.append(shlex.join(args))
         return invocations
