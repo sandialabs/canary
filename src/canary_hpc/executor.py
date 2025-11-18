@@ -43,6 +43,17 @@ class CanaryHPCExecutor:
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_executor")
 
+    def run(self, args: argparse.Namespace) -> int:
+        n = len(self.cases)
+        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
+        workspace = canary.Workspace.load()
+        with workspace.session(name=self.session) as session:
+            disp = session.run(roots=self.cases)
+        canary.config.pluginmanager.hook.canary_runtests_summary(
+            cases=disp["cases"], include_pass=False, truncate=10
+        )
+        return disp["returncode"]
+
     @canary.hookimpl
     def canary_resource_pool_fill(
         self, config: canary.Config, pool: dict[str, dict[str, Any]]
@@ -56,17 +67,6 @@ class CanaryHPCExecutor:
         pool["additional_properties"].update(mypool["additional_properties"])
         pool["resources"].clear()
         pool["resources"].update(mypool["resources"])
-
-    def run(self, args: argparse.Namespace) -> int:
-        n = len(self.cases)
-        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
-        workspace = canary.Workspace.load()
-        with workspace.session(name=self.session) as session:
-            disp = session.run(roots=self.cases)
-        canary.config.pluginmanager.hook.canary_runtests_summary(
-            cases=disp["cases"], include_pass=False, truncate=10
-        )
-        return disp["returncode"]
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:
