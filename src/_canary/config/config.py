@@ -1,6 +1,4 @@
 import argparse
-import json
-import json.decoder
 import os
 import sys
 from functools import cached_property
@@ -14,6 +12,7 @@ import yaml
 
 from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
+from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge
 from ..util.filesystem import write_directory_tag
@@ -318,20 +317,9 @@ def process_config_path(path: str) -> list[str]:
         front, _, path = path.partition(":")
         result.append(front)
         if path.startswith(("{", "[")):
-            result.append(try_loads(path))
+            result.append(json.try_loads(path))
             return result
     return result
-
-
-def try_loads(arg):
-    """Attempt to deserialize ``arg`` into a python object. If the deserialization fails,
-    return ``arg`` unmodified.
-
-    """
-    try:
-        return json.loads(arg)
-    except json.decoder.JSONDecodeError:
-        return arg
 
 
 def isnullpath(path: str) -> bool:
