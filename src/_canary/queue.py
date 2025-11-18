@@ -120,7 +120,7 @@ class ResourceQueue:
                     continue
 
                 try:
-                    acquired = self.rpool.checkout(job.resources)
+                    acquired = self.rpool.checkout(slot.resources)
                 except ResourceUnavailable:
                     deferred_slots.append(slot)
                     continue

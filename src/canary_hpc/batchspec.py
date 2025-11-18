@@ -227,6 +227,14 @@ class TestBatch:
                 self._status.set("READY", propagate=False)
         return self._status
 
+    def set_status(
+        self,
+        status: str | int | Status,
+        message: str | None = None,
+        code: int | None = None,
+    ) -> None:
+        self.status.set(status, message=message, code=code)
+
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(

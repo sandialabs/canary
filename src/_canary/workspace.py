@@ -228,7 +228,9 @@ class Workspace:
         return self
 
     @classmethod
-    def load(cls, start: str | Path = Path.cwd()) -> "Workspace":
+    def load(cls, start: str | Path | None = None) -> "Workspace":
+        start = Path(start or Path.cwd())
+        logger.debug(f"Loading Canary workspace from {start}")
         anchor = cls.find_anchor(start=start)
         if anchor is None:
             raise NotAWorkspaceError(
