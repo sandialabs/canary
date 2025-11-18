@@ -39,6 +39,14 @@ class ExecutionSlot:
     queue: mp.Queue
 
 
+def with_traceback(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        logger.exception("Child process failed")
+        raise
+
+
 class ResourceQueueExecutor:
     """Manages a pool of worker processes with timeout support and metrics collection."""
 
@@ -127,8 +135,8 @@ class ResourceQueueExecutor:
 
                 # Launch a new measured process
                 proc = MeasuredProcess(
-                    target=self.runner,
-                    args=(job, result_queue),
+                    target=with_traceback,
+                    args=(self.runner, job, result_queue),
                     kwargs=kwargs,
                 )
                 proc.start()

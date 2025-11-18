@@ -6,7 +6,6 @@ from typing import Any
 
 from ... import config
 from ...queue import ResourceQueue
-from ...queue_executor import ResourceQueueExecutor
 from ...resource_pool import make_resource_pool
 from ...util import logging
 from ..hookspec import hookimpl
@@ -67,6 +66,8 @@ class TestCaseExecutor:
         The session returncode (0 for success)
 
         """
+        from _canary.queue_executor import ResourceQueueExecutor
+
         try:
             rpool = self.get_rpool()
             queue = ResourceQueue(lock=global_lock, resource_pool=rpool, jobs=cases)  # ty: ignore[invalid-argument-type]

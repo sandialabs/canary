@@ -151,41 +151,33 @@ class CanaryHPCConductor:
 
         """
         batchspec = canary.config.getoption("canary_hpc_batchspec")
-        try:
-            if not batchspec:
-                raise ValueError("Cannot partition test cases: missing batching options")
-            specs: list[BatchSpec] = batch_testcases(
-                cases=cases,
-                layout=batchspec["layout"],
-                count=batchspec["count"],
-                duration=batchspec["duration"],
-                nodes=batchspec["nodes"],
+        if not batchspec:
+            raise ValueError("Cannot partition test cases: missing batching options")
+        specs: list[BatchSpec] = batch_testcases(
+            cases=cases,
+            layout=batchspec["layout"],
+            count=batchspec["count"],
+            duration=batchspec["duration"],
+            nodes=batchspec["nodes"],
+        )
+        if not specs:
+            raise ValueError(
+                "No test batches generated (this should never happen, "
+                "the default batching scheme should have been used)"
             )
-            if not specs:
-                raise ValueError(
-                    "No test batches generated (this should never happen, "
-                    "the default batching scheme should have been used)"
-                )
-            fmt = "@*{Generated} %d batch specs from %d test cases"
-            logger.info(fmt % (len(specs), len(cases)))
-            root = cases[0].workspace.root.parent / "canary-hpc"
-            batches: list[TestBatch] = []
-            for spec in specs:
-                path = f"batches/{spec.id[:2]}/{spec.id[2:]}"
-                workspace = ExecutionSpace(
-                    root=root, path=Path(path), session=cases[0].workspace.session
-                )
-                batch = TestBatch(spec, workspace=workspace)
-                batches.append(batch)
-        except Exception:
-            logger.exception("Failed to batch test cases")
-            raise
-        try:
-            queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)  # ty: ignore[invalid-argument-type]
-            queue.prepare()
-        except Exception:
-            logger.exception("Failed to create batch runner")
-            raise
+        fmt = "@*{Generated} %d batch specs from %d test cases"
+        logger.info(fmt % (len(specs), len(cases)))
+        root = cases[0].workspace.root.parent / "canary-hpc"
+        batches: list[TestBatch] = []
+        for spec in specs:
+            path = f"batches/{spec.id[:2]}/{spec.id[2:]}"
+            workspace = ExecutionSpace(
+                root=root, path=Path(path), session=cases[0].workspace.session
+            )
+            batch = TestBatch(spec, workspace=workspace)
+            batches.append(batch)
+        queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)  # ty: ignore[invalid-argument-type]
+        queue.prepare()
         runner = Runner()
         max_workers = canary.config.getoption("workers") or 10
         with ResourceQueueExecutor(queue, runner, max_workers=max_workers) as ex:
