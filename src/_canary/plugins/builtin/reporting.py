@@ -286,7 +286,8 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
     fp.write(f"{bold('Execution directory')}: {case.workspace.dir}\n")
-    fp.write(f"{bold('Command')}: {' '.join(case.execution_policy.command())}\n")
+    command = case.get_attribute("command")
+    fp.write(f"{bold('Command')}: {command}\n")
     if what in ("o", "oe") and case.stdout:
         file = case.workspace.joinpath(case.stdout)
         if os.path.exists(file):

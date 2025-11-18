@@ -119,6 +119,9 @@ class TestCase:
     def set_attribute(self, **kwds: Any) -> None:
         self.spec.attributes.update(kwds)
 
+    def get_attribute(self, name: str, default: None = None, /) -> None | Any:
+        return self.spec.attributes.get(name, default)
+
     @property
     def cpus(self) -> int:
         return self.spec.rparameters["cpus"]

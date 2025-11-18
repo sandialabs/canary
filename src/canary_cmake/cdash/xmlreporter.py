@@ -253,7 +253,7 @@ class CDashXMLReporter:
 
         testlist = doc.createElement("TestList")
         for case in cases:
-            add_text_node(testlist, "Test", case.format("./%P/%D"))
+            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{case.display_name}")
         l1.appendChild(testlist)
 
         status: str
@@ -310,11 +310,13 @@ class CDashXMLReporter:
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            name_fmt = "%P/%D" if canary.config.getoption("name_format") == "long" else "%D"
-            add_text_node(test_node, "Name", case.format(name_fmt))
-            add_text_node(test_node, "Path", case.format("./%P"))
-            add_text_node(test_node, "FullName", case.format("./%P/%D"))
-            add_text_node(test_node, "FullCommandLine", case.format("%x"))
+            name_fmt = canary.config.getoption("name_format")
+            name = case.display_name
+            fullname = f"{case.workspace.path.parent}/{case.display_name}"
+            add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
+            add_text_node(test_node, "Path", str(case.workspace.dir.parent))
+            add_text_node(test_node, "FullName", f"./{fullname}")
+            add_text_node(test_node, "FullCommandLine", str(case.get_attribute("command")))
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
@@ -323,20 +325,22 @@ class CDashXMLReporter:
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
             add_named_measurement(results, "Completion Status", completion_status)
-            add_named_measurement(results, "Command Line", case.format("%x"), type="cdata")
+            add_named_measurement(
+                results, "Command Line", str(case.get_attribute("command")), type="cdata"
+            )
             add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
                 add_named_measurement(results, "GPUs", case.gpus)
-            if url := getattr(case, "url", None):
+            if url := case.get_attribute(case, "url"):
                 add_named_measurement(results, "Test Script", url, type="text/link")
-            if case.measurements:
-                for name, value in case.measurements.items():
-                    if isinstance(value, str) and value.startswith(("https://", "http://")):
-                        add_named_measurement(results, name.title(), value, type="text/link")
-                    elif isinstance(value, (str, int, float)):
-                        add_named_measurement(results, name.title(), value)
-                    else:
-                        add_named_measurement(results, name.title(), json.dumps(value))
+            for name, value in case.attributes.items():
+                if isinstance(value, str) and value.startswith(("https://", "http://")):
+                    add_named_measurement(results, name.title(), value, type="text/link")
+            for name, value in case.measurements.items():
+                if isinstance(value, (str, int, float)):
+                    add_named_measurement(results, name.title(), value)
+                else:
+                    add_named_measurement(results, name.title(), json.dumps(value))
             add_measurement(
                 results,
                 case.read_output(compress=True),

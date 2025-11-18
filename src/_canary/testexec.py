@@ -7,6 +7,7 @@ import importlib
 import io
 import os
 import runpy
+import shlex
 import shutil
 import subprocess
 import sys
@@ -107,7 +108,6 @@ class ExecutionSpace:
 
 
 class ExecutionPolicy(Protocol):
-    def command(self) -> list[str]: ...
     def execute(self, case: "TestCase") -> int: ...
 
 
@@ -167,6 +167,7 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
 
     def execute(self, case: "TestCase") -> int:
         logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        case.set_attribute(command=shlex.join(sys.argv))
         with self.context(case):
             runpy.run_path(case.spec.file.name, run_name="__main__")
         logger.debug(f"Finished {case.fullname}")
@@ -194,6 +195,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
 
     def execute(self, case: "TestCase") -> int:
         logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        args: list[str] = list(self.args)
         with self.context(case):
             try:
                 stdout = open(case.stdout, "a")
@@ -202,8 +204,9 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
                 else:
                     stderr = open(case.stderr, "a")
                 if a := config.getoption("script_args"):
-                    self.args.extend(a)
-                cp = subprocess.run(self.args, stdout=stdout, stderr=stderr, check=False)
+                    args.extend(a)
+                case.set_attribute(command=shlex.join(args))
+                cp = subprocess.run(args, stdout=stdout, stderr=stderr, check=False)
             finally:
                 stdout.close()
                 if isinstance(stderr, io.TextIOWrapper):
