@@ -26,7 +26,7 @@ class ResourceQueue(queue.ResourceQueue):
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
-                self._dependents = {case.id: case.dependencies for case in batch}
+                self._dependents.update({case.id: case.dependencies for case in batch})
 
     def prepare(self, **kwds: Any) -> None:
         pass
