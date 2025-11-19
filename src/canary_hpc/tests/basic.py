@@ -26,6 +26,12 @@ def config(request):
         os.environ.update(env_copy)
 
 
+def glob_files_in_session(pattern):
+    sessions = glob.glob(".canary/sessions/[0-9]*")
+    session = os.path.basename(sessions[0])
+    return glob.glob(f".canary/sessions/{session}/canary-hpc/batches/**/{pattern}", recursive=True)
+
+
 def test_batched(tmpdir):
     # add long keyword so that batches have a length to minimize when partitioning
     with working_dir(tmpdir.strpath, create=True):
@@ -49,9 +55,9 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob_files_in_session("canary-inp.sh")
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
+        files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
         assert cp.returncode == 0
 
@@ -82,9 +88,8 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob_files_in_session("canary-inp.sh")
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         found = 0
         for line in open(files[0]):
             if re.search(r"#\s*BASH:? -l place=scatter:excl", line):
@@ -97,7 +102,7 @@ if __name__ == '__main__':
         if cp.returncode != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
+        files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
         if cp.returncode != 0:
             print(open(files[0], "r").read())
@@ -127,9 +132,9 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob_files_in_session("canary-inp.sh")
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
+        files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
         assert cp.returncode == 0
 
@@ -160,11 +165,9 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob_files_in_session("canary-inp.sh")
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         found = 0
-        print(open(files[0]).read())
         for line in open(files[0]):
             if re.search(r"#\s*BASH:? -l place=scatter:excl", line):
                 found += 1
@@ -176,7 +179,7 @@ if __name__ == '__main__':
         if cp.returncode != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
+        files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
         if cp.returncode != 0:
             print(open(files[0], "r").read())

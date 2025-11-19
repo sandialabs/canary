@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import datetime
+import os
 import pickle
 import time
 from graphlib import TopologicalSorter
@@ -17,7 +18,6 @@ from .testexec import ExecutionSpace
 from .testspec import select_sygil
 from .util import json_helper as json
 from .util import logging
-from .util.filesystem import working_dir
 from .util.filesystem import write_directory_tag
 from .util.graph import reachable_nodes
 from .util.graph import static_order
@@ -183,11 +183,13 @@ class Session:
         try:
             for case in cases:
                 case.status.set("PENDING")
-            with working_dir(str(self.work_dir)):
-                config.pluginmanager.hook.canary_runtests(cases=cases)
+            starting_dir = os.getcwd()
+            os.chdir(str(self.work_dir))
+            config.pluginmanager.hook.canary_runtests(cases=cases)
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         finally:
+            os.chdir(starting_dir)
             returncode = compute_returncode(cases)
             logger.info(
                 f"@*{{Finished}} session in {(time.monotonic() - start):.2f} s. "

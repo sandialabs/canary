@@ -48,6 +48,9 @@ class BatchSpec:
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
         self.rparameters = {"cpus": 1, "gpus": 0}
 
+    def __len__(self) -> int:
+        return len(self.cases)
+
     def validate(self, cases: Sequence[canary.TestCase]):
         errors = 0
         for case in cases:

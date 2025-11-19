@@ -1,12 +1,12 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
+from pathlib import Path
 
 import pytest
 
-import _canary.finder
 from _canary.util.filesystem import mkdirp
+from _canary.util.filesystem import working_dir
 from canary_hpc import batching
 from canary_hpc.binpack import ONE_PER_BIN
 
@@ -27,46 +27,44 @@ def generate_files(tmpdir):
     yield workdir
 
 
-def test_batch_n(generate_files):
-    workdir = generate_files
-    f = _canary.finder.Finder()
-    f.add(workdir)
-    f.prepare()
-    files = f.discover()
-    cases = _canary.finder.generate_test_cases(files)
-    assert len([c for c in cases if not c.spec.mask]) == num_cases
-    spec = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(
-        cases=cases,
-        **spec,  # ty: ignore[invalid-argument-type]
-    )
-    assert len(batches) == 5
-    assert sum(len(_) for _ in batches) == num_cases
-    spec = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(
-        cases=cases,
-        **spec,  # ty: ignore[invalid-argument-type]
-    )
-    assert len(batches) == num_cases
+def generate_testcases(dirname):
+    import _canary.testcase
+    import _canary.testexec
+    import _canary.workspace
+
+    generators = _canary.workspace.find_generators_in_path(dirname)
+    specs = _canary.workspace.generate_specs(generators)
+    lookup = {}
+    cases = []
+    for spec in specs:
+        ws = _canary.testexec.ExecutionSpace(Path.cwd(), Path("foo"))
+        deps = [lookup[d.id] for d in spec.dependencies]
+        case = _canary.testcase.TestCase(spec=spec, workspace=ws, dependencies=deps)
+        cases.append(case)
+        lookup[case.id] = case
+    return cases
 
 
-def test_batch_t(generate_files):
-    workdir = generate_files
-    f = _canary.finder.Finder()
-    f.add(workdir)
-    f.prepare()
-    files = f.discover()
-    cases = _canary.finder.generate_test_cases(files)
-    assert len([c for c in cases if not c.spec.mask]) == num_cases
-    spec = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(
-        cases=cases,
-        **spec,  # ty: ignore[invalid-argument-type]
-    )  # 5x long test case duration
-    assert sum(len(_) for _ in batches) == num_cases
-    spec = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
-    batches = batching.batch_testcases(
-        cases=cases,
-        **spec,  # ty: ignore[invalid-argument-type]
-    )
-    assert sum(len(_) for _ in batches) == num_cases
+def test_batch_n(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        workdir = generate_files
+        cases = generate_testcases(workdir)
+        kwds = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
+        batches = batching.batch_testcases(cases=cases, **kwds)
+        assert len(batches) == 5
+        assert sum(len(_) for _ in batches) == num_cases
+        kwds = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
+        batches = batching.batch_testcases(cases=cases, **kwds)
+        assert len(batches) == num_cases
+
+
+def test_batch_t(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        workdir = generate_files
+        cases = generate_testcases(workdir)
+        kwds = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
+        batches = batching.batch_testcases(cases=cases, **kwds)
+        assert sum(len(_) for _ in batches) == num_cases
+        kwds = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
+        batches = batching.batch_testcases(cases=cases, **kwds)
+        assert len(batches) == num_cases

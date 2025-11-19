@@ -4,6 +4,7 @@
 
 import glob
 import importlib.resources
+import os
 from pathlib import Path
 
 import _canary.config as config
@@ -17,7 +18,6 @@ def test_repo_bfilter(tmpdir):
     examples = root / "examples"
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
-            config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
             config.options.canary_hpc_scheduler = "shell"
             # config.ioptions.canary_hpc_scheduler = "shell"
             spec = {"count": 2, "duration": None, "layout": "flat", "nodes": "any"}
@@ -30,7 +30,9 @@ def test_repo_bfilter(tmpdir):
             selection = workspace.get_selection()
             with workspace.session(selection) as session:
                 session.run()
+            session = os.path.basename(glob.glob("./tests/.canary/sessions/[0-9]*")[0])
             files = glob.glob(
-                "tests/.canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True
+                f"tests/.canary/sessions/{session}/canary-hpc/batches/**/canary-inp.sh",
+                recursive=True,
             )
             assert len(files) == 2
