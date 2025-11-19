@@ -94,7 +94,7 @@ def reconstruct_log(file: str) -> str:
 
 def display_file(file: Path) -> None:
     print(f"{file}:")
-    if file.exists():
+    if not file.exists():
         raise FileNotFoundError(file)
     page_text(file.read_text())
 

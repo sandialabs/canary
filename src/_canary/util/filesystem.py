@@ -77,8 +77,8 @@ def which(
 
     Args:
       args: One or more executables to search for
-      path: The path to search. Defaults to ``PATH`` required (bool): If set to
-        True, raise an error if executable not found
+      path: The path to search. Defaults to ``PATH``
+      required (bool): If set to True, raise an error if executable not found
 
     Returns:
       exe: The first executable that is found in the path
