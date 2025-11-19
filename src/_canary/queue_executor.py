@@ -43,8 +43,10 @@ def with_traceback(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception:
-        logger.exception("Child process failed")
-        raise
+        if config.get("debug"):
+            logger.exception("Child process failed")
+        else:
+            logger.error("Child process failed")
 
 
 class ResourceQueueExecutor:

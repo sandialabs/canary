@@ -6,7 +6,20 @@ import base64
 import io
 import json
 import os
+import tarfile
 import zlib
+
+
+def targz_compress(*files: str) -> str:
+    buffer = io.BytesIO()
+    with tarfile.open(mode="w:gz", fileobj=buffer) as tar:
+        for file in files:
+            with open(file, "rb") as fh:
+                data = fh.read()
+            info = tarfile.TarInfo(name=os.path.basename(file))
+            info.size = len(data)
+            tar.addfile(info, fileobj=io.BytesIO(data))
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
 def serialize(obj: object) -> str:
