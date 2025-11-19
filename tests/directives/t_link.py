@@ -135,13 +135,13 @@ if __name__ == '__main__':
         python = Executable(sys.executable)
         python("-m", "canary", "run", "-w", ".", fail_on_error=False)
 
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=foo.b=1", stdout=str)
+        p = python("-m", "canary", "-d", "location", "a.a=foo.b=1", stdout=str)
         assert txtfiles(p.out.strip()) == ["foo.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=foo.b=2", stdout=str)
+        p = python("-m", "canary", "location", "a.a=foo.b=2", stdout=str)
         assert txtfiles(p.out.strip()) == ["foo-b2.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=baz.b=1", stdout=str)
+        p = python("-m", "canary", "location", "a.a=baz.b=1", stdout=str)
         assert txtfiles(p.out.strip()) == ["baz.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=baz.b=2", stdout=str)
+        p = python("-m", "canary", "location", "a.a=baz.b=2", stdout=str)
         assert txtfiles(p.out.strip()) == ["baz-b2.txt"]
 
         if python.returncode != 0:

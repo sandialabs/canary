@@ -23,6 +23,7 @@ from ...paramset import ParameterSet
 from ...testcase import TestCase
 from ...testexec import ExecutionPolicy
 from ...testexec import PythonFileExecutionPolicy
+from ...testexec import SubprocessExecutionPolicy
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -259,6 +260,14 @@ class PYTTestGenerator(AbstractTestGenerator):
                     DependencyPatterns(pattern=d.id, expects=1, result_match="success")
                     for d in my_drafts
                 ]
+                psets = {}
+                for paramset in paramsets:
+                    table = psets.setdefault(":".join(paramset.keys), [])
+                    for row in paramset.values:
+                        if len(paramset.keys) == 1:
+                            table.append(row[0])
+                        else:
+                            table.append(list(row))
                 parent = DraftSpec(
                     file_root=Path(self.root),
                     file_path=Path(self.path),
@@ -274,7 +283,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     artifacts=self.artifacts(testname=name, on_options=on_options),
                     exclusive=self.exclusive(testname=name, on_options=on_options),
-                    attributes={"multicase": True, "flag": ns.value},
+                    attributes={"multicase": True, "analyze": ns.value, "paramsets": psets},
                     dependencies=dependencies,
                 )
                 if test_mask is not None:
@@ -1007,5 +1016,7 @@ def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenera
 @hookimpl
 def canary_testcase_execution_policy(case: TestCase) -> ExecutionPolicy | None:
     if case.spec.file.suffix in (".pyt", ".py"):
+        if script := case.get_attribute("alt_script"):
+            return SubprocessExecutionPolicy([f"./{script}"])
         return PythonFileExecutionPolicy()
     return None

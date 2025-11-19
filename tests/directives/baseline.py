@@ -35,7 +35,7 @@ if __name__ == '__main__':
         assert cp.returncode == 0
         with working_dir("TestResults"):
             rebaseline = CanaryCommand("rebaseline")
-            cp = rebaseline(".")
+            cp = rebaseline(".", debug=True)
         assert cp.returncode == 0
         assert open("a.txt").read() == "a=1"
 

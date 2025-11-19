@@ -91,7 +91,6 @@ def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
     if not case.spec.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
-    file = case.workspace.joinpath("vvtest_util.py")
     with case.workspace.openfile("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
@@ -146,20 +145,13 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs["PARAM_DICT"] = case.spec.parameters or {}
     for key, val in case.spec.parameters.items():
         attrs[key] = val
-        if attrs["is_analyze"]:
-            # FIXME
-            pass
-    #            for paramset in case.paramsets:
-    #                key = "_".join(paramset.keys)
-    #                table = attrs.setdefault(f"PARAM_{key}", [])
-    #                for row in paramset.values:
-    #                    if len(paramset.keys) == 1:
-    #                        table.append(row[0])
-    #                    else:
-    #                        table.append(list(row))
+    if attrs["is_analyze"]:
+        for key, val in case.spec.attributes["paramsets"]:
+            name = key.replace(":", "_")
+            attrs[f"PARAM_{name}"] = val
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.spec.dependencies]
+    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.dependencies]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
     attrs["exec_dir"] = str(case.workspace.dir)

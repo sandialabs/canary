@@ -9,7 +9,6 @@ import math
 import multiprocessing
 import os
 import signal
-import sys
 import traceback
 from functools import cached_property
 from pathlib import Path
@@ -320,22 +319,14 @@ class TestCase:
         logger.info(f"Rebaselining {self.spec.pretty_name}")
         with self.workspace.enter():
             for arg in self.spec.baseline:
-                if isinstance(arg, str):
-                    exe: Executable
-                    args: list[str] = []
-                    p = Path(arg)
-                    if p.exists():
-                        exe = Executable(str(p))
-                    else:
-                        args = [self.spec.file.name, arg]
-                        exe = Executable(sys.executable)
-                    exe(*args, fail_on_error=False)
+                if arg["type"] == "exe":
+                    exe = Executable(arg["exe"])
+                    exe(*arg["args"], fail_on_error=False)
                 else:
-                    a, b = arg
-                    src = self.workspace.dir / a
-                    dst = self.spec.file.parent / b
+                    src = self.workspace.dir / arg["src"]
+                    dst = self.spec.file.parent / arg["dst"]
                     if src.exists():
-                        logger.debug(f"    Replacing {b} with {a}\n")
+                        logger.debug(f"    Replacing {dst} with {src}\n")
                         copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int) -> None:
@@ -369,7 +360,7 @@ class TestCase:
         elif code == 0:
             self.status.set("SUCCESS")
         else:
-            self.status.set("FAILED", code=code)
+            self.status.set(code)
 
     def refresh(self) -> None:
         data = json.loads(self.workspace.joinpath("testcase.lock").read_text())

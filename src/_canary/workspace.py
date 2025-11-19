@@ -827,9 +827,16 @@ class Workspace:
             return self.locate_testcase(case)
 
     def locate_testcase(self, root: str) -> TestCase:
-        for case in self.load_testcases(roots=[root]):
-            return case
+        for case in self.load_testcases():
+            if case.spec.matches(root):
+                return case
         raise ValueError(f"{root}: no matching test found in {self.root}")
+
+
+def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
+    hook = config.pluginmanager.hook.canary_collect_generators
+    generators: list[AbstractTestGenerator] = hook(scan_path=ScanPath(root=str(path)))
+    return generators
 
 
 def generate_specs(

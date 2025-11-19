@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import glob
-import os
 import sys
 
 from _canary.util.filesystem import set_executable
@@ -34,6 +33,7 @@ def analyze():
     assert self.parameters['b'] == (4, 5, 4, 5), self.parameters['b']
     return 0
 if __name__ == '__main__':
+    print("B.0", sys.argv)
     if '--analyze' in sys.argv[1:]:
         rc = analyze()
     else:
@@ -113,9 +113,5 @@ if __name__ == '__main__':
             fh.write(f"#!{sys.executable}\nimport sys\nsys.exit(0)")
         set_executable("baz.py")
         run = CanaryCommand("run")
-        cp = run("-w", ".")
-        if cp.returncode != 0:
-            print(os.listdir("TestResults/f"))
-            for file in glob.glob("TestResults/**/canary-out.txt"):
-                print(open(file).read())
+        cp = run(".", debug=True)
         assert cp.returncode == 0

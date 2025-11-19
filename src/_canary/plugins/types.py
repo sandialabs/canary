@@ -95,4 +95,4 @@ class Result:
 @dataclasses.dataclass
 class ScanPath:
     root: str
-    paths: list[str]
+    paths: list[str] | None = None

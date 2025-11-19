@@ -12,7 +12,7 @@ def test_issue_20_0(tmpdir):
     with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         run = CanaryCommand("run")
         f = os.path.join(os.path.dirname(__file__), "issue-20-0.vvt")
-        cp = run(f)
+        cp = run(f, debug=True)
         assert cp.returncode == 6
 
 

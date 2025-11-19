@@ -221,6 +221,8 @@ class Config:
 
         if args.config_mods:
             data.update(args.config_mods)
+            if envmods := args.config_mods.get("environment"):
+                self.apply_environment_mods(envmods)
 
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):

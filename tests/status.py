@@ -11,40 +11,34 @@ from _canary.error import timeout_exit_status
 
 def test_status_0():
     stat = status.Status()
-    stat.set("failed", details="Just because")
-    s = str(stat)
-    s = repr(stat)
+    stat.set("failed", message="Just because")
 
     other = status.Status()
     assert other != stat
-    other.set("failed", details="Just because")
+    other.set("failed", message="Just because")
     assert other == stat
 
     stat.set("ready")
-    assert stat.ready()
+    assert stat == "READY"
 
     stat.set("pending")
-    assert stat.pending()
+    assert stat == "PENDING"
 
-    stat.set_from_code(0)
-    assert stat == "success"
-    assert stat.name == "PASS"
-    stat.set_from_code(diff_exit_status)
-    assert stat == "diffed"
-    assert stat.name == "DIFF"
-    stat.set_from_code(skip_exit_status)
-    assert stat == "skipped"
-    assert stat.name == "SKIPPED"
-    stat.set_from_code(fail_exit_status)
-    assert stat == "failed"
-    assert stat.name == "FAIL"
-    stat.iid
-    stat.set_from_code(timeout_exit_status)
-    assert stat == "timeout"
-    stat.set_from_code(66)
-    assert stat == "timeout"
-    stat.set_from_code(22)
-    assert stat == "failed"
+    stat.set(0)
+    assert stat == "SUCCESS"
+    stat.set(diff_exit_status)
+    assert stat == "DIFFED"
+    stat.set(skip_exit_status)
+    assert stat == "SKIPPED"
+    stat.set(fail_exit_status)
+    assert stat == "FAILED"
+    stat.set(timeout_exit_status)
+    assert stat == "TIMEOUT"
+    stat.set(66)
+    assert stat == "TIMEOUT"
+    stat.set(22)
+    assert stat == "FAILED"
 
-    stat.set("not_run", details="reason")
-    assert stat.name == "NOT RUN"
+    stat.set("not_run", message="reason")
+    assert stat.name == "NOT_RUN"
+    assert stat.display_name() == "NOT RUN"

@@ -28,13 +28,13 @@ class Status:
         "XFAIL": (50, "Cyan", "✓", ()),
         "XDIFF": (51, "Cyan", "✓", ()),
         "RETRY": (52, "Yellow", "⟳", ()),
-        "SKIPPED": (53, "Magenta", "⊘", ()),
-        "CANCELLED": (63, "Magenta", "⊘", ()),
+        "SKIPPED": (63, "Magenta", "⊘", ()),
         "DIFFED": (64, "Magenta", "✗", ("DIFF",)),
         "FAILED": (65, "Red", "✗", ("FAIL",)),
         "TIMEOUT": (66, "Red", "⏱", ()),
         "ERROR": (67, "Red", "⚠", ()),
         "NOT_RUN": (68, "Red", "✗", ()),
+        "CANCELLED": (69, "Magenta", "⊘", ()),
     }
 
     # Reverse mapping: code -> name (for default codes only)
@@ -93,6 +93,12 @@ class Status:
     def name(self) -> str:
         """Status name (e.g., 'SUCCESS')."""
         return self._name
+
+    def display_name(self, **kwargs) -> str:
+        name = self._name.replace("_", " ")
+        if kwargs.get("color"):
+            return "@*%s{%s}" % (self.color[0], name)
+        return name
 
     @property
     def cname(self) -> str:

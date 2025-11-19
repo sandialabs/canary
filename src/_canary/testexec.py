@@ -21,6 +21,8 @@ from typing import Protocol
 
 from . import config
 from .util import logging
+from .util.module import load as load_module
+from .util.shell import source_rcfile
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -142,11 +144,18 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
             sys.argv = [sys.executable, case.spec.file.name]
             if a := config.getoption("script_args"):
                 sys.argv.extend(a)
+            if a := case.get_attribute("script_args"):
+                sys.argv.extend(a)
             sys.stdout = open(case.stdout, "a")
             if case.stderr is None:
                 sys.stderr = sys.stdout
             else:
                 sys.stderr = open(case.stderr, "a")
+            for module in case.spec.modules or []:
+                load_module(module)
+            for rcfile in case.spec.rcfiles or []:
+                source_rcfile(rcfile)
+
             os.chdir(case.workspace.dir)
 
             yield

@@ -77,7 +77,7 @@ class SpecCommons:
 
     def s_params(self: Named, sep: str = ",") -> str | None:
         if self.parameters:
-            parts = [f"{p}={stringify(self.parameters[p])}" for p in self.parameters]
+            parts = [f"{p}={stringify(self.parameters[p])}" for p in sorted(self.parameters.keys())]
             return sep.join(parts)
         return None
 
@@ -104,11 +104,11 @@ class SpecCommons:
             if key not in self.parameters:
                 parameters[key] = value
         if "np" not in self.parameters:
-            parameters["np"] = parameters["cpus"]
+            parameters["np"] = self.rparameters["cpus"]
         if "nnode" not in self.parameters:
-            parameters["nnode"] = parameters["nodes"]
+            parameters["nnode"] = self.rparameters["nodes"]
         if "ndevice" not in self.parameters:
-            parameters["ndevice"] = parameters["gpus"]
+            parameters["ndevice"] = self.rparameters["gpus"]
         if rt := getattr(self, "runtime", None):
             parameters["runtime"] = float(rt)
         return parameters
@@ -413,6 +413,7 @@ class DraftSpec(SpecCommons):
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
         self.exclusive = bool(self.exclusive)
         self.dependency_patterns = self._generate_dependency_patterns(self.dependencies or [])
+        self._generate_analyze_action()
 
     def resolve(
         self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None
@@ -501,6 +502,27 @@ class DraftSpec(SpecCommons):
                 actions.append({"type": "copy", "src": src, "dst": dst})
         return actions
 
+    def _generate_analyze_action(self):
+        if analyze := self.attributes.get("analyze"):
+            if analyze.startswith("-"):
+                self.attributes["script_args"] = [analyze]
+            else:
+                src: Path
+                if os.path.exists(analyze):
+                    src = Path(analyze).absolute()
+                else:
+                    src = self.file.parent / analyze
+                if not src.exists():
+                    logger.warning(f"{self}: analyze script {analyze} not found")
+                self.attributes["alt_script"] = src.name
+                # flag is a script to run during analysis, check if it is going to be copied/linked
+                for asset in self.assets:
+                    if asset.action in ("link", "copy") and src.name == asset.src.name:
+                        break
+                else:
+                    asset = Asset(src, src.name, action="link")
+                    self.assets.append(asset)
+
     def _validate_parameters(self, data: dict[str, Any]) -> dict[str, Any]:
         """Default parameters used to set up resources required by test case"""
         self.rparameters.clear()
@@ -552,15 +574,18 @@ class DraftSpec(SpecCommons):
         self, args: list[str | DependencyPatterns]
     ) -> list[DependencyPatterns]:
         dependency_patterns: list[DependencyPatterns] = []
+        parameters: dict[str, str] = {}
+        for key, val in self.parameters.items():
+            parameters[key] = stringify(val)
         for arg in args:
             if isinstance(arg, DependencyPatterns):
                 for i, f in enumerate(arg.patterns):
                     t = string.Template(f)
-                    arg.patterns[i] = t.safe_substitute(**self.parameters)
+                    arg.patterns[i] = t.safe_substitute(**parameters)
                 dependency_patterns.append(arg)
             else:
                 t = string.Template(arg)
-                pattern = t.safe_substitute(**self.parameters)
+                pattern = t.safe_substitute(**parameters)
                 dep_pattern = DependencyPatterns(pattern=pattern)
                 dependency_patterns.append(dep_pattern)
         return dependency_patterns
