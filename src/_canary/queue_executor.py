@@ -7,6 +7,7 @@ import io
 import multiprocessing as mp
 import os
 import signal
+import sys
 import time
 from functools import cached_property
 from pathlib import Path
@@ -28,6 +29,7 @@ from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 
+import traceback
 
 @dataclasses.dataclass
 class ExecutionSlot:
@@ -42,11 +44,21 @@ class ExecutionSlot:
 def with_traceback(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
-    except Exception:
-        if config.get("debug"):
-            logger.exception("Child process failed")
-        else:
-            logger.error("Child process failed")
+    except Exception as e:
+        case = args[0]
+        case.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
+
+        queue = args[1]
+
+        while not queue.empty():
+            queue.get_nowait()
+
+        queue.put({"status": case.status})
+        str = io.StringIO()
+        traceback.print_exc(file=str)
+        logger.error("Child process failed")
+        logger.debug(f"Child process failed: {str.getvalue()}")
+        sys.exit(1)
 
 
 class ResourceQueueExecutor:
