@@ -23,6 +23,7 @@ from . import config
 from .util import logging
 from .util.module import load as load_module
 from .util.shell import source_rcfile
+from .util.filesystem import force_remove
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -60,7 +61,7 @@ class ExecutionSpace:
 
     def remove(self, missing_ok: bool = False) -> None:
         if self.exists():
-            shutil.rmtree(self.dir)
+            force_remove(self.dir)
         elif not missing_ok:
             raise FileNotFoundError(self.dir)
 
