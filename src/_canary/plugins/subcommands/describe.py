@@ -74,7 +74,7 @@ def describe_testcase(case: "TestCase", indent: str = "") -> None:
     from pygments.lexers import get_lexer_by_name
 
     state = case.asdict()
-    text = dump({"name": case.spec.display_name(), **state})
+    text = dump({"name": case.display_name(), **state})
     lexer = get_lexer_by_name("yaml")
     formatter = Formatter(bg="dark", style="monokai")
     formatted_text = highlight(text.strip(), lexer, formatter)
