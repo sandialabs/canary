@@ -1,6 +1,14 @@
 import argparse
 import os
+from pathlib import Path
 from typing import Any
+from typing import Generator
+
+from schema import And
+from schema import Optional
+from schema import Or
+from schema import Schema
+from schema import Use
 
 import canary
 
@@ -121,6 +129,11 @@ class CDashHooks:
         """Return CDash labels for ``case``"""
         ...
 
+    @canary.hookspec
+    def canary_cdash_artifacts(self, case: "canary.TestCase") -> list[dict[str, str]] | None:
+        """Return artifacts to transmit to CDash"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -150,3 +163,20 @@ def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, A
         pool["resources"].update(resource_specs["local"])
         if "cpus" not in pool["resources"]:
             pool["resources"]["cpus"] = cpu_spec
+
+
+@canary.hookimpl(wrapper=True)
+def canary_cdash_artifacts(case: canary.TestCase) -> Generator[None, None, list[dict[str, str]]]:
+    """Default implementation: return the test case's keywords"""
+    schema = Schema(
+        {
+            "file": And(Or(str, Path), Use(str)),
+            Optional("when", default="always"): Or("never", "always", "on_success", "on_failure"),
+        }
+    )
+    artifacts = list(case.spec.artifacts) or []
+    result = yield
+    artifacts.extend([_ for _ in result if _])
+    for i, artifact in enumerate(artifacts):
+        artifacts[i] = schema.validate(artifact)
+    return artifacts

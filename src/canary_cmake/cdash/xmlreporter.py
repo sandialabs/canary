@@ -350,21 +350,14 @@ class CDashXMLReporter:
             )
             test_node.appendChild(results)
 
-            if case.status.name in ("FAILED", "DIFFED") and os.path.exists(case.file):
-                add_named_measurement(
-                    test_node,
-                    "Attached File",
-                    targz_compress(str(case.file)),
-                    type="file",
-                    encoding="base64",
-                    compression="tar/gzip",
-                    filename=os.path.basename(case.file),
-                )
-            for artifact in case.spec.artifacts:
+            artifacts = []
+            for artifact in canary.config.pluginmanager.hook.canary_cdash_artifacts(case=case):
                 when = artifact["when"]
-                if when == "success" and case.status.name != "SUCCESS":
+                if when == "never":
                     continue
-                elif when == "failure" and case.status.name == "SUCCESS":
+                elif when == "on_success" and case.status.name != "SUCCESS":
+                    continue
+                elif when == "on_failure" and case.status.name == "SUCCESS":
                     continue
                 file = artifact["file"]
                 if not os.path.exists(file) and not os.path.isabs(file):
@@ -373,15 +366,18 @@ class CDashXMLReporter:
                     elif os.path.exists(os.path.join(case.file_dir, file)):
                         file = os.path.join(case.file_dir, file)
                 if os.path.exists(file):
-                    add_named_measurement(
-                        test_node,
-                        "Attached File",
-                        targz_compress(file),
-                        type="file",
-                        encoding="base64",
-                        compression="tar/gzip",
-                        filename=os.path.basename(file),
-                    )
+                    artifacts.append(file)
+            if artifacts:
+                payload = targz_compress(*artifacts, path="artifacts")
+                add_named_measurement(
+                    test_node,
+                    "Attached File",
+                    payload,
+                    type="file",
+                    encoding="base64",
+                    compression="tar/gzip",
+                    filename="artifacts",
+                )
 
             labels: set[str] = set(
                 canary.config.pluginmanager.hook.canary_cdash_labels(case=case) or []

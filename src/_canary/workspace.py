@@ -881,7 +881,10 @@ def generate_specs(
                 )
         raise ValueError("Duplicate test IDs in test suite")
 
-    return testspec.resolve(drafts)
+    specs = testspec.resolve(drafts)
+    for spec in specs:
+        config.pluginmanager.hook.canary_testspec_modify(spec=spec)
+    return specs
 
 
 def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):

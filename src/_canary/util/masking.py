@@ -7,6 +7,7 @@ import re
 import time
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
+from typing import Protocol
 
 from .. import config
 from .. import when
@@ -124,7 +125,12 @@ def apply_masks(
         logger.log(logging.INFO, msg, extra=extra)
 
 
-def propagate_masks(items: list["ResolvedSpec"]) -> None:
+class Maskable(Protocol):
+    mask: str
+    dependencies: list["Maskable"]
+
+
+def propagate_masks(items: list[Maskable]) -> None:
     changed: bool = True
     while changed:
         changed = False

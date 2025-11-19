@@ -190,8 +190,8 @@ def canary_testsuite_mask(
 
 
 @hookspec
-def canary_testspec_mask(spec: list["ResolvedSpec"]) -> None:
-    """Apply a mask to the test spec"""
+def canary_testspec_modify(spec: list["ResolvedSpec"]) -> None:
+    """Modify the resolved test spec before the test case is created"""
     ...
 
 

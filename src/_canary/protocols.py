@@ -23,6 +23,7 @@ class JobProtocol(Protocol):
     gpus: int
     gpu_ids: list[int]
     id: str
+    mask: str
     measurements: MutableMapping[str, Any]
     status: StatusProtocol
     runtime: float

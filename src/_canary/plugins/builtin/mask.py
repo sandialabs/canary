@@ -32,7 +32,7 @@ def canary_testsuite_mask(
 
     """
     for spec in specs:
-        config.pluginmanager.hook.canary_testspec_mask(spec=spec)
+        config.pluginmanager.hook.canary_testspec_modify(spec=spec)
     masking.apply_masks(
         specs=specs,
         keyword_exprs=keyword_exprs,
@@ -42,4 +42,4 @@ def canary_testsuite_mask(
         ids=ids,
     )
     yield
-    masking.propagate_masks(specs)
+    masking.propagate_masks(specs)  # ty: ignore[invalid-argument-type]

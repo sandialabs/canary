@@ -21,6 +21,7 @@ from .util import logging
 from .util.filesystem import write_directory_tag
 from .util.graph import reachable_nodes
 from .util.graph import static_order
+from .util.masking import propagate_masks
 from .util.returncode import compute_returncode
 
 if TYPE_CHECKING:
@@ -146,6 +147,7 @@ class Session:
         map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
         lookup: dict[str, "TestCase"] = {}
         ts = TopologicalSorter(graph)
+        changed: bool = False
         for id in ts.static_order():
             spec = map[id]
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -162,10 +164,20 @@ class Session:
                 case.timekeeper.started_on = data["timekeeper"]["started_on"]
                 case.timekeeper.finished_on = data["timekeeper"]["finished_on"]
                 case.timekeeper.duration = data["timekeeper"]["duration"]
+                case.mask = data.get("mask", None)
             lookup[case.spec.id] = case
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
+            if case.mask:
+                changed = True
+        cases = list(lookup.values())
         if roots:
-            return [case for case in lookup.values() if case.id in roots]
-        return list(lookup.values())
+            for case in cases:
+                if case.id not in roots:
+                    case.mask = "Case not found in explicit spec roots"
+                    changed = True
+        if changed:
+            propagate_masks(cases)
+        return cases
 
     def get_ready(self, roots: list[str] | None) -> list[TestCase]:
         if not roots:

@@ -10,13 +10,14 @@ import tarfile
 import zlib
 
 
-def targz_compress(*files: str) -> str:
+def targz_compress(*files: str, path: str | None = None) -> str:
     buffer = io.BytesIO()
     with tarfile.open(mode="w:gz", fileobj=buffer) as tar:
         for file in files:
             with open(file, "rb") as fh:
                 data = fh.read()
-            info = tarfile.TarInfo(name=os.path.basename(file))
+            name = os.path.basename(file)
+            info = tarfile.TarInfo(name=name if path is None else f"{path}/{name}")
             info.size = len(data)
             tar.addfile(info, fileobj=io.BytesIO(data))
     return base64.b64encode(buffer.getvalue()).decode("utf-8")

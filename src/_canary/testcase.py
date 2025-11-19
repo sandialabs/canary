@@ -53,9 +53,8 @@ class TestCase:
         self.workspace = workspace
         self.stdout: str = "canary-out.txt"
         self.stderr: str | None = "canary-err.txt"
-        hk = config.pluginmanager.hook
-        self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(case=self)
-        hk.canary_testcase_modify(case=self)
+        pm = config.pluginmanager
+        self.execution_policy: ExecutionPolicy = pm.hook.canary_testcase_execution_policy(case=self)
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
