@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import _canary.testcase as tc
 import canary_vvtest as vvt
 from _canary.util.filesystem import working_dir
 
@@ -20,6 +19,6 @@ def test_vvt_generator(tmpdir):
 """
             )
         file = vvt.VVTTestGenerator(".", "test.vvt")
-        cases = file.lock(on_options=["baz"])
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
+        specs = file.lock(on_options=["baz"])
+        assert len(specs) == 10
+        assert specs[-1].attributes.get("multicase") is not None

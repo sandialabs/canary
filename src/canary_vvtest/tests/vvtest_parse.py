@@ -7,8 +7,8 @@ import sys
 
 import _canary.util.filesystem as fs
 import canary_vvtest.generator as generator
-from _canary import finder
 from _canary.enums import list_parameter_space
+from _canary import workspace
 
 
 def test_parse_parameterize():
@@ -276,34 +276,31 @@ if __name__ == "__main__":
             fh.write("else:\n    assert 0\n")
         fs.set_executable("vvtest_param_generator.py")
     with fs.working_dir(tmpdir.strpath):
-        f = finder.Finder()
-        f.add(".")
-        f.prepare()
-        files = f.discover()
-        cases = finder.generate_test_cases(files)
-        assert len(cases) == 6
-        assert cases[0].name == "create_inputs.a=A.b=B.np=1"
-        for case in cases[1:]:
-            dep_names = [_.name for _ in case.dependencies]
-            if case.name == "spam.a=A.b=B.np=1":
-                assert case.dependencies[0] == cases[0]
-            elif case.name == "ham.a=A.np=1":
-                assert len(case.dependencies) == 0
-            elif case.name == "eggs.a=A.b=B.np=1.target_np=12":
-                assert len(case.dependencies) == 2
-                assert cases[0] in case.dependencies
+        generators = workspace.find_generators_in_path(".")
+        specs = workspace.generate_specs(generators)
+        assert len(specs) == 6
+        assert specs[0].name == "create_inputs.a=A.b=B.np=1"
+        for spec in specs[1:]:
+            dep_names = [_.name for _ in spec.dependencies]
+            if spec.name == "spam.a=A.b=B.np=1":
+                assert spec.dependencies[0] == specs[0]
+            elif spec.name == "ham.a=A.np=1":
+                assert len(spec.dependencies) == 0
+            elif spec.name == "eggs.a=A.b=B.np=1.target_np=12":
+                assert len(spec.dependencies) == 2
+                assert specs[0] in spec.dependencies
                 assert "ham.a=A.np=1" in dep_names
-            elif case.name == "baz.a=A.b=B.np=12":
-                assert len(case.dependencies) == 4
-                assert cases[0] in case.dependencies
+            elif spec.name == "baz.a=A.b=B.np=12":
+                assert len(spec.dependencies) == 4
+                assert specs[0] in spec.dependencies
                 assert "spam.a=A.b=B.np=1" in dep_names
                 assert "ham.a=A.np=1" in dep_names
                 assert "eggs.a=A.b=B.np=1.target_np=12" in dep_names
-            elif case.name == "bacon.a=A.b=B.np=12":
-                assert len(case.dependencies) == 2
+            elif spec.name == "bacon.a=A.b=B.np=12":
+                assert len(spec.dependencies) == 2
                 assert "baz.a=A.b=B.np=12" in dep_names
             else:
-                assert 0, f"Unknown case {case.name}"
+                assert 0, f"Unknown spec {spec.name}"
 
 
 def test_make_table():
