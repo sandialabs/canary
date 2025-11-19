@@ -270,15 +270,16 @@ class TestCase:
     def run(self, queue: multiprocessing.Queue) -> None:
         code: int
         try:
-            with self.workspace.openfile(self.stdout, "a") as fh:
-                prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-                fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
-            xstatus = self.spec.xstatus
-            with self.workspace.enter(), self.timekeeper.timeit():
-                self.status.set("RUNNING")
-                self.save()
-                code = self.execution_policy.execute(case=self)
-                self.update_status_from_exit_code(code=code)
+            if self.status == "READY":
+                with self.workspace.openfile(self.stdout, "a") as fh:
+                    prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+                    fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
+                xstatus = self.spec.xstatus
+                with self.workspace.enter(), self.timekeeper.timeit():
+                    self.status.set("RUNNING")
+                    self.save()
+                    code = self.execution_policy.execute(case=self)
+                    self.update_status_from_exit_code(code=code)
         except KeyboardInterrupt:
             self.status.set("CANCELLED", message="Keyboard interrupt", code=signal.SIGINT.value)
         except SystemExit as e:
