@@ -8,7 +8,6 @@ import io
 import os
 import runpy
 import shlex
-import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -21,9 +20,9 @@ from typing import Protocol
 
 from . import config
 from .util import logging
+from .util.filesystem import force_remove
 from .util.module import load as load_module
 from .util.shell import source_rcfile
-from .util.filesystem import force_remove
 
 if TYPE_CHECKING:
     from .testcase import TestCase

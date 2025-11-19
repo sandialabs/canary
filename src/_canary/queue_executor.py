@@ -31,6 +31,7 @@ logger = logging.get_logger(__name__)
 
 import traceback
 
+
 @dataclasses.dataclass
 class ExecutionSlot:
     job: JobProtocol
@@ -41,23 +42,18 @@ class ExecutionSlot:
     queue: mp.Queue
 
 
-def with_traceback(fn, *args, **kwargs):
+def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue) -> None:
     try:
-        return fn(*args, **kwargs)
+        return runner(job, queue)
     except Exception as e:
-        case = args[0]
-        case.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
-
-        queue = args[1]
-
+        job.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
-
-        queue.put({"status": case.status})
-        str = io.StringIO()
-        traceback.print_exc(file=str)
+        queue.put({"status": job.status})
+        fh = io.StringIO()
+        traceback.print_exc(file=fh)
         logger.error("Child process failed")
-        logger.debug(f"Child process failed: {str.getvalue()}")
+        logger.debug(f"Child process failed: {fh.getvalue()}")
         sys.exit(1)
 
 
