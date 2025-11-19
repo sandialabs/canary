@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import copy
 import io
 import json
 import os
@@ -349,8 +348,13 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
     resource_groups = case.spec.attributes.get("resource_groups") or []
     if not resource_groups:
         return variables
-    avail = copy.deepcopy(case.resources)
-
+    avail: dict[str, Any] = {}
+    for type, items in case.resources.items():
+        slots_per_id = {}
+        for item in items:
+            slots_per_id[item["id"]] = slots_per_id.get(item["id"], 0) + item["slots"]
+        instances = [{"id": key, "slots": val} for key, val in slots_per_id.items()]
+        avail[type] = sorted(instances, key=lambda x: x["slots"])
     for i, group in enumerate(resource_groups):
         types = sorted(set([_["type"] for _ in group]))
         variables[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
@@ -370,7 +374,7 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
                 raise ValueError(f"Insufficient slots of {type} to fill CTest resource group")
         for type, spec in specs.items():
             key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
-            variables[key] = ",".join(spec)
+            variables[key] = ";".join(spec)
     variables["CTEST_RESOURCE_GROUP_COUNT"] = str(len(resource_groups))
     return variables
 

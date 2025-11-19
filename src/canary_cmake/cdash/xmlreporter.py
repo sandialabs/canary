@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import datetime
 import importlib.resources as ir
 import json
 import os
@@ -320,7 +321,7 @@ class CDashXMLReporter:
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = case.stop - case.start
+            duration = case.timekeeper.duration
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
@@ -331,7 +332,7 @@ class CDashXMLReporter:
             add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
                 add_named_measurement(results, "GPUs", case.gpus)
-            if url := case.get_attribute(case, "url"):
+            if url := case.get_attribute("url"):
                 add_named_measurement(results, "Test Script", url, type="text/link")
             for name, value in case.attributes.items():
                 if isinstance(value, str) and value.startswith(("https://", "http://")):
@@ -359,7 +360,7 @@ class CDashXMLReporter:
                     compression="gzip",
                     filename=os.path.basename(case.file),
                 )
-            for artifact in case.artifacts:
+            for artifact in case.spec.artifacts:
                 when = artifact["when"]
                 if when == "success" and case.status.name != "SUCCESS":
                     continue
@@ -559,9 +560,12 @@ class TestData:
             self.status |= 2**6
 
     def add_test(self, case: "canary.TestCase") -> None:
-        if case.start > 0 and case.start < self.start:
-            self.start = case.start
-        if case.stop > 0 and case.stop > self.stop:
-            self.stop = case.stop
+        if case.timekeeper.started_on != "NA" and case.timekeeper.finished_on != "NA":
+            start = datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp()
+            finish = datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp()
+            if start < self.start:
+                self.start = start
+            if finish > self.stop:
+                self.stop = finish
         self.update_status(case)
         self.cases.append(case)

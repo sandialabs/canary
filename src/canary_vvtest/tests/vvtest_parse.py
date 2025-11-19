@@ -7,8 +7,8 @@ import sys
 
 import _canary.util.filesystem as fs
 import canary_vvtest.generator as generator
-from _canary.enums import list_parameter_space
 from _canary import workspace
+from _canary.enums import list_parameter_space
 
 
 def test_parse_parameterize():

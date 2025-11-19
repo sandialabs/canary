@@ -37,7 +37,7 @@ def run_the_thing_and_check():
     env["CANARY_DISABLE_KB"] = "1"
     subprocess.run([f"{sys.prefix}/bin/canary", "-p", "baz", "run", "."], env=env)
     subprocess.run(
-        [f"{sys.prefix}/bin/canary", "-p", "baz", "-C", "TestResults", "report", "cdash", "create"],
+        [f"{sys.prefix}/bin/canary", "-d", "-p", "baz", "report", "cdash", "create"],
         env=env,
     )
     file = "TestResults/CDASH/Test-0.xml"

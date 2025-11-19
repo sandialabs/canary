@@ -2,15 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
+import multiprocessing
 import os
-import threading
 from pathlib import Path
 
 import pytest
 
+import _canary.testcase as tc
 import canary
-from _canary.queue import ResourceQueue
 from _canary.resource_pool import ResourcePool
+from _canary.testexec import ExecutionSpace
 from _canary.util.executable import Executable
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import set_executable
@@ -18,17 +19,19 @@ from _canary.util.filesystem import touchp
 from _canary.util.filesystem import which
 from _canary.util.filesystem import working_dir
 from canary_cmake.ctest import CTestTestGenerator
+from canary_cmake.ctest import setup_ctest
 
 
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
     def __call__(self, case):
+        queue = multiprocessing.Queue()
         try:
-            case.setup()
-            case.run(qsize=1, qrank=0)
+            canary.config.pluginmanager.hook.canary_testcase_setup(case=case)
+            canary.config.pluginmanager.hook.canary_testcase_run(case=case, queue=queue)
         finally:
-            case.finish()
+            canary.config.pluginmanager.hook.canary_testcase_finish(case=case)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -53,29 +56,29 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         with open("CMakeCache.txt", "w") as fh:
             fh.write(f"PROJECT_SOURCE_DIR:INTERNAL={os.getcwd()}")
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-        cases = file.lock()
-        assert len(cases) == 2
+        specs = file.lock()
+        assert len(specs) == 2
 
-        case = cases[0]
-        assert case.cpus == 5
-        assert case.gpus == 5
-        assert "foo" in case.keywords
-        assert "baz" in case.keywords
-        command = case.command()
+        spec = specs[0]
+        assert spec.rparameters["cpus"] == 5
+        assert spec.rparameters["gpus"] == 5
+        assert "foo" in spec.keywords
+        assert "baz" in spec.keywords
+        command = spec.attributes["command"]
         command[0] = os.path.basename(command[0])
         assert command == ["script.sh", "some-exe"]
-        assert case.variables["CTEST_NUM_RANKS"] == "5"
-        assert case.variables["SPAM"] == "BAZ"
+        assert spec.environment["CTEST_NUM_RANKS"] == "5"
+        assert spec.environment["SPAM"] == "BAZ"
 
-        case = cases[1]
-        command = case.command()
+        spec = specs[1]
+        command = spec.attributes["command"]
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
-        assert case.cpus == 4
-        assert "foo" in case.keywords
-        assert "spam" in case.keywords
-        assert case.variables["CTEST_NUM_RANKS"] == "5"
-        assert case.variables["EGGS"] == "SPAM"
+        assert spec.rparameters["cpus"] == 4
+        assert "foo" in spec.keywords
+        assert "spam" in spec.keywords
+        assert spec.environment["CTEST_NUM_RANKS"] == "5"
+        assert spec.environment["EGGS"] == "SPAM"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -96,12 +99,12 @@ def test_parse_ctesttestfile_1(tmpdir):
             make = Executable("make")
             make()
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-            cases = file.lock()
-            assert len(cases) == 1
-            case = cases[0]
-            assert case.cpus == 4
-            assert "foo" in case.keywords
-            assert "baz" in case.keywords
+            specs = file.lock()
+            assert len(specs) == 1
+            spec = specs[0]
+            assert spec.rparameters["cpus"] == 4
+            assert "foo" in spec.keywords
+            assert "baz" in spec.keywords
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -115,14 +118,15 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
 """
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-        [case] = file.lock()
+        [spec] = file.lock()
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
+            workspace = ExecutionSpace(Path.cwd(), Path("foo"))
+            case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
-            assert case.status.code == 0
             assert case.status.name == "FAILED"
+            assert case.status.code == 65
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -139,12 +143,14 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
 """
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-        [case] = file.lock()
+        [spec] = file.lock()
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
+            workspace = ExecutionSpace(Path.cwd(), Path("foo"))
+            case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
+            assert case.status.name == "SKIPPED"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -161,14 +167,15 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
 """
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-        [case] = file.lock()
+        [spec] = file.lock()
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
+            workspace = ExecutionSpace(Path.cwd(), Path("foo"))
+            case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
         assert case.status.name == "SUCCESS"
-        assert case.status.code == 1
+        assert case.status.code == 0
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -211,32 +218,45 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
 """
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-        cases = file.lock()
-        case_map = {case.name: case for case in cases}
-        print(case_map)
+        specs = file.lock()
+        spec_map = {spec.name: spec for spec in specs}
 
-        tests_done = case_map["testsDone"]
-        foo_only = case_map["fooOnly"]
-        db_only = case_map["dbOnly"]
-        db_with_foo = case_map["dbWithFoo"]
-        create_db = case_map["createDB"]
-        setup_users = case_map["setupUsers"]
-        cleanup_db = case_map["cleanupDB"]
-        cleanup_foo = case_map["cleanupFoo"]
+        tests_done = spec_map["testsDone"]
+        foo_only = spec_map["fooOnly"]
+        db_only = spec_map["dbOnly"]
+        db_with_foo = spec_map["dbWithFoo"]
+        create_db = spec_map["createDB"]
+        setup_users = spec_map["setupUsers"]
+        cleanup_db = spec_map["cleanupDB"]
+        cleanup_foo = spec_map["cleanupFoo"]
 
-        assert set(setup_users.dependencies) == {create_db}
-        assert set(tests_done.dependencies) == {
-            create_db,
-            foo_only,
-            db_with_foo,
-            db_only,
-            setup_users,
+        assert set([_.id for _ in setup_users.dependencies]) == {create_db.id}
+        assert set([_.id for _ in tests_done.dependencies]) == {
+            create_db.id,
+            foo_only.id,
+            db_with_foo.id,
+            db_only.id,
+            setup_users.id,
         }
         assert foo_only.dependencies == []
-        assert set(db_only.dependencies) == {create_db, setup_users}
-        assert set(db_with_foo.dependencies) == {setup_users, create_db}
-        assert set(cleanup_db.dependencies) == {db_only, db_with_foo, create_db, setup_users}
-        assert set(cleanup_foo.dependencies) == {foo_only, db_with_foo}
+        assert set([_.id for _ in db_only.dependencies]) == {create_db.id, setup_users.id}
+        assert set([_.id for _ in db_with_foo.dependencies]) == {setup_users.id, create_db.id}
+        assert set([_.id for _ in cleanup_db.dependencies]) == {
+            db_only.id,
+            db_with_foo.id,
+            create_db.id,
+            setup_users.id,
+        }
+        assert set([_.id for _ in cleanup_foo.dependencies]) == {foo_only.id, db_with_foo.id}
+
+
+class Hook:
+    def __init__(self, pool):
+        self.pool = pool
+
+    @canary.hookimpl
+    def canary_resource_pool_types(self):
+        return self.pool.types
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -275,24 +295,22 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
         with canary.config.override():
             mkdirp("./foo")
             pool = ResourcePool({"additional_properties": {}, "resources": pool})
+            canary.config.pluginmanager.register(Hook(pool), "myhook")
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-            [case] = file.lock()
-            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
-            check = pool.accommodates(case.required_resources())
+            [spec] = file.lock()
+            check = pool.accommodates(spec.required_resources())
             if not check:
                 raise ValueError(check.reason)
-            case.status.set("ready")
-            queue = ResourceQueue(lock=threading.Lock(), resource_pool=pool)
-            queue.put(case)
-            queue.prepare()
-            _, c = queue.get()
-            assert isinstance(c, canary.TestCase)
-            with c.rc_environ():
-                assert os.environ["CTEST_RESOURCE_GROUP_COUNT"] == "3"
-                assert os.environ["CTEST_RESOURCE_GROUP_0"] == "gpus"
-                assert os.environ["CTEST_RESOURCE_GROUP_1"] == "gpus"
-                assert os.environ["CTEST_RESOURCE_GROUP_2"] == "crypto_chips,gpus"
-                assert os.environ["CTEST_RESOURCE_GROUP_0_GPUS"] == "id:0,slots:2"
-                assert os.environ["CTEST_RESOURCE_GROUP_1_GPUS"] == "id:2,slots:2"
-                assert os.environ["CTEST_RESOURCE_GROUP_2_GPUS"] == "id:1,slots:4;id:3,slots:1"
-                assert os.environ["CTEST_RESOURCE_GROUP_2_CRYPTO_CHIPS"] == "id:card0,slots:2"
+            resources = pool.checkout(spec.required_resources())
+            workspace = ExecutionSpace(Path.cwd(), Path("foo"))
+            case = tc.TestCase(spec=spec, workspace=workspace)
+            case.assign_resources(resources)
+            setup_ctest(case)
+            assert case.variables["CTEST_RESOURCE_GROUP_COUNT"] == "3"
+            assert case.variables["CTEST_RESOURCE_GROUP_0"] == "gpus"
+            assert case.variables["CTEST_RESOURCE_GROUP_1"] == "gpus"
+            assert case.variables["CTEST_RESOURCE_GROUP_2"] == "crypto_chips,gpus"
+            assert case.variables["CTEST_RESOURCE_GROUP_0_GPUS"] == "id:0,slots:2"
+            assert case.variables["CTEST_RESOURCE_GROUP_1_GPUS"] == "id:2,slots:2"
+            assert case.variables["CTEST_RESOURCE_GROUP_2_GPUS"] == "id:1,slots:4;id:3,slots:1"
+            assert case.variables["CTEST_RESOURCE_GROUP_2_CRYPTO_CHIPS"] == "id:card0,slots:2"

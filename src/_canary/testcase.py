@@ -15,6 +15,7 @@ from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 from typing import MutableMapping
 
 from . import config
@@ -43,7 +44,10 @@ logger = logging.get_logger(__name__)
 
 class TestCase:
     def __init__(
-        self, spec: "TestSpec", workspace: ExecutionSpace, dependencies: list["TestCase"]
+        self,
+        spec: "TestSpec",
+        workspace: ExecutionSpace,
+        dependencies: list["TestCase"] | None = None,
     ) -> None:
         self.spec = spec
         self.workspace = workspace
@@ -55,7 +59,9 @@ class TestCase:
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
-        self.dependencies = dependencies
+        self.dependencies = dependencies or []
+        if len(self.spec.dependencies) != len(self.dependencies):
+            raise ValueError("Incorrect number of dependencies")
 
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
@@ -580,6 +586,10 @@ class Measurements:
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
+
+    def items(self) -> Generator[tuple[str, Any], None, None]:
+        for item in self.data.items():
+            yield item
 
 
 class MissingSourceError(Exception):
