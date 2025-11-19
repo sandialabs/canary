@@ -369,7 +369,10 @@ class TestCase:
             self.status.set(code)
 
     def refresh(self) -> None:
-        data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
+        try:
+            data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
+        except FileNotFoundError:
+            return
         status = data["status"]
         self.status.set(status["name"], status["message"], status["code"])
         tk = data["timekeeper"]
