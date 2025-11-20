@@ -4,7 +4,6 @@
 
 import os
 import re
-import time
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Protocol
@@ -36,17 +35,14 @@ def apply_masks(
       ids: Include those tests matching these ids
 
     """
-    msg = "@*{Masking} test specs based on filtering criteria"
-
-    start = time.monotonic()
-    logger.log(logging.INFO, msg, extra={"end": "..."})
-
     rx: re.Pattern | None = None
     if regex is not None:
         logger.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
     owners = set(owners or [])
+
+    pm = logger.progress_monitor("@*{Masking} test specs based on filtering criteria")
 
     # Get an index of sorted order
     map: dict[str, int] = {d.id: i for i, d in enumerate(specs)}
@@ -115,14 +111,12 @@ def apply_masks(
                         continue
 
     except Exception:
-        state = "failed"
+        status = "failed"
         raise
     else:
-        state = "done"
+        status = "done"
     finally:
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - start)
-        extra = {"end": end, "rewind": True}
-        logger.log(logging.INFO, msg, extra=extra)
+        pm.done(status)
 
 
 class Maskable(Protocol):

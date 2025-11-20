@@ -10,11 +10,13 @@ import math
 import os
 import sys
 import termios
+import time
 from contextlib import contextmanager
 from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Literal
+from typing import cast
 
 from ..third_party.color import clen
 from ..third_party.color import colorize
@@ -137,14 +139,34 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str | None = None) -> builtin_logging.Logger:
+class ProgressMonitor:
+    def __init__(self, logger_name: str, message: str) -> None:
+        self.message = message
+        self.logger_name = logger_name
+        self.start = time.monotonic()
+        get_logger(self.logger_name).log(INFO, self.message, extra={"end": "..."})
+
+    def done(self, status: str = "done") -> None:
+        end = "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start)
+        get_logger(self.logger_name).log(INFO, self.message, extra={"end": end, "rewind": True})
+
+
+class CanaryLogger(builtin_logging.Logger):
+    def progress_monitor(self, message: str) -> ProgressMonitor:
+        return ProgressMonitor(self.name, message)
+
+
+builtin_logging.setLoggerClass(CanaryLogger)
+
+
+def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
     parts = name.split(".")
     if parts[0] != root_log_name:
         parts.insert(0, root_log_name)
         name = ".".join(parts)
-    logger = builtin_logging.getLogger(name)
+    logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
 

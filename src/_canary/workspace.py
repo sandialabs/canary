@@ -7,7 +7,6 @@ import hashlib
 import os
 import pickle
 import shutil
-import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -407,9 +406,7 @@ class Workspace:
     def load_testcase_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
         generators: list[AbstractTestGenerator] = []
-        msg = "@*{Loading} test case generators"
-        logger.log(logging.DEBUG, msg, extra={"end": "..."})
-        start = time.monotonic()
+        pm = logger.progress_monitor("@*{Loading} test case generators")
         try:
             for file in self.generators_dir.rglob("*.json"):
                 state = json.loads(file.read_text())
@@ -421,9 +418,7 @@ class Workspace:
         else:
             status = "done"
         finally:
-            end = "... %s (%.2fs.)\n" % (status, time.monotonic() - start)
-            extra = {"end": end, "rewind": True}
-            logger.log(logging.DEBUG, msg, extra=extra)
+            pm.done(status)
         return generators
 
     def active_testcases(self) -> list[TestCase]:
@@ -435,6 +430,7 @@ class Workspace:
         """Find test case generators in scan_paths and add them to this workspace"""
         generators: list[AbstractTestGenerator] = []
         for root, paths in scan_paths.items():
+            logger.info(f"@*{{Collecting}} test case generators in {root}")
             p = ScanPath(root=root, paths=paths)
             generators.extend(config.pluginmanager.hook.canary_collect_generators(scan_path=p))
         n: int = 0
@@ -844,9 +840,7 @@ def generate_specs(
     on_options: list[str] | None = None,
 ) -> list[ResolvedSpec]:
     """Generate test cases and filter based on criteria"""
-    msg = "@*{Generating} test cases"
-    logger.log(logging.INFO, msg, extra={"end": "..."})
-    created = time.monotonic()
+    pm = logger.progress_monitor("@*{Generating} test cases")
     try:
         locked: list[list[DraftSpec]] = []
         if config.get("debug"):
@@ -860,14 +854,12 @@ def generate_specs(
                 drafts.append(spec)
         nc, ng = len(drafts), len(generators)
     except Exception:
-        state = "failed"
+        status = "failed"
         raise
     else:
-        state = "done"
+        status = "done"
     finally:
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
-        extra = {"end": end, "rewind": True}
-        logger.log(logging.INFO, msg, extra=extra)
+        pm.done(status)
     logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
 
     duplicates = find_duplicates(drafts)
@@ -892,11 +884,13 @@ def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
 
 
 def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
+    pm = logger.progress_monitor("@*{Searching} for duplicated tests")
     ids = [spec.id for spec in specs]
     duplicate_ids = {id for id in ids if ids.count(id) > 1}
     duplicates: dict[str, list[DraftSpec]] = {}
     for id in duplicate_ids:
         duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
+    pm.done()
     return duplicates
 
 

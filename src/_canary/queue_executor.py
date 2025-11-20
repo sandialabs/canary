@@ -42,9 +42,9 @@ class ExecutionSlot:
     queue: mp.Queue
 
 
-def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue) -> None:
+def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue, **kwargs: Any) -> None:
     try:
-        return runner(job, queue)
+        return runner(job, queue, **kwargs)
     except Exception as e:
         job.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():

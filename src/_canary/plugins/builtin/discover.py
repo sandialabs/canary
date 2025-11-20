@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import os
-import time
 
 from ... import config
 from ...generator import AbstractTestGenerator
@@ -26,9 +25,7 @@ def canary_discover_generators(
     generators: list[AbstractTestGenerator] = []
     errors: int = 0
 
-    created = time.monotonic()
-    msg = "@*{Searching} %s for test generators" % relroot
-    logger.log(logging.INFO, msg, extra={"end": "..."})
+    pm = logger.progress_monitor("@*{Searching} %s for test generators" % relroot)
     try:
         if os.path.isfile(root):
             try:
@@ -65,14 +62,12 @@ def canary_discover_generators(
             generators.extend(found)
             errors += p_errors
     except Exception:
-        state = "failed"
+        status = "failed"
         raise
     else:
-        state = "done"
+        status = "done"
     finally:
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
-        extra = {"end": end, "rewind": True}
-        logger.log(logging.INFO, msg, extra=extra)
+        pm.done(status)
 
     return generators, errors
 
