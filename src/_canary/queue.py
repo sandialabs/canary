@@ -147,6 +147,11 @@ class ResourceQueue:
             else:
                 raise Empty
 
+    def clear(self, status: str = "CANCELLED") -> None:
+        while self._heap:
+            slot = self._heap.pop()
+            slot.job.set_status(status)
+
     def done(self, job: JobProtocol) -> None:
         with self.lock:
             if job.id not in self._busy:

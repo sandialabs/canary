@@ -216,7 +216,7 @@ class ResourceQueueExecutor:
                 if elapsed > total_timeout:
                     # Get measurements before killing
                     measurements = slot.proc.get_measurements()
-                    slot.proc.shutdown(signal.SIGTERM, grace_period=0.1)
+                    slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
                     slot.job.refresh()
                     slot.job.set_status(
                         "TIMEOUT", message=f"Job timed out after {total_timeout} s."
@@ -288,7 +288,7 @@ class ResourceQueueExecutor:
         for pid, slot in self.inflight.items():
             if slot.proc.is_alive():
                 measurements = slot.proc.get_measurements()
-                slot.proc.shutdown(signum, grace_period=0.1)
+                slot.proc.shutdown(signum, grace_period=0.05)
                 slot.job.refresh()
                 stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
                 slot.job.set_status(stat, f"Job terminated with code {signum}")
@@ -308,6 +308,7 @@ class ResourceQueueExecutor:
             slot.proc.join()
 
         self.inflight.clear()
+        self.queue.clear("CANCELLED" if signum == signal.SIGINT else "ERROR")
 
     def _check_keyboard_input(self, start: float):
         if key := keyboard.get_key():
