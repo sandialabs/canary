@@ -257,6 +257,11 @@ class Config:
                     existing = os.getenv(pathname, "")
                     os.environ[pathname] = f"{existing}:{path}" if existing else path
 
+    def create_scope(self, name: str, file: str | None, data: dict[str, Any]) -> None:
+        # Deprecated method still used by some applications
+        data = config_schema.validate(data)
+        self.data = merge(self.data, data)
+
 
 def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     """Read the data from config scope ``data``
