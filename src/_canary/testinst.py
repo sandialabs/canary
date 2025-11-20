@@ -112,10 +112,10 @@ class TestMultiInstance(TestInstance):
         return True
 
 
-def factory(case: "TestCase") -> TestInstance:
+def from_testcase(case: "TestCase") -> TestInstance:
     dependencies: list[TestInstance] = []
     for dep in case.dependencies:
-        dependencies.append(factory(dep))
+        dependencies.append(from_testcase(dep))
 
     parameters: Parameters
     cls: Type[TestInstance]
@@ -164,15 +164,71 @@ def factory(case: "TestCase") -> TestInstance:
     return instance
 
 
-def load_instance(arg: Path | str | None) -> TestInstance:
-    from _canary.workspace import Workspace
+def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInstance:
+    spec = lock["spec"]
+    dependencies: list[TestInstance] = []
+    for dep in spec["dependencies"]:
+        dependencies.append(lookup[dep["id"]])
+    parameters: Parameters
+    cls: Type[TestInstance]
+    if lock["spec"]["attributes"].get("multicase"):
+        cls = TestMultiInstance
+        columns: dict[str, list[Any]] = {}
+        for key in spec["dependencies"][0]["parameters"].keys():
+            col = columns.setdefault(key, [])
+            for dep in spec["dependencies"]:
+                col.append(dep["parameters"][key])
+        parameters = MultiParameters(**columns)
+    else:
+        cls = TestInstance
+        parameters = Parameters(**spec["parameters"])
+    sources: dict[str, list[tuple[str, str | None]]] = {}
+    for asset in spec["assets"]:
+        sources.setdefault(asset["action"], []).append((asset["src"], asset["dst"]))
 
+    workspace = lock["workspace"]
+    status = lock["status"]
+    resources = lock["resources"]
+    timekeeper = lock["timekeeper"]
+
+    instance = cls(
+        file_root=spec["file_root"],
+        file_path=spec["file_path"],
+        name=spec["name"],
+        file=os.path.join(spec["file_root"], spec["file_path"]),
+        cpu_ids=[str(_["id"]) for _ in resources.get("cpus", [])],
+        gpu_ids=[str(_["id"]) for _ in resources.get("gpus", [])],
+        family=spec["family"],
+        keywords=spec["keywords"],
+        parameters=parameters,
+        timeout=spec["timeout"],
+        runtime=lock["runtime"],
+        baseline=spec["baseline"],
+        sources=sources,
+        work_tree=str(workspace["dir"]),
+        working_directory=str(workspace["dir"]),
+        status=Status(status["name"], status["message"], status["code"]),
+        start=timekeeper["started_on"],
+        stop=timekeeper["finished_on"],
+        id=spec["id"],
+        returncode=status["code"],
+        variables=spec["environment"],
+        dependencies=dependencies,
+        ofile=lock["stdout"],
+        efile=lock["stderr"],
+        lockfile=os.path.join(lock["workspace"]["dir"], "testcase.lock"),
+    )
+    return instance
+
+
+def load_instance(
+    arg: Path | str | None, lookup: dict[str, TestInstance] | None = None
+) -> TestInstance:
+    lookup = lookup or {}
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
     lock_data = json.loads(file.read_text())
-    id = lock_data["spec"]["id"]
-    workspace = Workspace.load()
-    cases = workspace.load_testcases(roots=[id])
-    for case in cases:
-        return factory(case)
-    raise ValueError(f"Test instance not found in {workspace.root}")
+    for f in lock_data["dependencies"]:
+        inst = load_instance(f, lookup)
+        lookup[inst.id] = inst
+    return from_lock(lock_data, lookup)

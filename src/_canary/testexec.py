@@ -113,7 +113,63 @@ class ExecutionPolicy(Protocol):
     def execute(self, case: "TestCase") -> int: ...
 
 
-class PythonFileExecutionPolicy(ExecutionPolicy):
+class SubprocessExecutionPolicy(ExecutionPolicy):
+    def __init__(self, args: list[str]) -> None:
+        self._default_args = args
+
+    def default_args(self, case: "TestCase") -> list[str]:
+        return list(self._default_args)
+
+    @contextmanager
+    def context(self, case: "TestCase") -> Generator[None, None, None]:
+        old_env = os.environ.copy()
+        old_cwd = Path.cwd()
+        try:
+            case.set_runtime_env(os.environ)
+            for module in case.spec.modules or []:
+                load_module(module)
+            for rcfile in case.spec.rcfiles or []:
+                source_rcfile(rcfile)
+            os.chdir(case.workspace.dir)
+            yield
+        finally:
+            os.chdir(old_cwd)
+            os.environ.clear()
+            os.environ.update(old_env)
+
+    def execute(self, case: "TestCase") -> int:
+        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        with self.context(case):
+            args = self.default_args(case)
+            if a := config.getoption("script_args"):
+                args.extend(a)
+            if a := case.get_attribute("script_args"):
+                args.extend(a)
+            case.set_attribute(command=shlex.join(args))
+            try:
+                stdout = open(case.stdout, "a")
+                if case.stderr is None:
+                    stderr = subprocess.STDOUT
+                else:
+                    stderr = open(case.stderr, "a")
+                cp = subprocess.run(args, stdout=stdout, stderr=stderr, check=False)
+            finally:
+                stdout.close()
+                if isinstance(stderr, io.TextIOWrapper):
+                    stderr.close()
+        logger.debug(f"Finished {case.fullname}")
+        return cp.returncode
+
+
+class PythonFileExecutionPolicy(SubprocessExecutionPolicy):
+    def __init__(self):
+        pass
+
+    def default_args(self, case: "TestCase") -> list[str]:
+        return [sys.executable, case.file.name]
+
+
+class PythonRunpyExecutionPolicy(ExecutionPolicy):
     @contextmanager
     def context(self, case: "TestCase") -> Generator[None, None, None]:
         """Temporarily patch:
@@ -121,7 +177,7 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
         • canary.spec (optional)
         • sys.argv (optional)
         """
-        from .testinst import factory as test_instance_factory
+        from .testinst import from_testcase as test_instance_factory
 
         canary = importlib.import_module("canary")
         old_argv = sys.argv.copy()
@@ -136,7 +192,11 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
             return case
 
         try:
-            case.update_env(os.environ)
+            case.set_runtime_env(os.environ)
+            for module in case.spec.modules or []:
+                load_module(module)
+            for rcfile in case.spec.rcfiles or []:
+                source_rcfile(rcfile)
             sys.path.insert(0, str(case.workspace.dir))
             setattr(canary, "get_instance", get_instance)
             setattr(canary, "get_testcase", get_testcase)
@@ -155,11 +215,8 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
                 load_module(module)
             for rcfile in case.spec.rcfiles or []:
                 source_rcfile(rcfile)
-
             os.chdir(case.workspace.dir)
-
             yield
-
         finally:
             delattr(canary, "get_instance")
             delattr(canary, "get_testcase")
@@ -181,44 +238,3 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
             runpy.run_path(case.spec.file.name, run_name="__main__")
         logger.debug(f"Finished {case.fullname}")
         return 0
-
-
-class SubprocessExecutionPolicy(ExecutionPolicy):
-    def __init__(self, args: list[str]) -> None:
-        self.args = args
-
-    @contextmanager
-    def context(self, case: "TestCase") -> Generator[None, None, None]:
-        old_env = os.environ.copy()
-        old_cwd = Path.cwd()
-        try:
-            case.update_env(os.environ)
-            os.chdir(case.workspace.dir)
-
-            yield
-
-        finally:
-            os.chdir(old_cwd)
-            os.environ.clear()
-            os.environ.update(old_env)
-
-    def execute(self, case: "TestCase") -> int:
-        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
-        args: list[str] = list(self.args)
-        with self.context(case):
-            try:
-                stdout = open(case.stdout, "a")
-                if case.stderr is None:
-                    stderr = subprocess.STDOUT
-                else:
-                    stderr = open(case.stderr, "a")
-                if a := config.getoption("script_args"):
-                    args.extend(a)
-                case.set_attribute(command=shlex.join(args))
-                cp = subprocess.run(args, stdout=stdout, stderr=stderr, check=False)
-            finally:
-                stdout.close()
-                if isinstance(stderr, io.TextIOWrapper):
-                    stderr.close()
-        logger.debug(f"Finished {case.fullname}")
-        return cp.returncode

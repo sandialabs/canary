@@ -381,7 +381,7 @@ class TestCase:
         self.timekeeper.finished_on = tk["finished_on"]
         self.timekeeper.duration = tk["duration"]
 
-    def update_env(self, env: MutableMapping[str, str]) -> None:
+    def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
         for key, val in self.variables.items():
             if val is None:
                 env.pop(key, None)
@@ -427,7 +427,14 @@ class TestCase:
             "measurements": self.measurements.asdict(),
             "workspace": self.workspace.asdict(),
             "variables": self.variables,
+            "resources": self.resources,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "runtime": self.runtime,
+            "dependencies": [dep.lockfile for dep in self.dependencies],
         }
+        record["spec"]["name"] = self.spec.name
+
         return record
 
     def set_dependency_based_status(self) -> None:

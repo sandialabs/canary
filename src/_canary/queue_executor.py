@@ -52,7 +52,6 @@ def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue, **kwargs
         queue.put({"status": job.status})
         fh = io.StringIO()
         traceback.print_exc(file=fh)
-        logger.error("Child process failed")
         logger.debug(f"Child process failed: {fh.getvalue()}")
         sys.exit(1)
 

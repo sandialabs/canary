@@ -35,7 +35,7 @@ def test_instance_deps(tmpdir):
             case = tc.TestCase(spec=spec, workspace=space, dependencies=deps)
             lookup[case.id] = case
             case.save()
-            instance = inst.factory(case)
+            instance = inst.from_testcase(case)
             if case.get_attribute("multicase"):
                 assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
                 assert instance.parameters.b == (1, 3, 5, 1, 3, 5)

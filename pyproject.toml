@@ -108,7 +108,7 @@ testpaths = [
     "src/canary_hpc/tests",
     "src/canary_junit/tests"
 ]
-norecursedirs = "mock"
+norecursedirs = "mock data generators"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
 python_files = "*.py"

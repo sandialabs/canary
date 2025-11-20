@@ -146,7 +146,7 @@ def test_generate_specs(tmpdir):
         Path("f2.pyt").touch()
         b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        resolved = spec.resolve(draft_specs=drafts)
+        resolved = spec.resolve(specs=drafts)
         specs = spec.finalize(resolved)
         assert len(specs) == 4
         assert len(specs[-1].dependencies) == 3

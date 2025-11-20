@@ -23,6 +23,7 @@ from ...paramset import ParameterSet
 from ...testcase import TestCase
 from ...testexec import ExecutionPolicy
 from ...testexec import PythonFileExecutionPolicy
+from ...testexec import PythonRunpyExecutionPolicy
 from ...testexec import SubprocessExecutionPolicy
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
@@ -1018,5 +1019,7 @@ def canary_testcase_execution_policy(case: TestCase) -> ExecutionPolicy | None:
     if case.spec.file.suffix in (".pyt", ".py"):
         if script := case.get_attribute("alt_script"):
             return SubprocessExecutionPolicy([f"./{script}"])
+        if os.getenv("CANARY_USE_RUNPY_EXECUTION_POLICY"):
+            return PythonRunpyExecutionPolicy()
         return PythonFileExecutionPolicy()
     return None
