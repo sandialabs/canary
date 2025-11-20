@@ -648,6 +648,7 @@ class DraftSpec(SpecCommons):
 
 
 def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
+    pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
     graph: dict[str, list[str]] = {}
     draft_lookup: dict[str, list[str]] = {}
     dep_done_criteria: dict[str, list[str]] = {}
@@ -684,6 +685,7 @@ def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedS
                 errors.setdefault(spec.fullname, []).extend(e.errors)
             lookup[id] = spec
         ts.done(*ids)
+    pm.done(status="done" if not errors else "failed")
 
     if errors:
         msg: list[str] = ["Dependency resolution failed:"]
@@ -695,6 +697,7 @@ def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedS
 
 
 def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
+    pm = logger.progress_monitor("@*{Finalizing} test specs")
     map: dict[str, ResolvedSpec] = {}
     graph: dict[str, list[str]] = {}
     for resolved_spec in resolved_specs:
@@ -712,6 +715,7 @@ def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
             spec = resolved.finalize(dependencies)
             lookup[id] = spec
         ts.done(*ids)
+    pm.done()
     return list(lookup.values())
 
 
