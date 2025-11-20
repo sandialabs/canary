@@ -265,9 +265,11 @@ class Workspace:
             raise TypeError("Missing required keyword arguments: 'selection' or 'name'")
         if selection is not None:
             session = Session.create(self.sessions_dir, selection)
+            logger.info(f"Loaded test session at {session.name}")
         else:
             root = self.sessions_dir / name
             session = Session.load(root)
+            logger.info(f"Created test session at {session.name}")
         try:
             yield session
         finally:
@@ -840,7 +842,7 @@ def generate_specs(
     on_options: list[str] | None = None,
 ) -> list[ResolvedSpec]:
     """Generate test cases and filter based on criteria"""
-    pm = logger.progress_monitor("@*{Generating} test cases")
+    pm = logger.progress_monitor("@*{Generating} test specs")
     try:
         locked: list[list[DraftSpec]] = []
         if config.get("debug"):
@@ -860,7 +862,6 @@ def generate_specs(
         status = "done"
     finally:
         pm.done(status)
-    logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
 
     duplicates = find_duplicates(drafts)
     if duplicates:
@@ -876,6 +877,8 @@ def generate_specs(
     specs = testspec.resolve(drafts)
     for spec in specs:
         config.pluginmanager.hook.canary_testspec_modify(spec=spec)
+
+    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
     return specs
 
 

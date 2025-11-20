@@ -148,6 +148,7 @@ class Session:
         lookup: dict[str, "TestCase"] = {}
         ts = TopologicalSorter(graph)
         changed: bool = False
+        pm = logger.progress_monitor("@*{Loading} test cases into session")
         for id in ts.static_order():
             spec = map[id]
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -177,6 +178,7 @@ class Session:
                     changed = True
         if changed:
             propagate_masks(cases)
+        pm.done()
         return cases
 
     def get_ready(self, roots: list[str] | None) -> list[TestCase]:
