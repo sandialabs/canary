@@ -174,10 +174,10 @@ class ResourceQueueExecutor:
 
             except KeyboardInterrupt:
                 self._terminate_all(signal.SIGINT)
-                break
+                raise
 
             except TimeoutError:
-                break
+                raise
 
             except BaseException:
                 logger.exception("Unhandled exception in process pool")
