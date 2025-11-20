@@ -265,11 +265,11 @@ class Workspace:
             raise TypeError("Missing required keyword arguments: 'selection' or 'name'")
         if selection is not None:
             session = Session.create(self.sessions_dir, selection)
-            logger.info(f"Loaded test session at {session.name}")
+            logger.info(f"Created test session at {session.name}")
         else:
             root = self.sessions_dir / name
             session = Session.load(root)
-            logger.info(f"Created test session at {session.name}")
+            logger.info(f"Loaded test session at {session.name}")
         try:
             yield session
         finally:
