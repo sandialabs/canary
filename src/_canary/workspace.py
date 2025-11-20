@@ -5,7 +5,7 @@ import dataclasses
 import datetime
 import hashlib
 import os
-import pickle
+import pickle  # nosec B403
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -449,7 +449,7 @@ class Workspace:
                     logger.info("Invalidating previously locked test case cache")
                     warned = True
                 with open(file, "rb") as fh:
-                    selection = pickle.load(fh)
+                    selection = pickle.load(fh)  # nosec B301
                     selection.specs = None
                 with open(file, "wb") as fh:
                     pickle.dump(selection, fh)
@@ -736,7 +736,7 @@ class Workspace:
             return selection
 
         with open(cache_file, "rb") as fh:
-            selection = pickle.load(fh)
+            selection = pickle.load(fh)  # nosec B301
 
         if selection.specs:
             return selection

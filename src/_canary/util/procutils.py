@@ -151,8 +151,8 @@ class MeasuredProcess(multiprocessing.Process):
                 # Add number of threads if available
                 try:
                     sample["num_threads"] = self._psutil_process.num_threads()
-                except:
-                    pass
+                except Exception:
+                    pass # nosec B110
 
                 self.samples.append(sample)
         except (psutil.NoSuchProcess, psutil.AccessDenied):

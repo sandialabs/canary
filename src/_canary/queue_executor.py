@@ -45,7 +45,7 @@ class ExecutionSlot:
 def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue, **kwargs: Any) -> None:
     try:
         return runner(job, queue, **kwargs)
-    except Exception as e:
+    except Exception as e: # nosec B110
         job.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
@@ -259,7 +259,7 @@ class ResourceQueueExecutor:
             try:
                 slot.queue.close()
                 slot.queue.join_thread()
-            except Exception:
+            except Exception: # nosec B110
                 pass
 
             slot.proc.join()  # Clean up the process
