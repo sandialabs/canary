@@ -73,6 +73,7 @@ class TestCase:
         self.name = self.spec.name
         self.family = self.spec.family
         self.timeout = self.spec.timeout
+        self.keywords = self.spec.keywords
         self.fullname = self.spec.fullname
         self.attributes = self.instance_attributes = self.spec.attributes
         self.file_path = self.spec.file_path
