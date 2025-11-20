@@ -11,6 +11,7 @@ import os
 import shlex
 import string
 import sys
+from collections import defaultdict
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -112,6 +113,18 @@ class SpecCommons:
         if rt := getattr(self, "runtime", None):
             parameters["runtime"] = float(rt)
         return parameters
+
+    @cached_property
+    def match_names(self) -> tuple[str, ...]:
+        return (
+            self.id,
+            self.name,
+            self.family,
+            self.fullname,
+            self.display_name,
+            str(self.file_path),
+            str(self.file_path.parent / self.display_name),
+        )
 
     def required_resources(self) -> list[dict[str, Any]]:
         reqd: list[dict[str, Any]] = []
@@ -649,16 +662,18 @@ class DraftSpec(SpecCommons):
 
 def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
     pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
-    graph: dict[str, list[str]] = {}
-    draft_lookup: dict[str, list[str]] = {}
-    dep_done_criteria: dict[str, list[str]] = {}
+    graph: defaultdict[str, list[str]] = defaultdict(list)
+    draft_lookup: defaultdict[str, list[str]] = defaultdict(list)
+    dep_done_criteria: defaultdict[str, list[str]] = defaultdict(list)
     map: dict[str, DraftSpec] = {d.id: d for d in draft_specs}
     for spec in draft_specs:
         if isinstance(spec, ResolvedSpec):
             graph[spec.id] = [_.id for _ in spec.dependencies]
+        elif not spec.dependency_patterns:
+            graph[spec.id] = []
         else:
-            matches = draft_lookup.setdefault(spec.id, [])
-            done_criteria = dep_done_criteria.setdefault(spec.id, [])
+            matches = draft_lookup[spec.id]
+            done_criteria = dep_done_criteria[spec.id]
             for dp in spec.dependency_patterns:
                 deps = [u for u in draft_specs if u is not spec and dp.matches(u)]
                 dp.update(*[u.id for u in deps])
@@ -666,7 +681,7 @@ def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedS
                 done_criteria.extend([dp.result_match] * len(deps))
             graph[spec.id] = matches
 
-    errors: dict[str, list[str]] = {}
+    errors: defaultdict[str, list[str]] = defaultdict(list)
     lookup: dict[str, ResolvedSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
@@ -682,7 +697,7 @@ def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedS
             try:
                 spec = spec.resolve(dependencies, dep_done_criteria[spec.id])
             except UnresolvedDependenciesErrors as e:
-                errors.setdefault(spec.fullname, []).extend(e.errors)
+                errors[spec.fullname].extend(e.errors)
             lookup[id] = spec
         ts.done(*ids)
     pm.done(status="done" if not errors else "failed")
