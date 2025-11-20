@@ -176,7 +176,7 @@ def canary_collectreport(specs: list["TestSpec"]) -> None:
     logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
     if excluded:
         n = len(excluded)
-        logger.info("@*{Excluding} %d test specs for the following reasons:" % n)
+        logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
         reasons: dict[str | None, list["TestSpec"]] = {}
         for spec in excluded:
             if spec.mask:
@@ -185,7 +185,7 @@ def canary_collectreport(specs: list["TestSpec"]) -> None:
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
+            logger.log(logging.EMIT, f"{'@B{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for spec in reasons[key]:
                     logger.log(logging.EMIT, f"... {spec.display_name}", extra={"prefix": ""})

@@ -45,7 +45,6 @@ def banner(color: bool = True) -> str:
     info = random.choice(banners)
     banner = bird + "\n" + info["banner"]
     # banner = info["banner"]
-    logger.debug(f"banner font: {info['font']}")
     if not color:
         return banner + f"\nversion: {version.version}"
     colors = cycle(["c", "c", "b", "b", "m", "m", "G", "G"])

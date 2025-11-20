@@ -863,8 +863,6 @@ def generate_specs(
     finally:
         pm.done(status)
 
-    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
-
     duplicates = find_duplicates(drafts)
     if duplicates:
         logger.error("Duplicate test IDs generated for the following test cases")
@@ -880,7 +878,7 @@ def generate_specs(
     for spec in specs:
         config.pluginmanager.hook.canary_testspec_modify(spec=spec)
 
-    logger.info("Done generating test specs")
+    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
 
     return specs
 
