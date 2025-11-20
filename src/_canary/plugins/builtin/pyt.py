@@ -136,7 +136,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
             try:
                 graph.print(resolved, file=file)
-            except Exception: # nosec B110
+            except Exception:  # nosec B110
                 pass
         except Exception:
             logger.warning("Unable to generate dependency graph")

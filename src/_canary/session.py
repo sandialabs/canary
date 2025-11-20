@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 import datetime
 import os
-import pickle # nosec B403
+import pickle  # nosec B403
 import time
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -95,7 +95,7 @@ class Session:
     def selection(self) -> "SpecSelection":
         if self._selection is None:
             with open(self.select_file, "rb") as fh:
-                self._selection = pickle.load(fh) # nosec B301
+                self._selection = pickle.load(fh)  # nosec B301
         assert self._selection is not None
         return self._selection
 
