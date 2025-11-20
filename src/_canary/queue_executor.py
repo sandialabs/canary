@@ -4,6 +4,7 @@
 import dataclasses
 import datetime
 import io
+import math
 import multiprocessing as mp
 import os
 import signal
@@ -21,6 +22,7 @@ from .protocols import JobProtocol
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
+from .util import cpu_count
 from .util import keyboard
 from .util import logging
 from .util.misc import digits
@@ -75,9 +77,10 @@ class ResourceQueueExecutor:
             runner: Callable that processes cases
             busy_wait_time: Time to wait when queue is busy
         """
-        self.max_workers = max_workers if max_workers > 0 else os.cpu_count()
-        if self.max_workers > os.cpu_count():
-            logger.warning(f"workers={self.max_workers} > cpu_count={os.cpu_count()}")
+        nproc = cpu_count()
+        self.max_workers = max_workers if max_workers > 0 else math.ceil(0.85 * nproc)
+        if self.max_workers > nproc:
+            logger.warning(f"workers={self.max_workers} > cpu_count={nproc}")
 
         self.queue: ResourceQueue = queue
         self.runner = runner
