@@ -645,7 +645,6 @@ class Workspace:
             logger.debug("Reading test specs from cache")
             specs = self.load_testspecs()
         else:
-            logger.debug("Generating test specs")
             specs = generate_specs(generators, on_options=on_options)
             for spec in specs:
                 # Add all test specs to the object store before masking so that future stages don't
@@ -864,6 +863,8 @@ def generate_specs(
     finally:
         pm.done(status)
 
+    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
+
     duplicates = find_duplicates(drafts)
     if duplicates:
         logger.error("Duplicate test IDs generated for the following test cases")
@@ -879,7 +880,8 @@ def generate_specs(
     for spec in specs:
         config.pluginmanager.hook.canary_testspec_modify(spec=spec)
 
-    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
+    logger.info("Done generating test specs")
+
     return specs
 
 
