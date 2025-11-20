@@ -25,6 +25,7 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...testcase import TestCase
+    from ...testspec import TestSpec
     from ...workspace import Session
 
 
@@ -166,30 +167,28 @@ def runtest_report_status(session: "Session") -> None:
 
 
 @hookimpl
-def canary_collectreport(cases: list["TestCase"]) -> None:
-    excluded: list["TestCase"] = []
-    for case in cases:
-        if case.mask:
-            excluded.append(case)
-    n = len(cases) - len(excluded)
-    logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
+def canary_collectreport(specs: list["TestSpec"]) -> None:
+    excluded: list["TestSpec"] = []
+    for spec in specs:
+        if spec.mask:
+            excluded.append(spec)
+    n = len(specs) - len(excluded)
+    logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
     if excluded:
         n = len(excluded)
-        logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
-        reasons: dict[str | None, list["TestCase"]] = {}
-        for case in excluded:
-            if case.mask:
-                reasons.setdefault(case.mask, []).append(case)
-            elif case.status.name == "INVALID":
-                reasons.setdefault(case.status.message, []).append(case)
+        logger.info("@*{Excluding} %d test specs for the following reasons:" % n)
+        reasons: dict[str | None, list["TestSpec"]] = {}
+        for spec in excluded:
+            if spec.mask:
+                reasons.setdefault(spec.mask, []).append(spec)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
             logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
-                for case in reasons[key]:
-                    logger.log(logging.EMIT, f"... {case.display_name()}", extra={"prefix": ""})
+                for spec in reasons[key]:
+                    logger.log(logging.EMIT, f"... {spec.display_name}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:

@@ -666,7 +666,7 @@ class Workspace:
             ids=ids,
         )
         final = testspec.finalize(specs)
-        config.pluginmanager.hook.canary_collectreport(cases=final)
+        config.pluginmanager.hook.canary_collectreport(specs=final)
 
         selected = [spec for spec in final if not spec.mask]
         if not selected:

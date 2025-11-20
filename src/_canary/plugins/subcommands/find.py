@@ -79,10 +79,8 @@ class Find(CanarySubcommand):
         specs_to_run = [spec for spec in specs if not spec.mask]
         if not specs_to_run:
             raise StopExecution("No tests to run", 7)
-        if not quiet:
-            config.pluginmanager.hook.canary_collectreport(cases=specs)
         final = finalize(specs)
-        config.pluginmanager.hook.canary_collectreport(cases=final)
+        config.pluginmanager.hook.canary_collectreport(specs=final)
         specs_to_run.sort(key=lambda x: x.name)
         if args.print_paths:
             pprint_paths(specs_to_run)

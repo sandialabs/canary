@@ -22,10 +22,12 @@ if TYPE_CHECKING:
     from ..testcase import TestCase
     from ..testexec import ExecutionPolicy
     from ..testspec import ResolvedSpec
+    from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
     from .types import ScanPath
+
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -139,7 +141,7 @@ def canary_statusreport(session: "Session") -> None:
 
 
 @hookspec
-def canary_collectreport(cases: list["TestCase"]) -> None:
+def canary_collectreport(specs: list["TestSpec"]) -> None:
     raise NotImplementedError
 
 
