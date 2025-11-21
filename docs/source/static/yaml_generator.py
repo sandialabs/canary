@@ -4,8 +4,9 @@ import re
 from itertools import product
 from pathlib import Path
 
-import canary
 import yaml
+
+import canary
 
 
 @canary.hookimpl
