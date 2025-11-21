@@ -99,11 +99,7 @@ class Workspace:
         self.head: Path
 
         self.lockfile: Path
-        self.index_file: Path
         self.latest_results_file: Path
-
-        # properties
-        self._spec_index: dict[str, list[str]]
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -125,8 +121,6 @@ class Workspace:
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
         self.latest_results_file = self.root / "latest.json"
-        self.index_file = self.root / "index.jsons"
-        self._spec_index = {}
         self._spec_ids = set()
 
     @staticmethod
@@ -220,10 +214,16 @@ class Workspace:
             file.write_text(link)
 
         self.latest_results_file.write_text(json.dumps({}))
-        self.index_file.touch()
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({"canary": {}}))
+
+        file = self.casespecs_dir / "index.json"
+        file.write_text(json.dumps({}))
+
+        file = self.casespecs_dir / "graph.json"
+        file.write_text(json.dumps({}))
+
         return self
 
     @classmethod
@@ -274,17 +274,6 @@ class Workspace:
             yield session
         finally:
             self.add_session_results(session)
-
-    @property
-    def spec_index(self) -> dict[str, list[str]]:
-        if not self._spec_index:
-            for line in self.index_file.read_text().splitlines():
-                entry = json.loads(line)
-                self._spec_index.update(entry)
-        return self._spec_index
-
-    def specfile(self, id: str) -> Path:
-        return self.casespecs_dir / id[:2] / id[2:] / "spec.lock"
 
     def load_latest_results(self) -> dict[str, Any]:
         return json.loads(self.latest_results_file.read_text())
@@ -385,9 +374,13 @@ class Workspace:
             link = (self.refs_dir / "latest").read_text().strip()
             path = self.refs_dir / link
             latest_session = path.stem
+        generator_count = 0
+        if (self.generators_dir / "index.json").exists():
+            index = json.loads((self.generators_dir / "index.json").read_text())
+            generator_count = len(index)
         info = {
             "root": str(self.root),
-            "generator_count": len(list(self.generators_dir.rglob("*.json"))),
+            "generator_count": generator_count,
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
             "latest_session": latest_session,
             "tags": sorted(p.stem for p in self.tags_dir.glob("*")),
@@ -396,22 +389,28 @@ class Workspace:
         }
         return info
 
-    def _add_generator(self, generator: AbstractTestGenerator) -> int:
-        file = self.generators_dir / generator.id[:2] / f"{generator.id[2:]}.json"
+    def add_generators(self, generators: list[AbstractTestGenerator]) -> None:
+        pm = logger.progress_monitor("@*{Adding} test case generators to workspace")
+        file = self.generators_dir / "index.json"
+        index: dict[str, Any] = {}
         if file.exists():
-            logger.debug(f"Test case generator already in workspace ({generator})")
-            return 0
+            index.update(json.loads(file.read_text()))
+        for generator in generators:
+            index[generator.id] = generator.getstate()
         file.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(file, json.dumps(generator.getstate(), indent=2))
-        return 1
+        atomic_write(file, json.dumps(index, indent=2))
+        pm.done()
 
     def load_testcase_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
         generators: list[AbstractTestGenerator] = []
         pm = logger.progress_monitor("@*{Loading} test case generators")
         try:
-            for file in self.generators_dir.rglob("*.json"):
-                state = json.loads(file.read_text())
+            file = self.generators_dir / "index.json"
+            index: dict[str, Any] = {}
+            if file.exists():
+                index.update(json.loads(file.read_text()))
+            for state in index.values():
                 generator = AbstractTestGenerator.from_state(state)
                 generators.append(generator)
         except Exception:
@@ -432,14 +431,12 @@ class Workspace:
         """Find test case generators in scan_paths and add them to this workspace"""
         generators: list[AbstractTestGenerator] = []
         for root, paths in scan_paths.items():
-            _, _, fs_root = root.partition("@")
+            fs_root = root if "@" not in root else root.partition("@")[-1]
             pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
             p = ScanPath(root=root, paths=paths)
             generators.extend(config.pluginmanager.hook.canary_collect_generators(scan_path=p))
             pm.done()
-        n: int = 0
-        for generator in generators:
-            n += self._add_generator(generator)
+        self.add_generators(generators)
         # Invalidate caches
         warned = False
         if (self.cache_dir / "select").exists():
@@ -454,17 +451,17 @@ class Workspace:
                     selection.specs = None
                 with open(file, "wb") as fh:
                     pickle.dump(selection, fh)
-        logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
+        logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
-    def resolve_root_ids(self, roots: list[str]) -> None:
+    def resolve_root_ids(self, roots: list[str], graph: dict[str, list[str]]) -> None:
         """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
 
         def find(root: str) -> str:
             sygil = testspec.select_sygil
-            if root in self.spec_index:
+            if root in graph:
                 return root
-            for id in self.spec_index:
+            for id in graph:
                 if id.startswith(root):
                     return id
                 elif root.startswith(sygil) and id.startswith(root[1:]):
@@ -476,15 +473,22 @@ class Workspace:
 
     def _load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
         """Load cached test specs.  Dependency resolution is performed."""
-        graph: dict[str, list[str]] = {id: list(deps) for id, deps in self.spec_index.items()}
+        index: dict[str, Any] = {}
+        ifile = self.casespecs_dir / "index.json"
+        if ifile.exists():
+            index.update(json.loads(ifile.read_text()))
+        graph: dict[str, list[str]] = {}
+        gfile = self.casespecs_dir / "graph.json"
+        if gfile.exists():
+            graph.update(json.loads(gfile.read_text()))
         if roots:
-            self.resolve_root_ids(roots)
+            self.resolve_root_ids(roots, graph)
             reachable = reachable_nodes(graph, roots)
             graph = {id: graph[id] for id in reachable}
         lookup: dict[str, ResolvedSpec] = {}
         ts = TopologicalSorter(graph)
         for id in ts.static_order():
-            file = self.specfile(id)
+            file = self.casespecs_dir / str(index[id]["relpath"])
             lock_data = json.loads(file.read_text())
             spec = ResolvedSpec.from_dict(lock_data, lookup)
             lookup[id] = spec
@@ -647,10 +651,9 @@ class Workspace:
             specs = self.load_testspecs()
         else:
             specs = generate_specs(generators, on_options=on_options)
-            for spec in specs:
-                # Add all test specs to the object store before masking so that future stages don't
-                # inherit this stage's mask (if any)
-                self.add_spec(spec)
+            # Add all test specs to the object store before masking so that future stages don't
+            # inherit this stage's mask (if any)
+            self.add_specs(specs)
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
@@ -750,15 +753,25 @@ class Workspace:
         self.cache_selection(selection)
         return selection
 
-    def add_spec(self, spec: ResolvedSpec) -> None:
-        file = self.casespecs_dir / spec.id[:2] / spec.id[2:] / "spec.lock"
-        if file.exists():
-            return
-        file.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(file, spec.dumps(indent=2))
-        self._spec_index.clear()
-        with self.index_file.open(mode="a") as fh:
-            fh.write(json.dumps({spec.id: [dep.id for dep in spec.dependencies]}) + "\n")
+    def add_specs(self, specs: list[ResolvedSpec]) -> None:
+        index: dict[str, Any] = {}
+        ifile = self.casespecs_dir / "index.json"
+        if ifile.exists():
+            index.update(json.loads(ifile.read_text()))
+        graph = {}
+        gfile = self.casespecs_dir / "graph.json"
+        if gfile.exists():
+            graph.update(json.loads(gfile.read_text()))
+        timestamp = datetime.datetime.now().timestamp()
+        for spec in specs:
+            root = hashlib.sha256(str(spec.file_root).encode("utf-8")).hexdigest()[:8]
+            file = self.casespecs_dir / root / f"{spec.id}.json"
+            file.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(file, spec.dumps(indent=2))
+            index[spec.id] = {"relpath": file.relative_to(ifile.parent), "generated": timestamp}
+            graph[spec.id] = [dep.id for dep in spec.dependencies]
+        atomic_write(ifile, json.dumps(index, indent=2))
+        atomic_write(gfile, json.dumps(graph, indent=2))
 
     def statusinfo(self) -> dict[str, list[str]]:
         latest = self.load_latest_results()
@@ -863,6 +876,8 @@ def generate_specs(
         status = "done"
     finally:
         pm.done(status)
+
+    print(len(drafts))
 
     duplicates = find_duplicates(drafts)
     if duplicates:

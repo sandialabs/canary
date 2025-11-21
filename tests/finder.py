@@ -297,3 +297,18 @@ def test_vvt_generator(tmpdir):
                     assert spec.mask
                 else:
                     assert not spec.mask
+
+
+def test_many_composite(tmpdir):
+    names = "abcdefghij"
+    workdir = tmpdir.strpath
+    with working_dir(workdir, create=True):
+        for name in names:
+            with open(f"{name}.pyt", "w") as fh:
+                fh.write("import canary\n")
+                fh.write("canary.directives.keywords('long')\n")
+                fh.write(f"canary.directives.parameterize({name!r}, list(range(4)))\n")
+                fh.write("canary.directives.generate_composite_base_case()\n")
+    generators = workspace.find_generators_in_path(workdir)
+    specs = workspace.generate_specs(generators)
+    assert len(specs) == len(names) * 5

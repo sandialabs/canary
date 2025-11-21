@@ -289,6 +289,24 @@ def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenera
     raise NotImplementedError
 
 
+@hookspec
+def canary_collect_file_patterns() -> list[str]:
+    """Return a list of directory names to skip when searching for tests"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_filter_files(files: list[str]) -> None:
+    """Filter tests we don't want to generate"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_skip_dirs() -> list[str]:
+    """Return a list of directory names to skip when searching for tests"""
+    raise NotImplementedError
+
+
 @hookspec(firstresult=True)
 def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
     raise NotImplementedError

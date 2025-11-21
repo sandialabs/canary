@@ -1003,6 +1003,11 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 
 @hookimpl
+def canary_collect_file_patterns() -> list[str]:
+    return ["*.pyt", "canary_*.py"]
+
+
+@hookimpl
 def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
     if PYTTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return PYTTestGenerator(root, path=path)

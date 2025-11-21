@@ -1,8 +1,10 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import fnmatch
 import os
 import subprocess
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Generator
 
@@ -11,6 +13,7 @@ from ...generator import AbstractTestGenerator
 from ...util import logging
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
+from ..types import File
 from ..types import ScanPath
 
 logger = logging.get_logger(__name__)
@@ -18,7 +21,6 @@ logger = logging.get_logger(__name__)
 
 class Collector:
     errors: int = 0
-    skip_dirs = ("__pycache__", ".git", ".svn")
 
     @hookimpl(specname="canary_collect_generators")
     def collect_from_directory(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
@@ -60,13 +62,6 @@ class Collector:
             except Exception as e:
                 raise ValueError(f"Failed to load {root}")
 
-    def skip_dir(self, dirname: str) -> bool:
-        if os.path.basename(dirname) in self.skip_dirs:
-            return True
-        if os.path.basename(dirname) == "TestResults":
-            return True
-        return False
-
     def from_file(self, root: Path, path: Path) -> AbstractTestGenerator | None:
         hk = config.pluginmanager.hook
         try:
@@ -93,37 +88,67 @@ class Collector:
                     self.errors += 1
                     logger.exception(f"Failed to parse {root}/{file}")
 
-    def from_directory(self, root: Path) -> Generator[AbstractTestGenerator, None, None]:
+    def from_directory(self, root: Path) -> list[AbstractTestGenerator]:
         # Cache repeated values
-        generator_hook = config.pluginmanager.hook.canary_testcase_generator
-        skip_dirs = self.skip_dirs  # tuple
+        skip_dirs = config.pluginmanager.hook.canary_collect_skip_dirs()
+        patterns = config.pluginmanager.hook.canary_collect_file_patterns()
         root_str = str(root)
         root_len = len(root_str) + 1  # for slicing to make relative paths fast
 
-        for dirpath, dirnames, filenames in os.walk(root_str):
+        files: list[str] = []
+        for dirname, dirs, names in os.walk(root_str):
             # Fast skip-dir check
-            basename = os.path.basename(dirpath)
-            if basename in skip_dirs or basename == "TestResults":
-                dirnames[:] = ()
+            basename = os.path.basename(dirname)
+            if basename in skip_dirs:
+                dirs[:] = ()
                 continue
-            try:
-                for name in filenames:
-                    file_path = f"{dirpath}/{name}"
-                    # Fast path → relative path (avoid os.path.relpath)
-                    rel_path = file_path[root_len:]
-                    try:
-                        f = generator_hook(root=root, path=rel_path)
-                    except Exception:
-                        self.errors += 1
-                        logger.exception(f"Failed to parse {rel_path}")
-                        continue
-                    if f:
-                        yield f
-                        if f.stop_recursion():
-                            raise StopRecursion
-            except StopRecursion:
-                dirnames[:] = ()
-                continue
+            for name in names:
+                for pattern in patterns:
+                    if fnmatch.fnmatchcase(name, pattern):
+                        file_path = f"{dirname}/{name}"
+                        # Fast path → relative path (avoid os.path.relpath)
+                        rel_path = file_path[root_len:]
+                        files.append(rel_path)
+                        break
+
+        # Filter files
+        files = self.filter_files(files)
+
+        # Now generate tests
+        all_files = [(root, file) for file in files]
+        with ProcessPoolExecutor() as ex:
+            futures = [ex.submit(generate_one, arg) for arg in all_files]
+            results = [f.result() for f in futures]
+        generators: list[AbstractTestGenerator] = []
+        for success, result in results:
+            if not success:
+                self.errors += 1
+            elif result is not None:
+                generators.append(result)
+        return generators
+
+    def filter_files(self, files: list[str]) -> list[str]:
+        file_objs = [File(f) for f in files]
+        config.pluginmanager.hook.canary_collect_filter_files(files=file_objs)
+        return [str(file) for file in file_objs if not file.skip]
+
+
+@hookimpl(wrapper=True)
+def canary_collect_file_patterns() -> Generator[None, None, list[str]]:
+    patterns = []
+    result = yield
+    for items in result:
+        patterns.extend(items)
+    return patterns
+
+
+@hookimpl(wrapper=True)
+def canary_collect_skip_dirs() -> Generator[None, None, list[str]]:
+    default = {"__pycache__", ".git", ".svn", ".hg", config.get("view") or "TestResults"}
+    result = yield
+    for items in result:
+        default.update(items)
+    return sorted(default)
 
 
 def git_ls(root: str) -> list[str]:
@@ -138,6 +163,17 @@ def repo_ls(root: str) -> list[str]:
     with working_dir(root):
         cp = subprocess.run(args, capture_output=True, text=True)
     return [f.strip() for f in cp.stdout.split("\n") if f.split()]
+
+
+def generate_one(args) -> tuple[bool, AbstractTestGenerator | None]:
+    generator_hook = config.pluginmanager.hook.canary_testcase_generator
+    root, f = args
+    try:
+        gen = generator_hook(root=root, path=f)
+        return True, gen
+    except Exception:
+        logger.exception(f"Failed to parse test from {root}/{f}")
+        return False, None
 
 
 class StopRecursion(Exception):

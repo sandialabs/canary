@@ -24,6 +24,7 @@ plugins = [
     addoption,
     TestCaseExecutor(),
     collect.Collector(),
+    collect,
     discover,
     email,
     html,

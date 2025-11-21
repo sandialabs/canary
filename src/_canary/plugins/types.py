@@ -96,3 +96,13 @@ class Result:
 class ScanPath:
     root: str
     paths: list[str] | None = None
+
+
+class File(str):
+    __slots__ = ("skip",)
+
+    def __new__(cls, value):
+        return str.__new__(cls, value)
+
+    def __init__(self, value):
+        self.skip = False

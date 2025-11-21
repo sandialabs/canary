@@ -11,6 +11,7 @@ from schema import Schema
 from schema import Use
 
 import canary
+from _canary.plugins.types import File
 
 from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
@@ -19,6 +20,24 @@ from .ctest import read_resource_specs
 from .ctest import setup_ctest
 
 logger = canary.get_logger(__name__)
+
+
+@canary.hookimpl
+def canary_collect_file_patterns() -> list[str]:
+    return ["CTestTestfile.cmake"]
+
+
+@canary.hookimpl
+def canary_collect_filter_files(files: list[File]) -> None:
+    seen_parents: set[str] = set()
+    for f in files:
+        if os.path.basename(f) == "CTestTestfile.cmake":
+            parts = f.split(os.sep)
+            top_parent = "." if len(parts) == 1 else parts[0]
+            if top_parent in seen_parents:
+                f.skip = True
+                continue  # CTest will automatically generate tests recursively
+            seen_parents.add(top_parent)
 
 
 @canary.hookimpl(specname="canary_testcase_generator")

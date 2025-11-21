@@ -16,6 +16,11 @@ logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
+def canary_collect_file_patterns() -> list[str]:
+    return ["*.vvt"]
+
+
+@canary.hookimpl
 def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
     if VVTTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return VVTTestGenerator(root, path=path)

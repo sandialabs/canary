@@ -7,7 +7,6 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
-from typing import Any
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -84,11 +83,6 @@ class AbstractTestGenerator(ABC):
         """Return a description of the test"""
         return repr(self)
 
-    def info(self) -> dict[str, Any]:
-        info: dict[str, Any] = {}
-        info["type"] = self.__class__.__name__
-        return info
-
     @abstractmethod
     def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
         """Expand parameters and instantiate concrete test cases
@@ -105,17 +99,15 @@ class AbstractTestGenerator(ABC):
 
     def getstate(self) -> dict[str, str]:
         state: dict[str, str] = {}
-        state["type"] = self.__class__.__name__
         state["root"] = self.root
         state["path"] = self.path
-        state["name"] = self.name
         state["sha256"] = self.sha256
+        state["mtime"] = os.path.getmtime(self.file)
         return state
 
     @staticmethod
     def from_state(state: dict[str, str]) -> "AbstractTestGenerator":
-        generator = AbstractTestGenerator.factory(state["root"], state["path"])
-        return generator
+        return AbstractTestGenerator.factory(state["root"], state["path"])
 
     @staticmethod
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
