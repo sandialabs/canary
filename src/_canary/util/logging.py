@@ -35,6 +35,7 @@ EMIT = builtin_logging.CRITICAL + 5
 
 builtin_print = print
 root_log_name = "canary"
+arrow = "==>"
 
 
 class FileHandler(builtin_logging.FileHandler): ...
@@ -75,11 +76,15 @@ class Formatter(builtin_logging.Formatter):
         }
         if not hasattr(record, "prefix"):
             if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
+                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
             elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+                prefix = "@*%s{%s} %s: " % (
+                    level_color(record.levelno),
+                    arrow,
+                    record.levelname.title(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = "@*{%s} " % arrow
             extra["prefix"] = prefix
 
         record.__dict__.update(extra)
@@ -98,11 +103,15 @@ class JsonFormatter(builtin_logging.Formatter):
         }
         if not hasattr(record, "prefix"):
             if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
+                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
             elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+                prefix = "@*%s{%s} %s: " % (
+                    level_color(record.levelno),
+                    arrow,
+                    record.levelname.title(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = "@*{%s} " % arrow
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()

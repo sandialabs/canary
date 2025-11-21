@@ -185,10 +185,10 @@ def canary_collectreport(specs: list["TestSpec"]) -> None:
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logger.log(logging.EMIT, f"    • {reason} ({n} excluded)", extra={"prefix": ""})
+            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for spec in reasons[key]:
-                    logger.log(logging.EMIT, f"... {spec.display_name}", extra={"prefix": ""})
+                    logger.log(logging.EMIT, f"◦ {spec.display_name}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
