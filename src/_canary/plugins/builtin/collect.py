@@ -67,30 +67,6 @@ class Collector:
             return True
         return False
 
-    def from_directory(self, root: Path) -> Generator[AbstractTestGenerator, None, None]:
-        hk = config.pluginmanager.hook
-        for dir, dirs, files in os.walk(str(root)):
-            try:
-                if self.skip_dir(dir):
-                    del dirs[:]
-                    continue
-                for name in files:
-                    try:
-                        file = os.path.join(dir, name)
-                        path = os.path.relpath(file, root)
-                        if f := hk.canary_testcase_generator(root=root, path=path):
-                            yield f
-                    except Exception as e:
-                        self.errors += 1
-                        logger.exception(f"Failed to parse {path}")
-                    else:
-                        if f and f.stop_recursion():
-                            raise StopRecursion
-            except StopRecursion:
-                del dirs[:]
-                continue
-        return
-
     def from_file(self, root: Path, path: Path) -> AbstractTestGenerator | None:
         hk = config.pluginmanager.hook
         try:
@@ -116,6 +92,38 @@ class Collector:
                 except Exception as e:
                     self.errors += 1
                     logger.exception(f"Failed to parse {root}/{file}")
+
+    def from_directory(self, root: Path) -> Generator[AbstractTestGenerator, None, None]:
+        # Cache repeated values
+        generator_hook = config.pluginmanager.hook.canary_testcase_generator
+        skip_dirs = self.skip_dirs  # tuple
+        root_str = str(root)
+        root_len = len(root_str) + 1  # for slicing to make relative paths fast
+
+        for dirpath, dirnames, filenames in os.walk(root_str):
+            # Fast skip-dir check
+            basename = os.path.basename(dirpath)
+            if basename in skip_dirs or basename == "TestResults":
+                dirnames[:] = ()
+                continue
+            try:
+                for name in filenames:
+                    file_path = f"{dirpath}/{name}"
+                    # Fast path → relative path (avoid os.path.relpath)
+                    rel_path = file_path[root_len:]
+                    try:
+                        f = generator_hook(root=root, path=rel_path)
+                    except Exception:
+                        self.errors += 1
+                        logger.exception(f"Failed to parse {rel_path}")
+                        continue
+                    if f:
+                        yield f
+                        if f.stop_recursion():
+                            raise StopRecursion
+            except StopRecursion:
+                dirnames[:] = ()
+                continue
 
 
 def git_ls(root: str) -> list[str]:
