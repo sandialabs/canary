@@ -167,7 +167,6 @@ class Session:
                 case.timekeeper.duration = data["timekeeper"]["duration"]
                 case.mask = data.get("mask", None)
             lookup[case.spec.id] = case
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
             if case.mask:
                 changed = True
         cases = list(lookup.values())
@@ -195,9 +194,10 @@ class Session:
         start = time.monotonic()
         returncode: int = -1
         try:
+            starting_dir = os.getcwd()
             for case in cases:
                 case.status.set("PENDING")
-            starting_dir = os.getcwd()
+                config.pluginmanager.hook.canary_testcase_modify(case=case)
             os.chdir(str(self.work_dir))
             config.pluginmanager.hook.canary_runtests(cases=cases)
         except TimeoutError:

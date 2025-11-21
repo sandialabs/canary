@@ -16,7 +16,6 @@ def analyze():
     assert self.parameters['b'] == (4, 5, 4, 5), self.parameters['b']
     return 0
 if __name__ == '__main__':
-    print("B.0", sys.argv)
     if '--analyze' in sys.argv[1:]:
         rc = analyze()
     else:

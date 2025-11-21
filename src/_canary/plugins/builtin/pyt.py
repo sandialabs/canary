@@ -261,14 +261,9 @@ class PYTTestGenerator(AbstractTestGenerator):
                     DependencyPatterns(pattern=d.id, expects=1, result_match="success")
                     for d in my_drafts
                 ]
-                psets = {}
+                psets = []
                 for paramset in paramsets:
-                    table = psets.setdefault(":".join(paramset.keys), [])
-                    for row in paramset.values:
-                        if len(paramset.keys) == 1:
-                            table.append(row[0])
-                        else:
-                            table.append(list(row))
+                    psets.append({"keys": paramset.keys, "values": paramset.values})
                 parent = DraftSpec(
                     file_root=Path(self.root),
                     file_path=Path(self.path),

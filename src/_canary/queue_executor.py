@@ -48,13 +48,14 @@ def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue, **kwargs
     try:
         return runner(job, queue, **kwargs)
     except Exception as e:  # nosec B110
+        fh = io.StringIO()
+        traceback.print_exc(file=fh)
+        text = fh.getvalue()
+        logger.debug(f"Child process failed: {text}")
         job.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
         queue.put({"status": job.status})
-        fh = io.StringIO()
-        traceback.print_exc(file=fh)
-        logger.debug(f"Child process failed: {fh.getvalue()}")
         sys.exit(1)
 
 

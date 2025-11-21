@@ -111,6 +111,11 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
+                if job.status.name == "NOT_RUN":
+                    logger.debug(f"Job {job.id} marked NOT_RUN and removed from queue")
+                    self._finished[job.id] = job
+                    continue
+
                 if job.status.name not in ("READY", "PENDING"):
                     # Job will never by ready
                     job.status.set("ERROR", "State became unrunable for unknown reasons")

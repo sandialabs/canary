@@ -146,9 +146,14 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     for key, val in case.spec.parameters.items():
         attrs[key] = val
     if attrs["is_analyze"]:
-        for key, val in case.spec.attributes["paramsets"]:
-            name = key.replace(":", "_")
-            attrs[f"PARAM_{name}"] = val
+        for paramset in case.spec.attributes["paramsets"]:
+            key = "_".join(paramset["keys"])
+            table = attrs.setdefault(f"PARAM_{key}", [])
+            for row in paramset["values"]:
+                if len(paramset["keys"]) == 1:
+                    table.append(row[0])
+                else:
+                    table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
     attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.dependencies]
