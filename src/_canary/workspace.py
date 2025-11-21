@@ -877,8 +877,6 @@ def generate_specs(
     finally:
         pm.done(status)
 
-    print(len(drafts))
-
     duplicates = find_duplicates(drafts)
     if duplicates:
         logger.error("Duplicate test IDs generated for the following test cases")
