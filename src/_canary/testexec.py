@@ -8,6 +8,7 @@ import io
 import os
 import runpy
 import shlex
+import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -94,7 +95,7 @@ class ExecutionSpace:
         """Copy the file at ``src`` to this workspace with name ``dst``"""
         dst: Path = Path(dst or src.name)
         (self.dir / dst.name).unlink(missing_ok=True)
-        (self.dir / dst.name).hardlink_to(src)
+        shutil.copyfile(str(src), str(self.dir / dst.name))
 
     def link(self, src: Path, dst: Path | str | None = None) -> None:
         """Symlink the file at ``src`` to this workspace with name ``dst``"""
