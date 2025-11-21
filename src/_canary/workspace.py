@@ -432,7 +432,8 @@ class Workspace:
         """Find test case generators in scan_paths and add them to this workspace"""
         generators: list[AbstractTestGenerator] = []
         for root, paths in scan_paths.items():
-            pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {root}")
+            _, _, fs_root = root.partition("@")
+            pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
             p = ScanPath(root=root, paths=paths)
             generators.extend(config.pluginmanager.hook.canary_collect_generators(scan_path=p))
             pm.done()
