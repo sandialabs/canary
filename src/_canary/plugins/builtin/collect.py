@@ -77,16 +77,11 @@ class Collector:
         type, _, root = root.partition("@")
         if type not in ("git", "repo"):
             raise TypeError("Unknown vc type {type!r}, choose from git, repo")
-        hk = config.pluginmanager.hook
-        files = git_ls(root) if type == "git" else repo_ls(root)
-        with working_dir(root):
-            for file in files:
-                try:
-                    if f := hk.canary_testcase_generator(root=root, path=file):
-                        yield f
-                except Exception as e:
-                    self.errors += 1
-                    logger.exception(f"Failed to parse {root}/{file}")
+        patterns: list[str] = config.pluginmanager.hook.canary_collect_file_patterns()
+        files = git_ls(root, patterns) if type == "git" else repo_ls(root)
+
+        files = filter_files(files)
+        return self.create_generators_from_files(root, files)
 
     def from_directory(self, root: Path) -> list[AbstractTestGenerator]:
         # Cache repeated values
@@ -111,10 +106,10 @@ class Collector:
                         files.append(rel_path)
                         break
 
-        # Filter files
-        files = self.filter_files(files)
+        files = filter_files(files)
+        return self.create_generators_from_files(root, files)
 
-        # Now generate tests
+    def create_generators_from_files(self, root, files):
         all_files = [(root, file) for file in files]
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(generate_one, arg) for arg in all_files]
@@ -127,10 +122,11 @@ class Collector:
                 generators.append(result)
         return generators
 
-    def filter_files(self, files: list[str]) -> list[str]:
-        file_objs = [File(f) for f in files]
-        config.pluginmanager.hook.canary_collect_filter_files(files=file_objs)
-        return [str(file) for file in file_objs if not file.skip]
+
+def filter_files(files: list[str]) -> list[str]:
+    file_objs = [File(f) for f in files]
+    config.pluginmanager.hook.canary_collect_filter_files(files=file_objs)
+    return [str(file) for file in file_objs if not file.skip]
 
 
 @hookimpl(wrapper=True)
@@ -151,10 +147,18 @@ def canary_collect_skip_dirs() -> Generator[None, None, list[str]]:
     return sorted(default)
 
 
-def git_ls(root: str) -> list[str]:
-    args = ["git", "ls-files", "--recurse-submodules"]
-    with working_dir(root):
-        cp = subprocess.run(args, capture_output=True, text=True)
+def git_ls(root: str, patterns: list[str]) -> list[str]:
+    gitified_patterns = [f"**/{p}" for p in patterns]
+    args = [
+        "git",
+        "-C",
+        root,
+        "ls-files",
+        "--recurse-submodules",
+        "--",
+        *gitified_patterns,
+    ]
+    cp = subprocess.run(args, capture_output=True, text=True)
     return [f.strip() for f in cp.stdout.split("\n") if f.split()]
 
 
