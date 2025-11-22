@@ -78,7 +78,7 @@ class Collector:
         if type not in ("git", "repo"):
             raise TypeError("Unknown vc type {type!r}, choose from git, repo")
         patterns: list[str] = config.pluginmanager.hook.canary_collect_file_patterns()
-        files = git_ls(root, patterns) if type == "git" else repo_ls(root)
+        files = git_ls(root, patterns) if type == "git" else repo_ls(root, patterns)
 
         files = filter_files(files)
         return self.create_generators_from_files(root, files)
@@ -162,11 +162,18 @@ def git_ls(root: str, patterns: list[str]) -> list[str]:
     return [f.strip() for f in cp.stdout.split("\n") if f.split()]
 
 
-def repo_ls(root: str) -> list[str]:
-    args = ["repo", "-c", "git ls-files --recurse-submodules"]
+def repo_ls(root: str, patterns: list[str]) -> list[str]:
+    files: list[str] = []
     with working_dir(root):
-        cp = subprocess.run(args, capture_output=True, text=True)
-    return [f.strip() for f in cp.stdout.split("\n") if f.split()]
+        cp = subprocess.run(["repo", "list"], capture_output=True, text=True)
+        paths = [line.split(":")[0].strip() for line in cp.stdout.splitlines()]
+        for p in paths:
+            proj_files = git_ls(p, patterns)
+            if p == ".":
+                files.extend(proj_files)
+            else:
+                files.extend([f"{p}/{f}" for f in proj_files])
+    return files
 
 
 def generate_one(args) -> tuple[bool, AbstractTestGenerator | None]:
