@@ -291,7 +291,7 @@ def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenera
 
 @hookspec
 def canary_collect_file_patterns() -> list[str]:
-    """Return a list of directory names to skip when searching for tests"""
+    """Return a list of patterns to consider as potential generators"""
     raise NotImplementedError
 
 
