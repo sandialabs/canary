@@ -42,81 +42,70 @@ def apply_masks(
 
     owners = set(owners or [])
 
-    pm = logger.progress_monitor("@*{Masking} test specs based on filtering criteria")
-
     # Get an index of sorted order
     map: dict[str, int] = {d.id: i for i, d in enumerate(specs)}
     graph: dict[int, int] = {map[s.id]: [map[_.id] for _ in s.dependencies] for s in specs}
     ts = TopologicalSorter(graph)
     order = list(ts.static_order())
 
-    try:
-        for i in order:
-            spec = specs[i]
+    for i in order:
+        spec = specs[i]
 
-            if spec.mask:
+        if spec.mask:
+            continue
+
+        if ids is not None:
+            if not any(spec.matches(id) for id in ids):
+                expr = ",".join(ids)
+                spec.mask = "testspec expression @*{%s} did not match" % expr
+            continue
+
+        try:
+            check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=spec)
+        except Exception as e:
+            if config.get("debug"):
+                raise
+            spec.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
+            continue
+        else:
+            if not check:
+                spec.mask = check.reason
                 continue
 
-            if ids is not None:
-                if not any(spec.matches(id) for id in ids):
-                    expr = ",".join(ids)
-                    spec.mask = "testspec expression @*{%s} did not match" % expr
-                continue
+        if owners and not owners.intersection(spec.owners or []):
+            spec.mask = "not owned by @*{%r}" % spec.owners
+            continue
 
-            try:
-                check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=spec)
-            except Exception as e:
-                if config.get("debug"):
-                    raise
-                spec.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
-                continue
-            else:
-                if not check:
-                    spec.mask = check.reason
+        if keyword_exprs is not None:
+            kwds = set(spec.keywords)
+            kwds.update(spec.implicit_keywords)
+            kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
+            if not kwd_all:
+                for keyword_expr in keyword_exprs:
+                    match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                    if not match:
+                        spec.mask = "keyword expression @*{%r} did not match" % keyword_expr
+                        break
+                if spec.mask:
                     continue
 
-            if owners and not owners.intersection(spec.owners or []):
-                spec.mask = "not owned by @*{%r}" % spec.owners
+        if parameter_expr:
+            match = when.when(
+                {"parameters": parameter_expr},
+                parameters=spec.parameters | spec.implicit_parameters,
+            )
+            if not match:
+                spec.mask = "parameter expression @*{%s} did not match" % parameter_expr
                 continue
 
-            if keyword_exprs is not None:
-                kwds = set(spec.keywords)
-                kwds.update(spec.implicit_keywords)
-                kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
-                if not kwd_all:
-                    for keyword_expr in keyword_exprs:
-                        match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                        if not match:
-                            spec.mask = "keyword expression @*{%r} did not match" % keyword_expr
-                            break
-                    if spec.mask:
-                        continue
-
-            if parameter_expr:
-                match = when.when(
-                    {"parameters": parameter_expr},
-                    parameters=spec.parameters | spec.implicit_parameters,
-                )
-                if not match:
-                    spec.mask = "parameter expression @*{%s} did not match" % parameter_expr
+        if rx is not None:
+            if not filesystem.grep(rx, spec.file):
+                for asset in spec.assets:
+                    if os.path.isfile(asset.src) and filesystem.grep(rx, asset.src):
+                        break
+                else:
+                    spec.mask = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
                     continue
-
-            if rx is not None:
-                if not filesystem.grep(rx, spec.file):
-                    for asset in spec.assets:
-                        if os.path.isfile(asset.src) and filesystem.grep(rx, asset.src):
-                            break
-                    else:
-                        spec.mask = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
-                        continue
-
-    except Exception:
-        status = "failed"
-        raise
-    else:
-        status = "done"
-    finally:
-        pm.done(status)
 
 
 class Maskable(Protocol):

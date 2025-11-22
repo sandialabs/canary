@@ -664,6 +664,7 @@ class Workspace:
         if case_specs:
             ids = [_[1:] for _ in case_specs]
 
+        pm = logger.progress_monitor("@*{Masking} test specs based on filtering criteria")
         config.pluginmanager.hook.canary_testsuite_mask(
             specs=specs,
             keyword_exprs=keyword_exprs,
@@ -672,7 +673,11 @@ class Workspace:
             regex=regex,
             ids=ids,
         )
+        pm.done()
+
+        pm = logger.progress_monitor("@*{Finalizing} test specs")
         final = testspec.finalize(specs)
+        pm.done()
         config.pluginmanager.hook.canary_collectreport(specs=final)
 
         selected = [spec for spec in final if not spec.mask]
@@ -890,7 +895,9 @@ def generate_specs(
                 )
         raise ValueError("Duplicate test IDs in test suite")
 
+    pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
     specs = testspec.resolve(drafts)
+    pm.done()
     for spec in specs:
         config.pluginmanager.hook.canary_testspec_modify(spec=spec)
 

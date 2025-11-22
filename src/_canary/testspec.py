@@ -662,7 +662,6 @@ class DraftSpec(SpecCommons):
 
 
 def resolve_naive(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
-    pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
     graph: defaultdict[str, list[str]] = defaultdict(list)
     draft_lookup: defaultdict[str, list[str]] = defaultdict(list)
     dep_done_criteria: defaultdict[str, list[str]] = defaultdict(list)
@@ -699,7 +698,6 @@ def resolve_naive(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[Res
                 errors[spec.fullname].extend(e.errors)
             lookup[id] = spec
         ts.done(*ids)
-    pm.done(status="done" if not errors else "failed")
 
     if errors:
         msg: list[str] = ["Dependency resolution failed:"]
@@ -711,8 +709,6 @@ def resolve_naive(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[Res
 
 
 def resolve(specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
-    pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
-
     # Separate specs into resolved and draft
     draft_specs: list[DraftSpec] = []
     resolved_specs: list[ResolvedSpec] = []
@@ -789,13 +785,11 @@ def resolve(specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
                 lookup[id] = spec
         ts.done(*ids)
 
-    pm.done(status="done" if not errors else "failed")
-
     if errors:
         msg: list[str] = ["Dependency resolution failed:"]
         for name, issues in errors.items():
-            msg.append(f"  {name}")
-            msg.extend(f"  • {p}" for p in issues)
+            msg.append(f"  {name}")
+            msg.extend(f"  • {p}" for p in issues)
         raise DependencyResolutionFailed("\n".join(msg))
 
     return list(lookup.values())
@@ -945,7 +939,6 @@ def _pattern_matches_spec(pattern: str, spec: DraftSpec | ResolvedSpec) -> bool:
 
 
 def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
-    pm = logger.progress_monitor("@*{Finalizing} test specs")
     map: dict[str, ResolvedSpec] = {}
     graph: dict[str, list[str]] = {}
     for resolved_spec in resolved_specs:
@@ -963,7 +956,6 @@ def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
             spec = resolved.finalize(dependencies)
             lookup[id] = spec
         ts.done(*ids)
-    pm.done()
     return list(lookup.values())
 
 
