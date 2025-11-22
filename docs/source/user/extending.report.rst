@@ -29,14 +29,14 @@ User defined reports
 
         """
         output = output or "canary-report.txt"
-        session = canary.Session(os.getcwd(), mode="r")
+        workspace = canary.Workspace.load()
         with open(output, "w") as fh:
-            for case in session.active_cases():
+            for case in workspace.active_testcases():
                 fh.write("====\n")
-                fh.write(f"Name: {case.name}\n")
-                fh.write(f"Start: {case.start}\n")
-                fh.write(f"Finish: {case.stop}\n")
-                fh.write(f"Status: {case.status.value}\n")
+                fh.write(f"Name: {case.spec.name}\n")
+                fh.write(f"Start: {case.timekeeper.started_on}\n")
+                fh.write(f"Finish: {case.timekeeper.finished_on}\n")
+                fh.write(f"Status: {case.status.name}\n")
 
 .. code-block:: console
 

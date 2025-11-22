@@ -14,14 +14,20 @@ from .types import CanaryReporter
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
-    from ..atc import AbstractTestCase
+    from multiprocessing import Queue
+
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
-    from ..session import Session
     from ..testcase import TestCase
+    from ..testexec import ExecutionPolicy
+    from ..testspec import ResolvedSpec
+    from ..testspec import TestSpec
+    from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
+    from .types import ScanPath
+
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -135,7 +141,7 @@ def canary_statusreport(session: "Session") -> None:
 
 
 @hookspec
-def canary_collectreport(cases: list["TestCase"]) -> None:
+def canary_collectreport(specs: list["TestSpec"]) -> None:
     raise NotImplementedError
 
 
@@ -167,14 +173,12 @@ def canary_discover_generators(
 
 @hookspec
 def canary_testsuite_mask(
-    cases: list["TestCase"],
+    specs: list["ResolvedSpec"],
     keyword_exprs: list[str],
     parameter_expr: str,
     owners: set[str],
     regex: str | None,
-    case_specs: list[str] | None,
-    start: str | None,
-    ignore_dependencies: bool,
+    ids: list[str] | None,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -188,12 +192,18 @@ def canary_testsuite_mask(
 
 
 @hookspec
+def canary_testspec_modify(spec: list["ResolvedSpec"]) -> None:
+    """Modify the resolved test spec before the test case is created"""
+    ...
+
+
+@hookspec
 def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
 
 
 @hookspec(firstresult=True)
-def canary_testcase_setup(case: "AbstractTestCase") -> bool:
+def canary_testcase_setup(case: "TestCase") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -209,7 +219,7 @@ def canary_testcase_setup(case: "AbstractTestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "AbstractTestCase", qsize: int, qrank: int) -> bool:
+def canary_testcase_run(case: "TestCase", queue: "Queue") -> bool:
     """Called to run the test case
 
     Args:
@@ -223,7 +233,7 @@ def canary_testcase_run(case: "AbstractTestCase", qsize: int, qrank: int) -> boo
 
 
 @hookspec(firstresult=True)
-def canary_testcase_finish(case: "AbstractTestCase") -> bool:
+def canary_testcase_finish(case: "TestCase") -> bool:
     """Called to perform the finishing tasks for the test case
 
     The default implementation runs ``case.finish()``
@@ -271,4 +281,32 @@ def canary_resource_pool_types() -> list[str]:
 @hookspec(firstresult=True)
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenerator"]:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_file_patterns() -> list[str]:
+    """Return a list of patterns to consider as potential generators"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_filter_files(files: list[str]) -> None:
+    """Filter tests we don't want to generate"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_skip_dirs() -> list[str]:
+    """Return a list of directory names to skip when searching for tests"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
     raise NotImplementedError

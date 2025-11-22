@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import _canary.plugins.builtin.pyt as pyt
-import _canary.testcase as tc
 from _canary.util.filesystem import working_dir
 
 
@@ -22,6 +21,6 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
 """
             )
         file = pyt.PYTTestGenerator(".", "test.pyt")
-        cases = file.lock(on_options=["baz"])
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
+        specs = file.lock(on_options=["baz"])
+        assert len(specs) == 10
+        assert specs[-1].attributes.get("multicase") is not None

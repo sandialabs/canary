@@ -15,8 +15,8 @@ from _canary.util.filesystem import which
 def test_issue_86():
     file = os.path.join(os.path.dirname(__file__), "CTestTestfile.cmake")
     generator = ctg.CTestTestGenerator(file)
-    cases = generator.lock()
-    for case in cases:
-        assert os.path.basename(case.command()[0]) == "echo"
-        assert case.command()[-1] == "yaml"
+    specs = generator.lock()
+    for spec in specs:
+        assert os.path.basename(spec.attributes["command"][0]) == "echo"
+        assert spec.attributes["command"][-1] == "yaml"
     force_remove(os.path.join(os.path.dirname(__file__), "Testing"))

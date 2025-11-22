@@ -6,9 +6,7 @@ import os
 import platform
 import re
 import sys
-from typing import Any
 
-from ..util import cpu_count
 from . import linux
 from . import macos
 
@@ -51,7 +49,3 @@ def system_config() -> dict:
         os=os_config,
     )
     return config
-
-
-def machine_config() -> dict[str, Any]:
-    return dict(node_count=1, gpus_per_node=0, cpus_per_node=cpu_count())

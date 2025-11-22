@@ -10,9 +10,9 @@ import yaml
 
 from ...generator import AbstractTestGenerator
 from ...third_party.color import colorize
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -40,22 +40,18 @@ class Describe(CanarySubcommand):
         parser.add_argument("testspec", help="Test file or test case spec")
 
     def execute(self, args: argparse.Namespace) -> int:
-        import _canary.finder as finder
-
-        if finder.is_test_file(args.testspec):
-            file = finder.find(args.testspec)
-            describe_generator(file, on_options=args.on_options)
+        try:
+            generator = AbstractTestGenerator.factory(args.testspec)
+            describe_generator(generator, on_options=args.on_options)
             return 0
+        except TypeError:
+            pass
 
         # could be a test case in the test session?
-        session = load_session()
-        for case in session.cases:
-            if case.matches(args.testspec):
-                describe_testcase(case)
-                return 0
-
-        print(f"{args.testspec}: could not find matching generator or test case")
-        return 1
+        workspace = Workspace.load()
+        case = workspace.locate(case=args.testspec)
+        describe_testcase(case)
+        return 0
 
 
 def describe_generator(
@@ -77,10 +73,8 @@ def describe_testcase(case: "TestCase", indent: str = "") -> None:
     )
     from pygments.lexers import get_lexer_by_name
 
-    if case.work_tree is None:
-        case.work_tree = "."
-    state = case.getstate()
-    text = dump({"name": case.display_name, **state})
+    state = case.asdict()
+    text = dump({"name": case.display_name(), **state})
     lexer = get_lexer_by_name("yaml")
     formatter = Formatter(bg="dark", style="monokai")
     formatted_text = highlight(text.strip(), lexer, formatter)

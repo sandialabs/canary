@@ -163,6 +163,8 @@ class Parser(argparse.ArgumentParser):
             kwds["add_help"] = False  # ty: ignore[invalid-assignment]
             kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
             kwds["help"] = command.description
+        if hasattr(command, "aliases"):
+            kwds["aliases"] = command.aliases  # ty: ignore[invalid-assignment]
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
         command.setup_parser(subparser)  # type: ignore
@@ -278,8 +280,7 @@ class RegisterPlugin(argparse.Action):
         option_str: str | None = None,
     ):
         config_mods = getattr(namespace, self.dest, None) or {}
-        config_section = config_mods.setdefault("config", {})
-        config_section.setdefault("plugins", []).append(option)
+        config_mods.setdefault("plugins", []).append(option)
         setattr(namespace, self.dest, config_mods)
 
 
@@ -412,7 +413,7 @@ def make_argument_parser(**kwargs):
         action=ConfigMods,
         metavar="path",
         help="Add the colon-separated path to test session's configuration, "
-        "e.g. %s" % colorize("@*{-c config:debug:true}"),
+        "e.g. %s" % colorize("@*{-c debug:true}"),
     )
     group.add_argument(
         "-e",
@@ -420,11 +421,8 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default=None,
         action=EnvironmentModification,
-        help="Add environment variable %s to the testing environment with value %s.  Accepts "
-        "optional scope using the form %s:var=val.  Valid scopes are: "
-        "session: set environment variable for whole session; "
-        "test: set environment variable only during test execution"
-        % (colorize("@*{var}"), colorize("@*{val}"), colorize("@*{scope}")),
+        help="Add environment variable %s to the testing environment with value %s. "
+        % (colorize("@*{var}"), colorize("@*{val}")),
     )
     parser.add_argument(
         "--cache-dir",

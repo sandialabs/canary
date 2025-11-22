@@ -7,7 +7,7 @@
 User defined test generator
 ===========================
 
-``canary`` generates test cases from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files.  Each generator is implemented as a subclass of :class:`~_canary.generator.AbstractTestGenerator`.  User defined test generators can also be created by subclassing :class:`~_canary.generator.AbstractTestGenerator` and defining the :meth:`~_canary.generator.AbstractTestGenerator.matches`, :meth:`~_canary.generator.AbstractTestGenerator.describe`, and :meth:`~_canary.generator.AbstractTestGenerator.lock` methods.  User defined test generators are registered with the :func:`~_canary.plugins.hookspec.canary_generator` plugin hook.
+``canary`` generates test cases from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files.  Each generator is implemented as a subclass of :class:`~_canary.generator.AbstractTestGenerator`.  User defined test generators can also be created by subclassing :class:`~_canary.generator.AbstractTestGenerator` and defining the :meth:`~_canary.generator.AbstractTestGenerator.matches`, :meth:`~_canary.generator.AbstractTestGenerator.describe`, and :meth:`~_canary.generator.AbstractTestGenerator.lock` methods.  User defined test generators are registered with the :func:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook.
 
 Consider the following YAML test input:
 
@@ -45,7 +45,7 @@ Example implementation
     :lines: 1-71
 
 
-The ``YAMLTestGenerator.lock()`` returns a list of ``YAMLTestCase`` test cases, defined below:
+The ``YAMLTestGenerator.lock()`` returns a list of ``ResolvedStpec`` test cases, defined below:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python

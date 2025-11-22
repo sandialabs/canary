@@ -8,7 +8,7 @@ import time
 import canary
 
 canary.directives.keywords("fast")
-canary.directives.timeout(0.1)
+canary.directives.timeout(2.0)
 
 
 def test():
