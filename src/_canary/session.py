@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import dataclasses
 import datetime
 import os
 import pickle  # nosec B403
@@ -8,7 +9,6 @@ import time
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import Any
 
 from . import config
 from .error import StopExecution
@@ -30,6 +30,16 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 session_tag = "SESSION.TAG"
+
+
+@dataclasses.dataclass
+class SessionResults:
+    session: str
+    cases: list[TestCase]
+    returncode: int
+    started_on: datetime.datetime
+    finished_on: datetime.datetime
+    prefix: Path
 
 
 class Session:
@@ -186,7 +196,7 @@ class Session:
         self.resolve_root_ids(roots)
         return [case for case in self.cases if case.id in roots]
 
-    def run(self, roots: list[str] | None = None) -> dict[str, Any]:
+    def run(self, roots: list[str] | None = None) -> SessionResults:
         cases = self.get_ready(roots=roots)
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
@@ -194,6 +204,7 @@ class Session:
         start = time.monotonic()
         returncode: int = -1
         try:
+            started_on = datetime.datetime.now()
             starting_dir = os.getcwd()
             for case in cases:
                 case.status.set("PENDING")
@@ -203,13 +214,21 @@ class Session:
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         finally:
+            finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
             returncode = compute_returncode(cases)
             logger.info(
                 f"@*{{Finished}} session in {(time.monotonic() - start):.2f} s. "
                 f"with returncode {returncode}"
             )
-            return {"returncode": returncode, "cases": cases}
+            return SessionResults(
+                session=self.name,
+                cases=cases,
+                returncode=returncode,
+                started_on=started_on,
+                finished_on=finished_on,
+                prefix=self.root,
+            )
 
     def enter(self) -> None: ...
 

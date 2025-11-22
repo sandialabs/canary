@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from ...util import logging
 from ...workspace import Workspace
-from ...workspace import WorkspaceExistsError
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -38,9 +37,5 @@ class Init(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        try:
-            workspace = Workspace.create(Path(args.path).absolute(), force=args.w)
-            logger.info(f"Initialized empty canary workspace at {workspace.root}")
-        except WorkspaceExistsError as e:
-            logger.error(f"Workspace already exists in {e}")
+        Workspace.create(Path(args.path).absolute(), force=args.w)
         return 0

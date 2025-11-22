@@ -130,7 +130,10 @@ class Run(CanarySubcommand):
             if args.keyword_exprs:
                 cases = filter_cases_by_keyword(cases, args.keyword_exprs)
             with workspace.session(name=cases[0].workspace.session) as session:
-                disp = session.run(roots=[case.id for case in cases])
+                try:
+                    results = session.run(roots=[case.id for case in cases])
+                finally:
+                    workspace.add_session_results(results)
         else:
             if args.runtag:
                 selection = workspace.get_selection(args.runtag)
@@ -162,12 +165,15 @@ class Run(CanarySubcommand):
                     selection = workspace.get_selection()
 
             with workspace.session(selection=selection) as session:
-                disp = session.run()
+                try:
+                    results = session.run()
+                finally:
+                    workspace.add_session_results(results)
 
         config.pluginmanager.hook.canary_runtests_summary(
-            cases=disp["cases"], include_pass=False, truncate=10
+            cases=results.cases, include_pass=False, truncate=10
         )
-        return disp["returncode"]
+        return results.returncode
 
 
 def filter_cases_by_keyword(cases: list["TestCase"], keyword_exprs: list[str]) -> list["TestCase"]:

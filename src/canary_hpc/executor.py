@@ -48,11 +48,15 @@ class CanaryHPCExecutor:
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
         with workspace.session(name=self.session) as session:
-            disp = session.run(roots=self.cases)
+            try:
+                results = session.run(roots=self.cases)
+            finally:
+                workspace.add_session_results(results)
+
         canary.config.pluginmanager.hook.canary_runtests_summary(
-            cases=disp["cases"], include_pass=False, truncate=10
+            cases=results.cases, include_pass=False, truncate=10
         )
-        return disp["returncode"]
+        return results.returncode
 
     @canary.hookimpl
     def canary_resource_pool_fill(

@@ -7,6 +7,8 @@ import hashlib
 import os
 import pickle  # nosec B403
 import shutil
+import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ from . import when
 from .generator import AbstractTestGenerator
 from .plugins.types import ScanPath
 from .session import Session
+from .session import SessionResults
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import DraftSpec
@@ -38,6 +41,10 @@ logger = logging.get_logger(__name__)
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 view_tag = "VIEW.TAG"
+
+
+DB_MAX_RETRIES = 8
+DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
 
 
 @dataclasses.dataclass
@@ -99,7 +106,7 @@ class Workspace:
         self.head: Path
 
         self.lockfile: Path
-        self.latest_results_file: Path
+        self.results_db: Path
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -120,13 +127,16 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
-        self.latest_results_file = self.root / "latest.json"
+        self.results_db = self.root / "latest.db"
         self._spec_ids = set()
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
+        relpath = Path(start).absolute().relative_to(Path.cwd())
+        pm = logger.progress_monitor(f"Removing workspace from {relpath}")
         anchor = Workspace.find_anchor(start=start)
         if anchor is None:
+            pm.done("no workspace found")
             return
         workspace = anchor / workspace_path
         view: Path | None = None
@@ -138,15 +148,17 @@ class Workspace:
         if view is None:
             if (workspace / workspace_tag).exists():
                 force_remove(workspace)
+            pm.done()
             return workspace
         elif (workspace / workspace_tag).exists() and (view / view_tag).exists():
             force_remove(view)
             force_remove(workspace)
+            pm.done()
             return workspace
         elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
         else:
-            logger.warning(f"Unable to remove {workspace}")
+            pm.done(f"error: unaable to remove {workspace}")
             return None
 
     @staticmethod
@@ -175,9 +187,11 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
+        pm = logger.progress_monitor(f"Initialing empty canary workspace at {path}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():
+            pm.done("workspace already exists")
             raise WorkspaceExistsError(path)
         self.root.mkdir(parents=True)
         write_directory_tag(self.root / workspace_tag)
@@ -213,7 +227,7 @@ class Workspace:
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
 
-        self.latest_results_file.write_text(json.dumps({}))
+        WorkspaceResultsDB.create(self.results_db)
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({"canary": {}}))
@@ -223,6 +237,8 @@ class Workspace:
 
         file = self.casespecs_dir / "graph.json"
         file.write_text(json.dumps({}))
+
+        pm.done("done")
 
         return self
 
@@ -270,39 +286,26 @@ class Workspace:
             root = self.sessions_dir / name
             session = Session.load(root)
             logger.info(f"Loaded test session at {session.name}")
-        try:
-            yield session
-        finally:
-            self.add_session_results(session)
+        yield session
 
     def load_latest_results(self) -> dict[str, Any]:
-        return json.loads(self.latest_results_file.read_text())
+        latest = WorkspaceResultsDB(self.results_db).load_latest_results()
+        return latest
 
-    def dump_latest_results(self, latest: dict[str, Any]) -> None:
-        atomic_write(self.latest_results_file, json.dumps(latest, indent=2))
-
-    def add_session_results(self, session: Session) -> None:
+    def add_session_results(self, results: SessionResults) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        latest = self.load_latest_results()
+        WorkspaceResultsDB(self.results_db).update_session_results(results)
         view_entries: dict[str, list[str]] = {}
-        for case in session.cases:
-            if case.status in ("READY", "PENDING"):
-                case.status.set("NOT_RUN", message="Case did not start")
-            entry = {"session": session.name, **case.asdict()}
-            entry["spec"]["name"] = case.spec.name
-            entry["spec"]["fullname"] = case.spec.fullname
-            entry["spec"]["file"] = case.spec.file
-            latest[case.id] = entry
-            relpath = case.workspace.dir.relative_to(session.work_dir)
-            view_entries.setdefault(session.work_dir, []).append(relpath)
+        for case in results.cases:
+            relpath = case.workspace.dir.relative_to(results.prefix / "work")
+            view_entries.setdefault(results.prefix / "work", []).append(relpath)
 
-        self.dump_latest_results(latest)
         self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"
         file.unlink(missing_ok=True)
-        link = os.path.relpath(str(session.root), str(file.parent))
+        link = os.path.relpath(str(results.prefix), str(file.parent))
         file.write_text(str(link))
 
         # Write meta data file HEAD -> ./sessions/{session.root}
@@ -519,19 +522,19 @@ class Workspace:
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
                 space = ExecutionSpace(
-                    root=Path(mine["workspace"]["root"]),
-                    path=Path(mine["workspace"]["path"]),
-                    session=mine["workspace"]["session"],
+                    root=Path(mine["ws_root"]),
+                    path=Path(mine["ws_path"]),
+                    session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status.set(
-                    mine["status"]["name"],
-                    message=mine["status"]["message"],
-                    code=mine["status"]["code"],
+                    mine["status"],
+                    message=mine["details"] or "",
+                    code=mine["exitcode"],
                 )
-                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
-                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
-                case.timekeeper.duration = mine["timekeeper"]["duration"]
+                case.timekeeper.started_on = mine["started_on"] or "NA"
+                case.timekeeper.finished_on = mine["finished_on"] or "NA"
+                case.timekeeper.duration = mine["duration"]
                 lookup[spec.id] = case
         if roots:
             return [case for case in lookup.values() if case.id in roots]
@@ -776,22 +779,21 @@ class Workspace:
     def statusinfo(self) -> dict[str, list[str]]:
         latest = self.load_latest_results()
         info: dict[str, list[str]] = {}
+        specs = {spec.id: spec for spec in self.load_testspecs()}
         for id, entry in latest.items():
-            info.setdefault("id", []).append(id[:7])
-            info.setdefault("name", []).append(entry["spec"]["name"])
-            info.setdefault("fullname", []).append(entry["spec"]["fullname"])
-            info.setdefault("family", []).append(entry["spec"]["family"])
-            info.setdefault("file", []).append(entry["spec"]["file"])
+            spec = specs[id]
+            info.setdefault("id", []).append(spec.id[:7])
+            info.setdefault("name", []).append(spec.name)
+            info.setdefault("fullname", []).append(spec.fullname)
+            info.setdefault("family", []).append(spec.family)
+            info.setdefault("file", []).append(spec.file)
             info.setdefault("session", []).append(entry["session"])
-            info.setdefault("workspace", []).append(entry["workspace"])
-            info.setdefault("returncode", []).append(entry["status"]["code"])
-            info.setdefault("status_name", []).append(entry["status"]["name"])
-            if entry["workspace"] is None and not entry["status"]["message"]:
-                entry["status"]["message"] = "Test case not included in any session"
-            info.setdefault("status_message", []).append(entry["status"]["message"] or "")
-            info.setdefault("duration", []).append(entry["timekeeper"]["duration"])
-            info.setdefault("started_on", []).append(entry["timekeeper"]["started_on"])
-            info.setdefault("finished_on", []).append(entry["timekeeper"]["finished_on"])
+            info.setdefault("returncode", []).append(entry["exitcode"])
+            info.setdefault("status_name", []).append(entry["status"])
+            info.setdefault("status_message", []).append(entry["details"] or "")
+            info.setdefault("duration", []).append(entry["duration"])
+            info.setdefault("started_on", []).append(entry["started_on"] or "NA")
+            info.setdefault("finished_on", []).append(entry["finished_on"] or "NA")
         return info
 
     def collect_all_testcases(self) -> Generator[TestCase, None, None]:
@@ -910,6 +912,137 @@ def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
         duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
     pm.done()
     return duplicates
+
+
+class WorkspaceResultsDB:
+    """Database wrapper for the "latest results" index."""
+
+    name: str = "LATEST"
+
+    def __init__(self, db_path: Path):
+        self.path = Path(db_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def create(cls, path: Path) -> "WorkspaceResultsDB":
+        """
+        Create the 'LATEST' table if it doesn't exist.
+        """
+        self = cls(path)
+        query = f"""CREATE TABLE IF NOT EXISTS {self.name} (
+          ID TEXT PRIMARY KEY,
+          session TEXT,
+          status TEXT,
+          exitcode INT,
+          details TEXT,
+          started_on TEXT,
+          finished_on TEXT,
+          duration REAL
+        );"""
+        conn = sqlite3.connect(str(self.path))
+        cursor = conn.cursor()
+        cursor.execute(query)
+        conn.commit()
+        conn.close()
+        return self
+
+    @classmethod
+    def load(cls, path: Path) -> "WorkspaceResultsDB":
+        self = cls(path)
+        return self
+
+    def add_testcases(self, cases: list[TestCase]):
+        batch = []
+        for case in cases:
+            batch.append(
+                {
+                    "ID": case.id,
+                    "session": None,
+                    "status": None,
+                    "exitcode": None,
+                    "details": None,
+                    "started_on": None,
+                    "finished_on": None,
+                    "duration": None,
+                }
+            )
+        self.safe_write_batch(batch, on_conflict="DO NOTHING")
+
+    def update_session_results(self, results: SessionResults) -> None:
+        """Update the 'LATEST' table for a list of completed test cases."""
+        batch = []
+        format_datetime = lambda x: None if x == "NA" else x
+        for case in results.cases:
+            batch.append(
+                {
+                    "ID": case.id,
+                    "session": results.session,
+                    "status": case.status.name,
+                    "exitcode": case.status.code,
+                    "details": case.status.message or None,
+                    "started_on": format_datetime(case.timekeeper.started_on),
+                    "finished_on": format_datetime(case.timekeeper.finished_on),
+                    "duration": case.timekeeper.duration,
+                    "ws_root": case.workspace.root,
+                    "ws_path": case.workspace.path,
+                }
+            )
+        self.safe_write_batch(batch)
+
+    def load_latest_results(self) -> dict[str, dict[str, Any]]:
+        """
+        Return the full 'LATESTh index as a dictionary keyed by ID.
+        """
+        conn = sqlite3.connect(self.path)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {self.name};")
+        rows = cursor.fetchall()
+        colnames = [desc[0] for desc in cursor.description]
+        conn.close()
+        return {row[0]: {colnames[i]: row[i] for i in range(1, len(colnames))} for row in rows}
+
+    def safe_write_batch(self, batch: list[dict[str, Any]], on_conflict: str | None = None) -> None:
+        """
+        Write a batch of test-case results inside a single EXCLUSIVE transaction.
+        Retries if the SQLite database file is temporarily locked.
+
+        """
+        default_conflict_resolution = """DO UPDATE SET
+            session = excluded.session,
+            status = excluded.status,
+            exitcode = excluded.exitcode,
+            details = excluded.details,
+            started_on = excluded.started_on,
+            finished_on= excluded.finished_on,
+            duration = excluded.duration"""
+        conflict_resolution = on_conflict or default_conflict_resolution
+        query = f"""INSERT INTO {self.name}
+        (ID,session,status,exitcode,details,started_on,finished_on,duration)
+        VALUES (:ID,:session,:status,:exitcode,:details,:started_on,:finished_on,:duration)
+        ON CONFLICT(ID) {conflict_resolution}
+        WHERE excluded.started_on IS NOT NULL AND (
+          latest.started_on IS NULL OR excluded.started_on > latest.started_on
+        )"""
+        for attempt in range(1, DB_MAX_RETRIES + 1):
+            try:
+                conn = sqlite3.connect(self.path, timeout=5, isolation_level="EXCLUSIVE")
+                cursor = conn.cursor()
+                cursor.execute("BEGIN EXCLUSIVE;")  # fast fail if lock can't be acquired
+                cursor.executemany(query, batch)
+                conn.commit()
+                conn.close()
+                return  # success!
+
+            except sqlite3.OperationalError as e:
+                msg = str(e).lower()
+                if "locked" in msg or "busy" in msg:
+                    # Retry with exponential backoff
+                    delay = DB_BASE_DELAY * (2 ** (attempt - 1))
+                    time.sleep(delay)
+                    continue
+                raise  # non-lock errors propagate
+
+        raise RuntimeError(f"SQLite write failed after {DB_MAX_RETRIES} retries")
 
 
 class WorkspaceExistsError(Exception):
