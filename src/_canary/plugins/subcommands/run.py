@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ... import when
+from ...session import SessionResults
 from ...util import logging
 from ...workspace import NotAWorkspaceError
 from ...workspace import SpecSelection
@@ -118,6 +119,7 @@ class Run(CanarySubcommand):
         except NotAWorkspaceError:
             workspace = Workspace.create(Path(work_tree))
 
+        results: SessionResults | None = None
         if args.start:
             # Special case: re-run test cases from here down
             if args.parameter_expr:
@@ -133,7 +135,8 @@ class Run(CanarySubcommand):
                 try:
                     results = session.run(roots=[case.id for case in cases])
                 finally:
-                    workspace.add_session_results(results)
+                    if results:
+                        workspace.add_session_results(results)
         else:
             if args.runtag:
                 selection = workspace.get_selection(args.runtag)
@@ -168,8 +171,11 @@ class Run(CanarySubcommand):
                 try:
                     results = session.run()
                 finally:
-                    workspace.add_session_results(results)
+                    if results:
+                        workspace.add_session_results(results)
 
+        if not results:
+            return 1
         config.pluginmanager.hook.canary_runtests_summary(
             cases=results.cases, include_pass=False, truncate=10
         )

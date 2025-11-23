@@ -71,7 +71,7 @@ class Log(CanarySubcommand):
                 return 0
             raise ValueError(f"no log file found in {workspace.root}")
 
-        case = workspace.locate(case=args.testspec)
+        case = workspace.find(case=args.testspec)
         file = self.get_logfile(case, args)
         if file:
             display_file(file)

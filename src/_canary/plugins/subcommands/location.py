@@ -61,7 +61,7 @@ If no options are give, -x is assumed."""
 
         case: TestCase
         workspace = Workspace.load()
-        case = workspace.locate(case=args.testspec)
+        case = workspace.find(case=args.testspec)
         f: str
         if args.show_log:
             f = case.workspace.joinpath(case.stdout)

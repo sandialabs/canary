@@ -52,7 +52,7 @@ class TestCase:
         self.spec = spec
         self.workspace = workspace
         self.stdout: str = "canary-out.txt"
-        self.stderr: str | None = "canary-err.txt"
+        self.stderr: str | None = None  # combine stdout/stderr by default
         pm = config.pluginmanager
         self.execution_policy: ExecutionPolicy = pm.hook.canary_testcase_execution_policy(case=self)
         self._status = Status()
@@ -575,14 +575,14 @@ def load_testcase_from_file(arg: Path | str | None) -> TestCase:
     lock_data = json.loads(file.read_text())
     id = lock_data["spec"]["id"]
     workspace = Workspace.load()
-    return workspace.locate(case=id)
+    return workspace.find(case=id)
 
 
 def load_testcase_from_state(lock_data: dict) -> TestCase:
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
-    return workspace.locate(case=lock_data["spec"]["id"])
+    return workspace.find(case=lock_data["spec"]["id"])
 
 
 @dataclasses.dataclass

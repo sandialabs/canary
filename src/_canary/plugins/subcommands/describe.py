@@ -49,7 +49,7 @@ class Describe(CanarySubcommand):
 
         # could be a test case in the test session?
         workspace = Workspace.load()
-        case = workspace.locate(case=args.testspec)
+        case = workspace.find(case=args.testspec)
         describe_testcase(case)
         return 0
 

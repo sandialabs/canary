@@ -67,7 +67,7 @@ class ResourceQueueExecutor:
         queue: ResourceQueue,
         runner: Callable,
         max_workers: int = -1,
-        busy_wait_time: float = 0.5,
+        busy_wait_time: float = 0.05,
     ):
         """
         Initialize the process pool.
@@ -275,7 +275,7 @@ class ResourceQueueExecutor:
         while len(self.inflight) >= self.max_workers:
             self._check_finished_processes()
             if len(self.inflight) >= self.max_workers:
-                time.sleep(0.1)  # Brief sleep before checking again
+                time.sleep(0.05)  # Brief sleep before checking again
 
     def _wait_all(self) -> None:
         """Wait for all active processes to complete."""

@@ -97,7 +97,7 @@ class AbstractTestGenerator(ABC):
 
         """
 
-    def getstate(self) -> dict[str, str]:
+    def asdict(self) -> dict[str, str]:
         state: dict[str, str] = {}
         state["root"] = self.root
         state["path"] = self.path
@@ -106,7 +106,7 @@ class AbstractTestGenerator(ABC):
         return state
 
     @staticmethod
-    def from_state(state: dict[str, str]) -> "AbstractTestGenerator":
+    def from_dict(state: dict[str, str]) -> "AbstractTestGenerator":
         return AbstractTestGenerator.factory(state["root"], state["path"])
 
     @staticmethod

@@ -9,6 +9,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ... import status
+from ...testcase import TestCase
 from ...third_party import colify
 from ...third_party.color import clen
 from ...third_party.color import colorize
@@ -86,20 +87,20 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
-        info = workspace.statusinfo()
-        table = self.get_status_table(info, args)
+        cases = workspace.load_testcases()
+        table = self.get_status_table(cases, args)
         fh = io.StringIO()
         colify.colify_table(table, output=fh)
-        print(fh.getvalue())
+        print(fh.getvalue().strip())
         if args.durations:
-            print_durations(info, N=args.durations)
+            print_durations(cases, N=args.durations)
         return 0
 
     def get_status_table(
-        self, info: dict[str, list], args: "argparse.Namespace"
+        self, cases: list[TestCase], args: "argparse.Namespace"
     ) -> list[list[str]]:
-        sorted_info = sortby_status(info)
-        filtered_info = filter_by_status(sorted_info, args.report_chars)
+        cases.sort(key=lambda c: status_sort_map.get(c.status.name, 50))
+        cases = filter_by_status(cases, args.report_chars)
         cols = args.format_cols.split(",")
         map: dict[str, str] = {
             "ID": "id",
@@ -111,24 +112,13 @@ class Status(CanarySubcommand):
             "Status": "status_name",
             "Details": "status_message",
         }
-        nrows = len(filtered_info["id"])
         table: list[list[str]] = []
         widths = [len(_) for _ in cols]
-        for i in range(nrows):
+        for case in cases:
             row: list[str] = []
             for j, name in enumerate(cols):
                 key = map[name]
-                value = filtered_info[key][i]
-                if name == "ID":
-                    value = colorize("@*b{%s}" % value)
-                elif name == "Name":
-                    value = pretty_test_name(value)
-                elif name == "Duration":
-                    value = colorize("@*{%s}" % dformat(value))
-                elif name == "Status":
-                    value = pretty_status_name(value)
-                else:
-                    value = str(value)
+                value = get_case_attribute(case, key)
                 widths[j] = max(widths[j], clen(value))
                 row.append(value)
             table.append(row)
@@ -136,6 +126,26 @@ class Status(CanarySubcommand):
         table.insert(0, cols)
         table.insert(1, hlines)
         return table
+
+
+def get_case_attribute(case: TestCase, attr: str) -> str:
+    if attr == "id":
+        return colorize("@*b{%s}" % case.id[:7])
+    elif attr == "name":
+        return pretty_test_name(case.spec.display_name)
+    elif attr == "fullname":
+        return pretty_test_name(str(case.spec.file_path.parent / case.spec.display_name))
+    elif attr == "session":
+        return str(case.workspace.session)
+    elif attr == "returncode":
+        return str(case.status.code)
+    elif attr == "duration":
+        return colorize("@*{%s}" % dformat(case.timekeeper.duration))
+    elif attr == "status_name":
+        return pretty_status_name(case.status.name)
+    elif attr == "status_message":
+        return case.status.message or ""
+    raise AttributeError(attr)
 
 
 def pretty_test_name(name: str) -> str:
@@ -153,13 +163,13 @@ def pretty_status_name(name: str) -> str:
     fmt: str = "%(name)s"
     if name in ("RETRY", "PENDING", "READY", "SKIPPED"):
         color = status.Status.defaults[name][1][0]
-        fmt = "@*c{not run} (@*%(color)s{%(name)s})"
-    elif name in ("NOT_RUN",):
+        fmt = "@*c{NOT RUN} (@*%(color)s{%(name)s})"
+    elif name == "NOT_RUN":
         color = status.Status.defaults[name][1][0]
-        fmt = "@*%(color)s{not run} (failed dependency)"
+        fmt = "@*%(color)s{NOT RUN}"
     elif name in ("DIFFED", "FAILED", "TIMEOUT", "INVALID", "UNKNOWN"):
         color = status.Status.defaults[name][1][0]
-        fmt = "@*r{failed} (@*%(color)s{%(name)s})"
+        fmt = "@*r{FAILED} (@*%(color)s{%(name)s})"
     else:
         color = status.Status.defaults[name][1][0]
         fmt = "@*%(color)s{%(name)s}"
@@ -207,91 +217,71 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
     return None
 
 
-def sortby_status(info: dict[str, list]) -> dict[str, list]:
-    map = {
-        "invalid": 0,
-        "created": 0,
-        "retry": 0,
-        "pending": 0,
-        "ready": 0,
-        "running": 0,
-        "success": 10,
-        "xfail": 11,
-        "xdiff": 12,
-        "cancelled": 20,
-        "skipped": 21,
-        "not_run": 22,
-        "timeout": 23,
-        "diffed": 30,
-        "failed": 31,
-        "unknown": 40,
-    }
-    status = info["status_name"]
-    ix = sorted(range(len(status)), key=lambda n: map.get(status[n], 50))
-    d: dict[str, list] = {}
-    for key, value in info.items():
-        d[key] = [value[i] for i in ix]
-    return d
+status_sort_map = {
+    "CREATED": 0,
+    "RETRY": 0,
+    "PENDING": 0,
+    "READY": 0,
+    "RUNNING": 0,
+    "SUCCESS": 10,
+    "XFAIL": 11,
+    "XDIFF": 12,
+    "CANCELLED": 20,
+    "SKIPPED": 21,
+    "NOT_RUN": 22,
+    "TIMEOUT": 23,
+    "DIFFED": 30,
+    "FAILED": 31,
+    "ERROR": 32,
+    "UNKNOWN": 40,
+}
 
 
-def sortby_duration(info: dict[str, list]) -> dict[str, list]:
-    durations = info["duration"]
-    ix = sorted(range(len(durations)), key=lambda x: -1 if x in ("NA", None) else x)
-    d: dict[str, list] = {}
-    for key, value in info.items():
-        d[key] = [value[i] for i in ix]
-    return d
-
-
-def filter_by_status(info: dict[str, list], chars: str | None) -> dict[str, list]:
+def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]:
     chars = chars or "dftns"
     if "A" in chars:
-        return info
-    mask = [False] * len(info["status_name"])
-    for i, stat in enumerate(info["status_name"]):
-        if info["session"][i] is None:
-            continue
-        elif "a" in chars:
-            mask[i] = stat != "SUCCESS"
+        return cases
+    keep = [False] * len(cases)
+    for i, case in enumerate(cases):
+        stat = case.status.name
+        if "a" in chars:
+            keep[i] = stat != "SUCCESS"
         elif stat == "SKIPPED":
-            mask[i] = "s" in chars
+            keep[i] = "s" in chars
         elif stat in ("SUCCESS", "XDIFF", "XFAIL"):
-            mask[i] = "p" in chars
+            keep[i] = "p" in chars
         elif stat in ("FAILED", "ERROR"):
-            mask[i] = "f" in chars
+            keep[i] = "f" in chars
         elif stat == "DIFFED":
-            mask[i] = "d" in chars
+            keep[i] = "d" in chars
         elif stat == "TIMEOUT":
-            mask[i] = "t" in chars
+            keep[i] = "t" in chars
         elif stat == "INVALId":
-            mask[i] = "n" in chars
+            keep[i] = "n" in chars
         elif stat in ("READY", "CREATED", "PENDING", "CANCELLED", "NOT_RUN"):
-            mask[i] = "n" in chars
+            keep[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {stat}")
-    filtered: dict[str, list] = {}
-    for key, value in info.items():
-        filtered[key] = [value[i] for i, m in enumerate(mask) if m]
-    return filtered
+    return [case for i, case in enumerate(cases) if keep[i]]
 
 
-def print_durations(info: dict, N: int) -> None:
-    sorted_info = sortby_duration(info)
+def print_durations(cases: list[TestCase], N: int) -> None:
+    cases.sort(key=lambda x: x.timekeeper.duration)
     fh = io.StringIO()
-    ix = list(range(len(sorted_info["duration"])))
+    ix = list(range(len(cases)))
     if N > 0:
         ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
     fh.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = sorted_info["duration"][i]
+        duration = cases[i].timekeeper.duration
         if duration < 0:
             continue
-        name = sorted_info["name"][i]
-        id = sorted_info["id"][i]
+        name = cases[i].display_name()
+        id = cases[i].id
         fh.write("  %6.2f   %s %s\n" % (duration, id, name))
     fh.write("\n")
-    print(fh.getvalue())
+    print(fh.getvalue().strip())
 
 
 def dformat(arg: float) -> str:

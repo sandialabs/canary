@@ -28,6 +28,10 @@ def dumps(*args, **kwargs):
     return json.dumps(*args, cls=PathEncoder, **kwargs)
 
 
+def dumps_min(*args, **kwargs):
+    return json.dumps(*args, cls=PathEncoder, separators=(",", ":"), **kwargs)
+
+
 def load(*args, **kwargs):
     return json.load(*args, **kwargs)
 

@@ -8,7 +8,6 @@ import os
 import pickle  # nosec B403
 import shutil
 import sqlite3
-import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -28,7 +27,6 @@ from .testspec import ResolvedSpec
 from .testspec import TestSpec
 from .util import json_helper as json
 from .util import logging
-from .util.filesystem import atomic_write
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
@@ -79,11 +77,6 @@ class Workspace:
 
         self.view: Path | None
 
-        # "Immutable" objects
-        self.objects_dir: Path
-        self.casespecs_dir: Path
-        self.generators_dir: Path
-
         # Storage for pointers to test sessions
         self.refs_dir: Path
 
@@ -106,7 +99,8 @@ class Workspace:
         self.head: Path
 
         self.lockfile: Path
-        self.results_db: Path
+        self.dbfile: Path
+        self.db: WorkspaceDatabase
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -116,9 +110,6 @@ class Workspace:
     def initialize_properties(self, *, anchor: Path) -> None:
         self.root = anchor / workspace_path
         self.view = None
-        self.objects_dir = self.root / "objects"
-        self.casespecs_dir = self.objects_dir / "specs"
-        self.generators_dir = self.objects_dir / "generators"
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
@@ -127,7 +118,7 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
-        self.results_db = self.root / "latest.db"
+        self.dbfile = self.root / "workspace.sqlite3"
         self._spec_ids = set()
 
     @staticmethod
@@ -196,8 +187,6 @@ class Workspace:
         self.root.mkdir(parents=True)
         write_directory_tag(self.root / workspace_tag)
 
-        self.casespecs_dir.mkdir(parents=True)
-        self.generators_dir.mkdir(parents=True)
         self.refs_dir.mkdir(parents=True)
         self.sessions_dir.mkdir(parents=True)
         self.cache_dir.mkdir(parents=True)
@@ -227,16 +216,9 @@ class Workspace:
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
 
-        WorkspaceResultsDB.create(self.results_db)
-
+        self.db = WorkspaceDatabase.create(self.dbfile)
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({"canary": {}}))
-
-        file = self.casespecs_dir / "index.json"
-        file.write_text(json.dumps({}))
-
-        file = self.casespecs_dir / "graph.json"
-        file.write_text(json.dumps({}))
 
         pm.done("done")
 
@@ -263,6 +245,7 @@ class Workspace:
                 write_directory_tag(view_file)
         file = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(file), logging.TRACE)
+        self.db = WorkspaceDatabase.load(self.dbfile)
         return self
 
     def sessions(self) -> Generator[Session, None, None]:
@@ -288,13 +271,9 @@ class Workspace:
             logger.info(f"Loaded test session at {session.name}")
         yield session
 
-    def load_latest_results(self) -> dict[str, Any]:
-        latest = WorkspaceResultsDB(self.results_db).load_latest_results()
-        return latest
-
     def add_session_results(self, results: SessionResults) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        WorkspaceResultsDB(self.results_db).update_session_results(results)
+        self.db.put_results(results)
         view_entries: dict[str, list[str]] = {}
         for case in results.cases:
             relpath = case.workspace.dir.relative_to(results.prefix / "work")
@@ -377,10 +356,8 @@ class Workspace:
             link = (self.refs_dir / "latest").read_text().strip()
             path = self.refs_dir / link
             latest_session = path.stem
-        generator_count = 0
-        if (self.generators_dir / "index.json").exists():
-            index = json.loads((self.generators_dir / "index.json").read_text())
-            generator_count = len(index)
+        generators = self.db.get_generators()
+        generator_count = len(generators)
         info = {
             "root": str(self.root),
             "generator_count": generator_count,
@@ -393,36 +370,15 @@ class Workspace:
         return info
 
     def add_generators(self, generators: list[AbstractTestGenerator]) -> None:
-        pm = logger.progress_monitor("@*{Adding} test case generators to workspace")
-        file = self.generators_dir / "index.json"
-        index: dict[str, Any] = {}
-        if file.exists():
-            index.update(json.loads(file.read_text()))
-        for generator in generators:
-            index[generator.id] = generator.getstate()
-        file.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(file, json.dumps(index, indent=2))
+        pm = logger.progress_monitor("@*{Adding} test case generators to workspace database")
+        self.db.put_generators(generators)
         pm.done()
 
     def load_testcase_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
-        generators: list[AbstractTestGenerator] = []
-        pm = logger.progress_monitor("@*{Loading} test case generators")
-        try:
-            file = self.generators_dir / "index.json"
-            index: dict[str, Any] = {}
-            if file.exists():
-                index.update(json.loads(file.read_text()))
-            for state in index.values():
-                generator = AbstractTestGenerator.from_state(state)
-                generators.append(generator)
-        except Exception:
-            status = "failed"
-            raise
-        else:
-            status = "done"
-        finally:
-            pm.done(status)
+        pm = logger.progress_monitor("@*{Loading} test case generators from workspace database")
+        generators = [AbstractTestGenerator.from_dict(d) for d in self.db.get_generators().values()]
+        pm.done()
         return generators
 
     def active_testcases(self) -> list[TestCase]:
@@ -476,24 +432,16 @@ class Workspace:
 
     def _load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
         """Load cached test specs.  Dependency resolution is performed."""
-        index: dict[str, Any] = {}
-        ifile = self.casespecs_dir / "index.json"
-        if ifile.exists():
-            index.update(json.loads(ifile.read_text()))
-        graph: dict[str, list[str]] = {}
-        gfile = self.casespecs_dir / "graph.json"
-        if gfile.exists():
-            graph.update(json.loads(gfile.read_text()))
+        graph = self.db.get_dependency_graph()
         if roots:
             self.resolve_root_ids(roots, graph)
             reachable = reachable_nodes(graph, roots)
             graph = {id: graph[id] for id in reachable}
         lookup: dict[str, ResolvedSpec] = {}
+        spec_data = self.db.get_specs()
         ts = TopologicalSorter(graph)
         for id in ts.static_order():
-            file = self.casespecs_dir / str(index[id]["relpath"])
-            lock_data = json.loads(file.read_text())
-            spec = ResolvedSpec.from_dict(lock_data, lookup)
+            spec = ResolvedSpec.from_dict(spec_data[id], lookup)
             lookup[id] = spec
         return list(lookup.values())
 
@@ -517,24 +465,24 @@ class Workspace:
         """
         lookup: dict[str, TestCase] = {}
         specs = self._load_testspecs(roots=roots)
-        latest = self.load_latest_results()
+        latest = self.db.get_results(ids=roots)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
                 space = ExecutionSpace(
-                    root=Path(mine["ws_root"]),
-                    path=Path(mine["ws_path"]),
-                    session=mine["session"],
+                    root=Path(mine["workspace"]["root"]),
+                    path=Path(mine["workspace"]["path"]),
+                    session=mine["workspace"]["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status.set(
-                    mine["status"],
-                    message=mine["details"] or "",
-                    code=mine["exitcode"],
+                    mine["status"]["name"],
+                    message=mine["status"]["message"],
+                    code=mine["status"]["code"],
                 )
-                case.timekeeper.started_on = mine["started_on"] or "NA"
-                case.timekeeper.finished_on = mine["finished_on"] or "NA"
-                case.timekeeper.duration = mine["duration"]
+                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
+                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
+                case.timekeeper.duration = mine["timekeeper"]["duration"]
                 lookup[spec.id] = case
         if roots:
             return [case for case in lookup.values() if case.id in roots]
@@ -762,27 +710,12 @@ class Workspace:
         return selection
 
     def add_specs(self, specs: list[ResolvedSpec]) -> None:
-        index: dict[str, Any] = {}
-        ifile = self.casespecs_dir / "index.json"
-        if ifile.exists():
-            index.update(json.loads(ifile.read_text()))
-        graph = {}
-        gfile = self.casespecs_dir / "graph.json"
-        if gfile.exists():
-            graph.update(json.loads(gfile.read_text()))
-        timestamp = datetime.datetime.now().timestamp()
-        for spec in specs:
-            root = hashlib.sha256(str(spec.file_root).encode("utf-8")).hexdigest()[:8]
-            file = self.casespecs_dir / root / f"{spec.id}.json"
-            file.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write(file, spec.dumps(indent=2))
-            index[spec.id] = {"relpath": file.relative_to(ifile.parent), "generated": timestamp}
-            graph[spec.id] = [dep.id for dep in spec.dependencies]
-        atomic_write(ifile, json.dumps(index, indent=2))
-        atomic_write(gfile, json.dumps(graph, indent=2))
+        pm = logger.progress_monitor("@*{Adding} test specs to workspace database")
+        self.db.put_specs(specs)
+        pm.done()
 
     def statusinfo(self) -> dict[str, list[str]]:
-        latest = self.load_latest_results()
+        latest = self.db.get_results()
         info: dict[str, list[str]] = {}
         specs = {spec.id: spec for spec in self.load_testspecs()}
         for id, entry in latest.items():
@@ -792,13 +725,13 @@ class Workspace:
             info.setdefault("fullname", []).append(spec.fullname)
             info.setdefault("family", []).append(spec.family)
             info.setdefault("file", []).append(spec.file)
-            info.setdefault("session", []).append(entry["session"])
-            info.setdefault("returncode", []).append(entry["exitcode"])
-            info.setdefault("status_name", []).append(entry["status"])
-            info.setdefault("status_message", []).append(entry["details"] or "")
-            info.setdefault("duration", []).append(entry["duration"])
-            info.setdefault("started_on", []).append(entry["started_on"] or "NA")
-            info.setdefault("finished_on", []).append(entry["finished_on"] or "NA")
+            info.setdefault("session", []).append(entry["workspace"]["session"])
+            info.setdefault("returncode", []).append(entry["status"]["code"])
+            info.setdefault("status_name", []).append(entry["status"]["name"])
+            info.setdefault("status_message", []).append(entry["status"]["message"])
+            info.setdefault("duration", []).append(entry["timekeeper"]["duration"])
+            info.setdefault("started_on", []).append(entry["timekeeper"]["started_on"])
+            info.setdefault("finished_on", []).append(entry["timekeeper"]["finished_on"])
         return info
 
     def collect_all_testcases(self) -> Generator[TestCase, None, None]:
@@ -840,13 +773,19 @@ class Workspace:
                     view_entries.setdefault(root, []).append(path)
                 self.update_view(view_entries)
 
-    def locate(self, *, case: str | None = None) -> Any:
+    def find(self, *, case: str | None = None) -> Any:
         """Locate something in the workspace"""
         if case is not None:
-            return self.locate_testcase(case)
+            return self.find_testcase(case)
 
-    def locate_testcase(self, root: str) -> TestCase:
-        for case in self.load_testcases():
+    def find_testcase(self, root: str) -> TestCase:
+        data = self.db.get_specs([root])
+        if data:
+            id = list(data.values())[0]["id"]
+            return self.load_testcases([id])[0]
+        # Do the full (slow) lookup
+        cases = self.load_testcases()
+        for case in cases:
             if case.spec.matches(root):
                 return case
         raise ValueError(f"{root}: no matching test found in {self.root}")
@@ -921,135 +860,180 @@ def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
     return duplicates
 
 
-class WorkspaceResultsDB:
+class WorkspaceDatabase:
     """Database wrapper for the "latest results" index."""
 
     name: str = "LATEST"
+    connection: sqlite3.Connection
 
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
+        self.connection.execute("PRAGMA journal_mode=WAL;")
+        self.connection.execute("PRAGMA synchronous=NORMAL;")
+        self.connection.execute("PRAGMA foreign_key=ON;")
 
     @classmethod
-    def create(cls, path: Path) -> "WorkspaceResultsDB":
+    def create(cls, path: Path) -> "WorkspaceDatabase":
         """
         Create the 'LATEST' table if it doesn't exist.
         """
         self = cls(path)
-        query = f"""CREATE TABLE IF NOT EXISTS {self.name} (
-          ID TEXT PRIMARY KEY,
-          session TEXT,
-          status TEXT,
-          exitcode INT,
-          details TEXT,
-          started_on TEXT,
-          finished_on TEXT,
-          duration REAL
-        );"""
-        conn = sqlite3.connect(str(self.path))
-        cursor = conn.cursor()
+        cursor = self.connection.cursor()
+
+        query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT);"
         cursor.execute(query)
-        conn.commit()
-        conn.close()
+
+        query = "CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, data TEXT);"
+        cursor.execute(query)
+
+        query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT);"
+        cursor.execute(query)
+
+        query = """CREATE TABLE IF NOT EXISTS results (
+          id TEXT PRIMARY KEY, status TEXT, timekeeper TEXT, workspace TEXT
+        );"""
+        cursor.execute(query)
+
+        self.connection.commit()
         return self
 
     @classmethod
-    def load(cls, path: Path) -> "WorkspaceResultsDB":
+    def load(cls, path: Path) -> "WorkspaceDatabase":
         self = cls(path)
         return self
 
-    def add_testcases(self, cases: list[TestCase]):
-        batch = []
-        for case in cases:
-            batch.append(
-                {
-                    "ID": case.id,
-                    "session": None,
-                    "status": None,
-                    "exitcode": None,
-                    "details": None,
-                    "started_on": None,
-                    "finished_on": None,
-                    "duration": None,
-                }
-            )
-        self.safe_write_batch(batch, on_conflict="DO NOTHING")
+    def close(self):
+        self.connection.close()
 
-    def update_session_results(self, results: SessionResults) -> None:
-        """Update the 'LATEST' table for a list of completed test cases."""
-        batch = []
-        format_datetime = lambda x: None if x == "NA" else x
+    def put_generators(self, generators: list[AbstractTestGenerator]) -> None:
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN IMMEDIATE;")
+        rows = [(gen.id, json.dumps_min(gen.asdict())) for gen in generators]
+        cursor.executemany(
+            """
+            INSERT INTO generators (id, data)
+            VALUES (?, ?)
+            ON CONFLICT(id) DO UPDATE SET data=excluded.data
+            """,
+            rows,
+        )
+        self.connection.commit()
+
+    def put_specs(self, specs: list[TestSpec]) -> None:
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN IMMEDIATE;")
+        rows = [(spec.id, json.dumps_min(spec.asdict())) for spec in specs]
+        cursor.executemany(
+            """
+            INSERT INTO specs (id, data)
+            VALUES (?, ?)
+            ON CONFLICT(id) DO UPDATE SET data=excluded.data
+            """,
+            rows,
+        )
+        rows = [(spec.id, json.dumps_min([dep.id for dep in spec.dependencies])) for spec in specs]
+        cursor.executemany(
+            """
+            INSERT INTO dependencies (id, data)
+            VALUES (?, ?)
+            ON CONFLICT(id) DO UPDATE SET data=excluded.data
+            """,
+            rows,
+        )
+        self.connection.commit()
+
+    def put_results(self, results: SessionResults) -> None:
+        rows = []
         for case in results.cases:
-            batch.append(
-                {
-                    "ID": case.id,
-                    "session": results.session,
-                    "status": case.status.name,
-                    "exitcode": case.status.code,
-                    "details": case.status.message or None,
-                    "started_on": format_datetime(case.timekeeper.started_on),
-                    "finished_on": format_datetime(case.timekeeper.finished_on),
-                    "duration": case.timekeeper.duration,
-                    "ws_root": case.workspace.root,
-                    "ws_path": case.workspace.path,
-                }
+            rows.append(
+                (
+                    case.id,
+                    json.dumps_min(case.status.asdict()),
+                    json.dumps_min(case.timekeeper.asdict()),
+                    json.dumps_min(case.workspace.asdict()),
+                )
             )
-        self.safe_write_batch(batch)
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN EXCLUSIVE;")
+        cursor.executemany(
+            """
+            INSERT INTO results (id, status, timekeeper, workspace)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              status=excluded.status,
+              timekeeper=excluded.timekeeper,
+              workspace=excluded.workspace
+            """,
+            rows,
+        )
+        self.connection.commit()
 
-    def load_latest_results(self) -> dict[str, dict[str, Any]]:
-        """
-        Return the full 'LATESTh index as a dictionary keyed by ID.
-        """
-        conn = sqlite3.connect(self.path)
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM {self.name};")
+    def get_generators(self) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT id, data FROM generators;")
         rows = cursor.fetchall()
-        colnames = [desc[0] for desc in cursor.description]
-        conn.close()
-        return {row[0]: {colnames[i]: row[i] for i in range(1, len(colnames))} for row in rows}
+        return {id: json.loads(data) for id, data in rows}
 
-    def safe_write_batch(self, batch: list[dict[str, Any]], on_conflict: str | None = None) -> None:
-        """
-        Write a batch of test-case results inside a single EXCLUSIVE transaction.
-        Retries if the SQLite database file is temporarily locked.
+    def get_specs(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        if not ids:
+            cursor.execute("SELECT id, data FROM specs")
+            rows = cursor.fetchall()
+        else:
+            clauses: list[str] = []
+            params: list[str] = []
+            for id in ids:
+                if id.startswith(testspec.select_sygil):
+                    id = id[1:]
+                if len(id) >= 64:  # full sha256 hexdigest
+                    clauses.append("id = ?")
+                    params.append(id)
+                else:
+                    clauses.append("id LIKE ?")
+                    params.append(f"{id}%")
+            where = " OR ".join(f"({c})" for c in clauses)
+            query = f"SELECT id, data FROM specs WHERE {where}"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return {id: json.loads(data) for id, data in rows}
 
-        """
-        default_conflict_resolution = """DO UPDATE SET
-            session = excluded.session,
-            status = excluded.status,
-            exitcode = excluded.exitcode,
-            details = excluded.details,
-            started_on = excluded.started_on,
-            finished_on= excluded.finished_on,
-            duration = excluded.duration"""
-        conflict_resolution = on_conflict or default_conflict_resolution
-        query = f"""INSERT INTO {self.name}
-        (ID,session,status,exitcode,details,started_on,finished_on,duration)
-        VALUES (:ID,:session,:status,:exitcode,:details,:started_on,:finished_on,:duration)
-        ON CONFLICT(ID) {conflict_resolution}
-        WHERE excluded.started_on IS NOT NULL AND (
-          latest.started_on IS NULL OR excluded.started_on > latest.started_on
-        )"""
-        for attempt in range(1, DB_MAX_RETRIES + 1):
-            try:
-                conn = sqlite3.connect(self.path, timeout=5, isolation_level="EXCLUSIVE")
-                cursor = conn.cursor()
-                cursor.execute("BEGIN EXCLUSIVE;")  # fast fail if lock can't be acquired
-                cursor.executemany(query, batch)
-                conn.commit()
-                conn.close()
-                return  # success!
+    def get_dependency_graph(self) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT id, data FROM dependencies;")
+        rows = cursor.fetchall()
+        return {id: json.loads(data) for id, data in rows}
 
-            except sqlite3.OperationalError as e:
-                msg = str(e).lower()
-                if "locked" in msg or "busy" in msg:
-                    # Retry with exponential backoff
-                    delay = DB_BASE_DELAY * (2 ** (attempt - 1))
-                    time.sleep(delay)
-                    continue
-                raise  # non-lock errors propagate
-
-        raise RuntimeError(f"SQLite write failed after {DB_MAX_RETRIES} retries")
+    def get_results(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        if not ids:
+            cursor.execute("SELECT id, status, timekeeper, workspace  FROM results")
+            rows = cursor.fetchall()
+        else:
+            clauses: list[str] = []
+            params: list[str] = []
+            for id in ids:
+                if id.startswith(testspec.select_sygil):
+                    id = id[1:]
+                if len(id) >= 64:  # full sha256 hexdigest
+                    clauses.append("id = ?")
+                    params.append(id)
+                else:
+                    clauses.append("id LIKE ?")
+                    params.append(f"{id}%")
+            where = " OR ".join(f"({c})" for c in clauses)
+            query = f"SELECT id, status, timekeeper, workspace FROM results WHERE {where}"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return {
+            id: {
+                "status": json.loads(status),
+                "timekeeper": json.loads(timekeeper),
+                "workspace": json.loads(workspace),
+            }
+            for id, status, timekeeper, workspace in rows
+        }
 
 
 class WorkspaceExistsError(Exception):

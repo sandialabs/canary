@@ -621,7 +621,7 @@ class DraftSpec(SpecCommons):
             d = d.parent
         else:
             hasher.update(str(self.file_path.parent / self.name).encode())
-        return hasher.hexdigest()[:20]
+        return hasher.hexdigest()
 
     @classmethod
     def from_legacy_testcase(cls, case: "LegacyTestCase") -> "DraftSpec":
