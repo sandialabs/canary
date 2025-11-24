@@ -852,8 +852,14 @@ def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
 def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
     pm = logger.progress_monitor("@*{Searching} for duplicated tests")
     ids = [spec.id for spec in specs]
-    duplicate_ids = {id for id in ids if ids.count(id) > 1}
+    counts: dict[str, int] = {}
+    for id in ids:
+        counts[id] = counts.get(id, 0) + 1
+
+    duplicate_ids = {id for id, count in counts.items() if count > 1}
     duplicates: dict[str, list[DraftSpec]] = {}
+
+    # if there are duplicates, we are in error condition and lookup cost is not important
     for id in duplicate_ids:
         duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
     pm.done()
