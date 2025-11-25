@@ -776,7 +776,7 @@ class WorkspaceDatabase:
                 query = f"{base_query} {clauses}"
                 cursor.execute(query, params)
                 rows.extend(cursor.fetchall())
-                partial = partial[:nvar]
+                partial = partial[nvar:]
         return rows
 
     def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
