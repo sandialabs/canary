@@ -488,11 +488,9 @@ class Workspace:
         if cached := self.db.get_specs(signature=signature):
             return cached
 
-        pm = logger.progress_monitor("@*{Generating} test specs")
         resolved: list[ResolvedSpec] = config.pluginmanager.hook.canary_generate(
             generators=generators, on_options=on_options
         )
-        pm.done()
 
         pm = logger.progress_monitor("@*{Putting} specs in workspace database")
         self.db.put_specs(signature, resolved)

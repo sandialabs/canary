@@ -32,6 +32,7 @@ def canary_generate(
         A list of test specs
 
     """
+    pm = logger.progress_monitor("@*{Generating} test specs")
     locked: list[list["DraftSpec"]] = []
     if config.get("debug"):
         for f in generators:
@@ -42,6 +43,7 @@ def canary_generate(
     for group in locked:
         for spec in group:
             drafts.append(spec)
+    pm.done()
 
     duplicates = find_duplicates(drafts)
     if duplicates:
