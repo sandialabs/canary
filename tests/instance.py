@@ -16,6 +16,7 @@ from _canary.util.filesystem import working_dir
 
 def generate_specs(generators, on_options=None):
     from _canary import config
+
     specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
     return specs
 

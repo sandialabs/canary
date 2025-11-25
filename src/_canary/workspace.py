@@ -760,7 +760,7 @@ class WorkspaceDatabase:
             clauses.append("id LIKE ?")
             params.append(f"{p}%")
         where = " OR ".join(clauses)
-        query = f"SELECT * FROM specs WHERE {where}"
+        query = f"SELECT * FROM specs WHERE {where}"  # nosec B608
         cursor = self.connection.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -780,7 +780,7 @@ class WorkspaceDatabase:
             clauses.append("id LIKE ?")
             params.append(f"{p}%")
         where = " OR ".join(clauses)
-        query = f"SELECT * FROM specs WHERE signature = ? AND ({where})"
+        query = f"SELECT * FROM specs WHERE signature = ? AND ({where})"  # nosec B608
         cursor = self.connection.cursor()
         cursor.execute(query, (signature, *params))
         rows = cursor.fetchall()
@@ -840,7 +840,7 @@ class WorkspaceDatabase:
                     clauses.append("id LIKE ?")
                     params.append(f"{id}%")
             where = " OR ".join(f"({c})" for c in clauses)
-            query = f"SELECT id, status, timekeeper, workspace FROM results WHERE {where}"
+            query = f"SELECT id, status, timekeeper, workspace FROM results WHERE {where}"  # nosec B608
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return {

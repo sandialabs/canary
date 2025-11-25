@@ -11,6 +11,11 @@ from _canary import workspace
 from _canary.enums import list_parameter_space
 
 
+def generate_specs(generators, on_options=None):
+    from _canary import config
+    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    return specs
+
 def test_parse_parameterize():
     s = """\
 #!/usr/bin/env python3
@@ -277,7 +282,7 @@ if __name__ == "__main__":
         fs.set_executable("vvtest_param_generator.py")
     with fs.working_dir(tmpdir.strpath):
         generators = workspace.find_generators_in_path(".")
-        specs = workspace.generate_specs(generators)
+        specs = generate_specs(generators)
         assert len(specs) == 6
         assert specs[0].name == "create_inputs.a=A.b=B.np=1"
         for spec in specs[1:]:
