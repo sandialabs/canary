@@ -95,7 +95,7 @@ class ExecutionSpace:
         """Copy the file at ``src`` to this workspace with name ``dst``"""
         dst: Path = Path(dst or src.name)
         (self.dir / dst.name).unlink(missing_ok=True)
-        shutil.copyfile(str(src), str(self.dir / dst.name))
+        shutil.copy(str(src), str(self.dir / dst.name))
 
     def link(self, src: Path, dst: Path | str | None = None) -> None:
         """Symlink the file at ``src`` to this workspace with name ``dst``"""
