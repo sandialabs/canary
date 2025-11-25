@@ -169,7 +169,7 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        pm = logger.progress_monitor(f"Initialing empty canary workspace at {path}")
+        pm = logger.progress_monitor(f"Initializing empty canary workspace at {path}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():
