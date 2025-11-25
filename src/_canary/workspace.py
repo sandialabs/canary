@@ -260,7 +260,7 @@ class Workspace:
             logger.info(f"Loaded test session at {session.name}")
         yield session
 
-    def add_session_results(self, results: SessionResults) -> None:
+    def add_session_results(self, results: SessionResults, view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         self.db.put_results(results)
         view_entries: dict[str, list[str]] = {}
@@ -268,7 +268,8 @@ class Workspace:
             relpath = case.workspace.dir.relative_to(results.prefix / "work")
             view_entries.setdefault(results.prefix / "work", []).append(relpath)
 
-        self.update_view(view_entries)
+        if view:
+            self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"

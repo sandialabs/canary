@@ -51,7 +51,7 @@ class CanaryHPCExecutor:
             try:
                 results = session.run(ids=self.cases)
             finally:
-                workspace.add_session_results(results)
+                workspace.add_session_results(results, view=False)
 
         canary.config.pluginmanager.hook.canary_runtests_summary(
             cases=results.cases, include_pass=False, truncate=10

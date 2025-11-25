@@ -14,6 +14,12 @@ num_cases = 25
 num_base_cases = 5
 
 
+def generate_specs(generators, on_options=None):
+    from _canary import config
+    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    return specs
+
+
 @pytest.fixture(scope="function")
 def generate_files(tmpdir):
     workdir = tmpdir.strpath
@@ -33,7 +39,7 @@ def generate_testcases(dirname):
     import _canary.workspace
 
     generators = _canary.workspace.find_generators_in_path(dirname)
-    specs = _canary.workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     lookup = {}
     cases = []
     for spec in specs:
