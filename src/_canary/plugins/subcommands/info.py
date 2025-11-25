@@ -45,10 +45,10 @@ class Info(CanarySubcommand):
         fh.write("Selection filters:\n")
         for key, value in selection.filters.items():
             fh.write(f"  • {key}: {value}\n")
-        fh.write("Test specs:\n")
+        fh.write(f"Test specs (n = {len(selection.specs)}):\n")
         for spec in selection.specs:
             name = spec.file_path.parent / spec.pretty_name
-            fh.write(f"  • {name}\n")
+            fh.write(f"  • {spec.id[:7]} : {name}\n")
         return fh.getvalue()
 
     def get_workspace_info(self) -> str:
