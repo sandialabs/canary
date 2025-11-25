@@ -34,6 +34,7 @@ __all__ = [
     "gethost",
     "getnode",
     "filesize",
+    "filesystem_root",
     "force_copy",
     "force_remove",
     "max_name_length",
@@ -122,6 +123,11 @@ def copyfile(src: str, dst: str) -> None:
 def movefile(src: str, dst: str) -> None:
     """Move file `src` to `dst`"""
     shutil.move(src, dst)
+
+
+def filesystem_root(root: str, sigil: str = "@") -> str:
+    """Return the path after `sigil` if there is a partitioning"""
+    return root if sigil not in root else root.partition(sigil)[-1]
 
 
 def synctree(

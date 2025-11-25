@@ -17,6 +17,7 @@ from ...third_party.colify import colified
 from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
+from ...util.filesystem import filesystem_root
 from ...util.json_helper import json
 from ...util.term import terminal_size
 from ...util.time import hhmmss
@@ -61,7 +62,7 @@ class Find(CanarySubcommand):
         generators: list["AbstractTestGenerator"] = []
         hook = config.pluginmanager.hook
         for root, paths in args.paths.items():
-            fs_root = root if "@" not in root else root.partition("@")[-1]
+            fs_root = filesystem_root(root)
             pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
             generators.extend(hook.canary_collect(root=root, paths=paths or []))
             pm.done()

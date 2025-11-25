@@ -11,6 +11,7 @@ from typing import Generator
 from ... import config
 from ...generator import AbstractTestGenerator
 from ...util import logging
+from ...util.filesystem import filesystem_root
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 from ..types import File
@@ -82,7 +83,7 @@ class Collector:
         self, root: str, files: list[File]
     ) -> list["AbstractTestGenerator"]:
         errors = 0
-        fs_root = root if "@" not in root else root.partition("@")[-1]
+        fs_root = filesystem_root(root)
         root_len = len(fs_root) + 1  # for slicing to make relative paths fast
         all_files = [(fs_root, file[root_len:]) for file in files]
         with ProcessPoolExecutor() as ex:

@@ -25,6 +25,7 @@ from .testspec import ResolvedSpec
 from .testspec import TestSpec
 from .util import json_helper as json
 from .util import logging
+from .util.filesystem import filesystem_root
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
@@ -368,7 +369,7 @@ class Workspace:
         """Find test case generators in scan_paths and add them to this workspace"""
         generators: list[AbstractTestGenerator] = []
         for root, paths in scan_paths.items():
-            fs_root = root if "@" not in root else root.partition("@")[-1]
+            fs_root = filesystem_root(root)
             pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
             generators.extend(config.pluginmanager.hook.canary_collect(root=root, paths=paths))
             pm.done()
