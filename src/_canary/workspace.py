@@ -768,17 +768,15 @@ class WorkspaceDatabase:
         rows = list()
         cursor = self.connection.cursor()
         base_query = "SELECT * FROM specs WHERE"
-        clauses: list[str] = []
-        params: list[str] = []
         if partial:
-            if len(partial) > 900:
-                raise ValueError("Too many partial IDs")
-            for p in partial:
-                clauses.append("id LIKE ?")
-                params.append(f"{p}%")
-            query = f"{base_query} {' OR '.join(clauses)}"
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
+            while rem := len(partial) > 0:
+                nvar = min(900, rem)
+                clauses = " OR ".join(["id LIKE ?"] * nvar)
+                params = [f"{p}%" for p in partial[:nvar]]
+                query = f"{base_query} {clauses}"
+                cursor.execute(query, params)
+                rows.extend(cursor.fetchall())
+                partial = partial[:nvar]
         return rows
 
     def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
