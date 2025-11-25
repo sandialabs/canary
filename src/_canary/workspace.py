@@ -776,7 +776,7 @@ class WorkspaceDatabase:
             for p in partial:
                 clauses.append("id LIKE ?")
                 params.append(f"{p}%")
-            query = f"{base_query} {" OR ".join(clauses)}"
+            query = f"{base_query} {' OR '.join(clauses)}"
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return rows
