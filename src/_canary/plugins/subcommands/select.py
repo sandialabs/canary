@@ -64,9 +64,9 @@ class Select(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
-        workspace.make_selection(
+        workspace.select(
             tag=args.tag,
-            paths=args.select_paths,
+            prefixes=args.select_paths,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,

@@ -140,12 +140,12 @@ class Run(CanarySubcommand):
         else:
             if args.runtag:
                 selection = workspace.get_selection(args.runtag)
-            elif args.casespecs:
-                selection = workspace.get_selection_by_specs(args.casespecs, tag=args.tag)
+            elif args.specids:
+                selection = workspace.select(ids=args.specids, tag=args.tag)
             elif args.paths:
                 parsing_policy = config.getoption("parsing_policy") or "pedantic"
                 workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
-                selection = workspace.make_selection(
+                selection = workspace.select(
                     tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
@@ -156,7 +156,7 @@ class Run(CanarySubcommand):
                 if any(
                     (args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)
                 ):
-                    selection = workspace.make_selection(
+                    selection = workspace.select(
                         tag=args.tag,
                         keyword_exprs=args.keyword_exprs,
                         parameter_expr=args.parameter_expr,

@@ -93,8 +93,6 @@ class Session:
             lookup[spec.id] = case
             self._cases.append(case)
 
-        self.populate_worktree()
-
         # Dump a snapshot of the configuration used to create this session
         file = self.root / "config"
         with open(file, "w") as fh:
@@ -123,36 +121,30 @@ class Session:
             self._cases.extend(self.load_testcases())
         return self._cases
 
-    def populate_worktree(self) -> None:
-        for case in self.cases:
-            path = Path(case.workspace.dir)
-            path.mkdir(parents=True)
-            case.save()
+    def resolve_root_ids(self, ids: list[str]) -> None:
+        """Expand ids to full IDs.  ids is a spec ID, or partial ID, and can be preceded by /"""
+        nodes: set[str] = {spec.id for spec in self.selection.specs}
 
-    def resolve_root_ids(self, roots: list[str]) -> None:
-        """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
-        ids: set[str] = {spec.id for spec in self.selection.specs}
+        def find(id: str) -> str:
+            if id in nodes:
+                return id
+            for node in nodes:
+                if node.startswith(id):
+                    return node
+                elif id.startswith(select_sygil) and node.startswith(id[1:]):
+                    return node
+            raise SpecNotFoundError(id)
 
-        def find(root: str) -> str:
-            if root in ids:
-                return root
-            for id in ids:
-                if id.startswith(root):
-                    return id
-                elif root.startswith(select_sygil) and id.startswith(root[1:]):
-                    return id
-            raise SpecNotFoundError(root)
+        for i, id in enumerate(ids):
+            ids[i] = find(id)
 
-        for i, root in enumerate(roots):
-            roots[i] = find(root)
-
-    def load_testcases(self, roots: list[str] | None = None) -> list[TestCase]:
+    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
         specs = self.selection.specs
         graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
-        if roots:
-            self.resolve_root_ids(roots)
-            reachable = reachable_nodes(graph, roots)
+        if ids:
+            self.resolve_root_ids(ids)
+            reachable = reachable_nodes(graph, ids)
             graph = {id: graph[id] for id in reachable}
         map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
         lookup: dict[str, "TestCase"] = {}
@@ -180,24 +172,24 @@ class Session:
             if case.mask:
                 changed = True
         cases = list(lookup.values())
-        if roots:
+        if ids:
             for case in cases:
-                if case.id not in roots:
-                    case.mask = "Case not found in explicit spec roots"
+                if case.id not in ids:
+                    case.mask = "Case not found in explicit spec ids"
                     changed = True
         if changed:
             propagate_masks(cases)
         pm.done()
         return cases
 
-    def get_ready(self, roots: list[str] | None) -> list[TestCase]:
-        if not roots:
+    def get_ready(self, ids: list[str] | None) -> list[TestCase]:
+        if not ids:
             return self.cases
-        self.resolve_root_ids(roots)
-        return [case for case in self.cases if case.id in roots]
+        self.resolve_root_ids(ids)
+        return [case for case in self.cases if case.id in ids]
 
-    def run(self, roots: list[str] | None = None) -> SessionResults:
-        cases = self.get_ready(roots=roots)
+    def run(self, ids: list[str] | None = None) -> SessionResults:
+        cases = self.get_ready(ids=ids)
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
         logger.info(f"@*{{Starting}} session {self.name}")
@@ -206,11 +198,17 @@ class Session:
         try:
             started_on = datetime.datetime.now()
             starting_dir = os.getcwd()
+            changed = False
             for case in cases:
                 case.status.set("PENDING")
                 config.pluginmanager.hook.canary_testcase_modify(case=case)
+                if case.mask:
+                    changed = True
+            if changed:
+                propagate_masks(cases)
+            final = [case for case in cases if not case.mask]
             os.chdir(str(self.work_dir))
-            config.pluginmanager.hook.canary_runtests(cases=cases)
+            config.pluginmanager.hook.canary_runtests(cases=final)
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         finally:

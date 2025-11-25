@@ -14,6 +14,12 @@ from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 
 
+def generate_specs(generators, on_options=None):
+    from _canary import config
+    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    return specs
+
+
 def test_instance_deps(tmpdir):
     workdir = os.path.join(tmpdir.strpath, "src")
     with working_dir(workdir, create=True):
@@ -23,7 +29,7 @@ def test_instance_deps(tmpdir):
             fh.write("canary.directives.parameterize('cpus', [1,2])\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 7
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)

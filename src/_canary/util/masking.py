@@ -4,7 +4,6 @@
 
 import os
 import re
-from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Protocol
 
@@ -21,11 +20,12 @@ logger = logging.get_logger(__name__)
 
 def apply_masks(
     specs: list["ResolvedSpec"],
-    keyword_exprs: list[str] | None,
-    parameter_expr: str | None,
-    owners: set[str] | None,
-    regex: str | None,
-    ids: list[str] | None,
+    keyword_exprs: list[str] | None = None,
+    parameter_expr: str | None = None,
+    owners: list[str] | None = None,
+    regex: str | None = None,
+    ids: list[str] | None = None,
+    prefixes: list[str] | None = None,
 ) -> None:
     """Filter test specs (mask test specs that don't meet a specific criteria)
 
@@ -40,25 +40,21 @@ def apply_masks(
         logger.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
-    owners = set(owners or [])
+    owners_set = set(owners or [])
 
-    # Get an index of sorted order
-    map: dict[str, int] = {d.id: i for i, d in enumerate(specs)}
-    graph: dict[int, int] = {map[s.id]: [map[_.id] for _ in s.dependencies] for s in specs}
-    ts = TopologicalSorter(graph)
-    order = list(ts.static_order())
-
-    for i in order:
-        spec = specs[i]
-
+    for spec in specs:
         if spec.mask:
             continue
 
         if ids is not None:
-            if not any(spec.matches(id) for id in ids):
-                expr = ",".join(ids)
-                spec.mask = "testspec expression @*{%s} did not match" % expr
+            if not any(spec.id.startswith(id) for id in ids):
+                spec.mask = "test ID not in @*{%s}" % ",".join(ids)
             continue
+
+        if prefixes is not None:
+            if not any(str(spec.file).startswith(prefix) for prefix in prefixes):
+                spec.mask = "test prefix does not match requested"
+                continue
 
         try:
             check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=spec)
@@ -72,13 +68,13 @@ def apply_masks(
                 spec.mask = check.reason
                 continue
 
-        if owners and not owners.intersection(spec.owners or []):
+        if owners_set and not owners_set.intersection(spec.owners or []):
             spec.mask = "not owned by @*{%r}" % spec.owners
             continue
 
         if keyword_exprs is not None:
             kwds = set(spec.keywords)
-            kwds.update(spec.implicit_keywords)
+            kwds.update(spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
             kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
             if not kwd_all:
                 for keyword_expr in keyword_exprs:
@@ -92,7 +88,7 @@ def apply_masks(
         if parameter_expr:
             match = when.when(
                 {"parameters": parameter_expr},
-                parameters=spec.parameters | spec.implicit_parameters,
+                parameters=spec.parameters | spec.implicit_parameters,  # ty: ignore[unsupported-operator]
             )
             if not match:
                 spec.mask = "parameter expression @*{%s} did not match" % parameter_expr

@@ -49,7 +49,7 @@ class CanaryHPCExecutor:
         workspace = canary.Workspace.load()
         with workspace.session(name=self.session) as session:
             try:
-                results = session.run(roots=self.cases)
+                results = session.run(ids=self.cases)
             finally:
                 workspace.add_session_results(results)
 

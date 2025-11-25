@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import fnmatch
 import json
 import os
 
@@ -63,7 +64,7 @@ class PathSpec(argparse.Action):
         setdefault(namespace, "paths", {})
         setdefault(namespace, "runtag", None)
         setdefault(namespace, "start", None)
-        setdefault(namespace, "casespecs", None)
+        setdefault(namespace, "specids", None)
 
         if option_string == "-f":
             namespace.paths.update(self.read_paths(values))
@@ -104,7 +105,7 @@ class PathSpec(argparse.Action):
                 root, name = path.split(os.pathsep, 1)
                 namespace.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
             elif path.startswith("/") and not os.path.exists(path):
-                setdefault(namespace, "casespecs", []).append(path)
+                setdefault(namespace, "specids", []).append(path[1:])
             else:
                 raise ValueError(f"{path}: no such file or directory")
 
@@ -254,23 +255,24 @@ def code(arg: str) -> str:
 
 def is_test_file(arg: str) -> bool:
     from .... import config
-    from ...types import ScanPath
 
-    p = ScanPath(root=os.path.abspath(arg), paths=[])
-    hook = config.pluginmanager.hook.canary_collect_generators
-    return hook(scan_path=p) is not None
+    patterns = config.pluginmanager.hook.canary_collect_file_patterns()
+    for pattern in patterns:
+        if fnmatch.fnmatchcase(arg, pattern):
+            return True
+    return False
 
 
 def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:
-    if ns.casespecs:
+    if ns.specids:
         if any([ns.paths, ns.runtag, ns.start]):
             raise TypeError("/HASH pathspec argument[s] incompatible with other pathspec arguments")
     if ns.start:
-        if any([ns.paths, ns.runtag, ns.casespecs]):
+        if any([ns.paths, ns.runtag, ns.specids]):
             raise TypeError(f"{ns.start}: argument incompatible with other pathspec arguments")
     if ns.runtag:
-        if any([ns.paths, ns.start, ns.casespecs]):
+        if any([ns.paths, ns.start, ns.specids]):
             raise TypeError(f"{ns.runtag}: argument incompatible with other pathspec arguments")
     if ns.paths:
-        if any([ns.runtag, ns.start, ns.casespecs]):
+        if any([ns.runtag, ns.start, ns.specids]):
             raise TypeError("PATH argument[s] incompatible with other pathspec arguments")

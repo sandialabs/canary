@@ -33,6 +33,11 @@ def mask(
     )
 
 
+def generate_specs(generators, on_options=None):
+    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    return specs
+
+
 def test_skipif(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
@@ -41,7 +46,7 @@ def test_skipif(tmpdir):
         with open("b.pyt", "w") as fh:
             fh.write("import canary\ncanary.directives.skipif(False, reason='Because')")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len(specs) == 2
     assert len([spec for spec in specs if not spec.mask]) == 1
 
@@ -54,15 +59,15 @@ def test_keywords(tmpdir):
         with open("b.pyt", "w") as fh:
             fh.write("import canary\ncanary.directives.keywords('e', 'f', 'g', 'h', 'i')")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     mask(specs, keyword_exprs=["a and i"])
     assert len([spec for spec in specs if not spec.mask]) == 0
 
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     mask(specs, keyword_exprs=["a and e"])
     assert len([spec for spec in specs if not spec.mask]) == 1
 
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     mask(specs, keyword_exprs=["a or i"])
     assert len([spec for spec in specs if not spec.mask]) == 2
 
@@ -74,7 +79,7 @@ def test_parameterize_1(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 3
     a, b = 0, 1
     for spec in specs:
@@ -91,7 +96,7 @@ def test_parameterize_2(tmpdir):
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("canary.directives.parameterize('n', [10,11,12])\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
@@ -107,9 +112,9 @@ def test_parameterize_3(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators, on_options=["xxx"])
+    specs = generate_specs(generators, on_options=["xxx"])
     assert len([spec for spec in specs if not spec.mask]) == 2
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 1
 
 
@@ -133,13 +138,13 @@ def test_cpu_count(tmpdir):
     with canary.config.override():
         canary.config.pluginmanager.register(Hook(42), "myhook")
         generators = workspace.find_generators_in_path(workdir)
-        specs = workspace.generate_specs(generators)
+        specs = generate_specs(generators)
         assert len([spec for spec in specs if not spec.mask]) == 4
         canary.config.pluginmanager.unregister(name="myhook")
     with canary.config.override():
         canary.config.pluginmanager.register(Hook(2), "myhook")
         generators = workspace.find_generators_in_path(workdir)
-        specs = workspace.generate_specs(generators)
+        specs = generate_specs(generators)
         mask(specs)
         assert len([spec for spec in specs if not spec.mask]) == 1
         canary.config.pluginmanager.unregister(name="myhook")
@@ -157,7 +162,7 @@ def test_dep_patterns(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('n', [1, 2, 3])\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 4
     for spec in specs:
         if spec.name == "f":
@@ -175,7 +180,7 @@ def test_analyze(tmpdir):
             fh.write("canary.directives.parameterize('n', [10,11,12])\n")
             fh.write("canary.directives.generate_composite_base_case()\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 10
     assert all(spec in specs[-1].dependencies for spec in specs[:-1])
 
@@ -188,9 +193,9 @@ def test_enable(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.enable(True, when=\"options='baz and spam'\")\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators, on_options=["baz"])
+    specs = generate_specs(generators, on_options=["baz"])
     assert len([spec for spec in specs if not spec.mask]) == 0
-    specs = workspace.generate_specs(generators, on_options=["baz", "spam", "foo"])
+    specs = generate_specs(generators, on_options=["baz", "spam", "foo"])
     assert len([spec for spec in specs if not spec.mask]) == 1
 
 
@@ -205,7 +210,7 @@ def test_enable_names(tmpdir):
             fh.write("canary.directives.name('spam')\n")
             fh.write('canary.directives.enable(False, when="testname=foo")\n')
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 2
 
 
@@ -225,7 +230,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             )
         with config.override():
             generators = workspace.find_generators_in_path(".")
-            specs = workspace.generate_specs(generators, on_options=["baz"])
+            specs = generate_specs(generators, on_options=["baz"])
             mask(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
@@ -235,14 +240,14 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
-            specs = workspace.generate_specs(generators)
+            specs = generate_specs(generators)
             mask(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(specs) == 4
             assert specs[-1].attributes.get("multicase") is not None
             assert not specs[-1].mask
 
             # with cpus<2, some of the cases will be filtered
-            specs = workspace.generate_specs(generators, on_options=["baz"])
+            specs = generate_specs(generators, on_options=["baz"])
             mask(specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"])
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
@@ -269,7 +274,7 @@ def test_vvt_generator(tmpdir):
             )
         with config.override():
             generators = workspace.find_generators_in_path(".")
-            specs = workspace.generate_specs(generators, on_options=["baz"])
+            specs = generate_specs(generators, on_options=["baz"])
             mask(specs, keyword_exprs=["test and unit"])
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
@@ -279,14 +284,14 @@ def test_vvt_generator(tmpdir):
             # without the baz option, the `np` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
-            specs = workspace.generate_specs(generators)
+            specs = generate_specs(generators)
             mask(specs, keyword_exprs=["test and unit"])
             assert len(specs) == 4
             assert specs[-1].attributes.get("multicase") is not None
             assert not specs[-1].mask
 
             # with np<2, some of the cases will be filtered
-            specs = workspace.generate_specs(generators, on_options=["baz"])
+            specs = generate_specs(generators, on_options=["baz"])
             mask(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
@@ -310,5 +315,5 @@ def test_many_composite(tmpdir):
                 fh.write(f"canary.directives.parameterize({name!r}, list(range(4)))\n")
                 fh.write("canary.directives.generate_composite_base_case()\n")
     generators = workspace.find_generators_in_path(workdir)
-    specs = workspace.generate_specs(generators)
+    specs = generate_specs(generators)
     assert len(specs) == len(names) * 5

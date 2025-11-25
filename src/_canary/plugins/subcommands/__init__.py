@@ -24,7 +24,6 @@ from . import rm
 from . import run
 from . import select
 from . import status
-from . import tag
 from . import tree
 
 plugins = [
@@ -50,6 +49,5 @@ plugins = [
     run,
     select,
     status,
-    tag,
     tree,
 ]

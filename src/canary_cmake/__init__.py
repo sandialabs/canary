@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
 from pathlib import Path
@@ -28,7 +32,7 @@ def canary_collect_file_patterns() -> list[str]:
 
 
 @canary.hookimpl
-def canary_collect_filter_files(files: list[File]) -> None:
+def canary_collect_modifyitems(files: list[File]) -> None:
     seen_parents: set[str] = set()
     for f in files:
         if os.path.basename(f) == "CTestTestfile.cmake":

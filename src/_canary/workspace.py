@@ -5,24 +5,22 @@ import dataclasses
 import datetime
 import hashlib
 import os
-import pickle  # nosec B403
 import shutil
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from typing import Callable
 from typing import Generator
 
 from . import config
 from . import testspec
 from . import when
 from .generator import AbstractTestGenerator
-from .plugins.types import ScanPath
 from .session import Session
 from .session import SessionResults
 from .testcase import TestCase
 from .testexec import ExecutionSpace
-from .testspec import DraftSpec
 from .testspec import ResolvedSpec
 from .testspec import TestSpec
 from .util import json_helper as json
@@ -30,9 +28,7 @@ from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
-from .util.graph import reachable_nodes
 from .util.graph import static_order
-from .util.parallel import starmap
 
 logger = logging.get_logger(__name__)
 
@@ -49,12 +45,13 @@ DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
 class SpecSelection:
     specs: list[TestSpec]
     tag: str | None
+    filters: dict[str, Any]
     _sha256: str = dataclasses.field(init=False)
     _created_on: str = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        specs = sorted([spec.id for spec in self.specs])
-        text = json.dumps({"tag": self.tag, "specs": specs})
+        meta = {"specs": sorted([spec.id for spec in self.specs]), "tag": self.tag, **self.filters}
+        text = json.dumps(meta)
         self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
 
@@ -89,16 +86,12 @@ class Workspace:
         # Temporary data
         self.tmp_dir: Path
 
-        # Storage for SpecSelection tags
-        self.tags_dir: Path
-
         # Text logs
         self.logs_dir: Path
 
         # Pointer to latest session
         self.head: Path
 
-        self.lockfile: Path
         self.dbfile: Path
         self.db: WorkspaceDatabase
 
@@ -114,10 +107,8 @@ class Workspace:
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
-        self.tags_dir = self.root / "tags"
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
-        self.lockfile = self.root / "lock"
         self.dbfile = self.root / "workspace.sqlite3"
         self._spec_ids = set()
 
@@ -191,8 +182,6 @@ class Workspace:
         self.sessions_dir.mkdir(parents=True)
         self.cache_dir.mkdir(parents=True)
         self.tmp_dir.mkdir(parents=True)
-        self.tags_dir.mkdir(parents=True)
-        self.tag("default")
         self.logs_dir.mkdir(parents=True)
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
@@ -335,13 +324,6 @@ class Workspace:
                     link.unlink()
                 link.symlink_to(target)
 
-    def is_tag(self, name: str) -> bool:
-        """Is ``name`` a tag?"""
-        for p in self.tags_dir.iterdir():
-            if p.name == name:
-                return True
-        return False
-
     def inside_view(self, path: Path | str) -> bool:
         """Is ``path`` inside of a self.view?"""
         if self.view is None:
@@ -363,21 +345,16 @@ class Workspace:
             "generator_count": generator_count,
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
             "latest_session": latest_session,
-            "tags": sorted(p.stem for p in self.tags_dir.glob("*")),
+            "tags": self.db.selections,
             "version": canary.version,
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
         return info
 
-    def add_generators(self, generators: list[AbstractTestGenerator]) -> None:
-        pm = logger.progress_monitor("@*{Adding} test case generators to workspace database")
-        self.db.put_generators(generators)
-        pm.done()
-
-    def load_testcase_generators(self) -> list[AbstractTestGenerator]:
+    def load_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
         pm = logger.progress_monitor("@*{Loading} test case generators from workspace database")
-        generators = [AbstractTestGenerator.from_dict(d) for d in self.db.get_generators().values()]
+        generators = self.db.get_generators()
         pm.done()
         return generators
 
@@ -392,80 +369,44 @@ class Workspace:
         for root, paths in scan_paths.items():
             fs_root = root if "@" not in root else root.partition("@")[-1]
             pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
-            p = ScanPath(root=root, paths=paths)
-            generators.extend(config.pluginmanager.hook.canary_collect_generators(scan_path=p))
+            generators.extend(config.pluginmanager.hook.canary_collect(root=root, paths=paths))
             pm.done()
-        self.add_generators(generators)
+        self.db.put_generators(generators)
         # Invalidate caches
         warned = False
-        if (self.cache_dir / "select").exists():
-            for file in (self.cache_dir / "select").iterdir():
-                if not file.is_file():
-                    continue
-                if not warned:
-                    logger.info("Invalidating previously locked test case cache")
-                    warned = True
-                with open(file, "rb") as fh:
-                    selection = pickle.load(fh)  # nosec B301
-                    selection.specs = None
-                with open(file, "wb") as fh:
-                    pickle.dump(selection, fh)
+        for selection in self.db.get_selections():
+            selection.specs.clear()
+            self.db.put_selection(selection)
+            if not warned:
+                logger.info("Invalidating previously locked test case cache")
+                warned = True
         logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
-    def resolve_root_ids(self, roots: list[str], graph: dict[str, list[str]]) -> None:
-        """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
+    def resolve_root_ids(self, ids: list[str], graph: dict[str, list[str]]) -> None:
+        """Expand ids to full IDs.  ids is a spec ID, or partial ID, and can be preceded by /"""
 
-        def find(root: str) -> str:
+        def find(id: str) -> str:
             sygil = testspec.select_sygil
-            if root in graph:
-                return root
-            for id in graph:
-                if id.startswith(root):
-                    return id
-                elif root.startswith(sygil) and id.startswith(root[1:]):
-                    return id
-            raise SpecNotFoundError(root)
+            if id in graph:
+                return id
+            for node in graph:
+                if node.startswith(id):
+                    return node
+                elif id.startswith(sygil) and node.startswith(id[1:]):
+                    return node
+            raise SpecNotFoundError(id)
 
-        for i, root in enumerate(roots):
-            roots[i] = find(root)
+        for i, id in enumerate(ids):
+            ids[i] = find(id)
 
-    def _load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
-        """Load cached test specs.  Dependency resolution is performed."""
-        graph = self.db.get_dependency_graph()
-        if roots:
-            self.resolve_root_ids(roots, graph)
-            reachable = reachable_nodes(graph, roots)
-            graph = {id: graph[id] for id in reachable}
-        lookup: dict[str, ResolvedSpec] = {}
-        spec_data = self.db.get_specs()
-        ts = TopologicalSorter(graph)
-        for id in ts.static_order():
-            spec = ResolvedSpec.from_dict(spec_data[id], lookup)
-            lookup[id] = spec
-        return list(lookup.values())
-
-    def load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
-        """Load cached test specs.  Dependency resolution is performed.
-
-        Args:
-          roots: only return specs matching these roots
-
-        Returns:
-          Test specs
-        """
-        specs = self._load_testspecs(roots=roots)
-        if roots:
-            return [spec for spec in specs if spec.id in roots]
-        return specs
-
-    def load_testcases(self, roots: list[str] | None = None) -> list[TestCase]:
+    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
         lookup: dict[str, TestCase] = {}
-        specs = self._load_testspecs(roots=roots)
-        latest = self.db.get_results(ids=roots)
+        specs = self.db.get_specs(ids=ids)
+        latest = self.db.get_results(ids=ids)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -484,28 +425,20 @@ class Workspace:
                 case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
                 case.timekeeper.duration = mine["timekeeper"]["duration"]
                 lookup[spec.id] = case
-        if roots:
-            return [case for case in lookup.values() if case.id in roots]
+        if ids:
+            return [case for case in lookup.values() if case.id in ids]
         return list(lookup.values())
-
-    def get_selection_by_specs(self, roots: list[str], tag: str | None = None) -> SpecSelection:
-        specs = self.load_testspecs(roots=roots)
-        final = testspec.finalize(specs)
-        selection = SpecSelection(final, tag)
-        if tag is not None:
-            self.cache_selection(selection)
-        return selection
 
     def select_from_path(
         self,
         path: Path,
         keyword_exprs: list[str] | None = None,
     ) -> list[TestCase]:
-        roots: list[str] = []
+        ids: list[str] = []
         for file in path.rglob("testcase.lock"):
             lock_data = json.loads(file.read_text())
-            roots.append(lock_data["spec"]["id"])
-        cases = self.load_testcases(roots=roots)
+            ids.append(lock_data["spec"]["id"])
+        cases = self.load_testcases(ids=ids)
         if keyword_exprs is None:
             return cases
         masks: dict[str, bool] = {}
@@ -521,54 +454,64 @@ class Workspace:
                         break
         return [case for case in cases if not masks.get(case.id)]
 
-    def tag(self, name: str, **meta: Any) -> str:
-        tag_file = self.tags_dir / name
-        if tag_file.exists():
-            raise ValueError(f"Tag {name!r} already exists")
-        cache_file = self.cache_dir / "tags" / name
-        link = os.path.relpath(str(cache_file), str(tag_file.parent))
-        tag_file.write_text(str(link))
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps(meta, indent=2))
-        return name
-
-    def remove_tag(self, name: str) -> bool:
-        if name == "default":
+    def remove_tag(self, tag: str) -> bool:
+        if tag == "default":
             logger.error("Cannot remove default tag")
             return False
-        tag_file = self.tags_dir / name
-        if not tag_file.exists():
-            logger.warning(f"Tag {name} does not exist")
+        if not self.db.is_selection(tag):
+            logger.error(f"{tag!r} is not a tag")
             return False
-        tag_file.unlink()
-        cache_file = self.cache_dir / "tags" / name
-        cache_file.unlink(missing_ok=True)
-        cache_file = self.cache_dir / "select" / name
-        cache_file.unlink(missing_ok=True)
+        self.db.delete_selection(tag)
         return True
 
-    def tag_info(self, name: str) -> dict[str, Any]:
-        tag_file = self.tags_dir / name
-        if not tag_file.exists():
-            raise ValueError(f"Tag {name} does not exist")
-        link = tag_file.read_text().strip()
-        cache_file = self.cache_dir / link
-        meta: dict[str, Any] = json.loads(cache_file.read_text())
-        return meta
+    def is_tag(self, tag: str) -> bool:
+        return self.db.is_selection(tag)
 
-    def lock(
+    def generate_specs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
+        """Generate resolved test specs
+
+        Args:
+          on_options: Used to filter tests by option.  In the typical case, options are added to
+            ``on_options`` by passing them on the command line, e.g., ``-o dbg`` would add ``dbg`` to
+            ``on_options``.  Tests can define filtering criteria based on what options are on.
+
+        Returns:
+          Resolved specs
+
+        """
+        on_options = on_options or []
+        generators = self.load_generators()
+        parts = [str(generator.file) for generator in generators] + on_options
+        parts.sort()
+        signature = hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
+
+        if cached := self.db.get_specs(signature=signature):
+            return cached
+
+        pm = logger.progress_monitor("@*{Generating} test specs")
+        resolved: list[ResolvedSpec] = config.pluginmanager.hook.canary_generate(
+            generators=generators, on_options=on_options
+        )
+        pm.done()
+
+        pm = logger.progress_monitor("@*{Putting} specs in workspace database")
+        self.db.put_specs(signature, resolved)
+        pm.done()
+
+        return resolved
+
+    def select(
         self,
-        *,
-        paths: list[str] | None = None,
+        tag: str | None = None,
+        prefixes: list[str] | None = None,
+        on_options: list[str] | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        on_options: list[str] | None = None,
+        owners: list[str] | None = None,
         regex: str | None = None,
-        case_specs: list[str] | None = None,
-        **kwargs: Any,
-    ) -> list[TestSpec]:
-        """Generate (lock) test specs from generators
+        ids: list[str] | None = None,
+    ) -> SpecSelection:
+        """Generate and select final test specs
 
         Args:
           keyword_exprs: Used to filter tests by keyword.  E.g., if two test define the keywords
@@ -586,157 +529,49 @@ class Workspace:
           owners: Used to filter tests by owner.
 
         Returns:
-          A list of test specs
+          Test spec selection
 
         """
-        specs: list[ResolvedSpec]
-        generators = self.load_testcase_generators()
-        if paths:
-            relative_to = lambda f1, f2: Path(f1.file).is_relative_to(Path(f2).absolute())
-            generators = [g for p in paths for g in generators if relative_to(g, p)]
-        meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
-        sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
-        file = self.cache_dir / "lock" / sha[:20]
-        if file.exists():
-            logger.debug("Reading test specs from cache")
-            specs = self.load_testspecs()
-        else:
-            specs = generate_specs(generators, on_options=on_options)
-            # Add all test specs to the object store before masking so that future stages don't
-            # inherit this stage's mask (if any)
-            self.add_specs(specs)
-            file.parent.mkdir(parents=True, exist_ok=True)
-            file.touch()
+        specs = self.generate_specs(on_options=on_options)
 
-        ids: list[str] | None = None
-        if case_specs:
-            ids = [_[1:] for _ in case_specs]
-
-        pm = logger.progress_monitor("@*{Masking} test specs based on filtering criteria")
-        config.pluginmanager.hook.canary_testsuite_mask(
-            specs=specs,
+        filters = dict(
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
+            prefixes=prefixes,
             ids=ids,
         )
+
+        pm = logger.progress_monitor("@*{Modifying} specs")
+        config.pluginmanager.hook.canary_select(specs=specs, **filters)
         pm.done()
 
         pm = logger.progress_monitor("@*{Finalizing} test specs")
-        final = testspec.finalize(specs)
+        final = testspec.finalize([spec for spec in specs if not spec.mask])
         pm.done()
-        config.pluginmanager.hook.canary_collectreport(specs=final)
 
-        selected = [spec for spec in final if not spec.mask]
-        if not selected:
-            logger.warning("Empty test spec selection")
+        if tag is None and all([not _ for _ in filters]):
+            tag = "default"
 
-        return selected
+        filters["on_options"] = on_options
+        selection = SpecSelection(specs=final, tag=tag, filters=filters)
 
-    def cache_selection(self, selection: SpecSelection) -> None:
-        assert selection.tag is not None
-        cache_file = self.cache_dir / "select" / selection.tag
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_file, "wb") as fh:
-            pickle.dump(selection, fh)
+        if tag:
+            self.db.put_selection(selection)
 
-    def make_selection(
-        self,
-        tag: str | None,
-        paths: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        on_options: list[str] | None = None,
-        case_specs: list[str] | None = None,
-        regex: str | None = None,
-    ) -> SpecSelection:
-        logger.info("@*{Selecting} test cases from generators")
-        kwds = dict(
-            paths=paths,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            on_options=on_options,
-            case_specs=case_specs,
-            regex=regex,
-        )
-        if tag is None and all(not value for value in kwds.values()):
-            # This is the default selection
-            return self.get_selection("default")
-        if tag is not None:
-            # Tag early to error out before locking if tag already exists
-            self.tag(tag, **kwds)
-        try:
-            specs = self.lock(**kwds)
-            selection = SpecSelection(specs=specs, tag=tag)
-            if tag is not None:
-                self.cache_selection(selection)
-        except Exception:
-            if tag is not None:
-                self.remove_tag(tag)
-            raise
+        config.pluginmanager.hook.canary_select_report(specs=specs)
+
         return selection
 
     def get_selection(self, tag: str = "default") -> SpecSelection:
-        tag_file = self.tags_dir / tag
-        if not tag_file.exists():
-            raise ValueError(f"Tag {tag} does not exist")
-
-        selection: SpecSelection
-
-        cache_file = self.cache_dir / "select" / tag
-        if not cache_file.exists():
-            link = tag_file.read_text().strip()
-            meta = json.loads((self.tags_dir / link).read_text())
-            specs = self.lock(**meta)
-            selection = SpecSelection(specs=specs, tag=tag)
-            self.cache_selection(selection)
-            return selection
-
-        with open(cache_file, "rb") as fh:
-            selection = pickle.load(fh)  # nosec B301
-
+        if tag == "default" and not self.db.is_selection(tag):
+            return self.select(tag="default")
+        selection = self.db.get_selection(tag)
         if selection.specs:
             return selection
-
         # No cases: cache was invalidated at some point
-        link = tag_file.read_text().strip()
-        meta = json.loads((self.tags_dir / link).read_text())
-        specs = self.lock(**meta)
-        selection = SpecSelection(specs=specs, tag=tag_file.name)
-        self.cache_selection(selection)
-        return selection
-
-    def add_specs(self, specs: list[ResolvedSpec]) -> None:
-        pm = logger.progress_monitor("@*{Adding} test specs to workspace database")
-        self.db.put_specs(specs)
-        pm.done()
-
-    def statusinfo(self) -> dict[str, list[str]]:
-        latest = self.db.get_results()
-        info: dict[str, list[str]] = {}
-        specs = {spec.id: spec for spec in self.load_testspecs()}
-        for id, entry in latest.items():
-            spec = specs[id]
-            info.setdefault("id", []).append(spec.id[:7])
-            info.setdefault("name", []).append(spec.name)
-            info.setdefault("fullname", []).append(spec.fullname)
-            info.setdefault("family", []).append(spec.family)
-            info.setdefault("file", []).append(spec.file)
-            info.setdefault("session", []).append(entry["workspace"]["session"])
-            info.setdefault("returncode", []).append(entry["status"]["code"])
-            info.setdefault("status_name", []).append(entry["status"]["name"])
-            info.setdefault("status_message", []).append(entry["status"]["message"])
-            info.setdefault("duration", []).append(entry["timekeeper"]["duration"])
-            info.setdefault("started_on", []).append(entry["timekeeper"]["started_on"])
-            info.setdefault("finished_on", []).append(entry["timekeeper"]["finished_on"])
-        return info
-
-    def collect_all_testcases(self) -> Generator[TestCase, None, None]:
-        for session in self.sessions():
-            yield from session.cases
+        return self.select(tag=selection.tag, **selection.filters)
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -792,84 +627,14 @@ class Workspace:
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
-    hook = config.pluginmanager.hook.canary_collect_generators
-    generators: list[AbstractTestGenerator] = hook(scan_path=ScanPath(root=str(path)))
+    hook = config.pluginmanager.hook.canary_collect
+    generators: list[AbstractTestGenerator] = hook(root=str(path), paths=[])
     return generators
-
-
-def generate_specs(
-    generators: list["AbstractTestGenerator"],
-    on_options: list[str] | None = None,
-) -> list[ResolvedSpec]:
-    """Generate test cases and filter based on criteria"""
-    pm = logger.progress_monitor("@*{Generating} test specs")
-    try:
-        locked: list[list[DraftSpec]] = []
-        if config.get("debug"):
-            for f in generators:
-                locked.append(lock_file(f, on_options))
-        else:
-            locked.extend(starmap(lock_file, [(f, on_options) for f in generators]))
-        drafts: list[DraftSpec] = []
-        for group in locked:
-            for spec in group:
-                drafts.append(spec)
-        nc, ng = len(drafts), len(generators)
-    except Exception:
-        status = "failed"
-        raise
-    else:
-        status = "done"
-    finally:
-        pm.done(status)
-
-    duplicates = find_duplicates(drafts)
-    if duplicates:
-        logger.error("Duplicate test IDs generated for the following test cases")
-        for id, dspecs in duplicates.items():
-            logger.error(f"{id}:")
-            for spec in dspecs:
-                logger.log(
-                    logging.EMIT, f"  - {spec.display_name}: {spec.file_path}", extra={"prefix": ""}
-                )
-        raise ValueError("Duplicate test IDs in test suite")
-
-    pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
-    specs = testspec.resolve(drafts)
-    pm.done()
-    for spec in specs:
-        config.pluginmanager.hook.canary_testspec_modify(spec=spec)
-
-    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
-
-    return specs
-
-
-def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
-    return file.lock(on_options=on_options)
-
-
-def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
-    pm = logger.progress_monitor("@*{Searching} for duplicated tests")
-    ids = [spec.id for spec in specs]
-    counts: dict[str, int] = {}
-    for id in ids:
-        counts[id] = counts.get(id, 0) + 1
-
-    duplicate_ids = {id for id, count in counts.items() if count > 1}
-    duplicates: dict[str, list[DraftSpec]] = {}
-
-    # if there are duplicates, we are in error condition and lookup cost is not important
-    for id in duplicate_ids:
-        duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
-    pm.done()
-    return duplicates
 
 
 class WorkspaceDatabase:
     """Database wrapper for the "latest results" index."""
 
-    name: str = "LATEST"
     connection: sqlite3.Connection
 
     def __init__(self, db_path: Path):
@@ -888,18 +653,24 @@ class WorkspaceDatabase:
         self = cls(path)
         cursor = self.connection.cursor()
 
-        query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT);"
+        query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT)"
         cursor.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, data TEXT);"
+        query = "CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, signature TEXT, data TEXT)"
         cursor.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT);"
+        query = "CREATE INDEX IF NOT EXISTS specs_signature ON specs (signature)"
+        cursor.execute(query)
+
+        query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
+        cursor.execute(query)
+
+        query = "CREATE TABLE IF NOT EXISTS selections (tag TEXT PRIMARY KEY, data TEXT)"
         cursor.execute(query)
 
         query = """CREATE TABLE IF NOT EXISTS results (
           id TEXT PRIMARY KEY, status TEXT, timekeeper TEXT, workspace TEXT
-        );"""
+        )"""
         cursor.execute(query)
 
         self.connection.commit()
@@ -927,28 +698,105 @@ class WorkspaceDatabase:
         )
         self.connection.commit()
 
-    def put_specs(self, specs: list[TestSpec]) -> None:
+    def get_generators(self) -> list[AbstractTestGenerator]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT id, data FROM generators;")
+        rows = cursor.fetchall()
+        generators = [AbstractTestGenerator.from_dict(json.loads(row[1])) for row in rows]
+        return generators
+
+    def put_specs(self, signature: str, specs: list[TestSpec]) -> None:
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE;")
-        rows = [(spec.id, json.dumps_min(spec.asdict())) for spec in specs]
         cursor.executemany(
             """
-            INSERT INTO specs (id, data)
-            VALUES (?, ?)
-            ON CONFLICT(id) DO UPDATE SET data=excluded.data
+            INSERT INTO specs (id, signature, data)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET signature=excluded.signature, data=excluded.data
             """,
-            rows,
+            [(spec.id, signature, json.dumps_min(spec.asdict())) for spec in specs],
         )
-        rows = [(spec.id, json.dumps_min([dep.id for dep in spec.dependencies])) for spec in specs]
         cursor.executemany(
             """
             INSERT INTO dependencies (id, data)
             VALUES (?, ?)
             ON CONFLICT(id) DO UPDATE SET data=excluded.data
             """,
-            rows,
+            [(spec.id, json.dumps_min([dep.id for dep in spec.dependencies])) for spec in specs],
         )
         self.connection.commit()
+
+    def get_specs(
+        self, ids: list[str] | None = None, signature: str | None = None
+    ) -> list[ResolvedSpec]:
+        if ids and signature:
+            return self._get_specs_by_id_and_signature(ids, signature)
+        elif ids:
+            return self._get_specs_by_id(ids)
+        elif signature:
+            return self._get_specs_by_signature(signature)
+        else:
+            return self._get_all_specs()
+
+    def _get_all_specs(self) -> list[ResolvedSpec]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM specs")
+        rows = cursor.fetchall()
+        return self._reconstruct_specs(rows)
+
+    def _get_specs_by_signature(self, signature: str) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM specs WHERE signature = ?", (signature,))
+        rows = cursor.fetchall()
+        return self._reconstruct_specs(rows)
+
+    def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
+        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+        clauses: list[str] = []
+        params: list[str] = []
+        if exact:
+            placeholders = ",".join(["?"] * len(exact))
+            clauses.append(f"id IN ({placeholders})")
+            params.extend(exact)
+        for p in partial:
+            clauses.append("id LIKE ?")
+            params.append(f"{p}%")
+        where = " OR ".join(clauses)
+        query = f"SELECT * FROM specs WHERE {where}"
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return self._reconstruct_specs(rows)
+
+    def _get_specs_by_id_and_signature(
+        self, ids: list[str], signature: str | None = None
+    ) -> list[ResolvedSpec]:
+        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+        clauses: list[str] = []
+        params: list[str] = []
+        if exact:
+            placeholders = ",".join(["?"] * len(exact))
+            clauses.append(f"id IN ({placeholders})")
+            params.extend(exact)
+        for p in partial:
+            clauses.append("id LIKE ?")
+            params.append(f"{p}%")
+        where = " OR ".join(clauses)
+        query = f"SELECT * FROM specs WHERE signature = ? AND ({where})"
+        cursor = self.connection.cursor()
+        cursor.execute(query, (signature, *params))
+        rows = cursor.fetchall()
+        return self._reconstruct_specs(rows)
+
+    def _reconstruct_specs(self, rows: list[list]) -> list[TestSpec]:
+        data = {id: json.loads(data) for id, _, data in rows}
+        graph = {id: [_["id"] for _ in d["dependencies"]] for id, d in data.items()}
+        lookup: dict[str, ResolvedSpec] = {}
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            spec = ResolvedSpec.from_dict(data[id], lookup)
+            lookup[id] = spec
+        return list(lookup.values())
 
     def put_results(self, results: SessionResults) -> None:
         rows = []
@@ -975,41 +823,6 @@ class WorkspaceDatabase:
             rows,
         )
         self.connection.commit()
-
-    def get_generators(self) -> dict[str, dict[str, Any]]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT id, data FROM generators;")
-        rows = cursor.fetchall()
-        return {id: json.loads(data) for id, data in rows}
-
-    def get_specs(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
-        cursor = self.connection.cursor()
-        if not ids:
-            cursor.execute("SELECT id, data FROM specs")
-            rows = cursor.fetchall()
-        else:
-            clauses: list[str] = []
-            params: list[str] = []
-            for id in ids:
-                if id.startswith(testspec.select_sygil):
-                    id = id[1:]
-                if len(id) >= 64:  # full sha256 hexdigest
-                    clauses.append("id = ?")
-                    params.append(id)
-                else:
-                    clauses.append("id LIKE ?")
-                    params.append(f"{id}%")
-            where = " OR ".join(f"({c})" for c in clauses)
-            query = f"SELECT id, data FROM specs WHERE {where}"
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-        return {id: json.loads(data) for id, data in rows}
-
-    def get_dependency_graph(self) -> dict[str, dict[str, Any]]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT id, data FROM dependencies;")
-        rows = cursor.fetchall()
-        return {id: json.loads(data) for id, data in rows}
 
     def get_results(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
         cursor = self.connection.cursor()
@@ -1041,6 +854,91 @@ class WorkspaceDatabase:
             for id, status, timekeeper, workspace in rows
         }
 
+    def get_dependency_graph(self) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT id, data FROM dependencies;")
+        rows = cursor.fetchall()
+        return {id: json.loads(data) for id, data in rows}
+
+    def put_selection(self, selection: SpecSelection) -> None:
+        data: dict[str, Any] = {}
+        data["specs"] = [spec.id for spec in selection.specs]
+        data["tag"] = selection.tag
+        data["filters"] = selection.filters
+        data["created_on"] = selection.created_on
+
+        tag = selection.tag or selection.sha256
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute(
+            """
+            INSERT INTO selections (tag, data)
+            VALUES (?, ?)
+            ON CONFLICT(tag) DO UPDATE SET data=excluded.data
+            """,
+            (tag, json.dumps_min(data)),
+        )
+        self.connection.commit()
+
+    @property
+    def selections(self) -> list[str]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT tag FROM selections")
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+
+    def is_selection(self, tag: str) -> bool:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT 1 FROM selections WHERE tag = ? LIMIT 1", (tag,))
+        return cursor.fetchone() is not None
+
+    def get_selection(self, tag: str) -> SpecSelection:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM selections WHERE tag = ?", (tag,))
+        row = cursor.fetchone()
+        if row is None:
+            raise NotASelection(tag)
+        data = json.loads(row[1])
+        specs = self.get_specs(ids=data["specs"])
+        final = testspec.finalize(specs)
+        selection = SpecSelection(specs=final, tag=data["tag"], filters=data["filters"])
+        selection._created_on = data["created_on"]
+        return selection
+
+    def get_selections(self) -> list[SpecSelection]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM selections")
+        rows = cursor.fetchall()
+        selections: list[SpecSelection] = []
+        for row in rows:
+            data = json.loads(row[1])
+            specs = self.get_specs(ids=data["specs"])
+            final = testspec.finalize(specs)
+            selection = SpecSelection(specs=final, tag=data["tag"], filters=data["filters"])
+            selection._created_on = data["created_on"]
+            selections.append(selection)
+        return selections
+
+    def delete_selection(self, tag: str) -> bool:
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("DELETE FROM selections WHERE tag = ?", (tag,))
+        self.connection.commit()
+        return True
+
+
+def stable_partition(
+    sequence: list[str], predicate: Callable[[str], bool]
+) -> tuple[list[str], list[str]]:
+    true: list[str] = []
+    false: list[str] = []
+    for item in sequence:
+        if predicate(item):
+            true.append(item)
+        else:
+            false.append(item)
+    return true, false
+
 
 class WorkspaceExistsError(Exception):
     pass
@@ -1052,3 +950,8 @@ class NotAWorkspaceError(Exception):
 
 class SpecNotFoundError(Exception):
     pass
+
+
+class NotASelection(Exception):
+    def __init__(self, tag):
+        super().__init__(f"No selection for tag {tag!r} found")

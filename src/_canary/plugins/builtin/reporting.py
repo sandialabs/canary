@@ -17,7 +17,6 @@ from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
 from ...util.banner import banner
-from ...util.string import pluralize
 from ...util.term import terminal_size
 from ...util.time import hhmmss
 from ..hookspec import hookimpl
@@ -25,7 +24,6 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...testcase import TestCase
-    from ...testspec import TestSpec
     from ...workspace import Session
 
 
@@ -164,31 +162,6 @@ def runtest_report_status(session: "Session") -> None:
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
         logger.log(logging.EMIT, file.getvalue(), extra={"prefix": ""})
-
-
-@hookimpl
-def canary_collectreport(specs: list["TestSpec"]) -> None:
-    excluded: list["TestSpec"] = []
-    for spec in specs:
-        if spec.mask:
-            excluded.append(spec)
-    n = len(specs) - len(excluded)
-    logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
-    if excluded:
-        n = len(excluded)
-        logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
-        reasons: dict[str | None, list["TestSpec"]] = {}
-        for spec in excluded:
-            if spec.mask:
-                reasons.setdefault(spec.mask, []).append(spec)
-        keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            n = len(reasons[key])
-            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
-            if config.getoption("show_excluded_tests"):
-                for spec in reasons[key]:
-                    logger.log(logging.EMIT, f"◦ {spec.display_name}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:

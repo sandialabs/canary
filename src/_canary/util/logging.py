@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # /Formatter
 #  Copyright NTESS. See COPYRIGHT file for details.
 #
@@ -402,3 +406,9 @@ def reset():
         fd = sys.stdin.fileno()
         save_tty_attr = termios.tcgetattr(fd)
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+
+
+def pager(text: str) -> None:
+    import pydoc
+
+    pydoc.ttypager(colorize(text))

@@ -32,7 +32,7 @@ class Add(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
-        if args.casespecs:
+        if args.specids:
             raise TypeError("Case specs incompatible with canary add")
         if args.runtag:
             raise TypeError("Tag name incompatible with canary add")

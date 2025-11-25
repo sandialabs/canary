@@ -13,6 +13,7 @@ from ..hookspec import hookimpl
 
 @hookimpl(wrapper=True)
 def canary_testcase_setup(case: TestCase) -> Generator[None, None, bool]:
+    case.workspace.create(exist_ok=True)
     if not config.getoption("dont_restage"):
         case.setup()
     yield

@@ -41,6 +41,7 @@ class Named(Protocol):
     family: str
     parameters: dict[str, Any]
     rparameters: dict[str, int]
+    attributes: dict[str, Any]
 
     @cached_property
     def file(self) -> Path: ...
@@ -154,6 +155,9 @@ class SpecCommons:
         if self.name == arg:
             return True
         return False
+
+    def set_attribute(self, **kwds: Any) -> None:
+        self.attrbutes.update(**kwds)
 
 
 @dataclasses.dataclass(frozen=True)

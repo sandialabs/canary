@@ -98,14 +98,6 @@ def canary_session_startup(session: "Session") -> None:
     entering the run test loop."""
 
 
-_impl_warning = "canary_session_start is deprecated and will be removed, use canary_session_startup"
-
-
-@hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
-def canary_session_start(session: "Session") -> None:
-    raise NotImplementedError
-
-
 @hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
@@ -140,66 +132,29 @@ def canary_statusreport(session: "Session") -> None:
     raise NotImplementedError
 
 
-@hookspec
-def canary_collectreport(specs: list["TestSpec"]) -> None:
-    raise NotImplementedError
-
-
 @hookspec(firstresult=True)
-def canary_discover_generators(
-    root: str, paths: list[str] | None
-) -> tuple[list["AbstractTestGenerator"], int]:
-    """Discover test cases in root
-
-    Args:
-      root: Search directory or path to single test file
-      paths: Test file paths relative to root
-
-    Returns:
-      list[AbstractTestGenerator]: list of generators found
-      int: number of parsing errors encountered
-
-    Notes:
-      - If ``root`` is the path to a file then ``paths`` will be ``None`` and a single test
-        generator will be returned.
-      - If ``paths`` is ``None``, then ``root`` should be searched recursively for any test
-        generators
-      - Otherwise, each ``path`` in ``paths`` is a file relative to ``root`` representing a test
-        generator
-
-    """
+def canary_generate(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["ResolvedSpec"]:
     raise NotImplementedError
 
 
 @hookspec
-def canary_testsuite_mask(
-    specs: list["ResolvedSpec"],
-    keyword_exprs: list[str],
-    parameter_expr: str,
-    owners: set[str],
-    regex: str | None,
-    ids: list[str] | None,
-) -> None:
-    """Filter test cases (mask test cases that don't meet a specific criteria)
-
-    Args:
-      keyword_exprs: Include those tests matching this keyword expressions
-      parameter_expr: Include those tests matching this parameter expression
-      start: The starting directory the python session was invoked in
-      case_specs: Include those tests matching these specs
-
-    """
+def canary_generate_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
 
 
 @hookspec
-def canary_testspec_modify(spec: list["ResolvedSpec"]) -> None:
-    """Modify the resolved test spec before the test case is created"""
-    ...
+def canary_generate_report(specs: list["ResolvedSpec"]) -> None: ...
 
 
 @hookspec
 def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
+
+
+@hookspec(firstresult=True)
+def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
@@ -296,7 +251,7 @@ def canary_collect_file_patterns() -> list[str]:
 
 
 @hookspec
-def canary_collect_filter_files(files: list[str]) -> None:
+def canary_collect_modifyitems(files: list[str]) -> None:
     """Filter tests we don't want to generate"""
     raise NotImplementedError
 
@@ -307,6 +262,19 @@ def canary_collect_skip_dirs() -> list[str]:
     raise NotImplementedError
 
 
-@hookspec(firstresult=True)
-def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
+@hookspec
+def canary_select(
+    specs: list["ResolvedSpec"],
+    keyword_exprs: list[str] | None,
+    parameter_expr: str | None,
+    owners: list[str] | None,
+    regex: str | None,
+    prefixes: list[str] | None,
+    ids: list[str] | None,
+) -> None:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_select_report(specs: list["TestSpec"]) -> None:
     raise NotImplementedError

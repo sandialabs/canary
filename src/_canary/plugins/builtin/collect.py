@@ -5,7 +5,7 @@ import fnmatch
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Generator
 
 from ... import config
@@ -14,119 +14,11 @@ from ...util import logging
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 from ..types import File
-from ..types import ScanPath
+
+if TYPE_CHECKING:
+    from ...generator import AbstractTestGenerator
 
 logger = logging.get_logger(__name__)
-
-
-class Collector:
-    errors: int = 0
-
-    @hookimpl(specname="canary_collect_generators")
-    def collect_from_directory(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
-        root = Path(scan_path.root)
-        if not root.is_dir():
-            return None
-        self.errors = 0
-        generators: list[AbstractTestGenerator] = []
-        if not scan_path.paths:
-            generators.extend(self.from_directory(root))
-        else:
-            for p in scan_path.paths:
-                if (root / p).is_file():
-                    if f := self.from_file(root, p):
-                        generators.append(f)
-                elif (root / p).is_dir():
-                    generators.extend(self.from_directory(root / p))
-                else:
-                    logger.warning(f"{root / p}: path does not exist")
-        if self.errors:
-            raise ValueError("Stopping due to previous errors")
-        return generators
-
-    @hookimpl(specname="canary_collect_generators")
-    def collect_from_vc(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
-        if scan_path.root.startswith(("git@", "repo@")):
-            generators = list(self.from_version_control(scan_path.root))
-            if self.errors:
-                raise ValueError("Stopping due to previous errors")
-            return generators
-
-    @hookimpl(specname="canary_collect_generators")
-    def collect_from_file(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
-        root = Path(scan_path.root)
-        if root.is_file():
-            try:
-                if f := self.from_file(root.parent, root.name):
-                    return [f]
-            except Exception as e:
-                raise ValueError(f"Failed to load {root}")
-
-    def from_file(self, root: Path, path: Path) -> AbstractTestGenerator | None:
-        hk = config.pluginmanager.hook
-        try:
-            if f := hk.canary_testcase_generator(root=str(root), path=str(path)):
-                return f
-        except Exception:
-            self.errors += 1
-            logger.exception(f"Failed to parse {path}")
-        return
-
-    def from_version_control(self, root: str) -> Generator[AbstractTestGenerator, None, None]:
-        """Find files in version control repository (only git supported)"""
-        type, _, root = root.partition("@")
-        if type not in ("git", "repo"):
-            raise TypeError("Unknown vc type {type!r}, choose from git, repo")
-        patterns: list[str] = config.pluginmanager.hook.canary_collect_file_patterns()
-        files = git_ls(root, patterns) if type == "git" else repo_ls(root, patterns)
-
-        files = filter_files(files)
-        return self.create_generators_from_files(root, files)
-
-    def from_directory(self, root: Path) -> list[AbstractTestGenerator]:
-        # Cache repeated values
-        skip_dirs = config.pluginmanager.hook.canary_collect_skip_dirs()
-        patterns = config.pluginmanager.hook.canary_collect_file_patterns()
-        root_str = str(root)
-        root_len = len(root_str) + 1  # for slicing to make relative paths fast
-
-        files: list[str] = []
-        for dirname, dirs, names in os.walk(root_str):
-            # Fast skip-dir check
-            basename = os.path.basename(dirname)
-            if basename in skip_dirs:
-                dirs[:] = ()
-                continue
-            for name in names:
-                for pattern in patterns:
-                    if fnmatch.fnmatchcase(name, pattern):
-                        file_path = f"{dirname}/{name}"
-                        # Fast path → relative path (avoid os.path.relpath)
-                        rel_path = file_path[root_len:]
-                        files.append(rel_path)
-                        break
-
-        files = filter_files(files)
-        return self.create_generators_from_files(root, files)
-
-    def create_generators_from_files(self, root, files):
-        all_files = [(root, file) for file in files]
-        with ProcessPoolExecutor() as ex:
-            futures = [ex.submit(generate_one, arg) for arg in all_files]
-            results = [f.result() for f in futures]
-        generators: list[AbstractTestGenerator] = []
-        for success, result in results:
-            if not success:
-                self.errors += 1
-            elif result is not None:
-                generators.append(result)
-        return generators
-
-
-def filter_files(files: list[str]) -> list[str]:
-    file_objs = [File(f) for f in files]
-    config.pluginmanager.hook.canary_collect_filter_files(files=file_objs)
-    return [str(file) for file in file_objs if not file.skip]
 
 
 @hookimpl(wrapper=True)
@@ -145,6 +37,118 @@ def canary_collect_skip_dirs() -> Generator[None, None, list[str]]:
     for items in result:
         default.update(items)
     return sorted(default)
+
+
+class Collector:
+    def __init__(self) -> None:
+        self._patterns: list[str] | None = None
+        self._skip_dirs: list[str] | None = None
+
+    def file_patterns(self) -> list[str]:
+        if self._patterns is None:
+            self._patterns = config.pluginmanager.hook.canary_collect_file_patterns()
+        assert self._patterns is not None
+        return self._patterns
+
+    def skip_dirs(self) -> list[str]:
+        if self._skip_dirs is None:
+            self._skip_dirs = config.pluginmanager.hook.canary_collect_skip_dirs()
+        assert self._skip_dirs is not None
+        return self._skip_dirs
+
+    def is_testfile(self, f: str) -> bool:
+        for pattern in self.file_patterns():
+            if fnmatch.fnmatchcase(f, pattern):
+                return True
+        return False
+
+    @hookimpl(wrapper=True)
+    def canary_collect(
+        self, root: str, paths: list[str]
+    ) -> Generator[None, None, list["AbstractTestGenerator"]]:
+        results = yield
+        files: list[File] = []
+        for result in results:
+            for f in result or []:
+                if not os.path.exists(f):
+                    logger.warning(f"{f}: file does not exist")
+                else:
+                    files.append(File(f))
+        config.pluginmanager.hook.canary_collect_modifyitems(files=files)
+        generators = self._create_generators_from_files(root, [f for f in files if not f.skip])
+        return generators
+
+    def _create_generators_from_files(
+        self, root: str, files: list[File]
+    ) -> list["AbstractTestGenerator"]:
+        errors = 0
+        root_len = len(root) + 1  # for slicing to make relative paths fast
+        all_files = [(root, file[root_len:]) for file in files]
+        with ProcessPoolExecutor() as ex:
+            futures = [ex.submit(generate_one, arg) for arg in all_files]
+            results = [f.result() for f in futures]
+        generators: list[AbstractTestGenerator] = []
+        for success, result in results:
+            if not success:
+                errors += 1
+            elif result is not None:
+                generators.append(result)
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+        return generators
+
+    @hookimpl(specname="canary_collect")
+    def collect_from_directory(self, root: str, paths: list[str]) -> list[str] | None:
+        if not os.path.isdir(root):
+            return None
+        elif not paths:
+            return self._from_directory(root=root)
+        files: list[str] = []
+        for p in paths:
+            path = os.path.join(root, p)
+            if os.path.isfile(path) and self.is_testfile(p):
+                files.append(path)
+            elif os.path.isdir(path):
+                files.extend(self._from_directory(path))
+            else:
+                logger.warning(f"{root}/{p}: path does not exist")
+        return files
+
+    @hookimpl(specname="canary_collect")
+    def collect_from_vc(self, root: str, paths: list[str]) -> list[str] | None:
+        if not root.startswith(("git@", "repo@")):
+            return None
+        # FIXME: what if paths
+        return self._from_version_control(root)
+
+    @hookimpl(specname="canary_collect")
+    def collect_from_file(self, root: str, paths: list[str]) -> list[str] | None:
+        if not paths and os.path.isfile(root) and self.is_testfile(root):
+            return [root]
+
+    def _from_version_control(self, root: str) -> list[str]:
+        """Find files in version control repository (only git supported)"""
+        type, _, root = root.partition("@")
+        if type not in ("git", "repo"):
+            raise TypeError("Unknown vc type {type!r}, choose from git, repo")
+        if type == "git":
+            return git_ls(root, self.file_patterns())
+        else:
+            return repo_ls(root, self.file_patterns())
+
+    def _from_directory(self, root: str) -> list[str]:
+        # Cache repeated values
+        files: list[str] = []
+        for dirname, dirs, names in os.walk(root):
+            # Fast skip-dir check
+            basename = os.path.basename(dirname)
+            if basename in self.skip_dirs():
+                dirs[:] = ()
+                continue
+            for name in names:
+                if self.is_testfile(name):
+                    files.append(os.path.join(dirname, name))
+        return files
 
 
 def git_ls(root: str, patterns: list[str]) -> list[str]:

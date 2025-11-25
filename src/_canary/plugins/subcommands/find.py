@@ -12,7 +12,7 @@ from typing import TextIO
 from ... import config
 from ...error import StopExecution
 from ...generator import AbstractTestGenerator
-from ...testspec import finalize
+from ...testspec import finalize as finalize_specs
 from ...third_party.colify import colified
 from ...third_party.color import colorize
 from ...util import graph
@@ -20,10 +20,8 @@ from ...util import logging
 from ...util.json_helper import json
 from ...util.term import terminal_size
 from ...util.time import hhmmss
-from ...workspace import generate_specs
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ..types import ScanPath
 from .common import PathSpec
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -61,40 +59,50 @@ class Find(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         generators: list["AbstractTestGenerator"] = []
-        hook = config.pluginmanager.hook.canary_collect_generators
+        hook = config.pluginmanager.hook
         for root, paths in args.paths.items():
-            p = ScanPath(root=root, paths=paths)
-            generators.extend(hook(scan_path=p))
-        specs = generate_specs(generators=generators, on_options=args.on_options)
+            fs_root = root if "@" not in root else root.partition("@")[-1]
+            pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
+            generators.extend(hook.canary_collect(root=root, paths=paths or []))
+            pm.done()
 
-        config.pluginmanager.hook.canary_testsuite_mask(
-            specs=specs,
+        pm = logger.progress_monitor("@*{Generating} test specs")
+        resolved = config.pluginmanager.hook.canary_generate(
+            generators=generators, on_options=args.on_options
+        )
+        pm.done()
+
+        pm = logger.progress_monitor("@*{Modifying} specs")
+        config.pluginmanager.hook.canary_select(
+            specs=resolved,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             owners=None if not args.owners else set(args.owners),
             regex=args.regex_filter,
+            prefixes=None,
             ids=None,
         )
+        pm.done()
+
         quiet = bool(args.print_files)
-        specs_to_run = [spec for spec in specs if not spec.mask]
-        if not specs_to_run:
+        final = finalize_specs([spec for spec in resolved if not spec.mask])
+        if not final:
             raise StopExecution("No tests to run", 7)
-        final = finalize(specs)
-        config.pluginmanager.hook.canary_collectreport(specs=final)
-        specs_to_run.sort(key=lambda x: x.name)
+        config.pluginmanager.hook.canary_select_report(specs=final)
+        final.sort(key=lambda x: x.name)
         if args.print_paths:
-            pprint_paths(specs_to_run)
+            pprint_paths(final)
         elif args.print_files:
-            pprint_files(specs_to_run)
+            pprint_files(final)
         elif args.print_graph:
-            pprint_graph(specs_to_run)
+            pprint_graph(final)
         elif args.print_lock:
             file = Path(config.invocation_dir) / "testspecs.lock"
-            states = [spec.asdict() for spec in specs_to_run]
+            states = [spec.asdict() for spec in final]
             file.write_text(json.dumps({"testspecs": states}, indent=2))
             logger.info("test specs written to testspec.lock")
         else:
-            pprint(specs_to_run)
+            pprint(final)
         return 0
 
 

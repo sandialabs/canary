@@ -6,6 +6,7 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
+from ...util import logging
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -32,18 +33,17 @@ class Info(CanarySubcommand):
             text = self.get_tag_info(args.tag)
         else:
             text = self.get_workspace_info()
-        print(text)
+        logging.pager(text)
         return 0
 
     def get_tag_info(self, tag: str) -> str:
         workspace = Workspace.load()
-        info = workspace.tag_info(tag)
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
         selection = workspace.get_selection(tag)
         fh.write(f"Selected on: {selection.created_on}\n")
         fh.write("Selection filters:\n")
-        for key, value in info.items():
+        for key, value in selection.filters.items():
             fh.write(f"  • {key}: {value}\n")
         fh.write("Test specs:\n")
         for spec in selection.specs:
