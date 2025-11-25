@@ -82,8 +82,9 @@ class Collector:
         self, root: str, files: list[File]
     ) -> list["AbstractTestGenerator"]:
         errors = 0
-        root_len = len(root) + 1  # for slicing to make relative paths fast
-        all_files = [(root, file[root_len:]) for file in files]
+        fs_root = root if "@" not in root else root.partition("@")[-1]
+        root_len = len(fs_root) + 1  # for slicing to make relative paths fast
+        all_files = [(fs_root, file[root_len:]) for file in files]
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(generate_one, arg) for arg in all_files]
             results = [f.result() for f in futures]
@@ -163,7 +164,7 @@ def git_ls(root: str, patterns: list[str]) -> list[str]:
         *gitified_patterns,
     ]
     cp = subprocess.run(args, capture_output=True, text=True)
-    return [f.strip() for f in cp.stdout.split("\n") if f.split()]
+    return [os.path.join(root, f.strip()) for f in cp.stdout.split("\n") if f.split()]
 
 
 def repo_ls(root: str, patterns: list[str]) -> list[str]:
@@ -174,9 +175,9 @@ def repo_ls(root: str, patterns: list[str]) -> list[str]:
         for p in paths:
             proj_files = git_ls(p, patterns)
             if p == ".":
-                files.extend(proj_files)
+                files.extend(os.path.join(root, proj_files))
             else:
-                files.extend([f"{p}/{f}" for f in proj_files])
+                files.extend([os.path.join(root, p, f) for f in proj_files])
     return files
 
 
