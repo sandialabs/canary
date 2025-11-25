@@ -532,8 +532,13 @@ class TestCase:
         else:
             cache = json.loads(file.read_text())["cache"]
         history = cache.setdefault("history", {})
-        dt = datetime.datetime.fromisoformat(self.timekeeper.started_on)
-        history["last_run"] = dt.strftime("%c")
+        dt = (
+            datetime.datetime.fromisoformat(self.timekeeper.started_on)
+            if self.timekeeper.started_on != "NA"
+            else None
+        )
+        if dt != None:
+            history["last_run"] = dt.strftime("%c")
         name = "pass" if self.status.name == "SUCCESS" else self.status.name.lower()
         history[name] = history.get(name, 0) + 1
         if self.timekeeper.duration >= 0 and self.status.name in (
