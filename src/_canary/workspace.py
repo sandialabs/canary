@@ -750,22 +750,41 @@ class WorkspaceDatabase:
         rows = cursor.fetchall()
         return self._reconstruct_specs(rows)
 
-    def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
-        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+    def _get_specs_by_exact_id(self, exact: list[str]) -> list[Any]:
+        rows = list()
+        cursor = self.connection.cursor()
+        base_query = "SELECT * FROM specs WHERE id IN"
+        if exact:
+            while rem := len(exact) > 0:
+                nvar = min(900, rem)
+                placeholders = ",".join(["?"] * nvar)
+                query = f"{base_query} ({placeholders})"
+                cursor.execute(query, exact[:nvar])
+                rows.extend(cursor.fetchall())
+                exact = exact[nvar:]
+        return rows
+
+    def _get_specs_by_partial_id(self, partial: list[str]) -> list[Any]:
+        rows = list()
+        cursor = self.connection.cursor()
+        base_query = "SELECT * FROM specs WHERE"
         clauses: list[str] = []
         params: list[str] = []
-        if exact:
-            placeholders = ",".join(["?"] * len(exact))
-            clauses.append(f"id IN ({placeholders})")
-            params.extend(exact)
-        for p in partial:
-            clauses.append("id LIKE ?")
-            params.append(f"{p}%")
-        where = " OR ".join(clauses)
-        query = f"SELECT * FROM specs WHERE {where}"  # nosec B608
-        cursor = self.connection.cursor()
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
+        if partial:
+            if len(partial) > 900:
+                raise ValueError("Too many partial IDs")
+            for p in partial:
+                clauses.append("id LIKE ?")
+                params.append(f"{p}%")
+            query = f"{base_query} {" OR ".join(clauses)}"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return rows
+
+    def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
+        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+        rows = self._get_specs_by_exact_id(exact)
+        rows.extend(self._get_specs_by_partial_id(partial))
         return self._reconstruct_specs(rows)
 
     def _get_specs_by_id_and_signature(
