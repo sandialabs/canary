@@ -276,5 +276,9 @@ def canary_select(
 
 
 @hookspec
+def canary_select_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
+
+
+@hookspec
 def canary_select_report(specs: list["TestSpec"]) -> None:
     raise NotImplementedError

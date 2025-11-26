@@ -71,6 +71,16 @@ class SpecCommons:
     def fullname(self: Named) -> str:
         return str(self.file_path.parent / self.name)
 
+    @property
+    def execpath(self: Named) -> str:
+        if p := self.attributes.get("execpath"):
+            return p
+        return str(self.file_path.parent / self.name)
+
+    @execpath.setter
+    def execpath(self: Named, arg: str) -> None:
+        self.attributes["execpath"] = arg
+
     @cached_property
     def display_name(self: Named) -> str:
         name = self.family
@@ -156,8 +166,11 @@ class SpecCommons:
             return True
         return False
 
-    def set_attribute(self, **kwds: Any) -> None:
-        self.attrbutes.update(**kwds)
+    def set_attribute(self, name: str, value: Any) -> None:
+        self.attributes[name] = value
+
+    def set_attributes(self, **kwds: Any) -> None:
+        self.attributes.update(**kwds)
 
 
 @dataclasses.dataclass(frozen=True)

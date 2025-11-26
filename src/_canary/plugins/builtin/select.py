@@ -38,6 +38,7 @@ def canary_select(
 
     """
     yield
+    config.pluginmanager.hook.canary_select_modifyitems(specs=specs)
     masking.propagate_masks(specs)  # ty: ignore[invalid-argument-type]
     return
 

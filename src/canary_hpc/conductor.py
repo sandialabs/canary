@@ -165,12 +165,15 @@ class CanaryHPCConductor:
                 "No test batches generated (this should never happen, "
                 "the default batching scheme should have been used)"
             )
+        if missing := {c.id for c in cases} - {c.id for batch in specs for c in batch.cases}:
+            raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
+
         fmt = "@*{Generated} %d batch specs from %d test cases"
         logger.info(fmt % (len(specs), len(cases)))
         root = cases[0].workspace.root.parent / "canary-hpc"
         batches: list[TestBatch] = []
         for spec in specs:
-            path = f"batches/{spec.id[:2]}/{spec.id[2:]}"
+            path = f"batches/{spec.id[:8]}"
             workspace = ExecutionSpace(
                 root=root, path=Path(path), session=cases[0].workspace.session
             )

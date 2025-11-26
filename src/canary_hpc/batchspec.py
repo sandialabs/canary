@@ -103,7 +103,7 @@ class TestBatch:
         return len(self.cases)
 
     def __str__(self) -> str:
-        return f"batch[id={self.id[:7]}]"
+        return f"batch[id={self.id[:8]}]"
 
     def __repr__(self) -> str:
         case_repr: str
@@ -239,13 +239,13 @@ class TestBatch:
         self.status.set(status, message=message, code=code)
 
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
-        logger.debug(f"Running batch {self.id[:7]}")
+        logger.debug(f"Running batch {self.id[:8]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
         rc = -1
         try:
-            logger.debug(f"Submitting batch {self.id[:7]}")
+            logger.debug(f"Submitting batch {self.id[:8]}")
             with self.timekeeper.timeit():
                 rc = runner.execute(self)
         finally:
@@ -261,7 +261,7 @@ class TestBatch:
                     case.status.set("CANCELLED")
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
-            logger.debug("Batch @*b{%s}: batch exited with code %d" % (self.id[:7], rc))
+            logger.debug("Batch @*b{%s}: batch exited with code %d" % (self.id[:8], rc))
 
         return
 

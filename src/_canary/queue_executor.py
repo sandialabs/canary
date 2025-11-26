@@ -239,10 +239,6 @@ class ResourceQueueExecutor:
         for pid in finished_pids:
             slot = self.inflight.pop(pid)
 
-            # Get measurements and store in job
-            measurements = slot.proc.get_measurements()
-            slot.job.measurements.update(measurements)
-
             # Get the final result before cleaning up
             result = None
             try:
@@ -258,6 +254,10 @@ class ResourceQueueExecutor:
                 slot.job.set_status(
                     "ERROR", message=f"No result found for job {slot.job} (pid {pid})"
                 )
+
+            # Get measurements and store in job
+            measurements = slot.proc.get_measurements()
+            slot.job.measurements.update(measurements)
             slot.job.save()
 
             try:

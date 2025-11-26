@@ -15,6 +15,7 @@ import tokenize
 from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
 from typing import Generator
@@ -25,6 +26,9 @@ from _canary.plugins.builtin.pyt import PYTTestGenerator
 from _canary.util import string
 
 from . import scalar
+
+if TYPE_CHECKING:
+    pass
 
 logger = canary.get_logger(__name__)
 

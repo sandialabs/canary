@@ -146,7 +146,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
                 args.extend(a)
             if a := case.get_attribute("script_args"):
                 args.extend(a)
-            case.set_attribute(command=shlex.join(args))
+            case.set_attribute("command", shlex.join(args))
             try:
                 stdout = open(case.stdout, "a")
                 if case.stderr is None:
@@ -234,7 +234,7 @@ class PythonRunpyExecutionPolicy(ExecutionPolicy):
 
     def execute(self, case: "TestCase") -> int:
         logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
-        case.set_attribute(command=shlex.join(sys.argv))
+        case.set_attribute("command", shlex.join(sys.argv))
         with self.context(case):
             runpy.run_path(case.spec.file.name, run_name="__main__")
         logger.debug(f"Finished {case.fullname}")

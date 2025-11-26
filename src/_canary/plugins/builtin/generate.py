@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from typing import TYPE_CHECKING
+from typing import Generator
 
 from ... import config
 from ...testspec import resolve as resolve_specs
@@ -19,10 +20,10 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@hookimpl
+@hookimpl(wrapper=True)
 def canary_generate(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["ResolvedSpec"]:
+) -> Generator[None, None, list["ResolvedSpec"]]:
     """Generate (lock) test specs from generators
 
     Args:
@@ -32,6 +33,15 @@ def canary_generate(
         A list of test specs
 
     """
+    specs = yield
+    config.pluginmanager.hook.canary_generate_modifyitems(specs=specs)
+    return specs
+
+
+@hookimpl(specname="canary_generate")
+def default_generate(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["ResolvedSpec"]:
     pm = logger.progress_monitor("@*{Generating} test specs")
     locked: list[list["DraftSpec"]] = []
     if config.get("debug"):

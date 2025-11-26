@@ -19,9 +19,7 @@ from .testspec import select_sygil
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import write_directory_tag
-from .util.graph import reachable_nodes
 from .util.graph import static_order
-from .util.masking import propagate_masks
 from .util.returncode import compute_returncode
 
 if TYPE_CHECKING:
@@ -88,9 +86,15 @@ class Session:
         lookup: dict[str, TestCase] = {}
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.fullname, session=self.name)
+            space = ExecutionSpace(root=self.work_dir, path=spec.execpath, session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
+            if case.mask:
+                raise ValueError(
+                    f"{case}: mask changed unexpectedly.  "
+                    f"Masks should be updated by canary_select_modifyitems"
+                )
             self._cases.append(case)
 
         # Dump a snapshot of the configuration used to create this session
@@ -138,23 +142,18 @@ class Session:
         for i, id in enumerate(ids):
             ids[i] = find(id)
 
-    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
+    def load_testcases(self) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
         specs = self.selection.specs
         graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
-        if ids:
-            self.resolve_root_ids(ids)
-            reachable = reachable_nodes(graph, ids)
-            graph = {id: graph[id] for id in reachable}
         map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
         lookup: dict[str, "TestCase"] = {}
         ts = TopologicalSorter(graph)
-        changed: bool = False
         pm = logger.progress_monitor("@*{Loading} test cases into session")
         for id in ts.static_order():
             spec = map[id]
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.fullname, session=self.name)
+            space = ExecutionSpace(root=self.work_dir, path=spec.execpath, session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             f = case.workspace.dir / "testcase.lock"
             if f.exists():
@@ -167,18 +166,9 @@ class Session:
                 case.timekeeper.started_on = data["timekeeper"]["started_on"]
                 case.timekeeper.finished_on = data["timekeeper"]["finished_on"]
                 case.timekeeper.duration = data["timekeeper"]["duration"]
-                case.mask = data.get("mask", None)
             lookup[case.spec.id] = case
-            if case.mask:
-                changed = True
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         cases = list(lookup.values())
-        if ids:
-            for case in cases:
-                if case.id not in ids:
-                    case.mask = "Case not found in explicit spec ids"
-                    changed = True
-        if changed:
-            propagate_masks(cases)
         pm.done()
         return cases
 
@@ -201,16 +191,14 @@ class Session:
             changed = False
             for case in cases:
                 case.status.set("PENDING")
-                config.pluginmanager.hook.canary_testcase_modify(case=case)
-                if case.mask:
-                    changed = True
-            if changed:
-                propagate_masks(cases)
             final = [case for case in cases if not case.mask]
             os.chdir(str(self.work_dir))
             config.pluginmanager.hook.canary_runtests(cases=final)
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
+        except Exception:
+            logger.exception("Unhandled exception in runtests")
+            raise
         finally:
             finished_on = datetime.datetime.now()
             os.chdir(starting_dir)

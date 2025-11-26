@@ -69,7 +69,6 @@ class TestCase:
         # Transfer some attributes from spec to me
         self.id = self.spec.id
         self.exclusive = self.spec.exclusive
-        self.mask = self.spec.mask
         self.name = self.spec.name
         self.family = self.spec.family
         self.timeout = self.spec.timeout
@@ -90,6 +89,11 @@ class TestCase:
 
     def __repr__(self) -> str:
         return self.spec.display_name
+
+    @property
+    def mask(self) -> str:
+        # Case mask is a read only property
+        return self.spec.mask
 
     def display_name(self, **kwargs) -> str:
         name = self.spec.display_name
@@ -126,8 +130,11 @@ class TestCase:
         name = str(self.workspace.path.parent / self.spec.display_name)
         return "@*%s{%s %s} %s\n" % (color, glyph, status_name, name)
 
-    def set_attribute(self, **kwds: Any) -> None:
-        self.spec.attributes.update(kwds)
+    def set_attribute(self, name: str, value: Any) -> None:
+        self.spec.set_attribute(name, value)
+
+    def set_attributes(self, **kwds: Any) -> None:
+        self.spec.set_attributes(**kwds)
 
     def get_attribute(self, name: str, default: None = None, /) -> None | Any:
         return self.spec.attributes.get(name, default)
@@ -417,6 +424,7 @@ class TestCase:
 
     def save(self) -> None:
         record = self.asdict()
+        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         self.lockfile.write_text(json.dumps(record, indent=2))
 
     def asdict(self) -> dict[str, dict]:

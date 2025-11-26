@@ -35,6 +35,29 @@ def canary_testcase_modify(case: "canary.TestCase") -> None:
 
 
 @canary.hookimpl
+def canary_generate_modifyitems(specs: list["canary.ResolvedSpec"]) -> None:
+    for spec in specs:
+        if spec.file_path.suffix != ".vvt":
+            continue
+        set_vvtest_execpath(spec)
+
+
+def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
+    """Set the execpath of the case
+
+    In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
+    ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
+    parameter is used for constructing execution path
+    """
+    getstr = lambda v: getattr(v, "string", str(v))
+    parts = [f"{p}={getstr(spec.parameters[p])}" for p in sorted(spec.parameters.keys())]
+    name = spec.family
+    if parts:
+        name = "%s.%s" % (name, ".".join(parts))
+    spec.execpath = str(spec.file_path.parent / name)  # ty: ignore [invalid-assignment]
+
+
+@canary.hookimpl
 def canary_testcase_setup(case: "canary.TestCase") -> None:
     if case.spec.file_path.suffix == ".vvt":
         with canary.filesystem.working_dir(case.workspace.dir):

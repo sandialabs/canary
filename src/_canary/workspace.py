@@ -29,6 +29,7 @@ from .util.filesystem import filesystem_root
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
+from .util.graph import reachable_nodes
 from .util.graph import static_order
 
 logger = logging.get_logger(__name__)
@@ -55,6 +56,8 @@ class SpecSelection:
         text = json.dumps(meta)
         self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
+        if any(spec.mask for spec in self.specs):
+            raise ValueError("SpecSelection expects only unmasked specs")
 
     @property
     def sha256(self) -> str:
@@ -385,30 +388,16 @@ class Workspace:
         logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
-    def resolve_root_ids(self, ids: list[str], graph: dict[str, list[str]]) -> None:
-        """Expand ids to full IDs.  ids is a spec ID, or partial ID, and can be preceded by /"""
-
-        def find(id: str) -> str:
-            sygil = testspec.select_sygil
-            if id in graph:
-                return id
-            for node in graph:
-                if node.startswith(id):
-                    return node
-                elif id.startswith(sygil) and node.startswith(id[1:]):
-                    return node
-            raise SpecNotFoundError(id)
-
-        for i, id in enumerate(ids):
-            ids[i] = find(id)
-
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
         lookup: dict[str, TestCase] = {}
-        specs = self.db.get_specs(ids=ids)
-        latest = self.db.get_results(ids=ids)
+        reachable: list[str] | None = None
+        if ids:
+            reachable = self.db.reachable_spec_ids(ids)
+        specs = self.db.get_specs(ids=reachable)
+        latest = self.db.get_results(ids=reachable)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -427,6 +416,7 @@ class Workspace:
                 case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
                 case.timekeeper.duration = mine["timekeeper"]["duration"]
                 lookup[spec.id] = case
+                config.pluginmanager.hook.canary_testcase_modify(case=case)
         if ids:
             return [case for case in lookup.values() if case.id in ids]
         return list(lookup.values())
@@ -614,11 +604,9 @@ class Workspace:
             return self.find_testcase(case)
 
     def find_testcase(self, root: str) -> TestCase:
-        data = self.db.get_specs([root])
-        if data:
-            cases = self.load_testcases([data[0].id])
-            if cases:
-                return cases[0]
+        id = self.db.resolve_spec_id(root)
+        if id is not None:
+            return self.load_testcases([id])[0]
         # Do the full (slow) lookup
         cases = self.load_testcases()
         for case in cases:
@@ -727,6 +715,47 @@ class WorkspaceDatabase:
         )
         self.connection.commit()
 
+    def reachable_spec_ids(self, ids: list[str]) -> list[str]:
+        graph = self.get_dependency_graph()
+        self.resolve_spec_ids(ids)
+        return reachable_nodes(graph, ids)
+
+    def resolve_spec_id(self, id: str) -> str | None:
+        if id.startswith(testspec.select_sygil):
+            id = id[1:]
+        cursor = self.connection.cursor()
+        try:
+            hi = increment_hex_prefix(id)
+        except ValueError:
+            return None
+        if hi is None:
+            return None
+        cursor.execute("SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi))
+        rows = cursor.fetchall()
+        if len(rows) == 0:
+            return None
+        elif len(rows) > 1:
+            raise ValueError(f"Ambiguous spec ID {id!r}")
+        return rows[0][0]
+
+    def resolve_spec_ids(self, ids: list[str]):
+        """Given partial spec IDs in ``ids``, expand them to their full size"""
+        cursor = self.connection.cursor()
+        for i, id in enumerate(ids):
+            if id.startswith(testspec.select_sygil):
+                id = id[1:]
+            if len(id) >= 64:
+                continue
+            hi = increment_hex_prefix(id)
+            assert hi is not None
+            cursor.execute("SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi))
+            rows = cursor.fetchall()
+            if len(rows) == 0:
+                raise ValueError(f"No match for spec ID {id!r}")
+            elif len(rows) > 1:
+                raise ValueError(f"Ambiguous spec ID {id!r}")
+            ids[i] = rows[0][0]
+
     def get_specs(
         self, ids: list[str] | None = None, signature: str | None = None
     ) -> list[ResolvedSpec]:
@@ -781,15 +810,19 @@ class WorkspaceDatabase:
         return rows
 
     def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
-        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+        self.resolve_spec_ids(ids)
+        graph = self.get_dependency_graph()
+        reachable = reachable_nodes(graph, ids)
+        exact, partial = stable_partition(reachable, predicate=lambda x: len(x) >= 64)
         rows = self._get_specs_by_exact_id(exact)
         rows.extend(self._get_specs_by_partial_id(partial))
-        return self._reconstruct_specs(rows)
+        specs = self._reconstruct_specs(rows)
+        return [spec for spec in specs if spec.id in ids]
 
-    def _get_specs_by_id_and_signature(
-        self, ids: list[str], signature: str | None = None
-    ) -> list[ResolvedSpec]:
-        exact, partial = stable_partition(ids, predicate=lambda x: len(x) >= 64)
+    def _get_specs_by_id_and_signature(self, ids: list[str], signature: str) -> list[ResolvedSpec]:
+        graph = self.get_dependency_graph()
+        reachable = reachable_nodes(graph, ids)
+        exact, partial = stable_partition(reachable, predicate=lambda x: len(x) >= 64)
         clauses: list[str] = []
         params: list[str] = []
         if exact:
@@ -804,11 +837,12 @@ class WorkspaceDatabase:
         cursor = self.connection.cursor()
         cursor.execute(query, (signature, *params))
         rows = cursor.fetchall()
-        return self._reconstruct_specs(rows)
+        specs = self._reconstruct_specs(rows)
+        return [spec for spec in specs if spec.id in ids]
 
     def _reconstruct_specs(self, rows: list[list]) -> list[TestSpec]:
         data = {id: json.loads(data) for id, _, data in rows}
-        graph = {id: [_["id"] for _ in d["dependencies"]] for id, d in data.items()}
+        graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
         lookup: dict[str, ResolvedSpec] = {}
         ts = TopologicalSorter(graph)
         for id in ts.static_order():
@@ -956,6 +990,18 @@ def stable_partition(
         else:
             false.append(item)
     return true, false
+
+
+def increment_hex_prefix(prefix: str) -> str | None:
+    try:
+        value = int(prefix, 16)
+    except ValueError:
+        raise ValueError(f"Ivalid hex prefix: {prefix!r}") from None
+    max_value = (1 << (4 * len(prefix))) - 1
+    if value == max_value:
+        logger.warning("No valid upper bound - prefix overflow")
+        return None
+    return f"{value + 1:0{len(prefix)}x}"
 
 
 class WorkspaceExistsError(Exception):
