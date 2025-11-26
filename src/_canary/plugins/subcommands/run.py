@@ -133,7 +133,7 @@ class Run(CanarySubcommand):
                 cases = filter_cases_by_keyword(cases, args.keyword_exprs)
             with workspace.session(name=cases[0].workspace.session) as session:
                 try:
-                    results = session.run(roots=[case.id for case in cases])
+                    results = session.run(ids=[case.id for case in cases])
                 finally:
                     if results:
                         workspace.add_session_results(results)
