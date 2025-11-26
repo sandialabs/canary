@@ -35,6 +35,21 @@ class PathSpec(argparse.Action):
 
     """
 
+    _file_patterns: list[str] = []
+
+    def _is_test_file(self, arg: str) -> bool:
+        from .... import config
+        from ...types import Collector
+
+        if not self._file_patterns:
+            collector = Collector()
+            config.pluginmanager.hook.canary_collectstart(collector=collector)
+            self._file_patterns.extend(collector.file_patterns)
+        for pattern in self._file_patterns:
+            if fnmatch.fnmatchcase(arg, pattern):
+                return True
+        return False
+
     def __call__(self, parser, namespace, values, option_string=None):
         """When this function call exits, the following variables will be set on ``namespace``:
 
@@ -88,7 +103,7 @@ class PathSpec(argparse.Action):
                 namespace.runtag = path
             elif workspace is not None and workspace.inside_view(path):
                 namespace.start = os.path.abspath(path)
-            elif os.path.isfile(path) and is_test_file(path):
+            elif os.path.isfile(path) and self._is_test_file(path):
                 abspath = os.path.abspath(path)
                 root, name = os.path.split(abspath)
                 namespace.paths.setdefault(root, []).append(name)
@@ -251,16 +266,6 @@ def code(arg: str) -> str:
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"``{arg}``"
     return colorize("@*{%s}" % arg)
-
-
-def is_test_file(arg: str) -> bool:
-    from .... import config
-
-    patterns = config.pluginmanager.hook.canary_collect_file_patterns()
-    for pattern in patterns:
-        if fnmatch.fnmatchcase(arg, pattern):
-            return True
-    return False
 
 
 def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:

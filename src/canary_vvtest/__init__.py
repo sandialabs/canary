@@ -16,8 +16,8 @@ logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
-def canary_collect_file_patterns() -> list[str]:
-    return ["*.vvt"]
+def canary_collectstart(collector) -> None:
+    collector.add_file_patterns("*.vvt")
 
 
 @canary.hookimpl

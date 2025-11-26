@@ -64,7 +64,7 @@ class Session:
         self._selection = None
 
     @staticmethod
-    def is_session(path: Path) -> Path | None:
+    def is_session(path: Path) -> bool:
         return (path / session_tag).exists()
 
     @classmethod
@@ -188,7 +188,6 @@ class Session:
         try:
             started_on = datetime.datetime.now()
             starting_dir = os.getcwd()
-            changed = False
             for case in cases:
                 case.status.set("PENDING")
             final = [case for case in cases if not case.mask]
