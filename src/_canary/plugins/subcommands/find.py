@@ -17,12 +17,12 @@ from ...third_party.colify import colified
 from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
-from ...util.filesystem import filesystem_root
 from ...util.json_helper import json
 from ...util.term import terminal_size
 from ...util.time import hhmmss
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
+from ..types import Collector
 from .common import PathSpec
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -59,13 +59,13 @@ class Find(CanarySubcommand):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
-        generators: list["AbstractTestGenerator"] = []
-        hook = config.pluginmanager.hook
+        collector = Collector()
         for root, paths in args.paths.items():
-            fs_root = filesystem_root(root)
-            pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
-            generators.extend(hook.canary_collect(root=root, paths=paths or []))
-            pm.done()
+            collector.add_scanpaths(root, paths)
+        pm = logger.progress_monitor("@*{Collecting} test generators")
+        hook = config.pluginmanager.hook
+        generators: list["AbstractTestGenerator"] = hook.canary_collect(collector=collector)
+        pm.done()
 
         pm = logger.progress_monitor("@*{Generating} test specs")
         resolved = config.pluginmanager.hook.canary_generate(

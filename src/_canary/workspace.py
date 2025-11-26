@@ -17,6 +17,7 @@ from . import config
 from . import testspec
 from . import when
 from .generator import AbstractTestGenerator
+from .plugins.types import Collector
 from .session import Session
 from .session import SessionResults
 from .testcase import TestCase
@@ -374,7 +375,9 @@ class Workspace:
         for root, paths in scan_paths.items():
             fs_root = filesystem_root(root)
             pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
-            generators.extend(config.pluginmanager.hook.canary_collect(root=root, paths=paths))
+            collector = Collector()
+            collector.add_scanpaths(root, paths)
+            generators.extend(config.pluginmanager.hook.canary_collect(collector=collector))
             pm.done()
         self.db.put_generators(generators)
         # Invalidate caches

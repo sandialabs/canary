@@ -1003,8 +1003,8 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 
 @hookimpl
-def canary_collect_file_patterns() -> list[str]:
-    return ["*.pyt", "canary_*.py"]
+def canary_collectstart(collector) -> None:
+    collector.add_file_patterns("*.pyt", "canary_*.py")
 
 
 @hookimpl

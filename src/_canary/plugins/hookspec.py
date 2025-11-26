@@ -25,8 +25,8 @@ if TYPE_CHECKING:
     from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager
+    from .types import Collector
     from .types import Result
-    from .types import ScanPath
 
 
 project_name = "canary"
@@ -34,38 +34,63 @@ hookspec = pluggy.HookspecMarker(project_name)
 hookimpl = pluggy.HookimplMarker(project_name)
 
 
-@hookspec(firstresult=True)
-def canary_testcase_generator(
-    root: str, path: str | None
-) -> "AbstractTestGenerator | Type[AbstractTestGenerator]":
-    """Returns an implementation of AbstractTestGenerator"""
-    raise NotImplementedError
+# -------------------------------------------------------------------------
+# Initialization hooks
+# -------------------------------------------------------------------------
 
 
-@hookspec(firstresult=True)
-def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
-    """Returns an implementation of AbstractTestGenerator"""
-    raise NotImplementedError
+@hookspec
+def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
+    """Called at plugin registration time to allow adding new hooks via a call to
+    ``pluginmanager.add_hookspecs(module_or_class, prefix)``.
+
+    Args:
+      pluginmanager: The canary plugin manager.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    """
 
 
 @hookspec
 def canary_addoption(parser: "Parser") -> None:
-    """Register new command line options or modify existing ones."""
+    """Register argparse options, called once at the beginning of a test run.
+
+    Args:
+      parser: To add command line options, call
+        :py:func:`parser.add_argument(...) <config.argparsing.Parser.add_argument>`.
+
+    Options can later be accessed through the :py:class:`config <canary.Config>` object:
+
+    - :py:func:`config.getoption(name) <canary.Config.getoption>` to
+      retrieve the value of a command line option.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    """
 
 
 @hookspec
 def canary_addcommand(parser: "Parser") -> None:
     """Add a subcommand to Canary
 
+    Args:
+      parser: To add a command, call
+        :py:func:`parser.add_command(...) <config.argparsing.Parser.add_command>`.
+
+    .. note::
+        The command should be a subclass of :py:class:`canary.CanarySubcommand`
+
     Example:
 
     .. code-block:: python
 
        import argparse
+       import canary
 
-       from canary import plugins
-
-       class MyCommand(CanarySubcommand):
+       class MyCommand(canary.CanarySubcommand):
            name = "my-command"
            description = "my-command description"
 
@@ -84,12 +109,119 @@ def canary_addcommand(parser: "Parser") -> None:
 
 @hookspec
 def canary_subcommand() -> CanarySubcommand:
+    """DEPRECATED: use canary_addcommand"""
     raise NotImplementedError
 
 
 @hookspec
 def canary_configure(config: "CanaryConfig") -> None:
-    """Perform custom configuration of the test environment"""
+    """Allow plugins to perform initial configuration.
+
+    This hook is called for every plugin and after command line options have been parsed.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    Args:
+      config: The canary config object.
+
+    """
+
+
+# -------------------------------------------------------------------------
+# collection hooks
+# -------------------------------------------------------------------------
+@hookspec(firstresult=True)
+def canary_collect(collector: "Collector") -> list["AbstractTestGenerator"]:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collectstart(collector: "Collector") -> None:
+    """Start collection.
+
+    Args:
+      collector: To add file patterns to the collector call
+      :py:func:`collector.add_file_patterns(...) <Collector.add_file_patterns>`.  To add directory
+      names to skip call :py:func:`collector.add_skip_dirs(...) <Collector.add_skip_dirs>`.
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_collectitems(collector: "Collector") -> None:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_modifyitems(collector: "Collector") -> None:
+    """Filter tests we don't want to generate"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_testcase_generator(
+    root: str, path: str | None
+) -> "AbstractTestGenerator | Type[AbstractTestGenerator]":
+    """Returns an implementation of AbstractTestGenerator"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
+    """DEPRECATED: Use canary_testcase_generator"""
+    raise NotImplementedError
+
+
+# -------------------------------------------------------------------------
+# generation hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec(firstresult=True)
+def canary_generate(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["ResolvedSpec"]:
+    """Perform the generation phase
+
+    The default generation phase is this:
+
+    1. Starting from ``session`` as the initial collector:
+
+      1. ``pytest_collectstart(collector)``
+      2. ``report = pytest_make_collect_report(collector)``
+      3. ``pytest_exception_interact(collector, call, report)`` if an interactive exception occurred
+      4. For each collected node:
+
+        1. If an item, ``pytest_itemcollected(item)``
+        2. If a collector, recurse into it.
+
+      5. ``pytest_collectreport(report)``
+
+    2. ``pytest_collection_modifyitems(session, config, items)``
+
+      1. ``pytest_deselected(items)`` for any deselected items (may be called multiple times)
+
+    3. ``pytest_collection_finish(session)``
+    4. Set ``session.items`` to the list of collected items
+    5. Set ``session.testscollected`` to the number of collected items
+
+    You can implement this hook to only perform some action before collection,
+    for example the terminal plugin uses it to start displaying the collection
+    counter (and returns `None`).
+
+    :param pytest.Session session: The pytest session object.
+    """
+
+    raise NotImplementedError
+
+
+@hookspec
+def canary_generate_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
+
+
+@hookspec
+def canary_generate_report(specs: list["ResolvedSpec"]) -> None: ...
 
 
 @hookspec
@@ -130,21 +262,6 @@ def canary_session_reporter() -> CanaryReporter:
 @hookspec
 def canary_statusreport(session: "Session") -> None:
     raise NotImplementedError
-
-
-@hookspec(firstresult=True)
-def canary_generate(
-    generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["ResolvedSpec"]:
-    raise NotImplementedError
-
-
-@hookspec
-def canary_generate_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
-
-
-@hookspec
-def canary_generate_report(specs: list["ResolvedSpec"]) -> None: ...
 
 
 @hookspec
@@ -204,12 +321,6 @@ def canary_testcase_finish(case: "TestCase") -> bool:
 
 
 @hookspec
-def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
-    "Called at plugin registration time to add new hooks"
-    raise NotImplementedError
-
-
-@hookspec
 def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, Any]]) -> None:
     """Fill ``resources`` with available resources."""
     raise NotImplementedError
@@ -236,29 +347,6 @@ def canary_resource_pool_types() -> list[str]:
 @hookspec(firstresult=True)
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
-    raise NotImplementedError
-
-
-@hookspec(firstresult=True)
-def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenerator"]:
-    raise NotImplementedError
-
-
-@hookspec
-def canary_collect_file_patterns() -> list[str]:
-    """Return a list of patterns to consider as potential generators"""
-    raise NotImplementedError
-
-
-@hookspec
-def canary_collect_modifyitems(files: list[str]) -> None:
-    """Filter tests we don't want to generate"""
-    raise NotImplementedError
-
-
-@hookspec
-def canary_collect_skip_dirs() -> list[str]:
-    """Return a list of directory names to skip when searching for tests"""
     raise NotImplementedError
 
 

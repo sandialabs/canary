@@ -71,7 +71,6 @@ def autodoc_commands(dest: str) -> None:
     from ...config.argparsing import make_argument_parser
 
     parser = make_argument_parser()
-    for command in config.pluginmanager.hook.canary_subcommand():
-        parser.add_command(command)
+    config.pluginmanager.hook.canary_addcommand(parser=parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
