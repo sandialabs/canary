@@ -616,8 +616,9 @@ class Workspace:
     def find_testcase(self, root: str) -> TestCase:
         data = self.db.get_specs([root])
         if data:
-            id = list(data.values())[0]["id"]
-            return self.load_testcases([id])[0]
+            cases = self.load_testcases([data[0].id])
+            if cases:
+                return cases[0]
         # Do the full (slow) lookup
         cases = self.load_testcases()
         for case in cases:
