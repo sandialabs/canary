@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 
 import json
 
@@ -11,7 +15,7 @@ def test():
 
     with open("testcase.lock", "r") as fh:
         data = json.load(fh)
-    assert data["properties"]["instance_attributes"]["attribute"] == 23
+    assert data["spec"]["attributes"]["attribute"] == 23
 
 
 if __name__ == "__main__":

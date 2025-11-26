@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # /Formatter
 #  Copyright NTESS. See COPYRIGHT file for details.
 #
@@ -10,11 +14,13 @@ import math
 import os
 import sys
 import termios
+import time
 from contextlib import contextmanager
 from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Literal
+from typing import cast
 
 from ..third_party.color import clen
 from ..third_party.color import colorize
@@ -33,6 +39,7 @@ EMIT = builtin_logging.CRITICAL + 5
 
 builtin_print = print
 root_log_name = "canary"
+arrow = "==>"
 
 
 class FileHandler(builtin_logging.FileHandler): ...
@@ -73,11 +80,15 @@ class Formatter(builtin_logging.Formatter):
         }
         if not hasattr(record, "prefix"):
             if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
+                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
             elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+                prefix = "@*%s{%s} %s: " % (
+                    level_color(record.levelno),
+                    arrow,
+                    record.levelname.title(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = "@*{%s} " % arrow
             extra["prefix"] = prefix
 
         record.__dict__.update(extra)
@@ -96,11 +107,15 @@ class JsonFormatter(builtin_logging.Formatter):
         }
         if not hasattr(record, "prefix"):
             if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
+                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
             elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+                prefix = "@*%s{%s} %s: " % (
+                    level_color(record.levelno),
+                    arrow,
+                    record.levelname.title(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = "@*{%s} " % arrow
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()
@@ -137,14 +152,34 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str | None = None) -> builtin_logging.Logger:
+class ProgressMonitor:
+    def __init__(self, logger_name: str, message: str) -> None:
+        self.message = message
+        self.logger_name = logger_name
+        self.start = time.monotonic()
+        get_logger(self.logger_name).log(INFO, self.message, extra={"end": "..."})
+
+    def done(self, status: str = "done") -> None:
+        end = "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start)
+        get_logger(self.logger_name).log(INFO, self.message, extra={"end": end, "rewind": True})
+
+
+class CanaryLogger(builtin_logging.Logger):
+    def progress_monitor(self, message: str) -> ProgressMonitor:
+        return ProgressMonitor(self.name, message)
+
+
+builtin_logging.setLoggerClass(CanaryLogger)
+
+
+def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
     parts = name.split(".")
     if parts[0] != root_log_name:
         parts.insert(0, root_log_name)
         name = ".".join(parts)
-    logger = builtin_logging.getLogger(name)
+    logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
 
@@ -371,3 +406,9 @@ def reset():
         fd = sys.stdin.fileno()
         save_tty_attr = termios.tcgetattr(fd)
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+
+
+def pager(text: str) -> None:
+    import pydoc
+
+    pydoc.ttypager(colorize(text))

@@ -27,7 +27,6 @@ import vvtest_util as vvt
 if __name__ == "__main__":
     if vvt.NAME == "demo":
         retcode = {"pass": 0, "diff": vvt.diff_exit_status, "fail": 1}[vvt.stat]
-        print(vvt.stat, retcode)
         sys.exit(retcode)
     elif vvt.NAME == "demo_analyze_question":
         assert len(vvt.DEPDIRS) == 1

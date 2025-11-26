@@ -1,13 +1,12 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import errno
+import hashlib
 import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
-from typing import Any
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -58,6 +57,12 @@ class AbstractTestGenerator(ABC):
         if not os.path.exists(self.file):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
+        sha = hashlib.sha256()
+        with open(self.file, "rb") as fh:
+            data = fh.read()
+            sha.update(data)
+        self.sha256: str = sha.hexdigest()
+        self.id = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"
@@ -78,11 +83,6 @@ class AbstractTestGenerator(ABC):
         """Return a description of the test"""
         return repr(self)
 
-    def info(self) -> dict[str, Any]:
-        info: dict[str, Any] = {}
-        info["type"] = self.__class__.__name__
-        return info
-
     @abstractmethod
     def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
         """Expand parameters and instantiate concrete test cases
@@ -97,18 +97,17 @@ class AbstractTestGenerator(ABC):
 
         """
 
-    def getstate(self) -> dict[str, str]:
+    def asdict(self) -> dict[str, str]:
         state: dict[str, str] = {}
-        state["type"] = self.__class__.__name__
         state["root"] = self.root
         state["path"] = self.path
-        state["name"] = self.name
+        state["sha256"] = self.sha256
+        state["mtime"] = os.path.getmtime(self.file)
         return state
 
     @staticmethod
-    def from_state(state: dict[str, str]) -> "AbstractTestGenerator":
-        generator = AbstractTestGenerator.factory(state["root"], state["path"])
-        return generator
+    def from_dict(state: dict[str, str]) -> "AbstractTestGenerator":
+        return AbstractTestGenerator.factory(state["root"], state["path"])
 
     @staticmethod
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":

@@ -6,10 +6,8 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
-from ...third_party.colify import colified
-from ...third_party.color import colorize
 from ...util import logging
-from ...util.term import terminal_size
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -24,50 +22,43 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class Info(CanarySubcommand):
     name = "info"
-    description = "Print information about tests in a folder"
+    description = "Print information about test session"
 
-    def setup_parser(self, parser: "Parser"):
-        parser.add_argument("-f", action="store_true", default=False, help="Show generator paths")
-        parser.add_argument("paths", nargs="*")
+    def setup_parser(self, parser: "Parser") -> None:
+        parser.add_argument("-t", "--tag", help="Show information about this tag")
 
     def execute(self, args: argparse.Namespace) -> int:
-        import _canary.finder as finder
-
-        f = finder.Finder()
-        paths = args.paths or ["."]
-        for path in paths:
-            f.add(path)
-        f.prepare()
-        files = f.discover()
-
-        info: dict[str, dict[str, set[str]]] = {}
-        for file in files:
-            myinfo = info.setdefault(file.root, {})
-            finfo = file.info()
-            myinfo.setdefault("keywords", set()).update(finfo.get("keywords", []))
-            myinfo.setdefault("options", set()).update(finfo.get("options", []))
-            type = finfo.get("type", "AbstractTestGenerator").replace("TestGenerator", "")
-            myinfo.setdefault("types", set()).add(type)
-            myinfo.setdefault("files", set()).add(file.path)
-        _, max_width = terminal_size()
-        for root, myinfo in info.items():
-            fp = io.StringIO()
-            label = colorize("@m{%s}" % root)
-            logging.hline(label, max_width=max_width, file=fp)
-            fp.write(f"Test generators: {len(files)}\n")
-            fp.write(f"Test types: {'  '.join(myinfo['types'])}\n")
-            if keywords := myinfo.get("keywords"):
-                fp.write("Keywords:\n")
-                cols = colified(sorted(keywords), indent=2, width=max_width, padding=5)
-                fp.write(cols.rstrip() + "\n")
-            if options := myinfo.get("options"):
-                fp.write("Option expressions:\n")
-                cols = colified(sorted(options), indent=2, width=max_width, padding=5)
-                fp.write(cols.rstrip() + "\n")
-            if args.f:
-                if paths := myinfo.get("files"):
-                    fp.write("Generators:\n")
-                    cols = colified(sorted(paths), indent=2, width=max_width, padding=5)
-                    fp.write(cols.rstrip() + "\n")
-            print(fp.getvalue())
+        text: str
+        if args.tag:
+            text = self.get_tag_info(args.tag)
+        else:
+            text = self.get_workspace_info()
+        logging.pager(text)
         return 0
+
+    def get_tag_info(self, tag: str) -> str:
+        workspace = Workspace.load()
+        fh = io.StringIO()
+        fh.write(f"Tag: {tag}\n")
+        selection = workspace.get_selection(tag)
+        fh.write(f"Selected on: {selection.created_on}\n")
+        fh.write("Selection filters:\n")
+        for key, value in selection.filters.items():
+            fh.write(f"  • {key}: {value}\n")
+        fh.write(f"Test specs (n = {len(selection.specs)}):\n")
+        for spec in selection.specs:
+            name = spec.file_path.parent / spec.pretty_name
+            fh.write(f"  • {spec.id[:7]} : {name}\n")
+        return fh.getvalue()
+
+    def get_workspace_info(self) -> str:
+        workspace = Workspace.load()
+        info = workspace.info()
+        fh = io.StringIO()
+        fh.write(f"Workspace:   {info['root']}\n")
+        fh.write(f"Version:     {info['version']}\n")
+        fh.write(f"Generators:  {info['generator_count']}\n")
+        fh.write(f"Sessions:    {info['session_count']}\n")
+        fh.write(f"Latest:      {info['latest_session']}\n")
+        fh.write(f"Tags:        {', '.join(info['tags'])}\n")
+        return fh.getvalue()

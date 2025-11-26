@@ -7,7 +7,7 @@
 Extend canary with plugins
 ==========================
 
-The default behavior of ``canary`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``canary`` session.  Plugins are loaded and managed by `pluggy <https://pluggy.readthedocs.io/en/stable/>`_.
+The default behavior of ``canary`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``canary`` workflow.  Plugins are loaded and managed by `pluggy <https://pluggy.readthedocs.io/en/stable/>`_.
 
 Plugin discovery
 ----------------
@@ -71,9 +71,9 @@ Examples
     import canary
 
     @canary.hookimpl
-    def canary_testcase_modify(case: canary.TestCase):
-        if case.name in EXCLUSION_DB:
-            case.mask = "excluded due to ..."
+    def canary_testspec_modify(spec: canary.ResolvedSpec):
+        if spec.name in EXCLUSION_DB:
+            spec.mask = "excluded due to ..."
 
 
 * Add a flag to turn on test coverage and set the ``LLVM_PROFILE_FILE`` environment variable:
@@ -92,17 +92,17 @@ Examples
         )
 
     @canary.hookimpl
-    def canary_testcase_modify(case: canary.TestCase) -> None:
+    def canary_testspec_modify(spec: canary.ResolvedSpec) -> None:
         if not canary.config.getoption("code_coverage"):
             return
-        if case.mask:
+        if spec.mask:
             return
-        case.add_default_env("LLVM_PROFILE_FILE", f"{case.name}.profraw")
+        spec.environment["LLVM_PROFILE_FILE"] = f"{case.name}.profraw"
 
     @canary.hookimpl
     def canary_session_finish(session: canary.Session) -> None:
         if not canary.config.getoption("code_coverage"):
             return
-        files = find_raw_profiling_files(session.work_tree)
+        files = find_raw_profiling_files(session.root)
         combined_files = combine_profiling_files(files)
         create_coverage_maps(combined_files)

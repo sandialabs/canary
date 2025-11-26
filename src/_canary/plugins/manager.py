@@ -23,10 +23,10 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.add_hookspecs(hookspec)
         for subcommand in subcommands.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
-            self.register(subcommand, name=name)
+            self.register(subcommand, name=f"command.{name}")
         for p in builtin.plugins:
             name = getname(p)
-            self.register(p, getname(p))
+            self.register(p, f"builtin.{name}")
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
 

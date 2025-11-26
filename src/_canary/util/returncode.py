@@ -18,26 +18,26 @@ def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) ->
 
     results: dict[str, int] = {}
     for case in cases:
-        results[case.status.value] = results.get(case.status.value, 0) + 1
+        results[case.status.name] = results.get(case.status.name, 0) + 1
     warned: set[str] = set()
     for result, n in results.items():
         for i in range(n):
-            if result in ("success", "xfail", "xdiff"):
+            if result in ("SUCCESS", "XFAIL", "XDIFF"):
                 continue
-            elif result == "diffed":
+            elif result == "DIFFED":
                 returncode |= 2**1
-            elif result == "failed":
+            elif result in ("FAILED", "ERROR"):
                 returncode |= 2**2
-            elif result == "timeout":
+            elif result == "TIMEOUT":
                 returncode |= 2**3
-            elif result in ("skipped", "not_run"):
+            elif result in ("SKIPPED", "NOT_RUN"):
                 returncode |= 2**4
-            elif result in ("cancelled", "ready"):
+            elif result in ("CANCELLED", "READY", "PENDING"):
                 returncode |= 2**5
             elif not permissive:
                 # any other code is a failure
                 returncode |= 2**6
-                if case.status.value not in warned:
+                if case.status.name not in warned:
                     logger.warning(f"{case}: unhandled status: {case.status}")
-                    warned.add(case.status.value)
+                    warned.add(case.status.name)
     return returncode

@@ -23,10 +23,6 @@ def list_of_int(arg: typing.Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
 
 
-optional_dict = Or(dict, None)  # type: ignore
-optional_str = Or(str, None)  # type: ignore
-
-
 def vardict(arg: typing.Any) -> bool:
     if arg is None:
         return True
@@ -69,8 +65,10 @@ def boolean(arg: typing.Any) -> bool:
 
 positive_int = And(int, lambda x: x > 0)  # type: ignore
 nonnegative_int = And(int, lambda x: x >= 0)  # type: ignore
+optional_str = Or(str, None)  # type: ignore
 
 any_schema = Schema({}, ignore_extra_keys=True)
+
 build_schema = Schema(
     {
         Optional("project"): optional_str,
@@ -96,25 +94,8 @@ build_schema = Schema(
             Optional("mpicxx"): optional_str,
             Optional("mpifc"): optional_str,
         },
-        Optional("options"): optional_dict,
     },
     ignore_extra_keys=True,
-)
-config_schema = Schema(
-    {
-        Optional("debug"): Use(boolean),
-        Optional("log_level"): Use(log_level_name),
-        Optional("cache_dir"): str,
-        Optional("multiprocessing"): {
-            Optional("context"): multiprocessing_contexts,
-            Optional("max_tasks_per_child"): positive_int,
-        },
-        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
-        Optional("polling_frequency"): {
-            Optional("testcase"): Use(time_in_seconds),
-        },
-        Optional("plugins"): list_of_str,
-    }
 )
 environment_schema = Schema(
     {
@@ -124,9 +105,28 @@ environment_schema = Schema(
         Optional("append-path"): vardict,
     }
 )
-plugin_schema = Schema({str: dict}, ignore_extra_keys=True)
-user_schema = Schema({}, ignore_extra_keys=True)
 
+config_schema = Schema(
+    {
+        Optional("debug"): Use(boolean),
+        Optional("log_level"): Use(log_level_name),
+        Optional("cache_dir"): str,
+        Optional("view"): Or(bool, str, None),
+        Optional("multiprocessing"): {
+            Optional("context"): multiprocessing_contexts,
+            Optional("max_tasks_per_child"): positive_int,
+        },
+        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+        Optional("polling_frequency"): {
+            Optional("testcase"): Use(time_in_seconds),
+        },
+        Optional("plugins"): list_of_str,
+        Optional("build"): build_schema,
+        Optional("environment"): environment_schema,
+        Optional("scratch"): any_schema,
+    },
+    ignore_extra_keys=True,
+)
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 
 
@@ -135,17 +135,16 @@ class EnvarSchema(Schema):
         data = super().validate(data, is_root_eval=False)
         if is_root_eval:
             validated = {}
-            config = validated.setdefault("config", {})
             for key, val in data.items():
                 name = key[7:].lower()
                 if name.startswith(("timeout_", "multiprocessing_")):
                     root, _, leaf = name.partition("_")
-                    config.setdefault(root, {})[leaf] = val
+                    validated.setdefault(root, {})[leaf] = val
                 elif name.endswith("_polling_frequency"):
                     leaf, _, root = name.partition("_")
-                    config.setdefault(root, {})[leaf] = val
+                    validated.setdefault(root, {})[leaf] = val
                 else:
-                    config[name] = val
+                    validated[name] = val
             return validated
         return data
 

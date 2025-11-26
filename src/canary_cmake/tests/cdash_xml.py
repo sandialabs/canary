@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import importlib.resources
 import os
 import subprocess
@@ -25,13 +29,15 @@ def config(request):
 def test_report_cdash(tmpdir):
     with working_dir(tmpdir.strpath):
         root = str(importlib.resources.files("canary"))
-        run_canary("run", "-w", os.path.join(root, "examples/basic"))
-        run_canary("report", "cdash", "create", cwd="TestResults")
+        run_canary("init", ".")
+        run_canary("add", os.path.join(root, "examples/basic"))
+        run_canary("run")
+        run_canary("report", "cdash", "create")
         assert os.path.exists("TestResults/CDASH")
 
 
 def run_canary(command, *args, cwd=None):
-    cmd = [sys.executable, "-m", "canary", "-r", "cpus:6", "-r", "gpus:0"]
+    cmd = [sys.executable, "-m", "canary", "-d", "-r", "cpus:6", "-r", "gpus:0"]
     if cwd:
         cmd.extend(["-C", cwd])
     cmd.append(command)
