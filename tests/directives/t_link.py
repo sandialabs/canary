@@ -111,12 +111,16 @@ def test_link_when(tmpdir):
         python = Executable(sys.executable)
         python("-m", "canary", "run", str(f), fail_on_error=False)
         p = python("-m", "canary", "location", "link_when.a=link_when_1.b=1", stdout=str)
+        assert p.out is not None
         assert txtfiles(p.out.strip()) == ["link_when_1.txt"]
         p = python("-m", "canary", "location", "link_when.a=link_when_1.b=2", stdout=str)
+        assert p.out is not None
         assert txtfiles(p.out.strip()) == ["link_when_1-b2.txt"]
         p = python("-m", "canary", "location", "link_when.a=link_when_2.b=1", stdout=str)
+        assert p.out is not None
         assert txtfiles(p.out.strip()) == ["link_when_2.txt"]
         p = python("-m", "canary", "location", "link_when.a=link_when_2.b=2", stdout=str)
+        assert p.out is not None
         assert txtfiles(p.out.strip()) == ["link_when_2-b2.txt"]
 
         if python.returncode != 0:

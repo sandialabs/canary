@@ -55,6 +55,8 @@ def default_generate(
             drafts.append(spec)
     pm.done()
 
+    for draft in drafts:
+        print(draft.file_root, draft.file_path, draft.id)
     duplicates = find_duplicates(drafts)
     if duplicates:
         logger.error("Duplicate test IDs generated for the following test cases")

@@ -12,16 +12,11 @@ from ....util import logging
 from ....util.time import time_in_seconds
 
 __all__ = [
-    "PathSpec",
-    "setdefault",
     "add_filter_arguments",
     "add_work_tree_arguments",
     "add_resource_arguments",
 ]
 
-
-from .pathspec import PathSpec
-from .pathspec import setdefault
 
 if TYPE_CHECKING:
     from ....config.argparsing import Parser

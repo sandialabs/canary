@@ -2,9 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import dataclasses
-import fnmatch
-import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 from typing import Any
@@ -107,43 +104,3 @@ class File(str):
 
     def __init__(self, value):
         self.skip = False
-
-
-@dataclasses.dataclass
-class Collector:
-    file_patterns: list[str] = dataclasses.field(default_factory=list, init=False)
-    skip_dirs: list[str] = dataclasses.field(default_factory=list, init=False)
-    scanpaths: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
-    files: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
-
-    def add_file_patterns(self, *patterns: str) -> None:
-        for pattern in patterns:
-            if pattern not in self.file_patterns:
-                self.file_patterns.append(pattern)
-
-    def add_skip_dirs(self, *dirs: str) -> None:
-        for dir in dirs:
-            if dir not in self.skip_dirs:
-                self.skip_dirs.append(dir)
-
-    def add_scanpaths(self, root: str, paths: list[str] | None = None) -> None:
-        existing = set(self.scanpaths.setdefault(root, []))
-        if paths:
-            existing.update(paths)
-        self.scanpaths[root] = sorted(existing)
-
-    def add_files_to_root(self, root: str, paths: list[str]) -> None:
-        existing: set[str] = set(self.files.setdefault(root, []))
-        for path in paths:
-            relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
-            if not os.path.exists(os.path.join(root, relpath)):
-                logger.warning(f"{root}/{relpath}: path does not exist")
-            else:
-                existing.add(relpath)
-        self.files[root] = sorted(existing)
-
-    def is_testfile(self, f: str) -> bool:
-        for pattern in self.file_patterns:
-            if fnmatch.fnmatchcase(f, pattern):
-                return True
-        return False

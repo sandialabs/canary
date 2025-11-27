@@ -16,6 +16,7 @@ from .types import CanarySubcommand
 if TYPE_CHECKING:
     from multiprocessing import Queue
 
+    from ..collect import Collector
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
     from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager
-    from .types import Collector
     from .types import Result
 
 
@@ -155,6 +155,12 @@ def canary_collectitems(collector: "Collector") -> None:
 
 @hookspec
 def canary_collect_modifyitems(collector: "Collector") -> None:
+    """Filter tests we don't want to generate"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_report(collector: "Collector") -> None:
     """Filter tests we don't want to generate"""
     raise NotImplementedError
 

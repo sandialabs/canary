@@ -10,8 +10,9 @@ from typing import TYPE_CHECKING
 from typing import TextIO
 
 from ... import config
+from ...collect import Collector
+from ...collect import canary_collect
 from ...error import StopExecution
-from ...generator import AbstractTestGenerator
 from ...testspec import finalize as finalize_specs
 from ...third_party.colify import colified
 from ...third_party.color import colorize
@@ -22,14 +23,11 @@ from ...util.term import terminal_size
 from ...util.time import hhmmss
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ..types import Collector
-from .common import PathSpec
 from .common import add_filter_arguments
 from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...generator import AbstractTestGenerator
     from ...testspec import TestSpec
 
 logger = logging.get_logger(__name__)
@@ -56,16 +54,12 @@ class Find(CanarySubcommand):
         )
         add_filter_arguments(parser)
         add_resource_arguments(parser)
-        PathSpec.setup_parser(parser)
+        Collector.setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
         collector = Collector()
-        for root, paths in args.paths.items():
-            collector.add_scanpaths(root, paths)
-        pm = logger.progress_monitor("@*{Collecting} test generators")
-        hook = config.pluginmanager.hook
-        generators: list["AbstractTestGenerator"] = hook.canary_collect(collector=collector)
-        pm.done()
+        collector.add_scanpaths(args.scanpaths)
+        generators = canary_collect(collector=collector)
 
         pm = logger.progress_monitor("@*{Generating} test specs")
         resolved = config.pluginmanager.hook.canary_generate(

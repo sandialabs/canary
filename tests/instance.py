@@ -37,7 +37,8 @@ def test_instance_deps(tmpdir):
     with canary.config.override():
         lookup = {}
         for spec in specs:
-            space = ExecutionSpace(Path(work_tree).parent, Path(work_tree).name)
+            p = Path(work_tree)
+            space = ExecutionSpace(p.parent, p.name)
             deps = [lookup[d.id] for d in spec.dependencies]
             case = tc.TestCase(spec=spec, workspace=space, dependencies=deps)
             lookup[case.id] = case

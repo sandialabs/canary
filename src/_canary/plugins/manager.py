@@ -9,9 +9,7 @@ from typing import Any
 
 import pluggy
 
-from . import builtin
 from . import hookspec
-from . import subcommands
 
 warnings.simplefilter("once", DeprecationWarning)
 
@@ -21,14 +19,22 @@ class CanaryPluginManager(pluggy.PluginManager):
     def factory(cls) -> "CanaryPluginManager":
         self = cls(hookspec.project_name)
         self.add_hookspecs(hookspec)
+        self.register_builtins()
+        self.load_setuptools_entrypoints(hookspec.project_name)
+        return self
+
+    def register_builtins(self):
+        from .. import collect
+        from . import builtin
+        from . import subcommands
+
         for subcommand in subcommands.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
             self.register(subcommand, name=f"command.{name}")
         for p in builtin.plugins:
             name = getname(p)
             self.register(p, f"builtin.{name}")
-        self.load_setuptools_entrypoints(hookspec.project_name)
-        return self
+        self.register(collect, "builtin.collect")
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

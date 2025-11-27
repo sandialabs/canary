@@ -16,8 +16,9 @@ from typing import Generator
 from . import config
 from . import testspec
 from . import when
+from .collect import Collector
+from .collect import canary_collect
 from .generator import AbstractTestGenerator
-from .plugins.types import Collector
 from .session import Session
 from .session import SessionResults
 from .testcase import TestCase
@@ -26,7 +27,6 @@ from .testspec import ResolvedSpec
 from .testspec import TestSpec
 from .util import json_helper as json
 from .util import logging
-from .util.filesystem import filesystem_root
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
@@ -174,11 +174,11 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        pm = logger.progress_monitor(f"Initializing empty canary workspace at {path}")
+        logger.info(f"Initializing empty canary workspace at {path}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():
-            pm.done("workspace already exists")
+            logger.error("workspace already exists")
             raise WorkspaceExistsError(path)
         self.root.mkdir(parents=True)
         write_directory_tag(self.root / workspace_tag)
@@ -213,8 +213,6 @@ class Workspace:
         self.db = WorkspaceDatabase.create(self.dbfile)
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({"canary": {}}))
-
-        pm.done("done")
 
         return self
 
@@ -368,17 +366,12 @@ class Workspace:
         return self.load_testcases()
 
     def add(
-        self, scan_paths: dict[str, list[str]], pedantic: bool = True
+        self, scanpaths: dict[str, list[str]], pedantic: bool = True
     ) -> list[AbstractTestGenerator]:
         """Find test case generators in scan_paths and add them to this workspace"""
-        generators: list[AbstractTestGenerator] = []
-        for root, paths in scan_paths.items():
-            fs_root = filesystem_root(root)
-            pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
-            collector = Collector()
-            collector.add_scanpaths(root, paths)
-            generators.extend(config.pluginmanager.hook.canary_collect(collector=collector))
-            pm.done()
+        collector = Collector()
+        collector.add_scanpaths(scanpaths)
+        generators = canary_collect(collector)
         self.db.put_generators(generators)
         # Invalidate caches
         warned = False
@@ -619,8 +612,9 @@ class Workspace:
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
-    hook = config.pluginmanager.hook.canary_collect
-    generators: list[AbstractTestGenerator] = hook(root=str(path), paths=[])
+    collector = Collector()
+    collector.add_scanpath(str(path), [])
+    generators = canary_collect(collector=collector)
     return generators
 
 
