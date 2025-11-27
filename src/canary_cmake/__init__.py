@@ -32,17 +32,15 @@ def canary_collectstart(collector) -> None:
 
 @canary.hookimpl
 def canary_collect_modifyitems(collector) -> None:
-    for root, paths in collector.files.items():
-        seen_parents: set[str] = set()
-        for i, p in enumerate(paths):
-            if os.path.basename(p) == "CTestTestfile.cmake":
-                parts = p.split(os.sep)
-                top_parent = "." if len(parts) == 1 else parts[0]
-                if top_parent in seen_parents:
-                    paths[i] = None
-                    continue  # CTest will automatically generate tests recursively
-                seen_parents.add(top_parent)
-        collector.files[root] = [p for p in paths if p is not None]
+    ctest_files: dict[str, list[str]] = {}
+    for root, path in collector.iter_files():
+        if os.path.basename(path) == "CTestTestfile.cmake":
+            ctest_files.setdefault(root, []).append(path)
+    for root, paths in ctest_files.items():
+        if len(paths) > 1:
+            paths.sort(key=lambda p: (p.split(os.sep), p))
+            for path in paths[1:]:
+                collector.remove_file(root, path)
 
 
 @canary.hookimpl(specname="canary_testcase_generator")

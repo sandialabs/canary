@@ -5,11 +5,11 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from ...collect import Collector
 from ...util import logging
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common.pathspec import PathSpec
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -28,7 +28,7 @@ class Add(CanarySubcommand):
     description = "Add test generators to Canary session"
 
     def setup_parser(self, parser: "Parser"):
-        PathSpec.setup_parser(parser)
+        Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
@@ -38,5 +38,5 @@ class Add(CanarySubcommand):
             raise TypeError("Tag name incompatible with canary add")
         if args.start:
             raise TypeError("Start directory incompatible with canary add")
-        workspace.add(args.paths, pedantic=True)
+        workspace.add(args.scanpaths, pedantic=True)
         return 0

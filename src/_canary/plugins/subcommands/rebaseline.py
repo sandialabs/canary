@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import when
+from ...collect import Collector
 from ...util import logging
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import PathSpec
 from .common import add_filter_arguments
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class Rebaseline(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         add_filter_arguments(parser)
-        PathSpec.setup_parser(parser)
+        Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         if not args.keyword_exprs and not args.start and not args.parameter_expr:

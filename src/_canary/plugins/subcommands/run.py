@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ... import when
+from ...collect import Collector
 from ...session import SessionResults
 from ...util import logging
 from ...workspace import NotAWorkspaceError
@@ -16,7 +17,6 @@ from ...workspace import SpecSelection
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import PathSpec
 from .common import add_filter_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
@@ -103,7 +103,7 @@ class Run(CanarySubcommand):
 
         parser.add_argument("-r", help=argparse.SUPPRESS)
         add_resource_arguments(parser)
-        PathSpec.setup_parser(parser)
+        Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         config.pluginmanager.hook.canary_runtests_startup()
@@ -142,9 +142,9 @@ class Run(CanarySubcommand):
                 selection = workspace.get_selection(args.runtag)
             elif args.specids:
                 selection = workspace.select(ids=args.specids, tag=args.tag)
-            elif args.paths:
+            elif args.scanpaths:
                 parsing_policy = config.getoption("parsing_policy") or "pedantic"
-                workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
+                workspace.add(args.scanpaths, pedantic=parsing_policy == "pedantic")
                 selection = workspace.select(
                     tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
