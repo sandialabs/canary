@@ -56,7 +56,7 @@ class JobProtocol(Protocol):
 
     def finish(self) -> None: ...
 
-    def required_resources(self) -> list[list[dict[str, Any]]]:
+    def required_resources(self) -> list[dict[str, Any]]:
         """Returns a list of resource
 
         required[i] == [{"type": type, "slots": slots}, ...]
