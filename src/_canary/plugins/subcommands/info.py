@@ -6,9 +6,9 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -41,10 +41,10 @@ class Info(CanarySubcommand):
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
         specs = workspace.get_selection(tag)
-#        fh.write(f"Selected on: {selection.created_on}\n")
-#        fh.write("Selection filters:\n")
-#        for key, value in selection.filters.items():
-#            fh.write(f"  • {key}: {value}\n")
+        #        fh.write(f"Selected on: {selection.created_on}\n")
+        #        fh.write("Selection filters:\n")
+        #        for key, value in selection.filters.items():
+        #            fh.write(f"  • {key}: {value}\n")
         fh.write(f"Test specs (n = {len(specs)}):\n")
         for spec in specs:
             name = spec.file_path.parent / spec.pretty_name

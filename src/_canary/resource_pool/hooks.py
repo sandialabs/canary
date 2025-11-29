@@ -13,14 +13,14 @@ from typing import Any
 
 import yaml
 
-from ...resource_pool.schemas import resource_pool_schema
-from ...util import cpu_count
-from ...util import logging
 from ..hookspec import hookimpl
+from ..util import cpu_count
+from ..util import logging
+from .schemas import resource_pool_schema
 
 if TYPE_CHECKING:
-    from ...config import Config
-    from ...config.argparsing import Parser
+    from ..config import Config
+    from ..config.argparsing import Parser
 
 
 logger = logging.get_logger(__name__)

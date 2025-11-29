@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from typing import Iterable
 
 from . import config
-from .plugins.hookspec import hookimpl
+from .hookspec import hookimpl
 from .rules import ResourceCapacityRule
 from .rules import Rule
 from .util import json_helper as json
@@ -17,6 +17,7 @@ from .util import logging
 from .util.string import pluralize
 
 if TYPE_CHECKING:
+    from .config.argparsing import Parser
     from .testspec import ResolvedSpec
 
 
@@ -32,6 +33,18 @@ def canary_select(selector: "Selector") -> list["ResolvedSpec"]:
     pm.done()
     config.pluginmanager.hook.canary_select_report(selector=selector)
     return selector.unmasked_specs()
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    parser.add_argument(
+        "--show-excluded-tests",
+        group="console reporting",
+        command="run",
+        action="store_true",
+        default=False,
+        help="Show names of tests that are excluded from the test session %(default)s",
+    )
 
 
 @hookimpl

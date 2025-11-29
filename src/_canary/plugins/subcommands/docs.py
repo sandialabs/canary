@@ -6,7 +6,7 @@ import argparse
 import webbrowser
 
 from ...config.argparsing import Parser
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanarySubcommand
 
 

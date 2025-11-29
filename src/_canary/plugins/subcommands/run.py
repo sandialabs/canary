@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING
 from ... import config
 from ... import when
 from ...collect import Collector
+from ...hookspec import hookimpl
 from ...session import SessionResults
 from ...util import logging
 from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -105,7 +105,7 @@ class Run(CanarySubcommand):
         Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        config.pluginmanager.hook.canary_runtests_startup()
+        config.pluginmanager.hook.canary_runtests_start()
 
         workspace: Workspace
         work_tree: str = args.work_tree or os.getcwd()
@@ -174,7 +174,7 @@ class Run(CanarySubcommand):
 
         if not results:
             return 1
-        config.pluginmanager.hook.canary_runtests_summary(
+        config.pluginmanager.hook.canary_runtests_report(
             cases=results.cases, include_pass=False, truncate=10
         )
         return results.returncode

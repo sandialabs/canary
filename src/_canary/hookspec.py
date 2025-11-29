@@ -10,23 +10,23 @@ from typing import Type
 
 import pluggy
 
-from .types import CanaryReporter
-from .types import CanarySubcommand
+from .plugins.types import CanaryReporter
+from .plugins.types import CanarySubcommand
 
 if TYPE_CHECKING:
     from multiprocessing import Queue
 
-    from ..collect import Collector
-    from ..config.argparsing import Parser
-    from ..config.config import Config as CanaryConfig
-    from ..generator import AbstractTestGenerator
-    from ..select import Selector
-    from ..testcase import TestCase
-    from ..testexec import ExecutionPolicy
-    from ..testspec import ResolvedSpec
-    from ..workspace import Session
-    from .manager import CanaryPluginManager
-    from .types import Result
+    from .collect import Collector
+    from .config.argparsing import Parser
+    from .config.config import Config as CanaryConfig
+    from .generator import AbstractTestGenerator
+    from .pluginmanager import CanaryPluginManager
+    from .resource_pool.rpool import Outcome
+    from .select import Selector
+    from .testcase import TestCase
+    from .testexec import ExecutionPolicy
+    from .testspec import ResolvedSpec
+    from .workspace import Session
 
 
 project_name = "canary"
@@ -229,7 +229,7 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
 
 
 @hookspec
-def canary_runtests_startup() -> None:
+def canary_runtests_start() -> None:
     """Called at the beginning of `canary run`"""
     raise NotImplementedError
 
@@ -240,7 +240,7 @@ def canary_runtests(cases: list["TestCase"]) -> int:
 
 
 @hookspec
-def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
+def canary_runtests_report(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
     raise NotImplementedError
 
 
@@ -251,22 +251,17 @@ def canary_session_reporter() -> CanaryReporter:
 
 
 @hookspec
-def canary_statusreport(session: "Session") -> None:
-    raise NotImplementedError
-
-
-@hookspec
 def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
 
 
 @hookspec(firstresult=True)
-def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
+def canary_runtest_execution_policy(case: "TestCase") -> "ExecutionPolicy":
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_testcase_setup(case: "TestCase") -> bool:
+def canary_runtest_setup(case: "TestCase") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -282,7 +277,7 @@ def canary_testcase_setup(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "TestCase", queue: "Queue") -> bool:
+def canary_runtest_exec(case: "TestCase", queue: "Queue") -> bool:
     """Called to run the test case
 
     Args:
@@ -296,7 +291,7 @@ def canary_testcase_run(case: "TestCase", queue: "Queue") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_finish(case: "TestCase") -> bool:
+def canary_runtest_finish(case: "TestCase") -> bool:
     """Called to perform the finishing tasks for the test case
 
     The default implementation runs ``case.finish()``
@@ -318,7 +313,7 @@ def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, 
 
 
 @hookspec(firstresult=True)
-def canary_resource_pool_accommodates(case: "TestCase") -> "Result":
+def canary_resource_pool_accommodates(case: "TestCase") -> "Outcome":
     """Determine if there are sufficient resource to run ``case``."""
     raise NotImplementedError
 

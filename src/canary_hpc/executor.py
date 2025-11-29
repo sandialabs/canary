@@ -53,7 +53,7 @@ class CanaryHPCExecutor:
             finally:
                 workspace.add_session_results(results, view=False)
 
-        canary.config.pluginmanager.hook.canary_runtests_summary(
+        canary.config.pluginmanager.hook.canary_runtests_report(
             cases=results.cases, include_pass=False, truncate=10
         )
         return results.returncode

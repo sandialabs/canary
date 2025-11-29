@@ -5,7 +5,7 @@
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanaryReporter
 from ..types import CanarySubcommand
 

@@ -28,10 +28,10 @@ class Runner:
     def __call__(self, case):
         queue = multiprocessing.Queue()
         try:
-            canary.config.pluginmanager.hook.canary_testcase_setup(case=case)
-            canary.config.pluginmanager.hook.canary_testcase_run(case=case, queue=queue)
+            canary.config.pluginmanager.hook.canary_runtest_setup(case=case)
+            canary.config.pluginmanager.hook.canary_runtest_exec(case=case, queue=queue)
         finally:
-            canary.config.pluginmanager.hook.canary_testcase_finish(case=case)
+            canary.config.pluginmanager.hook.canary_runtest_finish(case=case)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

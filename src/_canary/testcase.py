@@ -54,7 +54,7 @@ class TestCase:
         self.stdout: str = "canary-out.txt"
         self.stderr: str | None = None  # combine stdout/stderr by default
         pm = config.pluginmanager
-        self.execution_policy: ExecutionPolicy = pm.hook.canary_testcase_execution_policy(case=self)
+        self.execution_policy: ExecutionPolicy = pm.hook.canary_runtest_execution_policy(case=self)
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()

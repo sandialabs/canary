@@ -5,9 +5,9 @@
 from typing import TYPE_CHECKING
 
 from ... import config
+from ...hookspec import hookimpl
 from ...workspace import Session
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser

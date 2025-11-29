@@ -11,7 +11,6 @@ from typing import Any
 
 import yaml
 
-from ..plugins.types import Result
 from ..third_party.color import colorize
 from ..util import cpu_count
 from ..util import logging
@@ -24,6 +23,26 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 resource_spec = list[dict[str, str | int]]
+
+
+class Outcome:
+    __slots__ = ("ok", "reason")
+
+    def __init__(self, ok: bool | None = None, reason: str | None = None) -> None:
+        if not ok:
+            ok = not bool(reason)
+        if not ok and not reason:
+            raise ValueError(f"{self.__class__.__name__}(False) requires a reason")
+        self.ok: bool = ok
+        self.reason: str | None = reason
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def __repr__(self) -> str:
+        state = "ok" if self.ok else "fail"
+        reason = f": {self.reason}" if self.reason else ""
+        return f"<{self.__class__.__name__} {state}{reason}>"
 
 
 class ResourcePool:
@@ -187,7 +206,7 @@ class ResourcePool:
         for type in kwds:
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def accommodates(self, request: list[dict[str, Any]]) -> Result:
+    def accommodates(self, request: list[dict[str, Any]]) -> Outcome:
         """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -205,7 +224,7 @@ class ResourcePool:
         if missing:
             types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = pluralize("Resource", n=len(missing))
-            return Result(False, reason=f"{key} unavailable: {types}")
+            return Outcome(False, reason=f"{key} unavailable: {types}")
 
         # Step 2: Check available slots vs. needed slots
         wanting: dict[str, tuple[int, int]] = {}
@@ -224,10 +243,10 @@ class ResourcePool:
             else:
                 types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
                 reason = f"insufficient slots of {types}"
-            return Result(False, reason=reason)
+            return Outcome(False, reason=reason)
 
         # Step 3: all good
-        return Result(True)
+        return Outcome(True)
 
     def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, list[dict]]:
         """Returns resources available to the test

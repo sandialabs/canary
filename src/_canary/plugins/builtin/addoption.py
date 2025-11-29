@@ -5,8 +5,8 @@
 from typing import TYPE_CHECKING
 from typing import Generator
 
+from ...hookspec import hookimpl
 from ...third_party.monkeypatch import monkeypatch
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser

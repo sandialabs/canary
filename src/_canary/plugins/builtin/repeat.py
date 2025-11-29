@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ... import config
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.string import pluralize
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -46,7 +46,7 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(specname="canary_testcase_run")
+@hookimpl(specname="canary_runtest_exec")
 def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
@@ -60,7 +60,7 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
         )
 
 
-@hookimpl(specname="canary_testcase_run")
+@hookimpl(specname="canary_runtest_exec")
 def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
@@ -74,7 +74,7 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
         )
 
 
-@hookimpl(specname="canary_testcase_run")
+@hookimpl(specname="canary_runtest_exec")
 def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1

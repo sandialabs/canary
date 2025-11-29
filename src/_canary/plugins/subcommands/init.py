@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 logger = logging.get_logger(__name__)

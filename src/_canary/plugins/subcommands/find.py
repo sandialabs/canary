@@ -13,6 +13,7 @@ from ... import config
 from ...collect import Collector
 from ...collect import canary_collect
 from ...error import StopExecution
+from ...hookspec import hookimpl
 from ...testspec import finalize as finalize_specs
 from ...third_party.colify import colified
 from ...third_party.color import colorize
@@ -21,7 +22,6 @@ from ...util import logging
 from ...util.json_helper import json
 from ...util.term import terminal_size
 from ...util.time import hhmmss
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 from .common import add_resource_arguments

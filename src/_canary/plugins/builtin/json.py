@@ -6,8 +6,8 @@ import json
 import os
 from typing import Any
 
+from ...hookspec import hookimpl
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 

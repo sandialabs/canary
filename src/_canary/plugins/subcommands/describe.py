@@ -9,9 +9,9 @@ from typing import Any
 import yaml
 
 from ...generator import AbstractTestGenerator
+from ...hookspec import hookimpl
 from ...third_party.color import colorize
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:

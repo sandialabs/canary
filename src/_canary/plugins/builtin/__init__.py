@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from . import addoption
+from . import capture
 from . import email
 from . import html
 from . import json
@@ -11,15 +12,11 @@ from . import markdown
 from . import post_clean
 from . import pyt
 from . import repeat
-from . import reporting
-from . import rpool
-from . import runtest_protocol
 from . import testcase_generator
-from .executor import TestCaseExecutor
 
 plugins = [
     addoption,
-    TestCaseExecutor(),
+    capture,
     email,
     html,
     json,
@@ -28,8 +25,5 @@ plugins = [
     post_clean,
     pyt,
     repeat,
-    reporting,
-    rpool,
-    runtest_protocol,
     testcase_generator,
 ]

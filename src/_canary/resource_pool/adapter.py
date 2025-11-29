@@ -9,8 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..plugins.types import Result
 from ..testcase import TestCase
+from .rpool import Outcome
 from .rpool import ResourceUnavailable
 
 
@@ -69,9 +69,9 @@ class ResourcePoolAdapter:
         response = self.curl("/types", method="GET")
         return response["types"]
 
-    def accommodates(self, case: TestCase) -> Result:
+    def accommodates(self, case: TestCase) -> Outcome:
         response = self.curl("/accommodates", data=case.required_resources())
-        return Result(response["ok"], reason=response["reason"])
+        return Outcome(response["ok"], reason=response["reason"])
 
     def checkout(self, request: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         response = self.curl("/checkout", data=request)

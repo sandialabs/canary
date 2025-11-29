@@ -19,6 +19,7 @@ from ... import enums
 from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
+from ...hookspec import hookimpl
 from ...paramset import ParameterSet
 from ...testcase import TestCase
 from ...testexec import ExecutionPolicy
@@ -31,7 +32,6 @@ from ...util import logging
 from ...util.string import pluralize
 from ...util.string import stringify
 from ...util.time import time_in_seconds
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...testspec import DependencyPatterns
@@ -1015,7 +1015,7 @@ def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenera
 
 
 @hookimpl
-def canary_testcase_execution_policy(case: TestCase) -> ExecutionPolicy | None:
+def canary_runtest_execution_policy(case: TestCase) -> ExecutionPolicy | None:
     if case.spec.file.suffix in (".pyt", ".py"):
         if script := case.get_attribute("alt_script"):
             return SubprocessExecutionPolicy([f"./{script}"])

@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 from ... import when
 from ...collect import Collector
+from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 

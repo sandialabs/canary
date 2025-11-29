@@ -9,6 +9,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ... import status
+from ...hookspec import hookimpl
 from ...testcase import TestCase
 from ...third_party import colify
 from ...third_party.color import clen
@@ -16,7 +17,6 @@ from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
