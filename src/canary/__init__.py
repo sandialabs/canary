@@ -34,9 +34,9 @@ from _canary.testexec import SubprocessExecutionPolicy
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.testspec import DependencyPatterns
-from _canary.testspec import DraftSpec
 from _canary.testspec import ResolvedSpec
 from _canary.testspec import TestSpec
+from _canary.testspec import UnresolvedSpec
 from _canary.third_party import color
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem

@@ -60,7 +60,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         tests = self.load()
         if not tests:
             return []
-        drafts: list[canary.DraftSpec] = []
+        drafts: list[canary.UnresolvedSpec] = []
         realpath = os.path.realpath
         for family, details in tests.items():
             path = os.path.relpath(details["ctestfile"], self.root)
@@ -144,9 +144,9 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
                         fixture.dependencies.append(spec)
 
     def resolve_inter_dependencies(
-        self, drafts: list["canary.DraftSpec"]
+        self, drafts: list["canary.UnresolvedSpec"]
     ) -> list["canary.ResolvedSpec"]:
-        from _canary.testspec import resolve
+        from _canary.build import resolve
 
         resolved = resolve(drafts)
         return resolved
@@ -190,7 +190,7 @@ def create_draft_spec(
     working_directory: str | None = None,
     backtrace_triples: list[str] | None = None,
     **kwds,
-) -> canary.DraftSpec:
+) -> canary.UnresolvedSpec:
     kwargs: dict[str, Any] = {}
     kwargs["file_root"] = Path(file_root)
     kwargs["file_path"] = Path(file_path)
@@ -289,7 +289,7 @@ def create_draft_spec(
     if timeout_signal_name is not None:
         warn_unsupported_ctest_option("timeout_signal_name")
 
-    return canary.DraftSpec(**kwargs)  # ty: ignore[missing-argument]
+    return canary.UnresolvedSpec(**kwargs)  # ty: ignore[missing-argument]
 
 
 def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:

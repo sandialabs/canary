@@ -26,6 +26,7 @@ from ...testexec import ExecutionPolicy
 from ...testexec import PythonFileExecutionPolicy
 from ...testexec import PythonRunpyExecutionPolicy
 from ...testexec import SubprocessExecutionPolicy
+from ...testspec import Mask
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -35,7 +36,7 @@ from ...util.time import time_in_seconds
 
 if TYPE_CHECKING:
     from ...testspec import DependencyPatterns
-    from ...testspec import DraftSpec
+    from ...testspec import UnresolvedSpec
 
 
 WhenType = str | dict[str, str]
@@ -105,7 +106,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         return f"{type(self).__name__}({self.path})"
 
     def describe(self, on_options: list[str] | None = None) -> str:
-        from ...testspec import resolve
+        from ...build import resolve
 
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
@@ -161,7 +162,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                         option_expressions.add(a.when.option_expr)
         return list(option_expressions)
 
-    def lock(self, on_options: list[str] | None = None) -> list["DraftSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
         previous_level: int | None = None
         try:
             if self.filter_warnings:
@@ -176,24 +177,24 @@ class PYTTestGenerator(AbstractTestGenerator):
             if previous_level is not None:
                 logging.set_level(previous_level, only="stream")
 
-    def _lock(self, on_options: list[str] | None = None) -> list["DraftSpec"]:
+    def _lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
         from ...testspec import DependencyPatterns
-        from ...testspec import DraftSpec
+        from ...testspec import UnresolvedSpec
 
-        all_drafts: list["DraftSpec"] = []
+        all_drafts: list["UnresolvedSpec"] = []
 
         names = ", ".join(self.names())
         logger.debug(f"Generating test specs for {self} using the following test names: {names}")
         for name in self.names():
             skip_reason = self.skipif_reason
 
-            my_drafts: list["DraftSpec"] = []
+            my_drafts: list["UnresolvedSpec"] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 test_mask: str | None = skip_reason
                 keywords = self.keywords(testname=name, parameters=parameters)
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
-                draft = DraftSpec(
+                draft = UnresolvedSpec(
                     file_root=Path(self.root),
                     file_path=Path(self.path),
                     family=name,
@@ -236,7 +237,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     test_mask = reason
                     logger.debug(f"{draft}: disabled because {reason!r}")
                 if test_mask is not None:
-                    draft.mask = test_mask
+                    draft.mask = Mask.masked(test_mask)
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
@@ -264,7 +265,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 psets = []
                 for paramset in paramsets:
                     psets.append({"keys": paramset.keys, "values": paramset.values})
-                parent = DraftSpec(
+                parent = UnresolvedSpec(
                     file_root=Path(self.root),
                     file_path=Path(self.path),
                     family=name,
@@ -283,7 +284,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     dependencies=dependencies,
                 )
                 if test_mask is not None:
-                    parent.mask = test_mask
+                    parent.mask = Mask.masked(test_mask)
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:

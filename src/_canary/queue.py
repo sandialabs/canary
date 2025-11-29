@@ -81,9 +81,6 @@ class ResourceQueue:
     def put(self, *jobs: JobProtocol) -> None:
         # Precompute heap
         for job in jobs:
-            if job.mask:
-                logger.debug(f"Excluding masked job {job!r}")
-                continue
             if job.status.name not in ("READY", "PENDING"):
                 raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
             required = job.required_resources()

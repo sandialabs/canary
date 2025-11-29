@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 import _canary.testspec as spec
+from _canary import build
+from _canary import select
 from _canary.util.filesystem import working_dir
 
 
@@ -12,10 +14,10 @@ def test_depends_on_one(tmpdir):
         Path("f1.pyt").touch()
         Path("f2.pyt").touch()
         drafts = [
-            spec.DraftSpec(file_root=Path("."), file_path=Path("f1.pyt"), dependencies=[]),
-            spec.DraftSpec(file_root=Path("."), file_path=Path("f2.pyt"), dependencies=["f1"]),
+            spec.UnresolvedSpec(file_root=Path("."), file_path=Path("f1.pyt"), dependencies=[]),
+            spec.UnresolvedSpec(file_root=Path("."), file_path=Path("f2.pyt"), dependencies=["f1"]),
         ]
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == [resolved[0]]
 
@@ -24,13 +26,13 @@ def test_depends_on_one_to_many(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")
         Path("f1.pyt").touch()
-        b1 = spec.DraftSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=[])
+        b1 = spec.UnresolvedSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=[])
         Path("f2.pyt").touch()
-        b2 = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1"])
+        b2 = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1"])
         Path("f3.pyt").touch()
-        b3 = spec.DraftSpec(file_root=root, file_path=Path("f3.pyt"), dependencies=["f1"])
+        b3 = spec.UnresolvedSpec(file_root=root, file_path=Path("f3.pyt"), dependencies=["f1"])
         drafts = [b1, b2, b3]
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == [resolved[0]]
         assert resolved[2].dependencies == [resolved[0]]
@@ -42,14 +44,14 @@ def test_depends_on_param(tmpdir):
         Path("f1.pyt").touch()
         drafts = []
         for a in (1, 2, 3):
-            b = spec.DraftSpec(
+            b = spec.UnresolvedSpec(
                 file_root=root, file_path=Path("f1.pyt"), dependencies=[], parameters={"a": a}
             )
             drafts.append(b)
         Path("f2.pyt").touch()
-        b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=2"])
+        b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=2"])
         drafts.append(b)
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -63,15 +65,17 @@ def test_depends_on_many_to_one(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3, 4):
-            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
+            b = spec.UnresolvedSpec(
+                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
+            )
             drafts.append(b)
         f2 = Path("f2.pyt")
         f2.touch()
-        b = spec.DraftSpec(
+        b = spec.UnresolvedSpec(
             file_root=root, file_path=f1, dependencies=["f1.a=1", "f1.a=3", "f1.a=4"]
         )
         drafts.append(b)
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -85,12 +89,14 @@ def test_depends_on_glob(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3):
-            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
+            b = spec.UnresolvedSpec(
+                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
+            )
             drafts.append(b)
         Path("f2.pyt").touch()
-        b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
+        b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -103,7 +109,7 @@ def test_depends_on_param_subs(tmpdir):
         f1 = Path("f1.pyt")
         f1.touch()
         drafts = []
-        b = spec.DraftSpec(
+        b = spec.UnresolvedSpec(
             file_root=root,
             file_path=f1,
             family="abc_run",
@@ -113,7 +119,7 @@ def test_depends_on_param_subs(tmpdir):
         drafts.append(b)
         f2 = Path("f2.pyt")
         f2.touch()
-        b = spec.DraftSpec(
+        b = spec.UnresolvedSpec(
             file_root=root,
             file_path=f2,
             family="foobar",
@@ -121,7 +127,7 @@ def test_depends_on_param_subs(tmpdir):
             parameters={"my_var": 0.1},
         )
         drafts.append(b)
-        resolved = spec.resolve(drafts)
+        resolved = build.resolve(drafts)
         assert resolved[1].dependencies == [resolved[0]]
 
 
@@ -129,9 +135,9 @@ def test_depends_on_missing(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")
         Path("f1.pyt").touch()
-        b = spec.DraftSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=["f2"])
-        with pytest.raises(spec.DependencyResolutionFailed):
-            spec.resolve([b])
+        b = spec.UnresolvedSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=["f2"])
+        with pytest.raises(build.DependencyResolutionFailed):
+            build.resolve([b])
 
 
 def test_generate_specs(tmpdir):
@@ -141,13 +147,15 @@ def test_generate_specs(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3):
-            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
+            b = spec.UnresolvedSpec(
+                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
+            )
             drafts.append(b)
         Path("f2.pyt").touch()
-        b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
+        b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        resolved = spec.resolve(specs=drafts)
-        specs = spec.finalize(resolved)
+        resolved = build.resolve(specs=drafts)
+        specs = select.finalize(resolved)
         assert len(specs) == 4
         assert len(specs[-1].dependencies) == 3
 

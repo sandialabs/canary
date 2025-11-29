@@ -7,9 +7,10 @@ import canary
 from _canary import rules
 from _canary import select
 from _canary import workspace
-from _canary.generate import canary_generate
-from _canary.plugins.hookspec import hookimpl
-from _canary.plugins.types import Result
+from _canary.build import Builder
+from _canary.build import canary_build
+from _canary.hookspec import hookimpl
+from _canary.resource_pool.rpool import Outcome
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 
@@ -41,9 +42,9 @@ def select_specs(
     return selector.selected
 
 
-
 def generate_specs(generators, on_options=None):
-    specs = canary_generate(generators=generators, on_options=on_options)
+    builder = Builder(generators=generate_specs, on_options=on_options or [])
+    specs = canary_build(builder)
     return specs
 
 
@@ -134,8 +135,8 @@ class Hook:
     @hookimpl
     def canary_resource_pool_accommodates(self, case):
         if case.rparameters["cpus"] > self.cpus:
-            return Result(False, reason="Not enough cpus")
-        return Result(True)
+            return Outcome(False, reason="Not enough cpus")
+        return Outcome(True)
 
 
 def test_cpu_count(tmpdir):

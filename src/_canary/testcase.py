@@ -90,11 +90,6 @@ class TestCase:
     def __repr__(self) -> str:
         return self.spec.display_name
 
-    @property
-    def mask(self) -> str:
-        # Case mask is a read only property
-        return self.spec.mask
-
     def display_name(self, **kwargs) -> str:
         name = self.spec.display_name
         if kwargs.get("status"):
@@ -480,9 +475,7 @@ class TestCase:
         expected = self.spec.dep_done_criteria
         flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.mask and dep.status.name in ("READY", "PENDING"):
-                flags[i] = "wont_run"
-            elif dep.status.name in ("READY", "PENDING", "RUNNING"):
+            if dep.status.name in ("READY", "PENDING", "RUNNING"):
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.name, "*"):

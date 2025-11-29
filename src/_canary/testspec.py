@@ -11,15 +11,11 @@ import os
 import shlex
 import string
 import sys
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
-from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import IO
 from typing import Any
 from typing import Literal
-from typing import Protocol
 
 from . import config
 from .util import json_helper as json
@@ -30,7 +26,30 @@ logger = logging.get_logger(__name__)
 select_sygil = "/"
 
 
-class Named(Protocol):
+@dataclasses.dataclass(frozen=True)
+class Mask:
+    value: bool
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.value and not self.reason:
+            raise TypeError("Mask(True) requires a reason")
+        elif not self.value and self.reason:
+            self.reason = None
+
+    def __bool__(self) -> bool:
+        return self.value
+
+    @classmethod
+    def masked(cls, reason: str) -> "Mask":
+        return cls(True, reason)
+
+    @classmethod
+    def unmasked(cls) -> "Mask":
+        return cls(False, None)
+
+
+class Spec:
     id: str
     file_root: Path
     file_path: Path
@@ -39,59 +58,49 @@ class Named(Protocol):
     rparameters: dict[str, int]
     attributes: dict[str, Any]
 
-    @cached_property
-    def file(self) -> Path: ...
-    @cached_property
-    def name(self) -> str: ...
-    @cached_property
-    def display_name(self) -> str: ...
-    def s_params(self, sep: str = ",") -> str: ...
-
-
-class SpecCommons:
-    def __hash__(self: Named) -> int:
+    def __hash__(self) -> int:
         return hash(self.id)
 
     @cached_property
-    def file(self: Named) -> Path:
+    def file(self) -> Path:
         return self.file_root / self.file_path
 
     @cached_property
-    def name(self: Named) -> str:
+    def name(self) -> str:
         name = self.family
         if p := self.s_params(sep="."):
             name = f"{name}.{p}"
         return name
 
     @cached_property
-    def fullname(self: Named) -> str:
+    def fullname(self) -> str:
         return str(self.file_path.parent / self.name)
 
     @property
-    def execpath(self: Named) -> str:
+    def execpath(self) -> str:
         if p := self.attributes.get("execpath"):
             return p
         return str(self.file_path.parent / self.name)
 
     @execpath.setter
-    def execpath(self: Named, arg: str) -> None:
+    def execpath(self, arg: str) -> None:
         self.attributes["execpath"] = arg
 
     @cached_property
-    def display_name(self: Named) -> str:
+    def display_name(self) -> str:
         name = self.family
         if p := self.s_params():
             name = f"{name}[{p}]"
         return name
 
-    def s_params(self: Named, sep: str = ",") -> str | None:
+    def s_params(self, sep: str = ",") -> str | None:
         if self.parameters:
             parts = [f"{p}={stringify(self.parameters[p])}" for p in sorted(self.parameters.keys())]
             return sep.join(parts)
         return None
 
     @cached_property
-    def pretty_name(self: Named) -> str:
+    def pretty_name(self) -> str:
         if not self.parameters:
             return self.name
         parts: list[str] = []
@@ -102,12 +111,12 @@ class SpecCommons:
         return f"{self.name}[{','.join(parts)}]"
 
     @property
-    def implicit_keywords(self: Named) -> set[str]:
+    def implicit_keywords(self) -> set[str]:
         """Implicit keywords, used for some filtering operations"""
         return {self.id, self.name, self.family, str(self.file)}
 
     @property
-    def implicit_parameters(self: Named) -> dict[str, int | float]:
+    def implicit_parameters(self) -> dict[str, int | float]:
         parameters: dict[str, int | float] = {}
         for key, value in self.rparameters.items():
             if key not in self.parameters:
@@ -142,7 +151,7 @@ class SpecCommons:
             reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
         return reqd
 
-    def asdict(self, shallow: bool = False) -> dict:
+    def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
 
     def dump(self, file: IO[Any], **kwargs: Any) -> None:
@@ -170,7 +179,7 @@ class SpecCommons:
 
 
 @dataclasses.dataclass(frozen=True)
-class TestSpec(SpecCommons):
+class TestSpec(Spec):
     id: str
     file_root: Path
     file_path: Path
@@ -190,7 +199,6 @@ class TestSpec(SpecCommons):
     modules: list[str] | None
     rcfiles: list[str] | None
     owners: list[str] | None
-    mask: str
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: dict[str, str] = dataclasses.field(default_factory=dict)
@@ -244,7 +252,7 @@ class TestSpec(SpecCommons):
 
 
 @dataclasses.dataclass
-class ResolvedSpec(SpecCommons):
+class ResolvedSpec(Spec):
     id: str
     file_root: Path
     file_path: Path
@@ -264,7 +272,7 @@ class ResolvedSpec(SpecCommons):
     modules: list[str] | None
     rcfiles: list[str] | None
     owners: list[str] | None
-    mask: str = ""
+    mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
@@ -281,7 +289,10 @@ class ResolvedSpec(SpecCommons):
         for a in d["assets"]:
             assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
         d["assets"] = assets
+        mask = d.pop("mask", None)
         self = ResolvedSpec(**d)  # ty: ignore[missing-argument]
+        if mask:
+            self.mask = Mask(mask["value"], mask["reason"])
         return self
 
     def finalize(self, dependencies: list["TestSpec"]) -> TestSpec:
@@ -305,7 +316,6 @@ class ResolvedSpec(SpecCommons):
             modules=self.modules,
             rcfiles=self.rcfiles,
             owners=self.owners,
-            mask=self.mask,
             attributes=self.attributes,
             environment=self.environment,
             environment_modifications=self.environment_modifications,
@@ -348,7 +358,7 @@ class DependencyPatterns:
         if self.expects is None:
             self.expects = "+"
 
-    def matches(self, spec: "DraftSpec") -> bool:
+    def matches(self, spec: "UnresolvedSpec") -> bool:
         names = {
             spec.id,
             spec.name,
@@ -382,7 +392,7 @@ class DependencyPatterns:
 
 
 @dataclasses.dataclass
-class DraftSpec(SpecCommons):
+class UnresolvedSpec(Spec):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
 
@@ -404,7 +414,7 @@ class DraftSpec(SpecCommons):
     modules: list[str] | None = None
     rcfiles: list[str] | None = None
     owners: list[str] | None = None
-    mask: str | None = None
+    mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
@@ -417,7 +427,9 @@ class DraftSpec(SpecCommons):
         default_factory=list, init=False
     )
     rparameters: dict[str, Any] = dataclasses.field(default_factory=dict)
-    resolved_dependencies: list["DraftSpec"] = dataclasses.field(default_factory=list, init=False)
+    resolved_dependencies: list["UnresolvedSpec"] = dataclasses.field(
+        default_factory=list, init=False
+    )
     resolved: bool = dataclasses.field(default=False, init=False)
 
     def __post_init__(self) -> None:
@@ -635,312 +647,6 @@ class DraftSpec(SpecCommons):
         else:
             hasher.update(str(self.file_path.parent / self.name).encode())
         return hasher.hexdigest()
-
-
-def resolve_naive(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
-    graph: defaultdict[str, list[str]] = defaultdict(list)
-    draft_lookup: defaultdict[str, list[str]] = defaultdict(list)
-    dep_done_criteria: defaultdict[str, list[str]] = defaultdict(list)
-    map: dict[str, DraftSpec] = {d.id: d for d in draft_specs}
-    for spec in draft_specs:
-        if isinstance(spec, ResolvedSpec):
-            graph[spec.id] = [_.id for _ in spec.dependencies]
-        elif not spec.dependency_patterns:
-            graph[spec.id] = []
-        else:
-            for dp in spec.dependency_patterns:
-                deps = [u for u in draft_specs if u is not spec and dp.matches(u)]
-                dp.update(*[u.id for u in deps])
-                draft_lookup[spec.id].extend([_.id for _ in deps])
-                dep_done_criteria[spec.id].extend([dp.result_match] * len(deps))
-            graph[spec.id] = draft_lookup[spec.id]
-
-    errors: defaultdict[str, list[str]] = defaultdict(list)
-    lookup: dict[str, ResolvedSpec] = {}
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    while ts.is_active():
-        ids = ts.get_ready()
-        for id in ids:
-            # Replace dependencies with TestSpec objects
-            spec = map[id]
-            if isinstance(spec, ResolvedSpec):
-                lookup[id] = spec
-                continue
-            dependencies: list[ResolvedSpec] = [lookup[id_] for id_ in draft_lookup[id]]
-            try:
-                spec = spec.resolve(dependencies, dep_done_criteria[spec.id])
-            except UnresolvedDependenciesErrors as e:
-                errors[spec.fullname].extend(e.errors)
-            lookup[id] = spec
-        ts.done(*ids)
-
-    if errors:
-        msg: list[str] = ["Dependency resolution failed:"]
-        for name, issues in errors.items():
-            msg.append(f"  {name}")
-            msg.extend(f"  • {p}" for p in issues)
-        raise DependencyResolutionFailed("\n".join(msg))
-    return list(lookup.values())
-
-
-def resolve(specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
-    # Separate specs into resolved and draft
-    draft_specs: list[DraftSpec] = []
-    resolved_specs: list[ResolvedSpec] = []
-    spec_map: dict[str, DraftSpec | ResolvedSpec] = {}
-
-    # Build indices
-    unique_name_idx: dict[str, str] = {}
-    non_unique_idx: dict[str, list[str]] = defaultdict(list)
-
-    for spec in specs:
-        spec_map[spec.id] = spec
-
-        if isinstance(spec, ResolvedSpec):
-            resolved_specs.append(spec)
-        else:
-            draft_specs.append(spec)
-
-        # Index unique identifiers (for both draft and resolved)
-        unique_name_idx[spec.id] = spec.id
-
-        # Index non-unique identifiers (for both draft and resolved)
-        non_unique_idx[spec.name].append(spec.id)
-        non_unique_idx[spec.fullname].append(spec.id)
-        non_unique_idx[spec.display_name].append(spec.id)
-        non_unique_idx[spec.family].append(spec.id)
-        non_unique_idx[str(spec.file_path)].append(spec.id)
-        non_unique_idx[str(spec.file_path.parent / spec.display_name)].append(spec.id)
-
-    # All specs that can be matched (both draft and resolved)
-    matchable_specs = draft_specs + resolved_specs
-
-    # Build dependency graph in parallel, specs will be added as they resolve
-    graph: dict[str, list[str]] = {r.id: [_.id for _ in r.dependencies] for r in resolved_specs}
-    draft_lookup: dict[str, list[str]] = {}
-    dep_done_criteria: dict[str, list[str]] = {}
-
-    results: list[tuple[str, list[str], list[str]]]
-    if os.getenv("CANARY_SERIAL_SPEC_RESOLUTION"):
-        results = _resolve_dependencies_serial(
-            draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
-        )
-    else:
-        results = _resolve_dependencies_parallel(
-            draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
-        )
-
-    # Merge results
-    for spec_id, matches, done_criteria in results:
-        graph[spec_id] = matches
-        draft_lookup[spec_id] = matches
-        dep_done_criteria[spec_id] = done_criteria
-
-    # Resolve dependencies using topological sort (this is fast, keep sequential)
-    errors: defaultdict[str, list[str]] = defaultdict(list)
-    lookup: dict[str, ResolvedSpec] = {}
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-
-    while ts.is_active():
-        ids = ts.get_ready()
-        for id in ids:
-            spec = spec_map[id]
-            if isinstance(spec, ResolvedSpec):
-                lookup[id] = spec
-            else:
-                dep_ids = draft_lookup.get(id, [])
-                dependencies = [lookup[dep_id] for dep_id in dep_ids]
-
-                try:
-                    spec = spec.resolve(dependencies, dep_done_criteria.get(id, []))
-                except UnresolvedDependenciesErrors as e:
-                    errors[spec.fullname].extend(e.errors)
-
-                lookup[id] = spec
-        ts.done(*ids)
-
-    if errors:
-        msg: list[str] = ["Dependency resolution failed:"]
-        for name, issues in errors.items():
-            msg.append(f"  {name}")
-            msg.extend(f"  • {p}" for p in issues)
-        raise DependencyResolutionFailed("\n".join(msg))
-
-    return list(lookup.values())
-
-
-def _resolve_dependencies_serial(
-    specs_to_resolve: list[DraftSpec],
-    matchable_specs: list[DraftSpec | ResolvedSpec],
-    unique_name_idx: dict[str, str],
-    non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, DraftSpec | ResolvedSpec],
-) -> list[tuple[str, list[str], list[str]]]:
-    """Resolve dependencies serially for debugging"""
-    results = []
-    for spec in specs_to_resolve:
-        if not spec.dependency_patterns:
-            results.append(_resolve_empty(spec))
-        else:
-            results.append(
-                _resolve_spec_dependencies(
-                    spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
-                )
-            )
-    return results
-
-
-def _resolve_dependencies_parallel(
-    specs_to_resolve: list[DraftSpec],
-    matchable_specs: list[DraftSpec | ResolvedSpec],
-    unique_name_idx: dict[str, str],
-    non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, DraftSpec | ResolvedSpec],
-) -> list[tuple[str, list[str], list[str]]]:
-    """Resolve dependencies in parallel, returning (spec_id, match_ids, done_criteria)"""
-
-    if not specs_to_resolve:
-        return []
-
-    num_workers = min(os.cpu_count() or 4, len(specs_to_resolve))
-
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = []
-        for spec in specs_to_resolve:
-            if not spec.dependency_patterns:
-                futures.append(executor.submit(_resolve_empty, spec))
-            else:
-                futures.append(
-                    executor.submit(
-                        _resolve_spec_dependencies,
-                        spec,
-                        matchable_specs,
-                        unique_name_idx,
-                        non_unique_idx,
-                        spec_map,
-                    )
-                )
-
-        results = [future.result() for future in futures]
-
-    return results
-
-
-def _resolve_empty(spec: DraftSpec) -> tuple[str, list[str], list[str]]:
-    """Fast path for specs with no dependencies"""
-    return (spec.id, [], [])
-
-
-def _resolve_spec_dependencies(
-    spec: DraftSpec,
-    matchable_specs: list[DraftSpec | ResolvedSpec],
-    unique_name_idx: dict[str, str],
-    non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, DraftSpec | ResolvedSpec],
-) -> tuple[str, list[str], list[str]]:
-    """Resolve dependencies for a single spec"""
-    matches: list[str] = []
-    done_criteria: list[str] = []
-
-    for dp in spec.dependency_patterns:
-        deps = _find_matching_specs(
-            dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
-        )
-        dep_ids = [d.id for d in deps]
-        dp.update(*dep_ids)
-        matches.extend(dep_ids)
-        done_criteria.extend([dp.result_match] * len(deps))
-
-    return (spec.id, matches, done_criteria)
-
-
-def _find_matching_specs(
-    dp: DependencyPatterns,
-    source_spec: DraftSpec,
-    matchable_specs: list[DraftSpec | ResolvedSpec],
-    unique_name_idx: dict[str, str],
-    non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, DraftSpec | ResolvedSpec],
-) -> list[DraftSpec | ResolvedSpec]:
-    """Optimized pattern matching using indices where possible"""
-    matches: set[str] = set()
-    matched_specs: list[DraftSpec | ResolvedSpec] = []
-
-    for pattern in dp.patterns:
-        # Check exact matches first before resorting to glob matching
-        candidates: list[DraftSpec | ResolvedSpec] = []
-        if pattern in unique_name_idx:
-            spec_id = unique_name_idx[pattern]
-            candidates.append(spec_map[spec_id])
-        elif pattern in non_unique_idx:
-            spec_ids = non_unique_idx[pattern]
-            candidates.extend([spec_map[spec_id] for spec_id in spec_ids])
-
-        for spec in candidates:
-            if spec.id != source_spec.id and spec.id not in matches:
-                matches.add(spec.id)
-                matched_specs.append(spec)
-
-        if not matched_specs:
-            # Glob pattern - check all matchable specs (draft AND resolved)
-            for spec in matchable_specs:
-                if spec.id == source_spec.id or spec.id in matches:
-                    continue
-
-                if _pattern_matches_spec(pattern, spec):
-                    matches.add(spec.id)
-                    matched_specs.append(spec)
-
-    return matched_specs
-
-
-def _pattern_matches_spec(pattern: str, spec: DraftSpec | ResolvedSpec) -> bool:
-    """Check if pattern matches any of the spec's names"""
-    names = (
-        spec.id,
-        spec.name,
-        spec.family,
-        spec.fullname,
-        spec.display_name,
-        str(spec.file_path),
-        str(spec.file_path.parent / spec.display_name),
-    )
-
-    for name in names:
-        if fnmatch.fnmatchcase(name, pattern):
-            return True
-    return False
-
-
-def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
-    map: dict[str, ResolvedSpec] = {}
-    graph: dict[str, list[str]] = {}
-    for resolved_spec in resolved_specs:
-        map[resolved_spec.id] = resolved_spec
-        graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
-    lookup: dict[str, TestSpec] = {}
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    while ts.is_active():
-        ids = ts.get_ready()
-        for id in ids:
-            # Replace dependencies with TestSpec objects
-            resolved = map[id]
-            dependencies: list[TestSpec] = [lookup[dep.id] for dep in resolved.dependencies]
-            spec = resolved.finalize(dependencies)
-            lookup[id] = spec
-        ts.done(*ids)
-    return list(lookup.values())
-
-
-def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
-    return any(element in test_elements for element in elements)
-
-
-class DependencyResolutionFailed(Exception):
-    pass
 
 
 class InvalidTypeError(Exception):
