@@ -112,7 +112,7 @@ class ParameterRule(Rule):
         )
         if match:
             return RuleOutcome(True)
-        return RuleOutcome.failed(self.reason)
+        return RuleOutcome.failed(self.default_reason)
 
 
 class IDsRule(Rule):
@@ -125,7 +125,7 @@ class IDsRule(Rule):
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if not any(spec.id.startswith(id) for id in self.ids):
-            return RuleOutcome.failed(self.reason)
+            return RuleOutcome.failed(self.default_reason)
         return RuleOutcome(True)
 
 
@@ -143,7 +143,7 @@ class OwnersRule(Rule):
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if self.owners.intersection(spec.owners or []):
             return RuleOutcome(True)
-        return RuleOutcome.failed(self.reason)
+        return RuleOutcome.failed(self.default_reason)
 
 
 class PrefixRule(Rule):
@@ -180,7 +180,7 @@ class RegexRule(Rule):
                 if os.path.isfile(asset.src) and filesystem.grep(self.rx, asset.src):
                     break
             else:
-                return RuleOutcome.failed(self.reason)
+                return RuleOutcome.failed(self.default_reason)
         return RuleOutcome(True)
 
 

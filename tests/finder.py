@@ -4,37 +4,46 @@
 
 import _canary.config as config
 import canary
+from _canary import rules
+from _canary import select
 from _canary import workspace
+from _canary.generate import canary_generate
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.types import Result
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 
 
-def mask(
+def select_specs(
     specs,
     *,
     keyword_exprs=None,
     parameter_expr=None,
     owners=None,
     regex=None,
-    case_specs=None,
-    start=None,
+    ids=None,
+    prefixes=None,
 ):
-    from _canary.util import masking
+    selector = select.Selector(specs)
+    if keyword_exprs:
+        selector.add_rule(rules.KeywordRule(keyword_exprs))
+    if parameter_expr:
+        selector.add_rule(rules.ParameterRule(parameter_expr))
+    if owners:
+        selector.add_rule(rules.OwnersRule(owners))
+    if regex:
+        selector.add_rule(rules.RegexRule(regex))
+    if ids:
+        selector.add_rule(rules.IDsRule(ids))
+    if prefixes:
+        selector.add_rule(rules.PrefixRule(prefixes))
+    selector.run()
+    return selector.selected
 
-    masking.apply_masks(
-        specs=specs,
-        keyword_exprs=keyword_exprs,
-        parameter_expr=parameter_expr,
-        owners=owners,
-        regex=regex,
-        ids=case_specs,
-    )
 
 
 def generate_specs(generators, on_options=None):
-    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    specs = canary_generate(generators=generators, on_options=on_options)
     return specs
 
 
@@ -60,16 +69,16 @@ def test_keywords(tmpdir):
             fh.write("import canary\ncanary.directives.keywords('e', 'f', 'g', 'h', 'i')")
     generators = workspace.find_generators_in_path(workdir)
     specs = generate_specs(generators)
-    mask(specs, keyword_exprs=["a and i"])
-    assert len([spec for spec in specs if not spec.mask]) == 0
+    final = select_specs(specs, keyword_exprs=["a and i"])
+    assert len(final) == 0
 
     specs = generate_specs(generators)
-    mask(specs, keyword_exprs=["a and e"])
-    assert len([spec for spec in specs if not spec.mask]) == 1
+    final = select_specs(specs, keyword_exprs=["a and e"])
+    assert len(final) == 1
 
     specs = generate_specs(generators)
-    mask(specs, keyword_exprs=["a or i"])
-    assert len([spec for spec in specs if not spec.mask]) == 2
+    final = select_specs(specs, keyword_exprs=["a or i"])
+    assert len(final) == 2
 
 
 def test_parameterize_1(tmpdir):
@@ -145,8 +154,8 @@ def test_cpu_count(tmpdir):
         canary.config.pluginmanager.register(Hook(2), "myhook")
         generators = workspace.find_generators_in_path(workdir)
         specs = generate_specs(generators)
-        mask(specs)
-        assert len([spec for spec in specs if not spec.mask]) == 1
+        final = select_specs(specs)
+        assert len(final) == 1
         canary.config.pluginmanager.unregister(name="myhook")
 
 
@@ -231,33 +240,31 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
         with config.override():
             generators = workspace.find_generators_in_path(".")
             specs = generate_specs(generators, on_options=["baz"])
-            mask(specs, keyword_exprs=["test and unit"], owners=["me"])
+            final = select_specs(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            for spec in specs:
-                assert not spec.mask, f"{spec}: {spec.status}"
+            assert len(final) == 7
 
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
             specs = generate_specs(generators)
-            mask(specs, keyword_exprs=["test and unit"], owners=["me"])
+            final = select_specs(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(specs) == 4
             assert specs[-1].attributes.get("multicase") is not None
-            assert not specs[-1].mask
+            assert len(final) == 4
 
             # with cpus<2, some of the cases will be filtered
             specs = generate_specs(generators, on_options=["baz"])
-            mask(specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"])
+            final = select_specs(
+                specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"]
+            )
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert not specs[-1].mask
-            for spec in specs[:-1]:
+            assert len(final) == 4
+            for spec in final[:-1]:
                 assert spec.attributes.get("multicase") is None
-                if spec.rparameters["cpus"] == 2:
-                    assert spec.mask
-                else:
-                    assert not spec.mask
+                assert spec.rparameters["cpus"] != 2
 
 
 def test_vvt_generator(tmpdir):
@@ -275,33 +282,28 @@ def test_vvt_generator(tmpdir):
         with config.override():
             generators = workspace.find_generators_in_path(".")
             specs = generate_specs(generators, on_options=["baz"])
-            mask(specs, keyword_exprs=["test and unit"])
+            final = select_specs(specs, keyword_exprs=["test and unit"])
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            for spec in specs:
-                assert not spec.mask
+            assert len(final) == 7
 
             # without the baz option, the `np` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
             specs = generate_specs(generators)
-            mask(specs, keyword_exprs=["test and unit"])
+            final = select_specs(specs, keyword_exprs=["test and unit"])
             assert len(specs) == 4
             assert specs[-1].attributes.get("multicase") is not None
-            assert not specs[-1].mask
+            assert len(final) == 4
 
             # with np<2, some of the cases will be filtered
             specs = generate_specs(generators, on_options=["baz"])
-            mask(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
+            final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
             assert not specs[-1].mask
-            for spec in specs[:-1]:
-                assert spec.attributes.get("multicase") is None
-                if spec.rparameters["cpus"] == 2:
-                    assert spec.mask
-                else:
-                    assert not spec.mask
+            for spec in final[:-1]:
+                assert spec.rparameters["cpus"] != 2
 
 
 def test_many_composite(tmpdir):
