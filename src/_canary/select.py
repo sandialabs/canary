@@ -5,6 +5,7 @@
 import dataclasses
 import datetime
 import hashlib
+from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Iterable
 
@@ -12,6 +13,7 @@ from . import config
 from .hookspec import hookimpl
 from .rules import ResourceCapacityRule
 from .rules import Rule
+from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
 from .util.string import pluralize
@@ -19,12 +21,13 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .testspec import ResolvedSpec
+    from .testspec import TestSpec
 
 
 logger = logging.get_logger(__name__)
 
 
-def canary_select(selector: "Selector") -> list["ResolvedSpec"]:
+def canary_select(selector: "Selector") -> list["TestSpec"]:
     """Filter test cases (mask test cases that don't meet a specific criteria)"""
     pm = logger.progress_monitor("@*{Selecting} specs")
     config.pluginmanager.hook.canary_selectstart(selector=selector)
@@ -32,7 +35,7 @@ def canary_select(selector: "Selector") -> list["ResolvedSpec"]:
     config.pluginmanager.hook.canary_select_modifyitems(selector=selector)
     pm.done()
     config.pluginmanager.hook.canary_select_report(selector=selector)
-    return selector.unmasked_specs()
+    return selector.final_specs()
 
 
 @hookimpl
@@ -51,7 +54,7 @@ def canary_addoption(parser: "Parser") -> None:
 def canary_select_report(selector: "Selector") -> None:
     excluded: list["ResolvedSpec"] = []
     for spec in selector.specs:
-        if spec.id in selector.masked:
+        if spec.mask:
             excluded.append(spec)
     n = len(selector.specs) - len(excluded)
     logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
@@ -60,8 +63,7 @@ def canary_select_report(selector: "Selector") -> None:
         logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
         for spec in excluded:
-            if mask := selector.masked[spec.id]:
-                reasons.setdefault(mask, []).append(spec)
+            reasons.setdefault(spec.mask.reason, []).append(spec)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
@@ -91,14 +93,13 @@ class SelectorSnapshot:
         """Return True if the snapshot matches the current spec set."""
         return self.spec_set_id == Selector.spec_set_id(specs)
 
-    def apply(self, specs: list["ResolvedSpec"]) -> list["ResolvedSpec"]:
-        return [spec for spec in specs if spec.id not in self.masked]
+    def apply(self, specs: list["ResolvedSpec"]) -> list["TestSpec"]:
+        return finalize([spec for spec in specs if spec.id not in self.masked])
 
 
 class Selector:
     def __init__(self, specs: list["ResolvedSpec"], rules: Iterable[Rule] = ()):
         self.specs: list["ResolvedSpec"] = specs
-        self.masked: dict[str, str] = {}
         self.rules: list[Rule] = list(rules)
         self.rules.insert(0, ResourceCapacityRule())
         self.ready = False
@@ -112,7 +113,7 @@ class Selector:
             for rule in self.rules:
                 outcome = rule(spec)
                 if not outcome:
-                    self.masked[spec.id] = outcome.reason or rule.default_reason
+                    spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                     break
 
         # Propagate masks
@@ -120,19 +121,19 @@ class Selector:
         while changed:
             changed = False
             for spec in self.specs:
-                if spec.id in self.masked:
+                if spec.mask:
                     continue
                 if any(dep.mask for dep in spec.dependencies):
-                    self.masked[spec.id] = "One or more dependencies masked"
+                    self.mask = Mask.masked("One or more dependencies masked")
                     changed = True
 
         self.ready = True
 
     @property
-    def selected(self) -> list["ResolvedSpec"]:
+    def selected(self) -> list["TestSpec"]:
         if not self.ready:
             raise ValueError("selector.run() has not been executed")
-        return self.unmasked_specs()
+        return self.final_specs()
 
     @staticmethod
     def spec_set_id(specs: list["ResolvedSpec"]) -> str:
@@ -145,7 +146,7 @@ class Selector:
         spec_set_id = self.spec_set_id(self.specs)
         return SelectorSnapshot(
             spec_set_id=spec_set_id,
-            masked=self.masked,
+            masked={spec.id: spec.mask.reason for spec in self.specs if spec.mask.reason},
             rules=[r.serialize() for r in self.rules],
             created_on=datetime.datetime.now().isoformat(),
         )
@@ -158,7 +159,28 @@ class Selector:
             self.add_rule(rule)
         return self
 
-    def unmasked_specs(self) -> list["ResolvedSpec"]:
+    def final_specs(self) -> list["TestSpec"]:
         if not self.ready:
             raise ValueError("selector.run() has not been executed")
-        return [spec for spec in self.specs if spec.id not in self.masked]
+        return finalize([spec for spec in self.specs if not spec.mask])
+
+
+def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
+    map: dict[str, "ResolvedSpec"] = {}
+    graph: dict[str, list[str]] = {}
+    for resolved_spec in resolved_specs:
+        map[resolved_spec.id] = resolved_spec
+        graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
+    lookup: dict[str, "TestSpec"] = {}
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    while ts.is_active():
+        ids = ts.get_ready()
+        for id in ids:
+            # Replace dependencies with TestSpec objects
+            resolved = map[id]
+            dependencies: list["TestSpec"] = [lookup[dep.id] for dep in resolved.dependencies]
+            spec = resolved.finalize(dependencies)
+            lookup[id] = spec
+        ts.done(*ids)
+    return list(lookup.values())

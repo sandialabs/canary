@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import hashlib
 import os
 import shutil
 import sqlite3
@@ -16,9 +15,10 @@ from . import rules
 from . import select
 from . import testspec
 from . import when
+from .build import Builder
+from .build import canary_build
 from .collect import Collector
 from .collect import canary_collect
-from .generate import canary_generate
 from .generator import AbstractTestGenerator
 from .session import Session
 from .session import SessionResults
@@ -303,7 +303,7 @@ class Workspace:
                 link.parent.mkdir(parents=True, exist_ok=True)
                 if link.exists():
                     link.unlink()
-                link.symlink_to(target)
+                link.symlink_to(target, target_is_directory=True)
 
     def inside_view(self, path: Path | str) -> bool:
         """Is ``path`` inside of a self.view?"""
@@ -439,12 +439,11 @@ class Workspace:
         """
         on_options = on_options or []
         generators = self.load_generators()
-        parts = [str(generator.file) for generator in generators] + on_options
-        parts.sort()
-        signature = hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
+        builder = Builder(generators, on_options=on_options or [])
+        signature = builder.signature
         if cached := self.db.get_specs(signature=signature):
             return cached
-        resolved = canary_generate(generators=generators, on_options=on_options)
+        resolved = canary_build(builder)
         pm = logger.progress_monitor("@*{Putting} specs in workspace database")
         self.db.put_specs(signature, resolved)
         pm.done()
@@ -460,7 +459,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
         ids: list[str] | None = None,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["TestSpec"]:
         """Generate and select final test specs
 
         Args:
@@ -497,17 +496,14 @@ class Workspace:
         if regex:
             selector.add_rule(rules.RegexRule(regex))
         final = select.canary_select(selector=selector)
-
         if tag is None and len(selector.rules) == 1:
             # Default: 1 rule for resource availability
             tag = "default"
-
         if tag:
             self.db.put_selection(tag, selector.snapshot())
-
         return final
 
-    def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
+    def get_selection(self, tag: str = "default") -> list["TestSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
         snapshot = self.db.get_selection(tag)
@@ -517,7 +513,7 @@ class Workspace:
         selector = select.Selector.from_snapshot(specs, snapshot)
         selector.run()
         self.db.put_selection(tag, selector.snapshot())
-        return selector.selected
+        return selector.final_specs()
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""

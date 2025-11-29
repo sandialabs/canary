@@ -16,6 +16,7 @@ from .plugins.types import CanarySubcommand
 if TYPE_CHECKING:
     from multiprocessing import Queue
 
+    from .build import Builder
     from .collect import Collector
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
     from .select import Selector
     from .testcase import TestCase
     from .testexec import ExecutionPolicy
-    from .testspec import ResolvedSpec
     from .workspace import Session
 
 
@@ -185,17 +185,15 @@ def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
 
 
 @hookspec
-def canary_generatestart(
-    generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> None: ...
+def canary_buildstart(builder: "Builder") -> None: ...
 
 
 @hookspec
-def canary_generate_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
+def canary_build_modifyitems(builder: "Builder") -> None: ...
 
 
 @hookspec
-def canary_generate_report(specs: list["ResolvedSpec"]) -> None: ...
+def canary_build_report(builder: "Builder") -> None: ...
 
 
 # -------------------------------------------------------------------------

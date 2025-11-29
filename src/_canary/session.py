@@ -192,9 +192,8 @@ class Session:
         try:
             for case in cases:
                 case.status.set("PENDING")
-            final = [case for case in cases if not case.mask]
             os.chdir(str(self.work_dir))
-            config.pluginmanager.hook.canary_runtests(cases=final)
+            config.pluginmanager.hook.canary_runtests(cases=cases)
         except TimeoutError:
             logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
         except Exception:

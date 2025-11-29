@@ -9,7 +9,7 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .testspec import DraftSpec
+    from .testspec import UnresolvedSpec
 
 
 class AbstractTestGenerator(ABC):
@@ -84,7 +84,7 @@ class AbstractTestGenerator(ABC):
         return repr(self)
 
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> list["DraftSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:

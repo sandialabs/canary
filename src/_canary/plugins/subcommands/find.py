@@ -14,7 +14,7 @@ from ...collect import Collector
 from ...collect import canary_collect
 from ...error import StopExecution
 from ...hookspec import hookimpl
-from ...testspec import finalize as finalize_specs
+from ...select import finalize as finalize_specs
 from ...third_party.colify import colified
 from ...third_party.color import colorize
 from ...util import graph
