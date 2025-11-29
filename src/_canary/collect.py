@@ -62,8 +62,8 @@ def collect_from_paths(collector: "Collector") -> None:
                     continue
                 for f in files:
                     if collector.matches(f):
-                        relpath = os.path.relpath(os.path.join(dirname, f), scanpath.root)  # ty: ignore[invalid-argument-type]
-                        paths.append(relpath)
+                        relpath = os.path.relpath(os.path.join(dirname, f), scanpath.root)
+                        paths.append(str(relpath))
             if paths:
                 collector.add_files(scanpath.root, paths)
         pm.done()

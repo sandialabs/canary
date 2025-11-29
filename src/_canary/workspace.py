@@ -1,8 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import dataclasses
-import datetime
 import hashlib
 import os
 import shutil
@@ -14,10 +12,13 @@ from typing import Callable
 from typing import Generator
 
 from . import config
+from . import rules
+from . import select
 from . import testspec
 from . import when
 from .collect import Collector
 from .collect import canary_collect
+from .generate import canary_generate
 from .generator import AbstractTestGenerator
 from .session import Session
 from .session import SessionResults
@@ -42,31 +43,6 @@ view_tag = "VIEW.TAG"
 
 DB_MAX_RETRIES = 8
 DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
-
-
-@dataclasses.dataclass
-class SpecSelection:
-    specs: list[TestSpec]
-    tag: str | None
-    filters: dict[str, Any]
-    _sha256: str = dataclasses.field(init=False)
-    _created_on: str = dataclasses.field(init=False)
-
-    def __post_init__(self) -> None:
-        meta = {"specs": sorted([spec.id for spec in self.specs]), "tag": self.tag, **self.filters}
-        text = json.dumps(meta)
-        self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
-        if any(spec.mask for spec in self.specs):
-            raise ValueError("SpecSelection expects only unmasked specs")
-
-    @property
-    def sha256(self) -> str:
-        return self._sha256
-
-    @property
-    def created_on(self) -> str:
-        return self._created_on
 
 
 class Workspace:
@@ -247,17 +223,18 @@ class Workspace:
 
     @contextmanager
     def session(
-        self, selection: SpecSelection | None = None, name: str | None = None
+        self, specs: list["TestSpec"] | None = None, name: str | None = None
     ) -> Generator[Session, None, None]:
         session: Session
-        if selection is not None and name is not None:
-            raise TypeError("Mutually exlusive keyword arguments: 'selection', 'name'")
-        elif selection is None and name is None:
-            raise TypeError("Missing required keyword arguments: 'selection' or 'name'")
-        if selection is not None:
-            session = Session.create(self.sessions_dir, selection)
+        if specs is not None and name is not None:
+            raise TypeError("Mutually exlusive keyword arguments: 'specs', 'name'")
+        elif specs is None and name is None:
+            raise TypeError("Missing required keyword arguments: 'specs' or 'name'")
+        if specs is not None:
+            session = Session.create(self.sessions_dir, specs)
             logger.info(f"Created test session at {session.name}")
         else:
+            assert name is not None
             root = self.sessions_dir / name
             session = Session.load(root)
             logger.info(f"Loaded test session at {session.name}")
@@ -266,7 +243,7 @@ class Workspace:
     def add_session_results(self, results: SessionResults, view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         self.db.put_results(results)
-        view_entries: dict[str, list[str]] = {}
+        view_entries: dict[Path, list[Path]] = {}
         for case in results.cases:
             relpath = case.workspace.dir.relative_to(results.prefix / "work")
             view_entries.setdefault(results.prefix / "work", []).append(relpath)
@@ -310,9 +287,9 @@ class Workspace:
         for path in self.view.iterdir():
             if path.is_dir():
                 shutil.rmtree(path)
-        view_entries: dict[str, list[str]] = {}
+        view_entries: dict[Path, list[Path]] = {}
         for root, path in view.values():
-            view_entries.setdefault(root, []).append(path)
+            view_entries.setdefault(Path(root), []).append(Path(path))
         self.update_view(view_entries)
 
     def update_view(self, view_entries: dict[Path, list[Path]]) -> None:
@@ -349,7 +326,7 @@ class Workspace:
             "generator_count": generator_count,
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
             "latest_session": latest_session,
-            "tags": self.db.selections,
+            "tags": self.db.tags,
             "version": canary.version,
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
@@ -374,13 +351,6 @@ class Workspace:
         generators = canary_collect(collector)
         self.db.put_generators(generators)
         # Invalidate caches
-        warned = False
-        for selection in self.db.get_selections():
-            selection.specs.clear()
-            self.db.put_selection(selection)
-            if not warned:
-                logger.info("Invalidating previously locked test case cache")
-                warned = True
         logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
@@ -472,18 +442,12 @@ class Workspace:
         parts = [str(generator.file) for generator in generators] + on_options
         parts.sort()
         signature = hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
-
         if cached := self.db.get_specs(signature=signature):
             return cached
-
-        resolved: list[ResolvedSpec] = config.pluginmanager.hook.canary_generate(
-            generators=generators, on_options=on_options
-        )
-
+        resolved = canary_generate(generators=generators, on_options=on_options)
         pm = logger.progress_monitor("@*{Putting} specs in workspace database")
         self.db.put_specs(signature, resolved)
         pm.done()
-
         return resolved
 
     def select(
@@ -496,7 +460,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
         ids: list[str] | None = None,
-    ) -> SpecSelection:
+    ) -> list["ResolvedSpec"]:
         """Generate and select final test specs
 
         Args:
@@ -519,45 +483,41 @@ class Workspace:
 
         """
         specs = self.generate_specs(on_options=on_options)
+        selector = select.Selector(specs)
+        if ids:
+            selector.add_rule(rules.IDsRule(ids))
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if prefixes:
+            selector.add_rule(rules.PrefixRule(prefixes))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        final = select.canary_select(selector=selector)
 
-        filters = dict(
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-            prefixes=prefixes,
-            ids=ids,
-        )
-
-        pm = logger.progress_monitor("@*{Modifying} specs")
-        config.pluginmanager.hook.canary_select(specs=specs, **filters)
-        pm.done()
-
-        pm = logger.progress_monitor("@*{Finalizing} test specs")
-        final = testspec.finalize([spec for spec in specs if not spec.mask])
-        pm.done()
-
-        if tag is None and all([not _ for _ in filters]):
+        if tag is None and len(selector.rules) == 1:
+            # Default: 1 rule for resource availability
             tag = "default"
 
-        filters["on_options"] = on_options
-        selection = SpecSelection(specs=final, tag=tag, filters=filters)
-
         if tag:
-            self.db.put_selection(selection)
+            self.db.put_selection(tag, selector.snapshot())
 
-        config.pluginmanager.hook.canary_select_report(specs=specs)
+        return final
 
-        return selection
-
-    def get_selection(self, tag: str = "default") -> SpecSelection:
+    def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
-        selection = self.db.get_selection(tag)
-        if selection.specs:
-            return selection
-        # No cases: cache was invalidated at some point
-        return self.select(tag=selection.tag, **selection.filters)
+        snapshot = self.db.get_selection(tag)
+        specs = self.db.get_specs()
+        if snapshot.is_compatible_with_specs(specs):
+            return snapshot.apply(specs)
+        selector = select.Selector.from_snapshot(specs, snapshot)
+        selector.run()
+        self.db.put_selection(tag, selector.snapshot())
+        return selector.selected
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -589,9 +549,9 @@ class Workspace:
         finally:
             logger.info(f"Garbage collected {len(to_remove)} test cases")
             if not dryrun:
-                view_entries: dict[str, list[str]] = {}
+                view_entries: dict[Path, list[Path]] = {}
                 for root, path in view.values():
-                    view_entries.setdefault(root, []).append(path)
+                    view_entries.setdefault(Path(root), []).append(Path(path))
                 self.update_view(view_entries)
 
     def find(self, *, case: str | None = None) -> Any:
@@ -645,9 +605,6 @@ class WorkspaceDatabase:
         query = "CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, signature TEXT, data TEXT)"
         cursor.execute(query)
 
-        query = "CREATE INDEX IF NOT EXISTS specs_signature ON specs (signature)"
-        cursor.execute(query)
-
         query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
         cursor.execute(query)
 
@@ -691,7 +648,7 @@ class WorkspaceDatabase:
         generators = [AbstractTestGenerator.from_dict(json.loads(row[1])) for row in rows]
         return generators
 
-    def put_specs(self, signature: str, specs: list[TestSpec]) -> None:
+    def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE;")
         cursor.executemany(
@@ -909,14 +866,7 @@ class WorkspaceDatabase:
         rows = cursor.fetchall()
         return {id: json.loads(data) for id, data in rows}
 
-    def put_selection(self, selection: SpecSelection) -> None:
-        data: dict[str, Any] = {}
-        data["specs"] = [spec.id for spec in selection.specs]
-        data["tag"] = selection.tag
-        data["filters"] = selection.filters
-        data["created_on"] = selection.created_on
-
-        tag = selection.tag or selection.sha256
+    def put_selection(self, tag: str, snapshot: select.SelectorSnapshot) -> None:
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE")
         cursor.execute(
@@ -925,12 +875,21 @@ class WorkspaceDatabase:
             VALUES (?, ?)
             ON CONFLICT(tag) DO UPDATE SET data=excluded.data
             """,
-            (tag, json.dumps_min(data)),
+            (tag, snapshot.serialize()),
         )
         self.connection.commit()
 
+    def get_selection(self, tag: str) -> select.SelectorSnapshot:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM selections WHERE tag = ?", (tag,))
+        row = cursor.fetchone()
+        if row is None:
+            raise NotASelection(tag)
+        snapshot = select.SelectorSnapshot.reconstruct(row[1])
+        return snapshot
+
     @property
-    def selections(self) -> list[str]:
+    def tags(self) -> list[str]:
         cursor = self.connection.cursor()
         cursor.execute("SELECT tag FROM selections")
         rows = cursor.fetchall()
@@ -940,33 +899,6 @@ class WorkspaceDatabase:
         cursor = self.connection.cursor()
         cursor.execute("SELECT 1 FROM selections WHERE tag = ? LIMIT 1", (tag,))
         return cursor.fetchone() is not None
-
-    def get_selection(self, tag: str) -> SpecSelection:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM selections WHERE tag = ?", (tag,))
-        row = cursor.fetchone()
-        if row is None:
-            raise NotASelection(tag)
-        data = json.loads(row[1])
-        specs = self.get_specs(ids=data["specs"])
-        final = testspec.finalize(specs)
-        selection = SpecSelection(specs=final, tag=data["tag"], filters=data["filters"])
-        selection._created_on = data["created_on"]
-        return selection
-
-    def get_selections(self) -> list[SpecSelection]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM selections")
-        rows = cursor.fetchall()
-        selections: list[SpecSelection] = []
-        for row in rows:
-            data = json.loads(row[1])
-            specs = self.get_specs(ids=data["specs"])
-            final = testspec.finalize(specs)
-            selection = SpecSelection(specs=final, tag=data["tag"], filters=data["filters"])
-            selection._created_on = data["created_on"]
-            selections.append(selection)
-        return selections
 
     def delete_selection(self, tag: str) -> bool:
         cursor = self.connection.cursor()

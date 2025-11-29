@@ -13,7 +13,6 @@ from ...collect import Collector
 from ...session import SessionResults
 from ...util import logging
 from ...workspace import NotAWorkspaceError
-from ...workspace import SpecSelection
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -109,7 +108,6 @@ class Run(CanarySubcommand):
         config.pluginmanager.hook.canary_runtests_startup()
 
         workspace: Workspace
-        selection: SpecSelection
         work_tree: str = args.work_tree or os.getcwd()
         if args.wipe:
             Workspace.remove(Path(work_tree))
@@ -139,13 +137,13 @@ class Run(CanarySubcommand):
                         workspace.add_session_results(results)
         else:
             if args.runtag:
-                selection = workspace.get_selection(args.runtag)
+                specs = workspace.get_selection(args.runtag)
             elif args.specids:
-                selection = workspace.select(ids=args.specids, tag=args.tag)
+                specs = workspace.select(ids=args.specids, tag=args.tag)
             elif args.scanpaths:
                 parsing_policy = config.getoption("parsing_policy") or "pedantic"
                 workspace.add(args.scanpaths, pedantic=parsing_policy == "pedantic")
-                selection = workspace.select(
+                specs = workspace.select(
                     tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
@@ -156,7 +154,7 @@ class Run(CanarySubcommand):
                 if any(
                     (args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)
                 ):
-                    selection = workspace.select(
+                    specs = workspace.select(
                         tag=args.tag,
                         keyword_exprs=args.keyword_exprs,
                         parameter_expr=args.parameter_expr,
@@ -165,9 +163,9 @@ class Run(CanarySubcommand):
                     )
                 else:
                     # Get the default selection
-                    selection = workspace.get_selection()
+                    specs = workspace.get_selection()
 
-            with workspace.session(selection=selection) as session:
+            with workspace.session(specs=specs) as session:
                 try:
                     results = session.run()
                 finally:

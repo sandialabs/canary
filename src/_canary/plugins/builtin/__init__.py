@@ -4,7 +4,6 @@
 
 from . import addoption
 from . import email
-from . import generate
 from . import html
 from . import json
 from . import junit
@@ -15,7 +14,6 @@ from . import repeat
 from . import reporting
 from . import rpool
 from . import runtest_protocol
-from . import select
 from . import testcase_generator
 from .executor import TestCaseExecutor
 
@@ -23,7 +21,6 @@ plugins = [
     addoption,
     TestCaseExecutor(),
     email,
-    generate,
     html,
     json,
     junit,
@@ -34,6 +31,5 @@ plugins = [
     reporting,
     rpool,
     runtest_protocol,
-    select,
     testcase_generator,
 ]

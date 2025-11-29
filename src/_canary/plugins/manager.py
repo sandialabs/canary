@@ -25,6 +25,8 @@ class CanaryPluginManager(pluggy.PluginManager):
 
     def register_builtins(self):
         from .. import collect
+        from .. import generate
+        from .. import select
         from . import builtin
         from . import subcommands
 
@@ -35,6 +37,8 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")
+        self.register(generate, "builtin.generate")
+        self.register(select, "builtin.select")
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

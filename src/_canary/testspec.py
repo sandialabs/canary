@@ -17,7 +17,6 @@ from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import IO
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import Protocol
@@ -26,9 +25,6 @@ from . import config
 from .util import json_helper as json
 from .util import logging
 from .util.string import stringify
-
-if TYPE_CHECKING:
-    from .legacy.testcase import TestCase as LegacyTestCase
 
 logger = logging.get_logger(__name__)
 select_sygil = "/"
@@ -438,7 +434,7 @@ class DraftSpec(SpecCommons):
         if self.xstatus is None:
             self.xstatus = 0
         self.keywords = self.keywords or []
-        self.file_resources = self.file_resources or []
+        self.file_resources = self.file_resources or {}
         self.parameters = self._validate_parameters(self.parameters or {})
         self.assets = self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
@@ -639,43 +635,6 @@ class DraftSpec(SpecCommons):
         else:
             hasher.update(str(self.file_path.parent / self.name).encode())
         return hasher.hexdigest()
-
-    @classmethod
-    def from_legacy_testcase(cls, case: "LegacyTestCase") -> "DraftSpec":
-        spec = cls(
-            file_root=Path(case.file_root),
-            file_path=Path(case.file_path),
-            family=case.family,
-            keywords=case.keywords,
-            parameters=case.parameters,
-            baseline=case.baseline,
-            exclusive=case.exclusive,
-            timeout=case._timeout or -1.0,
-            xstatus=case.xstatus,
-            preload=case.preload,
-            modules=case.modules,
-            rcfiles=case.rcfiles,
-            owners=case.owners,
-            mask=case.mask,
-        )
-        dependency_patterns: list[DependencyPatterns] = []
-        for ud in case.unresolved_dependencies:
-            pattern = " ".join(ud.value)
-            dp = DependencyPatterns(
-                pattern=pattern, expects=ud.expect or "+", result_match=ud.result
-            )
-            dependency_patterns.append(dp)
-        spec.dependency_patterns.clear()
-        spec.dependency_patterns.extend(dependency_patterns)
-        assets: list[Asset] = []
-        for a in case.assets:
-            assets.append(Asset(src=Path(a.src), dst=a.dst or Path(a.src).name, action=a.action))  # ty: ignore[invalid-argument-type]
-        spec.assets.clear()
-        spec.assets.extend(assets)
-        if case.artifacts:
-            spec.artifacts.clear()
-            spec.artifacts.extend(case.artifacts)
-        return spec
 
 
 def resolve_naive(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:

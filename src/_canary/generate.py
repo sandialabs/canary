@@ -3,27 +3,24 @@
 # SPDX-License-Identifier: MIT
 
 from typing import TYPE_CHECKING
-from typing import Generator
 
-from ... import config
-from ...testspec import resolve as resolve_specs
-from ...util import logging
-from ...util.parallel import starmap
-from ..hookspec import hookimpl
+from . import config
+from .testspec import resolve as resolve_specs
+from .util import logging
+from .util.parallel import starmap
 
 if TYPE_CHECKING:
-    from ...generator import AbstractTestGenerator
-    from ...testspec import DraftSpec
-    from ...testspec import ResolvedSpec
+    from .generator import AbstractTestGenerator
+    from .testspec import DraftSpec
+    from .testspec import ResolvedSpec
 
 
 logger = logging.get_logger(__name__)
 
 
-@hookimpl(wrapper=True)
 def canary_generate(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> Generator[None, None, list["ResolvedSpec"]]:
+) -> list["ResolvedSpec"]:
     """Generate (lock) test specs from generators
 
     Args:
@@ -33,13 +30,13 @@ def canary_generate(
         A list of test specs
 
     """
-    specs = yield
+    config.pluginmanager.hook.canary_generatestart(generators=generators, on_options=on_options)
+    specs = _canary_generate(generators, on_options)
     config.pluginmanager.hook.canary_generate_modifyitems(specs=specs)
     return specs
 
 
-@hookimpl(specname="canary_generate")
-def default_generate(
+def _canary_generate(
     generators: list["AbstractTestGenerator"], on_options: list[str]
 ) -> list["ResolvedSpec"]:
     pm = logger.progress_monitor("@*{Generating} test specs")
@@ -55,8 +52,6 @@ def default_generate(
             drafts.append(spec)
     pm.done()
 
-    for draft in drafts:
-        print(draft.file_root, draft.file_path, draft.id)
     duplicates = find_duplicates(drafts)
     if duplicates:
         logger.error("Duplicate test IDs generated for the following test cases")
