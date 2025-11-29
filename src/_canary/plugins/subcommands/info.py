@@ -40,15 +40,15 @@ class Info(CanarySubcommand):
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        selection = workspace.get_selection(tag)
-        fh.write(f"Selected on: {selection.created_on}\n")
-        fh.write("Selection filters:\n")
-        for key, value in selection.filters.items():
-            fh.write(f"  • {key}: {value}\n")
-        fh.write(f"Test specs (n = {len(selection.specs)}):\n")
-        for spec in selection.specs:
+        specs = workspace.get_selection(tag)
+#        fh.write(f"Selected on: {selection.created_on}\n")
+#        fh.write("Selection filters:\n")
+#        for key, value in selection.filters.items():
+#            fh.write(f"  • {key}: {value}\n")
+        fh.write(f"Test specs (n = {len(specs)}):\n")
+        for spec in specs:
             name = spec.file_path.parent / spec.pretty_name
-            fh.write(f"  • {spec.id[:7]} : {name}\n")
+            fh.write(f"  • {spec.id[:7]}: {name}\n")
         return fh.getvalue()
 
     def get_workspace_info(self) -> str:

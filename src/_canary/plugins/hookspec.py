@@ -20,10 +20,10 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
+    from ..select import Selector
     from ..testcase import TestCase
     from ..testexec import ExecutionPolicy
     from ..testspec import ResolvedSpec
-    from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
@@ -184,42 +184,10 @@ def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
 # -------------------------------------------------------------------------
 
 
-@hookspec(firstresult=True)
-def canary_generate(
+@hookspec
+def canary_generatestart(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["ResolvedSpec"]:
-    """Perform the generation phase
-
-    The default generation phase is this:
-
-    1. Starting from ``session`` as the initial collector:
-
-      1. ``pytest_collectstart(collector)``
-      2. ``report = pytest_make_collect_report(collector)``
-      3. ``pytest_exception_interact(collector, call, report)`` if an interactive exception occurred
-      4. For each collected node:
-
-        1. If an item, ``pytest_itemcollected(item)``
-        2. If a collector, recurse into it.
-
-      5. ``pytest_collectreport(report)``
-
-    2. ``pytest_collection_modifyitems(session, config, items)``
-
-      1. ``pytest_deselected(items)`` for any deselected items (may be called multiple times)
-
-    3. ``pytest_collection_finish(session)``
-    4. Set ``session.items`` to the list of collected items
-    5. Set ``session.testscollected`` to the number of collected items
-
-    You can implement this hook to only perform some action before collection,
-    for example the terminal plugin uses it to start displaying the collection
-    counter (and returns `None`).
-
-    :param pytest.Session session: The pytest session object.
-    """
-
-    raise NotImplementedError
+) -> None: ...
 
 
 @hookspec
@@ -228,6 +196,23 @@ def canary_generate_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
 
 @hookspec
 def canary_generate_report(specs: list["ResolvedSpec"]) -> None: ...
+
+
+# -------------------------------------------------------------------------
+# selection hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_selectstart(selector: "Selector") -> None: ...
+
+
+@hookspec
+def canary_select_modifyitems(selector: "Selector") -> None: ...
+
+
+@hookspec
+def canary_select_report(selector: "Selector") -> None: ...
 
 
 @hookspec
@@ -353,26 +338,4 @@ def canary_resource_pool_types() -> list[str]:
 @hookspec(firstresult=True)
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
-    raise NotImplementedError
-
-
-@hookspec
-def canary_select(
-    specs: list["ResolvedSpec"],
-    keyword_exprs: list[str] | None,
-    parameter_expr: str | None,
-    owners: list[str] | None,
-    regex: str | None,
-    prefixes: list[str] | None,
-    ids: list[str] | None,
-) -> None:
-    raise NotImplementedError
-
-
-@hookspec
-def canary_select_modifyitems(specs: list["ResolvedSpec"]) -> None: ...
-
-
-@hookspec
-def canary_select_report(specs: list["TestSpec"]) -> None:
     raise NotImplementedError

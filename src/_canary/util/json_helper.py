@@ -14,14 +14,14 @@ from .string import pluralize
 
 
 class PathEncoder(json.JSONEncoder):
-    def default(self, obj):
+    def default(self, o):
         from ..paramset import ParameterSet
 
-        if isinstance(obj, Path):
-            return str(obj)
-        elif isinstance(obj, ParameterSet):
-            return {"keys": obj.keys, "values": obj.values}
-        return json.JSONEncoder.default(self, obj)
+        if isinstance(o, Path):
+            return str(o)
+        elif isinstance(o, ParameterSet):
+            return {"keys": o.keys, "values": o.values}
+        return json.JSONEncoder.default(self, o)
 
 
 def dump(*args, **kwargs):

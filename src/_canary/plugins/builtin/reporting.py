@@ -306,7 +306,7 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
     for case in cases:
         totals.setdefault(case.status.name, []).append(case)
     N = len(cases)
-    summary = ["@*b{%d total}" % N]
+    summary = ["@*b{%d total}:" % N]
     for name in totals:
         n = len(totals[name])
         if n:
@@ -317,7 +317,7 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
     kwds = {
         "x": x,
         "y": y,
-        "s": ", ".join(summary),
+        "s": summary[0] + " " + ", ".join(summary[1:]),
         "t": hhmmss(None if duration < 0 else duration),
         "title": title,
     }

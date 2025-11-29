@@ -4,7 +4,6 @@
 import dataclasses
 import datetime
 import os
-import pickle  # nosec B403
 import time
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -24,7 +23,6 @@ from .util.returncode import compute_returncode
 
 if TYPE_CHECKING:
     from .testspec import TestSpec
-    from .workspace import SpecSelection
 
 logger = logging.get_logger(__name__)
 session_tag = "SESSION.TAG"
@@ -47,9 +45,9 @@ class Session:
         self.name: str
         self.root: Path
         self.work_dir: Path
-        self.select_file: Path
+        self.specs_file: Path
         self._cases: list[TestCase]
-        self._selection: "SpecSelection | None"
+        self._specs: list["TestSpec"]
         raise RuntimeError("Use Session factory methods create and load")
 
     def __repr__(self) -> str:
@@ -60,15 +58,15 @@ class Session:
         self.root = anchor / self.name
         self._cases = []
         self.work_dir = self.root / "work"
-        self.select_file = self.root / "selection"
-        self._selection = None
+        self.specs_file = self.root / "specs.json"
+        self._specs = []
 
     @staticmethod
     def is_session(path: Path) -> bool:
         return (path / session_tag).exists()
 
     @classmethod
-    def create(cls, anchor: Path, selection: "SpecSelection") -> "Session":
+    def create(cls, anchor: Path, specs: list["TestSpec"]) -> "Session":
         self: Session = object.__new__(cls)
         ts = datetime.datetime.now().isoformat(timespec="microseconds")
         self.initialize_properties(anchor=anchor, name=ts.replace(":", "-"))
@@ -76,25 +74,23 @@ class Session:
             raise SessionExistsError(self.root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.select_file, "wb") as fh:
-            pickle.dump(selection, fh)
-        self._selection = selection
+        self._specs = specs
+
+        with open(self.specs_file, "w") as fh:
+            data: list[dict] = []
+            for spec in static_order(self.specs):
+                data.append(spec.asdict())
+            json.dump(data, fh, indent=2)
         write_directory_tag(self.root / session_tag)
 
         self._cases.clear()
-        specs = self.selection.specs
         lookup: dict[str, TestCase] = {}
-        for spec in static_order(specs):
+        for spec in static_order(self.specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
             space = ExecutionSpace(root=self.work_dir, path=spec.execpath, session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
             config.pluginmanager.hook.canary_testcase_modify(case=case)
-            if case.mask:
-                raise ValueError(
-                    f"{case}: mask changed unexpectedly.  "
-                    f"Masks should be updated by canary_select_modifyitems"
-                )
             self._cases.append(case)
 
         # Dump a snapshot of the configuration used to create this session
@@ -104,12 +100,18 @@ class Session:
         return self
 
     @property
-    def selection(self) -> "SpecSelection":
-        if self._selection is None:
-            with open(self.select_file, "rb") as fh:
-                self._selection = pickle.load(fh)  # nosec B301
-        assert self._selection is not None
-        return self._selection
+    def specs(self) -> list["TestSpec"]:
+        from .testspec import TestSpec
+
+        if not self._specs:
+            lookup: dict[str, TestSpec] = {}
+            with open(self.specs_file, "r") as fh:
+                data = json.load(fh)
+                for d in data:
+                    spec = TestSpec.from_dict(d, lookup)
+                    lookup[spec.id] = spec
+                    self.specs.append(spec)
+        return self._specs
 
     @classmethod
     def load(cls, root: Path) -> "Session":
@@ -127,7 +129,7 @@ class Session:
 
     def resolve_root_ids(self, ids: list[str]) -> None:
         """Expand ids to full IDs.  ids is a spec ID, or partial ID, and can be preceded by /"""
-        nodes: set[str] = {spec.id for spec in self.selection.specs}
+        nodes: set[str] = {spec.id for spec in self.specs}
 
         def find(id: str) -> str:
             if id in nodes:
@@ -144,7 +146,7 @@ class Session:
 
     def load_testcases(self) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
-        specs = self.selection.specs
+        specs = self.specs
         graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
         map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
         lookup: dict[str, "TestCase"] = {}
@@ -185,9 +187,9 @@ class Session:
         logger.info(f"@*{{Starting}} session {self.name}")
         start = time.monotonic()
         returncode: int = -1
+        starting_dir = os.getcwd()
+        started_on = datetime.datetime.now()
         try:
-            started_on = datetime.datetime.now()
-            starting_dir = os.getcwd()
             for case in cases:
                 case.status.set("PENDING")
             final = [case for case in cases if not case.mask]
