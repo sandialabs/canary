@@ -13,7 +13,7 @@ from typing import Any
 import pluggy
 import yaml
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:

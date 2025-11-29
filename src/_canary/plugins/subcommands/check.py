@@ -11,9 +11,9 @@ import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.filesystem import working_dir
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:

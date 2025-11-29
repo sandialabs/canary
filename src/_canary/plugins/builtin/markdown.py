@@ -9,11 +9,11 @@ from typing import Any
 from typing import TextIO
 
 from ... import config
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:

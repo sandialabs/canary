@@ -8,16 +8,16 @@ import threading
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ... import config
-from ...queue import ResourceQueue
-from ...resource_pool import make_resource_pool
-from ...util import logging
-from ..hookspec import hookimpl
-from ..types import Result
+from . import config
+from .hookspec import hookimpl
+from .queue import ResourceQueue
+from .resource_pool import make_resource_pool
+from .resource_pool.rpool import Outcome
+from .util import logging
 
 if TYPE_CHECKING:
-    from ...resource_pool import ResourcePool
-    from ...testcase import TestCase
+    from .resource_pool import ResourcePool
+    from .testcase import TestCase
 
 global_lock = threading.Lock()
 logger = logging.get_logger(__name__)
@@ -38,7 +38,7 @@ class TestCaseExecutor:
         return self._rpool
 
     @hookimpl(trylast=True)
-    def canary_resource_pool_accommodates(self, case: "TestCase") -> Result:
+    def canary_resource_pool_accommodates(self, case: "TestCase") -> Outcome:
         rpool = self.get_rpool()
         return rpool.accommodates(case.required_resources())
 
@@ -94,7 +94,7 @@ class Runner:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:
-            config.pluginmanager.hook.canary_testcase_setup(case=case)
-            config.pluginmanager.hook.canary_testcase_run(case=case, queue=queue)
+            config.pluginmanager.hook.canary_runtest_setup(case=case)
+            config.pluginmanager.hook.canary_runtest_exec(case=case, queue=queue)
         finally:
-            config.pluginmanager.hook.canary_testcase_finish(case=case)
+            config.pluginmanager.hook.canary_runtest_finish(case=case)

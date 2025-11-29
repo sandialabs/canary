@@ -19,10 +19,10 @@ from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
+from _canary.hookspec import hookimpl
+from _canary.hookspec import hookspec
 from _canary.main import console_main
-from _canary.plugins.hookspec import hookimpl
-from _canary.plugins.hookspec import hookspec
-from _canary.plugins.manager import CanaryPluginManager
+from _canary.pluginmanager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
 from _canary.protocols import JobProtocol

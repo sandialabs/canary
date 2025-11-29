@@ -7,10 +7,10 @@ import os
 import types
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...third_party import argparsewriter as aw
 from ...third_party.color import set_color_when
 from ...util.filesystem import mkdirp
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:

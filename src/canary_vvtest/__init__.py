@@ -58,14 +58,14 @@ def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
 
 
 @canary.hookimpl
-def canary_testcase_setup(case: "canary.TestCase") -> None:
+def canary_runtest_setup(case: "canary.TestCase") -> None:
     if case.spec.file_path.suffix == ".vvt":
         with canary.filesystem.working_dir(case.workspace.dir):
             write_vvtest_util(case)
 
 
 @canary.hookimpl
-def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
     if case.spec.file.suffix == ".vvt":
         return canary.PythonFileExecutionPolicy()
     return None

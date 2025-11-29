@@ -24,11 +24,14 @@ class CanaryPluginManager(pluggy.PluginManager):
         return self
 
     def register_builtins(self):
-        from .. import collect
-        from .. import generate
-        from .. import select
-        from . import builtin
-        from . import subcommands
+        from . import collect
+        from . import executor
+        from . import generate
+        from . import runtest
+        from . import select
+        from .plugins import builtin
+        from .plugins import subcommands
+        from .resource_pool import hooks as rp_hooks
 
         for subcommand in subcommands.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
@@ -37,7 +40,10 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")
+        self.register(executor.TestCaseExecutor(), "builtin.executor")
         self.register(generate, "builtin.generate")
+        self.register(runtest, "builtin.runtest")
+        self.register(rp_hooks, "builtin.resource_pool")
         self.register(select, "builtin.select")
 
     def consider_plugin(self, name: str) -> None:

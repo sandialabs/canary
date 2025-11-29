@@ -6,10 +6,10 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...util.editor import editor
 from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:

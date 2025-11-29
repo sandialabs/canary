@@ -51,7 +51,7 @@ def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGene
 
 
 @canary.hookimpl
-def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
     if case.spec.file.suffix == ".cmake":
         return canary.SubprocessExecutionPolicy(["./runtest.sh"])
     return None
@@ -65,13 +65,13 @@ def canary_testcase_modify(case: canary.TestCase) -> None:
 
 
 @canary.hookimpl
-def canary_testcase_setup(case: canary.TestCase) -> None:
+def canary_runtest_setup(case: canary.TestCase) -> None:
     if case.spec.file.suffix == ".cmake":
         setup_ctest(case)
 
 
 @canary.hookimpl
-def canary_testcase_finish(case: canary.TestCase) -> None:
+def canary_runtest_finish(case: canary.TestCase) -> None:
     if case.spec.file.suffix == ".cmake":
         finish_ctest(case)
 

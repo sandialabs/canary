@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...config.argparsing import Parser
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.sendmail import sendmail
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...testcase import TestCase

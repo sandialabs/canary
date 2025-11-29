@@ -14,9 +14,9 @@ import hpc_connect
 
 import canary
 from _canary.plugins.subcommands.run import Run
-from _canary.plugins.types import Result
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
+from _canary.resource_pool.rpool import Outcome
 from _canary.testexec import ExecutionSpace
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
@@ -97,10 +97,10 @@ class CanaryHPCConductor:
         return self.available_resource_types
 
     @canary.hookimpl
-    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Result:
+    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Outcome:
         return self.backend_accommodates(case)
 
-    def backend_accommodates(self, case: canary.TestCase) -> Result:
+    def backend_accommodates(self, case: canary.TestCase) -> Outcome:
         """determine if the resources for this test are available"""
 
         slots_needed: Counter[str] = Counter()
@@ -116,7 +116,7 @@ class CanaryHPCConductor:
         if missing:
             types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = canary.string.pluralize("Resource", n=len(missing))
-            return Result(False, reason=f"{key} unavailable: {types}")
+            return Outcome(False, reason=f"{key} unavailable: {types}")
 
         # Step 2: Check available slots vs. needed slots
         wanting: dict[str, tuple[int, int]] = {}
@@ -134,10 +134,10 @@ class CanaryHPCConductor:
             else:
                 types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
                 reason = f"insufficient slots of {types}"
-            return Result(False, reason=reason)
+            return Outcome(False, reason=reason)
 
         # Step 3: all good
-        return Result(True)
+        return Outcome(True)
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: list[canary.TestCase]) -> int:

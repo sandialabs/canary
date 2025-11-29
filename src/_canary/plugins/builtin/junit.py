@@ -11,9 +11,9 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ...hookspec import hookimpl
 from ...util.filesystem import mkdirp
 from ...workspace import Workspace
-from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:

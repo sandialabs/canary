@@ -16,7 +16,7 @@ from . import config
 from .config.argparsing import Parser
 from .config.schemas import testpaths_schema
 from .generator import AbstractTestGenerator
-from .plugins.hookspec import hookimpl
+from .hookspec import hookimpl
 from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import filesystem_root

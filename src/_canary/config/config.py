@@ -14,7 +14,7 @@ from typing import Literal
 
 import yaml
 
-from ..plugins.manager import CanaryPluginManager
+from ..pluginmanager import CanaryPluginManager
 from ..third_party import color
 from ..util import json_helper as json
 from ..util import logging
