@@ -4,8 +4,13 @@
 
 import dataclasses
 from typing import Any
-from typing import MutableMapping
+from typing import Generator
 from typing import Protocol
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from .timekeeper import Timekeeper
 
 
 class StatusProtocol(Protocol):
@@ -33,6 +38,7 @@ class JobProtocol(Protocol):
     status: StatusProtocol
     runtime: float
     timeout: float
+    timekeeper: "Timekeeper"
 
     def __str__(self) -> str: ...
 
@@ -89,9 +95,9 @@ class JobProtocol(Protocol):
         """
         ...
 
-    def assign_resources(self, arg: list[dict[str, list[dict]]]) -> None: ...
+    def assign_resources(self, arg: dict[str, list[dict]]) -> None: ...
 
-    def free_resources(self) -> list[dict[str, list[dict]]]: ...
+    def free_resources(self) -> dict[str, list[dict]]: ...
 
     def cost(self) -> float: ...
 

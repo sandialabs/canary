@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
+from typing import cast
 
 import hpc_connect
 
@@ -43,7 +44,7 @@ class BatchSpec:
 
     def __post_init__(self) -> None:
         self.id = hashit(",".join(case.id for case in self.cases), length=20)
-        self.session = self.cases[0].workspace.session
+        self.session = cast(str, self.cases[0].workspace.session)
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
         self.rparameters = {"cpus": 1, "gpus": 0}
 
@@ -229,7 +230,7 @@ class TestBatch:
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
-        rc = -1
+        rc: int | None = -1
         try:
             logger.debug(f"Submitting batch {self.id[:8]}")
             with self.timekeeper.timeit():
@@ -247,7 +248,7 @@ class TestBatch:
                     case.status.set("CANCELLED")
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
-            logger.debug("Batch @*b{%s}: batch exited with code %d" % (self.id[:8], rc))
+            logger.debug("Batch @*b{%s}: batch exited with code %s" % (self.id[:8], str(rc)))
 
         return
 
@@ -313,7 +314,7 @@ class TestBatch:
             ti = min(dt for dt in started_on if dt)
             tf = max(dt for dt in finished_on if dt)
             running = (tf - ti).total_seconds()
-            if duration:
+            if duration is not None and running is not None:
                 time_in_queue = max(duration - running, 0)
         return duration, running, time_in_queue
 

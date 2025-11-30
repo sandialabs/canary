@@ -17,6 +17,7 @@ from typing import IO
 from typing import Any
 from typing import Generic
 from typing import Literal
+from typing import Sequence
 from typing import TypeVar
 from typing import Type
 
@@ -62,7 +63,7 @@ class BaseSpec(Generic[T]):
     file_path: Path
     family: str = ""
     id: str = ""
-    dependencies: list[Any] = dataclasses.field(default_factory=list)
+    dependencies: Sequence[Any] = dataclasses.field(default_factory=list)
     dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     rparameters: dict[str, int] = dataclasses.field(default_factory=dict)
@@ -90,7 +91,7 @@ class BaseSpec(Generic[T]):
             self.id = self._generate_default_id()
         if self.timeout is None:
             self.timeout = -1.0
-        if self.timeout < 0 or self.timeout is None:
+        if self.timeout < 0:
             self.timeout = self._default_timeout()
         if self.xstatus is None:
             self.xstatus = 0
@@ -424,7 +425,7 @@ class DependencyPatterns:
 class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
-    dependencies: list[str | DependencyPatterns] = dataclasses.field(default_factory=list)
+    dependencies: Sequence[str | DependencyPatterns] = dataclasses.field(default_factory=list)
     file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = (
         dataclasses.field(default_factory=dict)
     )
@@ -541,7 +542,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
                     self.assets.append(asset)
 
     def _generate_dependency_patterns(
-        self, args: list[str | DependencyPatterns]
+        self, args: Sequence[str | DependencyPatterns]
     ) -> list[DependencyPatterns]:
         dependency_patterns: list[DependencyPatterns] = []
         parameters: dict[str, str] = {}

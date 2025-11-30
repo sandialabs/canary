@@ -72,15 +72,16 @@ class Log(CanarySubcommand):
             raise ValueError(f"no log file found in {workspace.root}")
 
         case = workspace.find(case=args.testspec)
-        file = self.get_logfile(case, args)
-        if file:
-            display_file(file)
+        f = self.get_logfile(case, args)
+        if f:
+            display_file(f)
         return 0
 
 
-def reconstruct_log(file: str) -> str:
+def reconstruct_log(file: str | Path) -> str:
+    file = Path(file)
     fp = io.StringIO()
-    if not os.path.isfile(file):
+    if not file.is_file():
         raise ValueError(f"{file}: no such file")
     fmt = "[%(time)s] %(level)s: %(message)s\n"
     records: list[dict[str, str]] = []

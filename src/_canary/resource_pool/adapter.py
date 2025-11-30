@@ -17,7 +17,7 @@ from .rpool import ResourceUnavailable
 class ResourcePoolAdapter:
     """Adapter to communicate with the pool server via curl + Unix socket."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sockefile: Path | None = None
         self.host: str | None = None
         self.port: int | None = None
@@ -33,7 +33,7 @@ class ResourcePoolAdapter:
         else:
             raise RuntimeError("CANARY_RESOURCE_POOL_ADDR is not defined")
 
-    def curl(self, endpoint: str, method: str = "POST", data: dict | None = None):
+    def curl(self, endpoint: str, method: str = "POST", data: Any = None):
         cmd = ["curl", "-s", "-w", "\n%{http_code}"]
         baseurl: str
         if self.socketfile is not None:
@@ -53,9 +53,9 @@ class ResourcePoolAdapter:
         if result.returncode != 0:
             raise RuntimeError(result.stderr)
         lines = result.stdout.splitlines()
-        data = json.loads("\n".join(lines[:-1]))
-        data["http_code"] = int(lines[-1])
-        return data
+        d = json.loads("\n".join(lines[:-1]))
+        d["http_code"] = int(lines[-1])
+        return d
 
     def empty(self) -> bool:
         return False

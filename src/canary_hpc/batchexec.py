@@ -39,7 +39,7 @@ class HPCConnectRunner:
                         if proc.poll() is not None:
                             break
                     except Exception:
-                        logger.exception("Batch @*b{%%s}: polling job failed!" % batch.id[:7])
+                        logger.exception("Batch @*b{%s}: polling job failed!" % batch.id[:7])
                         break
                     time.sleep(self.backend.polling_frequency)
         return getattr(proc, "returncode", None)
@@ -99,7 +99,7 @@ class HPCConnectRunner:
 
 class HPCConnectBatchRunner(HPCConnectRunner):
     def submit(self, batch: "TestBatch") -> hpc_connect.HPCProcess:
-        variables = dict(batch.variables)
+        variables: dict[str, str | None] = dict(batch.variables)
         variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
@@ -136,7 +136,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
 class HPCConnectSeriesRunner(HPCConnectRunner):
     def submit(self, batch: "TestBatch") -> hpc_connect.HPCProcess:
-        variables = dict(batch.variables)
+        variables: dict[str, str | None] = dict(batch.variables)
         variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"

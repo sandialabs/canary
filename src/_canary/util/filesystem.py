@@ -333,11 +333,12 @@ def touchp(path: str) -> None:
 
 
 @contextmanager
-def working_dir(dirname: str, create: bool = False) -> Generator[None, None, None]:
+def working_dir(dirname: str | pathlib.Path, create: bool = False) -> Generator[None, None, None]:
     """Context manager that changes the working directory to ``dirname`` and returns to the calling
     directory when the context is exited"""
+    dirname = pathlib.Path(dirname)
     if create:
-        mkdirp(dirname)
+        dirname.mkdir(parents=True, exist_ok=True)
 
     orig_dir = os.getcwd()
     os.chdir(dirname)

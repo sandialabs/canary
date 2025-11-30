@@ -12,6 +12,8 @@ from string import Template
 from types import ModuleType
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import cast
+from typing import Literal
 from typing import Sequence
 
 from ... import config
@@ -204,7 +206,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     timeout=self.timeout(
                         testname=name, on_options=on_options, parameters=parameters
-                    ),
+                    ) or -1.0,
                     baseline=self.baseline(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
@@ -270,7 +272,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     file_path=Path(self.path),
                     family=name,
                     keywords=self.keywords(testname=name),
-                    timeout=self.timeout(testname=name, on_options=on_options),
+                    timeout=self.timeout(testname=name, on_options=on_options) or -1.0,
                     baseline=self.baseline(testname=name, on_options=on_options),
                     file_resources=self.file_resources(testname=name, on_options=on_options),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
@@ -524,13 +526,13 @@ class PYTTestGenerator(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> dict[str, list[tuple[str, str | None]]]:
+    ) -> dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]]:
         kwds = dict(parameters) if parameters else {}
         if testname:
             kwds["name"] = testname
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
-        sources: dict[str, list[tuple[str, str | None]]] = {}
+        sources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = {}
         dirname = os.path.join(self.root, os.path.dirname(self.path))
         src_not_found: dict[str, set[str]] = {}
         for ns in self._sources:
@@ -551,7 +553,8 @@ class PYTTestGenerator(AbstractTestGenerator):
                 # the file is needed
                 src_not_found.setdefault(ns.action, set()).add(src)
                 fd = None if dst is None else self.safe_substitute(dst, **kwds)
-                sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), fd))
+                action = cast(Literal["copy", "link", "none"], ns.action)
+                sources.setdefault(action, []).append((os.path.relpath(src, dirname), fd))
             elif dst is not None:
                 # Explicitly request to copy/link source to a new destination
                 if len(found) > 1:
@@ -560,7 +563,8 @@ class PYTTestGenerator(AbstractTestGenerator):
                         "multiple sources to a single destination"
                     )
                 dst = self.safe_substitute(dst, **kwds)
-                sources.setdefault(ns.action, []).append((os.path.relpath(found[0], dirname), dst))
+                action = cast(Literal["copy", "link", "none"], ns.action)
+                sources.setdefault(action, []).append((os.path.relpath(found[0], dirname), dst))
             else:
                 for src in found:
                     sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), None))  # type: ignore
@@ -568,9 +572,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         if src_not_found:
             msg = io.StringIO()
             msg.write(f"{self}: the following support files were not found:\n")
-            for action in src_not_found:
-                for src in sorted(src_not_found[action]):
-                    msg.write(f"...  {src} (action: {action})\n")
+            for copy_action in src_not_found:
+                for src in sorted(src_not_found[copy_action]):
+                    msg.write(f"...  {src} (action: {copy_action})\n")
             logger.warning(msg.getvalue().strip())
 
         return sources

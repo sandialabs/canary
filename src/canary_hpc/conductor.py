@@ -178,7 +178,8 @@ class CanaryHPCConductor:
             )
             batch = TestBatch(spec, workspace=workspace)
             batches.append(batch)
-        queue = ResourceQueue(global_lock, resource_pool=self.rpool, jobs=batches)  # ty: ignore[invalid-argument-type]
+        queue = ResourceQueue(global_lock, resource_pool=self.rpool)
+        queue.put(*batches)  # type: ignore
         queue.prepare()
         runner = Runner()
         max_workers = canary.config.getoption("workers") or 10

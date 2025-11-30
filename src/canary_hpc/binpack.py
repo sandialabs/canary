@@ -15,7 +15,7 @@ logger = canary.get_logger(__name__)
 AUTO = 1000001  # automically choose batch size
 ONE_PER_BIN = 1000002  # One block per bin
 
-GrouperType = Callable[[list["Block"]], list[list["Block"]]]
+GrouperType = Callable[[Sequence["Block"]], list[list["Block"]]]
 
 
 class Block:
@@ -119,8 +119,9 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
     if count == 1:
         return [Bin(blocks)]
     groups = groupby_dep(blocks)
+    bins: list[Bin]
     if count == AUTO:
-        bins: list[Bin] = [Bin(list(group)) for group in groups if len(group) > 1]
+        bins = [Bin(list(group)) for group in groups if len(group) > 1]
         mean_bin_size = statistics.mean([b.norm() for b in bins])
         bin: Bin = Bin()
         # Handle groups of length 1 individually
@@ -134,7 +135,7 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
             bins.append(bin)
         return bins
     else:
-        bins: list[Bin] = [Bin() for i in range(count)]
+        bins = [Bin() for i in range(count)]
         for group in groups:
             bin = min(bins, key=lambda b: b.norm())
             bin.update(group)
@@ -200,7 +201,7 @@ def pack_to_height(
     blocks: Sequence[Block],
     height: int = 1800,
     width: int | None = None,
-    grouper: Callable[[list[Block]], list[list[Block]]] | None = None,
+    grouper: Callable[[Sequence[Block]], list[list[Block]]] | None = None,
 ) -> list[Bin]:
     """Partition blocks by tiling in the 2D space defined by width x height"""
     logger.debug(f"Partitioning {len(blocks)} blocks")

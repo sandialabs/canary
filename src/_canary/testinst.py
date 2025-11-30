@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import datetime
 import dataclasses
 import io
 import os
@@ -133,7 +134,7 @@ def from_testcase(case: "TestCase") -> TestInstance:
 
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in case.spec.assets:
-        sources.setdefault(asset.action, []).append((asset.src, asset.dst))
+        sources.setdefault(asset.action, []).append((str(asset.src), asset.dst))
     instance = cls(
         file_root=str(case.spec.file_root),
         file_path=str(case.spec.file_path),
@@ -151,8 +152,8 @@ def from_testcase(case: "TestCase") -> TestInstance:
         work_tree=str(case.workspace.dir),  # type: ignore
         working_directory=str(case.workspace.dir),
         status=case.status,
-        start=case.timekeeper.started_on,
-        stop=case.timekeeper.finished_on,
+        start=datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp(),
+        stop=datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp(),
         id=case.spec.id,
         returncode=case.status.code,
         variables=case.spec.environment,

@@ -273,7 +273,7 @@ class PathSpec(argparse.Action):
 
     """
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
         """When this function call exits, the following variables will be set on ``namespace``:
 
         scanpaths: dict[str, list[str]]

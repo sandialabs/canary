@@ -8,8 +8,10 @@ from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Sequence
 
 if TYPE_CHECKING:
+    from .testspec import ResolvedSpec
     from .testspec import UnresolvedSpec
 
 
@@ -85,7 +87,7 @@ class AbstractTestGenerator(ABC):
         return repr(self)
 
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:
@@ -118,3 +120,6 @@ class AbstractTestGenerator(ABC):
             return generator
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"{f} is not a test generator")
+
+    def info(self) -> dict[str, Any]:
+        return {}

@@ -59,6 +59,54 @@ get_logger = _logging.get_logger
 logging = _logging.get_logger()
 
 
+__all__ = [
+"schema",
+"config",
+"enums",
+"Parser",
+"Config",
+"centered_parameter_space",
+"list_parameter_space",
+"random_parameter_space",
+"TestDiffed",
+"TestFailed",
+"TestSkipped",
+"AbstractTestGenerator",
+"hookimpl",
+"hookspec",
+"console_main",
+"CanaryPluginManager",
+"CanaryReporter",
+"CanarySubcommand",
+"JobProtocol",
+"Session",
+"TestCase",
+"ExecutionPolicy",
+"PythonFileExecutionPolicy",
+"SubprocessExecutionPolicy",
+"TestInstance",
+"TestMultiInstance",
+"DependencyPatterns",
+"ResolvedSpec",
+"TestSpec",
+"UnresolvedSpec",
+"color",
+"difflib",
+"filesystem",
+"graph",
+"module",
+"shell",
+"string",
+"time",
+"Executable",
+"version",
+"version_info",
+"NotAWorkspaceError",
+"Workspace",
+"directives",
+"patterns",]
+
+
 class TestParser(argparse.ArgumentParser):
     def parse_args(self, args=None, namespace=None):
         namespace, unknown_args = super().parse_known_args(args, namespace)
