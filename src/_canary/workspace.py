@@ -91,7 +91,7 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.dbfile = self.root / "workspace.sqlite3"
-        self._spec_ids = set()
+        self._spec_ids: set[str] = set()
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
@@ -100,13 +100,13 @@ class Workspace:
         anchor = Workspace.find_anchor(start=start)
         if anchor is None:
             pm.done("no workspace found")
-            return
+            return None
         workspace = anchor / workspace_path
         view: Path | None = None
         cache_dir = workspace / "cache"
         file = workspace / "cache/view"
         if file.exists():
-            relpath = file.read_text().strip()
+            relpath = Path(file.read_text().strip())
             view = cache_dir / relpath
         if view is None:
             if (workspace / workspace_tag).exists():
@@ -283,13 +283,13 @@ class Workspace:
                     continue
                 ws_dir = latest[case.id].workspace.dir
                 relpath = ws_dir.relative_to(session.work_dir)
-                view[case.id] = (str(session.work_dir), relpath)
+                view[case.id] = (str(session.work_dir), str(relpath))
         for path in self.view.iterdir():
             if path.is_dir():
                 shutil.rmtree(path)
         view_entries: dict[Path, list[Path]] = {}
-        for root, path in view.values():
-            view_entries.setdefault(Path(root), []).append(Path(path))
+        for root, p in view.values():
+            view_entries.setdefault(Path(root), []).append(Path(p))
         self.update_view(view_entries)
 
     def update_view(self, view_entries: dict[Path, list[Path]]) -> None:
@@ -362,8 +362,9 @@ class Workspace:
         reachable: list[str] | None = None
         if ids:
             reachable = self.db.reachable_spec_ids(ids)
-        specs = self.db.get_specs(ids=reachable)
+        resolved = self.db.get_specs(ids=reachable)
         latest = self.db.get_results(ids=reachable)
+        specs = select.finalize(resolved)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -536,7 +537,7 @@ class Workspace:
                     continue
                 ws_dir = latest[case.id].workspace.dir
                 relpath = ws_dir.relative_to(session.work_dir)
-                view[case.id] = (str(session.work_dir), relpath)
+                view[case.id] = (str(session.work_dir), str(relpath))
         try:
             for case in to_remove:
                 logger.info(f"gc: removing {case}::{case.workspace.dir}")
@@ -724,7 +725,7 @@ class WorkspaceDatabase:
         rows = cursor.fetchall()
         return self._reconstruct_specs(rows)
 
-    def _get_specs_by_signature(self, signature: str) -> dict[str, dict[str, Any]]:
+    def _get_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
         cursor = self.connection.cursor()
         cursor.execute("SELECT * FROM specs WHERE signature = ?", (signature,))
         rows = cursor.fetchall()
@@ -790,7 +791,7 @@ class WorkspaceDatabase:
         specs = self._reconstruct_specs(rows)
         return [spec for spec in specs if spec.id in ids]
 
-    def _reconstruct_specs(self, rows: list[list]) -> list[TestSpec]:
+    def _reconstruct_specs(self, rows: list[list]) -> list[ResolvedSpec]:
         data = {id: json.loads(data) for id, _, data in rows}
         graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
         lookup: dict[str, ResolvedSpec] = {}
@@ -856,7 +857,7 @@ class WorkspaceDatabase:
             for id, status, timekeeper, workspace in rows
         }
 
-    def get_dependency_graph(self) -> dict[str, dict[str, Any]]:
+    def get_dependency_graph(self) -> dict[str, list[str]]:
         cursor = self.connection.cursor()
         cursor.execute("SELECT id, data FROM dependencies;")
         rows = cursor.fetchall()

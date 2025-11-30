@@ -185,7 +185,6 @@ def test_roundtrip(tmpdir):
             modules=None,
             rcfiles=None,
             owners=None,
-            mask="",
         )
 
         f1 = Path("f1.pyt")
@@ -211,7 +210,6 @@ def test_roundtrip(tmpdir):
             modules=None,
             rcfiles=None,
             owners=None,
-            mask="",
         )
         with open("spec.lock", "w") as fh:
             s1.dump(fh)

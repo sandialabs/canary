@@ -11,6 +11,7 @@ object indicating whether the spec passed or failed the rule.
 Rules support serialization to and from dictionaries and JSON strings to allow persistence and
 reconstruction across sessions.
 """
+
 import importlib
 import os
 import re
@@ -41,6 +42,7 @@ class RuleOutcome:
         ok (bool): Whether the rule evaluation succeeded.
         reason (str | None): Optional explanation for a failure.
     """
+
     __slots__ = ("ok", "reason")
 
     def __init__(self, ok: bool = True, reason: str | None = None) -> None:
@@ -130,7 +132,8 @@ class KeywordRule(Rule):
     """Selects specs based on keyword expressions.
 
     A spec passes if all keyword expressions match its explicit or implicit keywords, unless the
-    expression list contains '__all__' or ':all:', in which case all specs pass.  """
+    expression list contains '__all__' or ':all:', in which case all specs pass."""
+
     def __init__(self, keyword_exprs: list[str]):
         self.keyword_exprs = keyword_exprs
 
@@ -156,7 +159,8 @@ class ParameterRule(Rule):
     """Selects specs based on parameter expressions.
 
     The spec passes if the parameter expression matches any of the spec's explicit or implicit
-    parameters.  """
+    parameters."""
+
     def __init__(self, parameter_expr: str) -> None:
         self.parameter_expr = parameter_expr
 
@@ -199,6 +203,7 @@ class OwnersRule(Rule):
     A spec passes if at least one of its owners appears in the rule's
     configured owner set.
     """
+
     def __init__(self, owners: Iterable[str] = ()) -> None:
         self.owners = set(owners)
 
@@ -221,6 +226,7 @@ class PrefixRule(Rule):
     A spec passes if its underlying file path begins with any of the
     configured prefixes.
     """
+
     def __init__(self, prefixes: Iterable[str] = ()) -> None:
         self.prefixes = list(prefixes)
 
@@ -240,6 +246,7 @@ class RegexRule(Rule):
     A spec passes if the configured regular expression occurs in the spec's primary file or in any
     referenced asset file.
     """
+
     def __init__(self, regex: str) -> None:
         logger.warning("Regular expression search can be slow for large test suites")
         self.string: str = regex
@@ -269,6 +276,7 @@ class ResourceCapacityRule(Rule):
     the spec's declared resource needs.  Evaluation results are cached based on the resource set's
     hashable representation.
     """
+
     def __init__(self) -> None:
         self.cache: dict[tuple[tuple[str, Any], ...], RuleOutcome] = {}
 

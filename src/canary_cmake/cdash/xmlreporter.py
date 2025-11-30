@@ -10,7 +10,6 @@ import os
 import sys
 import time
 import xml.dom.minidom as xdom
-from graphlib import TopologicalSorter
 from typing import IO
 from typing import Any
 
@@ -48,32 +47,32 @@ class CDashXMLReporter:
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
         raise NotImplementedError("No way of loading the case directly from lock yet")
-        from _canary.testcase import factory as testcase_factory
 
-        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
-        self = cls(dest=dest)
-        data = json.load(open(file))
-        ts: TopologicalSorter = TopologicalSorter()
-        for id, state in data.items():
-            for name, value in state["properties"].items():
-                if name == "dependencies":
-                    dependencies = value
-                    dep_ids = [d["properties"]["id"] for d in dependencies]
-                    ts.add(id, *dep_ids)
-                    break
-        cases: dict[str, canary.TestCase] = {}
-        for id in ts.static_order():
-            state = data[id]
-            case = testcase_factory(state.pop("type"))
-            case.setstate(state)
-            for i, dep in enumerate(case.dependencies):
-                case.dependencies[i] = cases[dep.id]
-            cases[id] = case
-        for case in cases.values():
-            if not case.mask:
-                # case.refresh()
-                self.data.add_test(case)
-        return self
+    #        from _canary.testcase import factory as testcase_factory
+    #
+    #        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
+    #        self = cls(dest=dest)
+    #        data = json.load(open(file))
+    #        ts: TopologicalSorter = TopologicalSorter()
+    #        for id, state in data.items():
+    #            for name, value in state["properties"].items():
+    #                if name == "dependencies":
+    #                    dependencies = value
+    #                    dep_ids = [d["properties"]["id"] for d in dependencies]
+    #                    ts.add(id, *dep_ids)
+    #                    break
+    #        cases: dict[str, canary.TestCase] = {}
+    #        for id in ts.static_order():
+    #            state = data[id]
+    #            case = testcase_factory(state.pop("type"))
+    #            case.setstate(state)
+    #            for i, dep in enumerate(case.dependencies):
+    #                case.dependencies[i] = cases[dep.id]
+    #            cases[id] = case
+    #        for case in cases.values():
+    #            # case.refresh()
+    #            self.data.add_test(case)
+    #        return self
 
     def create(
         self,
@@ -265,10 +264,6 @@ class CDashXMLReporter:
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.mask:
-                status = "notdone"
-                exit_code = "Not Done"
-                completion_status = "notrun"
             elif case.status.name == "SKIPPED":
                 status = "notdone"
                 exit_code = "Skipped"
@@ -363,8 +358,8 @@ class CDashXMLReporter:
                 if not os.path.exists(file) and not os.path.isabs(file):
                     if os.path.exists(os.path.join(case.workspace.dir, file)):
                         file = os.path.join(case.workspace.dir, file)
-                    elif os.path.exists(os.path.join(case.file_dir, file)):
-                        file = os.path.join(case.file_dir, file)
+                    elif os.path.exists(os.path.join(case.file.parent, file)):
+                        file = os.path.join(case.file.parent, file)
                 if os.path.exists(file):
                     artifacts.append(file)
             if artifacts:

@@ -158,11 +158,13 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
         tf = datetime.datetime.fromisoformat(case.timekeeper.finished_on)
         if start is None:
             start = ti
-            finish = tf
         else:
             start = min(ti, start)
+        if finish is None:
+            finish = tf
+        else:
             finish = max(tf, finish)
-    if finish:
+    if start and finish:
         duration = (finish - start).total_seconds()
     totals: dict[str, list["TestCase"]] = {}
     for case in cases:
@@ -194,7 +196,7 @@ def bold(string: str) -> str:
 def print_durations(cases: list["TestCase"], N: int) -> None:
     string = io.StringIO()
     cases = [c for c in cases if c.timekeeper.duration >= 0]
-    sorted_cases = sorted(cases, key=lambda x: x.duration)
+    sorted_cases = sorted(cases, key=lambda x: x.timekeeper.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
     kwds = {"t": glyphs.turtle, "N": N}

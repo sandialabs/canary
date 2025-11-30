@@ -200,6 +200,8 @@ class TestCase:
 
         # Look for variables to expand
         for key, value in self.variables.items():
+            if value is None:
+                continue
             try:
                 self.variables[key] = value % vars
             except Exception:  # nosec B110
@@ -338,7 +340,9 @@ class TestCase:
                         logger.debug(f"    Replacing {dst} with {src}\n")
                         copyfile(src, dst)
 
-    def update_status_from_exit_code(self, *, code: int) -> None:
+    def update_status_from_exit_code(self, *, code: int | str) -> None:
+        if isinstance(code, str):
+            code = 1
         xcode = self.spec.xstatus
 
         if xcode == diff_exit_status:
@@ -422,8 +426,8 @@ class TestCase:
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         self.lockfile.write_text(json.dumps(record, indent=2))
 
-    def asdict(self) -> dict[str, dict]:
-        record: dict[str, dict] = {
+    def asdict(self) -> dict[str, Any]:
+        record: dict[str, Any] = {
             "status": self.status.asdict(),
             "spec": self.spec.asdict(),
             "timekeeper": self.timekeeper.asdict(),
@@ -510,6 +514,7 @@ class TestCase:
         file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
         if file.exists():
             return json.loads(file.read_text())["cache"]
+        return None
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
@@ -538,7 +543,7 @@ class TestCase:
             if self.timekeeper.started_on != "NA"
             else None
         )
-        if dt != None:
+        if dt is not None:
             history["last_run"] = dt.strftime("%c")
         name = "pass" if self.status.name == "SUCCESS" else self.status.name.lower()
         history[name] = history.get(name, 0) + 1

@@ -162,8 +162,6 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     started_on: datetime | None = None
     finished_on: datetime | None = None
     for case in cases:
-        if case.mask:
-            continue
         stats.num_tests += 1
         if case.status.name in ("DIFFED", "FAILED", "TIMEOUT"):
             stats.num_failed += 1

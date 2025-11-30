@@ -15,7 +15,10 @@ from functools import cached_property
 from pathlib import Path
 from typing import IO
 from typing import Any
+from typing import Generic
 from typing import Literal
+from typing import TypeVar
+from typing import Type
 
 from . import config
 from .util import json_helper as json
@@ -24,6 +27,7 @@ from .util.string import stringify
 
 logger = logging.get_logger(__name__)
 select_sygil = "/"
+
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,7 +39,7 @@ class Mask:
         if self.value and not self.reason:
             raise TypeError("Mask(True) requires a reason")
         elif not self.value and self.reason:
-            self.reason = None
+            raise TypeError(f"Mask(False) not compatible with reason {self.reason!r}")
 
     def __bool__(self) -> bool:
         return self.value
@@ -49,17 +53,59 @@ class Mask:
         return cls(False, None)
 
 
-class Spec:
-    id: str
+T = TypeVar("T", bound="BaseSpec")
+
+
+@dataclasses.dataclass
+class BaseSpec(Generic[T]):
     file_root: Path
     file_path: Path
-    family: str
-    parameters: dict[str, Any]
-    rparameters: dict[str, int]
-    attributes: dict[str, Any]
+    family: str = ""
+    id: str = ""
+    dependencies: list[Any] = dataclasses.field(default_factory=list)
+    dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
+    parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
+    rparameters: dict[str, int] = dataclasses.field(default_factory=dict)
+    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    keywords: list[str] = dataclasses.field(default_factory=list)
+    assets: list["Asset"] = dataclasses.field(default_factory=list)
+    baseline: list[Any] = dataclasses.field(default_factory=list)
+    artifacts: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    exclusive: bool = False
+    timeout: float = -1.0
+    xstatus: int = 0
+    preload: str | None = None
+    modules: list[str] | None = None
+    rcfiles: list[str] | None = None
+    owners: list[str] | None = None
+    environment: dict[str, str] = dataclasses.field(default_factory=dict)
+    environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def __post_init__(self) -> None:
+        self.family = self.family or self.file.stem
+        if not self.id:
+            self.id = self._generate_default_id()
+        if self.timeout is None:
+            self.timeout = -1.0
+        if self.timeout < 0 or self.timeout is None:
+            self.timeout = self._default_timeout()
+        if self.xstatus is None:
+            self.xstatus = 0
+        if not self.rparameters:
+            self.parameters = self._validate_parameters(self.parameters or {})
+
+    @classmethod
+    def from_dict(cls: Type[T], d: dict, lookup: dict[str, T]) -> T:
+        d["file_root"] = Path(d.pop("file_root"))
+        d["file_path"] = Path(d.pop("file_path"))
+        dependencies = [lookup[dep["id"]] for dep in d["dependencies"]]
+        d["dependencies"] = dependencies
+        assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
+        d["assets"] = assets
+        return cls(**d)  # ty: ignore[missing-argument]
 
     @cached_property
     def file(self) -> Path:
@@ -177,123 +223,106 @@ class Spec:
     def set_attributes(self, **kwds: Any) -> None:
         self.attributes.update(**kwds)
 
-
-@dataclasses.dataclass(frozen=True)
-class TestSpec(Spec):
-    id: str
-    file_root: Path
-    file_path: Path
-    family: str
-    dependencies: list["TestSpec"]
-    dep_done_criteria: list[str]
-    keywords: list[str]
-    parameters: dict[str, Any]
-    rparameters: dict[str, int]
-    assets: list["Asset"]
-    baseline: list[dict]
-    artifacts: list[dict[str, str]]
-    exclusive: bool
-    timeout: float
-    xstatus: int
-    preload: str | None
-    modules: list[str] | None
-    rcfiles: list[str] | None
-    owners: list[str] | None
-    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
-    environment: dict[str, str] = dataclasses.field(default_factory=dict)
-    environment_modifications: dict[str, str] = dataclasses.field(default_factory=dict)
-    cache: dict[str, str] = dataclasses.field(default_factory=dict, init=False)
-
-    @classmethod
-    def from_dict(cls, d: dict, lookup: dict[str, "TestSpec"]) -> "TestSpec":
-        d["file_root"] = Path(d.pop("file_root"))
-        d["file_path"] = Path(d.pop("file_path"))
-        dependencies: list[TestSpec] = []
-        for dep in d["dependencies"]:
-            dependencies.append(lookup[dep["id"]])
-        d["dependencies"] = dependencies
-        assets: list[Asset] = []
-        for a in d["assets"]:
-            assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
-        d["assets"] = assets
-        d.pop("cache", None)
-        self = TestSpec(**d)  # ty: ignore[missing-argument]
-        return self
-
-    def set_default_timeout(self) -> None:
-        """Sets the default timeout.  If runtime statistics have been collected those will be used,
-        otherwise the timeout will be based on the presence of duration-like keywords (fast and
-        long being the builtin defaults)
-        """
-        t = self.cache.get("metrics:time")
-        if t is not None:
-            max_runtime = t["max"]
-            if max_runtime < 5.0:
-                timeout = 120.0
-            elif max_runtime < 120.0:
-                timeout = 360.0
-            elif max_runtime < 300.0:
-                timeout = 900.0
-            elif max_runtime < 600.0:
-                timeout = 1800.0
-            else:
-                timeout = 2.0 * max_runtime
+    def _generate_default_id(self) -> str:
+        # Hasher is used to build ID
+        hasher = hashlib.sha256()
+        hasher.update(self.name.encode())
+        if self.parameters:
+            for p in sorted(self.parameters):
+                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
+        hasher.update(self.file.read_bytes())
+        d = self.file.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                f = str(os.path.relpath(str(self.file), str(d)))
+                hasher.update(f.encode())
+                break
+            d = d.parent
         else:
-            if t := config.get("timeout:*"):
-                timeout = float(t)
-            else:
-                for keyword in self.keywords:
-                    if t := config.get(f"timeout:{keyword}"):
-                        timeout = float(t)
-                        break
-                else:
-                    timeout = config.get("timeout:default")
-        self._timeout = float(timeout)
+            hasher.update(str(self.file_path.parent / self.name).encode())
+        return hasher.hexdigest()
+
+    def _default_timeout(self) -> float:
+        if cli_timeouts := config.getoption("timeout"):
+            for keyword in self.keywords:
+                if t := cli_timeouts.get(keyword):
+                    return float(t)
+            if t := cli_timeouts.get("*"):
+                return float(t)
+        for keyword in self.keywords:
+            if t := config.get(f"timeout:{keyword}"):
+                return float(t)
+        if t := config.get("timeout:all"):
+            return float(t)
+        return float(config.get("timeout:default"))
+
+    def _validate_parameters(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Default parameters used to set up resources required by test case"""
+        self.rparameters.clear()
+        self.rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
+        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
+        resource_types.update(("np", "gpus", "nnode"))  # vvtest compatibility
+        for key, value in data.items():
+            if key in resource_types and not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+        exclusive_pairs = [("cpus", "np"), ("gpus", "ndevice"), ("nodes", "nnode")]
+        for a, b in exclusive_pairs:
+            if a in data and b in data:
+                raise MutuallyExclusiveParametersError(a, b)
+        if {"nodes", "nnode"} & data.keys():
+            bad = {"cpus", "gpus", "np", "ndevice"} & data.keys()
+            if bad:
+                raise MutuallyExclusiveParametersError("nodes", ",".join(bad))
+            nodes: int = int(data.get("nodes", data.get("nnode")))
+            rpcount = config.pluginmanager.hook.canary_resource_pool_count
+            self.rparameters["nodes"] = nodes
+            self.rparameters["cpus"] = nodes * rpcount(type="cpu")
+            self.rparameters["gpus"] = nodes * rpcount(type="gpu")
+        if {"cpus", "np"} & data.keys():
+            cpus: int = int(data.get("cpus", data.get("np")))
+            self.rparameters["cpus"] = cpus
+            cpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="cpu")
+            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            cpus_per_node = math.ceil(cpu_count / node_count)
+            if cpus_per_node > 0:
+                nodes = max(self.rparameters["nodes"], math.ceil(cpus / cpus_per_node))
+                self.rparameters["nodes"] = nodes
+        if {"gpus", "ndevice"} & data.keys():
+            gpus: int = int(data.get("gpus", data.get("ndevice")))
+            self.rparameters["gpus"] = gpus
+            gpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="gpu")
+            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            gpus_per_node = math.ceil(gpu_count / node_count)
+            if gpus_per_node > 0:
+                nodes = max(self.rparameters["nodes"], math.ceil(gpus / gpus_per_node))
+                self.rparameters["nodes"] = nodes
+        # We have already done validation, now just fill in missing resource types
+        resource_types = resource_types - {"nodes", "cpus", "gpus", "nnode", "np", "ndevice"}
+        for key, value in data.items():
+            if key in resource_types:
+                self.rparameters[key] = value
+        return data
+
 
 
 @dataclasses.dataclass
-class ResolvedSpec(Spec):
-    id: str
-    file_root: Path
-    file_path: Path
-    family: str
-    dependencies: list["ResolvedSpec"]
-    dep_done_criteria: list[str]
-    keywords: list[str]
-    parameters: dict[str, Any]
-    rparameters: dict[str, int]
-    assets: list["Asset"]
-    baseline: list[dict]
-    artifacts: list[dict[str, str]]
-    exclusive: bool
-    timeout: float
-    xstatus: int
-    preload: str | None
-    modules: list[str] | None
-    rcfiles: list[str] | None
-    owners: list[str] | None
+class TestSpec(BaseSpec["TestSpec"]):
+    baseline: list[dict] = dataclasses.field(default_factory=list)
+    dependencies: list["TestSpec"] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class ResolvedSpec(BaseSpec["ResolvedSpec"]):
+    baseline: list[dict] = dataclasses.field(default_factory=list)
+    dependencies: list["ResolvedSpec"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
-    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
-    environment: dict[str, str] = dataclasses.field(default_factory=dict)
-    environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
-        d["file_root"] = Path(d.pop("file_root"))
-        d["file_path"] = Path(d.pop("file_path"))
-        dependencies: list[ResolvedSpec] = []
-        for dep in d["dependencies"]:
-            dependencies.append(lookup[dep["id"]])
-        d["dependencies"] = dependencies
-        assets: list[Asset] = []
-        for a in d["assets"]:
-            assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
-        d["assets"] = assets
         mask = d.pop("mask", None)
-        self = ResolvedSpec(**d)  # ty: ignore[missing-argument]
         if mask:
-            self.mask = Mask(mask["value"], mask["reason"])
-        return self
+            d["mask"] = Mask(mask["value"], mask["reason"])
+        return super().from_dict(d, lookup)
 
     def finalize(self, dependencies: list["TestSpec"]) -> TestSpec:
         return TestSpec(
@@ -392,40 +421,17 @@ class DependencyPatterns:
 
 
 @dataclasses.dataclass
-class UnresolvedSpec(Spec):
+class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
-
-    file_root: Path
-    file_path: Path
-    family: str = ""
     dependencies: list[str | DependencyPatterns] = dataclasses.field(default_factory=list)
-    keywords: list[str] = dataclasses.field(default_factory=list)
-    parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = (
         dataclasses.field(default_factory=dict)
     )
     baseline: list[str | tuple[str, str]] = dataclasses.field(default_factory=list)
-    artifacts: list[dict[str, str]] = dataclasses.field(default_factory=list)
-    exclusive: bool = False
-    timeout: float = -1.0
-    xstatus: int = 0
-    preload: str | None = None
-    modules: list[str] | None = None
-    rcfiles: list[str] | None = None
-    owners: list[str] | None = None
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
-    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
-    environment: dict[str, str] = dataclasses.field(default_factory=dict)
-    environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
-    id: str = ""
-
-    # Fields that are generated in __post_init__
-    assets: list[Asset] = dataclasses.field(default_factory=list, init=False)
     baseline_actions: list[dict] = dataclasses.field(default_factory=list, init=False)
-    dependency_patterns: list[DependencyPatterns] = dataclasses.field(
-        default_factory=list, init=False
-    )
+    dep_patterns: list[DependencyPatterns] = dataclasses.field(default_factory=list, init=False)
     rparameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     resolved_dependencies: list["UnresolvedSpec"] = dataclasses.field(
         default_factory=list, init=False
@@ -433,32 +439,18 @@ class UnresolvedSpec(Spec):
     resolved: bool = dataclasses.field(default=False, init=False)
 
     def __post_init__(self) -> None:
-        assert self.file.exists()
-        self.family = self.family or self.file.stem
-        if not self.id:
-            self.id = self._generate_default_id()
-
+        super().__post_init__()
         # We make sure objects have the right type, in case any were passed in as name=None
-        if self.timeout is None:
-            self.timeout = -1.0
-        if self.timeout < 0 or self.timeout is None:
-            self.timeout = self._default_timeout()
-        if self.xstatus is None:
-            self.xstatus = 0
-        self.keywords = self.keywords or []
-        self.file_resources = self.file_resources or {}
-        self.parameters = self._validate_parameters(self.parameters or {})
         self.assets = self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
-        self.exclusive = bool(self.exclusive)
-        self.dependency_patterns = self._generate_dependency_patterns(self.dependencies or [])
+        self.dep_patterns = self._generate_dependency_patterns(self.dependencies or [])
         self._generate_analyze_action()
 
     def resolve(
         self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None
     ) -> "ResolvedSpec":
         errors: list[str] = []
-        for dp in self.dependency_patterns:
+        for dp in self.dep_patterns:
             if e := dp.verify():
                 errors.extend(e)
         dep_done_criteria = dep_done_criteria or ["success"] * len(dependencies)
@@ -509,20 +501,6 @@ class UnresolvedSpec(Spec):
                 assets.append(Asset(action=action, src=src, dst=dst))
         return assets
 
-    def _default_timeout(self) -> float:
-        if cli_timeouts := config.getoption("timeout"):
-            for keyword in self.keywords:
-                if t := cli_timeouts.get(keyword):
-                    return float(t)
-            if t := cli_timeouts.get("*"):
-                return float(t)
-        for keyword in self.keywords:
-            if t := config.get(f"timeout:{keyword}"):
-                return float(t)
-        if t := config.get("timeout:all"):
-            return float(t)
-        return float(config.get("timeout:default"))
-
     def _generate_baseline_actions(self, items: list[str | tuple[str, str]]) -> list[dict]:
         actions: list[dict] = []
         for item in items:
@@ -541,7 +519,7 @@ class UnresolvedSpec(Spec):
                 actions.append({"type": "copy", "src": src, "dst": dst})
         return actions
 
-    def _generate_analyze_action(self):
+    def _generate_analyze_action(self) -> None:
         if analyze := self.attributes.get("analyze"):
             if analyze.startswith("-"):
                 self.attributes["script_args"] = [analyze]
@@ -562,53 +540,6 @@ class UnresolvedSpec(Spec):
                     asset = Asset(src, src.name, action="link")
                     self.assets.append(asset)
 
-    def _validate_parameters(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Default parameters used to set up resources required by test case"""
-        self.rparameters.clear()
-        self.rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
-        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        resource_types.update(("np", "gpus", "nnode"))  # vvtest compatibility
-        for key, value in data.items():
-            if key in resource_types and not isinstance(value, int):
-                raise InvalidTypeError(key, value)
-        exclusive_pairs = [("cpus", "np"), ("gpus", "ndevice"), ("nodes", "nnode")]
-        for a, b in exclusive_pairs:
-            if a in data and b in data:
-                raise MutuallyExclusiveParametersError(a, b)
-        if {"nodes", "nnode"} & data.keys():
-            bad = {"cpus", "gpus", "np", "ndevice"} & data.keys()
-            if bad:
-                raise MutuallyExclusiveParametersError("nodes", ",".join(bad))
-            nodes: int = int(data.get("nodes", data.get("nnode")))
-            rpcount = config.pluginmanager.hook.canary_resource_pool_count
-            self.rparameters["nodes"] = nodes
-            self.rparameters["cpus"] = nodes * rpcount(type="cpu")
-            self.rparameters["gpus"] = nodes * rpcount(type="gpu")
-        if {"cpus", "np"} & data.keys():
-            cpus: int = int(data.get("cpus", data.get("np")))
-            self.rparameters["cpus"] = cpus
-            cpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="cpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
-            cpus_per_node = math.ceil(cpu_count / node_count)
-            if cpus_per_node > 0:
-                nodes = max(self.rparameters["nodes"], math.ceil(cpus / cpus_per_node))
-                self.rparameters["nodes"] = nodes
-        if {"gpus", "ndevice"} & data.keys():
-            gpus: int = int(data.get("gpus", data.get("ndevice")))
-            self.rparameters["gpus"] = gpus
-            gpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="gpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
-            gpus_per_node = math.ceil(gpu_count / node_count)
-            if gpus_per_node > 0:
-                nodes = max(self.rparameters["nodes"], math.ceil(gpus / gpus_per_node))
-                self.rparameters["nodes"] = nodes
-        # We have already done validation, now just fill in missing resource types
-        resource_types = resource_types - {"nodes", "cpus", "gpus", "nnode", "np", "ndevice"}
-        for key, value in data.items():
-            if key in resource_types:
-                self.rparameters[key] = value
-        return data
-
     def _generate_dependency_patterns(
         self, args: list[str | DependencyPatterns]
     ) -> list[DependencyPatterns]:
@@ -628,25 +559,6 @@ class UnresolvedSpec(Spec):
                 dep_pattern = DependencyPatterns(pattern=pattern)
                 dependency_patterns.append(dep_pattern)
         return dependency_patterns
-
-    def _generate_default_id(self) -> str:
-        # Hasher is used to build ID
-        hasher = hashlib.sha256()
-        hasher.update(self.name.encode())
-        if self.parameters:
-            for p in sorted(self.parameters):
-                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
-        hasher.update(self.file.read_bytes())
-        d = self.file.parent
-        while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
-                f = str(os.path.relpath(str(self.file), str(d)))
-                hasher.update(f.encode())
-                break
-            d = d.parent
-        else:
-            hasher.update(str(self.file_path.parent / self.name).encode())
-        return hasher.hexdigest()
 
 
 class InvalidTypeError(Exception):

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import dataclasses
 from typing import Any
 from typing import MutableMapping
 from typing import Protocol
@@ -28,7 +29,7 @@ class JobProtocol(Protocol):
     gpu_ids: list[int]
     id: str
     mask: str
-    measurements: MutableMapping[str, Any]
+    measurements: "Measurements"
     status: StatusProtocol
     runtime: float
     timeout: float
@@ -93,3 +94,21 @@ class JobProtocol(Protocol):
     def free_resources(self) -> list[dict[str, list[dict]]]: ...
 
     def cost(self) -> float: ...
+
+
+@dataclasses.dataclass
+class Measurements:
+    data: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    def add_measurement(self, name: str, value: Any) -> None:
+        self.data[name] = value
+
+    def update(self, measurements: dict) -> None:
+        self.data.update(measurements)
+
+    def asdict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
+    def items(self) -> Generator[tuple[str, Any], None, None]:
+        for item in self.data.items():
+            yield item

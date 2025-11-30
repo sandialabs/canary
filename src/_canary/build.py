@@ -136,6 +136,7 @@ canary_build_report(builder):
     perform further mutation.
 
 """
+
 import dataclasses
 import fnmatch
 import hashlib
@@ -351,7 +352,7 @@ def _resolve_dependencies_serial(
     """Resolve dependencies serially for debugging"""
     results = []
     for spec in specs_to_resolve:
-        if not spec.dependency_patterns:
+        if not spec.dep_patterns:
             results.append(_resolve_empty(spec))
         else:
             results.append(
@@ -379,7 +380,7 @@ def _resolve_dependencies_parallel(
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
         for spec in specs_to_resolve:
-            if not spec.dependency_patterns:
+            if not spec.dep_patterns:
                 futures.append(executor.submit(_resolve_empty, spec))
             else:
                 futures.append(
@@ -414,7 +415,7 @@ def _resolve_spec_dependencies(
     matches: list[str] = []
     done_criteria: list[str] = []
 
-    for dp in spec.dependency_patterns:
+    for dp in spec.dep_patterns:
         deps = _find_matching_specs(
             dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )

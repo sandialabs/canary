@@ -42,7 +42,6 @@ class BatchSpec:
     exclusive: bool = dataclasses.field(init=False, default=False)
 
     def __post_init__(self) -> None:
-        self.validate(self.cases)
         self.id = hashit(",".join(case.id for case in self.cases), length=20)
         self.session = self.cases[0].workspace.session
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
@@ -50,19 +49,6 @@ class BatchSpec:
 
     def __len__(self) -> int:
         return len(self.cases)
-
-    def validate(self, cases: Sequence[canary.TestCase]):
-        errors = 0
-        for case in cases:
-            if case.mask:
-                logger.critical(f"{case}: case is masked")
-                errors += 1
-            for dep in case.dependencies:
-                if dep.mask:
-                    errors += 1
-                    logger.critical(f"{dep}: dependent of {case} is masked")
-        if errors:
-            raise ValueError("Stopping due to previous errors")
 
     def required_resources(self) -> list[dict[str, Any]]:
         return [{"type": "cpus", "slots": 1}]

@@ -135,6 +135,7 @@ exclude = [
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/canary_gitlab/tests/*",
 ]
 
 [[tool.mypy.overrides]]

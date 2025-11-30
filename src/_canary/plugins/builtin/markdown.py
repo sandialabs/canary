@@ -56,8 +56,6 @@ class MarkdownReporter(CanaryReporter):
         logger.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
-        if case.mask:
-            return
         fh.write(f"# {case.display_name()}\n\n")
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")

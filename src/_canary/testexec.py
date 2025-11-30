@@ -91,17 +91,17 @@ class ExecutionSpace:
     def unlink(self, name: Path | str, missing_ok: bool = False) -> None:
         (self.dir / name).unlink(missing_ok=missing_ok)
 
-    def copy(self, src: Path, dst: Path | str | None) -> None:
+    def copy(self, src: Path, dst: Path | str | None = None) -> None:
         """Copy the file at ``src`` to this workspace with name ``dst``"""
-        dst: Path = Path(dst or src.name)
-        (self.dir / dst.name).unlink(missing_ok=True)
-        shutil.copy(str(src), str(self.dir / dst.name))
+        dest: Path = Path(dst or src.name)
+        (self.dir / dest.name).unlink(missing_ok=True)
+        shutil.copy(str(src), str(self.dir / dest.name))
 
     def link(self, src: Path, dst: Path | str | None = None) -> None:
         """Symlink the file at ``src`` to this workspace with name ``dst``"""
-        dst: Path = Path(dst or src.name)
-        (self.dir / dst.name).unlink(missing_ok=True)
-        (self.dir / dst.name).symlink_to(src)
+        dest: Path = Path(dst or src.name)
+        (self.dir / dest.name).unlink(missing_ok=True)
+        (self.dir / dest.name).symlink_to(src)
 
     def joinpath(self, *parts: Path | str) -> Path:
         f = self.dir
