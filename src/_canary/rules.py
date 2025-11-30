@@ -1,3 +1,16 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+"""Rules for selecting and filtering ResolvedSpec objects.
+
+This module defines a set of Rule classes used to determine whether a ResolvedSpec should be
+included in test execution. Each rule evaluates specific attributes—such as keywords, parameters,
+owners, IDs, file prefixes, regular expressions, or resource requirements—and returns a RuleOutcome
+object indicating whether the spec passed or failed the rule.
+
+Rules support serialization to and from dictionaries and JSON strings to allow persistence and
+reconstruction across sessions.
+"""
 import importlib
 import os
 import re
@@ -22,6 +35,12 @@ logger = logging.get_logger(__name__)
 
 
 class RuleOutcome:
+    """Represents the result of evaluating a rule.
+
+    Attributes:
+        ok (bool): Whether the rule evaluation succeeded.
+        reason (str | None): Optional explanation for a failure.
+    """
     __slots__ = ("ok", "reason")
 
     def __init__(self, ok: bool = True, reason: str | None = None) -> None:
@@ -37,28 +56,52 @@ class RuleOutcome:
 
 
 class Rule:
-    """A rule to decide whether a spec should be selected
+    """Base class for all selection rules.
 
-    The __call__ method should return:
-      - True: select the spec
-      - False: drop the spec
+    Subclasses should override __call__ to evaluate whether a ResolvedSpec satisfies the rule.
+    Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
     """
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         raise NotImplementedError
 
     def asdict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the rule.
+
+        Returns:
+            dict: A mapping containing the parameters required to
+            reconstruct the rule.
+        """
         return dict(self.__dict__)
 
     @classmethod
     def from_dict(cls, params: dict[str, Any]) -> "Rule":
+        """Create a rule instance from serialized parameters.
+
+        Args:
+            params: A mapping of constructor parameters.
+
+        Returns:
+            Rule: A new rule instance with the given parameters.
+        """
         return cls(**params)
 
     @cached_property
     def default_reason(self) -> str:
+        """Return the generic failure reason for the rule.
+
+        Returns:
+            str: A human-readable description of why the rule would
+            fail if no more specific reason is provided.
+        """
         raise NotImplementedError
 
     def serialize(self) -> str:
+        """Return a compact JSON string representing the rule.
+
+        Returns:
+            str: Serialized representation of the rule.
+        """
         meta = {
             "module": self.__class__.__module__,
             "classname": self.__class__.__name__,
@@ -68,6 +111,14 @@ class Rule:
 
     @staticmethod
     def reconstruct(serialized: str) -> "Rule":
+        """Reconstruct a rule from a serialized JSON string.
+
+        Args:
+            serialized: JSON string previously produced by serialize().
+
+        Returns:
+            Rule: The reconstructed rule instance.
+        """
         meta = json.loads(serialized)
         module = importlib.import_module(meta["module"])
         cls: Type[Rule] = getattr(module, meta["classname"])
@@ -76,6 +127,10 @@ class Rule:
 
 
 class KeywordRule(Rule):
+    """Selects specs based on keyword expressions.
+
+    A spec passes if all keyword expressions match its explicit or implicit keywords, unless the
+    expression list contains '__all__' or ':all:', in which case all specs pass.  """
     def __init__(self, keyword_exprs: list[str]):
         self.keyword_exprs = keyword_exprs
 
@@ -98,6 +153,10 @@ class KeywordRule(Rule):
 
 
 class ParameterRule(Rule):
+    """Selects specs based on parameter expressions.
+
+    The spec passes if the parameter expression matches any of the spec's explicit or implicit
+    parameters.  """
     def __init__(self, parameter_expr: str) -> None:
         self.parameter_expr = parameter_expr
 
@@ -116,6 +175,11 @@ class ParameterRule(Rule):
 
 
 class IDsRule(Rule):
+    """Selects specs based on test ID prefixes.
+
+    A spec passes if its ID begins with any of the configured prefixes.
+    """
+
     def __init__(self, ids: Iterable[str] = ()) -> None:
         self.ids = list(ids)
 
@@ -130,6 +194,11 @@ class IDsRule(Rule):
 
 
 class OwnersRule(Rule):
+    """Selects specs based on declared owners.
+
+    A spec passes if at least one of its owners appears in the rule's
+    configured owner set.
+    """
     def __init__(self, owners: Iterable[str] = ()) -> None:
         self.owners = set(owners)
 
@@ -147,6 +216,11 @@ class OwnersRule(Rule):
 
 
 class PrefixRule(Rule):
+    """Selects specs based on file path prefixes.
+
+    A spec passes if its underlying file path begins with any of the
+    configured prefixes.
+    """
     def __init__(self, prefixes: Iterable[str] = ()) -> None:
         self.prefixes = list(prefixes)
 
@@ -155,13 +229,17 @@ class PrefixRule(Rule):
         return "test file not a child of %s" % ", ".join(self.prefixes)
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
-        for prefix in self.prefixes:
-            if not str(spec.file).startswith(prefix):
-                return RuleOutcome.failed(f"test file not a child of {prefix}")
-        return RuleOutcome(True)
+        if any(str(spec.file).startswith(prefix) for prefix in self.prefixes):
+            return RuleOutcome(True)
+        return RuleOutcome.failed(f"test file not in any of {', '.join(self.prefixes)}")
 
 
 class RegexRule(Rule):
+    """Selects specs by searching for a regular expression in test files.
+
+    A spec passes if the configured regular expression occurs in the spec's primary file or in any
+    referenced asset file.
+    """
     def __init__(self, regex: str) -> None:
         logger.warning("Regular expression search can be slow for large test suites")
         self.string: str = regex
@@ -185,6 +263,12 @@ class RegexRule(Rule):
 
 
 class ResourceCapacityRule(Rule):
+    """Selects specs based on system resource capacity.
+
+    This rule queries plugin hooks to determine whether the available resource pool can accommodate
+    the spec's declared resource needs.  Evaluation results are cached based on the resource set's
+    hashable representation.
+    """
     def __init__(self) -> None:
         self.cache: dict[tuple[tuple[str, Any], ...], RuleOutcome] = {}
 
