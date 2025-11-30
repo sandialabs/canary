@@ -144,7 +144,7 @@ class ResourceQueueExecutor:
                 qrank += 1
 
                 # Create a result queue for this specific process
-                result_queue = mp.Queue()
+                result_queue: mp.Queue = mp.Queue()
 
                 # Launch a new measured process
                 proc = MeasuredProcess(
@@ -155,7 +155,8 @@ class ResourceQueueExecutor:
                 proc.start()
                 self.on_job_start(job, qrank, qsize)
 
-                self.inflight[proc.pid] = ExecutionSlot(
+                pid: int = proc.pid  # type: ignore
+                self.inflight[pid] = ExecutionSlot(
                     proc=proc,
                     queue=result_queue,
                     job=job,

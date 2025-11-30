@@ -6,6 +6,7 @@ import math
 from graphlib import TopologicalSorter
 from typing import Iterable
 from typing import Literal
+from typing import Sequence
 
 import canary
 from _canary.util import cpu_count
@@ -91,7 +92,7 @@ class GroupByNodes:
     def __init__(self, cpus_per_node: int | None) -> None:
         self.cpus_per_node: int = cpus_per_node or cpu_count()
 
-    def __call__(self, blocks: list[binpack.Block]) -> list[list[binpack.Block]]:
+    def __call__(self, blocks: Sequence[binpack.Block]) -> list[list[binpack.Block]]:
         groups: dict[int, list[binpack.Block]] = {}
         for block in blocks:
             nodes_reqd = math.ceil(block.width / self.cpus_per_node)

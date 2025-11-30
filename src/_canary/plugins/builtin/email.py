@@ -62,7 +62,7 @@ def generate_html_report(session: "Session") -> str:
     file.write("<body>\n<h1>Canary test summary</h1>\n<table>\n")
     file.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
     for group, cases in totals.items():
-        for case in sorted(cases, key=lambda c: c.duration):
+        for case in sorted(cases, key=lambda c: c.timekeeper.duration):
             file.write(
                 f"<tr><td>{case.display_name()}</td>"
                 f"<td>{case.timekeeper.duration:.2f}</td>"

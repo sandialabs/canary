@@ -233,7 +233,6 @@ class ResourcePool:
             if slots_avail < slots:
                 wanting[rtype] = (slots, slots_avail)
         if wanting:
-            types: str
             reason: str
             levelno: int = logging.get_level()
             if levelno <= logging.DEBUG:

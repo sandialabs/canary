@@ -350,7 +350,7 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
         return variables
     avail: dict[str, Any] = {}
     for type, items in case.resources.items():
-        slots_per_id = {}
+        slots_per_id: dict[str, Any] = {}
         for item in items:
             slots_per_id[item["id"]] = slots_per_id.get(item["id"], 0) + item["slots"]
         instances = [{"id": key, "slots": val} for key, val in slots_per_id.items()]

@@ -27,7 +27,6 @@ class _resource_pool_attr_error:
         f.write(f"In this case, replace config.resource_pool.{name} with {repl}.")
         raise AttributeError(f.getvalue().strip()) from None
 
-
 resource_pool = _resource_pool_attr_error()
 
 
@@ -35,6 +34,10 @@ _config: Config | None = None
 
 if typing.TYPE_CHECKING:
     _config = typing.cast(Config, _config)
+    pluginmanager = _config.pluginmanager
+    getoption = _config.getoption
+    data = _config.data
+    write_new = _config.write_new
 
 
 def ensure_loaded() -> None:

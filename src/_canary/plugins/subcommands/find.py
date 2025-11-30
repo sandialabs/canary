@@ -112,7 +112,7 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
 def pprint_paths(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
     unique_generators: dict[str, set[str]] = dict()
     for spec in specs:
-        unique_generators.setdefault(spec.file_root, set()).add(spec.file_path)
+        unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
     _, max_width = terminal_size()
     for root, paths in unique_generators.items():
         label = colorize("@m{%s}" % root)
@@ -129,7 +129,7 @@ def pprint_files(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
 def pprint_keywords(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
     unique_kwds: dict[str, set[str]] = dict()
     for spec in specs:
-        unique_kwds.setdefault(spec.file_root, set()).update(spec.keywords)
+        unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
     _, max_width = terminal_size()
     for root, kwds in unique_kwds.items():
         label = colorize("@m{%s}" % root)
@@ -147,7 +147,7 @@ def pprint(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
     tree: dict[str, list[str]] = {}
     for spec in specs:
         line = f"{hhmmss(spec.timeout):11s}    {spec.fullname}"
-        tree.setdefault(spec.file_root, []).append(line)
+        tree.setdefault(str(spec.file_root), []).append(line)
     for root, lines in tree.items():
         cols = colified(lines, indent=2, width=max_width)
         label = colorize("@m{%s}" % root)

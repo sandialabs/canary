@@ -4,6 +4,7 @@
 
 import argparse
 from typing import TYPE_CHECKING
+from pathlib import Path
 
 from ...hookspec import hookimpl
 from ...workspace import Workspace
@@ -62,13 +63,13 @@ If no options are give, -x is assumed."""
         case: TestCase
         workspace = Workspace.load()
         case = workspace.find(case=args.testspec)
-        f: str
+        f: Path | str
         if args.show_log:
             f = case.workspace.joinpath(case.stdout)
         elif args.show_input:
             f = case.file
         elif args.show_source_dir:
-            f = case.file_dir
+            f = case.file.parent
         elif args.show_working_directory:
             f = case.workspace.dir
         else:

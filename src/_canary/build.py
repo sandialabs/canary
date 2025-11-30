@@ -146,6 +146,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
+from typing import Sequence
 
 from . import config
 from .hookspec import hookimpl
@@ -253,8 +254,9 @@ def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
     return file.lock(on_options=on_options)
 
 
-def resolve(specs: list["UnresolvedSpec"] | list["ResolvedSpec"]) -> list["ResolvedSpec"]:
+def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedSpec"]:
     from .testspec import ResolvedSpec
+    from .testspec import UnresolvedSpec
 
     # Separate specs into resolved and draft
     draft_specs: list["UnresolvedSpec"] = []
@@ -321,23 +323,12 @@ def resolve(specs: list["UnresolvedSpec"] | list["ResolvedSpec"]) -> list["Resol
             if isinstance(draft, ResolvedSpec):
                 lookup[id] = draft
             else:
+                assert isinstance(draft, UnresolvedSpec)
                 dep_ids = draft_lookup.get(id, [])
                 dependencies = [lookup[dep_id] for dep_id in dep_ids]
-
-                try:
-                    spec = draft.resolve(dependencies, dep_done_criteria.get(id, []))
-                except UnresolvedDependenciesErrors as e:
-                    errors[draft.fullname].extend(e.errors)
-                lookup[id] = spec
+                lookup[id] = draft.resolve(dependencies, dep_done_criteria.get(id, []))
 
         ts.done(*ids)
-
-    if errors:
-        msg: list[str] = ["Dependency resolution failed:"]
-        for name, issues in errors.items():
-            msg.append(f"  {name}")
-            msg.extend(f"  • {p}" for p in issues)
-        raise DependencyResolutionFailed("\n".join(msg))
 
     return list(lookup.values())
 
@@ -483,7 +474,3 @@ def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -
         if fnmatch.fnmatchcase(name, pattern):
             return True
     return False
-
-
-class DependencyResolutionFailed(Exception):
-    pass

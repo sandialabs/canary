@@ -8,6 +8,7 @@ import sys
 from functools import cached_property
 from pathlib import Path
 from string import Template
+from typing import cast
 from typing import IO
 from typing import Any
 from typing import Literal
@@ -90,12 +91,12 @@ class Config:
         self.data = default_config_values()
         for name in ("site", "global", "local"):
             try:
-                scope = get_config_scope_data(name)
+                scope = get_config_scope_data(cast(ConfigScopes, name))
             except LocalScopeDoesNotExistError:
                 continue
-            self.data = merge(self.data, scope)
+            self.data = merge(self.data, scope)  # type: ignore
         if env_scope := get_env_scope():
-            self.data = merge(self.data, env_scope)
+            self.data = merge(self.data, env_scope)  # type: ignore
         if self.get("debug"):
             logging.set_level(logging.DEBUG)
 

@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO
 from typing import TYPE_CHECKING
+from typing import TextIO
 from typing import Any
 from typing import Generator
 from typing import Protocol
@@ -149,6 +150,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
             case.set_attribute("command", shlex.join(args))
             try:
                 stdout = open(case.stdout, "a")
+                stderr: TextIO | int
                 if case.stderr is None:
                     stderr = subprocess.STDOUT
                 else:
@@ -201,7 +203,7 @@ class PythonRunpyExecutionPolicy(ExecutionPolicy):
             sys.path.insert(0, str(case.workspace.dir))
             setattr(canary, "get_instance", get_instance)
             setattr(canary, "get_testcase", get_testcase)
-            canary.__testcase__ = case
+            setattr(canary, "__testcase__", case)
             sys.argv = [sys.executable, case.spec.file.name]
             if a := config.getoption("script_args"):
                 sys.argv.extend(a)

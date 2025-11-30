@@ -9,10 +9,10 @@ from typing import Sequence
 from . import logging
 
 if TYPE_CHECKING:
-    from ..testcase import TestCase
+    from ..protocols import JobProtocol
 
 
-def progress(cases: Sequence["TestCase"], elapsed_time: float) -> None:
+def progress(cases: Sequence["JobProtocol"], elapsed_time: float) -> None:
     """Display test session progress
 
     Args:
