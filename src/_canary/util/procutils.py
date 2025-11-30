@@ -116,7 +116,7 @@ class MeasuredProcess(multiprocessing.Process):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.samples: list[dict[str, float]] = []
+        self.samples = []
         self._psutil_process = None
         self._start_time = None
 
@@ -198,6 +198,7 @@ class MeasuredProcess(multiprocessing.Process):
     def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
         logger.debug(f"Terminating process {self.pid}")
         self._sample_metrics()
-        os.kill(self.pid, signum)
+        if self.pid is not None:
+            os.kill(self.pid, signum)
         time.sleep(grace_period)
         self.kill()

@@ -90,7 +90,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
-        info: dict[str, Any] = super().info()
+        info: dict[str, Any] = {}
         tests = self.load()
         for details in tests.values():
             info.setdefault("keywords", []).extend(details.get("labels", []))
@@ -293,7 +293,7 @@ def create_draft_spec(
 
 
 def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:
-    mods: list[dict[str, str]] = []
+    my_mods: list[dict[str, str]] = []
     for em in mods:
         op, name, value = em["op"], em["name"], em["value"]
         entry: dict[str, str] = dict(name=name)
@@ -312,8 +312,8 @@ def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:
                 entry.update({"value": value, "action": "append-path", "sep": ";"})
             case "cmake_list_prepend":
                 entry.update({"value": value, "action": "prepend-path", "sep": ";"})
-        mods.append(entry)
-    return mods
+        my_mods.append(entry)
+    return my_mods
 
 
 def setup_ctest(case: canary.TestCase):

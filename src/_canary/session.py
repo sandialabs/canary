@@ -67,6 +67,8 @@ class Session:
 
     @classmethod
     def create(cls, anchor: Path, specs: list["TestSpec"]) -> "Session":
+        if not specs:
+            raise StopExecution("Empty test session", notests_exit_status)
         self: Session = object.__new__(cls)
         ts = datetime.datetime.now().isoformat(timespec="microseconds")
         self.initialize_properties(anchor=anchor, name=ts.replace(":", "-"))
@@ -87,7 +89,7 @@ class Session:
         lookup: dict[str, TestCase] = {}
         for spec in static_order(self.specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.execpath, session=self.name)
+            space = ExecutionSpace(root=self.work_dir, path=Path(spec.execpath), session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
             config.pluginmanager.hook.canary_testcase_modify(case=case)
@@ -110,7 +112,7 @@ class Session:
                 for d in data:
                     spec = TestSpec.from_dict(d, lookup)
                     lookup[spec.id] = spec
-                    self.specs.append(spec)
+                    self._specs.append(spec)
         return self._specs
 
     @classmethod
@@ -155,7 +157,7 @@ class Session:
         for id in ts.static_order():
             spec = map[id]
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.execpath, session=self.name)
+            space = ExecutionSpace(root=self.work_dir, path=Path(spec.execpath), session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             f = case.workspace.dir / "testcase.lock"
             if f.exists():

@@ -7,6 +7,7 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
+from typing import Any
 
 if TYPE_CHECKING:
     from .testspec import UnresolvedSpec
@@ -97,8 +98,8 @@ class AbstractTestGenerator(ABC):
 
         """
 
-    def asdict(self) -> dict[str, str]:
-        state: dict[str, str] = {}
+    def asdict(self) -> dict[str, Any]:
+        state: dict[str, Any] = {}
         state["root"] = self.root
         state["path"] = self.path
         state["sha256"] = self.sha256
@@ -116,4 +117,4 @@ class AbstractTestGenerator(ABC):
         if generator := config.pluginmanager.hook.canary_testcase_generator(root=root, path=path):
             return generator
         f = root if path is None else os.path.join(root, path)
-        raise TypeError(f"No test generator for {f}")
+        raise TypeError(f"{f} is not a test generator")

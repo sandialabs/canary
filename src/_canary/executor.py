@@ -26,14 +26,15 @@ logger = logging.get_logger(__name__)
 class TestCaseExecutor:
     """Defines plugin implementations for executing test cases"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._rpool: "ResourcePool | None" = None
 
     def get_rpool(self) -> "ResourcePool":
         # Use a function instead of @property since pluggy tries to inspect properties and causes
         # the resource pool to be instantiated prematurely
         if self._rpool is None:
-            self._rpool = make_resource_pool(config._config)  # ty: ignore[invalid-argument-type]
+            assert config._config is not None
+            self._rpool = make_resource_pool(config._config)
         assert self._rpool is not None
         return self._rpool
 
@@ -74,7 +75,8 @@ class TestCaseExecutor:
 
         try:
             rpool = self.get_rpool()
-            queue = ResourceQueue(lock=global_lock, resource_pool=rpool, jobs=cases)  # ty: ignore[invalid-argument-type]
+            queue = ResourceQueue(lock=global_lock, resource_pool=rpool)
+            queue.put(*cases)  # type: ignore
             queue.prepare()
         except Exception:
             logger.exception("Unable to create resource queue")

@@ -167,6 +167,7 @@ class SelectorSnapshot:
     Mapping of masked spec IDs to their mask reasons.  rules: A list of serialized rules that were
     applied.  created_on: ISO-8601 timestamp of snapshot creation.
     """
+
     spec_set_id: str
     masked: dict[str, str]
     rules: list[str]
@@ -204,6 +205,7 @@ class Selector:
         rules: The rule sequence applied during selection.
         ready: Whether selection has been executed via :meth:`run`.
     """
+
     def __init__(self, specs: list["ResolvedSpec"], rules: Iterable[Rule] = ()):
         self.specs: list["ResolvedSpec"] = specs
         self.rules: list[Rule] = list(rules)
@@ -221,18 +223,7 @@ class Selector:
                 if not outcome:
                     spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                     break
-
-        # Propagate masks
-        changed: bool = True
-        while changed:
-            changed = False
-            for spec in self.specs:
-                if spec.mask:
-                    continue
-                if any(dep.mask for dep in spec.dependencies):
-                    self.mask = Mask.masked("One or more dependencies masked")
-                    changed = True
-
+        propagate_masks(self.specs)
         self.ready = True
 
     @property
@@ -271,6 +262,19 @@ class Selector:
         return finalize([spec for spec in self.specs if not spec.mask])
 
 
+def propagate_masks(specs: list["ResolvedSpec"]):
+    # Propagate masks
+    changed: bool = True
+    while changed:
+        changed = False
+        for spec in specs:
+            if spec.mask:
+                continue
+            if any(dep.mask for dep in spec.dependencies):
+                spec.mask = Mask.masked("One or more dependencies masked")
+                changed = True
+
+
 def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
     """Finalize resolved specs into topologically ordered test specs.
 
@@ -286,7 +290,10 @@ def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
     """
     map: dict[str, "ResolvedSpec"] = {}
     graph: dict[str, list[str]] = {}
+    propagate_masks(resolved_specs)
     for resolved_spec in resolved_specs:
+        if resolved_spec.mask:
+            continue
         map[resolved_spec.id] = resolved_spec
         graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
     lookup: dict[str, "TestSpec"] = {}

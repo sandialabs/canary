@@ -36,7 +36,7 @@ def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
         graph[spec.id] = [dep.id for dep in spec.dependencies]
         map[spec.id] = i
     ts = TopologicalSorter(graph)
-    return [map[spec.id] for spec in ts.static_order()]
+    return [map[id] for id in ts.static_order()]
 
 
 def print_spec(

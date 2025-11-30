@@ -67,8 +67,6 @@ class HTMLReporter(CanaryReporter):
         return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
-        if case.mask:
-            return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name()}</td></tr>\n")

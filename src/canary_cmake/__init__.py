@@ -188,7 +188,9 @@ def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, A
 
 
 @canary.hookimpl(wrapper=True)
-def canary_cdash_artifacts(case: canary.TestCase) -> Generator[None, None, list[dict[str, str]]]:
+def canary_cdash_artifacts(
+    case: canary.TestCase,
+) -> Generator[None, list[dict[str, str]], list[dict[str, str]]]:
     """Default implementation: return the test case's keywords"""
     schema = Schema(
         {

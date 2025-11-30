@@ -99,6 +99,7 @@ class HPC(canary.CanarySubcommand):
 
 
 class CanaryHPCHooks:
+    @staticmethod
     @canary.hookspec(firstresult=True)
     def canary_hpc_batch_runner(
         batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager

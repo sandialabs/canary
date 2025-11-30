@@ -125,7 +125,6 @@ class CanaryHPCConductor:
             if slots_avail < slots:
                 wanting[rtype] = (slots, slots_avail)
         if wanting:
-            types: str
             reason: str
             if canary.config.get("debug"):
                 fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
