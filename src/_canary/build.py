@@ -1,6 +1,141 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+"""
+Canary Build Pipeline
+=====================
+
+This module implements the build lifecycle for converting generator output into fully resolved test
+specifications.  The central orchestrator is the ``Builder`` object, which progresses through
+validation, resolution, and finally hook-driven post-processing.
+
+The ``canary_build(builder)`` function coordinates the entire process using Pluggy hooks.  Plugins
+may observe or modify the build at specific stages.
+
+Flow Diagram
+------------
+
+The following diagram illustrates the full lifecycle:
+
+    +------------------+
+    |   Generator(s)   |
+    |  produce files   |
+    +---------+--------+
+              |
+              v
+    +----------------------+
+    |     Builder()        |
+    |  constructed with    |
+    |  generator outputs   |
+    +----------+-----------+
+               |
+               v
+    +----------------------+
+    | canary_build()       |
+    |                      |
+    | pluginmanager.hook.  |
+    |   canary_buildstart  |
+    +----------+-----------+
+               |
+               v
+    +----------------------+
+    | Builder.run()        |
+    |                      |
+    | 1. validate(...)     |
+    | 2. resolve(...)      |
+    |     -> produces      |
+    |        resolved       |
+    |        specs          |
+    +----------+-----------+
+               |
+               v
+    +------------------------------+
+    | pluginmanager.hook.         |
+    |   canary_build_modifyitems  |
+    +--------------+--------------+
+                   |
+                   v
+    +------------------------------+
+    | pluginmanager.hook.         |
+    |   canary_build_report       |
+    +--------------+--------------+
+                   |
+                   v
+    +------------------------------+
+    | builder.resolved_specs()     |
+    |     -> Final TestSpecs       |
+    +------------------------------+
+
+
+Functions
+---------
+
+canary_build(builder)
+    Runs the full build pipeline.
+
+    Args:
+        builder (Builder): The builder instance containing generator output.
+
+    Returns:
+        list[TestSpec]: The fully resolved and optionally plugin-modified
+        final specifications.
+
+    Lifecycle:
+        1. ``canary_buildstart(builder)``
+           Invoked before any processing. Plugins may inspect or adjust
+           input material.
+
+        2. ``builder.run()``
+           Runs validation and resolution.
+
+        3. ``canary_build_modifyitems(builder)``
+           Invoked after resolution. Plugins may modify resolved items before
+           finalization.
+
+        4. ``canary_build_report(builder)``
+           Invoked after modifications. Plugins may output or record final
+           information but should not mutate data.
+
+        5. Return ``builder.resolved_specs()``.
+
+
+Classes
+-------
+
+class Builder:
+    Coordinates conversion from raw generator output into resolved specs.
+
+    Methods:
+        run():
+            Performs the two essential phases:
+
+            * validate(unresolved)
+              Ensures UnresolvedSpecs are structurally and semantically valid.
+
+            * resolve(unresolved)
+              Produces concrete resolved specs suitable for test execution.
+
+        resolved_specs():
+            Returns the final list of resolved TestSpecs after all hooks have executed.
+
+
+Hook Specifications
+-------------------
+
+Plugins may implement the following hooks:
+
+canary_buildstart(builder):
+    Called before ``builder.run()``. Plugins may modify the builder or its inputs.
+
+canary_build_modifyitems(builder):
+    Called after resolution. Plugins may reorder, mutate, filter, or otherwise modify resolved
+    specs.
+
+canary_build_report(builder):
+    Called after modifications. Plugins should emit reports or summaries but generally should not
+    perform further mutation.
+
+"""
 import dataclasses
 import fnmatch
 import hashlib

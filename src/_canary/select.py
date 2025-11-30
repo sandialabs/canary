@@ -1,6 +1,59 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+"""
+Selection Phase for Canary Test Execution
+=========================================
+
+This module implements the selection stage of the Canary test lifecycle.  Selection applies a
+sequence of rules to mask (exclude) test specifications based on resource availability,
+user-defined criteria, and dependency relationships. The result of selection is a stable, filtered
+list of ``TestSpec`` instances ready for execution.
+
+Overview
+--------
+
+The selection flow is:
+
+    selector = Selector(specs, rules)
+    final_specs = canary_select(selector)
+
+Selection performs three primary actions:
+
+1. **Rule Evaluation** — Each ``ResolvedSpec`` is evaluated against each
+   ``Rule``. If any rule fails, the spec receives a ``Mask`` with the reason.
+
+2. **Mask Propagation** — If a spec is masked, all specs depending on it are also masked.
+
+3. **Finalization** — Unmasked ``ResolvedSpec`` objects are topologically sorted and finalized into
+``TestSpec`` instances.
+
+Caching and Snapshots
+---------------------
+
+Selection results can be cached using ``SelectorSnapshot``. A snapshot includes:
+
+* The stable hash of the input spec set
+* A mapping of masked spec IDs to their reasons
+* The serialized rule set
+* A timestamp
+
+Snapshots allow callers to determine whether cached selections remain valid
+after a workspace changes.
+
+Plugin Integration
+------------------
+
+Plugins participate in the selection lifecycle via:
+
+* ``canary_selectstart`` — Mutate or inspect the ``Selector`` before execution.
+* ``canary_select_modifyitems`` — Adjust masked/unmasked items after rules run.
+* ``canary_select_report`` — Emit reporting data after selection.
+
+This keeps the selection engine deterministic while allowing flexible
+extensibility.
+
+"""
 
 import dataclasses
 import datetime
@@ -28,7 +81,18 @@ logger = logging.get_logger(__name__)
 
 
 def canary_select(selector: "Selector") -> list["TestSpec"]:
-    """Filter test cases (mask test cases that don't meet a specific criteria)"""
+    """Run the selection phase on the provided selector.
+
+    This function executes the standard selection lifecycle:
+    plugin start hooks, rule execution, mask propagation,
+    plugin modification hooks, and reporting hooks.
+
+    Args:
+        selector: A ``Selector`` instance configured with specs and rules.
+
+    Returns:
+        A list of finalized ``TestSpec`` instances ready for execution.
+    """
     pm = logger.progress_monitor("@*{Selecting} specs")
     config.pluginmanager.hook.canary_selectstart(selector=selector)
     selector.run()
@@ -40,6 +104,14 @@ def canary_select(selector: "Selector") -> list["TestSpec"]:
 
 @hookimpl
 def canary_addoption(parser: "Parser") -> None:
+    """Register Selection-related command-line options.
+
+    This hook adds ``--show-excluded-tests`` to the console reporting
+    group for the ``canary run`` command.
+
+    Args:
+        parser: The argument parser used to register command-line flags.
+    """
     parser.add_argument(
         "--show-excluded-tests",
         group="console reporting",
@@ -52,6 +124,15 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl
 def canary_select_report(selector: "Selector") -> None:
+    """Emit a report summarizing which specs were selected or excluded.
+
+    Reporting includes the count of selected and excluded tests, grouped
+    by mask reason. If ``--show-excluded-tests`` was provided, individual
+    spec names are also emitted.
+
+    Args:
+        selector: The ``Selector`` instance whose results are being reported.
+    """
     excluded: list["ResolvedSpec"] = []
     for spec in selector.specs:
         if spec.mask:
@@ -76,6 +157,16 @@ def canary_select_report(selector: "Selector") -> None:
 
 @dataclasses.dataclass(frozen=True)
 class SelectorSnapshot:
+    """Serializable snapshot of a completed selection run.
+
+    ``SelectorSnapshot`` represents the minimal state required to determine whether a cached
+    selection result is still valid and, if so, to reconstruct the selected tests without fully
+    re-running all rules.
+
+    Attributes: spec_set_id: Stable SHA-256 hash identifying the original spec set.  masked:
+    Mapping of masked spec IDs to their mask reasons.  rules: A list of serialized rules that were
+    applied.  created_on: ISO-8601 timestamp of snapshot creation.
+    """
     spec_set_id: str
     masked: dict[str, str]
     rules: list[str]
@@ -98,6 +189,21 @@ class SelectorSnapshot:
 
 
 class Selector:
+    """Apply rule-based masking to a set of resolved specifications.
+
+    ``Selector`` is responsible for evaluating rules against each ``ResolvedSpec``, propagating
+    masks through dependency graphs, and finalizing the resulting test specifications.
+
+    Args:
+        specs: The list of ``ResolvedSpec`` objects to select from.
+        rules: Optional iterable of ``Rule`` instances. A
+            ``ResourceCapacityRule`` is always prepended unless overridden.
+
+    Attributes:
+        specs: The input list of resolved specs.
+        rules: The rule sequence applied during selection.
+        ready: Whether selection has been executed via :meth:`run`.
+    """
     def __init__(self, specs: list["ResolvedSpec"], rules: Iterable[Rule] = ()):
         self.specs: list["ResolvedSpec"] = specs
         self.rules: list[Rule] = list(rules)
@@ -166,6 +272,18 @@ class Selector:
 
 
 def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
+    """Finalize resolved specs into topologically ordered test specs.
+
+    This function constructs the final ``TestSpec`` objects from the dependency graph defined by
+    ``ResolvedSpec.dependencies``. It ensures a deterministic topological order and replaces
+    dependency references with the finalized ``TestSpec`` instances.
+
+    Args:
+        resolved_specs: A list of unmasked ``ResolvedSpec`` objects.
+
+    Returns:
+        A list of ``TestSpec`` instances in dependency-resolved order.
+    """
     map: dict[str, "ResolvedSpec"] = {}
     graph: dict[str, list[str]] = {}
     for resolved_spec in resolved_specs:
