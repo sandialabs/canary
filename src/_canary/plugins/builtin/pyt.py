@@ -12,9 +12,9 @@ from string import Template
 from types import ModuleType
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import cast
 from typing import Literal
 from typing import Sequence
+from typing import cast
 
 from ... import config
 from ... import enums
@@ -206,7 +206,8 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     timeout=self.timeout(
                         testname=name, on_options=on_options, parameters=parameters
-                    ) or -1.0,
+                    )
+                    or -1.0,
                     baseline=self.baseline(
                         testname=name, on_options=on_options, parameters=parameters
                     ),

@@ -150,7 +150,6 @@ from typing import Sequence
 
 from . import config
 from .hookspec import hookimpl
-from .testspec import UnresolvedDependenciesErrors
 from .util import json_helper as json
 from .util import logging
 from .util.parallel import starmap

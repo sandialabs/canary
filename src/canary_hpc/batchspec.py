@@ -12,7 +12,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Sequence
 from typing import cast
 
 import hpc_connect

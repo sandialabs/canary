@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from typing import TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ...hookspec import hookimpl
 from ...workspace import Workspace

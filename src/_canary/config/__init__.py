@@ -27,6 +27,7 @@ class _resource_pool_attr_error:
         f.write(f"In this case, replace config.resource_pool.{name} with {repl}.")
         raise AttributeError(f.getvalue().strip()) from None
 
+
 resource_pool = _resource_pool_attr_error()
 
 

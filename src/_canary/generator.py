@@ -87,7 +87,9 @@ class AbstractTestGenerator(ABC):
         return repr(self)
 
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
+    def lock(
+        self, on_options: list[str] | None = None
+    ) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:

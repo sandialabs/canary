@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import Protocol
-from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from .timekeeper import Timekeeper

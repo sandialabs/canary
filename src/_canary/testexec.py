@@ -15,10 +15,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO
 from typing import TYPE_CHECKING
-from typing import TextIO
 from typing import Any
 from typing import Generator
 from typing import Protocol
+from typing import TextIO
 
 from . import config
 from .util import logging

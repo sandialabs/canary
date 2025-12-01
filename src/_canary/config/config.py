@@ -8,10 +8,10 @@ import sys
 from functools import cached_property
 from pathlib import Path
 from string import Template
-from typing import cast
 from typing import IO
 from typing import Any
 from typing import Literal
+from typing import cast
 
 import yaml
 

@@ -6,7 +6,6 @@ import argparse
 import datetime
 import io
 import json
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 

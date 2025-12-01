@@ -8,8 +8,8 @@ from typing import Sequence
 from . import logging
 
 if TYPE_CHECKING:
-    from ..testcase import TestCase
     from ..protocols import JobProtocol
+    from ..testcase import TestCase
 
 logger = logging.get_logger(__name__)
 

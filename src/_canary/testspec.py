@@ -18,8 +18,8 @@ from typing import Any
 from typing import Generic
 from typing import Literal
 from typing import Sequence
-from typing import TypeVar
 from typing import Type
+from typing import TypeVar
 
 from . import config
 from .util import json_helper as json
@@ -28,7 +28,6 @@ from .util.string import stringify
 
 logger = logging.get_logger(__name__)
 select_sygil = "/"
-
 
 
 @dataclasses.dataclass(frozen=True)
@@ -305,7 +304,6 @@ class BaseSpec(Generic[T]):
         return data
 
 
-
 @dataclasses.dataclass
 class TestSpec(BaseSpec["TestSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
@@ -425,6 +423,7 @@ class DependencyPatterns:
 class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
+
     dependencies: Sequence[str | DependencyPatterns] = dataclasses.field(default_factory=list)
     file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = (
         dataclasses.field(default_factory=dict)
