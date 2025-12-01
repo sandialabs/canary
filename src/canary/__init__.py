@@ -36,6 +36,7 @@ from _canary.testexec import SubprocessExecutionPolicy
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.testspec import DependencyPatterns
+from _canary.testspec import Mask
 from _canary.testspec import ResolvedSpec
 from _canary.testspec import TestSpec
 from _canary.testspec import UnresolvedSpec
@@ -63,12 +64,13 @@ logging = _logging.get_logger()
 
 __all__ = [
     "schema",
-    "builder",
-    "collector",
+    "Builder",
+    "Collector",
     "config",
     "enums",
     "Parser",
     "Config",
+    "Mask",
     "centered_parameter_space",
     "list_parameter_space",
     "random_parameter_space",

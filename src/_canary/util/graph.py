@@ -13,8 +13,9 @@ from typing import TypeVar
 if TYPE_CHECKING:
     from ..testspec import ResolvedSpec
     from ..testspec import TestSpec
+    from ..testspec import UnresolvedSpec
 
-    SpecLike = TypeVar("SpecLike", TestSpec, ResolvedSpec)
+    SpecLike = TypeVar("SpecLike", ResolvedSpec, TestSpec, UnresolvedSpec)
 
 builtin_print = print
 
@@ -72,7 +73,7 @@ def print_spec(
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(specs: list["SpecLike"], file: str | Path | TextIO = sys.stdout) -> None:
+def print(specs: Sequence["SpecLike"], file: str | Path | TextIO = sys.stdout) -> None:
     def streamify(arg) -> tuple[TextIO, bool]:
         if isinstance(arg, str):
             arg = Path(arg)
