@@ -106,7 +106,7 @@ testpaths = [
     "src/canary_vvtest/tests",
     "src/canary_cmake/tests",
     "src/canary_hpc/tests",
-    "src/canary_junit/tests"
+    "src/canary_gitlab/tests"
 ]
 norecursedirs = "mock data generators"
 addopts = "-ra --durations=10"
