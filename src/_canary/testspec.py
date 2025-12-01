@@ -62,6 +62,8 @@ class BaseSpec(Generic[T]):
     file_path: Path
     family: str = ""
     id: str = ""
+    stdout: str = "canary-out.txt"
+    stderr: str | None = None  # combine stdout/stderr by default
     dependencies: Sequence[Any] = dataclasses.field(default_factory=list)
     dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)

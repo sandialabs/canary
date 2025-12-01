@@ -28,10 +28,11 @@ def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTes
 
 
 @canary.hookimpl
-def canary_testcase_modify(case: "canary.TestCase") -> None:
-    if case.spec.file_path.suffix == ".vvt":
-        case.stdout = "execute.log"
-        case.stderr = None
+def canary_build_modifyitems(builder: "canary.Builder") -> None:
+    for spec in builder.specs:
+        if spec.file_path.suffix == ".vvt":
+            spec.stdout = "execute.log"
+            spec.stderr = None
 
 
 @canary.hookimpl
@@ -164,7 +165,7 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     # ``--execute-analysis-sections`` is a appended to a test script's command line if
     # rtconfig.getAttr("analyze") is True.  Thus, it seems that there is no differenece between
     # ``opt_analyze`` and ``is_analysis_only``.  In canary, --execute-analysis-sections is added
-    # to the command if canary_testcase_modify below
+    # in the AnalyzeAction class below
     analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
 

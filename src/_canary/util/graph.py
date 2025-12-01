@@ -13,9 +13,8 @@ from typing import TypeVar
 if TYPE_CHECKING:
     from ..testspec import ResolvedSpec
     from ..testspec import TestSpec
-    from ..testspec import UnresolvedSpec
 
-    SpecLike = TypeVar("SpecLike", ResolvedSpec, TestSpec, UnresolvedSpec)
+    SpecLike = TypeVar("SpecLike", ResolvedSpec, TestSpec)
 
 builtin_print = print
 

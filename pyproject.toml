@@ -212,6 +212,7 @@ exclude = [
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
     "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
+    "src/_canary/testspec.py",  # this file raises a bug in ty
     "src/canary_cmake/tests/*",  # just until we get them fixed
     "src/canary_vvtest/tests/*",  # just until we get them fixed
     "src/canary_hpc/tests/*",  # just until we get them fixed

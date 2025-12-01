@@ -59,20 +59,20 @@ If no options are give, -x is assumed."""
 
     def execute(self, args: argparse.Namespace) -> int:
         from ...testcase import TestCase
+        from ...testspec import TestSpec
 
-        case: TestCase
         workspace = Workspace.load()
-        case = workspace.find(case=args.testspec)
         f: Path | str
-        if args.show_log:
-            f = case.workspace.joinpath(case.stdout)
-        elif args.show_input:
-            f = case.file
-        elif args.show_source_dir:
-            f = case.file.parent
-        elif args.show_working_directory:
-            f = case.workspace.dir
+        if args.show_input or args.show_source_dir:
+            spec: TestSpec = workspace.find(spec=args.testspec)
+            f = spec.file if args.show_input else spec.file.parent
         else:
-            f = case.workspace.dir
+            case: TestCase = workspace.find(case=args.testspec)
+            if args.show_log:
+                f = case.workspace.joinpath(case.stdout)
+            elif args.show_working_directory:
+                f = case.workspace.dir
+            else:
+                f = case.workspace.dir
         print(f)
         return 0

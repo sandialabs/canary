@@ -4,6 +4,7 @@
 import os
 import shutil
 import sqlite3
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -383,7 +384,6 @@ class Workspace:
                 case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
                 case.timekeeper.duration = mine["timekeeper"]["duration"]
                 lookup[spec.id] = case
-                config.pluginmanager.hook.canary_testcase_modify(case=case)
         if ids:
             return [case for case in lookup.values() if case.id in ids]
         return list(lookup.values())
@@ -440,7 +440,7 @@ class Workspace:
         """
         on_options = on_options or []
         generators = self.load_generators()
-        builder = Builder(generators, on_options=on_options or [])
+        builder = Builder(generators, workspace=self.root, on_options=on_options or [])
         signature = builder.signature
         if cached := self.db.get_specs(signature=signature):
             return cached
@@ -551,10 +551,12 @@ class Workspace:
                     view_entries.setdefault(Path(root), []).append(Path(path))
                 self.update_view(view_entries)
 
-    def find(self, *, case: str | None = None) -> Any:
+    def find(self, *, case: str | None = None, spec: str | None = None) -> Any:
         """Locate something in the workspace"""
         if case is not None:
             return self.find_testcase(case)
+        if spec is not None:
+            return self.find_testspec(spec)
 
     def find_testcase(self, root: str) -> TestCase:
         id = self.db.resolve_spec_id(root)
@@ -566,6 +568,17 @@ class Workspace:
             if case.spec.matches(root):
                 return case
         raise ValueError(f"{root}: no matching test found in {self.root}")
+
+    def find_testspec(self, root: str) -> ResolvedSpec:
+        id = self.db.resolve_spec_id(root)
+        if id is not None:
+            return self.db.get_specs([id])[0]
+        # Do the full (slow) lookup
+        specs = self.db.get_specs()
+        for spec in specs:
+            if spec.matches(root):
+                return spec
+        raise ValueError(f"{root}: no matching spec found in {self.root}")
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
@@ -628,7 +641,7 @@ class WorkspaceDatabase:
         pm = logger.progress_monitor("@*{Putting} test generators into database")
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE;")
-        rows = [(gen.id, json.dumps_min(gen.asdict())) for gen in generators]
+        rows = [(gen.id, gen.serialize()) for gen in generators]
         cursor.executemany(
             """
             INSERT INTO generators (id, data)
@@ -642,9 +655,10 @@ class WorkspaceDatabase:
 
     def get_generators(self) -> list[AbstractTestGenerator]:
         cursor = self.connection.cursor()
-        cursor.execute("SELECT id, data FROM generators;")
+        cursor.execute("SELECT data FROM generators;")
         rows = cursor.fetchall()
-        generators = [AbstractTestGenerator.from_dict(json.loads(row[1])) for row in rows]
+        with ProcessPoolExecutor() as ex:
+            generators = list(ex.map(AbstractTestGenerator.reconstruct, [row[0] for row in rows]))
         return generators
 
     def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
@@ -794,6 +808,9 @@ class WorkspaceDatabase:
         return [spec for spec in specs if spec.id in ids]
 
     def _reconstruct_specs(self, rows: list[list]) -> list[ResolvedSpec]:
+        import time
+
+        t = time.monotonic()
         data = {id: json.loads(data) for id, _, data in rows}
         graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
         lookup: dict[str, ResolvedSpec] = {}

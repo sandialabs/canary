@@ -181,7 +181,7 @@ class SelectorSnapshot:
     def schema() -> Schema:
         s = Schema(
             {
-                "spec_set_id": [str],
+                "spec_set_id": str,
                 "masked": {str: str},
                 "rules": [str],
                 "created_on": str,

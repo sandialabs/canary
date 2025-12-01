@@ -92,7 +92,6 @@ class Session:
             space = ExecutionSpace(root=self.work_dir, path=Path(spec.execpath), session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
             self._cases.append(case)
 
         # Dump a snapshot of the configuration used to create this session
@@ -171,7 +170,6 @@ class Session:
                 case.timekeeper.finished_on = data["timekeeper"]["finished_on"]
                 case.timekeeper.duration = data["timekeeper"]["duration"]
             lookup[case.spec.id] = case
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
         cases = list(lookup.values())
         pm.done()
         return cases

@@ -238,11 +238,6 @@ def canary_session_reporter() -> CanaryReporter:
     raise NotImplementedError
 
 
-@hookspec
-def canary_testcase_modify(case: "TestCase") -> None:
-    """Modify the test case before the test run."""
-
-
 @hookspec(firstresult=True)
 def canary_runtest_execution_policy(case: "TestCase") -> "ExecutionPolicy":
     raise NotImplementedError

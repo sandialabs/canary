@@ -140,7 +140,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
             os.environ.update(old_env)
 
     def execute(self, case: "TestCase") -> int:
-        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
         with self.context(case):
             args = self.default_args(case)
             if a := config.getoption("script_args"):
@@ -160,7 +160,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
                 stdout.close()
                 if isinstance(stderr, io.TextIOWrapper):
                     stderr.close()
-        logger.debug(f"Finished {case.fullname}")
+        logger.debug(f"Finished {case.display_name()}")
         return cp.returncode
 
 
@@ -235,9 +235,9 @@ class PythonRunpyExecutionPolicy(ExecutionPolicy):
             sys.stderr = sys.__stderr__
 
     def execute(self, case: "TestCase") -> int:
-        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
         case.set_attribute("command", shlex.join(sys.argv))
         with self.context(case):
             runpy.run_path(case.spec.file.name, run_name="__main__")
-        logger.debug(f"Finished {case.fullname}")
+        logger.debug(f"Finished {case.display_name()}")
         return 0

@@ -124,7 +124,7 @@ class JunitDocument(xdom.Document):
         testcase.setAttribute("name", case.display_name())
         testcase.setAttribute("classname", get_classname(case))
         testcase.setAttribute("time", str(case.timekeeper.duration))
-        testcase.setAttribute("file", getattr(case, "relpath", str(case.file_path)))
+        testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
         not_done = (
             "RETRY",
             "CREATED",

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from pathlib import Path
 import _canary.config as config
 import canary
 from _canary import rules
@@ -43,7 +44,7 @@ def select_specs(
 
 
 def generate_specs(generators, on_options=None):
-    builder = Builder(generators=generators, on_options=on_options or [])
+    builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
     specs = canary_build(builder)
     return specs
 

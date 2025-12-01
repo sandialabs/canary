@@ -113,6 +113,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 from graphlib import TopologicalSorter
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Sequence
 
@@ -152,6 +153,7 @@ def canary_build(builder: "Builder") -> list["ResolvedSpec"]:
 @dataclasses.dataclass
 class Builder:
     generators: list["AbstractTestGenerator"]
+    workspace: Path
     on_options: list[str] = dataclasses.field(default_factory=list)
     specs: list["ResolvedSpec"] = dataclasses.field(default_factory=list, init=False)
 

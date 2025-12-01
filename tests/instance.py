@@ -18,7 +18,7 @@ def generate_specs(generators, on_options=None):
     from _canary.build import Builder
     from _canary.build import canary_build
 
-    builder = Builder(generators=generators, on_options=on_options or [])
+    builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
     specs = canary_build(builder)
     return specs
 

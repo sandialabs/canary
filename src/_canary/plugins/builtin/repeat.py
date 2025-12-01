@@ -124,6 +124,6 @@ def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     fmt.write(
         f"Finished @*b{{%s}} (attempt {attempt + 1}): %s %s"
-        % (case.id[:7], case.fullname, case.status.cname)
+        % (case.id[:7], case.display_name(), case.status.cname)
     )
     return fmt.getvalue().strip()

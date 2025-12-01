@@ -51,10 +51,8 @@ class TestCase:
     ) -> None:
         self.spec = spec
         self.workspace = workspace
-        self.stdout: str = "canary-out.txt"
-        self.stderr: str | None = None  # combine stdout/stderr by default
-        pm = config.pluginmanager
-        self.execution_policy: ExecutionPolicy = pm.hook.canary_runtest_execution_policy(case=self)
+        pm = config.pluginmanager.hook
+        self.execution_policy: ExecutionPolicy = pm.canary_runtest_execution_policy(case=self)
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
@@ -66,18 +64,37 @@ class TestCase:
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
-        # Transfer some attributes from spec to me
-        self.id = self.spec.id
-        self.exclusive = self.spec.exclusive
-        self.name = self.spec.name
-        self.family = self.spec.family
-        self.timeout = self.spec.timeout
-        self.keywords = self.spec.keywords
-        self.fullname = self.spec.fullname
-        self.attributes = self.instance_attributes = self.spec.attributes
-        self.file_path = self.spec.file_path
-        self.file_root = self.spec.file_root
-        self.file = self.spec.file
+    @property
+    def id(self) -> str:
+        return self.spec.id
+
+    @property
+    def exclusive(self) -> bool:
+        return self.spec.exclusive
+
+    @property
+    def stdout(self) -> str:
+        return self.spec.stdout
+
+    @property
+    def stderr(self) -> str | None:
+        return self.spec.stderr
+
+    @property
+    def file(self) -> Path:
+        return self.spec.file
+
+    @property
+    def name(self) -> str:
+        return self.spec.name
+
+    @property
+    def timeout(self) -> float:
+        return self.spec.timeout
+
+    @property
+    def attributes(self) -> dict[str, Any]:
+        return self.spec.attributes
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
@@ -163,7 +180,7 @@ class TestCase:
                 pass
         except Exception:
             logger.debug("Failed to load historic timing data", exc_info=True)
-        return self.spec.timeout
+        return self.timeout
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]

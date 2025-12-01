@@ -114,15 +114,9 @@ class Rule:
         return json.dumps_min(meta)
 
     @staticmethod
-    def schema() -> Schema:
-        schema = Schema(
-            {
-                "module": str,
-                "classname": str,
-                "params": {str: Any},
-            }
-        )
-        return schema
+    def validate(data) -> Any:
+        schema = Schema({"module": str, "classname": str, "params": {str: object}})
+        return schema.validate(data)
 
     @staticmethod
     def reconstruct(serialized: str) -> "Rule":
@@ -135,7 +129,7 @@ class Rule:
             Rule: The reconstructed rule instance.
         """
         meta = json.loads(serialized)
-        Rule.schema().validate(meta)
+        Rule.validate(meta)
         module = importlib.import_module(meta["module"])
         cls: Type[Rule] = getattr(module, meta["classname"])
         rule = cls.from_dict(meta["params"])

@@ -3,12 +3,18 @@
 # SPDX-License-Identifier: MIT
 import errno
 import hashlib
+import importlib
 import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
+
+from schema import Schema
+from schema import Type
+
+from .util import json_helper as json
 
 if TYPE_CHECKING:
     from .testspec import ResolvedSpec
@@ -60,18 +66,16 @@ class AbstractTestGenerator(ABC):
         if not os.path.exists(self.file):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
+
         sha = hashlib.sha256()
         with open(self.file, "rb") as fh:
             data = fh.read()
             sha.update(data)
         self.sha256: str = sha.hexdigest()
-        self.id = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
+        self.id: str = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"
-
-    def stop_recursion(self) -> bool:
-        return False
 
     @classmethod
     @abstractmethod
@@ -106,13 +110,35 @@ class AbstractTestGenerator(ABC):
         state: dict[str, Any] = {}
         state["root"] = self.root
         state["path"] = self.path
-        state["sha256"] = self.sha256
         state["mtime"] = os.path.getmtime(self.file)
         return state
 
     @staticmethod
     def from_dict(state: dict[str, str]) -> "AbstractTestGenerator":
         return AbstractTestGenerator.factory(state["root"], state["path"])
+
+    @staticmethod
+    def validate(data) -> Any:
+        schema = Schema({"module": str, "classname": str, "params": {str: object}})
+        return schema.validate(data)
+
+    @staticmethod
+    def reconstruct(serialized: str) -> "AbstractTestGenerator":
+        meta = json.loads(serialized)
+        AbstractTestGenerator.validate(meta)
+        module = importlib.import_module(meta["module"])
+        cls: Type[AbstractTestGenerator] = getattr(module, meta["classname"])
+        params = meta["params"]
+        generator = cls(params["root"], params["path"])
+        return generator
+
+    def serialize(self) -> str:
+        meta = {
+            "module": self.__class__.__module__,
+            "classname": self.__class__.__name__,
+            "params": self.asdict(),
+        }
+        return json.dumps_min(meta)
 
     @staticmethod
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":

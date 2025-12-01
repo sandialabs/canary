@@ -202,6 +202,8 @@ def print_durations(cases: list["TestCase"], N: int) -> None:
     kwds = {"t": glyphs.turtle, "N": N}
     string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for case in sorted_cases:
-        string.write("  %6.2f   %s   %s\n" % (case.timekeeper.duration, case.id[:7], case.fullname))
+        string.write(
+            "  %6.2f   %s   %s\n" % (case.timekeeper.duration, case.id[:7], case.display_name())
+        )
     string.write("\n")
     logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
