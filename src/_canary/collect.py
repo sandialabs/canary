@@ -19,7 +19,6 @@ from .generator import AbstractTestGenerator
 from .hookspec import hookimpl
 from .third_party.color import colorize
 from .util import logging
-from .util.filesystem import filesystem_root
 from .util.filesystem import working_dir
 
 if TYPE_CHECKING:
@@ -27,6 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+vc_prefixes = ("git@", "repo@")
 
 def canary_collect(collector: "Collector") -> list["AbstractTestGenerator"]:
     config.pluginmanager.hook.canary_collectstart(collector=collector)
@@ -64,7 +64,7 @@ class Collector:
 
     def run(self) -> None:
         for scanpath in self.iter_scanpaths():
-            if scanpath.root.startswith(("git@", "repo@")):
+            if scanpath.root.startswith(vc_prefixes):
                 self.collect_from_vc(scanpath.root)
             elif os.path.exists(scanpath.root):
                 self.collect_from_path(scanpath)
@@ -74,8 +74,9 @@ class Collector:
     def collect_from_path(self, scanpath: "ScanPath") -> None:
         root_path = Path(scanpath.root)
         assert root_path.exists()
-        fs_root = filesystem_root(scanpath.root)
-        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {fs_root}")
+        pm = logger.progress_monitor(
+            f"@*{{Collecting}} generator files from {root_path}"
+        )
         full_path = root_path if scanpath.path is None else root_path / scanpath.path
         if full_path.is_file() and self.matches(full_path.name):
             assert scanpath.path is not None
@@ -96,9 +97,11 @@ class Collector:
         pm.done()
 
     def collect_from_vc(self, root: str) -> None:
-        assert root.startswith(("git@", "repo@"))
+        assert root.startswith(vc_prefixes)
         type, _, vcroot = root.partition("@")
-        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {vcroot}")
+        pm = logger.progress_monitor(
+            f"@*{{Collecting}} generator files from {vcroot} using {type}"
+        )
         files = _from_version_control(type, vcroot, self.file_patterns)
         self.add_files(vcroot, files)
         pm.done()
@@ -121,7 +124,8 @@ class Collector:
             self.add_scanpath(root, paths)
 
     def add_scanpath(self, root: str, paths: list[str]) -> None:
-        root = os.path.abspath(root)
+        if not root.startswith(vc_prefixes):
+            root = os.path.abspath(root)
         if os.path.isfile(root):
             if paths:
                 raise ValueError(f"Scan paths for file {root} cannot have subpaths")
@@ -206,13 +210,13 @@ def canary_collectstart(collector: "Collector") -> None:
 
 
 def _from_version_control(type: str, root: str, file_patterns: list[str]) -> list[str]:
-    """Find files in version control repository (only git supported)"""
-    if type not in ("git", "repo"):
-        raise TypeError("Unknown vc type {type!r}, choose from git, repo")
+    """Find files in version control repository"""
     if type == "git":
         return git_ls(root, file_patterns)
-    else:
+    elif type == "repo":
         return repo_ls(root, file_patterns)
+    else:
+        raise TypeError(f"Unknown vc type {type!r}, choose from git, repo")
 
 
 def git_ls(root: str, patterns: list[str]) -> list[str]:
@@ -326,7 +330,7 @@ class PathSpec(argparse.Action):
                 namespace.scanpaths.setdefault(root, []).append(name)
             elif os.path.isdir(path):
                 namespace.scanpaths.setdefault(os.path.abspath(path), [])
-            elif path.startswith(("git@", "repo@")):
+            elif path.startswith(vc_prefixes):
                 if not os.path.isdir(path.partition("@")[2]):
                     p = path.partition("@")[2]
                     raise ValueError(f"{p}: no such file or directory")
