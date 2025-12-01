@@ -12,9 +12,11 @@ from _canary.enums import list_parameter_space
 
 
 def generate_specs(generators, on_options=None):
-    from _canary import config
+    from _canary import build
 
-    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+
+    builder = build.Builder(generators, on_options=on_options or [])
+    specs = build.canary_build(builder)
     return specs
 
 
