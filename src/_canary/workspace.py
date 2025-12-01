@@ -553,6 +553,7 @@ class Workspace:
 
     def find(self, *, case: str | None = None, spec: str | None = None) -> Any:
         """Locate something in the workspace"""
+        assert not (case and spec)
         if case is not None:
             return self.find_testcase(case)
         if spec is not None:
@@ -560,14 +561,16 @@ class Workspace:
 
     def find_testcase(self, root: str) -> TestCase:
         id = self.db.resolve_spec_id(root)
-        if id is not None:
-            return self.load_testcases([id])[0]
-        # Do the full (slow) lookup
-        cases = self.load_testcases()
-        for case in cases:
-            if case.spec.matches(root):
-                return case
-        raise ValueError(f"{root}: no matching test found in {self.root}")
+        try:
+            if id is not None:
+                return self.load_testcases([id])[0]
+            # Do the full (slow) lookup
+            cases = self.load_testcases()
+            for case in cases:
+                if case.spec.matches(root):
+                    return case
+        except IndexError:
+            raise ValueError(f"{root}: no matching test result found in {self.root}")
 
     def find_testspec(self, root: str) -> ResolvedSpec:
         id = self.db.resolve_spec_id(root)
