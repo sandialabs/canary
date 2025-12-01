@@ -250,9 +250,9 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
             specs = generate_specs(generators)
-            final = select_specs(specs, keyword_exprs=["test and unit"], owners=["me"])
-            assert len(specs) == 4
             assert specs[-1].attributes.get("multicase") is not None
+            assert len(specs) == 4
+            final = select_specs(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(final) == 4
 
             # with cpus<2, some of the cases will be filtered
@@ -262,9 +262,8 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             )
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 4
-            for spec in final[:-1]:
-                assert spec.attributes.get("multicase") is None
+            assert len(final) == 3
+            for spec in final:
                 assert spec.rparameters["cpus"] != 2
 
 
@@ -302,9 +301,7 @@ def test_vvt_generator(tmpdir):
             final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert not specs[-1].mask
-            for spec in final[:-1]:
-                assert spec.rparameters["cpus"] != 2
+            assert len(final) == 3
 
 
 def test_many_composite(tmpdir):

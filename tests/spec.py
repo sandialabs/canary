@@ -136,7 +136,7 @@ def test_depends_on_missing(tmpdir):
         root = Path(".")
         Path("f1.pyt").touch()
         b = spec.UnresolvedSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=["f2"])
-        with pytest.raises(build.DependencyResolutionFailed):
+        with pytest.raises(spec.UnresolvedDependenciesErrors):
             build.resolve([b])
 
 
