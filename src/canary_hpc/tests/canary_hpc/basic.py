@@ -15,8 +15,8 @@ from _canary.util.testing import CanaryCommand
 
 @pytest.fixture(scope="function", autouse=True)
 def config(request):
+    env_copy = os.environ.copy()
     try:
-        env_copy = os.environ.copy()
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"
         _canary.config._config = _canary.config.Config()
@@ -59,6 +59,9 @@ if __name__ == '__main__':
         assert len(files) == 4
         files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
+        if cp.returncode != 0:
+            for file in files:
+                open(file).read()
         assert cp.returncode == 0
 
 
