@@ -30,54 +30,179 @@ logger = logging.get_logger(__name__)
 
 def canary_collect(collector: "Collector") -> list["AbstractTestGenerator"]:
     config.pluginmanager.hook.canary_collectstart(collector=collector)
-    config.pluginmanager.hook.canary_collectitems(collector=collector)
+    collector.run()
     config.pluginmanager.hook.canary_collect_modifyitems(collector=collector)
     config.pluginmanager.hook.canary_collect_report(collector=collector)
     return collector.emit_generators()
+
+
+@dataclasses.dataclass
+class Collector:
+    file_patterns: list[str] = dataclasses.field(default_factory=list, init=False)
+    skip_dirs: list[str] = dataclasses.field(default_factory=list, init=False)
+    scanpaths: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
+    files: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
+
+    @staticmethod
+    def setup_parser(parser: "Parser") -> None:
+        parser.add_argument(
+            "-f",
+            action=PathSpec,
+            dest="f_pathspec",
+            metavar="file",
+            help="Read test paths from a json or yaml file. "
+            "See 'canary help --pathfile' for help on the file schema",
+        )
+        parser.add_argument(
+            "scanpaths",
+            action=PathSpec,
+            nargs=argparse.REMAINDER,
+            metavar="pathspec [--] [user args...]",
+            help="Test file[s] or directories to search. "
+            "See 'canary help --pathspec' for help on the path specification",
+        )
+
+    def run(self) -> None:
+        for scanpath in self.iter_scanpaths():
+            if scanpath.root.startswith(("git@", "repo@")):
+                self.collect_from_vc(scanpath.root)
+            elif os.path.exists(scanpath.root):
+                self.collect_from_path(scanpath)
+            else:
+                logger.warning(f"Skipping non-existent path {scanpath.root}")
+
+    def collect_from_path(self, scanpath: "ScanPath") -> None:
+        root_path = Path(scanpath.root)
+        assert root_path.exists()
+        fs_root = filesystem_root(scanpath.root)
+        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {fs_root}")
+        full_path = root_path if scanpath.path is None else root_path / scanpath.path
+        if full_path.is_file() and self.matches(full_path.name):
+            assert scanpath.path is not None
+            relpath = os.path.relpath(str(full_path), scanpath.root)
+            self.add_file(str(scanpath.root), str(relpath))
+        elif full_path.is_dir():
+            paths: list[str] = []
+            for dirname, dirs, files in os.walk(full_path):
+                if self.skip(dirname):
+                    dirs[:] = ()
+                    continue
+                for f in files:
+                    if self.matches(f):
+                        relpath = os.path.relpath(os.path.join(dirname, f), scanpath.root)
+                        paths.append(str(relpath))
+            if paths:
+                self.add_files(scanpath.root, paths)
+        pm.done()
+
+    def collect_from_vc(self, root: str) -> None:
+        assert root.startswith(("git@", "repo@"))
+        type, _, vcroot = root.partition("@")
+        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {vcroot}")
+        files = _from_version_control(type, vcroot, self.file_patterns)
+        self.add_files(vcroot, files)
+        pm.done()
+
+    def add_file_patterns(self, *patterns: str) -> None:
+        for pattern in patterns:
+            if pattern not in self.file_patterns:
+                self.file_patterns.append(pattern)
+
+    def add_skip_dirs(self, dirs: list[str]) -> None:
+        for dir in dirs:
+            if dir not in self.skip_dirs:
+                self.skip_dirs.append(dir)
+
+    def skip(self, dirname: str) -> bool:
+        return os.path.basename(dirname) in self.skip_dirs
+
+    def add_scanpaths(self, scanpaths: dict[str, list[str]]) -> None:
+        for root, paths in scanpaths.items():
+            self.add_scanpath(root, paths)
+
+    def add_scanpath(self, root: str, paths: list[str]) -> None:
+        root = os.path.abspath(root)
+        if os.path.isfile(root):
+            if paths:
+                raise ValueError(f"Scan paths for file {root} cannot have subpaths")
+            root, tail = os.path.split(root)
+            paths = [tail]
+        my_paths = set(self.scanpaths.get(root, []))
+        for path in paths:
+            relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
+            if relpath.startswith(".."):
+                raise ValueError(f"Subpath {relpath} must be child of {root}.")
+            my_paths.add(os.path.normpath(relpath))
+        self.scanpaths[root] = sorted(my_paths, key=lambda p: (len(p.split(os.sep)), p))
+
+    def iter_scanpaths(self) -> Iterator["ScanPath"]:
+        for root, paths in self.scanpaths.items():
+            if not paths:
+                yield ScanPath(root=root)
+            else:
+                for path in paths:
+                    yield ScanPath(root=root, path=path)
+
+    def add_file(self, root: str, path: str) -> None:
+        self.add_files(root, [path])
+
+    def add_files(self, root: str, paths: list[str]) -> None:
+        root = os.path.abspath(root)
+        my_files: set[str] = set(self.files.get(root, []))
+        for path in paths:
+            relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
+            if relpath.startswith(".."):
+                raise ValueError(f"Subpath {relpath} must be child of {root}.")
+            if not os.path.exists(os.path.join(root, relpath)):
+                logger.warning(f"{root}/{relpath}: path does not exist")
+            else:
+                my_files.add(os.path.normpath(relpath))
+        self.files[root] = sorted(my_files, key=lambda p: (len(p.split(os.sep)), p))
+
+    def remove_file(self, root: str, path: str) -> None:
+        paths = self.files.pop(root, [])
+        relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
+        if relpath in paths:
+            paths.remove(relpath)
+        if paths:
+            self.files[root] = paths
+
+    def iter_files(self) -> Iterator[tuple[str, str]]:
+        for root, paths in self.scanpaths.items():
+            for path in paths:
+                yield root, path
+
+    def matches(self, f: str) -> bool:
+        for pattern in self.file_patterns:
+            if fnmatch.fnmatchcase(f, pattern):
+                return True
+        return False
+
+    def emit_generators(self) -> list["AbstractTestGenerator"]:
+        pm = logger.progress_monitor("@*{Instantiating} generators from collected files")
+        errors = 0
+        generators: list["AbstractTestGenerator"] = []
+        all_paths: list[tuple[str, str]] = []
+        for root, paths in self.files.items():
+            all_paths.extend([(root, path) for path in paths])
+        with ProcessPoolExecutor() as ex:
+            futures = [ex.submit(generate_one, arg) for arg in all_paths]
+            results = [f.result() for f in futures]
+        for success, result in results:
+            if not success:
+                errors += 1
+            elif result is not None:
+                generators.append(result)
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+        pm.done()
+        return generators
 
 
 @hookimpl
 def canary_collectstart(collector: "Collector") -> None:
     dirs = ["__pycache__", ".git", ".svn", ".hg", config.get("view") or "TestResults"]
     collector.add_skip_dirs(dirs)
-
-
-@hookimpl(specname="canary_collectitems")
-def collect_from_paths(collector: "Collector") -> None:
-    for scanpath in collector.iter_scanpaths():
-        root_path = Path(scanpath.root)
-        if not root_path.exists():
-            continue
-        fs_root = filesystem_root(scanpath.root)
-        pm = logger.progress_monitor(f"@*{{Collecting}} test case generators in {fs_root}")
-        full_path = root_path if scanpath.path is None else root_path / scanpath.path
-        if full_path.is_file() and collector.matches(full_path.name):
-            assert scanpath.path is not None
-            relpath = os.path.relpath(str(full_path), scanpath.root)
-            collector.add_file(str(scanpath.root), relpath)
-        elif full_path.is_dir():
-            paths: list[str] = []
-            for dirname, dirs, files in os.walk(full_path):
-                if collector.skip(dirname):
-                    dirs[:] = ()
-                    continue
-                for f in files:
-                    if collector.matches(f):
-                        relpath = os.path.relpath(os.path.join(dirname, f), scanpath.root)
-                        paths.append(str(relpath))
-            if paths:
-                collector.add_files(scanpath.root, paths)
-        pm.done()
-
-
-@hookimpl(specname="canary_collectitems")
-def collect_from_vc(collector: "Collector") -> None:
-    for root in collector.scanpaths:
-        if not root.startswith(("git@", "repo@")):
-            continue
-        type, _, vcroot = root.partition("@")
-        files = _from_version_control(type, vcroot, collector.file_patterns)
-        collector.add_files(vcroot, files)
 
 
 def _from_version_control(type: str, root: str, file_patterns: list[str]) -> list[str]:
@@ -123,125 +248,6 @@ def repo_ls(root: str, patterns: list[str]) -> list[str]:
 class ScanPath:
     root: str
     path: str | None = None
-
-
-@dataclasses.dataclass
-class Collector:
-    file_patterns: list[str] = dataclasses.field(default_factory=list, init=False)
-    skip_dirs: list[str] = dataclasses.field(default_factory=list, init=False)
-    scanpaths: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
-    files: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
-
-    @staticmethod
-    def setup_parser(parser: "Parser") -> None:
-        parser.add_argument(
-            "-f",
-            action=PathSpec,
-            dest="f_pathspec",
-            metavar="file",
-            help="Read test paths from a json or yaml file. "
-            "See 'canary help --pathfile' for help on the file schema",
-        )
-        parser.add_argument(
-            "scanpaths",
-            action=PathSpec,
-            nargs=argparse.REMAINDER,
-            metavar="pathspec [--] [user args...]",
-            help="Test file[s] or directories to search. "
-            "See 'canary help --pathspec' for help on the path specification",
-        )
-
-    def add_file_patterns(self, *patterns: str) -> None:
-        for pattern in patterns:
-            if pattern not in self.file_patterns:
-                self.file_patterns.append(pattern)
-
-    def add_skip_dirs(self, dirs: list[str]) -> None:
-        for dir in dirs:
-            if dir not in self.skip_dirs:
-                self.skip_dirs.append(dir)
-
-    def skip(self, dirname: str) -> bool:
-        return os.path.basename(dirname) in self.skip_dirs
-
-    def add_scanpaths(self, scanpaths: dict[str, list[str]]) -> None:
-        for root, paths in scanpaths.items():
-            self.add_scanpath(root, paths)
-
-    def add_scanpath(self, root: str, paths: list[str]) -> None:
-        root = os.path.abspath(root)
-        if os.path.isfile(root):
-            if paths:
-                raise ValueError(f"Scan paths for file {root} cannot have subpaths")
-            root, tail = os.path.split(root)
-            paths = [tail]
-        my_paths = set(self.scanpaths.get(root, []))
-        for path in paths:
-            relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
-            if relpath.startswith(".."):
-                raise ValueError(f"Subpath {relpath} must be child of {root}.")
-            my_paths.add(os.path.normpath(relpath))
-        self.scanpaths[root] = sorted(my_paths, key=lambda p: (len(p.split(os.sep)), p))
-
-    def iter_scanpaths(self) -> Iterator[ScanPath]:
-        for root, paths in self.scanpaths.items():
-            if not paths:
-                yield ScanPath(root=root)
-            else:
-                for path in paths:
-                    yield ScanPath(root=root, path=path)
-
-    def add_file(self, root: str, path: str) -> None:
-        self.add_files(root, [path])
-
-    def add_files(self, root: str, paths: list[str]) -> None:
-        root = os.path.abspath(root)
-        my_files: set[str] = set(self.files.get(root, []))
-        for path in paths:
-            relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
-            if relpath.startswith(".."):
-                raise ValueError(f"Subpath {relpath} must be child of {root}.")
-            if not os.path.exists(os.path.join(root, relpath)):
-                logger.warning(f"{root}/{relpath}: path does not exist")
-            else:
-                my_files.add(os.path.normpath(relpath))
-        self.files[root] = sorted(my_files, key=lambda p: (len(p.split(os.sep)), p))
-
-    def remove_file(self, root: str, path: str) -> None:
-        paths = self.files.pop(root, [])
-        relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
-        if relpath in paths:
-            paths.remove(relpath)
-        if paths:
-            self.files[root] = paths
-
-    def iter_files(self) -> Iterator[tuple[str, str]]:
-        for root, paths in self.scanpaths.items():
-            for path in paths:
-                yield root, path
-
-    def matches(self, f: str) -> bool:
-        for pattern in self.file_patterns:
-            if fnmatch.fnmatchcase(f, pattern):
-                return True
-        return False
-
-    def emit_generators(self) -> list["AbstractTestGenerator"]:
-        errors = 0
-        generators: list["AbstractTestGenerator"] = []
-        for root, paths in self.files.items():
-            all_paths = [(root, path) for path in paths]
-            with ProcessPoolExecutor() as ex:
-                futures = [ex.submit(generate_one, arg) for arg in all_paths]
-                results = [f.result() for f in futures]
-            for success, result in results:
-                if not success:
-                    errors += 1
-                elif result is not None:
-                    generators.append(result)
-        if errors:
-            raise ValueError("Stopping due to previous errors")
-        return generators
 
 
 def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:

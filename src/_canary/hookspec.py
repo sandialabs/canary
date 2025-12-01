@@ -131,11 +131,6 @@ def canary_configure(config: "CanaryConfig") -> None:
 # -------------------------------------------------------------------------
 # collection hooks
 # -------------------------------------------------------------------------
-@hookspec(firstresult=True)
-def canary_collect(collector: "Collector") -> list["AbstractTestGenerator"]:
-    raise NotImplementedError
-
-
 @hookspec
 def canary_collectstart(collector: "Collector") -> None:
     """Start collection.
@@ -146,11 +141,6 @@ def canary_collectstart(collector: "Collector") -> None:
       names to skip call :py:func:`collector.add_skip_dirs(...) <Collector.add_skip_dirs>`.
 
     """
-
-
-@hookspec(firstresult=True)
-def canary_collectitems(collector: "Collector") -> None:
-    raise NotImplementedError
 
 
 @hookspec

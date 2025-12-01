@@ -625,6 +625,7 @@ class WorkspaceDatabase:
         self.connection.close()
 
     def put_generators(self, generators: list[AbstractTestGenerator]) -> None:
+        pm = logger.progress_monitor("@*{Putting} test generators into database")
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE;")
         rows = [(gen.id, json.dumps_min(gen.asdict())) for gen in generators]
@@ -637,6 +638,7 @@ class WorkspaceDatabase:
             rows,
         )
         self.connection.commit()
+        pm.done()
 
     def get_generators(self) -> list[AbstractTestGenerator]:
         cursor = self.connection.cursor()

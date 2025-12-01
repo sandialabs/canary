@@ -58,9 +58,12 @@ extensibility.
 import dataclasses
 import datetime
 import hashlib
+from collections import deque
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Iterable
+
+from schema import Schema
 
 from . import config
 from .hookspec import hookimpl
@@ -93,11 +96,9 @@ def canary_select(selector: "Selector") -> list["TestSpec"]:
     Returns:
         A list of finalized ``TestSpec`` instances ready for execution.
     """
-    pm = logger.progress_monitor("@*{Selecting} specs")
     config.pluginmanager.hook.canary_selectstart(selector=selector)
     selector.run()
     config.pluginmanager.hook.canary_select_modifyitems(selector=selector)
-    pm.done()
     config.pluginmanager.hook.canary_select_report(selector=selector)
     return selector.final_specs()
 
@@ -176,9 +177,22 @@ class SelectorSnapshot:
     def serialize(self) -> str:
         return json.dumps_min(dataclasses.asdict(self))
 
+    @staticmethod
+    def schema() -> Schema:
+        s = Schema(
+            {
+                "spec_set_id": [str],
+                "masked": {str: str},
+                "rules": [str],
+                "created_on": str,
+            }
+        )
+        return s
+
     @classmethod
     def reconstruct(cls, serialized: str) -> "SelectorSnapshot":
         data = json.loads(serialized)
+        SelectorSnapshot.schema().validate(data)
         return cls(**data)
 
     def is_compatible_with_specs(self, specs: list["ResolvedSpec"]) -> bool:
@@ -217,7 +231,10 @@ class Selector:
         self.rules.append(rule)
 
     def run(self) -> None:
+        pm = logger.progress_monitor("@*{Selecting} specs based on %d rule sets" % len(self.rules))
         for spec in self.specs:
+            if spec.mask:
+                continue
             for rule in self.rules:
                 outcome = rule(spec)
                 if not outcome:
@@ -225,11 +242,10 @@ class Selector:
                     break
         propagate_masks(self.specs)
         self.ready = True
+        pm.done()
 
     @property
     def selected(self) -> list["TestSpec"]:
-        if not self.ready:
-            raise ValueError("selector.run() has not been executed")
         return self.final_specs()
 
     @staticmethod
@@ -259,20 +275,25 @@ class Selector:
     def final_specs(self) -> list["TestSpec"]:
         if not self.ready:
             raise ValueError("selector.run() has not been executed")
-        return finalize([spec for spec in self.specs if not spec.mask])
+        return finalize(self.specs)
 
 
 def propagate_masks(specs: list["ResolvedSpec"]):
     # Propagate masks
-    changed: bool = True
-    while changed:
-        changed = False
-        for spec in specs:
-            if spec.mask:
-                continue
-            if any(dep.mask for dep in spec.dependencies):
-                spec.mask = Mask.masked("One or more dependencies masked")
-                changed = True
+    queue = deque([spec for spec in specs if spec.mask])
+    spec_map: dict[str, "ResolvedSpec"] = {spec.id: spec for spec in specs}
+    # Precompute reverse graph
+    dependents: dict[str, list[str]] = {s.id: [] for s in specs}
+    for s in specs:
+        for dep in s.dependencies:
+            dependents[dep.id].append(s.id)
+    while queue:
+        masked = queue.popleft()
+        for child_id in dependents[masked.id]:
+            child = spec_map[child_id]
+            if not child.mask:
+                child.mask = Mask.masked("One or more dependencies masked")
+                queue.append(child)
 
 
 def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
@@ -288,13 +309,14 @@ def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
     Returns:
         A list of ``TestSpec`` instances in dependency-resolved order.
     """
-    map: dict[str, "ResolvedSpec"] = {}
+    spec_map: dict[str, "ResolvedSpec"] = {}
     graph: dict[str, list[str]] = {}
+    # calling propagate_masks should be unnecessary at this point
     propagate_masks(resolved_specs)
     for resolved_spec in resolved_specs:
         if resolved_spec.mask:
             continue
-        map[resolved_spec.id] = resolved_spec
+        spec_map[resolved_spec.id] = resolved_spec
         graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
     lookup: dict[str, "TestSpec"] = {}
     ts = TopologicalSorter(graph)
@@ -303,7 +325,7 @@ def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
         ids = ts.get_ready()
         for id in ids:
             # Replace dependencies with TestSpec objects
-            resolved = map[id]
+            resolved = spec_map[id]
             dependencies: list["TestSpec"] = [lookup[dep.id] for dep in resolved.dependencies]
             spec = resolved.finalize(dependencies)
             lookup[id] = spec

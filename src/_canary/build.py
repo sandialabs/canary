@@ -17,54 +17,22 @@ Flow Diagram
 
 The following diagram illustrates the full lifecycle:
 
-    +------------------+
-    |   Generator(s)   |
-    |  produce files   |
-    +---------+--------+
-              |
-              v
-    +----------------------+
-    |     Builder()        |
-    |  constructed with    |
-    |  generator outputs   |
-    +----------+-----------+
-               |
-               v
-    +----------------------+
-    | canary_build()       |
-    |                      |
-    | pluginmanager.hook.  |
-    |   canary_buildstart  |
-    +----------+-----------+
-               |
-               v
-    +----------------------+
-    | Builder.run()        |
-    |                      |
-    | 1. validate(...)     |
-    | 2. resolve(...)      |
-    |     -> produces      |
-    |        resolved       |
-    |        specs          |
-    +----------+-----------+
-               |
-               v
-    +------------------------------+
-    | pluginmanager.hook.         |
-    |   canary_build_modifyitems  |
-    +--------------+--------------+
-                   |
-                   v
-    +------------------------------+
-    | pluginmanager.hook.         |
-    |   canary_build_report       |
-    +--------------+--------------+
-                   |
-                   v
-    +------------------------------+
-    | builder.resolved_specs()     |
-    |     -> Final TestSpecs       |
-    +------------------------------+
+    +--------------------------------------------------+
+    |  Generator(s)                                    |
+    |    Produces [Un]resolved test specs              |
+    |                      ↓                           |
+    |  Builder(generators)                             |
+    |    Build UnresolvedSpec from generator outputs   |
+    |                      ↓                           |
+    |  canary_build(builder)                           |
+    |  • pluginmanager.hook.canary_buildstart()        |
+    |  • builder.run()                                 |
+    |    • validate(...)                               |
+    |    • resolve(...)                                |
+    |  • pluginmanager.hook.canary_build_modifyitems() |
+    |  • pluginmanager.hook.canary_build_report()      |
+    |  → builder.resolved_specs()                      |
+    +--------------------------------------------------+
 
 
 Functions

@@ -26,12 +26,12 @@ logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
-def canary_collectstart(collector) -> None:
+def canary_collectstart(collector: canary.Collector) -> None:
     collector.add_file_patterns("CTestTestfile.cmake")
 
 
 @canary.hookimpl
-def canary_collect_modifyitems(collector) -> None:
+def canary_collect_modifyitems(collector: canary.Collector) -> None:
     ctest_files: dict[str, list[str]] = {}
     for root, path in collector.iter_files():
         if os.path.basename(path) == "CTestTestfile.cmake":

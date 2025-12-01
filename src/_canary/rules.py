@@ -22,6 +22,8 @@ from typing import Hashable
 from typing import Iterable
 from typing import Type
 
+from schema import Schema
+
 from . import config
 from . import when
 from .util import filesystem
@@ -112,6 +114,17 @@ class Rule:
         return json.dumps_min(meta)
 
     @staticmethod
+    def schema() -> Schema:
+        schema = Schema(
+            {
+                "module": str,
+                "classname": str,
+                "params": {str: Any},
+            }
+        )
+        return schema
+
+    @staticmethod
     def reconstruct(serialized: str) -> "Rule":
         """Reconstruct a rule from a serialized JSON string.
 
@@ -122,6 +135,7 @@ class Rule:
             Rule: The reconstructed rule instance.
         """
         meta = json.loads(serialized)
+        Rule.schema().validate(meta)
         module = importlib.import_module(meta["module"])
         cls: Type[Rule] = getattr(module, meta["classname"])
         rule = cls.from_dict(meta["params"])
