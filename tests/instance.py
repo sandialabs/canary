@@ -15,9 +15,11 @@ from _canary.util.filesystem import working_dir
 
 
 def generate_specs(generators, on_options=None):
-    from _canary import config
+    from _canary.build import canary_build
+    from _canary.build import Builder
 
-    specs = config.pluginmanager.hook.canary_generate(generators=generators, on_options=on_options)
+    builder = Builder(generators=generators, on_options=on_options or [])
+    specs = canary_build(builder)
     return specs
 
 
@@ -38,7 +40,7 @@ def test_instance_deps(tmpdir):
         lookup = {}
         for spec in specs:
             p = Path(work_tree)
-            space = ExecutionSpace(p.parent, p.name)
+            space = ExecutionSpace(p.parent, str(p.name))
             deps = [lookup[d.id] for d in spec.dependencies]
             case = tc.TestCase(spec=spec, workspace=space, dependencies=deps)
             lookup[case.id] = case

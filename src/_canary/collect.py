@@ -53,7 +53,8 @@ def collect_from_paths(collector: "Collector") -> None:
         full_path = root_path if scanpath.path is None else root_path / scanpath.path
         if full_path.is_file() and collector.matches(full_path.name):
             assert scanpath.path is not None
-            collector.add_file(str(full_path.parent), str(full_path.name))
+            relpath = os.path.relpath(str(full_path), scanpath.root)
+            collector.add_file(str(scanpath.root), relpath)
         elif full_path.is_dir():
             paths: list[str] = []
             for dirname, dirs, files in os.walk(full_path):
@@ -296,7 +297,7 @@ class PathSpec(argparse.Action):
         setdefault(namespace, "start", None)
         setdefault(namespace, "specids", None)
 
-        if option_string == "-f":
+        if self.dest == "f_pathspec":
             namespace.scanpaths.update(self.read_paths(values))
             return
 

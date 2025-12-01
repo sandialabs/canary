@@ -135,6 +135,12 @@ def from_testcase(case: "TestCase") -> TestInstance:
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in case.spec.assets:
         sources.setdefault(asset.action, []).append((str(asset.src), asset.dst))
+    start = -1.0
+    if case.timekeeper.started_on != "NA":
+        start = datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp()
+    stop = -1.0
+    if case.timekeeper.finished_on != "NA":
+        stop = datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp()
     instance = cls(
         file_root=str(case.spec.file_root),
         file_path=str(case.spec.file_path),
@@ -152,8 +158,8 @@ def from_testcase(case: "TestCase") -> TestInstance:
         work_tree=str(case.workspace.dir),  # type: ignore
         working_directory=str(case.workspace.dir),
         status=case.status,
-        start=datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp(),
-        stop=datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp(),
+        start=start,
+        stop=stop,
         id=case.spec.id,
         returncode=case.status.code,
         variables=case.spec.environment,
@@ -192,6 +198,12 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
     resources = lock["resources"]
     timekeeper = lock["timekeeper"]
 
+    start = -1.0
+    if timekeeper["started_on"] != "NA":
+        start = datetime.datetime.fromisoformat(timekeeper["started_on"]).timestamp()
+    stop = -1.0
+    if timekeeper["finished_on"] != "NA":
+        stop = datetime.datetime.fromisoformat(timekeeper["finished_on"]).timestamp()
     instance = cls(
         file_root=spec["file_root"],
         file_path=spec["file_path"],
@@ -209,8 +221,8 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         work_tree=str(workspace["dir"]),
         working_directory=str(workspace["dir"]),
         status=Status(status["name"], status["message"], status["code"]),
-        start=timekeeper["started_on"],
-        stop=timekeeper["finished_on"],
+        start=start,
+        stop=stop,
         id=spec["id"],
         returncode=status["code"],
         variables=spec["environment"],
