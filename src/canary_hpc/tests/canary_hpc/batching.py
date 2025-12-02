@@ -17,7 +17,7 @@ num_base_cases = 5
 def generate_specs(generators, on_options=None):
     from _canary import build
 
-    builder = build.Builder(generators, on_options=on_options or [])
+    builder = build.Builder(generators, workspace=Path.cwd(), on_options=on_options or [])
     specs = build.canary_build(builder)
     return specs
 

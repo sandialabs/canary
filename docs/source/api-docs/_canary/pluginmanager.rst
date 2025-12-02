@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-paths
-=====
+pluginmanager
+=============
 
-.. automodule:: _canary.resource_pool.paths
+.. automodule:: _canary.pluginmanager
    :members:
    :undoc-members:
    :show-inheritance:

@@ -33,33 +33,11 @@ def canary_build_modifyitems(builder: "canary.Builder") -> None:
         if spec.file_path.suffix == ".vvt":
             spec.stdout = "execute.log"
             spec.stderr = None
+            set_vvtest_execpath(spec)
 
 
 @canary.hookimpl
-def canary_generate_modifyitems(specs: list["canary.ResolvedSpec"]) -> None:
-    for spec in specs:
-        if spec.file_path.suffix != ".vvt":
-            continue
-        set_vvtest_execpath(spec)
-
-
-def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
-    """Set the execpath of the case
-
-    In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
-    ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
-    parameter is used for constructing execution path
-    """
-    getstr = lambda v: getattr(v, "string", str(v))
-    parts = [f"{p}={getstr(spec.parameters[p])}" for p in sorted(spec.parameters.keys())]
-    name = spec.family
-    if parts:
-        name = "%s.%s" % (name, ".".join(parts))
-    spec.execpath = str(spec.file_path.parent / name)  # ty: ignore [invalid-assignment]
-
-
-@canary.hookimpl
-def canary_runtest_setup(case: "canary.TestCase") -> None:
+def canary_runteststart(case: "canary.TestCase") -> None:
     if case.spec.file_path.suffix == ".vvt":
         with canary.filesystem.working_dir(case.workspace.dir):
             write_vvtest_util(case)
@@ -70,25 +48,6 @@ def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPo
     if case.spec.file.suffix == ".vvt":
         return canary.PythonFileExecutionPolicy()
     return None
-
-
-class RerunAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        keywords = getattr(namespace, "keyword_exprs", None) or []
-        keywords.append(":all:")
-        namespace.keyword_exprs = list(keywords)
-        setattr(namespace, self.dest, True)
-
-
-class AnalyzeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        script_args = getattr(namespace, "script_args", None) or []
-        script_args.append("--execute-analysis-sections")
-        setattr(namespace, "script_args", list(script_args))
-        opts = getattr(namespace, "canary_vvtest", None) or {}
-        opts[self.dest] = True
-        setattr(namespace, "canary_vvtest", opts)
-        setattr(namespace, "dont_restage", True)
 
 
 @canary.hookimpl
@@ -114,6 +73,40 @@ def canary_addoption(parser: "canary.Parser") -> None:
         "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
         "test is run.",
     )
+
+
+def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
+    """Set the execpath of the case
+
+    In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
+    ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
+    parameter is used for constructing execution path
+    """
+    getstr = lambda v: getattr(v, "string", str(v))
+    parts = [f"{p}={getstr(spec.parameters[p])}" for p in sorted(spec.parameters.keys())]
+    name = spec.family
+    if parts:
+        name = "%s.%s" % (name, ".".join(parts))
+    spec.execpath = str(spec.file_path.parent / name)  # ty: ignore [invalid-assignment]
+
+
+class RerunAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        keywords = getattr(namespace, "keyword_exprs", None) or []
+        keywords.append(":all:")
+        namespace.keyword_exprs = list(keywords)
+        setattr(namespace, self.dest, True)
+
+
+class AnalyzeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        script_args = getattr(namespace, "script_args", None) or []
+        script_args.append("--execute-analysis-sections")
+        setattr(namespace, "script_args", list(script_args))
+        opts = getattr(namespace, "canary_vvtest", None) or {}
+        opts[self.dest] = True
+        setattr(namespace, "canary_vvtest", opts)
+        setattr(namespace, "dont_restage", True)
 
 
 def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:

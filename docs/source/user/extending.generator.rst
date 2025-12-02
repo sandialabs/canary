@@ -42,18 +42,3 @@ Example implementation
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 1-71
-
-
-The ``YAMLTestGenerator.lock()`` returns a list of ``ResolvedStpec`` test cases, defined below:
-
-.. literalinclude:: /static/yaml_generator.py
-    :language: python
-    :lines: 72-114
-
-
-The user defined test generator is registered using the :meth:`~_canary.plugins.hookspec.canary_generator` plugin hook:
-
-.. literalinclude:: /static/yaml_generator.py
-    :language: python
-    :lines: 115-

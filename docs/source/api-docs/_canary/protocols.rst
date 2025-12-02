@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-reporting
+protocols
 =========
 
-.. automodule:: _canary.plugins.builtin.reporting
+.. automodule:: _canary.protocols
    :members:
    :undoc-members:
    :show-inheritance:

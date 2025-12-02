@@ -309,13 +309,13 @@ class BaseSpec(Generic[T]):
 @dataclasses.dataclass
 class TestSpec(BaseSpec["TestSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: list["TestSpec"] = dataclasses.field(default_factory=list)
+    dependencies: Sequence["TestSpec"] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
 class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: list["ResolvedSpec"] = dataclasses.field(default_factory=list)
+    dependencies: Sequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
 
     @classmethod
@@ -324,6 +324,15 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
         if mask:
             d["mask"] = Mask(mask["value"], mask["reason"])
         return super().from_dict(d, lookup)
+
+    def set_mask(self, arg: str | Mask | None) -> None:
+        if arg is None:
+            self.mask = Mask.unmasked()
+        elif isinstance(arg, str):
+            self.mask = Mask.masked(arg)
+        else:
+            assert isinstance(arg, Mask)
+            self.mask = arg
 
     def finalize(self, dependencies: list["TestSpec"]) -> TestSpec:
         return TestSpec(
@@ -349,6 +358,8 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
             attributes=self.attributes,
             environment=self.environment,
             environment_modifications=self.environment_modifications,
+            stdout=self.stdout,
+            stderr=self.stderr,
         )
 
 
@@ -482,6 +493,8 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
             attributes=self.attributes,
             environment=self.environment,
             environment_modifications=self.environment_modifications,
+            stdout=self.stdout,
+            stderr=self.stderr,
         )
 
     def is_resolved(self) -> bool:

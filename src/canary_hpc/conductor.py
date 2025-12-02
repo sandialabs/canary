@@ -17,6 +17,7 @@ from _canary.plugins.subcommands.run import Run
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
 from _canary.resource_pool.rpool import Outcome
+from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
@@ -139,7 +140,7 @@ class CanaryHPCConductor:
         return Outcome(True)
 
     @canary.hookimpl(tryfirst=True)
-    def canary_runtests(self, cases: list[canary.TestCase]) -> int:
+    def canary_runtests(self, runner: "Runner") -> None:
         """Run each test case in ``cases``.
 
         Args:
@@ -153,7 +154,7 @@ class CanaryHPCConductor:
         if not batchspec:
             raise ValueError("Cannot partition test cases: missing batching options")
         specs: list[BatchSpec] = batch_testcases(
-            cases=cases,
+            cases=runner.cases,
             layout=batchspec["layout"],
             count=batchspec["count"],
             duration=batchspec["duration"],
@@ -164,27 +165,27 @@ class CanaryHPCConductor:
                 "No test batches generated (this should never happen, "
                 "the default batching scheme should have been used)"
             )
-        if missing := {c.id for c in cases} - {c.id for batch in specs for c in batch.cases}:
+        if missing := {c.id for c in runner.cases} - {c.id for batch in specs for c in batch.cases}:
             raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
 
         fmt = "@*{Generated} %d batch specs from %d test cases"
-        logger.info(fmt % (len(specs), len(cases)))
-        root = cases[0].workspace.root.parent / "canary-hpc"
+        logger.info(fmt % (len(specs), len(runner.cases)))
+        root = runner.cases[0].workspace.root.parent / "canary-hpc"
         batches: list[TestBatch] = []
         for spec in specs:
             path = f"batches/{spec.id[:8]}"
             workspace = ExecutionSpace(
-                root=root, path=Path(path), session=cases[0].workspace.session
+                root=root, path=Path(path), session=runner.cases[0].workspace.session
             )
             batch = TestBatch(spec, workspace=workspace)
             batches.append(batch)
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)
         queue.put(*batches)  # type: ignore
         queue.prepare()
-        runner = Runner()
+        executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
-        with ResourceQueueExecutor(queue, runner, max_workers=max_workers) as ex:
-            return ex.run(backend=self.backend.name)
+        with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+            ex.run(backend=self.backend.name)
 
     @staticmethod
     def setup_parser(
@@ -259,7 +260,7 @@ class KeyboardQuit(Exception):
     pass
 
 
-class Runner:
+class BatchExecutor:
     """Class for running ``ResourceQueue``."""
 
     def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:

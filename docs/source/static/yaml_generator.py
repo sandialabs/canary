@@ -16,7 +16,7 @@ def canary_testcase_generator(root: str, path: str | None) -> "YAMLTestGenerator
 
 
 @canary.hookimpl
-def canary_testcase_setup(case: canary.TestCase) -> None:
+def canary_runtest_setup(case: canary.TestCase) -> None:
     if not YAMLTestGenerator.matches(case.spec.file):
         return
     sh = canary.filesystem.which("sh")
@@ -31,7 +31,7 @@ def canary_testcase_setup(case: canary.TestCase) -> None:
 
 
 @canary.hookimpl
-def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
     if YAMLTestGenerator.matches(case.spec.file):
         return canary.SubprocessExecutionPolicy(["./runtest.sh"])
     return None
@@ -58,13 +58,13 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
         path = Path(path)
         return re.match("test_.*\.yaml", path.name) is not None
 
-    def lock(self, on_options: list[str] | None = None) -> list[canary.DraftSpec]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.UnresolvedSpec]:
         """Take the cartesian product of parameters and from each combination create a test case."""
 
         with open(self.file, "r") as fh:
             fd = yaml.safe_load(fh)
 
-        specs: list[canary.DraftSpec] = []
+        specs: list[canary.UnresolvedSpec] = []
         for name, details in fd["tests"].items():
             kwds = dict(
                 file_root=Path(self.root),
@@ -78,10 +78,10 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
                 keys = list(parameters.keys())
                 for values in product(*parameters.values()):
                     params = dict(zip(keys, values))
-                    spec = canary.DraftSpec(parameters=params, **kwds)
+                    spec = canary.UnresolvedSpec(parameters=params, **kwds)
                     specs.append(spec)
             else:
-                spec = canary.DraftSpec(**kwds)
+                spec = canary.UnresolvedSpec(**kwds)
                 specs.append(spec)
 
         return specs

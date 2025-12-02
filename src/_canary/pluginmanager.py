@@ -26,7 +26,7 @@ class CanaryPluginManager(pluggy.PluginManager):
     def register_builtins(self):
         from . import build
         from . import collect
-        from . import executor
+        from . import conductor
         from . import runtest
         from . import select
         from .plugins import builtin
@@ -40,7 +40,7 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")
-        self.register(executor.TestCaseExecutor(), "builtin.executor")
+        self.register(conductor.CanaryConductor(), "builtin.conductor")
         self.register(build, "builtin.build")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")

@@ -105,8 +105,6 @@ class Run(CanarySubcommand):
         Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        config.pluginmanager.hook.canary_runtests_start()
-
         workspace: Workspace
         work_tree: str = args.work_tree or os.getcwd()
         if args.wipe:
@@ -174,9 +172,6 @@ class Run(CanarySubcommand):
 
         if not results:
             return 1
-        config.pluginmanager.hook.canary_runtests_report(
-            cases=results.cases, include_pass=False, truncate=10
-        )
         return results.returncode
 
 

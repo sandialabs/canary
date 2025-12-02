@@ -44,9 +44,9 @@ class ExecutionSlot:
     queue: mp.Queue
 
 
-def with_traceback(runner: Callable, job: JobProtocol, queue: mp.Queue, **kwargs: Any) -> None:
+def with_traceback(executor: Callable, job: JobProtocol, queue: mp.Queue, **kwargs: Any) -> None:
     try:
-        return runner(job, queue, **kwargs)
+        return executor(job, queue, **kwargs)
     except Exception as e:  # nosec B110
         fh = io.StringIO()
         traceback.print_exc(file=fh)
@@ -65,7 +65,7 @@ class ResourceQueueExecutor:
     def __init__(
         self,
         queue: ResourceQueue,
-        runner: Callable,
+        executor: Callable,
         max_workers: int = -1,
         busy_wait_time: float = 0.05,
     ):
@@ -75,7 +75,7 @@ class ResourceQueueExecutor:
         Args:
             max_workers: Maximum number of concurrent worker processes
             queue: ResourceQueue instance
-            runner: Callable that processes cases
+            executor: Callable that processes cases
             busy_wait_time: Time to wait when queue is busy
         """
         nproc = cpu_count()
@@ -84,7 +84,7 @@ class ResourceQueueExecutor:
             logger.warning(f"workers={self.max_workers} > cpu_count={nproc}")
 
         self.queue: ResourceQueue = queue
-        self.runner = runner
+        self.executor = executor
         self.busy_wait_time = busy_wait_time
 
         self.inflight: dict[int, ExecutionSlot] = {}
@@ -149,7 +149,7 @@ class ResourceQueueExecutor:
                 # Launch a new measured process
                 proc = MeasuredProcess(
                     target=with_traceback,
-                    args=(self.runner, job, result_queue),
+                    args=(self.executor, job, result_queue),
                     kwargs=kwargs,
                 )
                 proc.start()

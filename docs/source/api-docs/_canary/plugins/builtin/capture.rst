@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-pathspec
-========
+capture
+=======
 
-.. automodule:: _canary.plugins.subcommands.common.pathspec
+.. automodule:: _canary.plugins.builtin.capture
    :members:
    :undoc-members:
    :show-inheritance:

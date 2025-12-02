@@ -10,18 +10,13 @@ plugins.builtin
 
    addcommand
    addoption
-   discover
+   capture
    email
-   executor
    html
    json
    junit
    markdown
-   mask
    post_clean
    pyt
    repeat
-   reporting
-   rpool
-   runtest_protocol
    testcase_generator

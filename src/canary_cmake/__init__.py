@@ -58,7 +58,7 @@ def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPo
 
 
 @canary.hookimpl
-def canary_runtest_setup(case: canary.TestCase) -> None:
+def canary_runteststart(case: canary.TestCase) -> None:
     if case.spec.file.suffix == ".cmake":
         setup_ctest(case)
 

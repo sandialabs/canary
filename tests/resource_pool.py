@@ -17,7 +17,7 @@ def test_fill_simple():
 
 
 class Case:
-    def required_resources(self) -> list[list[dict[str, object]]]:
+    def required_resources(self) -> list[dict[str, object]]:
         group: list[dict[str, object]] = []
         group.extend([{"type": "cpus", "slots": 1} for _ in range(2)])
         group.extend([{"type": "gpus", "slots": 1} for _ in range(2)])

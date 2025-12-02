@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-testinstance
-============
+timekeeper
+==========
 
-.. automodule:: _canary.testinstance
+.. automodule:: _canary.timekeeper
    :members:
    :undoc-members:
    :show-inheritance:

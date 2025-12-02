@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-executor
-========
+select
+======
 
-.. automodule:: _canary.plugins.builtin.executor
+.. automodule:: _canary.plugins.subcommands.select
    :members:
    :undoc-members:
    :show-inheritance:

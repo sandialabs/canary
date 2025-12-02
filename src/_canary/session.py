@@ -4,7 +4,6 @@
 import dataclasses
 import datetime
 import os
-import time
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,6 +11,8 @@ from typing import TYPE_CHECKING
 from . import config
 from .error import StopExecution
 from .error import notests_exit_status
+from .runtest import Runner
+from .runtest import canary_runtests
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import select_sygil
@@ -19,7 +20,6 @@ from .util import json_helper as json
 from .util import logging
 from .util.filesystem import write_directory_tag
 from .util.graph import static_order
-from .util.returncode import compute_returncode
 
 if TYPE_CHECKING:
     from .testspec import TestSpec
@@ -98,6 +98,7 @@ class Session:
         file = self.root / "config"
         with open(file, "w") as fh:
             config.dump(fh)
+
         return self
 
     @property
@@ -184,33 +185,21 @@ class Session:
         cases = self.get_ready(ids=ids)
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
-        logger.info(f"@*{{Starting}} session {self.name}")
-        start = time.monotonic()
-        returncode: int = -1
         starting_dir = os.getcwd()
         started_on = datetime.datetime.now()
         try:
             for case in cases:
                 case.status.set("PENDING")
             os.chdir(str(self.work_dir))
-            config.pluginmanager.hook.canary_runtests(cases=cases)
-        except TimeoutError:
-            logger.error(f"Session timed out after {(time.monotonic() - start):.2f} s.")
-        except Exception:
-            logger.exception("Unhandled exception in runtests")
-            raise
+            runner = Runner(cases=cases, session=self)
+            canary_runtests(runner=runner)
         finally:
             finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
-            returncode = compute_returncode(cases)
-            logger.info(
-                f"@*{{Finished}} session in {(time.monotonic() - start):.2f} s. "
-                f"with returncode {returncode}"
-            )
             return SessionResults(
                 session=self.name,
                 cases=cases,
-                returncode=returncode,
+                returncode=runner.returncode,
                 started_on=started_on,
                 finished_on=finished_on,
                 prefix=self.root,

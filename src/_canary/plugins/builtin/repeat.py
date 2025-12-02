@@ -46,7 +46,7 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(specname="canary_runtest_exec")
+@hookimpl(specname="canary_runtest")
 def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
@@ -60,7 +60,7 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
         )
 
 
-@hookimpl(specname="canary_runtest_exec")
+@hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
@@ -74,7 +74,7 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
         )
 
 
-@hookimpl(specname="canary_runtest_exec")
+@hookimpl(specname="canary_runtest")
 def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
     if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1

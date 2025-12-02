@@ -10,7 +10,6 @@ from typing import Type
 
 import pluggy
 
-from .plugins.types import CanaryReporter
 from .plugins.types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -23,10 +22,11 @@ if TYPE_CHECKING:
     from .generator import AbstractTestGenerator
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
+    from .runtest import Runner
     from .select import Selector
+    from .session import Session
     from .testcase import TestCase
     from .testexec import ExecutionPolicy
-    from .workspace import Session
 
 
 project_name = "canary"
@@ -128,6 +128,14 @@ def canary_configure(config: "CanaryConfig") -> None:
     """
 
 
+@hookspec
+def canary_sessionstart(session: "Session") -> None: ...
+
+
+@hookspec
+def canary_sessionfinish(session: "Session") -> None: ...
+
+
 # -------------------------------------------------------------------------
 # collection hooks
 # -------------------------------------------------------------------------
@@ -145,13 +153,13 @@ def canary_collectstart(collector: "Collector") -> None:
 
 @hookspec
 def canary_collect_modifyitems(collector: "Collector") -> None:
-    """Filter tests we don't want to generate"""
+    """Called after collection of test files is complete.  May filter or re-order items in place"""
     raise NotImplementedError
 
 
 @hookspec
 def canary_collect_report(collector: "Collector") -> None:
-    """Filter tests we don't want to generate"""
+    """Write a report to the console for collected items"""
     raise NotImplementedError
 
 
@@ -175,76 +183,108 @@ def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
 
 
 @hookspec
-def canary_buildstart(builder: "Builder") -> None: ...
+def canary_buildstart(builder: "Builder") -> None:
+    """Starts the build process.
+
+    Args:
+        builder: The builder to start.
+    """
 
 
 @hookspec
-def canary_build_modifyitems(builder: "Builder") -> None: ...
+def canary_build_modifyitems(builder: "Builder") -> None:
+    """Modifies the build items.
+
+    Args:
+        builder: The builder to modify.
+    """
 
 
 @hookspec
-def canary_build_report(builder: "Builder") -> None: ...
+def canary_build_report(builder: "Builder") -> None:
+    """Reports the build results.
+
+    Args:
+        builder: The builder to report on.
+    """
 
 
 # -------------------------------------------------------------------------
 # selection hooks
 # -------------------------------------------------------------------------
+@hookspec
+def canary_selectstart(selector: "Selector") -> None:
+    """Starts the selection process.
+
+    Args:
+        selector: The selector to start.
+    """
 
 
 @hookspec
-def canary_selectstart(selector: "Selector") -> None: ...
+def canary_select_modifyitems(selector: "Selector") -> None:
+    """Modifies the selection items.
+
+    Args:
+        selector: The selector to modify.
+    """
 
 
 @hookspec
-def canary_select_modifyitems(selector: "Selector") -> None: ...
+def canary_select_report(selector: "Selector") -> None:
+    """Reports the selection results.
+
+    Args:
+        selector: The selector to report on.
+    """
 
 
+# -------------------------------------------------------------------------
+# runtest hooks
+# -------------------------------------------------------------------------
 @hookspec
-def canary_select_report(selector: "Selector") -> None: ...
-
-
-@hookspec
-def canary_session_startup(session: "Session") -> None:
-    """Called after the session object has been created and before performing collection and
-    entering the run test loop."""
-
-
-@hookspec
-def canary_session_finish(session: "Session", exitstatus: int) -> None:
-    """Called after the test session has finished allowing plugins to perform custom actions after
-    all tests have been run."""
-    raise NotImplementedError
-
-
-@hookspec
-def canary_runtests_start() -> None:
+def canary_runtests_start(runner: "Runner") -> None:
     """Called at the beginning of `canary run`"""
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_runtests(cases: list["TestCase"]) -> int:
-    raise NotImplementedError
+def canary_runtests(runner: "Runner") -> None:
+    """Runs the tests.
+
+    Args:
+        runner: The runner to run.
+
+    """
 
 
 @hookspec
-def canary_runtests_report(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
-    raise NotImplementedError
+def canary_runtests_report(runner: "Runner") -> None:
+    """Reports the test results.
 
-
-@hookspec
-def canary_session_reporter() -> CanaryReporter:
-    """Register Canary report type"""
-    raise NotImplementedError
+    Args:
+        runner: The runner to report on.
+    """
 
 
 @hookspec(firstresult=True)
 def canary_runtest_execution_policy(case: "TestCase") -> "ExecutionPolicy":
+    """Returns the execution policy for a test case.
+
+    Args:
+        case: The test case.
+
+    Returns:
+        The execution policy.
+
+    Raises:
+        NotImplementedError: This function is not implemented.
+    """
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_runtest_setup(case: "TestCase") -> bool:
+def canary_runteststart(case: "TestCase") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -260,7 +300,7 @@ def canary_runtest_setup(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_runtest_exec(case: "TestCase", queue: "Queue") -> bool:
+def canary_runtest(case: "TestCase", queue: "Queue") -> bool:
     """Called to run the test case
 
     Args:
@@ -287,6 +327,11 @@ def canary_runtest_finish(case: "TestCase") -> bool:
 
     """
     raise NotImplementedError
+
+
+# -------------------------------------------------------------------------
+# resource pool hooks
+# -------------------------------------------------------------------------
 
 
 @hookspec

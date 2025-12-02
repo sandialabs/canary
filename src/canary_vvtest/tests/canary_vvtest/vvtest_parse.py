@@ -4,6 +4,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 import _canary.util.filesystem as fs
 import canary_vvtest.generator as generator
@@ -14,7 +15,7 @@ from _canary.enums import list_parameter_space
 def generate_specs(generators, on_options=None):
     from _canary import build
 
-    builder = build.Builder(generators, on_options=on_options or [])
+    builder = build.Builder(generators, workspace=Path.cwd(), on_options=on_options or [])
     specs = build.canary_build(builder)
     return specs
 

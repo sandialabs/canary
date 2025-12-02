@@ -96,7 +96,7 @@ def setup_cdash_subproject_label():
 import canary
 @canary.hookimpl
 def canary_cdash_subproject_label(case):
-    return case.family
+    return case.spec.family
 """)
     with open("baz.pyt", "w") as fh:
         fh.write("""\

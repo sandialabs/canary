@@ -49,3 +49,7 @@ canary.yaml
 
 testcase.lock
 testcases.lock
+
+canary_distributed.*
+pool.json
+transactions.jsons

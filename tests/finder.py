@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from pathlib import Path
+
 import _canary.config as config
 import canary
 from _canary import rules
@@ -26,7 +27,7 @@ def select_specs(
     ids=None,
     prefixes=None,
 ):
-    selector = select.Selector(specs)
+    selector = select.Selector(specs, workspace=Path.cwd())
     if keyword_exprs:
         selector.add_rule(rules.KeywordRule(keyword_exprs))
     if parameter_expr:

@@ -155,10 +155,17 @@ class Builder:
     generators: list["AbstractTestGenerator"]
     workspace: Path
     on_options: list[str] = dataclasses.field(default_factory=list)
-    specs: list["ResolvedSpec"] = dataclasses.field(default_factory=list, init=False)
+    _specs: list["ResolvedSpec"] = dataclasses.field(default_factory=list, init=False)
+    ready: bool = dataclasses.field(default=False, init=False)
+
+    @property
+    def specs(self) -> list["ResolvedSpec"]:
+        return self.resolved_specs()
 
     def resolved_specs(self) -> list["ResolvedSpec"]:
-        return self.specs
+        if not self.ready:
+            raise ValueError("builder.run() has not been executed")
+        return self._specs
 
     @cached_property
     def signature(self) -> str:
@@ -181,7 +188,8 @@ class Builder:
         self.validate(drafts)
 
         pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
-        self.specs = resolve(drafts)
+        self._specs = resolve(drafts)
+        self.ready = True
         pm.done()
 
     def validate(self, specs: list["UnresolvedSpec"]) -> None:

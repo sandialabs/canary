@@ -66,7 +66,6 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             path = os.path.relpath(details["ctestfile"], self.root)
             if not os.path.exists(os.path.join(self.root, path)):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
-
             draft = create_draft_spec(
                 file_root=self.root,
                 file_path=path,
@@ -138,10 +137,10 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             for fixture_name in spec.attributes["fixtures"]["required"]:
                 if fixture_name in setup_fixtures:
                     for fixture in setup_fixtures[fixture_name]:
-                        spec.dependencies.append(fixture)
+                        spec.dependencies.append(fixture)  # type: ignore
                 if fixture_name in cleanup_fixtures:
                     for fixture in cleanup_fixtures[fixture_name]:
-                        fixture.dependencies.append(spec)
+                        fixture.dependencies.append(spec)  # type: ignore
 
     def resolve_inter_dependencies(
         self, drafts: list["canary.UnresolvedSpec"]

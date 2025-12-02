@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-hookspec
-========
+collect
+=======
 
-.. automodule:: _canary.plugins.hookspec
+.. automodule:: _canary.collect
    :members:
    :undoc-members:
    :show-inheritance:

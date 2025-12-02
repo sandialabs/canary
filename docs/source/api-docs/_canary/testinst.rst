@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-_json
-=====
+testinst
+========
 
-.. automodule:: _canary.util._json
+.. automodule:: _canary.testinst
    :members:
    :undoc-members:
    :show-inheritance:

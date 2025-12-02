@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from .batchexec import HPCConnectRunner
     from .batchspec import TestBatch
 
+__all__ = ["CanaryHPCBatchSpec", "CanaryHPCConductor", "CanaryHPCExecutor"]
+
 logger = canary.get_logger(__name__)
 
 

@@ -19,6 +19,7 @@ from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .third_party import color
 from .util import logging
+from .util.banner import banner
 from .util.collections import contains_any
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.color:
             color.set_color_when(args.color)
         config.set_main_options(args)
+        print_banner()
         config.pluginmanager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
@@ -155,6 +157,14 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
             if plugin and frame.filename == filename(plugin):
                 return plugin
     return None
+
+
+def print_banner() -> None:
+    if os.getenv("CANARY_MAKE_DOCS"):
+        return
+    print_the_banner = not config.getoption("no_banner") and logging.get_level() <= logging.INFO
+    if print_the_banner:
+        print(color.colorize(banner()), file=sys.stderr)
 
 
 def print_current_config() -> None:

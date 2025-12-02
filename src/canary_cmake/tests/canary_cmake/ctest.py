@@ -22,14 +22,14 @@ from canary_cmake.ctest import CTestTestGenerator
 from canary_cmake.ctest import setup_ctest
 
 
-class Runner:
+class TestCaseRunner:
     """Class for running ``AbstractTestCase``."""
 
     def __call__(self, case):
         queue = multiprocessing.Queue()
         try:
-            canary.config.pluginmanager.hook.canary_runtest_setup(case=case)
-            canary.config.pluginmanager.hook.canary_runtest_exec(case=case, queue=queue)
+            canary.config.pluginmanager.hook.canary_runteststart(case=case)
+            canary.config.pluginmanager.hook.canary_runtest(case=case, queue=queue)
         finally:
             canary.config.pluginmanager.hook.canary_runtest_finish(case=case)
 
@@ -120,7 +120,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = Runner()
+        runner = TestCaseRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
@@ -145,7 +145,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = Runner()
+        runner = TestCaseRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
@@ -169,7 +169,7 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = Runner()
+        runner = TestCaseRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)

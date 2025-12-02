@@ -351,6 +351,11 @@ def make_argument_parser(**kwargs):
         action="count",
         help="Decrease console logging level by 1",
     )
+    group.add_argument(
+        "--no-banner",
+        action="store_true",
+        help="Do not print banner [default: %(default)s]",
+    )
     parser.add_argument(
         "-d",
         "--debug",

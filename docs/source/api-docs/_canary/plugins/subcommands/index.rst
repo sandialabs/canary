@@ -8,6 +8,7 @@ plugins.subcommands
 .. toctree::
    :maxdepth: 1
 
+   add
    autodoc
    check
    common/index
@@ -17,12 +18,17 @@ plugins.subcommands
    edit
    fetch
    find
+   gc
    help
    info
+   init
    location
    log
    rebaseline
+   refresh
    report
+   rm
    run
+   select
    status
    tree

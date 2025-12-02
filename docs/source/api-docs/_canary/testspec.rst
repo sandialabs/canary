@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-runtest_protocol
-================
+testspec
+========
 
-.. automodule:: _canary.plugins.builtin.runtest_protocol
+.. automodule:: _canary.testspec
    :members:
    :undoc-members:
    :show-inheritance:

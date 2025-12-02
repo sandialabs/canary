@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-atc
-===
+rules
+=====
 
-.. automodule:: _canary.atc
+.. automodule:: _canary.rules
    :members:
    :undoc-members:
    :show-inheritance:

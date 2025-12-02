@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-mask
-====
+hooks
+=====
 
-.. automodule:: _canary.plugins.builtin.mask
+.. automodule:: _canary.resource_pool.hooks
    :members:
    :undoc-members:
    :show-inheritance:

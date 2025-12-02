@@ -9,7 +9,6 @@ util
    :maxdepth: 1
 
    _difflib
-   _json
    banner
    collections
    compression
@@ -21,11 +20,13 @@ util
    glyphs
    graph
    hash
+   json_helper
    keyboard
    logging
    misc
    module
    parallel
+   paramview
    procutils
    progress
    returncode

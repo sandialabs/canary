@@ -234,7 +234,11 @@ class TestBatch:
             logger.debug(f"Submitting batch {self.id[:8]}")
             with self.timekeeper.timeit():
                 rc = runner.execute(self)
+        except Exception:
+            rc = 1
         finally:
+            if rc is None:
+                rc = 1
             self.refresh()
             stat = "SUCCESS" if all(case.status == "SUCCESS" for case in self) else "FAILED"
             self.status.set(stat, propagate=False)

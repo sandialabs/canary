@@ -10,8 +10,11 @@ canary_hpc
 
    .canary_cache/index
    argparsing
+   batchexec
    batching
+   batchspec
    binpack
    conductor
    executor
    queue
+   status

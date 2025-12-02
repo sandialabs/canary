@@ -1,12 +1,15 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import datetime
+import dataclasses
 import io
 import random
-import sys
+import time
+from contextlib import contextmanager
+from multiprocessing import Queue
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 
 from . import config
 from .hookspec import hookimpl
@@ -14,25 +17,65 @@ from .status import Status
 from .third_party.color import colorize
 from .util import glyphs
 from .util import logging
-from .util.banner import banner
+from .util.returncode import compute_returncode
 from .util.time import hhmmss
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .session import Session
     from .testcase import TestCase
 
 
 logger = logging.get_logger(__name__)
 
 
-from multiprocessing import Queue
-from typing import Generator
+def canary_runtests(runner: "Runner") -> None:
+    pm = config.pluginmanager.hook
+    try:
+        logger.info(f"@*{{Starting}} session {runner.session.name}")
+        pm.canary_runtests_start(runner=runner)
+        with runner.timeit():
+            pm.canary_runtests(runner=runner)
+    except TimeoutError:
+        logger.error(f"Session timed out after {(time.time() - runner.start):.2f} s.")
+        raise
+    except Exception:
+        logger.exception("Unhandled exception in canary_runtest")
+        raise
+    finally:
+        logger.info(
+            f"@*{{Finished}} session in {(runner.finish - runner.start):.2f} s. "
+            f"with returncode {runner.returncode}"
+        )
+        pm.canary_runtests_report(runner=runner)
+    return
 
-from .testcase import TestCase
+
+@dataclasses.dataclass
+class Runner:
+    cases: list["TestCase"]
+    session: "Session"
+    _returncode: int = -20
+    start: float = dataclasses.field(default=-1.0, init=False)
+    finish: float = dataclasses.field(default=-1.0, init=False)
+
+    @property
+    def returncode(self) -> int:
+        if self._returncode == -20:
+            self._returncode = compute_returncode(self.cases)
+        return self._returncode
+
+    @contextmanager
+    def timeit(self) -> Generator[None, None, None]:
+        try:
+            self.start = time.time()
+            yield
+        finally:
+            self.finish = time.time()
 
 
 @hookimpl(wrapper=True)
-def canary_runtest_setup(case: TestCase) -> Generator[None, None, bool]:
+def canary_runteststart(case: "TestCase") -> Generator[None, None, bool]:
     case.workspace.create(exist_ok=True)
     if not config.getoption("dont_restage"):
         case.setup()
@@ -42,7 +85,7 @@ def canary_runtest_setup(case: TestCase) -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_runtest_exec(case: TestCase, queue: Queue) -> Generator[None, None, bool]:
+def canary_runtest(case: "TestCase", queue: Queue) -> Generator[None, None, bool]:
     case.run(queue)
     yield
     case.save()
@@ -50,7 +93,7 @@ def canary_runtest_exec(case: TestCase, queue: Queue) -> Generator[None, None, b
 
 
 @hookimpl(wrapper=True)
-def canary_runtest_finish(case: TestCase) -> Generator[None, None, bool]:
+def canary_runtest_finish(case: "TestCase") -> Generator[None, None, bool]:
     case.finish()
     yield
     case.save()
@@ -62,12 +105,6 @@ def canary_addoption(parser: "Parser") -> None:
     def add_group_argument(p: "Parser", *args: Any, **kwargs: Any):
         p.add_argument(*args, group="console reporting", command="run", **kwargs)
 
-    add_group_argument(
-        parser,
-        "--no-header",
-        action="store_true",
-        help="Disable printing header [default: %(default)s]",
-    )
     add_group_argument(
         parser,
         "--no-summary",
@@ -83,29 +120,22 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(specname="canary_runtests_startup", tryfirst=True)
-def print_banner():
-    if not config.getoption("no_header"):
-        print(colorize(banner()), file=sys.stderr)
-        # logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-
-
 @hookimpl(specname="canary_runtests_report", tryfirst=True)
-def print_short_test_status_summary(
-    cases: list["TestCase"], include_pass: bool, truncate: int
-) -> None:
+def print_short_test_status_summary(runner: Runner) -> None:
     """Return a summary of the completed test cases.  if ``include_pass is True``, include
     passed tests in the summary
 
     """
     if config.getoption("no_summary"):
         return
+    include_pass = False
+    truncate = 10
     file = io.StringIO()
-    if not cases:
+    if not runner.cases:
         file.write("Nothing to report\n")
     else:
         totals: dict[str, list["TestCase"]] = {}
-        for case in cases:
+        for case in runner.cases:
             totals.setdefault(case.status.name, []).append(case)
         for name in totals:
             if not include_pass and name == "SUCCESS":
@@ -125,51 +155,30 @@ def print_short_test_status_summary(
                     break
     string = file.getvalue()
     if string.strip():
-        string = "@*{Short test summary info}\n" + string
+        string = "\n@*{Short test summary info}\n" + string
     logger.log(logging.EMIT, string, extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_report")
-def print_runtests_durations(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
+def print_runtests_durations(runner: Runner) -> None:
     if N := config.getoption("durations"):
-        return print_durations(cases, N)
+        return print_durations(runner.cases, N)
 
 
 @hookimpl(specname="canary_runtests_report", trylast=True)
-def runtests_footer(
-    cases: list["TestCase"], include_pass: bool, truncate: int, title: str | None = None
-) -> None:
+def runtests_footer(runner: Runner) -> None:
     """Return a short, high-level, summary of test results"""
-    print_footer(cases, "Session done")
+    print_footer(runner, "Session done")
 
 
-def print_footer(cases: list["TestCase"], title: str) -> None:
+def print_footer(runner: "Runner", title: str) -> None:
     """Return a short, high-level, summary of test results"""
     string = io.StringIO()
-    duration = -1.0
-    start: datetime.datetime | None = None
-    finish: datetime.datetime | None = None
-    for case in cases:
-        if case.timekeeper.started_on == "NA":
-            continue
-        if case.timekeeper.finished_on == "NA":
-            continue
-        ti = datetime.datetime.fromisoformat(case.timekeeper.started_on)
-        tf = datetime.datetime.fromisoformat(case.timekeeper.finished_on)
-        if start is None:
-            start = ti
-        else:
-            start = min(ti, start)
-        if finish is None:
-            finish = tf
-        else:
-            finish = max(tf, finish)
-    if start and finish:
-        duration = (finish - start).total_seconds()
+    duration = runner.finish - runner.start
     totals: dict[str, list["TestCase"]] = {}
-    for case in cases:
+    for case in runner.cases:
         totals.setdefault(case.status.name, []).append(case)
-    N = len(cases)
+    N = len(runner.cases)
     summary = ["@*b{%d total}:" % N]
     for name in totals:
         n = len(totals[name])

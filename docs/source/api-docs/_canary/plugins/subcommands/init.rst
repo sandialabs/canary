@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-discover
-========
+init
+====
 
-.. automodule:: _canary.plugins.builtin.discover
+.. automodule:: _canary.plugins.subcommands.init
    :members:
    :undoc-members:
    :show-inheritance:

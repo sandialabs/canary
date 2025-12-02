@@ -9,7 +9,7 @@ resource_pool
    :maxdepth: 1
 
    adapter
-   paths
+   hooks
    rpool
    schemas
    server_app

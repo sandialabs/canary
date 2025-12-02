@@ -15,7 +15,7 @@ Overview
 
 The selection flow is:
 
-    selector = Selector(specs, rules)
+    selector = Selector(specs, workspace, rules)
     final_specs = canary_select(selector)
 
 Selection performs three primary actions:
@@ -60,6 +60,7 @@ import datetime
 import hashlib
 from collections import deque
 from graphlib import TopologicalSorter
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 
@@ -220,8 +221,9 @@ class Selector:
         ready: Whether selection has been executed via :meth:`run`.
     """
 
-    def __init__(self, specs: list["ResolvedSpec"], rules: Iterable[Rule] = ()):
+    def __init__(self, specs: list["ResolvedSpec"], workspace: Path, rules: Iterable[Rule] = ()):
         self.specs: list["ResolvedSpec"] = specs
+        self.workspace = workspace
         self.rules: list[Rule] = list(rules)
         self.rules.insert(0, ResourceCapacityRule())
         self.ready = False
@@ -240,7 +242,6 @@ class Selector:
                 if not outcome:
                     spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                     break
-        propagate_masks(self.specs)
         self.ready = True
         pm.done()
 
@@ -265,8 +266,10 @@ class Selector:
         )
 
     @classmethod
-    def from_snapshot(cls, specs: list["ResolvedSpec"], snapshot: SelectorSnapshot) -> "Selector":
-        self = cls(specs)
+    def from_snapshot(
+        cls, specs: list["ResolvedSpec"], workspace: Path, snapshot: SelectorSnapshot
+    ) -> "Selector":
+        self = cls(specs, workspace)
         for serialized_rule in snapshot.rules:
             rule = Rule.reconstruct(serialized_rule)
             self.add_rule(rule)

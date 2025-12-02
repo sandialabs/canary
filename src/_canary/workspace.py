@@ -239,7 +239,11 @@ class Workspace:
             root = self.sessions_dir / name
             session = Session.load(root)
             logger.info(f"Loaded test session at {session.name}")
-        yield session
+        try:
+            config.pluginmanager.hook.canary_sessionstart(session=session)
+            yield session
+        finally:
+            config.pluginmanager.hook.canary_sessionfinish(session=session)
 
     def add_session_results(self, results: SessionResults, view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
@@ -483,7 +487,7 @@ class Workspace:
 
         """
         specs = self.generate_specs(on_options=on_options)
-        selector = select.Selector(specs)
+        selector = select.Selector(specs, self.root)
         if ids:
             selector.add_rule(rules.IDsRule(ids))
         if keyword_exprs:
@@ -511,7 +515,7 @@ class Workspace:
         specs = self.db.get_specs()
         if snapshot.is_compatible_with_specs(specs):
             return snapshot.apply(specs)
-        selector = select.Selector.from_snapshot(specs, snapshot)
+        selector = select.Selector.from_snapshot(specs, self.root, snapshot)
         selector.run()
         self.db.put_selection(tag, selector.snapshot())
         return selector.final_specs()

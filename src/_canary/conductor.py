@@ -17,13 +17,14 @@ from .util import logging
 
 if TYPE_CHECKING:
     from .resource_pool import ResourcePool
+    from .runtest import Runner
     from .testcase import TestCase
 
 global_lock = threading.Lock()
 logger = logging.get_logger(__name__)
 
 
-class TestCaseExecutor:
+class CanaryConductor:
     """Defines plugin implementations for executing test cases"""
 
     def __init__(self) -> None:
@@ -61,7 +62,7 @@ class TestCaseExecutor:
         return fp.getvalue()
 
     @hookimpl(trylast=True)
-    def canary_runtests(self, cases: list["TestCase"]) -> int:
+    def canary_runtests(self, runner: "Runner") -> None:
         """Run each test case in ``cases``.
 
         Args:
@@ -76,18 +77,19 @@ class TestCaseExecutor:
         try:
             rpool = self.get_rpool()
             queue = ResourceQueue(lock=global_lock, resource_pool=rpool)
-            queue.put(*cases)  # type: ignore
+            queue.put(*runner.cases)  # type: ignore
             queue.prepare()
         except Exception:
             logger.exception("Unable to create resource queue")
             raise
-        runner = Runner()
+        executor = TestCaseExecutor()
         max_workers = config.getoption("workers") or -1
-        with ResourceQueueExecutor(queue, runner, max_workers=max_workers) as ex:
-            return ex.run()
+        with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+            ex.run()
+        return
 
 
-class Runner:
+class TestCaseExecutor:
     """Class for running ``AbstractTestCase``."""
 
     def __call__(
@@ -96,7 +98,7 @@ class Runner:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:
-            config.pluginmanager.hook.canary_runtest_setup(case=case)
-            config.pluginmanager.hook.canary_runtest_exec(case=case, queue=queue)
+            config.pluginmanager.hook.canary_runteststart(case=case)
+            config.pluginmanager.hook.canary_runtest(case=case, queue=queue)
         finally:
             config.pluginmanager.hook.canary_runtest_finish(case=case)
