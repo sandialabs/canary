@@ -565,21 +565,25 @@ class Workspace:
 
     def find_testcase(self, root: str) -> TestCase:
         id = self.db.resolve_spec_id(root)
-        try:
-            if id is not None:
+        if id is not None:
+            try:
                 return self.load_testcases([id])[0]
-            # Do the full (slow) lookup
-            cases = self.load_testcases()
-            for case in cases:
-                if case.spec.matches(root):
-                    return case
-        except IndexError:
-            raise ValueError(f"{root}: no matching test result found in {self.root}")
+            except IndexError:
+                raise ValueError(f"{id}: no matching test case found in {self.root}")
+        # Do the full (slow) lookup
+        cases = self.load_testcases()
+        for case in cases:
+            if case.spec.matches(root):
+                return case
+        raise ValueError(f"{root}: no matching test case found in {self.root}")
 
     def find_testspec(self, root: str) -> ResolvedSpec:
         id = self.db.resolve_spec_id(root)
         if id is not None:
-            return self.db.get_specs([id])[0]
+            try:
+                return self.db.get_specs([id])[0]
+            except IndexError:
+                raise ValueError(f"{id}: no matching spec found in {self.root}")
         # Do the full (slow) lookup
         specs = self.db.get_specs()
         for spec in specs:

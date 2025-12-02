@@ -50,13 +50,11 @@ class CanaryHPCExecutor:
         with workspace.session(name=self.session) as session:
             try:
                 results = session.run(ids=self.cases)
-            finally:
                 workspace.add_session_results(results, view=False)
-
-        canary.config.pluginmanager.hook.canary_runtests_report(
-            cases=results.cases, include_pass=False, truncate=10
-        )
-        return results.returncode
+            except Exception:
+                return 1
+            else:
+                return results.returncode
 
     @canary.hookimpl
     def canary_resource_pool_fill(

@@ -187,12 +187,14 @@ class Session:
             raise StopExecution("No tests to run", notests_exit_status)
         starting_dir = os.getcwd()
         started_on = datetime.datetime.now()
+        runner = Runner(cases=cases, session=self)
         try:
             for case in cases:
                 case.status.set("PENDING")
             os.chdir(str(self.work_dir))
-            runner = Runner(cases=cases, session=self)
             canary_runtests(runner=runner)
+        except Exception:
+            logger.exception("session run failed")
         finally:
             finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
