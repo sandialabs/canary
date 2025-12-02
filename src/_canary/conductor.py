@@ -62,7 +62,7 @@ class CanaryConductor:
         return fp.getvalue()
 
     @hookimpl(trylast=True)
-    def canary_runtests(self, runner: "Runner") -> None:
+    def canary_runtests(self, runner: "Runner") -> bool:
         """Run each test case in ``cases``.
 
         Args:
@@ -86,7 +86,7 @@ class CanaryConductor:
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.run()
-        return
+        return True
 
 
 class TestCaseExecutor:

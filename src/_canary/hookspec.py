@@ -243,7 +243,7 @@ def canary_select_report(selector: "Selector") -> None:
 # runtest hooks
 # -------------------------------------------------------------------------
 @hookspec
-def canary_runtests_start(runner: "Runner") -> None:
+def canary_runtests_start(runner: "Runner") -> bool:
     """Called at the beginning of `canary run`"""
     raise NotImplementedError
 

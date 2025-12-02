@@ -140,7 +140,7 @@ class CanaryHPCConductor:
         return Outcome(True)
 
     @canary.hookimpl(tryfirst=True)
-    def canary_runtests(self, runner: "Runner") -> None:
+    def canary_runtests(self, runner: "Runner") -> bool:
         """Run each test case in ``cases``.
 
         Args:
@@ -186,6 +186,8 @@ class CanaryHPCConductor:
         max_workers = canary.config.getoption("workers") or 10
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.run(backend=self.backend.name)
+
+        return True
 
     @staticmethod
     def setup_parser(
