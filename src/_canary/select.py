@@ -70,6 +70,7 @@ from . import config
 from .hookspec import hookimpl
 from .rules import ResourceCapacityRule
 from .rules import Rule
+from .rules import RuntimeRule
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
@@ -77,6 +78,7 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .testcase import TestCase
     from .testspec import ResolvedSpec
     from .testspec import TestSpec
 
@@ -104,6 +106,14 @@ def canary_select(selector: "Selector") -> list["TestSpec"]:
     return selector.final_specs()
 
 
+def canary_rtselect(selector: "RuntimeSelector") -> list["TestCase"]:
+    config.pluginmanager.hook.canary_rtselectstart(selector=selector)
+    selector.run()
+    config.pluginmanager.hook.canary_rtselect_modifyitems(selector=selector)
+    config.pluginmanager.hook.canary_rtselect_report(selector=selector)
+    return selector.final_cases()
+
+
 @hookimpl
 def canary_addoption(parser: "Parser") -> None:
     """Register Selection-related command-line options.
@@ -117,7 +127,7 @@ def canary_addoption(parser: "Parser") -> None:
     parser.add_argument(
         "--show-excluded-tests",
         group="console reporting",
-        command="run",
+        command=("run", "find"),
         action="store_true",
         default=False,
         help="Show names of tests that are excluded from the test session %(default)s",
@@ -141,6 +151,7 @@ def canary_select_report(selector: "Selector") -> None:
             excluded.append(spec)
     n = len(selector.specs) - len(excluded)
     logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
+    show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
     if excluded:
         n = len(excluded)
         logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
@@ -152,9 +163,30 @@ def canary_select_report(selector: "Selector") -> None:
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
             logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
-            if config.getoption("show_excluded_tests"):
+            if show_excluded_tests:
                 for spec in reasons[key]:
-                    logger.log(logging.EMIT, f"◦ {spec.display_name}", extra={"prefix": ""})
+                    logger.log(logging.EMIT, f"  ◦ {spec.display_name}", extra={"prefix": ""})
+
+
+@hookimpl
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
+    excluded: list["TestCase"] = []
+    for case in selector.cases:
+        if case.status.name not in ("READY", "PENDING"):
+            excluded.append(case)
+    n = len(selector.cases) - len(excluded)
+    logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
+    if excluded:
+        n = len(excluded)
+        logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
+        reasons: dict[str | None, list["TestCase"]] = {}
+        for case in excluded:
+            reasons.setdefault(case.status.message, []).append(case)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
+        for key in reversed(keys):
+            reason = key if key is None else key.lstrip()
+            n = len(reasons[key])
+            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -212,8 +244,7 @@ class Selector:
 
     Args:
         specs: The list of ``ResolvedSpec`` objects to select from.
-        rules: Optional iterable of ``Rule`` instances. A
-            ``ResourceCapacityRule`` is always prepended unless overridden.
+        rules: Optional iterable of ``Rule`` instances.
 
     Attributes:
         specs: The input list of resolved specs.
@@ -225,7 +256,6 @@ class Selector:
         self.specs: list["ResolvedSpec"] = specs
         self.workspace = workspace
         self.rules: list[Rule] = list(rules)
-        self.rules.insert(0, ResourceCapacityRule())
         self.ready = False
 
     def add_rule(self, rule: Rule) -> None:
@@ -334,3 +364,57 @@ def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
             lookup[id] = spec
         ts.done(*ids)
     return list(lookup.values())
+
+
+class RuntimeSelector:
+    """Apply rule-based masking to a set of test cases.
+
+    """
+
+    def __init__(self, cases: list["TestCase"], rules: Iterable[RuntimeRule] = ()):
+        self.cases: list["TestCase"] = cases
+        for case in cases:
+            if case.status.name not in ("READY", "PENDING"):
+                raise ValueError(f"{case}: expected {case.status.name=} to be READY or PENDING")
+        self.rules: list[RuntimeRule] = list(rules)
+        self.rules.insert(0, ResourceCapacityRule())
+        self.ready = False
+
+    def add_rule(self, rule: RuntimeRule) -> None:
+        assert isinstance(rule, RuntimeRule)
+        self.rules.append(rule)
+
+    def run(self) -> None:
+        pm = logger.progress_monitor("@*{Selecting} cases based on %d rule sets" % len(self.rules))
+        for case in self.cases:
+            for rule in self.rules:
+                outcome = rule(case)
+                if not outcome:
+                    case.status.set("SKIPPED", message=outcome.reason or rule.default_reason)
+                    break
+        self.ready = True
+        pm.done()
+
+    def final_cases(self) -> list["TestCase"]:
+        if not self.ready:
+            raise ValueError("selector.run() has not been executed")
+        # Propagate skipped tests
+        queue = deque([c for c in self.cases if c.status.name not in ("READY", "PENDING")])
+        case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
+        # Precompute reverse graph
+        dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
+        for case in self.cases:
+            for dep in case.spec.dependencies:
+                dependents[dep.id].append(case.id)
+        while queue:
+            excluded = queue.popleft()
+            for child_id in dependents[excluded.id]:
+                child = case_map[child_id]
+                if child.status.name in ("READY", "PENDING"):
+                    if excluded.status.name == "SKIPPED":
+                        child.status.set("SKIPPED", "One or more dependencies skipped")
+                    else:
+                        stat = excluded.status.name.lower()
+                        child.status.set("NOT_RUN", f"One or more dependencies {stat}")
+                    queue.append(child)
+        return [case for case in self.cases if case.status.name in ("READY", "PENDING")]

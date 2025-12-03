@@ -243,7 +243,7 @@ class LegacyParserAdapter:
         self.parser = parser
         self.parser.add_argument(
             "-b",
-            command=("run", "find"),
+            command="run",
             group="canary hpc",
             metavar="option=value",
             action=CanaryHPCResourceSetter,
@@ -252,7 +252,7 @@ class LegacyParserAdapter:
 
     def add_argument(self, flag: str, *args, **kwargs):
         flag = "--hpc-" + flag[2:]
-        self.parser.add_argument(flag, *args, command=("run", "find"), group="canary hpc", **kwargs)
+        self.parser.add_argument(flag, *args, command="run", group="canary hpc", **kwargs)
 
     def parse_args(self, args: Sequence[str] | None = None) -> argparse.Namespace:
         return self.parser.parse_args(args)

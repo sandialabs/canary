@@ -204,7 +204,7 @@ class ResourcePool:
         for type, count in kwds.items():
             self.resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
         for type in kwds:
-            self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
+            self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]]) # type: ignore
 
     def accommodates(self, request: list[dict[str, Any]]) -> Outcome:
         """determine if the resources for this test are available"""

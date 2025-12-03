@@ -74,9 +74,9 @@ class Collector:
     def collect_from_path(self, scanpath: "ScanPath") -> None:
         root_path = Path(scanpath.root)
         assert root_path.exists()
-        pm = logger.progress_monitor(
-            f"@*{{Collecting}} generator files from {root_path}"
-        )
+        cwd = Path.cwd()
+        sp = root_path if not root_path.is_relative_to(cwd) else root_path.relative_to(cwd)
+        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {sp}")
         full_path = root_path if scanpath.path is None else root_path / scanpath.path
         if full_path.is_file() and self.matches(full_path.name):
             assert scanpath.path is not None
@@ -99,9 +99,7 @@ class Collector:
     def collect_from_vc(self, root: str) -> None:
         assert root.startswith(vc_prefixes)
         type, _, vcroot = root.partition("@")
-        pm = logger.progress_monitor(
-            f"@*{{Collecting}} generator files from {vcroot} using {type}"
-        )
+        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {vcroot} using {type}")
         files = _from_version_control(type, vcroot, self.file_patterns)
         self.add_files(vcroot, files)
         pm.done()

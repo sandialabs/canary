@@ -67,7 +67,6 @@ class BaseSpec(Generic[T]):
     dependencies: Sequence[Any] = dataclasses.field(default_factory=list)
     dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
-    rparameters: dict[str, int] = dataclasses.field(default_factory=dict)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     keywords: list[str] = dataclasses.field(default_factory=list)
     assets: list["Asset"] = dataclasses.field(default_factory=list)
@@ -86,6 +85,9 @@ class BaseSpec(Generic[T]):
     def __hash__(self) -> int:
         return hash(self.id)
 
+    def __str__(self) -> str:
+        return self.display_name
+
     def __post_init__(self) -> None:
         self.family = self.family or self.file.stem
         if not self.id:
@@ -96,8 +98,7 @@ class BaseSpec(Generic[T]):
             self.timeout = self._default_timeout()
         if self.xstatus is None:
             self.xstatus = 0
-        if not self.rparameters:
-            self.parameters = self._validate_parameters(self.parameters or {})
+        self.validate()
 
     @classmethod
     def from_dict(cls: Type[T], d: dict, lookup: dict[str, T]) -> T:
@@ -164,19 +165,25 @@ class BaseSpec(Generic[T]):
         return {self.id, self.name, self.family, str(self.file)}
 
     @property
-    def implicit_parameters(self) -> dict[str, int | float]:
-        parameters: dict[str, int | float] = {}
-        for key, value in self.rparameters.items():
-            if key not in self.parameters:
-                parameters[key] = value
-        if "np" not in self.parameters:
-            parameters["np"] = self.rparameters["cpus"]
-        if "nnode" not in self.parameters:
-            parameters["nnode"] = self.rparameters["nodes"]
-        if "ndevice" not in self.parameters:
-            parameters["ndevice"] = self.rparameters["gpus"]
+    def implicit_parameters(self) -> dict[str, Any]:
+        parameters: dict[str, Any] = {}
+        if "cpus" not in self.parameters:
+            parameters["cpus"] = 1
+        if "gpus" not in self.parameters:
+            parameters["gpus"] = 0
+        if "nodes" not in self.parameters:
+            parameters["nodes"] = 1
         if rt := getattr(self, "runtime", None):
             parameters["runtime"] = float(rt)
+
+        # vvtest compatibility
+        if "np" not in self.parameters:
+            parameters["np"] = self.parameters.get("cpus", parameters.get("cpus"))
+        if "nnode" not in self.parameters:
+            parameters["nnode"] = self.parameters.get("nodes", parameters.get("nodes"))
+        if "ndevice" not in self.parameters:
+            parameters["ndevice"] = self.parameters.get("gpus", parameters.get("gpus"))
+
         return parameters
 
     @cached_property
@@ -190,14 +197,6 @@ class BaseSpec(Generic[T]):
             str(self.file_path),
             str(self.file_path.parent / self.display_name),
         )
-
-    def required_resources(self) -> list[dict[str, Any]]:
-        reqd: list[dict[str, Any]] = []
-        for name, value in self.rparameters.items():
-            if name == "nodes":
-                continue
-            reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
-        return reqd
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -258,52 +257,15 @@ class BaseSpec(Generic[T]):
             return float(t)
         return float(config.get("timeout:default"))
 
-    def _validate_parameters(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Default parameters used to set up resources required by test case"""
-        self.rparameters.clear()
-        self.rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
-        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        resource_types.update(("np", "gpus", "nnode"))  # vvtest compatibility
-        for key, value in data.items():
-            if key in resource_types and not isinstance(value, int):
-                raise InvalidTypeError(key, value)
+    def validate(self):
         exclusive_pairs = [("cpus", "np"), ("gpus", "ndevice"), ("nodes", "nnode")]
         for a, b in exclusive_pairs:
-            if a in data and b in data:
+            if a in self.parameters and b in self.parameters:
                 raise MutuallyExclusiveParametersError(a, b)
-        if {"nodes", "nnode"} & data.keys():
-            bad = {"cpus", "gpus", "np", "ndevice"} & data.keys()
+        if {"nodes", "nnode"} & self.parameters.keys():
+            bad = {"cpus", "gpus", "np", "ndevice"} & self.parameters.keys()
             if bad:
                 raise MutuallyExclusiveParametersError("nodes", ",".join(bad))
-            nodes: int = int(data.get("nodes", data.get("nnode")))
-            rpcount = config.pluginmanager.hook.canary_resource_pool_count
-            self.rparameters["nodes"] = nodes
-            self.rparameters["cpus"] = nodes * rpcount(type="cpu")
-            self.rparameters["gpus"] = nodes * rpcount(type="gpu")
-        if {"cpus", "np"} & data.keys():
-            cpus: int = int(data.get("cpus", data.get("np")))
-            self.rparameters["cpus"] = cpus
-            cpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="cpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
-            cpus_per_node = math.ceil(cpu_count / node_count)
-            if cpus_per_node > 0:
-                nodes = max(self.rparameters["nodes"], math.ceil(cpus / cpus_per_node))
-                self.rparameters["nodes"] = nodes
-        if {"gpus", "ndevice"} & data.keys():
-            gpus: int = int(data.get("gpus", data.get("ndevice")))
-            self.rparameters["gpus"] = gpus
-            gpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="gpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
-            gpus_per_node = math.ceil(gpu_count / node_count)
-            if gpus_per_node > 0:
-                nodes = max(self.rparameters["nodes"], math.ceil(gpus / gpus_per_node))
-                self.rparameters["nodes"] = nodes
-        # We have already done validation, now just fill in missing resource types
-        resource_types = resource_types - {"nodes", "cpus", "gpus", "nnode", "np", "ndevice"}
-        for key, value in data.items():
-            if key in resource_types:
-                self.rparameters[key] = value
-        return data
 
 
 @dataclasses.dataclass
@@ -344,7 +306,6 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
             dep_done_criteria=self.dep_done_criteria,
             keywords=self.keywords,
             parameters=self.parameters,
-            rparameters=self.rparameters,
             assets=self.assets,
             baseline=self.baseline,
             artifacts=self.artifacts,
@@ -445,7 +406,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
     baseline_actions: list[dict] = dataclasses.field(default_factory=list, init=False)
     dep_patterns: list[DependencyPatterns] = dataclasses.field(default_factory=list, init=False)
-    rparameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     resolved_dependencies: list["UnresolvedSpec"] = dataclasses.field(
         default_factory=list, init=False
     )
@@ -478,7 +438,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
             dep_done_criteria=dep_done_criteria,
             keywords=self.keywords,
             parameters=self.parameters,
-            rparameters=self.rparameters,
             assets=self.assets,
             baseline=self.baseline_actions,
             artifacts=self.artifacts,
@@ -574,12 +533,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
                 dep_pattern = DependencyPatterns(pattern=pattern)
                 dependency_patterns.append(dep_pattern)
         return dependency_patterns
-
-
-class InvalidTypeError(Exception):
-    def __init__(self, name, value):
-        class_name = value.__class__.__name__
-        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")
 
 
 class MutuallyExclusiveParametersError(Exception):

@@ -13,6 +13,8 @@ from .error import StopExecution
 from .error import notests_exit_status
 from .runtest import Runner
 from .runtest import canary_runtests
+from .select import RuntimeSelector
+from .select import canary_rtselect
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import select_sygil
@@ -176,10 +178,15 @@ class Session:
         return cases
 
     def get_ready(self, ids: list[str] | None) -> list[TestCase]:
+        cases: list[TestCase]
         if not ids:
-            return self.cases
-        self.resolve_root_ids(ids)
-        return [case for case in self.cases if case.id in ids]
+            cases = self.cases
+        else:
+            self.resolve_root_ids(ids)
+            cases = [case for case in self.cases if case.id in ids]
+        selector = RuntimeSelector(cases)
+        final = canary_rtselect(selector=selector)
+        return final
 
     def run(self, ids: list[str] | None = None) -> SessionResults:
         cases = self.get_ready(ids=ids)

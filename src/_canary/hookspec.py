@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
+    from .select import RuntimeSelector
     from .select import Selector
     from .session import Session
     from .testcase import TestCase
@@ -232,6 +233,36 @@ def canary_select_modifyitems(selector: "Selector") -> None:
 
 @hookspec
 def canary_select_report(selector: "Selector") -> None:
+    """Reports the selection results.
+
+    Args:
+        selector: The selector to report on.
+    """
+
+
+# -------------------------------------------------------------------------
+# runtime selection hooks
+# -------------------------------------------------------------------------
+@hookspec
+def canary_rtselectstart(selector: "RuntimeSelector") -> None:
+    """Starts the selection process.
+
+    Args:
+        selector: The selector to start.
+    """
+
+
+@hookspec
+def canary_rtselect_modifyitems(selector: "RuntimeSelector") -> None:
+    """Modifies the selection items.
+
+    Args:
+        selector: The selector to modify.
+    """
+
+
+@hookspec
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     """Reports the selection results.
 
     Args:

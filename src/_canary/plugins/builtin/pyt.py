@@ -238,7 +238,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                 )
                 if test_mask is None and not enabled:
                     test_mask = reason
-                    logger.debug(f"{draft}: disabled because {reason!r}")
                 if test_mask is not None:
                     draft.mask = Mask.masked(test_mask)
                 if any([_[1] is not None for _ in modules]):

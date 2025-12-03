@@ -31,6 +31,7 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
+    from .testcase import TestCase
     from .testspec import ResolvedSpec
 
 
@@ -277,8 +278,29 @@ class RegexRule(Rule):
         return RuleOutcome(True)
 
 
-class ResourceCapacityRule(Rule):
-    """Selects specs based on system resource capacity.
+class RuntimeRule:
+    """Base class for all runtime selection rules.
+
+    Subclasses should override __call__ to evaluate whether a TestCase satisfies the rule.
+    Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
+    """
+
+    def __call__(self, case: "TestCase") -> RuleOutcome:
+        raise NotImplementedError
+
+    @cached_property
+    def default_reason(self) -> str:
+        """Return the generic failure reason for the rule.
+
+        Returns:
+            str: A human-readable description of why the rule would
+            fail if no more specific reason is provided.
+        """
+        raise NotImplementedError
+
+
+class ResourceCapacityRule(RuntimeRule):
+    """Selects cases based on system resource capacity.
 
     This rule queries plugin hooks to determine whether the available resource pool can accommodate
     the spec's declared resource needs.  Evaluation results are cached based on the resource set's
@@ -301,14 +323,14 @@ class ResourceCapacityRule(Rule):
         frozen = [(r["type"], r["slots"]) for r in resource_set]
         return tuple(sorted(frozen))
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
-        resource_set = spec.required_resources()
+    def __call__(self, case: "TestCase") -> RuleOutcome:
+        resource_set = case.required_resources()
         frozen = self.freeze_resource_set(resource_set)
         if frozen not in self.cache:
             outcome: RuleOutcome | None = None
             pm = config.pluginmanager.hook
             try:
-                result = pm.canary_resource_pool_accommodates(case=spec)
+                result = pm.canary_resource_pool_accommodates(case=case)
                 outcome = RuleOutcome(ok=result.ok, reason=result.reason)
             except Exception as e:
                 outcome = RuleOutcome.failed("@*{%s}(%r)" % (e.__class__.__name__, e.args[0]))

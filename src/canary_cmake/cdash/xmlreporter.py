@@ -134,7 +134,7 @@ class CDashXMLReporter:
                 if name := subproject.getAttribute("name"):
                     subproject_labels.add(name)
                 for label in subproject.getElementsByTagName("Label"):
-                    if label.childNodes and (name := label.childNodes[0].nodeValue):
+                    if label.childNodes and (name := label.childNodes[0].nodeValue):  # type: ignore
                         subproject_labels.add(name)
         namespace.subproject_labels = None
         if subproject_labels:

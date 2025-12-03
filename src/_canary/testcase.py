@@ -14,6 +14,7 @@ from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
+from typing import cast
 from typing import Any
 from typing import Generator
 from typing import MutableMapping
@@ -51,6 +52,7 @@ class TestCase:
     ) -> None:
         self.spec = spec
         self.workspace = workspace
+        self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
         self.execution_policy: ExecutionPolicy = pm.canary_runtest_execution_policy(case=self)
         self._status = Status()
@@ -63,6 +65,47 @@ class TestCase:
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
+
+    def get_resource_parameters_from_spec(self) -> dict[str, int]:
+        """Default parameters used to set up resources required by test case"""
+        rparameters: dict[str, int] = {}
+        rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
+        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
+        resource_types.update(("np", "gpus", "nnode"))  # vvtest compatibility
+        data = self.spec.parameters
+        for key, value in data.items():
+            if key in resource_types and not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+        if {"nodes", "nnode"} & self.spec.parameters.keys():
+            nodes = cast(int, self.spec.parameters.get("nodes", self.spec.parameters.get("nnode")))
+            rpcount = config.pluginmanager.hook.canary_resource_pool_count
+            rparameters["nodes"] = int(nodes)
+            rparameters["cpus"] = nodes * rpcount(type="cpu")
+            rparameters["gpus"] = nodes * rpcount(type="gpu")
+        if {"cpus", "np"} & self.spec.parameters.keys():
+            cpus = cast(int, self.spec.parameters.get("cpus", self.spec.parameters.get("np")))
+            rparameters["cpus"] = int(cpus)
+            cpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="cpu")
+            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            cpus_per_node = math.ceil(cpu_count / node_count)
+            if cpus_per_node > 0:
+                nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
+                rparameters["nodes"] = nodes
+        if {"gpus", "ndevice"} & self.spec.parameters.keys():
+            gpus = cast(int, self.spec.parameters.get("gpus", self.spec.parameters.get("ndevice")))
+            rparameters["gpus"] = int(gpus)
+            gpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="gpu")
+            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            gpus_per_node = math.ceil(gpu_count / node_count)
+            if gpus_per_node > 0:
+                nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
+                rparameters["nodes"] = nodes
+        # We have already done validation, now just fill in missing resource types
+        resource_types -= {"nodes", "cpus", "gpus", "nnode", "np", "ndevice"}
+        for key, value in self.spec.parameters.items():
+            if key in resource_types:
+                rparameters[key] = int(value)
+        return rparameters
 
     @property
     def id(self) -> str:
@@ -153,11 +196,11 @@ class TestCase:
 
     @property
     def cpus(self) -> int:
-        return self.spec.rparameters["cpus"]
+        return self.rparameters["cpus"]
 
     @property
     def gpus(self) -> int:
-        return self.spec.rparameters["gpus"]
+        return self.rparameters["gpus"]
 
     @property
     def cpu_ids(self) -> list[str]:
@@ -184,7 +227,7 @@ class TestCase:
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
-        for value in self.spec.rparameters.values():
+        for value in self.rparameters.values():
             vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
 
@@ -230,7 +273,12 @@ class TestCase:
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:
-        return self.spec.required_resources()
+        reqd: list[dict[str, Any]] = []
+        for name, value in self.rparameters.items():
+            if name == "nodes":
+                continue
+            reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
+        return reqd
 
     @property
     def status(self) -> Status:
@@ -633,3 +681,8 @@ class Measurements:
 
 class MissingSourceError(Exception):
     pass
+
+class InvalidTypeError(Exception):
+    def __init__(self, name, value):
+        class_name = value.__class__.__name__
+        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")
