@@ -38,6 +38,7 @@ class Run(CanarySubcommand):
     epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
+        parser.set_defaults(banner=True)
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
         parser.add_argument(

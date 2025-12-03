@@ -162,7 +162,7 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
 def print_banner() -> None:
     if os.getenv("CANARY_MAKE_DOCS"):
         return
-    print_the_banner = not config.getoption("no_banner") and logging.get_level() <= logging.INFO
+    print_the_banner = config.getoption("banner") and logging.get_level() <= logging.INFO
     if print_the_banner:
         print(color.colorize(banner()), file=sys.stderr)
 

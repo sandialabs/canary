@@ -352,9 +352,10 @@ def make_argument_parser(**kwargs):
         help="Decrease console logging level by 1",
     )
     group.add_argument(
-        "--no-banner",
-        action="store_true",
-        help="Do not print banner [default: %(default)s]",
+        "--banner",
+        dest="banner",
+        action=argparse.BooleanOptionalAction,
+        help="Print banner [default: %(default)s]",
     )
     parser.add_argument(
         "-d",
@@ -433,6 +434,7 @@ def make_argument_parser(**kwargs):
         "--cache-dir",
         help="Store test case cache info in the given folder [default: .canary_cache/]",
     )
+    parser.set_defaults(banner=False)
 
     return parser
 
