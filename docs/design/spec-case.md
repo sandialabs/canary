@@ -125,9 +125,9 @@ Create workspace
    ↓
 Generator collection
    ↓
-Draft spec creation
+Unresolved spec creation
    ↓
-Draft spec resolution
+Unresolved spec resolution
    ↓
 Resolved spec
    ↓
@@ -146,6 +146,8 @@ Load workspace
 Create session
    ↓
 Load specs
+   ↓
+Final filtering of specs
    ↓
 Create test cases
    ↓
