@@ -19,7 +19,7 @@ class StatusProtocol(Protocol):
     def set(
         self,
         status: "str | int | StatusProtocol",
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
     ) -> None: ...
 
@@ -48,7 +48,7 @@ class JobProtocol(Protocol):
     def set_status(
         self,
         status: str | int | StatusProtocol,
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
     ) -> None: ...
 

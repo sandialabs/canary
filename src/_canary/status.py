@@ -5,13 +5,13 @@
 
 class Status:
     """Lightweight status object for test cases.
-    Can be created from either status name or return code.
+    Can be created from either status category or return code.
     JSON serializable via to_dict() and from_dict().
 
     Examples:
         status = Status('SUCCESS')
         status = Status('SUCCESS', code=42)  # Custom code
-        status = Status(0, message="All tests passed")
+        status = Status(0, reason="All tests passed")
         status = Status.SUCCESS("Build completed")
 
         # JSON serialization
@@ -20,7 +20,7 @@ class Status:
     """
 
     # Status definitions: (default_code, color, glyph, extra label)
-    defaults = {
+    categories = {
         "PENDING": (-3, "Blue", "○", ()),
         "READY": (-2, "Blue", "○", ()),
         "RUNNING": (-1, "green", "▶", ()),
@@ -28,6 +28,7 @@ class Status:
         "XFAIL": (50, "Cyan", "✓", ()),
         "XDIFF": (51, "Cyan", "✓", ()),
         "RETRY": (52, "Yellow", "⟳", ()),
+        "BLOCKED": (62, "Magenta", "⊘", ()),
         "SKIPPED": (63, "Magenta", "⊘", ()),
         "DIFFED": (64, "Magenta", "✗", ("DIFF",)),
         "FAILED": (65, "Red", "✗", ("FAIL",)),
@@ -37,72 +38,92 @@ class Status:
         "CANCELLED": (69, "Magenta", "⊘", ()),
     }
 
-    # Reverse mapping: code -> name (for default codes only)
-    code2name = {code: name for name, (code, _, _, _) in defaults.items()}
+    # Reverse mapping: code -> category (for default codes only)
+    code2category = {code: category for category, (code, _, _, _) in categories.items()}
 
     def __init__(
         self,
         status: "str | int | Status" = "PENDING",
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
+        kind: str | None = None,
     ):
-        """Create a Status from a name, code, or another Status.
+        """Create a Status from a category, code, or another Status.
 
         Args:
-            status: Status name (str), return code (int), or Status object
-            message: Optional message associated with this status
+            status: Status category (str), return code (int), or Status object
+            reason: Optional reason associated with this status
             code: Optional custom return code (overrides default)
         """
-        self._name: str
-        self._message: str | None
+        self._category: str
+        self._reason: str | None
         self._code: int
-        self.set(status, message, code)
+        self._kind: str | None
+        self.set(status, reason, code, kind)
 
     def set(
         self,
         status: "str | int | Status" = "PENDING",
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
+        kind: str | None = None,
     ) -> None:
         if isinstance(status, Status):
-            self._name = status._name
-            self._message = message if message is not None else status._message
+            self._category = status._category
+            self._reason = reason if reason is not None else status._reason
             self._code = code if code is not None else status._code
+            self._kind = status._kind
             return
         if isinstance(status, int):
             # Look up by code (only works for default codes)
-            if status in self.code2name:
-                self._name = self.code2name[status]
+            if status in self.code2category:
+                self._category = self.code2category[status]
             else:
-                self._name = "FAILED"
+                self._category = "FAILED"
             self._code = code if code is not None else status
         elif isinstance(status, str):
-            # Look up by name
-            name = status.upper()
-            if name not in self.defaults:
-                raise ValueError(f"Unknown status name: {status}")
-            self._name = name
+            # Look up by category
+            category = status.upper()
+            if category not in self.categories:
+                raise ValueError(f"Unknown status category: {status}")
+            self._category = category
             # Use provided code or default
-            default_code = self.defaults[name][0]
+            default_code = self.categories[category][0]
             self._code = code if code is not None else default_code
+            self._kind = kind
         else:
             raise TypeError(f"Status must be str, int, or Status, not {type(status)}")
-        self._message = message
+        self._reason = reason
+        self._kind = kind
 
     @property
-    def name(self) -> str:
-        """Status name (e.g., 'SUCCESS')."""
-        return self._name
+    def category(self) -> str:
+        """Status category (e.g., 'SUCCESS')."""
+        return self._category
+
+    @property
+    def kind(self) -> str | None:
+        return self._kind
+
+    @property
+    def code(self) -> int:
+        """Return code (default or custom)."""
+        return self._code
+
+    @property
+    def reason(self) -> str | None:
+        """Optional reason associated with this status."""
+        return self._reason
 
     def display_name(self, **kwargs) -> str:
-        name = self._name.replace("_", " ")
+        name = self._category.replace("_", " ")
         if kwargs.get("color"):
             return "@*%s{%s}" % (self.color[0], name)
         return name
 
     @property
     def cname(self) -> str:
-        return "@*%s{%s}" % (self.color[0], self.name)
+        return "@*%s{%s}" % (self.color[0], self.category)
 
     @property
     def html_name(self) -> str:
@@ -114,40 +135,30 @@ class Status:
             "y": "#FEFD02",
             "c": "#00FFFF",
         }[self.color[0].lower()]
-        return f"<font color={color}>{self.name}</font>"
-
-    @property
-    def code(self) -> int:
-        """Return code (default or custom)."""
-        return self._code
+        return f"<font color={color}>{self.category}</font>"
 
     @property
     def color(self) -> str:
         """Associated color (e.g., 'green' for SUCCESS)."""
-        return self.defaults[self._name][1]
+        return self.categories[self._category][1]
 
     @property
     def glyph(self) -> str:
         """Associated glyph (e.g., '✓' for SUCCESS)."""
-        return self.defaults[self._name][2]
-
-    @property
-    def message(self) -> str | None:
-        """Optional message associated with this status."""
-        return self._message
+        return self.categories[self._category][2]
 
     @property
     def labels(self) -> list[str]:
-        return list(self.defaults[self._name][-1])
+        return list(self.categories[self._category][-1])
 
     def asdict(self) -> dict:
         """
         Convert Status to a JSON-serializable dictionary.
 
         Returns:
-            Dictionary with name, code, and message (if present)
+            Dictionary with category, code, and reason (if present)
         """
-        result = {"name": self._name, "code": self._code, "message": self._message}
+        result = {"category": self._category, "code": self._code, "reason": self._reason}
         return result
 
     @classmethod
@@ -156,46 +167,46 @@ class Status:
         Create a Status from a dictionary (e.g., from JSON).
 
         Args:
-            data: Dictionary with 'name', 'code', and optional 'message'
+            data: Dictionary with 'category', 'code', and optional 'reason'
 
         Returns:
             Status object
         """
-        return cls(status=data["name"], code=data["code"], message=data.get("message"))
+        return cls(status=data["category"], code=data["code"], reason=data.get("reason"))
 
     def __eq__(self, other) -> bool:
-        """Compare by name, code, and message."""
+        """Compare by category, code, and reason."""
         if isinstance(other, Status):
             return (
-                self._name == other._name
+                self._category == other._category
                 and self._code == other._code
-                and self._message == other._message
+                and self._reason == other._reason
             )
         elif isinstance(other, str):
-            # String comparison only checks name, not message or code
-            return self._name == other.upper()
+            # String comparison only checks category, not reason or code
+            return self._category == other.upper()
         elif isinstance(other, int):
-            # Int comparison only checks code, not name or message
+            # Int comparison only checks code, not category or reason
             return self.code == other
         return False
 
     def __hash__(self):
         """Allow Status to be used in sets and as dict keys."""
-        return hash((self._name, self._code, self._message))
+        return hash((self._category, self._code, self._reason))
 
     def __str__(self) -> str:
         """String representation."""
-        if self._message:
-            return f"{self._name}: {self._message}"
-        return self._name
+        if self._reason:
+            return f"{self._category}: {self._reason}"
+        return self._category
 
     def __repr__(self) -> str:
         """Developer representation."""
-        parts = [f"{self._name!r}"]
-        if self._message:
-            parts.append(f"message={self._message!r}")
+        parts = [f"{self._category!r}"]
+        if self._reason:
+            parts.append(f"reason={self._reason!r}")
         # Show code if it's not the default
-        default_code = self.defaults[self._name][0]
+        default_code = self.categories[self._category][0]
         if self._code != default_code:
             parts.append(f"code={self._code}")
         return f"Status({', '.join(parts)})"
@@ -206,49 +217,53 @@ class Status:
 
     # Class-level constants for convenience
     @classmethod
-    def PENDING(cls, message: str | None = None, code: int | None = None):
-        return cls("PENDING", message=message, code=code)
+    def PENDING(cls, reason: str | None = None, code: int | None = None):
+        return cls("PENDING", reason=reason, code=code)
 
     @classmethod
-    def READY(cls, message: str | None = None, code: int | None = None):
-        return cls("READY", message=message, code=code)
+    def READY(cls, reason: str | None = None, code: int | None = None):
+        return cls("READY", reason=reason, code=code)
 
     @classmethod
-    def RUNNING(cls, message: str | None = None, code: int | None = None):
-        return cls("RUNNING", message=message, code=code)
+    def RUNNING(cls, reason: str | None = None, code: int | None = None):
+        return cls("RUNNING", reason=reason, code=code)
 
     @classmethod
-    def SUCCESS(cls, message: str | None = None, code: int | None = None):
-        return cls("SUCCESS", message=message, code=code)
+    def SUCCESS(cls, reason: str | None = None, code: int | None = None):
+        return cls("SUCCESS", reason=reason, code=code)
 
     @classmethod
-    def XFAIL(cls, message: str | None = None, code: int | None = None):
-        return cls("XFAIL", message=message, code=code)
+    def XFAIL(cls, reason: str | None = None, code: int | None = None):
+        return cls("XFAIL", reason=reason, code=code)
 
     @classmethod
-    def XDIFF(cls, message: str | None = None, code: int | None = None):
-        return cls("XDIFF", message=message, code=code)
+    def XDIFF(cls, reason: str | None = None, code: int | None = None):
+        return cls("XDIFF", reason=reason, code=code)
 
     @classmethod
-    def SKIPPED(cls, message: str | None = None, code: int | None = None):
-        return cls("SKIPPED", message=message, code=code)
+    def SKIPPED(cls, reason: str | None = None, code: int | None = None):
+        return cls("SKIPPED", reason=reason, code=code)
 
     @classmethod
-    def FAILED(cls, message: str | None = None, code: int | None = None):
-        return cls("FAILED", message=message, code=code)
+    def BLOCKED(cls, reason: str | None = None, code: int | None = None):
+        return cls("BLOCKED", reason=reason, code=code)
 
     @classmethod
-    def DIFFED(cls, message: str | None = None, code: int | None = None):
-        return cls("DIFFED", message=message, code=code)
+    def FAILED(cls, reason: str | None = None, code: int | None = None):
+        return cls("FAILED", reason=reason, code=code)
 
     @classmethod
-    def TIMEOUT(cls, message: str | None = None, code: int | None = None):
-        return cls("TIMEOUT", message=message, code=code)
+    def DIFFED(cls, reason: str | None = None, code: int | None = None):
+        return cls("DIFFED", reason=reason, code=code)
 
     @classmethod
-    def ERROR(cls, message: str | None = None, code: int | None = None):
-        return cls("ERROR", message=message, code=code)
+    def TIMEOUT(cls, reason: str | None = None, code: int | None = None):
+        return cls("TIMEOUT", reason=reason, code=code)
 
     @classmethod
-    def BROKEN(cls, message: str | None = None, code: int | None = None):
-        return cls("BROKEN", message=message, code=code)
+    def ERROR(cls, reason: str | None = None, code: int | None = None):
+        return cls("ERROR", reason=reason, code=code)
+
+    @classmethod
+    def BROKEN(cls, reason: str | None = None, code: int | None = None):
+        return cls("BROKEN", reason=reason, code=code)

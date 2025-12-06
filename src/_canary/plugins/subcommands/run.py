@@ -241,7 +241,7 @@ def filter_failed_cases(workspace: Workspace, cases: list["TestCase"]) -> list["
     cases = workspace.load_testcases(ids=[spec.id for spec in specs])
     map: dict[str, "TestCase"] = {case.id: case for case in cases}
     for case in cases:
-        if case.status.name not in ok_status:
+        if case.status.category not in ok_status:
             failed.add(case.id)
     reachable = reachable_nodes(graph, failed)
     #specs = [spec for spec in specs if spec.id in reachable and ]
@@ -255,7 +255,7 @@ def filter_cases(cases: list["TestCase"], args: "argparse.Namespace") -> list["T
     for case in cases:
         kwds = set(case.spec.keywords)
         kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
-        if args.rerun_failed and case.status.name in ok_status:
+        if args.rerun_failed and case.status.category in ok_status:
             # skip passing tests
             masks[case.id] = True
             continue

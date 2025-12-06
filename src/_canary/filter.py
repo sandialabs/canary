@@ -38,7 +38,7 @@ class ExecutionContextFilter:
             for rule in self.rules:
                 outcome = rule(case)
                 if not outcome:
-                    case.status.set("SKIPPED", message=outcome.reason or rule.default_reason)
+                    case.status.set("SKIPPED", reason=outcome.reason or rule.default_reason)
                     break
         config.pluginmanager.hook.canary_contextfilter_modifyitems(contextfilter=self)
         self.propagate()
@@ -48,7 +48,7 @@ class ExecutionContextFilter:
 
     def propagate(self) -> None:
         # Propagate skipped tests
-        queue = deque([c for c in self.cases if c.status.name not in ("READY", "PENDING")])
+        queue = deque([c for c in self.cases if c.status.category not in ("READY", "PENDING")])
         case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
         # Precompute reverse graph
         dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
@@ -59,8 +59,8 @@ class ExecutionContextFilter:
             excluded = queue.popleft()
             for child_id in dependents[excluded.id]:
                 child = case_map[child_id]
-                if child.status.name in ("READY", "PENDING"):
-                    stat = excluded.status.name.lower()
+                if child.status.category in ("READY", "PENDING"):
+                    stat = excluded.status.category.lower()
                     child.status.set("SKIPPED", f"One or more dependencies {stat}")
                     queue.append(child)
         return
@@ -70,7 +70,7 @@ class ExecutionContextFilter:
 def canary_contextfilter_report(contextfilter: "ExecutionContextFilter") -> None:
     excluded: list["TestCase"] = []
     for case in contextfilter.cases:
-        if case.status.name not in ("READY", "PENDING"):
+        if case.status.category not in ("READY", "PENDING"):
             excluded.append(case)
     n = len(contextfilter.cases) - len(excluded)
     logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
@@ -79,7 +79,7 @@ def canary_contextfilter_report(contextfilter: "ExecutionContextFilter") -> None
         logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
         reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
-            reasons.setdefault(case.status.message, []).append(case)
+            reasons.setdefault(case.status.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()

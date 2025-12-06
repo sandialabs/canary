@@ -50,7 +50,7 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
 def generate_html_report(session: "Session") -> str:
     totals: dict[str, list["TestCase"]] = {}
     for case in session.cases:
-        group = case.status.name.title()
+        group = case.status.category.title()
         totals.setdefault(group, []).append(case)
     file = io.StringIO()
     file.write("<html><head><style>\n")

@@ -43,7 +43,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
     if what in ("no", None):
         return
     cases = session.cases
-    failed = [case for case in cases if case.status.name not in ("SUCCESS", "XDIFF", "XFAIL")]
+    failed = [case for case in cases if case.status.category not in ("SUCCESS", "XDIFF", "XFAIL")]
     if failed:
         _, width = terminal_size()
         print(ccenter(" @*R{%d Test failures} " % len(failed), width, "="), end="\n\n")
@@ -53,7 +53,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
 
 def _show_capture(case: "TestCase", what="oe") -> None:
     _, width = terminal_size()
-    color = "g" if case.status.name == "SUCCESS" else "R" if case.status.name == "FAILED" else "y"
+    color = "g" if case.status.category == "SUCCESS" else "R" if case.status.category == "FAILED" else "y"
     fp = io.StringIO()
     fp.write(ccenter(" @*%s{%s} " % (color, case.display_name()), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")

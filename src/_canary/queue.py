@@ -81,8 +81,8 @@ class ResourceQueue:
     def put(self, *jobs: JobProtocol) -> None:
         # Precompute heap
         for job in jobs:
-            if job.status.name not in ("READY", "PENDING"):
-                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
+            if job.status.category not in ("READY", "PENDING"):
+                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.category}")
             required = job.required_resources()
             if not required:
                 raise ValueError("{job}: a test should require at least 1 cpu")
@@ -108,19 +108,19 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
-                if job.status.name == "SKIPPED":
+                if job.status.category == "SKIPPED":
                     logger.debug(f"Job {job.id} marked SKIPPED and removed from queue")
                     self._finished[job.id] = job
                     continue
 
-                if job.status.name not in ("READY", "PENDING"):
+                if job.status.category not in ("READY", "PENDING"):
                     # Job will never by ready
                     job.status.set("ERROR", "State became unrunable for unknown reasons")
                     logger.debug(f"Job {job.id} marked ERROR and removed from queue")
                     self._finished[job.id] = job
                     continue
 
-                if job.status.name != "READY":
+                if job.status.category != "READY":
                     deferred_slots.append(slot)
                     continue
 
@@ -198,11 +198,11 @@ class ResourceQueue:
             pending = len(self._heap)
             total = done + busy + pending
             for job in self._finished.values():
-                if job.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
+                if job.status.category in ("SUCCESS", "XDIFF", "XFAIL"):
                     p += 1
-                elif job.status.name == "DIFFED":
+                elif job.status.category == "DIFFED":
                     d += 1
-                elif job.status.name == "TIMEOUT":
+                elif job.status.category == "TIMEOUT":
                     t += 1
                 else:
                     f += 1

@@ -19,7 +19,7 @@ def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bo
 
     results: dict[str, int] = {}
     for case in cases:
-        results[case.status.name] = results.get(case.status.name, 0) + 1
+        results[case.status.category] = results.get(case.status.category, 0) + 1
     warned: set[str] = set()
     for result, n in results.items():
         for i in range(n):
@@ -36,7 +36,7 @@ def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bo
             elif not permissive:
                 # any other code is a failure
                 returncode |= 2**6
-                if case.status.name not in warned:
+                if case.status.category not in warned:
                     logger.warning(f"{case}: unhandled status: {case.status}")
-                    warned.add(case.status.name)
+                    warned.add(case.status.category)
     return returncode

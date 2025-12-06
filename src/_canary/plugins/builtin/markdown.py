@@ -65,7 +65,7 @@ class MarkdownReporter(CanaryReporter):
 
     def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
         info: dict[str, str] = {
-            "**Status**": case.status.name,
+            "**Status**": case.status.category,
             "**Exit code**": str(case.status.code),
             "**ID**": str(case.id),
             "**Location**": str(case.workspace.dir),
@@ -84,7 +84,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            group = case.status.name.title()
+            group = case.status.category.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {os.uname().nodename} ")
         fh.write(f"| {config.get('build:project')} ")
@@ -105,7 +105,7 @@ class MarkdownReporter(CanaryReporter):
             self.generate_all_tests_index(totals, fp)
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        key = cases[0].status.name
+        key = cases[0].status.category
         fh.write(f"# {key} Summary\n\n")
         fh.write("| Test | ID | Duration | Status |\n")
         fh.write("| --- | --- | --- | --- |\n")
@@ -115,7 +115,7 @@ class MarkdownReporter(CanaryReporter):
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name()}](./{os.path.basename(file)})"
             duration = f"{case.timekeeper.duration:.2f}"
-            status = case.status.name
+            status = case.status.category
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
     def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
@@ -129,6 +129,6 @@ class MarkdownReporter(CanaryReporter):
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name()}](./{os.path.basename(file)})"
                 duration = f"{case.timekeeper.duration:.2f}"
-                status = case.status.name
+                status = case.status.category
                 fh.write(f"| {link} | {duration} | {status} |\n")
         fh.write("\n")

@@ -48,12 +48,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
+    if (case.status.category == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if case.status.name == "SUCCESS":
+            if case.status.category == "SUCCESS":
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
@@ -62,12 +62,12 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
+    if (case.status.category == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if not case.status.name == "TIMEOUT":
+            if not case.status.category == "TIMEOUT":
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
@@ -76,12 +76,12 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
+    if (case.status.category == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if not case.status.name == "SUCCESS":
+            if not case.status.category == "SUCCESS":
                 break
         else:
             return

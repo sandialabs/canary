@@ -18,8 +18,8 @@ logger = canary.get_logger(__name__)
 class ResourceQueue(queue.ResourceQueue):
     def put(self, *jobs: JobProtocol) -> None:
         for job in jobs:
-            if job.status.name not in ("READY", "PENDING"):
-                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.name}")
+            if job.status.category not in ("READY", "PENDING"):
+                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.category}")
         with self.lock:
             for batch in jobs:
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
@@ -53,11 +53,11 @@ class ResourceQueue(queue.ResourceQueue):
             total = done + busy + pending
             for batch in self._finished.values():
                 for case in batch:
-                    if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
+                    if case.status.category in ("SUCCESS", "XDIFF", "XFAIL"):
                         p += 1
-                    elif case.status.name == "DIFFED":
+                    elif case.status.category == "DIFFED":
                         d += 1
-                    elif case.status.name == "TIMEOUT":
+                    elif case.status.category == "TIMEOUT":
                         t += 1
                     else:
                         f += 1

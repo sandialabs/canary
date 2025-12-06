@@ -220,7 +220,7 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         sources=sources,
         work_tree=str(workspace["dir"]),
         working_directory=str(workspace["dir"]),
-        status=Status(status["name"], status["message"], status["code"]),
+        status=Status(status["category"], status["reason"], status["code"]),
         start=start,
         stop=stop,
         id=spec["id"],

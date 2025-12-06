@@ -148,7 +148,7 @@ def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCa
 def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:
     if isinstance(status, str):
         status = (status,)
-    return [c for c in cases if c.status.name in status]
+    return [c for c in cases if c.status.category in status]
 
 
 def bold(arg: str) -> str:

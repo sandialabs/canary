@@ -135,7 +135,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
     else:
         totals: dict[str, list["TestCase"]] = {}
         for case in runner.cases:
-            totals.setdefault(case.status.name, []).append(case)
+            totals.setdefault(case.status.category, []).append(case)
         for name in totals:
             if not include_pass and name == "SUCCESS":
                 continue
@@ -176,13 +176,13 @@ def print_footer(runner: "Runner", title: str) -> None:
     duration = runner.finish - runner.start
     totals: dict[str, list["TestCase"]] = {}
     for case in runner.cases:
-        totals.setdefault(case.status.name, []).append(case)
+        totals.setdefault(case.status.category, []).append(case)
     N = len(runner.cases)
     summary = ["@*b{%d total}:" % N]
     for name in totals:
         n = len(totals[name])
         if n:
-            color = Status.defaults[name][1][0]
+            color = Status.categories[name][1][0]
             summary.append("@%s{%d %s}" % (color[0], n, name.lower()))
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)

@@ -153,16 +153,16 @@ class TestCase:
     def display_name(self, **kwargs) -> str:
         name = self.spec.display_name
         if kwargs.get("status"):
-            name += " @*%s{%s}" % (self.status.color[0], self.status.name)
+            name += " @*%s{%s}" % (self.status.color[0], self.status.category)
         return name
 
     def set_status(
         self,
         status: str | int | Status,
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
     ) -> None:
-        self.status.set(status, message=message, code=code)
+        self.status.set(status, reason=reason, code=code)
 
     def describe(self) -> str:
         """Write a string describing the test case"""
@@ -170,8 +170,8 @@ class TestCase:
         text = "%s @*b{%s} %s" % (self.status.cname, self.id[:7], name)
         if self.timekeeper.duration >= 0:
             text += " (%s)" % hhmmss(self.timekeeper.duration)
-        if self.status.message:
-            text += ": %s" % self.status.message
+        if self.status.reason:
+            text += ": %s" % self.status.reason
         return text
 
     def add_variables(self, **kwds: str) -> None:
@@ -181,7 +181,7 @@ class TestCase:
     def statline(self) -> str:
         color = self.status.color[0]
         glyph = self.status.glyph
-        status_name = self.status.name
+        status_name = self.status.category
         name = str(self.workspace.path.parent / self.spec.display_name)
         return "@*%s{%s %s} %s\n" % (color, glyph, status_name, name)
 
@@ -282,7 +282,7 @@ class TestCase:
 
     @property
     def status(self) -> Status:
-        if self._status.name == "PENDING":
+        if self._status.category == "PENDING":
             if not self.dependencies:
                 self._status = Status.READY()
             else:
@@ -350,29 +350,29 @@ class TestCase:
                     code = self.execution_policy.execute(case=self)
                     self.update_status_from_exit_code(code=code)
         except KeyboardInterrupt:
-            self.status.set("CANCELLED", message="Keyboard interrupt", code=signal.SIGINT.value)
+            self.status.set("CANCELLED", reason="Keyboard interrupt", code=signal.SIGINT.value)
         except SystemExit as e:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
             stat = "XDIFF" if xstatus == diff_exit_status else "DIFFED"
-            self.status.set(stat, message=None if not e.args else e.args[0])
+            self.status.set(stat, reason=None if not e.args else e.args[0])
         except TestFailed as e:
             stat = "XFAIL" if (xstatus == fail_exit_status or xstatus < 0) else "FAILED"
-            self.status.set(stat, message=None if not e.args else e.args[0])
+            self.status.set(stat, reason=None if not e.args else e.args[0])
         except TestSkipped as e:
-            self.status.set("SKIPPED", message=None if not e.args else e.args[0])
+            self.status.set("SKIPPED", reason=None if not e.args else e.args[0])
         except TestTimedOut as e:
-            self.status.set("TIMEOUT", message=None if not e.args else e.args[0])
+            self.status.set("TIMEOUT", reason=None if not e.args else e.args[0])
         except BaseException as e:
             if config.get("debug"):
                 logger.exception("Exception during test case execution")
             fh = io.StringIO()
             traceback.print_exc(file=fh, limit=2)
-            message = fh.getvalue()
+            reason = fh.getvalue()
             f = self.stderr or self.stdout
             with self.workspace.openfile(f, "a") as fp:
-                fp.write(message)
-            self.status.set("ERROR", message=message)
+                fp.write(reason)
+            self.status.set("ERROR", reason=reason)
         finally:
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
@@ -383,7 +383,7 @@ class TestCase:
         """The companion of queue.put, save results from the test ran in a child process in the
         parent process"""
         if status := data.get("status"):
-            self.status.set(status.name, status.message, status.code)
+            self.status.set(status.category, status.reason, status.code)
         if timekeeper := data.get("timekeeper"):
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
@@ -446,7 +446,7 @@ class TestCase:
         except FileNotFoundError:
             return
         status = data["status"]
-        self.status.set(status["name"], status["message"], status["code"])
+        self.status.set(status["category"], status["reason"], status["code"])
         tk = data["timekeeper"]
         self.timekeeper.started_on = tk["started_on"]
         self.timekeeper.finished_on = tk["finished_on"]
@@ -531,22 +531,22 @@ class TestCase:
             if flag == "wont_run":
                 # this case will never be able to run
                 dep = self.dependencies[i]
-                if dep.status.name == "SKIPPED":
+                if dep.status.category == "SKIPPED":
                     self._status.set("SKIPPED", "one or more dependencies was skipped")
-                elif dep.status.name == "CANCELLED":
+                elif dep.status.category == "CANCELLED":
                     self._status.set("SKIPPED", "one or more dependencies was cancelled")
-                elif dep.status.name == "TIMEOUT":
+                elif dep.status.category == "TIMEOUT":
                     self._status.set("SKIPPED", "one or more dependencies timed out")
-                elif dep.status.name == "FAILED":
+                elif dep.status.category == "FAILED":
                     self._status.set("SKIPPED", "one or more dependencies failed")
-                elif dep.status.name == "DIFFED":
+                elif dep.status.category == "DIFFED":
                     self._status.set("SKIPPED", "one or more dependencies diffed")
-                elif dep.status.name == "SUCCESS":
+                elif dep.status.category == "SUCCESS":
                     self._status.set("SKIPPED", "one or more dependencies succeeded")
                 else:
                     self._status.set(
                         "SKIPPED",
-                        f"Dependency {dep.name} finished with status {dep.status.name!r}, "
+                        f"Dependency {dep.name} finished with status {dep.status.category!r}, "
                         f"not {self.spec.dep_done_criteria[i]}",
                     )
                 break
@@ -556,20 +556,20 @@ class TestCase:
         expected = self.spec.dep_done_criteria
         flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.status.name in ("READY", "PENDING", "RUNNING"):
+            if dep.status.category in ("READY", "PENDING", "RUNNING"):
                 # Still pending on this case
                 flags[i] = "pending"
-            elif expected[i] in (None, dep.status.name, "*"):
+            elif expected[i] in (None, dep.status.category, "*"):
                 flags[i] = "can_run"
-            elif match_any(expected[i], [dep.status.name, *dep.status.labels], ignore_case=True):
+            elif match_any(expected[i], [dep.status.category, *dep.status.labels], ignore_case=True):
                 flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
         return flags
 
     def read_output(self, compress: bool = False) -> str:
-        if self.status.name == "SKIPPED":
-            return f"Test skipped.  Reason: {self.status.message}"
+        if self.status.category == "SKIPPED":
+            return f"Test skipped.  Reason: {self.status.reason}"
         file = self.workspace.joinpath(self.stdout)
         if not file.exists():
             return "Log not found"
@@ -582,7 +582,7 @@ class TestCase:
                 out.write(file.read_text(errors="ignore"))
         text = out.getvalue()
         if compress:
-            kb_to_keep = 2 if self.status.name == "SUCCESS" else 300
+            kb_to_keep = 2 if self.status.category == "SUCCESS" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
@@ -595,7 +595,7 @@ class TestCase:
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
-        if self.status.name in ("CANCELLED", "READY", "PENDING"):
+        if self.status.category in ("CANCELLED", "READY", "PENDING"):
             return
         cache_dir = Path(config.cache_dir)
         file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
@@ -622,9 +622,9 @@ class TestCase:
         )
         if dt is not None:
             history["last_run"] = dt.strftime("%c")
-        name = "pass" if self.status.name == "SUCCESS" else self.status.name.lower()
+        name = "pass" if self.status.category == "SUCCESS" else self.status.category.lower()
         history[name] = history.get(name, 0) + 1
-        if self.timekeeper.duration >= 0 and self.status.name in (
+        if self.timekeeper.duration >= 0 and self.status.category in (
             "SUCCESS",
             "XFAIL",
             "XDIFF",

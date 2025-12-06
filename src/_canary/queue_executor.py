@@ -52,7 +52,7 @@ def with_traceback(executor: Callable, job: JobProtocol, queue: mp.Queue, **kwar
         traceback.print_exc(file=fh)
         text = fh.getvalue()
         logger.debug(f"Child process failed: {text}")
-        job.status.set("ERROR", message=f"{e.__class__.__name__}({e.args[0]})")
+        job.status.set("ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
         queue.put({"status": job.status})
@@ -221,7 +221,7 @@ class ResourceQueueExecutor:
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
                     slot.job.refresh()
                     slot.job.set_status(
-                        "TIMEOUT", message=f"Job timed out after {total_timeout} s."
+                        "TIMEOUT", reason=f"Job timed out after {total_timeout} s."
                     )
                     slot.job.measurements.update(measurements)
                     slot.job.save()
@@ -253,7 +253,7 @@ class ResourceQueueExecutor:
                 slot.job.on_result(result)
             else:
                 slot.job.set_status(
-                    "ERROR", message=f"No result found for job {slot.job} (pid {pid})"
+                    "ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
                 )
 
             # Get measurements and store in job

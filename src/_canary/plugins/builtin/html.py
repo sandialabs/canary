@@ -70,7 +70,7 @@ class HTMLReporter(CanaryReporter):
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name()}</td></tr>\n")
-        fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Status:</b> {case.status.category}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.status.code}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
         fh.write(f"<tr><td><b>Duration:</b> {case.timekeeper.duration}</td></tr>\n")
@@ -100,7 +100,7 @@ class HTMLReporter(CanaryReporter):
         fh.write("</tr>\n")
         totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            group = case.status.name.title()
+            group = case.status.category.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{os.uname().nodename}</td>")
@@ -124,7 +124,7 @@ class HTMLReporter(CanaryReporter):
     def generate_group_index(self, cases, fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
-        key = cases[0].status.name
+        key = cases[0].status.category
         fh.write(f"<body>\n<h1> {key} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")

@@ -135,10 +135,10 @@ class JunitDocument(xdom.Document):
             "BROKEN",
             "UNKNOWN",
         )
-        if case.status.name in ("FAILED", "TIMEOUT", "DIFFED"):
+        if case.status.category in ("FAILED", "TIMEOUT", "DIFFED"):
             failure = self.create_element("failure")
-            failure.setAttribute("message", f"Test case status: {case.status.name}")
-            failure.setAttribute("type", case.status.name)
+            failure.setAttribute("message", f"Test case status: {case.status.category}")
+            failure.setAttribute("type", case.status.category)
             testcase.appendChild(failure)
             text = self.create_cdata_node(case.read_output())
             system_out = self.create_element("system-out")
@@ -150,9 +150,9 @@ class JunitDocument(xdom.Document):
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
                     failure.appendChild(text)
-        elif case.status.name in not_done:
+        elif case.status.category in not_done:
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", case.status.name)
+            skipped.setAttribute("message", case.status.category)
             testcase.appendChild(skipped)
         return testcase
 
@@ -163,13 +163,13 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     finished_on: datetime | None = None
     for case in cases:
         stats.num_tests += 1
-        if case.status.name in ("DIFFED", "FAILED", "TIMEOUT", "BROKEN"):
+        if case.status.category in ("DIFFED", "FAILED", "TIMEOUT", "BROKEN"):
             stats.num_failed += 1
-        elif case.status.name in ("CANCELLED", "SKIPPED"):
+        elif case.status.category in ("CANCELLED", "SKIPPED"):
             stats.num_skipped += 1
-        elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING"):
+        elif case.status.category in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING"):
             stats.num_error += 1
-        if case.status.name not in ("PENDING", "RUNNING", "READY"):
+        if case.status.category not in ("PENDING", "RUNNING", "READY"):
             t = case.timekeeper.started_on
             if started_on is None:
                 if t != "NA":

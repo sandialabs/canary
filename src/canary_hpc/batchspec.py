@@ -103,7 +103,7 @@ class TestBatch:
         name = str(self)
         if not kwargs.get("status"):
             return name
-        if self.status.name in ("READY", "PENDING"):
+        if self.status.category in ("READY", "PENDING"):
             return f"{name} ({len(self)} {self.status.cname})"
         else:
             combined_stat = self._combined_status()
@@ -205,12 +205,12 @@ class TestBatch:
 
     @property
     def status(self) -> BatchStatus:
-        if self._status.name == "PENDING":
+        if self._status.category == "PENDING":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             pending = 0
             for case in self.cases:
                 for dep in case.dependencies:
-                    if dep.status.name in ("PENDING", "READY", "RUNNING"):
+                    if dep.status.category in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
                 self._status.set("READY", propagate=False)
@@ -219,10 +219,10 @@ class TestBatch:
     def set_status(
         self,
         status: str | int | Status,
-        message: str | None = None,
+        reason: str | None = None,
         code: int | None = None,
     ) -> None:
-        self.status.set(status, message=message, code=code)
+        self.status.set(status, reason=reason, code=code)
 
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:8]}")
@@ -245,9 +245,9 @@ class TestBatch:
             data: dict[str, Any] = {}
             data[self.id] = {"status": self.status.status, "timekeeper": self.timekeeper}
             for case in self.cases:
-                if case.status.name in ("PENDING", "READY"):
+                if case.status.category in ("PENDING", "READY"):
                     case.status.set("SKIPPED")
-                elif case.status.name == "RUNNING":
+                elif case.status.category == "RUNNING":
                     case.status.set("CANCELLED")
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
@@ -264,7 +264,7 @@ class TestBatch:
         """
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
-                self.status.set(stat.name, stat.message, stat.code, propagate=False)
+                self.status.set(stat.name, stat.reason, stat.code, propagate=False)
             if timekeeper := mydata.get("timekeeper"):
                 self.timekeeper.started_on = timekeeper.started_on
                 self.timekeeper.finished_on = timekeeper.finished_on
@@ -289,10 +289,10 @@ class TestBatch:
         """
         stat: dict[str, int] = {}
         for case in self.cases:
-            stat[case.status.name] = stat.get(case.status.name, 0) + 1
+            stat[case.status.category] = stat.get(case.status.category, 0) + 1
         parts: list[str] = []
         for name, n in stat.items():
-            color = Status.defaults[name][1][0]
+            color = Status.categories[name][1][0]
             parts.append("@%s{%d %s}" % (color, n, name))
         return ", ".join(parts)
 

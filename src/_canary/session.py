@@ -181,7 +181,7 @@ class Session:
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status.set(
                     result["status"]["name"],
-                    message=result["status"]["message"],
+                    reason=result["status"]["reason"],
                     code=result["status"]["code"],
                 )
                 case.timekeeper.started_on = result["timekeeper"]["started_on"]
@@ -274,7 +274,7 @@ class Session:
                     # case was explicitly requested, set its status to pending
                     case.status.set("PENDING")
                     cases.append(case)
-        return [case for case in cases if case.status.name in ("READY", "PENDING")]
+        return [case for case in cases if case.status.category in ("READY", "PENDING")]
 
     def run(self, ids: list[str] | None = None) -> SessionResults:
         cases = self.get_ready(ids=ids)

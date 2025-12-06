@@ -239,7 +239,7 @@ class Workspace:
             lookup[spec.id] = case
             cases.append(case)
             if res := results.get(case.id):
-                case.status.set(res["status"], res["message"], res["code"])
+                case.status.set(res["status"], reason=res["reason"], code=res["code"])
                 # FIXME: Do the right thing here
                 if case.id in ids:
                     case.status.set("PENDING")
@@ -248,7 +248,7 @@ class Workspace:
         starting_dir = os.getcwd()
         session.mkdir(parents=True, exist_ok=True)
         started_on = datetime.datetime.now()
-        ready = [case for case in cases if case.status.name in ("PENDING", "READY")]
+        ready = [case for case in cases if case.status.category in ("PENDING", "READY")]
         runner = Runner(cases=ready, session=session.name)
         try:
             os.chdir(str(session))
@@ -396,14 +396,14 @@ class Workspace:
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
                 space = ExecutionSpace(
-                    root=Path(mine["workspace"]["root"]),
-                    path=Path(mine["workspace"]["path"]),
-                    session=mine["workspace"]["session"],
+                    root=self.root / "sessions" / mine["session"],
+                    path=Path(mine["workspace"]),
+                    session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status.set(
-                    mine["status"]["name"],
-                    message=mine["status"]["message"],
+                    mine["status"]["category"],
+                    reason=mine["status"]["reason"],
                     code=mine["status"]["code"],
                 )
                 case.timekeeper.started_on = mine["timekeeper"]["started_on"]
@@ -666,7 +666,17 @@ class WorkspaceDatabase:
         cursor.execute(query)
 
         query = """CREATE TABLE IF NOT EXISTS results (
-          id TEXT, session TEXT, status TEXT, timekeeper TEXT, workspace TEXT, measurements TEXT,
+          id TEXT,
+          session TEXT,
+          statcategory TEXT,
+          statkind TEXT,
+          statreason TEXT,
+          statcode INTEGER,
+          started_on TEXT,
+          finished_on TEXT,
+          duration TEXT,
+          workspace TEXT,
+          measurements TEXT,
           PRIMARY KEY (id, session)
         )"""
         cursor.execute(query)
@@ -868,32 +878,6 @@ class WorkspaceDatabase:
             lookup[id] = spec
         return list(lookup.values())
 
-    def put_testcases(self, cases: list[TestCase]) -> None:
-        rows = []
-        for case in cases:
-            rows.append(
-                (
-                    case.id,
-                    json.dumps_min(case.status.asdict()),
-                    json.dumps_min(case.timekeeper.asdict()),
-                )
-            )
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN EXCLUSIVE;")
-        cursor.executemany(
-            """
-            INSERT INTO results (id, status, timekeeper, workspace, measurements)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              status=excluded.status,
-              timekeeper=excluded.timekeeper,
-              workspace=excluded.workspace,
-              measurements=excluded.measurements
-            """,
-            rows,
-        )
-        self.connection.commit()
-
     def put_results(self, results: SessionResults) -> None:
         rows = []
         for case in results.cases:
@@ -901,9 +885,14 @@ class WorkspaceDatabase:
                 (
                     case.id,
                     results.session,
-                    json.dumps_min(case.status.asdict()),
-                    json.dumps_min(case.timekeeper.asdict()),
-                    json.dumps_min(case.workspace.asdict()),
+                    case.status.category,
+                    case.status.kind or "",
+                    case.status.reason or "",
+                    case.status.code,
+                    case.timekeeper.started_on,
+                    case.timekeeper.finished_on,
+                    case.timekeeper.duration,
+                    str(case.workspace.path),
                     json.dumps_min(case.measurements.asdict()),
                 )
             )
@@ -911,8 +900,20 @@ class WorkspaceDatabase:
         cursor.execute("BEGIN EXCLUSIVE;")
         cursor.executemany(
             """
-            INSERT INTO results (id, session, status, timekeeper, workspace, measurements)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO results (
+              id,
+              session,
+              statcategory,
+              statkind,
+              statreason,
+              statcode,
+              started_on,
+              finished_on,
+              duration,
+              workspace,
+              measurements
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -944,16 +945,18 @@ class WorkspaceDatabase:
                     batch,
                 )  # nosec B608
                 rows.extend(cursor.fetchall())
-        return {
-            id: {
-                "status": json.loads(status),
-                "timekeeper": json.loads(timekeeper),
-                "workspace": json.loads(workspace),
-            }
-            for id, _, status, timekeeper, workspace in rows
-        }
+        data: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            d = data.setdefault(row[0], {})  # ID
+            d["session"] = row[1]
+            d["status"] = {"category": row[2], "kind": row[3], "reason": row[4], "code": row[5]}
+            d["timekeeper"] = {"started_on": row[6], "finished_on": row[7], "duration": float(row[8])}
+            d["workspace"] = row[9]
+            d["measurements"] = json.loads(row[10])
+        return data
 
     def get_single_result(self, id: str) -> dict[str, dict[str, Any]]:
+        raise NotImplementedError
         cursor = self.connection.cursor()
         cursor.execute("SELECT * FROM results WHERE id = ? ORDER BY session ASC", id)
         rows = cursor.fetchall()

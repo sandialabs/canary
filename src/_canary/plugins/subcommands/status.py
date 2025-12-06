@@ -99,7 +99,7 @@ class Status(CanarySubcommand):
     def get_status_table(
         self, cases: list[TestCase], args: "argparse.Namespace"
     ) -> list[list[str]]:
-        cases.sort(key=lambda c: status_sort_map.get(c.status.name, 50))
+        cases.sort(key=lambda c: status_sort_map.get(c.status.category, 50))
         cases = filter_by_status(cases, args.report_chars)
         cols = args.format_cols.split(",")
         map: dict[str, str] = {
@@ -142,9 +142,9 @@ def get_case_attribute(case: TestCase, attr: str) -> str:
     elif attr == "duration":
         return colorize("@*{%s}" % dformat(case.timekeeper.duration))
     elif attr == "status_name":
-        return pretty_status_name(case.status.name)
+        return pretty_status_name(case.status.category)
     elif attr == "status_message":
-        return case.status.message or ""
+        return case.status.reason or ""
     raise AttributeError(attr)
 
 
@@ -162,13 +162,13 @@ def pretty_status_name(name: str) -> str:
     color: str = ""
     fmt: str = "%(name)s"
     if name in ("RETRY", "PENDING", "READY", "SKIPPED"):
-        color = status.Status.defaults[name][1][0]
+        color = status.Status.categories[name][1][0]
         fmt = "@*c{NOT RUN} (@*%(color)s{%(name)s})"
     elif name in ("DIFFED", "FAILED", "BROKEN", "ERROR", "TIMEOUT"):
-        color = status.Status.defaults[name][1][0]
+        color = status.Status.categories[name][1][0]
         fmt = "@*r{FAILED} (@*%(color)s{%(name)s})"
     else:
-        color = status.Status.defaults[name][1][0]
+        color = status.Status.categories[name][1][0]
         fmt = "@*%(color)s{%(name)s}"
     return colorize(fmt % {"color": color, "name": name})
 
@@ -240,7 +240,7 @@ def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]
         return cases
     keep = [False] * len(cases)
     for i, case in enumerate(cases):
-        stat = case.status.name
+        stat = case.status.category
         if "a" in chars:
             keep[i] = stat != "SUCCESS"
         elif stat == "SKIPPED":
