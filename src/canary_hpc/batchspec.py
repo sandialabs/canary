@@ -246,7 +246,7 @@ class TestBatch:
             data[self.id] = {"status": self.status.status, "timekeeper": self.timekeeper}
             for case in self.cases:
                 if case.status.name in ("PENDING", "READY"):
-                    case.status.set("NOT_RUN")
+                    case.status.set("SKIPPED")
                 elif case.status.name == "RUNNING":
                     case.status.set("CANCELLED")
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}

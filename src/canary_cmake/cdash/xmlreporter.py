@@ -285,7 +285,7 @@ class CDashXMLReporter:
             elif case.status.name == "TIMEOUT":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status.name == "NOT_RUN":
+            elif case.status.name == "BROKEN":
                 status = "failed"
                 exit_code = "Not Run"
                 completion_status = "Completed"
@@ -546,7 +546,7 @@ class TestData:
             self.status |= 2**4
         elif case.status.name == "READY":
             self.status |= 2**5
-        elif case.status.name == "NOT_RUN":
+        elif case.status.name == "BROKEN":
             self.status |= 2**6
 
     def add_test(self, case: "canary.TestCase") -> None:

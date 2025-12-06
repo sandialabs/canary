@@ -19,11 +19,11 @@ if TYPE_CHECKING:
     from .collect import Collector
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
+    from .filter import ExecutionContextFilter
     from .generator import AbstractTestGenerator
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
-    from .select import RuntimeSelector
     from .select import Selector
     from .session import Session
     from .testcase import TestCase
@@ -244,7 +244,7 @@ def canary_select_report(selector: "Selector") -> None:
 # runtime selection hooks
 # -------------------------------------------------------------------------
 @hookspec
-def canary_rtselectstart(selector: "RuntimeSelector") -> None:
+def canary_contextfilterstart(contextfilter: "ExecutionContextFilter") -> None:
     """Starts the selection process.
 
     Args:
@@ -253,7 +253,7 @@ def canary_rtselectstart(selector: "RuntimeSelector") -> None:
 
 
 @hookspec
-def canary_rtselect_modifyitems(selector: "RuntimeSelector") -> None:
+def canary_contextfilter_modifyitems(contextfilter: "ExecutionContextFilter") -> None:
     """Modifies the selection items.
 
     Args:
@@ -262,7 +262,7 @@ def canary_rtselect_modifyitems(selector: "RuntimeSelector") -> None:
 
 
 @hookspec
-def canary_rtselect_report(selector: "RuntimeSelector") -> None:
+def canary_contextfilter_report(contextfilter: "ExecutionContextFilter") -> None:
     """Reports the selection results.
 
     Args:

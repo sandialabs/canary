@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import datetime
 import os
 import shutil
 import sqlite3
@@ -16,15 +17,15 @@ from . import rules
 from . import select
 from . import testspec
 from . import when
+from .filter import ExecutionContextFilter
 from .build import Builder
-from .build import canary_build
 from .collect import Collector
-from .collect import canary_collect
 from .generator import AbstractTestGenerator
-from .session import Session
 from .session import SessionResults
 from .testcase import TestCase
 from .testexec import ExecutionSpace
+from .runtest import Runner
+from .runtest import canary_runtests
 from .testspec import ResolvedSpec
 from .testspec import TestSpec
 from .util import json_helper as json
@@ -97,7 +98,7 @@ class Workspace:
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
         relpath = Path(start).absolute().relative_to(Path.cwd())
-        pm = logger.progress_monitor(f"Removing workspace from {relpath}")
+        pm = logger.progress_monitor(f"@*{{Removing}} workspace from {relpath}")
         anchor = Workspace.find_anchor(start=start)
         if anchor is None:
             pm.done("no workspace found")
@@ -151,7 +152,7 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        logger.info(f"Initializing empty canary workspace at {path}")
+        logger.info(f"@*{{Initializing}} empty canary workspace at {path}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():
@@ -217,41 +218,64 @@ class Workspace:
         self.db = WorkspaceDatabase.load(self.dbfile)
         return self
 
-    def sessions(self) -> Generator[Session, None, None]:
-        for path in self.sessions_dir.iterdir():
-            if Session.is_session(path):
-                yield Session.load(path)
-
-    @contextmanager
-    def session(
-        self, specs: list["TestSpec"] | None = None, name: str | None = None
-    ) -> Generator[Session, None, None]:
-        session: Session
-        if specs is not None and name is not None:
-            raise TypeError("Mutually exlusive keyword arguments: 'specs', 'name'")
-        elif specs is None and name is None:
-            raise TypeError("Missing required keyword arguments: 'specs' or 'name'")
-        if specs is not None:
-            session = Session.create(self.sessions_dir, specs)
-            logger.info(f"Created test session at {session.name}")
-        else:
-            assert name is not None
-            root = self.sessions_dir / name
-            session = Session.load(root)
-            logger.info(f"Loaded test session at {session.name}")
+    def run(self, specs: list["TestSpec"]) -> SessionResults:
+        session_name = datetime.datetime.now().isoformat(timespec="microseconds").replace(":", "-")
+        session = self.sessions_dir / session_name
+        lookup: dict[str, TestCase] = {}
+        cases: list[TestCase] = []
+        results = self.db.get_results()
+        ids = [spec.id for spec in specs]
+        reachable: list[str] = self.db.reachable_spec_ids(ids)
+        if missing := set(reachable) - set(ids) :
+            # FIXME: load missing test specs
+            # resolved = self.db.get_specs(missing)
+            # other = ...
+            # specs.extend([spec for spec in other if spec not in specs])
+            pass
+        for spec in static_order(specs):
+            dependencies = [lookup[dep.id] for dep in spec.dependencies]
+            space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
+            case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+            lookup[spec.id] = case
+            cases.append(case)
+            if res := results.get(case.id):
+                case.status.set(res["status"], res["message"], res["code"])
+                # FIXME: Do the right thing here
+                if case.id in ids:
+                    case.status.set("PENDING")
+        filter = ExecutionContextFilter(cases)
+        filter.run()
+        starting_dir = os.getcwd()
+        session.mkdir(parents=True, exist_ok=True)
+        started_on = datetime.datetime.now()
+        ready = [case for case in cases if case.status.name in ("PENDING", "READY")]
+        runner = Runner(cases=ready, session=session.name)
         try:
-            config.pluginmanager.hook.canary_sessionstart(session=session)
-            yield session
+            os.chdir(str(session))
+            canary_runtests(runner=runner)
+        except Exception:
+            logger.exception("session run failed")
         finally:
-            config.pluginmanager.hook.canary_sessionfinish(session=session)
+            finished_on = datetime.datetime.now()
+            os.chdir(starting_dir)
+            results = SessionResults(
+                session=session.name,
+                cases=cases,
+                returncode=runner.returncode,
+                started_on=started_on,
+                finished_on=finished_on,
+                prefix=session,
+            )
+            self.add_session_results(results)
+            return results
 
     def add_session_results(self, results: SessionResults, view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         self.db.put_results(results)
         view_entries: dict[Path, list[Path]] = {}
         for case in results.cases:
-            relpath = case.workspace.dir.relative_to(results.prefix / "work")
-            view_entries.setdefault(results.prefix / "work", []).append(relpath)
+            relpath = case.workspace.dir.relative_to(results.prefix)
+            view_entries.setdefault(results.prefix, []).append(relpath)
 
         if view:
             self.update_view(view_entries)
@@ -353,16 +377,14 @@ class Workspace:
         """Find test case generators in scan_paths and add them to this workspace"""
         collector = Collector()
         collector.add_scanpaths(scanpaths)
-        generators = canary_collect(collector)
+        generators = collector.run()
         self.db.put_generators(generators)
         # Invalidate caches
         logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
-        """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
-        update each case to point to the latest run instance.
-        """
+        """Load cached test cases.  Dependency resolution is performed."""
         lookup: dict[str, TestCase] = {}
         reachable: list[str] | None = None
         if ids:
@@ -392,13 +414,13 @@ class Workspace:
             return [case for case in lookup.values() if case.id in ids]
         return list(lookup.values())
 
-    def select_from_path(
+    def select_from_view(
         self,
         path: Path,
         keyword_exprs: list[str] | None = None,
     ) -> list[TestCase]:
         ids: list[str] = []
-        for file in path.rglob("testcase.lock"):
+        for file in path.rglob("*/testcase.lock"):
             lock_data = json.loads(file.read_text())
             ids.append(lock_data["spec"]["id"])
         cases = self.load_testcases(ids=ids)
@@ -448,7 +470,7 @@ class Workspace:
         signature = builder.signature
         if cached := self.db.get_specs(signature=signature):
             return cached
-        resolved = canary_build(builder)
+        resolved = builder.run()
         pm = logger.progress_monitor("@*{Putting} specs in workspace database")
         self.db.put_specs(signature, resolved)
         pm.done()
@@ -486,8 +508,8 @@ class Workspace:
           Test spec selection
 
         """
-        specs = self.generate_specs(on_options=on_options)
-        selector = select.Selector(specs, self.root)
+        resolved = self.generate_specs(on_options=on_options)
+        selector = select.Selector(resolved, self.root)
         if ids:
             selector.add_rule(rules.IDsRule(ids))
         if keyword_exprs:
@@ -500,25 +522,36 @@ class Workspace:
             selector.add_rule(rules.OwnersRule(owners))
         if regex:
             selector.add_rule(rules.RegexRule(regex))
-        final = select.canary_select(selector=selector)
-        if tag is None and len(selector.rules) == 1:
+        if tag is None and len(selector.rules) == 0:
             # Default: 1 rule for resource availability
             tag = "default"
         if tag:
             self.db.put_selection(tag, selector.snapshot())
-        return final
+        specs = selector.run()
+        return specs
 
-    def get_selection(self, tag: str = "default") -> list["TestSpec"]:
+    def get_selection(self, tag: str = "default") -> list["TestCase"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
         snapshot = self.db.get_selection(tag)
-        specs = self.db.get_specs()
-        if snapshot.is_compatible_with_specs(specs):
-            return snapshot.apply(specs)
-        selector = select.Selector.from_snapshot(specs, self.root, snapshot)
-        selector.run()
-        self.db.put_selection(tag, selector.snapshot())
-        return selector.final_specs()
+        resolved = self.db.get_specs()
+        specs: list[TestSpec]
+        if snapshot.is_compatible_with_specs(resolved):
+            specs = snapshot.apply(resolved)
+        else:
+            selector = select.Selector.from_snapshot(resolved, self.root, snapshot)
+            specs = selector.run()
+            self.db.put_selection(tag, selector.snapshot())
+        lookup: dict[str, "TestCase"] = {}
+        map: dict[str, TestSpec] = {spec.id: spec for spec in specs}
+        graph: dict[str, list[str]] = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            spec = map[id]
+            dependencies = [lookup[dep.id] for dep in spec.dependencies]
+            case = TestCase(spec=spec, dependencies=dependencies)
+            lookup[spec.id] = case
+        return list(lookup.values())
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -595,7 +628,7 @@ class Workspace:
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
     collector = Collector()
     collector.add_scanpath(str(path), [])
-    generators = canary_collect(collector=collector)
+    generators = collector.run()
     return generators
 
 
@@ -633,8 +666,15 @@ class WorkspaceDatabase:
         cursor.execute(query)
 
         query = """CREATE TABLE IF NOT EXISTS results (
-          id TEXT PRIMARY KEY, status TEXT, timekeeper TEXT, workspace TEXT
+          id TEXT, session TEXT, status TEXT, timekeeper TEXT, workspace TEXT, measurements TEXT,
+          PRIMARY KEY (id, session)
         )"""
+        cursor.execute(query)
+
+        query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (id)"
+        cursor.execute(query)
+
+        query = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
         cursor.execute(query)
 
         self.connection.commit()
@@ -819,9 +859,6 @@ class WorkspaceDatabase:
         return [spec for spec in specs if spec.id in ids]
 
     def _reconstruct_specs(self, rows: list[list]) -> list[ResolvedSpec]:
-        import time
-
-        t = time.monotonic()
         data = {id: json.loads(data) for id, _, data in rows}
         graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
         lookup: dict[str, ResolvedSpec] = {}
@@ -831,27 +868,51 @@ class WorkspaceDatabase:
             lookup[id] = spec
         return list(lookup.values())
 
-    def put_results(self, results: SessionResults) -> None:
+    def put_testcases(self, cases: list[TestCase]) -> None:
         rows = []
-        for case in results.cases:
+        for case in cases:
             rows.append(
                 (
                     case.id,
                     json.dumps_min(case.status.asdict()),
                     json.dumps_min(case.timekeeper.asdict()),
-                    json.dumps_min(case.workspace.asdict()),
                 )
             )
         cursor = self.connection.cursor()
         cursor.execute("BEGIN EXCLUSIVE;")
         cursor.executemany(
             """
-            INSERT INTO results (id, status, timekeeper, workspace)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO results (id, status, timekeeper, workspace, measurements)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               status=excluded.status,
               timekeeper=excluded.timekeeper,
-              workspace=excluded.workspace
+              workspace=excluded.workspace,
+              measurements=excluded.measurements
+            """,
+            rows,
+        )
+        self.connection.commit()
+
+    def put_results(self, results: SessionResults) -> None:
+        rows = []
+        for case in results.cases:
+            rows.append(
+                (
+                    case.id,
+                    results.session,
+                    json.dumps_min(case.status.asdict()),
+                    json.dumps_min(case.timekeeper.asdict()),
+                    json.dumps_min(case.workspace.asdict()),
+                    json.dumps_min(case.measurements.asdict()),
+                )
+            )
+        cursor = self.connection.cursor()
+        cursor.execute("BEGIN EXCLUSIVE;")
+        cursor.executemany(
+            """
+            INSERT INTO results (id, session, status, timekeeper, workspace, measurements)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -860,32 +921,50 @@ class WorkspaceDatabase:
     def get_results(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
         cursor = self.connection.cursor()
         if not ids:
-            cursor.execute("SELECT id, status, timekeeper, workspace  FROM results")
+            cursor.execute(
+                """SELECT *
+                FROM results AS r
+                WHERE r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
+                """
+            )
             rows = cursor.fetchall()
         else:
-            clauses: list[str] = []
-            params: list[str] = []
-            for id in ids:
-                if id.startswith(testspec.select_sygil):
-                    id = id[1:]
-                if len(id) >= 64:  # full sha256 hexdigest
-                    clauses.append("id = ?")
-                    params.append(id)
-                else:
-                    clauses.append("id LIKE ?")
-                    params.append(f"{id}%")
-            where = " OR ".join(f"({c})" for c in clauses)
-            query = f"SELECT id, status, timekeeper, workspace FROM results WHERE {where}"  # nosec B608
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
+            rows = []
+            batch_size = 900
+            self.resolve_spec_ids(ids)
+            for i in range(0, len(ids), batch_size):
+                batch = ids[i : i + batch_size]
+                placeholders = ", ".join("?" * len(batch))
+                cursor.execute(
+                    f"""SELECT r.*
+                    FROM results AS r
+                    WHERE r.id in ({placeholders})
+                    AND r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
+                    """,
+                    batch,
+                )  # nosec B608
+                rows.extend(cursor.fetchall())
         return {
             id: {
                 "status": json.loads(status),
                 "timekeeper": json.loads(timekeeper),
                 "workspace": json.loads(workspace),
             }
-            for id, status, timekeeper, workspace in rows
+            for id, _, status, timekeeper, workspace in rows
         }
+
+    def get_single_result(self, id: str) -> dict[str, dict[str, Any]]:
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT * FROM results WHERE id = ? ORDER BY session ASC", id)
+        rows = cursor.fetchall()
+        data: dict[str, dict[str, Any]] = {}
+        for id, session, status, timekeeper, workspace in rows:
+            data[session] = {
+                "status": json.loads(status),
+                "timekeeper": json.loads(timekeeper),
+                "workspace": json.loads(workspace),
+            }
+        return data
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
         cursor = self.connection.cursor()

@@ -23,16 +23,14 @@ def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bo
     warned: set[str] = set()
     for result, n in results.items():
         for i in range(n):
-            if result in ("SUCCESS", "XFAIL", "XDIFF"):
+            if result in ("SUCCESS", "XFAIL", "XDIFF", "SKIPPED"):
                 continue
             elif result == "DIFFED":
                 returncode |= 2**1
-            elif result in ("FAILED", "ERROR"):
+            elif result in ("FAILED", "ERROR", "BROKEN"):
                 returncode |= 2**2
             elif result == "TIMEOUT":
                 returncode |= 2**3
-            elif result in ("SKIPPED", "NOT_RUN"):
-                returncode |= 2**4
             elif result in ("CANCELLED", "READY", "PENDING"):
                 returncode |= 2**5
             elif not permissive:

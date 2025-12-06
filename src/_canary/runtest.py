@@ -22,7 +22,6 @@ from .util.time import hhmmss
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .session import Session
     from .testcase import TestCase
 
 
@@ -32,7 +31,7 @@ logger = logging.get_logger(__name__)
 def canary_runtests(runner: "Runner") -> None:
     pm = config.pluginmanager.hook
     try:
-        logger.info(f"@*{{Starting}} session {runner.session.name}")
+        logger.info(f"@*{{Starting}} session {runner.session}")
         pm.canary_runtests_start(runner=runner)
         with runner.timeit():
             pm.canary_runtests(runner=runner)
@@ -54,7 +53,7 @@ def canary_runtests(runner: "Runner") -> None:
 @dataclasses.dataclass
 class Runner:
     cases: list["TestCase"]
-    session: "Session"
+    session: str
     _returncode: int = -20
     start: float = dataclasses.field(default=-1.0, init=False)
     finish: float = dataclasses.field(default=-1.0, init=False)

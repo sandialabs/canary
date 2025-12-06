@@ -60,8 +60,8 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert len(specs) == 2
 
         spec = specs[0]
-        assert spec.rparameters["cpus"] == 5
-        assert spec.rparameters["gpus"] == 5
+        assert spec.parameters["cpus"] == 5
+        assert spec.parameters["gpus"] == 5
         assert "foo" in spec.keywords
         assert "baz" in spec.keywords
         command = spec.attributes["command"]
@@ -74,7 +74,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         command = spec.attributes["command"]
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
-        assert spec.rparameters["cpus"] == 4
+        assert spec.parameters["cpus"] == 4
         assert "foo" in spec.keywords
         assert "spam" in spec.keywords
         assert spec.environment["CTEST_NUM_RANKS"] == "5"
@@ -102,7 +102,7 @@ def test_parse_ctesttestfile_1(tmpdir):
             specs = file.lock()
             assert len(specs) == 1
             spec = specs[0]
-            assert spec.rparameters["cpus"] == 4
+            assert spec.parameters["cpus"] == 4
             assert "foo" in spec.keywords
             assert "baz" in spec.keywords
 
@@ -297,13 +297,14 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             pool = ResourcePool({"additional_properties": {}, "resources": pool})
             canary.config.pluginmanager.register(Hook(pool), "myhook")
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
-            [spec] = file.lock()
-            check = pool.accommodates(spec.required_resources())
-            if not check:
-                raise ValueError(check.reason)
-            resources = pool.checkout(spec.required_resources())
+            [resolved] = file.lock()
+            spec = resolved.finalize([])
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
+            check = pool.accommodates(case.required_resources())
+            if not check:
+                raise ValueError(check.reason)
+            resources = pool.checkout(case.required_resources())
             case.assign_resources(resources)
             setup_ctest(case)
             assert case.variables["CTEST_RESOURCE_GROUP_COUNT"] == "3"

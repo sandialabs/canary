@@ -120,7 +120,7 @@ class ResourceQueueExecutor:
                 "ResourceQueueExecutor.run must be called in a ResourceQueueExector context"
             )
 
-        logger.info(f"Starting process pool with max {self.max_workers} workers")
+        logger.info(f"@*{{Starting}} process pool with max {self.max_workers} workers")
 
         timeout = float(config.get("timeout:session", -1))
         qrank, qsize = 0, len(self.queue)

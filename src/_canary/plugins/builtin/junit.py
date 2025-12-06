@@ -132,7 +132,7 @@ class JunitDocument(xdom.Document):
             "READY",
             "RUNNING",
             "CANCELLED",
-            "NOT_RUN",
+            "BROKEN",
             "UNKNOWN",
         )
         if case.status.name in ("FAILED", "TIMEOUT", "DIFFED"):
@@ -163,11 +163,11 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     finished_on: datetime | None = None
     for case in cases:
         stats.num_tests += 1
-        if case.status.name in ("DIFFED", "FAILED", "TIMEOUT"):
+        if case.status.name in ("DIFFED", "FAILED", "TIMEOUT", "BROKEN"):
             stats.num_failed += 1
-        elif case.status.name in ("CANCELLED", "NOT_RUN", "SKIPPED"):
+        elif case.status.name in ("CANCELLED", "SKIPPED"):
             stats.num_skipped += 1
-        elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING", "INVALID"):
+        elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING"):
             stats.num_error += 1
         if case.status.name not in ("PENDING", "RUNNING", "READY"):
             t = case.timekeeper.started_on

@@ -28,20 +28,14 @@ logger = logging.get_logger(__name__)
 
 vc_prefixes = ("git@", "repo@")
 
-def canary_collect(collector: "Collector") -> list["AbstractTestGenerator"]:
-    config.pluginmanager.hook.canary_collectstart(collector=collector)
-    collector.run()
-    config.pluginmanager.hook.canary_collect_modifyitems(collector=collector)
-    config.pluginmanager.hook.canary_collect_report(collector=collector)
-    return collector.emit_generators()
 
-
-@dataclasses.dataclass
 class Collector:
-    file_patterns: list[str] = dataclasses.field(default_factory=list, init=False)
-    skip_dirs: list[str] = dataclasses.field(default_factory=list, init=False)
-    scanpaths: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
-    files: dict[str, list[str]] = dataclasses.field(default_factory=dict, init=False)
+    def __init__(self) -> None:
+        self.file_patterns: list[str] = []
+        self.skip_dirs: list[str] = []
+        self.scanpaths: dict[str, list[str]] = {}
+        self.files: dict[str, list[str]] = {}
+        self.generators: list["AbstractTestGenerator"] = []
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
@@ -62,7 +56,8 @@ class Collector:
             "See 'canary help --pathspec' for help on the path specification",
         )
 
-    def run(self) -> None:
+    def run(self) -> list["AbstractTestGenerator"]:
+        config.pluginmanager.hook.canary_collectstart(collector=self)
         for scanpath in self.iter_scanpaths():
             if scanpath.root.startswith(vc_prefixes):
                 self.collect_from_vc(scanpath.root)
@@ -70,6 +65,32 @@ class Collector:
                 self.collect_from_path(scanpath)
             else:
                 logger.warning(f"Skipping non-existent path {scanpath.root}")
+        config.pluginmanager.hook.canary_collect_modifyitems(collector=self)
+        self.finalize()
+        config.pluginmanager.hook.canary_collect_report(collector=self)
+        return self.generators
+
+    def finalize(self) -> None:
+        pm = logger.progress_monitor("@*{Instantiating} generators from collected files")
+        errors = 0
+        generators: list["AbstractTestGenerator"] = []
+        all_paths: list[tuple[str, str]] = []
+        for root, paths in self.files.items():
+            all_paths.extend([(root, path) for path in paths])
+        with ProcessPoolExecutor() as ex:
+            futures = [ex.submit(generate_one, arg) for arg in all_paths]
+            results = [f.result() for f in futures]
+        for success, result in results:
+            if not success:
+                errors += 1
+            elif result is not None:
+                generators.append(result)
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+        pm.done()
+        self.generators.clear()
+        self.generators.extend(generators)
+        return
 
     def collect_from_path(self, scanpath: "ScanPath") -> None:
         root_path = Path(scanpath.root)
@@ -179,26 +200,6 @@ class Collector:
             if fnmatch.fnmatchcase(f, pattern):
                 return True
         return False
-
-    def emit_generators(self) -> list["AbstractTestGenerator"]:
-        pm = logger.progress_monitor("@*{Instantiating} generators from collected files")
-        errors = 0
-        generators: list["AbstractTestGenerator"] = []
-        all_paths: list[tuple[str, str]] = []
-        for root, paths in self.files.items():
-            all_paths.extend([(root, path) for path in paths])
-        with ProcessPoolExecutor() as ex:
-            futures = [ex.submit(generate_one, arg) for arg in all_paths]
-            results = [f.result() for f in futures]
-        for success, result in results:
-            if not success:
-                errors += 1
-            elif result is not None:
-                generators.append(result)
-        if errors:
-            raise ValueError("Stopping due to previous errors")
-        pm.done()
-        return generators
 
 
 @hookimpl

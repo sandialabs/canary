@@ -39,6 +39,6 @@ def test_status_0():
     stat.set(22)
     assert stat == "FAILED"
 
-    stat.set("not_run", message="reason")
-    assert stat.name == "NOT_RUN"
-    assert stat.display_name() == "NOT RUN"
+    stat.set("broken", message="reason")
+    assert stat.name == "BROKEN"
+    assert stat.display_name() == "BROKEN"

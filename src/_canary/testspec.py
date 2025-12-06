@@ -6,7 +6,6 @@ import dataclasses
 import fnmatch
 import hashlib
 import itertools
-import math
 import os
 import shlex
 import string

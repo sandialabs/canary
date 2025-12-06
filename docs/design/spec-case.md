@@ -4,7 +4,7 @@
 
 Canary's design evolved from a single, monolithic TestCase class into a small, layered hierarchy of immutable specification objects that describe what to run, and a single runtime class that defines how to run it.
 
-DraftSpec → ResolvedSpec → TestSpec → TestCase
+`UnresolvedSpec` → `ResolvedSpec` → `TestSpec` → `TestCase`
 
 This structure separates test definition, dependency resolution, and execution, making tests immutable, reproducible, and easy to parallelize.
 
@@ -12,7 +12,7 @@ This structure separates test definition, dependency resolution, and execution, 
 
 ### Early Design
 
-Initially, Canary used one large TestCase class to represent everything about a test:
+Initially, Canary used one large `TestCase` class to represent everything about a test:
 
 * Parameters and dependencies
 * Paths and file management
@@ -26,9 +26,9 @@ Initially, Canary used one large TestCase class to represent everything about a 
 * Serialization difficulties: Hard to store and reload without cleanup.
 * Limited scalability: Parallelization and process isolation were fragile.
 
-## DraftSpec — The Collected Blueprint
+## UnresolvedSpec — The Collected Blueprint
 
-DraftSpec is created when Canary scans the repository and collects tests.
+`UnresolvedSpec` is created when Canary scans the repository and collects tests.
 It describes what might be run but does not yet have dependencies resolved or resources assigned.
 
 Responsibilities
@@ -39,11 +39,11 @@ Responsibilities
 
 ### ResolvedSpec — The Connected Graph Node
 
-ResolvedSpec represents a DraftSpec whose dependencies have been resolved into explicit references.
+`ResolvedSpec` represents a `UnresolvedSpec` whose dependencies have been resolved into explicit references.
 
 Responsibilities
 
-* Expands dependency patterns into actual ResolvedSpec objects.
+* Expands dependency patterns into actual `ResolvedSpec` objects.
 * Defines a node in the dependency DAG.
 * Ready for scheduling but not execution.
 
@@ -55,7 +55,7 @@ Characteristics
 
 ### TestSpec — The Immutable Execution Recipe
 
-TestSpec is the final, fully resolved specification describing what will be executed.
+`TestSpec` is the final, fully resolved specification describing what will be executed.
 It defines identifiers, parameters, dependencies, and resources, but no execution behavior.
 
 Responsibilities
@@ -72,7 +72,7 @@ Characteristics
 
 ## TestCase — The Live Execution Context
 
-TestCase is created by the session and represents a live, executable instance of a TestSpec.
+`TestCase` is created by the session and represents a live, executable instance of a `TestSpec`.
 It binds the immutable specification to a workspace, runtime policy, and tracking objects.
 
 ```python
@@ -111,7 +111,7 @@ case = TestCase(spec=spec, workspace=space)
 
 Attributes
 
-* `spec`: The immutable TestSpec.
+* `spec`: The immutable `TestSpec`.
 * `workspace`: An ExecutionSpace that manages directories and artifacts.
 * `execution_policy`: Runs the test case
 * `measurements`: Tracks resource and performance metrics.
@@ -159,3 +159,15 @@ Update View
    ↓
 Done
 ```
+
+## How to update existing generators and TestCase subclasses?
+
+### Overview
+
+- Generators should return a list of `UnresolvedSpec` or `ResolvedSpec`
+- `TestCase` is no longer subclass-able
+- Implement `canary_collectstart` to add test file patterns to search
+- Implement `canary_collect_modifyitems` to modify the generator in any way
+- Implement `canary_runtest_execution_policy` to define how to run a test
+- Implement `canary_runteststart` (optional)
+- Implement `canary_runtest_finish` (optional)

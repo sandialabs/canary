@@ -108,8 +108,8 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
-                if job.status.name == "NOT_RUN":
-                    logger.debug(f"Job {job.id} marked NOT_RUN and removed from queue")
+                if job.status.name == "SKIPPED":
+                    logger.debug(f"Job {job.id} marked SKIPPED and removed from queue")
                     self._finished[job.id] = job
                     continue
 

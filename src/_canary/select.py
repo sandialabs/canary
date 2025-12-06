@@ -68,9 +68,7 @@ from schema import Schema
 
 from . import config
 from .hookspec import hookimpl
-from .rules import ResourceCapacityRule
 from .rules import Rule
-from .rules import RuntimeRule
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
@@ -78,40 +76,11 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .testcase import TestCase
     from .testspec import ResolvedSpec
     from .testspec import TestSpec
 
 
 logger = logging.get_logger(__name__)
-
-
-def canary_select(selector: "Selector") -> list["TestSpec"]:
-    """Run the selection phase on the provided selector.
-
-    This function executes the standard selection lifecycle:
-    plugin start hooks, rule execution, mask propagation,
-    plugin modification hooks, and reporting hooks.
-
-    Args:
-        selector: A ``Selector`` instance configured with specs and rules.
-
-    Returns:
-        A list of finalized ``TestSpec`` instances ready for execution.
-    """
-    config.pluginmanager.hook.canary_selectstart(selector=selector)
-    selector.run()
-    config.pluginmanager.hook.canary_select_modifyitems(selector=selector)
-    config.pluginmanager.hook.canary_select_report(selector=selector)
-    return selector.final_specs()
-
-
-def canary_rtselect(selector: "RuntimeSelector") -> list["TestCase"]:
-    config.pluginmanager.hook.canary_rtselectstart(selector=selector)
-    selector.run()
-    config.pluginmanager.hook.canary_rtselect_modifyitems(selector=selector)
-    config.pluginmanager.hook.canary_rtselect_report(selector=selector)
-    return selector.final_cases()
 
 
 @hookimpl
@@ -146,10 +115,10 @@ def canary_select_report(selector: "Selector") -> None:
         selector: The ``Selector`` instance whose results are being reported.
     """
     excluded: list["ResolvedSpec"] = []
-    for spec in selector.specs:
+    for spec in selector.resolved_specs:
         if spec.mask:
             excluded.append(spec)
-    n = len(selector.specs) - len(excluded)
+    n = len(selector.resolved_specs) - len(excluded)
     logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
     show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
     if excluded:
@@ -166,27 +135,6 @@ def canary_select_report(selector: "Selector") -> None:
             if show_excluded_tests:
                 for spec in reasons[key]:
                     logger.log(logging.EMIT, f"  ◦ {spec.display_name}", extra={"prefix": ""})
-
-
-@hookimpl
-def canary_rtselect_report(selector: "RuntimeSelector") -> None:
-    excluded: list["TestCase"] = []
-    for case in selector.cases:
-        if case.status.name not in ("READY", "PENDING"):
-            excluded.append(case)
-    n = len(selector.cases) - len(excluded)
-    logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
-    if excluded:
-        n = len(excluded)
-        logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
-        reasons: dict[str | None, list["TestCase"]] = {}
-        for case in excluded:
-            reasons.setdefault(case.status.message, []).append(case)
-        keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            n = len(reasons[key])
-            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -249,22 +197,22 @@ class Selector:
     Attributes:
         specs: The input list of resolved specs.
         rules: The rule sequence applied during selection.
-        ready: Whether selection has been executed via :meth:`run`.
     """
 
     def __init__(self, specs: list["ResolvedSpec"], workspace: Path, rules: Iterable[Rule] = ()):
-        self.specs: list["ResolvedSpec"] = specs
+        self.resolved_specs: list["ResolvedSpec"] = specs
         self.workspace = workspace
         self.rules: list[Rule] = list(rules)
-        self.ready = False
+        self._specs: list["TestSpec"] = []
 
     def add_rule(self, rule: Rule) -> None:
         assert isinstance(rule, Rule)
         self.rules.append(rule)
 
-    def run(self) -> None:
-        pm = logger.progress_monitor("@*{Selecting} specs based on %d rule sets" % len(self.rules))
-        for spec in self.specs:
+    def run(self) -> list["TestSpec"]:
+        logger.debug("@*{Selecting} specs based on rules")
+        config.pluginmanager.hook.canary_selectstart(selector=self)
+        for spec in self.resolved_specs:
             if spec.mask:
                 continue
             for rule in self.rules:
@@ -272,12 +220,19 @@ class Selector:
                 if not outcome:
                     spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                     break
-        self.ready = True
-        pm.done()
+        config.pluginmanager.hook.canary_select_modifyitems(selector=self)
+        self.specs = finalize(self.resolved_specs)
+        config.pluginmanager.hook.canary_select_report(selector=self)
+        return self.specs
 
     @property
-    def selected(self) -> list["TestSpec"]:
-        return self.final_specs()
+    def specs(self) -> list["TestSpec"]:
+        return self._specs
+
+    @specs.setter
+    def specs(self, arg: Iterable["TestSpec"]) -> None:
+        self._specs.clear()
+        self._specs.extend(arg)
 
     @staticmethod
     def spec_set_id(specs: list["ResolvedSpec"]) -> str:
@@ -285,12 +240,10 @@ class Selector:
         return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
 
     def snapshot(self) -> SelectorSnapshot:
-        if not self.ready:
-            raise ValueError("selector.run() has not been executed")
-        spec_set_id = self.spec_set_id(self.specs)
+        spec_set_id = self.spec_set_id(self.resolved_specs)
         return SelectorSnapshot(
             spec_set_id=spec_set_id,
-            masked={spec.id: spec.mask.reason for spec in self.specs if spec.mask.reason},
+            masked={spec.id: spec.mask.reason for spec in self.resolved_specs if spec.mask.reason},
             rules=[r.serialize() for r in self.rules],
             created_on=datetime.datetime.now().isoformat(),
         )
@@ -304,11 +257,6 @@ class Selector:
             rule = Rule.reconstruct(serialized_rule)
             self.add_rule(rule)
         return self
-
-    def final_specs(self) -> list["TestSpec"]:
-        if not self.ready:
-            raise ValueError("selector.run() has not been executed")
-        return finalize(self.specs)
 
 
 def propagate_masks(specs: list["ResolvedSpec"]):
@@ -364,57 +312,3 @@ def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
             lookup[id] = spec
         ts.done(*ids)
     return list(lookup.values())
-
-
-class RuntimeSelector:
-    """Apply rule-based masking to a set of test cases.
-
-    """
-
-    def __init__(self, cases: list["TestCase"], rules: Iterable[RuntimeRule] = ()):
-        self.cases: list["TestCase"] = cases
-        for case in cases:
-            if case.status.name not in ("READY", "PENDING"):
-                raise ValueError(f"{case}: expected {case.status.name=} to be READY or PENDING")
-        self.rules: list[RuntimeRule] = list(rules)
-        self.rules.insert(0, ResourceCapacityRule())
-        self.ready = False
-
-    def add_rule(self, rule: RuntimeRule) -> None:
-        assert isinstance(rule, RuntimeRule)
-        self.rules.append(rule)
-
-    def run(self) -> None:
-        pm = logger.progress_monitor("@*{Selecting} cases based on %d rule sets" % len(self.rules))
-        for case in self.cases:
-            for rule in self.rules:
-                outcome = rule(case)
-                if not outcome:
-                    case.status.set("SKIPPED", message=outcome.reason or rule.default_reason)
-                    break
-        self.ready = True
-        pm.done()
-
-    def final_cases(self) -> list["TestCase"]:
-        if not self.ready:
-            raise ValueError("selector.run() has not been executed")
-        # Propagate skipped tests
-        queue = deque([c for c in self.cases if c.status.name not in ("READY", "PENDING")])
-        case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
-        # Precompute reverse graph
-        dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
-        for case in self.cases:
-            for dep in case.spec.dependencies:
-                dependents[dep.id].append(case.id)
-        while queue:
-            excluded = queue.popleft()
-            for child_id in dependents[excluded.id]:
-                child = case_map[child_id]
-                if child.status.name in ("READY", "PENDING"):
-                    if excluded.status.name == "SKIPPED":
-                        child.status.set("SKIPPED", "One or more dependencies skipped")
-                    else:
-                        stat = excluded.status.name.lower()
-                        child.status.set("NOT_RUN", f"One or more dependencies {stat}")
-                    queue.append(child)
-        return [case for case in self.cases if case.status.name in ("READY", "PENDING")]

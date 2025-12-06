@@ -6,6 +6,7 @@ import sys
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Iterable
 from typing import Sequence
 from typing import TextIO
 from typing import TypeVar
@@ -13,8 +14,9 @@ from typing import TypeVar
 if TYPE_CHECKING:
     from ..testspec import ResolvedSpec
     from ..testspec import TestSpec
+    from ..testcase import TestCase
 
-    SpecLike = TypeVar("SpecLike", ResolvedSpec, TestSpec)
+    SpecLike = TypeVar("SpecLike", TestCase, ResolvedSpec, TestSpec)
 
 builtin_print = print
 
@@ -95,7 +97,7 @@ def print(specs: Sequence["SpecLike"], file: str | Path | TextIO = sys.stdout) -
         file.close()
 
 
-def reachable_nodes(graph: dict[str, list[str]], roots: list[str]) -> list[str]:
+def reachable_nodes(graph: dict[str, list[str]], roots: Iterable[str]) -> list[str]:
     """Return all nodes reachable from any of the given roots"""
     visited: set[str] = set()
     stack: list[str] = list(roots)

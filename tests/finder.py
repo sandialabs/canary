@@ -6,11 +6,13 @@ from pathlib import Path
 
 import _canary.config as config
 import canary
+from _canary import filter
 from _canary import rules
 from _canary import select
+from _canary import testcase
+from _canary import testexec
 from _canary import workspace
 from _canary.build import Builder
-from _canary.build import canary_build
 from _canary.hookspec import hookimpl
 from _canary.resource_pool.rpool import Outcome
 from _canary.util.filesystem import mkdirp
@@ -41,13 +43,18 @@ def select_specs(
     if prefixes:
         selector.add_rule(rules.PrefixRule(prefixes))
     selector.run()
-    return selector.selected
+    return selector.specs
 
 
 def generate_specs(generators, on_options=None):
     builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
-    specs = canary_build(builder)
+    specs = builder.run()
     return specs
+
+
+def filter_cases(cases):
+    f = filter.ExecutionContextFilter(cases)
+    f.run()
 
 
 def test_skipif(tmpdir):
@@ -150,15 +157,31 @@ def test_cpu_count(tmpdir):
     with canary.config.override():
         canary.config.pluginmanager.register(Hook(42), "myhook")
         generators = workspace.find_generators_in_path(workdir)
-        specs = generate_specs(generators)
-        assert len([spec for spec in specs if not spec.mask]) == 4
+        resolved = generate_specs(generators)
+        specs = select_specs(resolved)
+        cases = []
+        for spec in specs:
+            space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
+            case = testcase.TestCase(spec=spec, workspace=space)
+            cases.append(case)
+        filter_cases(cases)
+        assert len(specs) == 4
+        assert len([case for case in cases if case.status.name == "READY"]) == 4
         canary.config.pluginmanager.unregister(name="myhook")
+
     with canary.config.override():
         canary.config.pluginmanager.register(Hook(2), "myhook")
         generators = workspace.find_generators_in_path(workdir)
-        specs = generate_specs(generators)
-        final = select_specs(specs)
-        assert len(final) == 1
+        resolved = generate_specs(generators)
+        specs = select_specs(resolved)
+        cases = []
+        for spec in specs:
+            space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
+            case = testcase.TestCase(spec=spec, workspace=space)
+            cases.append(case)
+        filter_cases(cases)
+        assert len(specs) == 4
+        assert len([case for case in cases if case.status.name == "READY"]) == 1
         canary.config.pluginmanager.unregister(name="myhook")
 
 
@@ -266,7 +289,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert specs[-1].attributes.get("multicase") is not None
             assert len(final) == 3
             for spec in final:
-                assert spec.rparameters["cpus"] != 2
+                assert spec.parameters["cpus"] != 2
 
 
 def test_vvt_generator(tmpdir):

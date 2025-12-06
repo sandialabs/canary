@@ -14,10 +14,10 @@ from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
-from typing import cast
 from typing import Any
 from typing import Generator
 from typing import MutableMapping
+from typing import cast
 
 from . import config
 from .error import TestDiffed
@@ -76,17 +76,17 @@ class TestCase:
         for key, value in data.items():
             if key in resource_types and not isinstance(value, int):
                 raise InvalidTypeError(key, value)
+        rpcount = config.pluginmanager.hook.canary_resource_pool_count
         if {"nodes", "nnode"} & self.spec.parameters.keys():
             nodes = cast(int, self.spec.parameters.get("nodes", self.spec.parameters.get("nnode")))
-            rpcount = config.pluginmanager.hook.canary_resource_pool_count
             rparameters["nodes"] = int(nodes)
             rparameters["cpus"] = nodes * rpcount(type="cpu")
             rparameters["gpus"] = nodes * rpcount(type="gpu")
         if {"cpus", "np"} & self.spec.parameters.keys():
             cpus = cast(int, self.spec.parameters.get("cpus", self.spec.parameters.get("np")))
             rparameters["cpus"] = int(cpus)
-            cpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="cpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            cpu_count = rpcount(type="cpu")
+            node_count = rpcount(type="node")
             cpus_per_node = math.ceil(cpu_count / node_count)
             if cpus_per_node > 0:
                 nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
@@ -94,8 +94,8 @@ class TestCase:
         if {"gpus", "ndevice"} & self.spec.parameters.keys():
             gpus = cast(int, self.spec.parameters.get("gpus", self.spec.parameters.get("ndevice")))
             rparameters["gpus"] = int(gpus)
-            gpu_count = config.pluginmanager.hook.canary_resource_pool_count(type="gpu")
-            node_count = config.pluginmanager.hook.canary_resource_pool_count(type="node")
+            gpu_count = rpcount(type="gpu")
+            node_count = rpcount(type="node")
             gpus_per_node = math.ceil(gpu_count / node_count)
             if gpus_per_node > 0:
                 nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
@@ -509,6 +509,18 @@ class TestCase:
 
         return record
 
+    def serialize(self) -> str:
+        record: dict[str, Any] = {
+            "id": self.spec.id,
+            "status": self.status.asdict(),
+            "timekeeper": self.timekeeper.asdict(),
+            "measurements": self.measurements.asdict(),
+            "variables": self.variables,
+            "resources": self.resources,
+            "dependencies": [dep.id for dep in self.dependencies],
+        }
+        return json.dumps_min(record)
+
     def set_dependency_based_status(self) -> None:
         # Determine if dependent cases have completed and, if so, flip status to 'ready'
         flags = self.dep_condition_flags()
@@ -522,18 +534,18 @@ class TestCase:
                 if dep.status.name == "SKIPPED":
                     self._status.set("SKIPPED", "one or more dependencies was skipped")
                 elif dep.status.name == "CANCELLED":
-                    self._status.set("NOT_RUN", "one or more dependencies was cancelled")
+                    self._status.set("SKIPPED", "one or more dependencies was cancelled")
                 elif dep.status.name == "TIMEOUT":
-                    self._status.set("NOT_RUN", "one or more dependencies timed out")
+                    self._status.set("SKIPPED", "one or more dependencies timed out")
                 elif dep.status.name == "FAILED":
-                    self._status.set("NOT_RUN", "one or more dependencies failed")
+                    self._status.set("SKIPPED", "one or more dependencies failed")
                 elif dep.status.name == "DIFFED":
                     self._status.set("SKIPPED", "one or more dependencies diffed")
                 elif dep.status.name == "SUCCESS":
                     self._status.set("SKIPPED", "one or more dependencies succeeded")
                 else:
                     self._status.set(
-                        "NOT_RUN",
+                        "SKIPPED",
                         f"Dependency {dep.name} finished with status {dep.status.name!r}, "
                         f"not {self.spec.dep_done_criteria[i]}",
                     )
@@ -681,6 +693,7 @@ class Measurements:
 
 class MissingSourceError(Exception):
     pass
+
 
 class InvalidTypeError(Exception):
     def __init__(self, name, value):

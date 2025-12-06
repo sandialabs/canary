@@ -248,7 +248,7 @@ section, we demonstrate using `stage` to partition test cases into selection set
 Now let's consider the case where we'd like to partition tests into parallel vs. serial sets.
 This is achieved by calling `stage` as follows:
 ```console
-$ canary stage -p 'cpus=1' serial
+$ canary select -p 'cpus=1' -t serial
 ==> Generating test cases... done (0.18s.)
 ==> Generated 84 test cases from 38 generators
 ==> Resolving test case dependencies... done (0.00s.)
@@ -256,7 +256,7 @@ $ canary stage -p 'cpus=1' serial
 ==> Selected 64 test cases based on filtering criteria
 ==> To run this collection of test cases, execute 'canary run serial'
 
-$ canary stage -p 'cpus>1' parallel
+$ canary select -p 'cpus>1' -t parallel
 ==> Generating test cases... done (0.07s.)
 ==> Generated 84 test cases from 38 generators
 ==> Resolving test case dependencies... done (0.00s.)

@@ -33,7 +33,7 @@ class Status:
         "FAILED": (65, "Red", "✗", ("FAIL",)),
         "TIMEOUT": (66, "Red", "⏱", ()),
         "ERROR": (67, "Red", "⚠", ()),
-        "NOT_RUN": (68, "Red", "✗", ()),
+        "BROKEN": (68, "Red", "✗", ()),
         "CANCELLED": (69, "Magenta", "⊘", ()),
     }
 
@@ -250,5 +250,5 @@ class Status:
         return cls("ERROR", message=message, code=code)
 
     @classmethod
-    def NOT_RUN(cls, message: str | None = None, code: int | None = None):
-        return cls("NOT_RUN", message=message, code=code)
+    def BROKEN(cls, message: str | None = None, code: int | None = None):
+        return cls("BROKEN", message=message, code=code)

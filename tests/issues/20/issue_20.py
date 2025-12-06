@@ -22,4 +22,4 @@ def test_issue_20_1(tmpdir):
         f = os.path.join(os.path.dirname(__file__), "issue-20-1.vvt")
         cp = run(f)
         # some tests intentionally fail, so a non-zero returncode is expected:
-        assert cp.returncode == 22
+        assert cp.returncode == 6

@@ -9,12 +9,12 @@ def test_issue_90(tmpdir):
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             write_testfile(fh)
-        cp = run("-w", ".", check=False)
+        cp = run("-w", ".", check=False, debug=True)
         assert cp.returncode != 0
         with fs.working_dir("TestResults"):
             try:
                 os.environ["FIX_B"] = "1"
-                cp = run("-k", "not success", ".", check=False)
+                cp = run("--rerun-failed", check=False)
             finally:
                 os.environ.pop("FIX_B")
             assert cp.returncode == 0

@@ -53,7 +53,7 @@ class CanaryHPCConductor:
         # to finish.  Batches have no specialized resource requirements, just need cpus to run the
         # submission on.
         self.rpool = ResourcePool()
-        self.rpool.populate(cpus=cpu_count())
+        self.rpool.populate(cpus=cpu_count(), gpus=0)
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_conductor")

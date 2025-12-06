@@ -58,24 +58,11 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
     )
-    group.add_argument(
-        "--rerun-failed",
-        nargs=0,
-        action=RerunFailed,
-        help="Rerun failed tests [default: False]",
-    )
     if tagged:
         group.add_argument(
             "--tag",
             help="Tag this test case selection for future runs [default: False]",
         )
-
-
-class RerunFailed(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        keyword_exprs = getattr(args, "keyword_exprs") or []
-        keyword_exprs.append("not success")
-        args.keyword_exprs = keyword_exprs
 
 
 def add_work_tree_arguments(parser: "Parser") -> None:

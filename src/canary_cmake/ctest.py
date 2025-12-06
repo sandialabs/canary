@@ -381,7 +381,7 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
 def finish_ctest(case: "canary.TestCase") -> None:
     output = case.read_output()
 
-    if case.status.name in ("TIMEOUT", "SKIPPED", "CANCELLED", "NOT_RUN"):
+    if case.status.name in ("TIMEOUT", "SKIPPED", "CANCELLED"):
         return
 
     if pass_regular_expression := case.spec.attributes.get("pass_regular_expression"):

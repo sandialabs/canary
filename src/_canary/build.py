@@ -105,7 +105,6 @@ canary_build_report(builder):
 
 """
 
-import dataclasses
 import fnmatch
 import hashlib
 import os
@@ -115,6 +114,7 @@ from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Iterable
 from typing import Sequence
 
 from . import config
@@ -133,39 +133,17 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def canary_build(builder: "Builder") -> list["ResolvedSpec"]:
-    """Lock test specs from generators and resolve dependencies
-
-    Args:
-        generators: Test case generators
-
-    Returns:
-        A list of test specs
-
-    """
-    config.pluginmanager.hook.canary_buildstart(builder=builder)
-    builder.run()
-    config.pluginmanager.hook.canary_build_modifyitems(builder=builder)
-    config.pluginmanager.hook.canary_build_report(builder=builder)
-    return builder.resolved_specs()
-
-
-@dataclasses.dataclass
 class Builder:
-    generators: list["AbstractTestGenerator"]
-    workspace: Path
-    on_options: list[str] = dataclasses.field(default_factory=list)
-    _specs: list["ResolvedSpec"] = dataclasses.field(default_factory=list, init=False)
-    ready: bool = dataclasses.field(default=False, init=False)
-
-    @property
-    def specs(self) -> list["ResolvedSpec"]:
-        return self.resolved_specs()
-
-    def resolved_specs(self) -> list["ResolvedSpec"]:
-        if not self.ready:
-            raise ValueError("builder.run() has not been executed")
-        return self._specs
+    def __init__(
+        self,
+        generators: list["AbstractTestGenerator"],
+        workspace: Path,
+        on_options: Iterable[str] = (),
+    ) -> None:
+        self.generators = generators
+        self.workspace = workspace
+        self.on_options = list(on_options)
+        self.specs: list["ResolvedSpec"] = []
 
     @cached_property
     def signature(self) -> str:
@@ -174,7 +152,8 @@ class Builder:
         signature = hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
         return signature
 
-    def run(self) -> None:
+    def run(self) -> list["ResolvedSpec"]:
+        config.pluginmanager.hook.canary_buildstart(builder=self)
         locked: list[list["UnresolvedSpec"]] = []
         pm = logger.progress_monitor("@*{Generating} test specs")
         if config.get("debug"):
@@ -184,13 +163,14 @@ class Builder:
             locked.extend(starmap(lock_file, [(f, self.on_options) for f in self.generators]))
         drafts: list["UnresolvedSpec"] = [draft for group in locked for draft in group]
         pm.done()
-
         self.validate(drafts)
-
         pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
-        self._specs = resolve(drafts)
+        self.specs = resolve(drafts)
         self.ready = True
         pm.done()
+        config.pluginmanager.hook.canary_build_modifyitems(builder=self)
+        config.pluginmanager.hook.canary_build_report(builder=self)
+        return self.specs
 
     def validate(self, specs: list["UnresolvedSpec"]) -> None:
         pm = logger.progress_monitor("@*{Searching} for duplicated tests")

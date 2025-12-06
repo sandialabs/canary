@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...hookspec import hookimpl
-from ...workspace import Session
+from ...session import Session
 from ...workspace import Workspace
 
 if TYPE_CHECKING:

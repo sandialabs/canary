@@ -43,7 +43,7 @@ class BatchStatus:
         if propagate:
             for child in self._children:
                 if child.status.name in ("READY", "PENDING"):
-                    child.status.set("NOT_RUN")
+                    child.status.set("SKIPPED")
                 elif child.status.name == "RUNNING":
                     child.timekeeper.stop()
                     child.status.set("CANCELLED")

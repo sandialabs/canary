@@ -116,10 +116,8 @@ def group_failed_tests(cases: list["canary.TestCase"]):
         "diffed",
         "failed",
         "timeout",
-        "not_run",
+        "broken",
         "cancelled",
-        "unknown",
-        "invalid",
     )
     for case in cases:
         if case.status.name in nonpass:

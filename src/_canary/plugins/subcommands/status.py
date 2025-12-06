@@ -164,10 +164,7 @@ def pretty_status_name(name: str) -> str:
     if name in ("RETRY", "PENDING", "READY", "SKIPPED"):
         color = status.Status.defaults[name][1][0]
         fmt = "@*c{NOT RUN} (@*%(color)s{%(name)s})"
-    elif name == "NOT_RUN":
-        color = status.Status.defaults[name][1][0]
-        fmt = "@*%(color)s{NOT RUN}"
-    elif name in ("DIFFED", "FAILED", "TIMEOUT", "INVALID", "UNKNOWN"):
+    elif name in ("DIFFED", "FAILED", "BROKEN", "ERROR", "TIMEOUT"):
         color = status.Status.defaults[name][1][0]
         fmt = "@*r{FAILED} (@*%(color)s{%(name)s})"
     else:
@@ -228,7 +225,7 @@ status_sort_map = {
     "XDIFF": 12,
     "CANCELLED": 20,
     "SKIPPED": 21,
-    "NOT_RUN": 22,
+    "BROKEN": 22,
     "TIMEOUT": 23,
     "DIFFED": 30,
     "FAILED": 31,
@@ -256,9 +253,7 @@ def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]
             keep[i] = "d" in chars
         elif stat == "TIMEOUT":
             keep[i] = "t" in chars
-        elif stat == "INVALId":
-            keep[i] = "n" in chars
-        elif stat in ("READY", "CREATED", "PENDING", "CANCELLED", "NOT_RUN"):
+        elif stat in ("READY", "CREATED", "PENDING", "CANCELLED", "BROKEN"):
             keep[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {stat}")

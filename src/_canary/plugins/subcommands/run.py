@@ -13,8 +13,8 @@ from ...collect import Collector
 from ...hookspec import hookimpl
 from ...session import SessionResults
 from ...util import logging
-from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
+from ...util.graph import reachable_nodes
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -30,6 +30,8 @@ logger = logging.get_logger(__name__)
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Run())
+
+ok_status = ("SKIPPED", "SUCCESS", "XDIFF", "XFAIL", "TIMEOUT")
 
 
 class Run(CanarySubcommand):
@@ -75,6 +77,11 @@ class Run(CanarySubcommand):
             action="store_true",
             help="Do not collect a test's process information [default: %(default)s]",
         )
+        parser.add_argument(
+            "--rerun-failed",
+            action="store_true",
+            help="Rerun failed tests [default: False]",
+        )
 
         group = parser.add_argument_group("console reporting")
         group.add_argument(
@@ -106,86 +113,155 @@ class Run(CanarySubcommand):
         Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace: Workspace
-        work_tree: str = args.work_tree or os.getcwd()
+        work_tree = args.work_tree or os.getcwd()
         if args.wipe:
-            Workspace.remove(Path(work_tree))
-
-        try:
-            workspace = Workspace.load(Path(work_tree))
-        except NotAWorkspaceError:
-            workspace = Workspace.create(Path(work_tree))
-
-        results: SessionResults | None = None
-        if args.start:
-            # Special case: re-run test cases from here down
-            if args.parameter_expr:
-                raise TypeError(f"{args.start}: parameter expression incompatible with start dir")
-            if args.regex_filter:
-                raise TypeError(f"{args.start}: regular expression incompatible with start dir")
-            if args.tag:
-                raise TypeError(f"{args.start}: tags incompatible with start dir")
-            cases = workspace.select_from_path(path=Path(args.start))
-            if args.keyword_exprs:
-                cases = filter_cases_by_keyword(cases, args.keyword_exprs)
-            with workspace.session(name=cases[0].workspace.session) as session:
-                try:
-                    results = session.run(ids=[case.id for case in cases])
-                finally:
-                    if results:
-                        workspace.add_session_results(results)
+            Workspace.remove(work_tree)
+        if path := Workspace.find_workspace(work_tree):
+            return self.run_inworkspace(path, args)
         else:
-            if args.runtag:
-                specs = workspace.get_selection(args.runtag)
-            elif args.specids:
-                specs = workspace.select(ids=args.specids, tag=args.tag)
-            elif args.scanpaths:
-                parsing_policy = config.getoption("parsing_policy") or "pedantic"
-                workspace.add(args.scanpaths, pedantic=parsing_policy == "pedantic")
-                specs = workspace.select(
-                    tag=args.tag,
-                    keyword_exprs=args.keyword_exprs,
-                    parameter_expr=args.parameter_expr,
-                    on_options=args.on_options,
-                    regex=args.regex_filter,
-                )
-            else:
-                if any(
-                    (args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)
-                ):
-                    specs = workspace.select(
-                        tag=args.tag,
-                        keyword_exprs=args.keyword_exprs,
-                        parameter_expr=args.parameter_expr,
-                        on_options=args.on_options,
-                        regex=args.regex_filter,
-                    )
-                else:
-                    # Get the default selection
-                    specs = workspace.get_selection()
+            return self.create_workspace_and_run(args)
 
-            with workspace.session(specs=specs) as session:
-                try:
-                    results = session.run()
-                finally:
-                    if results:
-                        workspace.add_session_results(results)
+    def create_workspace_and_run(self, args: "argparse.Namespace") -> int:
+        workspace = Workspace.create(args.work_tree or os.getcwd())
+        if args.start:
+            raise ValueError("Illegal option in new workspace: 'start'")
+        if args.runtag:
+            raise ValueError("Illegal option in new workspace: 'runtag'")
+        if args.specids:
+            raise ValueError("Illegal option in new workspace: 'specids'")
+        scanpaths = args.scanpaths or {os.getcwd(): []}
+        parsing_policy = config.getoption("parsing_policy") or "pedantic"
+        workspace.add(scanpaths, pedantic=parsing_policy == "pedantic")
+        specs = workspace.select(
+            tag=args.tag,
+            keyword_exprs=args.keyword_exprs,
+            parameter_expr=args.parameter_expr,
+            on_options=args.on_options,
+            regex=args.regex_filter,
+        )
+        results: SessionResults = workspace.run(specs)
+        return results.returncode
 
+    def run_inworkspace(self, path: Path, args: "argparse.Namespace") -> int:
+        """The workspace already exists, now let's run some test cases within it"""
+        if args.scanpaths:
+            raise ValueError("Add new scanpaths to workspace with 'canary add ...'")
+        opts = ("start", "runtag", "specids")
+        defined = [o for o in opts if getattr(args, o, None) is not None]
+        if len(defined) > 1:
+            raise ValueError(f"only one of {', '.join(defined)} may be provided")
+        if args.start:
+            return self.run_inview(path, args.start, args)
+        elif args.runtag:
+            return self.run_tag(path, args.runtag, args)
+        elif args.specids:
+            return self.run_specids(path, args.specids, args)
+        else:
+            return self.run_inplace(path, args)
+
+    def run_inview(self, path: Path, start: str, args: "argparse.Namespace") -> int:
+        workspace = Workspace.load(path)
+        if args.parameter_expr:
+            raise TypeError(f"{start}: parameter expression incompatible with start dir")
+        if args.regex_filter:
+            raise TypeError(f"{start}: regular expression incompatible with start dir")
+        if args.tag:
+            raise TypeError(f"{start}: tags incompatible with start dir")
+        cases = workspace.select_from_view(path=Path(start))
+        cases = filter_cases(cases, args)
+        if len({case.workspace.session for case in cases}) > 1:
+            raise ValueError("All cases must come from the same session")
+        results: SessionResults | None = None
+        with workspace.session(name=cases[0].workspace.session) as session:
+            try:
+                results = session.run(ids=[case.id for case in cases])
+            finally:
+                if results:
+                    workspace.add_session_results(results)
+        if not results:
+            return 1
+        return results.returncode
+
+    def run_tag(self, path: Path, tag: str, args: "argparse.Namespace") -> int:
+        workspace = Workspace.load(path)
+        specs = workspace.get_selection(tag)
+        results: SessionResults | None = None
+        with workspace.session(specs=specs) as session:
+            try:
+                results = session.run()
+            finally:
+                if results:
+                    workspace.add_session_results(results)
+        if not results:
+            return 1
+        return results.returncode
+
+    def run_specids(self, path: Path, specids: list[str], args: "argparse.Namespace") -> int:
+        workspace = Workspace.load(path)
+        specs = workspace.select(ids=specids, tag=args.tag)
+        results: SessionResults | None = None
+        with workspace.session(specs=specs) as session:
+            try:
+                results = session.run()
+            finally:
+                if results:
+                    workspace.add_session_results(results)
         if not results:
             return 1
         return results.returncode
 
 
-def filter_cases_by_keyword(cases: list["TestCase"], keyword_exprs: list[str]) -> list["TestCase"]:
+    def run_inplace(self, path: Path, args: "argparse.Namespace") -> int:
+        # Load test cases, filter, and run
+        workspace = Workspace.load(path)
+        results: SessionResults | None = None
+        specs = workspace.select(
+            tag=args.tag,
+            keyword_exprs=args.keyword_exprs,
+            parameter_expr=args.parameter_expr,
+            on_options=args.on_options,
+            regex=args.regex_filter,
+        )
+        if args.rerun_failed:
+            ids = workspace.find_failed()
+        with workspace.session(specs=specs) as session:
+            try:
+                results = session.run()
+            finally:
+                if results:
+                    workspace.add_session_results(results)
+        if not results:
+            return 1
+        return results.returncode
+
+
+def filter_failed_cases(workspace: Workspace, cases: list["TestCase"]) -> list["TestCase"]:
+    graph = {spec.id: [dep.id for dep in spec.dependencies] for spec in specs}
+    failed: set[str] = set()
+    cases = workspace.load_testcases(ids=[spec.id for spec in specs])
+    map: dict[str, "TestCase"] = {case.id: case for case in cases}
+    for case in cases:
+        if case.status.name not in ok_status:
+            failed.add(case.id)
+    reachable = reachable_nodes(graph, failed)
+    #specs = [spec for spec in specs if spec.id in reachable and ]
+
+
+def filter_cases(cases: list["TestCase"], args: "argparse.Namespace") -> list["TestCase"]:
+    keyword_exprs = args.keyword_exprs or []
+    if (":all:" in keyword_exprs) or ("__all__" in keyword_exprs):
+        return cases
     masks: dict[str, bool] = {}
     for case in cases:
         kwds = set(case.spec.keywords)
         kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
-        kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
-        if not kwd_all:
-            for keyword_expr in keyword_exprs:
-                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                if not match:
-                    masks[case.id] = True
-                    break
+        if args.rerun_failed and case.status.name in ok_status:
+            # skip passing tests
+            masks[case.id] = True
+            continue
+        for keyword_expr in keyword_exprs:
+            match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+            if not match:
+                masks[case.id] = True
+                break
     return [case for case in cases if not masks.get(case.id)]

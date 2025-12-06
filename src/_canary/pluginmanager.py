@@ -27,6 +27,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import build
         from . import collect
         from . import conductor
+        from . import filter
         from . import runtest
         from . import select
         from .plugins import builtin
@@ -42,6 +43,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(collect, "builtin.collect")
         self.register(conductor.CanaryConductor(), "builtin.conductor")
         self.register(build, "builtin.build")
+        self.register(filter, "builtin.filter")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
         self.register(select, "builtin.select")

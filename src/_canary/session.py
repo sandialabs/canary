@@ -4,17 +4,18 @@
 import dataclasses
 import datetime
 import os
+import sqlite3
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 
 from . import config
 from .error import StopExecution
 from .error import notests_exit_status
+from .filter import ExecutionContextFilter
 from .runtest import Runner
 from .runtest import canary_runtests
-from .select import RuntimeSelector
-from .select import canary_rtselect
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import select_sygil
@@ -47,7 +48,7 @@ class Session:
         self.name: str
         self.root: Path
         self.work_dir: Path
-        self.specs_file: Path
+        self.db: sqlite3.Connection
         self._cases: list[TestCase]
         self._specs: list["TestSpec"]
         raise RuntimeError("Use Session factory methods create and load")
@@ -60,7 +61,6 @@ class Session:
         self.root = anchor / self.name
         self._cases = []
         self.work_dir = self.root / "work"
-        self.specs_file = self.root / "specs.json"
         self._specs = []
 
     @staticmethod
@@ -79,14 +79,7 @@ class Session:
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self._specs = specs
-
-        with open(self.specs_file, "w") as fh:
-            data: list[dict] = []
-            for spec in static_order(self.specs):
-                data.append(spec.asdict())
-            json.dump(data, fh, indent=2)
         write_directory_tag(self.root / session_tag)
-
         self._cases.clear()
         lookup: dict[str, TestCase] = {}
         for spec in static_order(self.specs):
@@ -96,26 +89,28 @@ class Session:
             lookup[spec.id] = case
             self._cases.append(case)
 
-        # Dump a snapshot of the configuration used to create this session
-        file = self.root / "config"
-        with open(file, "w") as fh:
-            config.dump(fh)
+        filter = ExecutionContextFilter(self._cases)
+        filter.run()
+
+        dbfile = self.root / "session.sqlite3"
+        self.db = sqlite3.connect(dbfile, timeout=30.0, isolation_level=None)
+        cursor = self.db.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA foreign_key=ON;")
+        cursor.execute("CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, data TEXT)")
+        cursor.execute(
+            """CREATE TABLE IF NOT EXISTS results (
+                id TEXT PRIMARY KEY, status TEXT, timekeeper TEXT, workspace TEXT
+            )"""
+        )
+        self.db.commit()
+
+        self.save_specs(self._specs)
+        self.save_results(self._cases)
+        self.save_config()
 
         return self
-
-    @property
-    def specs(self) -> list["TestSpec"]:
-        from .testspec import TestSpec
-
-        if not self._specs:
-            lookup: dict[str, TestSpec] = {}
-            with open(self.specs_file, "r") as fh:
-                data = json.load(fh)
-                for d in data:
-                    spec = TestSpec.from_dict(d, lookup)
-                    lookup[spec.id] = spec
-                    self._specs.append(spec)
-        return self._specs
 
     @classmethod
     def load(cls, root: Path) -> "Session":
@@ -123,7 +118,126 @@ class Session:
             raise NotASessionError(root)
         self: Session = object.__new__(cls)
         self.initialize_properties(anchor=root.parent, name=root.name)
+        dbfile = self.root / "session.sqlite3"
+        self.db = sqlite3.connect(dbfile, timeout=30.0, isolation_level=None)
+        cursor = self.db.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA foreign_key=ON;")
         return self
+
+    def save_config(self) -> None:
+        # Dump a snapshot of the configuration used to create this session
+        file = self.root / "config"
+        with open(file, "w") as fh:
+            config.dump(fh)
+
+    def load_specs(self) -> list["TestSpec"]:
+        from .testspec import TestSpec
+
+        cursor = self.db.cursor()
+        cursor.execute("SELECT * FROM specs")
+        rows = cursor.fetchall()
+        data = {id: json.loads(data) for id, data in rows}
+        graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
+        lookup: dict[str, TestSpec] = {}
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            spec = TestSpec.from_dict(data[id], lookup)
+            lookup[id] = spec
+        return list(lookup.values())
+
+    def save_specs(self, specs: list["TestSpec"]) -> None:
+        cursor = self.db.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO specs (id, data)
+            VALUES (?, ?)
+            ON CONFLICT(id) DO UPDATE SET data=excluded.data
+            """,
+            [(spec.id, json.dumps_min(spec.asdict())) for spec in specs],
+        )
+        self.db.commit()
+
+    def load_testcases(self) -> list[TestCase]:
+        """Load cached test cases.  Dependency resolution is performed."""
+        specs = self.specs
+        graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
+        map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
+        lookup: dict[str, "TestCase"] = {}
+        ts = TopologicalSorter(graph)
+        pm = logger.progress_monitor("@*{Loading} test cases")
+        results = self.get_results()
+        try:
+            for id in ts.static_order():
+                spec = map[id]
+                dependencies = [lookup[dep.id] for dep in spec.dependencies]
+                result = results[id]
+                space = ExecutionSpace(
+                    root=Path(result["workspace"]["root"]),
+                    path=Path(result["workspace"]["path"]),
+                    session=result["workspace"]["session"],
+                )
+                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case.status.set(
+                    result["status"]["name"],
+                    message=result["status"]["message"],
+                    code=result["status"]["code"],
+                )
+                case.timekeeper.started_on = result["timekeeper"]["started_on"]
+                case.timekeeper.finished_on = result["timekeeper"]["finished_on"]
+                case.timekeeper.duration = result["timekeeper"]["duration"]
+                lookup[case.spec.id] = case
+            cases = list(lookup.values())
+        except:
+            logger.exception("uncaught exception")
+            raise
+        pm.done()
+        return cases
+
+    def save_results(self, cases: list["TestCase"]) -> None:
+        rows = []
+        for case in cases:
+            rows.append(
+                (
+                    case.id,
+                    json.dumps_min(case.status.asdict()),
+                    json.dumps_min(case.timekeeper.asdict()),
+                    json.dumps_min(case.workspace.asdict()),
+                )
+            )
+        cursor = self.db.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO results (id, status, timekeeper, workspace)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              status=excluded.status,
+              timekeeper=excluded.timekeeper,
+              workspace=excluded.workspace
+            """,
+            rows,
+        )
+        self.db.commit()
+
+    def get_results(self) -> dict[str, dict[str, Any]]:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT id, status, timekeeper, workspace  FROM results")
+        rows = cursor.fetchall()
+        return {
+            id: {
+                "status": json.loads(status),
+                "timekeeper": json.loads(timekeeper),
+                "workspace": json.loads(workspace),
+            }
+            for id, status, timekeeper, workspace in rows
+        }
+
+    @property
+    def specs(self) -> list["TestSpec"]:
+        if not self._specs:
+            self._specs.extend(self.load_specs())
+        return self._specs
 
     @property
     def cases(self) -> list[TestCase]:
@@ -148,45 +262,19 @@ class Session:
         for i, id in enumerate(ids):
             ids[i] = find(id)
 
-    def load_testcases(self) -> list[TestCase]:
-        """Load cached test cases.  Dependency resolution is performed."""
-        specs = self.specs
-        graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
-        map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
-        lookup: dict[str, "TestCase"] = {}
-        ts = TopologicalSorter(graph)
-        pm = logger.progress_monitor("@*{Loading} test cases into session")
-        for id in ts.static_order():
-            spec = map[id]
-            dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=Path(spec.execpath), session=self.name)
-            case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-            f = case.workspace.dir / "testcase.lock"
-            if f.exists():
-                data = json.loads(f.read_text())
-                case.status.set(
-                    data["status"]["name"],
-                    message=data["status"]["message"],
-                    code=data["status"]["code"],
-                )
-                case.timekeeper.started_on = data["timekeeper"]["started_on"]
-                case.timekeeper.finished_on = data["timekeeper"]["finished_on"]
-                case.timekeeper.duration = data["timekeeper"]["duration"]
-            lookup[case.spec.id] = case
-        cases = list(lookup.values())
-        pm.done()
-        return cases
-
     def get_ready(self, ids: list[str] | None) -> list[TestCase]:
         cases: list[TestCase]
         if not ids:
             cases = self.cases
         else:
             self.resolve_root_ids(ids)
-            cases = [case for case in self.cases if case.id in ids]
-        selector = RuntimeSelector(cases)
-        final = canary_rtselect(selector=selector)
-        return final
+            cases = []
+            for case in self.cases:
+                if case.id in ids:
+                    # case was explicitly requested, set its status to pending
+                    case.status.set("PENDING")
+                    cases.append(case)
+        return [case for case in cases if case.status.name in ("READY", "PENDING")]
 
     def run(self, ids: list[str] | None = None) -> SessionResults:
         cases = self.get_ready(ids=ids)
@@ -205,6 +293,7 @@ class Session:
         finally:
             finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
+            self.save_results(cases)
             return SessionResults(
                 session=self.name,
                 cases=cases,

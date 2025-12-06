@@ -60,15 +60,10 @@ def test_resource_populate():
     }
 
 
-def test_resource_pool_modify():
+def test_resource_populate_nogpu():
     rp = ResourcePool()
-    rp.populate(cpus=1)
-    assert rp.resources == {"cpus": [{"id": "0", "slots": 1}]}
-    rp.modify(gpus=1)
-    assert rp.resources == {
-        "cpus": [{"id": "0", "slots": 1}],
-        "gpus": [{"id": "0", "slots": 1}],
-    }
+    rp.populate(cpus=1, gpus=0)
+    assert rp.resources == {"cpus": [{"id": "0", "slots": 1}], "gpus": []}
 
 
 def test_resource_pool_fill():

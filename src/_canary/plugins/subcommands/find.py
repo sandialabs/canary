@@ -11,7 +11,6 @@ from typing import TextIO
 
 from ... import config
 from ...collect import Collector
-from ...collect import canary_collect
 from ...error import StopExecution
 from ...hookspec import hookimpl
 from ...select import finalize as finalize_specs
@@ -59,7 +58,7 @@ class Find(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         collector = Collector()
         collector.add_scanpaths(args.scanpaths)
-        generators = canary_collect(collector=collector)
+        generators = collector.run()
 
         pm = logger.progress_monitor("@*{Generating} test specs")
         resolved = config.pluginmanager.hook.canary_generate(
