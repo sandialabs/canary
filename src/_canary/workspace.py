@@ -1,39 +1,39 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import dataclasses
 import datetime
 import os
 import shutil
 import sqlite3
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from typing import Callable
-from typing import Generator
 
 from . import config
 from . import rules
 from . import select
 from . import testspec
-from . import when
-from .filter import ExecutionContextFilter
 from .build import Builder
 from .collect import Collector
+from .error import notests_exit_status
+from .error import StopExecution
 from .generator import AbstractTestGenerator
-from .session import SessionResults
-from .testcase import TestCase
-from .testexec import ExecutionSpace
 from .runtest import Runner
 from .runtest import canary_runtests
+from .testcase import Measurements
+from .testcase import TestCase
+from .testexec import ExecutionSpace
+from .testspec import Mask
 from .testspec import ResolvedSpec
-from .testspec import TestSpec
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
 from .util.graph import reachable_nodes
+from .util.graph import reachable_up_down
 from .util.graph import static_order
 
 logger = logging.get_logger(__name__)
@@ -45,6 +45,16 @@ view_tag = "VIEW.TAG"
 
 DB_MAX_RETRIES = 8
 DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
+
+
+@dataclasses.dataclass
+class Session:
+    name: str
+    cases: list[TestCase]
+    returncode: int
+    started_on: datetime.datetime
+    finished_on: datetime.datetime
+    prefix: Path
 
 
 class Workspace:
@@ -218,38 +228,32 @@ class Workspace:
         self.db = WorkspaceDatabase.load(self.dbfile)
         return self
 
-    def run(self, specs: list["TestSpec"]) -> SessionResults:
-        session_name = datetime.datetime.now().isoformat(timespec="microseconds").replace(":", "-")
+    def run(
+        self,
+        specs: list["ResolvedSpec"],
+        session_name: str | None = None,
+        update_view: bool = True,
+    ) -> Session:
+        now = datetime.datetime.now()
+        session_name = session_name or now.isoformat(timespec="microseconds").replace(":", "-")
         session = self.sessions_dir / session_name
-        lookup: dict[str, TestCase] = {}
-        cases: list[TestCase] = []
-        results = self.db.get_results()
-        ids = [spec.id for spec in specs]
-        reachable: list[str] = self.db.reachable_spec_ids(ids)
-        if missing := set(reachable) - set(ids) :
-            # FIXME: load missing test specs
-            # resolved = self.db.get_specs(missing)
-            # other = ...
-            # specs.extend([spec for spec in other if spec not in specs])
-            pass
-        for spec in static_order(specs):
-            dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-            case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-            lookup[spec.id] = case
-            cases.append(case)
-            if res := results.get(case.id):
-                case.status.set(res["status"], reason=res["reason"], code=res["code"])
-                # FIXME: Do the right thing here
-                if case.id in ids:
-                    case.status.set("PENDING")
-        filter = ExecutionContextFilter(cases)
-        filter.run()
+
+        cases = self.construct_testcases(specs, session)
+
+        selector = select.RuntimeSelector(cases, workspace=self.root)
+        selector.add_rule(rules.ResourceCapacityRule())
+        selector.run()
+
         starting_dir = os.getcwd()
         session.mkdir(parents=True, exist_ok=True)
         started_on = datetime.datetime.now()
-        ready = [case for case in cases if case.status.category in ("PENDING", "READY")]
-        runner = Runner(cases=ready, session=session.name)
+        ready = [
+            case for case in cases if case.status.category in ("READY", "PENDING") and not case.mask
+        ]
+        if not ready:
+            raise StopExecution("no cases to run", exit_code=notests_exit_status)
+        runner = Runner(cases=ready, session=session.name, workspace=self)
+
         try:
             os.chdir(str(session))
             canary_runtests(runner=runner)
@@ -258,26 +262,26 @@ class Workspace:
         finally:
             finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
-            results = SessionResults(
-                session=session.name,
-                cases=cases,
+            results = Session(
+                name=session.name,
+                cases=[case for case in cases if not case.mask],
                 returncode=runner.returncode,
                 started_on=started_on,
                 finished_on=finished_on,
                 prefix=session,
             )
-            self.add_session_results(results)
+            self.add_session_results(results, update_view=update_view)
             return results
 
-    def add_session_results(self, results: SessionResults, view: bool = True) -> None:
+    def add_session_results(self, results: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         self.db.put_results(results)
-        view_entries: dict[Path, list[Path]] = {}
-        for case in results.cases:
-            relpath = case.workspace.dir.relative_to(results.prefix)
-            view_entries.setdefault(results.prefix, []).append(relpath)
 
-        if view:
+        if update_view:
+            view_entries: dict[Path, list[Path]] = {}
+            for case in results.cases:
+                relpath = case.workspace.dir.relative_to(results.prefix)
+                view_entries.setdefault(results.prefix, []).append(relpath)
             self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -300,19 +304,12 @@ class Workspace:
         def mtime(path: Path):
             return path.stat().st_mtime
 
-        latest: dict[str, TestCase] = {}
         view: dict[str, tuple[str, str]] = {}
-        for session in self.sessions():
-            for case in session.cases:
-                if case.id not in latest:
-                    latest[case.id] = case
-                elif mtime(latest[case.id].workspace.dir) > mtime(case.workspace.dir):
-                    latest[case.id] = case
-                else:
-                    continue
-                ws_dir = latest[case.id].workspace.dir
-                relpath = ws_dir.relative_to(session.work_dir)
-                view[case.id] = (str(session.work_dir), str(relpath))
+        for case in self.load_testcases():
+            if not case.workspace.session:
+                continue
+            relpath = case.workspace.dir.relative_to(self.sessions_dir / case.workspace.session)
+            view[case.id] = (str(self.sessions_dir / case.workspace.session), str(relpath))
         for path in self.view.iterdir():
             if path.is_dir():
                 shutil.rmtree(path)
@@ -332,7 +329,10 @@ class Workspace:
                 link.parent.mkdir(parents=True, exist_ok=True)
                 if link.exists():
                     link.unlink()
-                link.symlink_to(target, target_is_directory=True)
+                try:
+                    link.symlink_to(target, target_is_directory=True)
+                except FileExistsError:
+                    pass
 
     def inside_view(self, path: Path | str) -> bool:
         """Is ``path`` inside of a self.view?"""
@@ -379,7 +379,6 @@ class Workspace:
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
         self.db.put_generators(generators)
-        # Invalidate caches
         logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
         return generators
 
@@ -389,9 +388,8 @@ class Workspace:
         reachable: list[str] | None = None
         if ids:
             reachable = self.db.reachable_spec_ids(ids)
-        resolved = self.db.get_specs(ids=reachable)
         latest = self.db.get_results(ids=reachable)
-        specs = select.finalize(resolved)
+        specs = self.db.get_specs(ids=reachable)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -405,10 +403,12 @@ class Workspace:
                     mine["status"]["category"],
                     reason=mine["status"]["reason"],
                     code=mine["status"]["code"],
+                    kind=mine["status"]["kind"],
                 )
                 case.timekeeper.started_on = mine["timekeeper"]["started_on"]
                 case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
                 case.timekeeper.duration = mine["timekeeper"]["duration"]
+                case.measurements = mine["measurements"]
                 lookup[spec.id] = case
         if ids:
             return [case for case in lookup.values() if case.id in ids]
@@ -417,27 +417,13 @@ class Workspace:
     def select_from_view(
         self,
         path: Path,
-        keyword_exprs: list[str] | None = None,
-    ) -> list[TestCase]:
+    ) -> list["ResolvedSpec"]:
         ids: list[str] = []
         for file in path.rglob("*/testcase.lock"):
             lock_data = json.loads(file.read_text())
             ids.append(lock_data["spec"]["id"])
-        cases = self.load_testcases(ids=ids)
-        if keyword_exprs is None:
-            return cases
-        masks: dict[str, bool] = {}
-        for case in cases:
-            kwds = set(case.spec.keywords)
-            kwds.update(case.spec.implicit_keywords)
-            kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
-            if not kwd_all:
-                for keyword_expr in keyword_exprs:
-                    match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                    if not match:
-                        masks[case.id] = True
-                        break
-        return [case for case in cases if not masks.get(case.id)]
+        resolved = self.db.get_specs(ids=ids)
+        return resolved
 
     def remove_tag(self, tag: str) -> bool:
         if tag == "default":
@@ -452,7 +438,7 @@ class Workspace:
     def is_tag(self, tag: str) -> bool:
         return self.db.is_selection(tag)
 
-    def generate_specs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
+    def construct_testspecs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
         """Generate resolved test specs
 
         Args:
@@ -467,14 +453,49 @@ class Workspace:
         on_options = on_options or []
         generators = self.load_generators()
         builder = Builder(generators, workspace=self.root, on_options=on_options or [])
-        signature = builder.signature
-        if cached := self.db.get_specs(signature=signature):
+        if cached := self.db.get_specs(signature=builder.signature):
+            logger.info("@*{Retrieved} %d test specs from workspace database" % len(cached))
             return cached
+        pm = logger.progress_monitor("@*{Generating} test specs from generators")
         resolved = builder.run()
-        pm = logger.progress_monitor("@*{Putting} specs in workspace database")
-        self.db.put_specs(signature, resolved)
+        pm.done()
+        pm = logger.progress_monitor("@*{Putting} test specs in workspace database")
+        self.db.put_specs(builder.signature, resolved)
         pm.done()
         return resolved
+
+    def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
+        lookup: dict[str, TestCase] = {}
+        cases: list[TestCase] = []
+        latest = self.db.get_results()
+        for spec in static_order(specs):
+            dependencies = [lookup[dep.id] for dep in spec.dependencies]
+            case: TestCase
+            if spec.mask and spec.id in latest:
+                # This case won't run, but it may be needed by dependents
+                mine = latest[spec.id]
+                space = ExecutionSpace(
+                    root=self.sessions_dir / mine["session"],
+                    path=Path(mine["workspace"]),
+                    session=mine["session"],
+                )
+                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case.status.set(
+                    mine["status"]["category"],
+                    reason=mine["status"]["reason"],
+                    code=mine["status"]["code"],
+                    kind=mine["status"]["kind"],
+                )
+                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
+                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
+                case.timekeeper.duration = mine["timekeeper"]["duration"]
+                case.measurements = mine["measurements"]
+            else:
+                space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
+                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+            lookup[spec.id] = case
+            cases.append(case)
+        return cases
 
     def select(
         self,
@@ -486,7 +507,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
         ids: list[str] | None = None,
-    ) -> list["TestSpec"]:
+    ) -> list["ResolvedSpec"]:
         """Generate and select final test specs
 
         Args:
@@ -508,7 +529,7 @@ class Workspace:
           Test spec selection
 
         """
-        resolved = self.generate_specs(on_options=on_options)
+        resolved = self.construct_testspecs(on_options=on_options)
         selector = select.Selector(resolved, self.root)
         if ids:
             selector.add_rule(rules.IDsRule(ids))
@@ -527,34 +548,28 @@ class Workspace:
             tag = "default"
         if tag:
             self.db.put_selection(tag, selector.snapshot())
-        specs = selector.run()
-        return specs
+        selector.run()
+        return selector.specs
 
-    def get_selection(self, tag: str = "default") -> list["TestCase"]:
+    def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
+        if tag == "__failed__":
+            return self.compute_rerun_list()
         snapshot = self.db.get_selection(tag)
         resolved = self.db.get_specs()
-        specs: list[TestSpec]
         if snapshot.is_compatible_with_specs(resolved):
-            specs = snapshot.apply(resolved)
+            snapshot.apply(resolved)
+            return resolved
         else:
             selector = select.Selector.from_snapshot(resolved, self.root, snapshot)
-            specs = selector.run()
+            selector.run()
             self.db.put_selection(tag, selector.snapshot())
-        lookup: dict[str, "TestCase"] = {}
-        map: dict[str, TestSpec] = {spec.id: spec for spec in specs}
-        graph: dict[str, list[str]] = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
-        ts = TopologicalSorter(graph)
-        for id in ts.static_order():
-            spec = map[id]
-            dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            case = TestCase(spec=spec, dependencies=dependencies)
-            lookup[spec.id] = case
-        return list(lookup.values())
+            return selector.specs
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
+        raise NotImplementedError
 
         def mtime(path: Path):
             return path.stat().st_mtime
@@ -623,6 +638,33 @@ class Workspace:
             if spec.matches(root):
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
+
+    def compute_rerun_list(self) -> list["ResolvedSpec"]:
+        results = self.db.get_results()
+        failed: set[str] = set()
+        for id, result in results.items():
+            if result["status"]["category"] in ("FAILED", "ERROR", "BROKEN", "DIFFED", "BLOCKED"):
+                failed.add(id)
+        graph = self.db.get_dependency_graph()
+        upstream, downstream = reachable_up_down(graph, failed)
+        run_specs = failed | downstream
+        load_specs = run_specs | upstream
+        resolved = self.db.get_specs(ids=list(load_specs))
+        for spec in resolved:
+            if spec.id not in run_specs:
+                spec.mask = Mask.masked("ID not in failed IDs or downstream")
+        return resolved
+
+    def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
+        if not ids:
+            return self.db.get_specs()
+        graph = self.db.get_dependency_graph()
+        reachable = reachable_nodes(graph, ids)
+        specs = self.db.get_specs(ids=reachable)
+        for spec in specs:
+            if spec.id not in ids:
+                spec.mask = Mask.masked("ID not requested")
+        return specs
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
@@ -878,13 +920,13 @@ class WorkspaceDatabase:
             lookup[id] = spec
         return list(lookup.values())
 
-    def put_results(self, results: SessionResults) -> None:
+    def put_results(self, session: Session) -> None:
         rows = []
-        for case in results.cases:
+        for case in session.cases:
             rows.append(
                 (
                     case.id,
-                    results.session,
+                    session.name,
                     case.status.category,
                     case.status.kind or "",
                     case.status.reason or "",
@@ -950,23 +992,32 @@ class WorkspaceDatabase:
             d = data.setdefault(row[0], {})  # ID
             d["session"] = row[1]
             d["status"] = {"category": row[2], "kind": row[3], "reason": row[4], "code": row[5]}
-            d["timekeeper"] = {"started_on": row[6], "finished_on": row[7], "duration": float(row[8])}
+            d["timekeeper"] = {
+                "started_on": row[6],
+                "finished_on": row[7],
+                "duration": float(row[8]),
+            }
             d["workspace"] = row[9]
-            d["measurements"] = json.loads(row[10])
+            d["measurements"] = Measurements.from_dict(json.loads(row[10]))
         return data
 
-    def get_single_result(self, id: str) -> dict[str, dict[str, Any]]:
-        raise NotImplementedError
+    def get_single_result(self, id: str) -> list:
         cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM results WHERE id = ? ORDER BY session ASC", id)
+        cursor.execute("SELECT * FROM results WHERE id LIKE ? ORDER BY session ASC", (f"{id}%",))
         rows = cursor.fetchall()
-        data: dict[str, dict[str, Any]] = {}
-        for id, session, status, timekeeper, workspace in rows:
-            data[session] = {
-                "status": json.loads(status),
-                "timekeeper": json.loads(timekeeper),
-                "workspace": json.loads(workspace),
+        data: list[dict] = []
+        for row in rows:
+            d = {}
+            d["session"] = row[1]
+            d["status"] = {"category": row[2], "kind": row[3], "reason": row[4], "code": row[5]}
+            d["timekeeper"] = {
+                "started_on": row[6],
+                "finished_on": row[7],
+                "duration": float(row[8]),
             }
+            d["workspace"] = row[9]
+            d["measurements"] = json.loads(row[10])
+            data.append(d)
         return data
 
     def get_dependency_graph(self) -> dict[str, list[str]]:

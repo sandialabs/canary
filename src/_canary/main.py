@@ -149,7 +149,10 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
 
         if f := getattr(obj, "__file__", None):
             return f
-        return inspect.getfile(obj.__class__)
+        try:
+            return inspect.getfile(obj.__class__)
+        except TypeError:
+            return None
 
     for frame in tb[::-1]:
         # Check if the frame corresponds to a registered plugin

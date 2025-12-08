@@ -33,7 +33,7 @@ def canary_addoption(parser: Parser) -> None:
 
 
 @hookimpl(trylast=True)
-def canary_session_finish(session: "Session", exitstatus: int) -> None:
+def canary_sessionfinish(session: "Session") -> None:
     mail_to = config.getoption("mail_to")
     if mail_to is None:
         return

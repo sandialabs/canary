@@ -38,7 +38,8 @@ from .util.time import hhmmss
 from .when import match_any
 
 if TYPE_CHECKING:
-    from .testspec import TestSpec
+    from .testspec import Mask
+    from .testspec import ResolvedSpec
 
 logger = logging.get_logger(__name__)
 
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 class TestCase:
     def __init__(
         self,
-        spec: "TestSpec",
+        spec: "ResolvedSpec",
         workspace: ExecutionSpace,
         dependencies: list["TestCase"] | None = None,
     ) -> None:
@@ -138,6 +139,14 @@ class TestCase:
     @property
     def attributes(self) -> dict[str, Any]:
         return self.spec.attributes
+
+    @property
+    def mask(self) -> "Mask":
+        return self.spec.mask
+
+    @property
+    def pretty_name(self) -> str:
+        return self.spec.pretty_name
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
@@ -446,7 +455,12 @@ class TestCase:
         except FileNotFoundError:
             return
         status = data["status"]
-        self.status.set(status["category"], status["reason"], status["code"])
+        self.status.set(
+            status["category"],
+            reason=status["reason"],
+            code=status["code"],
+            kind=status["kind"],
+        )
         tk = data["timekeeper"]
         self.timekeeper.started_on = tk["started_on"]
         self.timekeeper.finished_on = tk["finished_on"]
@@ -532,20 +546,20 @@ class TestCase:
                 # this case will never be able to run
                 dep = self.dependencies[i]
                 if dep.status.category == "SKIPPED":
-                    self._status.set("SKIPPED", "one or more dependencies was skipped")
+                    self._status.set("BLOCKED", "one or more dependencies was skipped")
                 elif dep.status.category == "CANCELLED":
-                    self._status.set("SKIPPED", "one or more dependencies was cancelled")
+                    self._status.set("BLOCKED", "one or more dependencies was cancelled")
                 elif dep.status.category == "TIMEOUT":
-                    self._status.set("SKIPPED", "one or more dependencies timed out")
+                    self._status.set("BLOCKED", "one or more dependencies timed out")
                 elif dep.status.category == "FAILED":
-                    self._status.set("SKIPPED", "one or more dependencies failed")
+                    self._status.set("BLOCKED", "one or more dependencies failed")
                 elif dep.status.category == "DIFFED":
-                    self._status.set("SKIPPED", "one or more dependencies diffed")
+                    self._status.set("BLOCKED", "one or more dependencies diffed")
                 elif dep.status.category == "SUCCESS":
-                    self._status.set("SKIPPED", "one or more dependencies succeeded")
+                    self._status.set("BLOCKED", "one or more dependencies succeeded")
                 else:
                     self._status.set(
-                        "SKIPPED",
+                        "BLOCKED",
                         f"Dependency {dep.name} finished with status {dep.status.category!r}, "
                         f"not {self.spec.dep_done_criteria[i]}",
                     )
@@ -561,7 +575,9 @@ class TestCase:
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.category, "*"):
                 flags[i] = "can_run"
-            elif match_any(expected[i], [dep.status.category, *dep.status.labels], ignore_case=True):
+            elif match_any(
+                expected[i], [dep.status.category, *dep.status.labels], ignore_case=True
+            ):
                 flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
@@ -682,6 +698,10 @@ class Measurements:
 
     def update(self, measurements: dict) -> None:
         self.data.update(measurements)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
+        return cls(data=data)
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

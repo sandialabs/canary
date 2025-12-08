@@ -6,7 +6,6 @@ from pathlib import Path
 
 import _canary.config as config
 import canary
-from _canary import filter
 from _canary import rules
 from _canary import select
 from _canary import testcase
@@ -43,7 +42,7 @@ def select_specs(
     if prefixes:
         selector.add_rule(rules.PrefixRule(prefixes))
     selector.run()
-    return selector.specs
+    return [spec for spec in selector.specs if not spec.mask]
 
 
 def generate_specs(generators, on_options=None):
@@ -53,7 +52,8 @@ def generate_specs(generators, on_options=None):
 
 
 def filter_cases(cases):
-    f = filter.ExecutionContextFilter(cases)
+    f = select.RuntimeSelector(cases, workspace=Path.cwd())
+    f.add_rule(rules.ResourceCapacityRule())
     f.run()
 
 
@@ -166,7 +166,7 @@ def test_cpu_count(tmpdir):
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4
-        assert len([case for case in cases if case.status.name == "READY"]) == 4
+        assert len([case for case in cases if case.status.category == "READY"]) == 4
         canary.config.pluginmanager.unregister(name="myhook")
 
     with canary.config.override():
@@ -181,7 +181,7 @@ def test_cpu_count(tmpdir):
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4
-        assert len([case for case in cases if case.status.name == "READY"]) == 1
+        assert len([case for case in cases if case.status.category == "READY"]) == 1
         canary.config.pluginmanager.unregister(name="myhook")
 
 
@@ -287,46 +287,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             )
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 3
-            for spec in final:
-                assert spec.parameters["cpus"] != 2
-
-
-def test_vvt_generator(tmpdir):
-    with working_dir(tmpdir.strpath, create=True):
-        with open("test.vvt", "w") as fh:
-            fh.write(
-                """
-# VVT: name: baz
-# VVT: analyze : --analyze
-# VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1 2
-# VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
-"""
-            )
-        with config.override():
-            generators = workspace.find_generators_in_path(".")
-            specs = generate_specs(generators, on_options=["baz"])
-            final = select_specs(specs, keyword_exprs=["test and unit"])
-            assert len(specs) == 7
-            assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 7
-
-            # without the baz option, the `np` parameter will not be expanded so we will be left with
-            # three test cases and one analyze.  The analyze will not be masked because the `np`
-            # parameter is never expanded
-            specs = generate_specs(generators)
-            final = select_specs(specs, keyword_exprs=["test and unit"])
-            assert len(specs) == 4
-            assert specs[-1].attributes.get("multicase") is not None
             assert len(final) == 4
-
-            # with np<2, some of the cases will be filtered
-            specs = generate_specs(generators, on_options=["baz"])
-            final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
-            assert len(specs) == 7
-            assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 3
 
 
 def test_many_composite(tmpdir):

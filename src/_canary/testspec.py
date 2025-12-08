@@ -87,6 +87,12 @@ class BaseSpec(Generic[T]):
     def __str__(self) -> str:
         return self.display_name
 
+    def __repr__(self) -> str:
+        p = self.family
+        if self.parameters:
+            p += ", " + ", ".join(f"{k}={self.parameters[k]}" for k in sorted(self.parameters))
+        return f"{self.__class__.__name__}({p})"
+
     def __post_init__(self) -> None:
         self.family = self.family or self.file.stem
         if not self.id:
@@ -268,16 +274,16 @@ class BaseSpec(Generic[T]):
 
 
 @dataclasses.dataclass
-class TestSpec(BaseSpec["TestSpec"]):
-    baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: Sequence["TestSpec"] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass
 class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
     dependencies: Sequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
+
+    def __repr__(self) -> str:
+        p = self.family
+        if self.parameters:
+            p += ", " + ", ".join(f"{k}={self.parameters[k]}" for k in sorted(self.parameters))
+        return f"{self.__class__.__name__}({p})"
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
@@ -285,42 +291,6 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
         if mask:
             d["mask"] = Mask(mask["value"], mask["reason"])
         return super().from_dict(d, lookup)
-
-    def set_mask(self, arg: str | Mask | None) -> None:
-        if arg is None:
-            self.mask = Mask.unmasked()
-        elif isinstance(arg, str):
-            self.mask = Mask.masked(arg)
-        else:
-            assert isinstance(arg, Mask)
-            self.mask = arg
-
-    def finalize(self, dependencies: list["TestSpec"]) -> TestSpec:
-        return TestSpec(
-            id=self.id,
-            file_root=self.file_root,
-            file_path=self.file_path,
-            family=self.family,
-            dependencies=dependencies,
-            dep_done_criteria=self.dep_done_criteria,
-            keywords=self.keywords,
-            parameters=self.parameters,
-            assets=self.assets,
-            baseline=self.baseline,
-            artifacts=self.artifacts,
-            exclusive=self.exclusive,
-            timeout=self.timeout,
-            xstatus=self.xstatus,
-            preload=self.preload,
-            modules=self.modules,
-            rcfiles=self.rcfiles,
-            owners=self.owners,
-            attributes=self.attributes,
-            environment=self.environment,
-            environment_modifications=self.environment_modifications,
-            stdout=self.stdout,
-            stderr=self.stderr,
-        )
 
 
 @dataclasses.dataclass

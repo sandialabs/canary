@@ -158,7 +158,12 @@ class Status:
         Returns:
             Dictionary with category, code, and reason (if present)
         """
-        result = {"category": self._category, "code": self._code, "reason": self._reason}
+        result = {
+            "category": self._category,
+            "code": self._code,
+            "reason": self._reason,
+            "kind": self._kind,
+        }
         return result
 
     @classmethod
@@ -172,7 +177,12 @@ class Status:
         Returns:
             Status object
         """
-        return cls(status=data["category"], code=data["code"], reason=data.get("reason"))
+        return cls(
+            status=data["category"],
+            code=data["code"],
+            reason=data.get("reason"),
+            kind=data.get("kind"),
+        )
 
     def __eq__(self, other) -> bool:
         """Compare by category, code, and reason."""
@@ -181,6 +191,7 @@ class Status:
                 self._category == other._category
                 and self._code == other._code
                 and self._reason == other._reason
+                and self._kind == other._kind
             )
         elif isinstance(other, str):
             # String comparison only checks category, not reason or code
@@ -192,7 +203,7 @@ class Status:
 
     def __hash__(self):
         """Allow Status to be used in sets and as dict keys."""
-        return hash((self._category, self._code, self._reason))
+        return hash((self._category, self._code, self._reason, self._kind))
 
     def __str__(self) -> str:
         """String representation."""

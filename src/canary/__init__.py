@@ -29,7 +29,6 @@ from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
 from _canary.protocols import JobProtocol
 from _canary.select import Selector
-from _canary.session import Session
 from _canary.testcase import TestCase
 from _canary.testexec import ExecutionPolicy
 from _canary.testexec import PythonFileExecutionPolicy
@@ -39,7 +38,6 @@ from _canary.testinst import TestMultiInstance
 from _canary.testspec import DependencyPatterns
 from _canary.testspec import Mask
 from _canary.testspec import ResolvedSpec
-from _canary.testspec import TestSpec
 from _canary.testspec import UnresolvedSpec
 from _canary.third_party import color
 from _canary.util import _difflib as difflib
@@ -54,6 +52,7 @@ from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
 from _canary.version import version_info  # noqa: I001
 from _canary.workspace import NotAWorkspaceError
+from _canary.workspace import Session
 from _canary.workspace import Workspace
 
 from . import directives
@@ -87,7 +86,6 @@ __all__ = [
     "CanaryReporter",
     "CanarySubcommand",
     "JobProtocol",
-    "Session",
     "TestCase",
     "ExecutionPolicy",
     "PythonFileExecutionPolicy",
@@ -96,7 +94,6 @@ __all__ = [
     "TestMultiInstance",
     "DependencyPatterns",
     "ResolvedSpec",
-    "TestSpec",
     "UnresolvedSpec",
     "color",
     "difflib",
@@ -110,6 +107,7 @@ __all__ = [
     "version",
     "version_info",
     "NotAWorkspaceError",
+    "Session",
     "Workspace",
     "directives",
     "patterns",

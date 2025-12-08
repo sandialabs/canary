@@ -11,11 +11,11 @@ from _canary.error import timeout_exit_status
 
 def test_status_0():
     stat = status.Status()
-    stat.set("failed", message="Just because")
+    stat.set("failed", reason="Just because")
 
     other = status.Status()
     assert other != stat
-    other.set("failed", message="Just because")
+    other.set("failed", reason="Just because")
     assert other == stat
 
     stat.set("ready")
@@ -39,6 +39,6 @@ def test_status_0():
     stat.set(22)
     assert stat == "FAILED"
 
-    stat.set("broken", message="reason")
-    assert stat.name == "BROKEN"
+    stat.set("broken", reason="reason")
+    assert stat.category == "BROKEN"
     assert stat.display_name() == "BROKEN"

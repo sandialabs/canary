@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class StatusProtocol(Protocol):
-    name: str
+    category: str
     color: str
 
     def set(

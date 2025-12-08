@@ -19,15 +19,15 @@ if TYPE_CHECKING:
     from .collect import Collector
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
-    from .filter import ExecutionContextFilter
     from .generator import AbstractTestGenerator
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
+    from .select import RuntimeSelector
     from .select import Selector
-    from .session import Session
     from .testcase import TestCase
     from .testexec import ExecutionPolicy
+    from .workspace import Session
 
 
 project_name = "canary"
@@ -130,7 +130,7 @@ def canary_configure(config: "CanaryConfig") -> None:
 
 
 @hookspec
-def canary_sessionstart(session: "Session") -> None: ...
+def canary_sessionstart(workspace: "Session") -> None: ...
 
 
 @hookspec
@@ -244,7 +244,7 @@ def canary_select_report(selector: "Selector") -> None:
 # runtime selection hooks
 # -------------------------------------------------------------------------
 @hookspec
-def canary_contextfilterstart(contextfilter: "ExecutionContextFilter") -> None:
+def canary_rtselectstart(selector: "RuntimeSelector") -> None:
     """Starts the selection process.
 
     Args:
@@ -253,7 +253,7 @@ def canary_contextfilterstart(contextfilter: "ExecutionContextFilter") -> None:
 
 
 @hookspec
-def canary_contextfilter_modifyitems(contextfilter: "ExecutionContextFilter") -> None:
+def canary_rtselect_modifyitems(selector: "RuntimeSelector") -> None:
     """Modifies the selection items.
 
     Args:
@@ -262,7 +262,7 @@ def canary_contextfilter_modifyitems(contextfilter: "ExecutionContextFilter") ->
 
 
 @hookspec
-def canary_contextfilter_report(contextfilter: "ExecutionContextFilter") -> None:
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     """Reports the selection results.
 
     Args:

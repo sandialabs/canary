@@ -3,26 +3,22 @@
 # SPDX-License-Identifier: MIT
 
 import sys
+from collections import deque
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 from typing import Sequence
 from typing import TextIO
-from typing import TypeVar
 
 if TYPE_CHECKING:
     from ..testspec import ResolvedSpec
-    from ..testspec import TestSpec
-    from ..testcase import TestCase
-
-    SpecLike = TypeVar("SpecLike", TestCase, ResolvedSpec, TestSpec)
 
 builtin_print = print
 
 
-def static_order(specs: Sequence["SpecLike"]) -> list["SpecLike"]:
-    map: dict[str, "SpecLike"] = {}
+def static_order(specs: Sequence["ResolvedSpec"]) -> list["ResolvedSpec"]:
+    map: dict[str, "ResolvedSpec"] = {}
     graph: dict[str, list[str]] = {}
     for spec in specs:
         map[spec.id] = spec
@@ -31,7 +27,7 @@ def static_order(specs: Sequence["SpecLike"]) -> list["SpecLike"]:
     return [map[id] for id in ts.static_order()]
 
 
-def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
+def static_order_ix(specs: Sequence["ResolvedSpec"]) -> list[int]:
     map: dict[str, int] = {}
     graph: dict[str, list[str]] = {}
     for i, spec in enumerate(specs):
@@ -42,7 +38,7 @@ def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
 
 
 def print_spec(
-    spec: "SpecLike",
+    spec: "ResolvedSpec",
     level: int = -1,
     file=None,
     indent="",
@@ -55,7 +51,7 @@ def print_spec(
     tee = "├── "
     last = "└── "
 
-    def inner(spec: "SpecLike", prefix: str = "", level=-1):
+    def inner(spec: "ResolvedSpec", prefix: str = "", level=-1):
         if not level:
             return  # 0, stop iterating
         dependencies = spec.dependencies
@@ -74,7 +70,7 @@ def print_spec(
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(specs: Sequence["SpecLike"], file: str | Path | TextIO = sys.stdout) -> None:
+def print(specs: Sequence["ResolvedSpec"], file: str | Path | TextIO = sys.stdout) -> None:
     def streamify(arg) -> tuple[TextIO, bool]:
         if isinstance(arg, str):
             arg = Path(arg)
@@ -110,3 +106,50 @@ def reachable_nodes(graph: dict[str, list[str]], roots: Iterable[str]) -> list[s
             if dep not in visited:
                 stack.append(dep)
     return list(visited)
+
+
+def reachable_up_down(
+    graph_deps: dict[str, list[str]],
+    nodes: Iterable[str],
+) -> tuple[set[str], set[str]]:
+    """
+    graph_deps: node -> list of dependencies (A: [B,C,D] means A depends on B,C,D)
+    nodes: starting nodes
+
+    Returns (upstream, downstream):
+      upstream   = all nodes that the start nodes depend on (ancestors)
+      downstream = all nodes that depend on the start nodes (descendants)
+    """
+
+    # --- Convert A:[B,C] (A depends on B,C) → B:[A], C:[A]
+    providers: dict = {u: set() for u in graph_deps}  # ensure all nodes present
+    for u, deps in graph_deps.items():
+        for d in deps:
+            providers.setdefault(d, set())
+            providers[d].add(u)
+
+    start = set(nodes)
+
+    # --- Upstream search (dependencies) ---
+    # Walk backward along graph_deps edges: A -> deps
+    upstream = set()
+    q = deque(start)
+    while q:
+        u = q.popleft()
+        for d in graph_deps.get(u, ()):  # dependencies of u
+            if d not in upstream and d not in start:
+                upstream.add(d)
+                q.append(d)
+
+    # --- Downstream search (dependents) ---
+    # Walk forward along provider->consumer edges
+    downstream = set()
+    q = deque(start)
+    while q:
+        u = q.popleft()
+        for v in providers.get(u, ()):  # consumers of u
+            if v not in downstream and v not in start:
+                downstream.add(v)
+                q.append(v)
+
+    return upstream, downstream

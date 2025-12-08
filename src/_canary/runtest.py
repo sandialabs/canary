@@ -23,6 +23,7 @@ from .util.time import hhmmss
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .testcase import TestCase
+    from .workspace import Workspace
 
 
 logger = logging.get_logger(__name__)
@@ -54,6 +55,7 @@ def canary_runtests(runner: "Runner") -> None:
 class Runner:
     cases: list["TestCase"]
     session: str
+    workspace: "Workspace"
     _returncode: int = -20
     start: float = dataclasses.field(default=-1.0, init=False)
     finish: float = dataclasses.field(default=-1.0, init=False)
@@ -137,7 +139,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
         for case in runner.cases:
             totals.setdefault(case.status.category, []).append(case)
         for name in totals:
-            if not include_pass and name == "SUCCESS":
+            if not include_pass and name in ("SUCCESS", "XDIFF", "XFAIL"):
                 continue
             n: int = 0
             for case in sorted(totals[name], key=lambda t: t.name):

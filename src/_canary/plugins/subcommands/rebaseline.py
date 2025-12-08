@@ -41,7 +41,8 @@ class Rebaseline(CanarySubcommand):
         workspace = Workspace.load()
         cases: list[TestCase]
         if args.start:
-            cases = workspace.select_from_view(path=Path(args.start))
+            specs = workspace.select_from_view(path=Path(args.start))
+            cases = workspace.load_testcases(ids=[spec.id for spec in specs])
         else:
             cases = workspace.load_testcases(args.case_specs)
         if args.keyword_exprs:

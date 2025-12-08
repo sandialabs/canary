@@ -45,7 +45,7 @@ canary_build(builder)
         builder (Builder): The builder instance containing generator output.
 
     Returns:
-        list[TestSpec]: The fully resolved and optionally plugin-modified
+        list[ResolvedSpec]: The fully resolved and optionally plugin-modified
         final specifications.
 
     Lifecycle:
@@ -84,7 +84,7 @@ class Builder:
               Produces concrete resolved specs suitable for test execution.
 
         resolved_specs():
-            Returns the final list of resolved TestSpecs after all hooks have executed.
+            Returns the final list of resolved ResolvedSpec after all hooks have executed.
 
 
 Hook Specifications

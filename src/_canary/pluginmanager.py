@@ -27,7 +27,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import build
         from . import collect
         from . import conductor
-        from . import filter
         from . import runtest
         from . import select
         from .plugins import builtin

@@ -27,12 +27,10 @@ def test_repo_bfilter(tmpdir):
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
             workspace = Workspace.create("tests", force=True)
             workspace.add({str(examples / "basic"): [], str(examples / "vvt"): []})
-            selection = workspace.get_selection()
-            with workspace.session(selection) as session:
-                session.run()
-            session = os.path.basename(glob.glob("./tests/.canary/sessions/[0-9]*")[0])
+            specs = workspace.get_selection()
+            workspace.run(specs)
             files = glob.glob(
-                f"tests/.canary/sessions/{session}/canary-hpc/batches/**/canary-inp.sh",
+                f"tests/.canary/tmp/canary-hpc/batches/**/canary-inp.sh",
                 recursive=True,
             )
             assert len(files) == 2

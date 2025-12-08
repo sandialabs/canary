@@ -47,14 +47,9 @@ class CanaryHPCExecutor:
         n = len(self.cases)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
-        with workspace.session(name=self.session) as session:
-            try:
-                results = session.run(ids=self.cases)
-                workspace.add_session_results(results, view=False)
-            except Exception:
-                return 1
-            else:
-                return results.returncode
+        specs = workspace.load_testspecs(ids=self.cases)
+        session = workspace.run(specs, session_name=self.session, update_view=False)
+        return session.returncode
 
     @canary.hookimpl
     def canary_resource_pool_fill(

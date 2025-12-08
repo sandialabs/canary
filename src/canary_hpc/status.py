@@ -18,7 +18,7 @@ class BatchStatus:
             self.base_status = Status.READY()
 
     @property
-    def name(self) -> str:
+    def category(self) -> str:
         return self.base_status.category
 
     @property
@@ -37,18 +37,19 @@ class BatchStatus:
         status: str | int | Status,
         reason: str | None = None,
         code: int | None = None,
+        kind: str | None = None,
         propagate: bool = True,
     ) -> None:
-        self.base_status.set(status, reason=reason, code=code)
+        self.base_status.set(status, reason=reason, code=code, kind=kind)
         if propagate:
             for child in self._children:
                 if child.status.category in ("READY", "PENDING"):
-                    child.status.set("SKIPPED")
+                    child.status.set("BROKEN")
                 elif child.status.category == "RUNNING":
                     child.timekeeper.stop()
                     child.status.set("CANCELLED")
                 else:
-                    child.status.set(status, reason=reason, code=code)
+                    child.status.set(status, reason=reason, code=code, kind=kind)
 
     @property
     def status(self) -> Status:

@@ -5,10 +5,10 @@
 Selection Phase for Canary Test Execution
 =========================================
 
-This module implements the selection stage of the Canary test lifecycle.  Selection applies a
+This module implements the election stage of the Canary test lifecycle.  Selection applies a
 sequence of rules to mask (exclude) test specifications based on resource availability,
 user-defined criteria, and dependency relationships. The result of selection is a stable, filtered
-list of ``TestSpec`` instances ready for execution.
+list of ``ResolvedSpec`` instances ready for execution.
 
 Overview
 --------
@@ -25,8 +25,7 @@ Selection performs three primary actions:
 
 2. **Mask Propagation** — If a spec is masked, all specs depending on it are also masked.
 
-3. **Finalization** — Unmasked ``ResolvedSpec`` objects are topologically sorted and finalized into
-``TestSpec`` instances.
+``ResolvedSpec`` instances.
 
 Caching and Snapshots
 ---------------------
@@ -59,7 +58,6 @@ import dataclasses
 import datetime
 import hashlib
 from collections import deque
-from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
@@ -69,6 +67,7 @@ from schema import Schema
 from . import config
 from .hookspec import hookimpl
 from .rules import Rule
+from .rules import RuntimeRule
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
@@ -76,8 +75,8 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .testcase import TestCase
     from .testspec import ResolvedSpec
-    from .testspec import TestSpec
 
 
 logger = logging.get_logger(__name__)
@@ -114,27 +113,7 @@ def canary_select_report(selector: "Selector") -> None:
     Args:
         selector: The ``Selector`` instance whose results are being reported.
     """
-    excluded: list["ResolvedSpec"] = []
-    for spec in selector.resolved_specs:
-        if spec.mask:
-            excluded.append(spec)
-    n = len(selector.resolved_specs) - len(excluded)
-    logger.info("@*{Selected} %d test %s" % (n, pluralize("spec", n)))
-    show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
-    if excluded:
-        n = len(excluded)
-        logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
-        reasons: dict[str | None, list["ResolvedSpec"]] = {}
-        for spec in excluded:
-            reasons.setdefault(spec.mask.reason, []).append(spec)
-        keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            n = len(reasons[key])
-            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
-            if show_excluded_tests:
-                for spec in reasons[key]:
-                    logger.log(logging.EMIT, f"  ◦ {spec.display_name}", extra={"prefix": ""})
+    select_report(selector.specs)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -145,9 +124,11 @@ class SelectorSnapshot:
     selection result is still valid and, if so, to reconstruct the selected tests without fully
     re-running all rules.
 
-    Attributes: spec_set_id: Stable SHA-256 hash identifying the original spec set.  masked:
-    Mapping of masked spec IDs to their mask reasons.  rules: A list of serialized rules that were
-    applied.  created_on: ISO-8601 timestamp of snapshot creation.
+    Attributes:
+      spec_set_id: Stable SHA-256 hash identifying the original spec set.
+      masked: Mapping of masked spec IDs to their mask reasons.  rules: A list of serialized rules
+        that were applied.
+      created_on: ISO-8601 timestamp of snapshot creation.
     """
 
     spec_set_id: str
@@ -180,8 +161,10 @@ class SelectorSnapshot:
         """Return True if the snapshot matches the current spec set."""
         return self.spec_set_id == Selector.spec_set_id(specs)
 
-    def apply(self, specs: list["ResolvedSpec"]) -> list["TestSpec"]:
-        return finalize([spec for spec in specs if spec.id not in self.masked])
+    def apply(self, specs: list["ResolvedSpec"]) -> None:
+        for spec in specs:
+            if mask := self.masked.get(spec.id):
+                spec.mask = Mask.masked(mask)
 
 
 class Selector:
@@ -200,19 +183,18 @@ class Selector:
     """
 
     def __init__(self, specs: list["ResolvedSpec"], workspace: Path, rules: Iterable[Rule] = ()):
-        self.resolved_specs: list["ResolvedSpec"] = specs
+        self.specs = specs
         self.workspace = workspace
         self.rules: list[Rule] = list(rules)
-        self._specs: list["TestSpec"] = []
 
     def add_rule(self, rule: Rule) -> None:
         assert isinstance(rule, Rule)
         self.rules.append(rule)
 
-    def run(self) -> list["TestSpec"]:
+    def run(self) -> None:
         logger.debug("@*{Selecting} specs based on rules")
         config.pluginmanager.hook.canary_selectstart(selector=self)
-        for spec in self.resolved_specs:
+        for spec in self.specs:
             if spec.mask:
                 continue
             for rule in self.rules:
@@ -221,18 +203,8 @@ class Selector:
                     spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                     break
         config.pluginmanager.hook.canary_select_modifyitems(selector=self)
-        self.specs = finalize(self.resolved_specs)
         config.pluginmanager.hook.canary_select_report(selector=self)
-        return self.specs
-
-    @property
-    def specs(self) -> list["TestSpec"]:
-        return self._specs
-
-    @specs.setter
-    def specs(self, arg: Iterable["TestSpec"]) -> None:
-        self._specs.clear()
-        self._specs.extend(arg)
+        return
 
     @staticmethod
     def spec_set_id(specs: list["ResolvedSpec"]) -> str:
@@ -240,10 +212,10 @@ class Selector:
         return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
 
     def snapshot(self) -> SelectorSnapshot:
-        spec_set_id = self.spec_set_id(self.resolved_specs)
+        spec_set_id = self.spec_set_id(self.specs)
         return SelectorSnapshot(
             spec_set_id=spec_set_id,
-            masked={spec.id: spec.mask.reason for spec in self.resolved_specs if spec.mask.reason},
+            masked={spec.id: spec.mask.reason for spec in self.specs if spec.mask.reason},
             rules=[r.serialize() for r in self.rules],
             created_on=datetime.datetime.now().isoformat(),
         )
@@ -257,6 +229,56 @@ class Selector:
             rule = Rule.reconstruct(serialized_rule)
             self.add_rule(rule)
         return self
+
+
+class RuntimeSelector:
+    """Apply rule-based masking to a set of test cases."""
+
+    def __init__(
+        self, cases: list["TestCase"], workspace: Path, rules: Iterable[RuntimeRule] = ()
+    ) -> None:
+        self.cases = cases
+        self.workspace = workspace
+        self.rules: list[RuntimeRule] = list(rules)
+
+    def add_rule(self, rule: RuntimeRule) -> None:
+        assert isinstance(rule, RuntimeRule)
+        self.rules.append(rule)
+
+    def run(self) -> None:
+        pm = logger.progress_monitor("@*{Selecting} test cases based on runtime environment")
+        config.pluginmanager.hook.canary_rtselectstart(selector=self)
+        for case in self.cases:
+            if case.mask:
+                continue
+            for rule in self.rules:
+                outcome = rule(case)
+                if not outcome:
+                    case.status.set("SKIPPED", reason=outcome.reason or rule.default_reason)
+                    break
+        config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
+        self.propagate()
+        pm.done()
+        config.pluginmanager.hook.canary_rtselect_report(selector=self)
+        return
+
+    def propagate(self) -> None:
+        # Propagate skipped/broken tests
+        queue = deque([c for c in self.cases if c.status.category in ("SKIPPED", "BROKEN")])
+        case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
+        # Precompute reverse graph
+        dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
+        for case in self.cases:
+            for dep in case.spec.dependencies:
+                dependents.setdefault(dep.id, []).append(case.id)
+        while queue:
+            excluded = queue.popleft()
+            for child_id in dependents[excluded.id]:
+                child = case_map[child_id]
+                if child.status.category in ("READY", "PENDING"):
+                    child.status.set("SKIPPED", "One or more dependencies skipped or broken")
+                    queue.append(child)
+        return
 
 
 def propagate_masks(specs: list["ResolvedSpec"]):
@@ -277,38 +299,54 @@ def propagate_masks(specs: list["ResolvedSpec"]):
                 queue.append(child)
 
 
-def finalize(resolved_specs: list["ResolvedSpec"]) -> list["TestSpec"]:
-    """Finalize resolved specs into topologically ordered test specs.
+def select_report(specs: list["ResolvedSpec"]) -> None:
+    """Emit a report summarizing which specs were selected or excluded.
 
-    This function constructs the final ``TestSpec`` objects from the dependency graph defined by
-    ``ResolvedSpec.dependencies``. It ensures a deterministic topological order and replaces
-    dependency references with the finalized ``TestSpec`` instances.
+    Reporting includes the count of selected and excluded tests, grouped
+    by mask reason. If ``--show-excluded-tests`` was provided, individual
+    spec names are also emitted.
 
-    Args:
-        resolved_specs: A list of unmasked ``ResolvedSpec`` objects.
-
-    Returns:
-        A list of ``TestSpec`` instances in dependency-resolved order.
     """
-    spec_map: dict[str, "ResolvedSpec"] = {}
-    graph: dict[str, list[str]] = {}
-    # calling propagate_masks should be unnecessary at this point
-    propagate_masks(resolved_specs)
-    for resolved_spec in resolved_specs:
-        if resolved_spec.mask:
-            continue
-        spec_map[resolved_spec.id] = resolved_spec
-        graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
-    lookup: dict[str, "TestSpec"] = {}
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    while ts.is_active():
-        ids = ts.get_ready()
-        for id in ids:
-            # Replace dependencies with TestSpec objects
-            resolved = spec_map[id]
-            dependencies: list["TestSpec"] = [lookup[dep.id] for dep in resolved.dependencies]
-            spec = resolved.finalize(dependencies)
-            lookup[id] = spec
-        ts.done(*ids)
-    return list(lookup.values())
+    excluded: list["ResolvedSpec"] = []
+    for spec in specs:
+        if spec.mask:
+            excluded.append(spec)
+    n = len(specs) - len(excluded)
+    logger.info("@*{Selected} %d of %d test %s " % (n, len(specs), pluralize("spec", n)))
+    show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
+    if excluded:
+        n = len(excluded)
+        logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
+        reasons: dict[str | None, list["ResolvedSpec"]] = {}
+        for spec in excluded:
+            reasons.setdefault(spec.mask.reason, []).append(spec)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
+        for key in reversed(keys):
+            reason = key if key is None else key.lstrip()
+            n = len(reasons[key])
+            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
+            if show_excluded_tests:
+                for spec in reasons[key]:
+                    logger.log(logging.EMIT, f"  ◦ {spec.display_name}", extra={"prefix": ""})
+
+
+@hookimpl
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
+    excluded: list["TestCase"] = []
+    for case in selector.cases:
+        if case.status.category in ("SKIPPED", "BROKEN"):
+            excluded.append(case)
+    unmasked = [case for case in selector.cases if not case.mask]
+    n = len(unmasked) - len(excluded)
+    logger.info("@*{Selected} %d of %d test %s " % (n, len(unmasked), pluralize("case", n)))
+    if excluded:
+        n = len(excluded)
+        logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
+        reasons: dict[str | None, list["TestCase"]] = {}
+        for case in excluded:
+            reasons.setdefault(case.status.reason, []).append(case)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
+        for key in reversed(keys):
+            reason = key if key is None else key.lstrip()
+            n = len(reasons[key])
+            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})

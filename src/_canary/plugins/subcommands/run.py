@@ -8,13 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import config
-from ... import when
 from ...collect import Collector
 from ...hookspec import hookimpl
-from ...session import SessionResults
 from ...util import logging
 from ...workspace import Workspace
-from ...util.graph import reachable_nodes
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -22,7 +19,7 @@ from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testspec import ResolvedSpec
 
 logger = logging.get_logger(__name__)
 
@@ -30,6 +27,7 @@ logger = logging.get_logger(__name__)
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Run())
+
 
 ok_status = ("SKIPPED", "SUCCESS", "XDIFF", "XFAIL", "TIMEOUT")
 
@@ -139,8 +137,15 @@ class Run(CanarySubcommand):
             on_options=args.on_options,
             regex=args.regex_filter,
         )
-        results: SessionResults = workspace.run(specs)
-        return results.returncode
+        session = workspace.run(specs)
+        return session.returncode
+
+    def rerun_failed(self, path: Path, args: "argparse.Namespace") -> int:
+        # Load test cases, filter, and run
+        workspace = Workspace.load(path)
+        specs = workspace.get_selection(tag="__failed__")
+        session = workspace.run(specs)
+        return session.returncode
 
     def run_inworkspace(self, path: Path, args: "argparse.Namespace") -> int:
         """The workspace already exists, now let's run some test cases within it"""
@@ -150,7 +155,9 @@ class Run(CanarySubcommand):
         defined = [o for o in opts if getattr(args, o, None) is not None]
         if len(defined) > 1:
             raise ValueError(f"only one of {', '.join(defined)} may be provided")
-        if args.start:
+        if args.rerun_failed:
+            return self.rerun_failed(path, args)
+        elif args.start:
             return self.run_inview(path, args.start, args)
         elif args.runtag:
             return self.run_tag(path, args.runtag, args)
@@ -167,54 +174,26 @@ class Run(CanarySubcommand):
             raise TypeError(f"{start}: regular expression incompatible with start dir")
         if args.tag:
             raise TypeError(f"{start}: tags incompatible with start dir")
-        cases = workspace.select_from_view(path=Path(start))
-        cases = filter_cases(cases, args)
-        if len({case.workspace.session for case in cases}) > 1:
-            raise ValueError("All cases must come from the same session")
-        results: SessionResults | None = None
-        with workspace.session(name=cases[0].workspace.session) as session:
-            try:
-                results = session.run(ids=[case.id for case in cases])
-            finally:
-                if results:
-                    workspace.add_session_results(results)
-        if not results:
-            return 1
-        return results.returncode
+        specs = workspace.select_from_view(path=Path(start))
+        filter_specs_by_keyword(specs, args)
+        session = workspace.run(specs)
+        return session.returncode
 
     def run_tag(self, path: Path, tag: str, args: "argparse.Namespace") -> int:
         workspace = Workspace.load(path)
         specs = workspace.get_selection(tag)
-        results: SessionResults | None = None
-        with workspace.session(specs=specs) as session:
-            try:
-                results = session.run()
-            finally:
-                if results:
-                    workspace.add_session_results(results)
-        if not results:
-            return 1
-        return results.returncode
+        session = workspace.run(specs)
+        return session.returncode
 
     def run_specids(self, path: Path, specids: list[str], args: "argparse.Namespace") -> int:
         workspace = Workspace.load(path)
         specs = workspace.select(ids=specids, tag=args.tag)
-        results: SessionResults | None = None
-        with workspace.session(specs=specs) as session:
-            try:
-                results = session.run()
-            finally:
-                if results:
-                    workspace.add_session_results(results)
-        if not results:
-            return 1
-        return results.returncode
-
+        session = workspace.run(specs)
+        return session.returncode
 
     def run_inplace(self, path: Path, args: "argparse.Namespace") -> int:
         # Load test cases, filter, and run
         workspace = Workspace.load(path)
-        results: SessionResults | None = None
         specs = workspace.select(
             tag=args.tag,
             keyword_exprs=args.keyword_exprs,
@@ -222,46 +201,22 @@ class Run(CanarySubcommand):
             on_options=args.on_options,
             regex=args.regex_filter,
         )
-        if args.rerun_failed:
-            ids = workspace.find_failed()
-        with workspace.session(specs=specs) as session:
-            try:
-                results = session.run()
-            finally:
-                if results:
-                    workspace.add_session_results(results)
-        if not results:
-            return 1
-        return results.returncode
+        session = workspace.run(specs)
+        return session.returncode
 
 
-def filter_failed_cases(workspace: Workspace, cases: list["TestCase"]) -> list["TestCase"]:
-    graph = {spec.id: [dep.id for dep in spec.dependencies] for spec in specs}
-    failed: set[str] = set()
-    cases = workspace.load_testcases(ids=[spec.id for spec in specs])
-    map: dict[str, "TestCase"] = {case.id: case for case in cases}
-    for case in cases:
-        if case.status.category not in ok_status:
-            failed.add(case.id)
-    reachable = reachable_nodes(graph, failed)
-    #specs = [spec for spec in specs if spec.id in reachable and ]
+def filter_specs_by_keyword(specs: list["ResolvedSpec"], args: "argparse.Namespace") -> None:
+    from ... import rules
+    from ...testspec import Mask
 
-
-def filter_cases(cases: list["TestCase"], args: "argparse.Namespace") -> list["TestCase"]:
-    keyword_exprs = args.keyword_exprs or []
+    if not args.keyword_exprs:
+        return
+    keyword_exprs = list(args.keyword_exprs)
     if (":all:" in keyword_exprs) or ("__all__" in keyword_exprs):
-        return cases
-    masks: dict[str, bool] = {}
-    for case in cases:
-        kwds = set(case.spec.keywords)
-        kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
-        if args.rerun_failed and case.status.category in ok_status:
-            # skip passing tests
-            masks[case.id] = True
-            continue
-        for keyword_expr in keyword_exprs:
-            match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-            if not match:
-                masks[case.id] = True
-                break
-    return [case for case in cases if not masks.get(case.id)]
+        return
+    rule = rules.KeywordRule(keyword_exprs)
+    for spec in specs:
+        outcome = rule(spec)
+        if not outcome:
+            spec.mask = Mask.masked(outcome.reason or rule.default_reason)
+    return

@@ -13,6 +13,7 @@ from . import fetch
 from . import find
 from . import gc
 from . import help
+from . import history
 from . import info
 from . import init
 from . import location
@@ -38,6 +39,7 @@ plugins = [
     find,
     gc,
     help,
+    history,
     info,
     init,
     location,

@@ -246,7 +246,7 @@ class TestBatch:
             data[self.id] = {"status": self.status.status, "timekeeper": self.timekeeper}
             for case in self.cases:
                 if case.status.category in ("PENDING", "READY"):
-                    case.status.set("SKIPPED")
+                    case.status.set("BROKEN")
                 elif case.status.category == "RUNNING":
                     case.status.set("CANCELLED")
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
@@ -264,7 +264,13 @@ class TestBatch:
         """
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
-                self.status.set(stat.name, stat.reason, stat.code, propagate=False)
+                self.status.set(
+                    stat.category,
+                    reason=stat.reason,
+                    code=stat.code,
+                    kind=stat.kind,
+                    propagate=False,
+                )
             if timekeeper := mydata.get("timekeeper"):
                 self.timekeeper.started_on = timekeeper.started_on
                 self.timekeeper.finished_on = timekeeper.finished_on

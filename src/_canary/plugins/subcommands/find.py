@@ -10,10 +10,12 @@ from typing import TYPE_CHECKING
 from typing import TextIO
 
 from ... import config
+from ... import rules
+from ...build import Builder
 from ...collect import Collector
 from ...error import StopExecution
 from ...hookspec import hookimpl
-from ...select import finalize as finalize_specs
+from ...select import Selector
 from ...third_party.colify import colified
 from ...third_party.color import colorize
 from ...util import graph
@@ -27,7 +29,7 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testspec import TestSpec
+    from ...testspec import ResolvedSpec
 
 logger = logging.get_logger(__name__)
 
@@ -60,29 +62,23 @@ class Find(CanarySubcommand):
         collector.add_scanpaths(args.scanpaths)
         generators = collector.run()
 
-        pm = logger.progress_monitor("@*{Generating} test specs")
-        resolved = config.pluginmanager.hook.canary_generate(
-            generators=generators, on_options=args.on_options
-        )
-        pm.done()
+        builder = Builder(generators, workspace=Path.cwd(), on_options=args.on_options or [])
+        resolved = builder.run()
 
-        pm = logger.progress_monitor("@*{Modifying} specs")
-        config.pluginmanager.hook.canary_select(
-            specs=resolved,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            owners=None if not args.owners else set(args.owners),
-            regex=args.regex_filter,
-            prefixes=None,
-            ids=None,
-        )
-        pm.done()
+        selector = Selector(resolved, Path.cwd())
+        if args.keyword_exprs:
+            selector.add_rule(rules.KeywordRule(args.keyword_exprs))
+        if args.parameter_expr:
+            selector.add_rule(rules.ParameterRule(args.parameter_expr))
+        if args.owners:
+            selector.add_rule(rules.OwnersRule(args.owners))
+        if args.regex_filter:
+            selector.add_rule(rules.RegexRule(args.regex_filter))
+        selector.run()
 
-        quiet = bool(args.print_files)
-        final = finalize_specs([spec for spec in resolved if not spec.mask])
+        final = [spec for spec in resolved if not spec.mask]
         if not final:
             raise StopExecution("No tests to run", 7)
-        config.pluginmanager.hook.canary_select_report(specs=final)
         final.sort(key=lambda x: x.name)
         if args.print_paths:
             pprint_paths(final)
@@ -108,7 +104,7 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
     group.add_argument(*args, **kwargs)
 
 
-def pprint_paths(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_paths(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
     unique_generators: dict[str, set[str]] = dict()
     for spec in specs:
         unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
@@ -120,12 +116,12 @@ def pprint_paths(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
         file.write(cols + "\n")
 
 
-def pprint_files(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_files(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
     for f in sorted(set([spec.file for spec in specs])):
         file.write("%s\n" % os.path.relpath(f, os.getcwd()))
 
 
-def pprint_keywords(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_keywords(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
     unique_kwds: dict[str, set[str]] = dict()
     for spec in specs:
         unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
@@ -137,11 +133,11 @@ def pprint_keywords(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
         file.write(cols + "\n")
 
 
-def pprint_graph(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_graph(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
     graph.print(specs, file=file)
 
 
-def pprint(specs: list["TestSpec"], file: TextIO = sys.stdout) -> None:
+def pprint(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
     _, max_width = terminal_size()
     tree: dict[str, list[str]] = {}
     for spec in specs:

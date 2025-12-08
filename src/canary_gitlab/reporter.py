@@ -28,14 +28,12 @@ class GitLabMRReporter(canary.CanaryReporter):
             help="GitLab access token that allows to GET/POST to the merge request API",
         )
 
-    def create(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report html: session required")
-
+    def create(self, **kwargs: Any) -> None:
+        workspace = canary.Workspace.load()
         access_token = kwargs["access_token"]
         cdash_url = kwargs["cdash_url"]
         mr = MergeRequest(access_token=access_token)
-        failed = group_failed_tests(session.load_testcases())
+        failed = group_failed_tests(workspace.load_testcases())
         if failed:
             mr.report_failed(failed, cdash_build_url=cdash_url)
         else:

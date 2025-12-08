@@ -6,7 +6,9 @@ import argparse
 import io
 import itertools
 import re
+import sys
 from typing import TYPE_CHECKING
+from typing import TextIO
 
 from ... import status
 from ...hookspec import hookimpl
@@ -83,7 +85,6 @@ class Status(CanarySubcommand):
         parser.add_argument(
             "--dump", action="store_true", help="Dump test cases to lock lock file [default: False]"
         )
-        parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
@@ -91,9 +92,10 @@ class Status(CanarySubcommand):
         table = self.get_status_table(cases, args)
         fh = io.StringIO()
         colify.colify_table(table, output=fh)
-        print(fh.getvalue().strip())
         if args.durations:
-            print_durations(cases, N=args.durations)
+            fh.write("\n")
+            print_durations(cases, N=args.durations, file=fh)
+        print(fh.getvalue().strip())
         return 0
 
     def get_status_table(
@@ -161,7 +163,7 @@ def pretty_test_name(name: str) -> str:
 def pretty_status_name(name: str) -> str:
     color: str = ""
     fmt: str = "%(name)s"
-    if name in ("RETRY", "PENDING", "READY", "SKIPPED"):
+    if name in ("RETRY", "PENDING", "READY", "SKIPPED", "BLOCKED"):
         color = status.Status.categories[name][1][0]
         fmt = "@*c{NOT RUN} (@*%(color)s{%(name)s})"
     elif name in ("DIFFED", "FAILED", "BROKEN", "ERROR", "TIMEOUT"):
@@ -247,7 +249,7 @@ def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]
             keep[i] = "s" in chars
         elif stat in ("SUCCESS", "XDIFF", "XFAIL"):
             keep[i] = "p" in chars
-        elif stat in ("FAILED", "ERROR"):
+        elif stat in ("FAILED", "ERROR", "BLOCKED"):
             keep[i] = "f" in chars
         elif stat == "DIFFED":
             keep[i] = "d" in chars
@@ -260,23 +262,21 @@ def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]
     return [case for i, case in enumerate(cases) if keep[i]]
 
 
-def print_durations(cases: list[TestCase], N: int) -> None:
+def print_durations(cases: list[TestCase], N: int, file: TextIO = sys.stdout) -> None:
     cases.sort(key=lambda x: x.timekeeper.duration)
-    fh = io.StringIO()
     ix = list(range(len(cases)))
     if N > 0:
         ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
-    fh.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
+    file.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
         duration = cases[i].timekeeper.duration
         if duration < 0:
             continue
         name = cases[i].display_name()
-        id = cases[i].id
-        fh.write("  %6.2f   %s %s\n" % (duration, id, name))
-    fh.write("\n")
-    print(fh.getvalue().strip())
+        id = cases[i].id[:7]
+        file.write("  %6.2f   %s %s\n" % (duration, id, name))
+    file.write("\n")
 
 
 def dformat(arg: float) -> str:

@@ -278,7 +278,7 @@ class RegexRule(Rule):
         return RuleOutcome(True)
 
 
-class ContextRule:
+class RuntimeRule:
     """Base class for all runtime selection rules.
 
     Subclasses should override __call__ to evaluate whether a TestCase satisfies the rule.
@@ -299,7 +299,7 @@ class ContextRule:
         raise NotImplementedError
 
 
-class ResourceCapacityRule(ContextRule):
+class ResourceCapacityRule(RuntimeRule):
     """Selects cases based on system resource capacity.
 
     This rule queries plugin hooks to determine whether the available resource pool can accommodate

@@ -153,31 +153,30 @@ class CanaryHPCConductor:
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         if not batchspec:
             raise ValueError("Cannot partition test cases: missing batching options")
-        specs: list[BatchSpec] = batch_testcases(
+        batch_specs: list[BatchSpec] = batch_testcases(
             cases=runner.cases,
             layout=batchspec["layout"],
             count=batchspec["count"],
             duration=batchspec["duration"],
             nodes=batchspec["nodes"],
         )
-        if not specs:
+        if not batch_specs:
             raise ValueError(
                 "No test batches generated (this should never happen, "
                 "the default batching scheme should have been used)"
             )
-        if missing := {c.id for c in runner.cases} - {c.id for batch in specs for c in batch.cases}:
+        if missing := {c.id for c in runner.cases} - {c.id for b in batch_specs for c in b.cases}:
             raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
 
-        fmt = "@*{Generated} %d batch specs from %d test cases"
-        logger.info(fmt % (len(specs), len(runner.cases)))
-        root = runner.cases[0].workspace.root.parent / "canary-hpc"
+        key = canary.string.pluralize("batch", n=len(batch_specs))
+        fmt = "@*{Generated} %d test %s from %d test cases"
+        logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
+        root = runner.workspace.tmp_dir / "canary-hpc"
         batches: list[TestBatch] = []
-        for spec in specs:
-            path = f"batches/{spec.id[:8]}"
-            workspace = ExecutionSpace(
-                root=root, path=Path(path), session=runner.cases[0].workspace.session
-            )
-            batch = TestBatch(spec, workspace=workspace)
+        for batch_spec in batch_specs:
+            path = f"batches/{batch_spec.id[:8]}"
+            workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
+            batch = TestBatch(batch_spec, workspace=workspace)
             batches.append(batch)
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)
         queue.put(*batches)  # type: ignore

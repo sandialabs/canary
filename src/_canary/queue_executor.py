@@ -220,9 +220,7 @@ class ResourceQueueExecutor:
                     measurements = slot.proc.get_measurements()
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
                     slot.job.refresh()
-                    slot.job.set_status(
-                        "TIMEOUT", reason=f"Job timed out after {total_timeout} s."
-                    )
+                    slot.job.set_status("TIMEOUT", reason=f"Job timed out after {total_timeout} s.")
                     slot.job.measurements.update(measurements)
                     slot.job.save()
                     slot.proc.join()

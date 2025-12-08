@@ -31,12 +31,12 @@ def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bo
                 returncode |= 2**2
             elif result == "TIMEOUT":
                 returncode |= 2**3
-            elif result in ("CANCELLED", "READY", "PENDING"):
+            elif result in ("CANCELLED", "READY", "PENDING", "BLOCKED"):
                 returncode |= 2**5
             elif not permissive:
                 # any other code is a failure
                 returncode |= 2**6
-                if case.status.category not in warned:
-                    logger.warning(f"{case}: unhandled status: {case.status}")
-                    warned.add(case.status.category)
+                if result not in warned:
+                    logger.warning(f"unhandled status: {result}")
+                    warned.add(result)
     return returncode

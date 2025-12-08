@@ -108,8 +108,10 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
-                if job.status.category == "SKIPPED":
-                    logger.debug(f"Job {job.id} marked SKIPPED and removed from queue")
+                if job.status.category in ("SKIPPED", "BLOCKED"):
+                    logger.debug(
+                        f"Job {job.id} marked {job.status.category} and removed from queue"
+                    )
                     self._finished[job.id] = job
                     continue
 
