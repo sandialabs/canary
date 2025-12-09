@@ -171,7 +171,7 @@ class CanaryHPCConductor:
         key = canary.string.pluralize("batch", n=len(batch_specs))
         fmt = "@*{Generated} %d test %s from %d test cases"
         logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
-        root = runner.workspace.tmp_dir / "canary-hpc"
+        root = runner.workspace.cache_dir / "canary-hpc"
         batches: list[TestBatch] = []
         for batch_spec in batch_specs:
             path = f"batches/{batch_spec.id[:8]}"

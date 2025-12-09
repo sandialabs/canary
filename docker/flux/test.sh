@@ -32,8 +32,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux ./examples || exit_code=$?
 if [ "${exit_code}" -ne 14 ]; then
-  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
-  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
@@ -46,8 +46,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3 ./examples || exit_code=$?
 if [ "${exit_code}" -ne 14 ]; then
-  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
-  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
@@ -60,8 +60,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3,layout:atomic ./examples || exit_code=$?
 if [ "${exit_code}" -ne 14 ]; then
-  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
-  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
@@ -74,8 +74,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:auto,layout:flat ./examples || exit_code=$?
 if [ "${exit_code}" -ne 14 ]; then
-  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
-  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
