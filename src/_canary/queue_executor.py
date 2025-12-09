@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import time
+import traceback
 from functools import cached_property
 from pathlib import Path
 from queue import Empty as EmptyResultQueue
@@ -35,7 +36,6 @@ from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 
-import traceback
 
 
 @dataclasses.dataclass
@@ -133,7 +133,7 @@ class ResourceQueueExecutor:
 
         console: Console | None = None
         if not config.get("debug") and sys.stdin.isatty():
-            console = Console()
+            console = Console(file=sys.stdout, force_terminal=True)
         with CanaryLive(self._render_dashboard, console=console) as live:
             while True:
                 try:
@@ -353,15 +353,19 @@ class ResourceQueueExecutor:
         table.add_column("Elapsed")
         table.add_column("Rank")
 
-        for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
-            elapsed = slot.job.timekeeper.duration
-            table.add_row(
-                slot.job.display_name(rich=True),
-                slot.job.id[:7],
-                slot.job.status.display_name(rich=True),
-                f"{elapsed:5.1f}s",
-                f"{slot.qrank}/{slot.qsize}",
-            )
+        max_rows: int = 45
+        num_inflight = len(self.inflight)
+        if num_inflight < max_rows:
+            n = max_rows - num_inflight
+            for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
+                elapsed = slot.job.timekeeper.duration
+                table.add_row(
+                    slot.job.display_name(rich=True),
+                    slot.job.id[:7],
+                    slot.job.status.display_name(rich=True),
+                    f"{elapsed:5.1f}s",
+                    f"{slot.qrank}/{slot.qsize}",
+                )
 
         now = time.time()
         for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
@@ -373,9 +377,6 @@ class ResourceQueueExecutor:
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
-
-        while len(table.rows) < self.max_workers:
-            table.add_row("", "", "", "", "")
 
         return table
 
@@ -396,11 +397,11 @@ class CanaryLive:
 
         # Logging control
         self._filter = logging.MuteConsoleFilter()
-        self._stream_handlers: list[logging.StreamHandler] = []
+        self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
 
     def __enter__(self):
         if self.enabled:
-            self._mute_stream_handlers()
+            self.mute_stream_handlers()
             self.live = Live(
                 self.factory(),
                 refresh_per_second=self.refresh_per_second,
@@ -413,23 +414,25 @@ class CanaryLive:
     def __exit__(self, exc_type, exc, tb):
         if self.live:
             self.live.__exit__(exc_type, exc, tb)
-            self._unmute_stream_handlers()
+            self.unmute_stream_handlers()
 
     def update(self) -> None:
         if self.live:
-            try:
-                self.live.update(self.factory(), refresh=True)
-            except BlockingIOError:
-                pass
+            self.live.update(self.factory(), refresh=True)
 
-    def _mute_stream_handlers(self) -> None:
+    def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)
         for h in root.handlers:
-            if isinstance(h, logging.StreamHandler):
+            if isinstance(h, logging.builtin_logging.StreamHandler):
+                h.addFilter(self._filter)
+                self._stream_handlers.append(h)
+        root = logging.builtin_logging.getLogger()
+        for h in root.handlers:
+            if isinstance(h, logging.builtin_logging.StreamHandler):
                 h.addFilter(self._filter)
                 self._stream_handlers.append(h)
 
-    def _unmute_stream_handlers(self) -> None:
+    def unmute_stream_handlers(self) -> None:
         for h in self._stream_handlers:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
