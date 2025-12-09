@@ -4,7 +4,6 @@
 
 import argparse
 import json
-import os
 import sys
 import typing
 
@@ -17,14 +16,7 @@ logger = canary.get_logger(__name__)
 
 @canary.hookimpl
 def canary_collectstart(collector) -> None:
-    collector.add_file_patterns("*.vvt")
-
-
-@canary.hookimpl
-def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-    if VVTTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return VVTTestGenerator(root, path=path)
-    return None
+    collector.add_generator(VVTTestGenerator)
 
 
 @canary.hookimpl

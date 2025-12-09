@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: MIT
 import argparse
 import dataclasses
-import fnmatch
 import json
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Iterable
 from typing import Iterator
+from typing import Type
 
 from . import config
 from .config.argparsing import Parser
@@ -21,9 +21,6 @@ from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
 
-if TYPE_CHECKING:
-    from .generator import AbstractTestGenerator
-
 logger = logging.get_logger(__name__)
 
 vc_prefixes = ("git@", "repo@")
@@ -31,11 +28,11 @@ vc_prefixes = ("git@", "repo@")
 
 class Collector:
     def __init__(self) -> None:
-        self.file_patterns: list[str] = []
         self.skip_dirs: list[str] = []
         self.scanpaths: dict[str, list[str]] = {}
-        self.files: dict[str, list[str]] = {}
+        self.files: dict[str, list[str]] = {}  # root: paths
         self.generators: list["AbstractTestGenerator"] = []
+        self.types: set[Type[AbstractTestGenerator]] = set()
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
@@ -74,9 +71,9 @@ class Collector:
         pm = logger.progress_monitor("@*{Instantiating} generators from collected files")
         errors = 0
         generators: list["AbstractTestGenerator"] = []
-        all_paths: list[tuple[str, str]] = []
+        all_paths: list[tuple[set[Type[AbstractTestGenerator]], str, str]] = []
         for root, paths in self.files.items():
-            all_paths.extend([(root, path) for path in paths])
+            all_paths.extend([(self.types, root, path) for path in paths])
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(generate_one, arg) for arg in all_paths]
             results = [f.result() for f in futures]
@@ -125,10 +122,12 @@ class Collector:
         self.add_files(vcroot, files)
         pm.done()
 
-    def add_file_patterns(self, *patterns: str) -> None:
-        for pattern in patterns:
-            if pattern not in self.file_patterns:
-                self.file_patterns.append(pattern)
+    def add_generator(self, generator: Type[AbstractTestGenerator]) -> None:
+        self.types.add(generator)
+
+    @property
+    def file_patterns(self) -> set[str]:
+        return {pat for type in self.types for pat in type.file_patterns}
 
     def add_skip_dirs(self, dirs: list[str]) -> None:
         for dir in dirs:
@@ -196,8 +195,8 @@ class Collector:
                 yield root, path
 
     def matches(self, f: str) -> bool:
-        for pattern in self.file_patterns:
-            if fnmatch.fnmatchcase(f, pattern):
+        for type in self.types:
+            if type.matches(f):
                 return True
         return False
 
@@ -208,7 +207,7 @@ def canary_collectstart(collector: "Collector") -> None:
     collector.add_skip_dirs(dirs)
 
 
-def _from_version_control(type: str, root: str, file_patterns: list[str]) -> list[str]:
+def _from_version_control(type: str, root: str, file_patterns: Iterable[str]) -> list[str]:
     """Find files in version control repository"""
     if type == "git":
         return git_ls(root, file_patterns)
@@ -218,7 +217,7 @@ def _from_version_control(type: str, root: str, file_patterns: list[str]) -> lis
         raise TypeError(f"Unknown vc type {type!r}, choose from git, repo")
 
 
-def git_ls(root: str, patterns: list[str]) -> list[str]:
+def git_ls(root: str, patterns: Iterable[str]) -> list[str]:
     gitified_patterns = [f"**/{p}" for p in patterns]
     args = [
         "git",
@@ -233,7 +232,7 @@ def git_ls(root: str, patterns: list[str]) -> list[str]:
     return [f.strip() for f in cp.stdout.split("\n") if f.split()]
 
 
-def repo_ls(root: str, patterns: list[str]) -> list[str]:
+def repo_ls(root: str, patterns: Iterable[str]) -> list[str]:
     files: list[str] = []
     with working_dir(root):
         cp = subprocess.run(["repo", "list"], capture_output=True, text=True)
@@ -254,11 +253,13 @@ class ScanPath:
 
 
 def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:
-    pm = config.pluginmanager.hook
-    root, f = args
+    types, root, f = args
     try:
-        gen = pm.canary_testcase_generator(root=root, path=f)
-        return True, gen
+        for type in types:
+            if gen := type.factory(root=root, path=f):
+                return True, gen
+        logger.error(f"{f}: no matching generator found")
+        return False, None
     except Exception:
         logger.exception(f"Failed to parse test from {root}/{f}")
         return False, None

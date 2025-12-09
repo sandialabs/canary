@@ -27,7 +27,7 @@ logger = canary.get_logger(__name__)
 
 @canary.hookimpl
 def canary_collectstart(collector: canary.Collector) -> None:
-    collector.add_file_patterns("CTestTestfile.cmake")
+    collector.add_generator(CTestTestGenerator)
 
 
 @canary.hookimpl
@@ -41,13 +41,6 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
             paths.sort(key=lambda p: (p.split(os.sep), p))
             for path in paths[1:]:
                 collector.remove_file(root, path)
-
-
-@canary.hookimpl(specname="canary_testcase_generator")
-def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return CTestTestGenerator(root, path=path)
-    return None
 
 
 @canary.hookimpl

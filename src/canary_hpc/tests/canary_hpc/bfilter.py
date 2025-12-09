@@ -4,7 +4,6 @@
 
 import glob
 import importlib.resources
-import os
 from pathlib import Path
 
 import _canary.config as config
@@ -30,7 +29,7 @@ def test_repo_bfilter(tmpdir):
             specs = workspace.get_selection()
             workspace.run(specs)
             files = glob.glob(
-                f"tests/.canary/tmp/canary-hpc/batches/**/canary-inp.sh",
+                "tests/.canary/tmp/canary-hpc/batches/**/canary-inp.sh",
                 recursive=True,
             )
             assert len(files) == 2

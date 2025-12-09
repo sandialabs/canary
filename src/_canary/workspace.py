@@ -17,8 +17,8 @@ from . import select
 from . import testspec
 from .build import Builder
 from .collect import Collector
-from .error import notests_exit_status
 from .error import StopExecution
+from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
@@ -271,6 +271,7 @@ class Workspace:
                 prefix=session,
             )
             self.add_session_results(results, update_view=update_view)
+            config.pluginmanager.hook.canary_sessionfinish(session=session)
             return results
 
     def add_session_results(self, results: Session, update_view: bool = True) -> None:

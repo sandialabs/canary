@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import fnmatch
 import glob
 import io
 import os
@@ -12,6 +11,7 @@ from string import Template
 from types import ModuleType
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import ClassVar
 from typing import Literal
 from typing import Sequence
 from typing import cast
@@ -81,6 +81,8 @@ class FilterNamespace:
 
 
 class PYTTestGenerator(AbstractTestGenerator):
+    file_patterns: ClassVar[tuple[str, ...]] = ("*.pyt", "canary_*.py")
+
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
@@ -869,14 +871,6 @@ class PYTTestGenerator(AbstractTestGenerator):
         finally:
             set_file_scanning(False)
 
-    @classmethod
-    def matches(cls, path: str) -> bool:
-        if path.endswith(".pyt"):
-            return True
-        elif fnmatch.fnmatch(os.path.basename(path), "canary_*.py"):
-            return True
-        return False
-
     def f_generate_composite_base_case(
         self,
         *,
@@ -1009,14 +1003,7 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 @hookimpl
 def canary_collectstart(collector) -> None:
-    collector.add_file_patterns("*.pyt", "canary_*.py")
-
-
-@hookimpl
-def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
-    if PYTTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return PYTTestGenerator(root, path=path)
-    return None
+    collector.add_generator(PYTTestGenerator)
 
 
 @hookimpl

@@ -83,10 +83,6 @@ def is_test_file(file: str) -> bool:
     return config.pluginmanager.hook.canary_testcase_generator(root=file, path=None) is not None
 
 
-def find(path: str) -> AbstractTestGenerator:
-    return AbstractTestGenerator.factory(path)
-
-
 class FinderError(Exception):
     pass
 

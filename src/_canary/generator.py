@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import errno
+import fnmatch
 import hashlib
 import importlib
 import os
@@ -9,7 +10,13 @@ from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import ClassVar
 from typing import Sequence
+
+try:
+    from typing import Self  # type: ignore
+except ImportError:
+    from typing_extensions import Self
 
 from schema import Schema
 from schema import Type
@@ -44,10 +51,7 @@ class AbstractTestGenerator(ABC):
        import canary
 
        class MyGenerator(canary.AbstractTestGenerator):
-
-           @classmethod
-           def matches(cls, path: str) -> bool:
-               ...
+           file_patterns = ["*.suffix"]
 
            def describe(self, on_options: list[str] | None = None) -> str:
                ...
@@ -56,6 +60,8 @@ class AbstractTestGenerator(ABC):
                ...
 
     """
+
+    file_patterns: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, root: str, path: str | None = None) -> None:
         if path is None:
@@ -78,13 +84,20 @@ class AbstractTestGenerator(ABC):
         return f"{self.__class__.__name__}(file={self.file!r})"
 
     @classmethod
-    @abstractmethod
-    def matches(cls, path: str) -> bool:
-        """Is the file at ``path`` a test file?"""
+    def factory(cls, root: str, path: str | None = None) -> Self | None:
+        f = root if path is None else path
+        if cls.matches(f):
+            return cls(root, path=path)
+        return None
 
     @classmethod
-    def always_matches(cls, path: str) -> bool:
-        return cls.matches(path)
+    def matches(cls, path: str) -> str | None:
+        """Is the file at ``path`` a test file?"""
+        name = os.path.basename(path)
+        for pattern in cls.file_patterns:
+            if fnmatch.fnmatchcase(name, pattern):
+                return pattern
+        return None
 
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
@@ -114,10 +127,6 @@ class AbstractTestGenerator(ABC):
         return state
 
     @staticmethod
-    def from_dict(state: dict[str, str]) -> "AbstractTestGenerator":
-        return AbstractTestGenerator.factory(state["root"], state["path"])
-
-    @staticmethod
     def validate(data) -> Any:
         schema = Schema({"module": str, "classname": str, "params": {str: object}})
         return schema.validate(data)
@@ -141,7 +150,7 @@ class AbstractTestGenerator(ABC):
         return json.dumps_min(meta)
 
     @staticmethod
-    def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
+    def create(root: str, path: str | None = None) -> "AbstractTestGenerator":
         from . import config
 
         if generator := config.pluginmanager.hook.canary_testcase_generator(root=root, path=path):

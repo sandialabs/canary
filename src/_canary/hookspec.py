@@ -145,8 +145,8 @@ def canary_collectstart(collector: "Collector") -> None:
     """Start collection.
 
     Args:
-      collector: To add file patterns to the collector call
-      :py:func:`collector.add_file_patterns(...) <Collector.add_file_patterns>`.  To add directory
+      collector: To add generators to the collector call
+      :py:func:`collector.add_generator(...) <Collector.add_generator>`.  To add directory
       names to skip call :py:func:`collector.add_skip_dirs(...) <Collector.add_skip_dirs>`.
 
     """

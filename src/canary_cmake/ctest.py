@@ -31,26 +31,12 @@ def warn_unsupported_ctest_option(option: str) -> None:
 
 
 class CTestTestGenerator(canary.AbstractTestGenerator):
+    file_patterns = ("CTestTestfile.cmake",)
+
     def __init__(self, root: str, path: str | None = None) -> None:
         # CTest works with resolved paths
         super().__init__(os.path.abspath(root), path=path)
         self.owners: list[str] = []
-
-    @classmethod
-    def matches(cls, path: str) -> bool:
-        matches = cls.always_matches(path)
-        if matches:
-            return True
-        return False
-
-    def stop_recursion(self) -> bool:
-        if canary.config.getoption("canary_cmake_recurse_ctest", False):
-            return False
-        return True
-
-    @classmethod
-    def always_matches(cls, path: str) -> bool:
-        return os.path.basename(path) == "CTestTestfile.cmake"
 
     def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
         cmake = find_cmake()

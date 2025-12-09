@@ -34,6 +34,8 @@ logger = canary.get_logger(__name__)
 
 
 class VVTTestGenerator(PYTTestGenerator):
+    file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
+
     def load(self, file: str | None = None) -> None:
         file = file or self.file
         for arg in p_VVT(file):
@@ -68,10 +70,6 @@ class VVTTestGenerator(PYTTestGenerator):
                     )
                 case _:
                     raise VVTParseError(f"Unknown command: {arg.command}", arg)
-
-    @classmethod
-    def matches(cls, path: str) -> bool:
-        return path.endswith(".vvt")
 
     def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
         """# VVT : keywords [:=] word1 word2 ... wordn"""

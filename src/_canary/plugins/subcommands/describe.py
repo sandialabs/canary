@@ -8,7 +8,8 @@ from typing import Any
 
 import yaml
 
-from ...generator import AbstractTestGenerator
+from ... import config
+from ...collect import Collector
 from ...hookspec import hookimpl
 from ...third_party.color import colorize
 from ...workspace import Workspace
@@ -16,6 +17,7 @@ from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...generator import AbstractTestGenerator
     from ...testcase import TestCase
 
 
@@ -40,12 +42,12 @@ class Describe(CanarySubcommand):
         parser.add_argument("testspec", help="Test file or test case spec")
 
     def execute(self, args: argparse.Namespace) -> int:
-        try:
-            generator = AbstractTestGenerator.factory(args.testspec)
-            describe_generator(generator, on_options=args.on_options)
-            return 0
-        except TypeError:
-            pass
+        collector = Collector()
+        config.pluginmanager.hook.canary_collectstart(collector=collector)
+        for type in collector.types:
+            if gen := type.factory(args.testspec):
+                describe_generator(gen, on_options=args.on_options)
+                return 0
 
         # could be a test case in the test session?
         workspace = Workspace.load()
@@ -55,7 +57,7 @@ class Describe(CanarySubcommand):
 
 
 def describe_generator(
-    file: AbstractTestGenerator,
+    file: "AbstractTestGenerator",
     on_options: list[str] | None = None,
 ) -> None:
     description = file.describe(on_options=on_options)

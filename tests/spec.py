@@ -1,11 +1,9 @@
-import json
 from pathlib import Path
 
 import pytest
 
 import _canary.testspec as spec
 from _canary import build
-from _canary import select
 from _canary.util.filesystem import working_dir
 
 
