@@ -6,6 +6,7 @@ import datetime
 import os
 import shutil
 import sqlite3
+import yaml
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -223,7 +224,11 @@ class Workspace:
 
         self.db = WorkspaceDatabase.create(self.dbfile)
         file = self.root / "canary.yaml"
-        file.write_text(json.dumps({"canary": {}}))
+        cfg: dict[str, Any] = {}
+        if mods := config.getoption("config_mods"):
+            cfg.update(mods)
+        with open(file, "w") as fh:
+            yaml.dump({"canary": cfg}, fh, default_flow_style=False)
 
         return self
 
