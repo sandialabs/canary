@@ -45,7 +45,15 @@ arrow = "==>"
 class FileHandler(builtin_logging.FileHandler): ...
 
 
+class MuteConsoleFilter(builtin_logging.Filter):
+    def filter(self, record):
+        # Returning false = block record
+        return False
+
+
 class StreamHandler(builtin_logging.StreamHandler):
+    canary_stream = True
+
     def emit(self, record):
         """Emit a record.
 

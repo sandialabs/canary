@@ -161,6 +161,8 @@ class TestCase:
 
     def display_name(self, **kwargs) -> str:
         name = self.spec.display_name
+        if kwargs.get("rich"):
+            return self.spec.rich_name
         if kwargs.get("status"):
             name += " @*%s{%s}" % (self.status.color[0], self.status.category)
         return name

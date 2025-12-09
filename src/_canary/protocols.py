@@ -23,6 +23,8 @@ class StatusProtocol(Protocol):
         code: int | None = None,
     ) -> None: ...
 
+    def display_name(self, **kwargs: Any) -> str: ...
+
 
 class JobProtocol(Protocol):
     cpus: int

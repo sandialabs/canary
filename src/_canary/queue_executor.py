@@ -17,6 +17,10 @@ from typing import Any
 from typing import Callable
 from uuid import uuid4
 
+from rich.console import Console
+from rich.live import Live
+from rich.table import Table
+
 from . import config
 from .protocols import JobProtocol
 from .queue import Busy
@@ -52,7 +56,7 @@ def with_traceback(executor: Callable, job: JobProtocol, queue: mp.Queue, **kwar
         traceback.print_exc(file=fh)
         text = fh.getvalue()
         logger.debug(f"Child process failed: {text}")
-        job.status.set("ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
+        job.set_status("ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
         queue.put({"status": job.status})
@@ -88,6 +92,7 @@ class ResourceQueueExecutor:
         self.busy_wait_time = busy_wait_time
 
         self.inflight: dict[int, ExecutionSlot] = {}
+        self.finished: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
 
     def __enter__(self) -> "ResourceQueueExecutor":
@@ -125,66 +130,74 @@ class ResourceQueueExecutor:
         timeout = float(config.get("timeout:session", -1))
         qrank, qsize = 0, len(self.queue)
         start = time.time()
-        while True:
-            try:
-                if timeout >= 0.0 and time.time() - start > timeout:
-                    self._terminate_all(signal.SIGUSR2)
-                    raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
 
-                self._check_keyboard_input(start)
+        console: Console | None = None
+        if not config.get("debug") and sys.stdin.isatty():
+            console = Console()
+        with CanaryLive(self._render_dashboard, console=console) as live:
+            while True:
+                try:
+                    if timeout >= 0.0 and time.time() - start > timeout:
+                        self._terminate_all(signal.SIGUSR2)
+                        raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
 
-                # Clean up any finished processes and collect results
-                self._check_finished_processes()
+                    self._check_keyboard_input(start)
 
-                # Wait for a slot if at max capacity
-                self._wait_for_slot()
+                    # Clean up any finished processes and collect results
+                    self._check_finished_processes()
+                    live.update()
 
-                # Get a job from the queue
-                job = self.queue.get()
-                qrank += 1
+                    # Wait for a slot if at max capacity
+                    self._wait_for_slot()
+                    live.update()
 
-                # Create a result queue for this specific process
-                result_queue: mp.Queue = mp.Queue()
+                    # Get a job from the queue
+                    job = self.queue.get()
+                    qrank += 1
 
-                # Launch a new measured process
-                proc = MeasuredProcess(
-                    target=with_traceback,
-                    args=(self.executor, job, result_queue),
-                    kwargs=kwargs,
-                )
-                proc.start()
-                self.on_job_start(job, qrank, qsize)
+                    # Create a result queue for this specific process
+                    result_queue: mp.Queue = mp.Queue()
 
-                pid: int = proc.pid  # type: ignore
-                self.inflight[pid] = ExecutionSlot(
-                    proc=proc,
-                    queue=result_queue,
-                    job=job,
-                    start_time=time.time(),
-                    qrank=qrank,
-                    qsize=qsize,
-                )
+                    # Launch a new measured process
+                    proc = MeasuredProcess(
+                        target=with_traceback,
+                        args=(self.executor, job, result_queue),
+                        kwargs=kwargs,
+                    )
+                    proc.start()
+                    self.on_job_start(job, qrank, qsize)
+                    pid: int = proc.pid  # type: ignore
+                    self.inflight[pid] = ExecutionSlot(
+                        proc=proc,
+                        queue=result_queue,
+                        job=job,
+                        start_time=time.time(),
+                        qrank=qrank,
+                        qsize=qsize,
+                    )
+                    live.update()
 
-            except Busy:
-                # Queue is busy, wait and try again
-                time.sleep(self.busy_wait_time)
+                except Busy:
+                    # Queue is busy, wait and try again
+                    time.sleep(self.busy_wait_time)
 
-            except Empty:
-                # Queue is empty, wait for remaining jobs and exit
-                self._wait_all()
-                break
+                except Empty:
+                    # Queue is empty, wait for remaining jobs and exit
+                    self._wait_all(live)
+                    break
 
-            except KeyboardInterrupt:
-                self._terminate_all(signal.SIGINT)
-                raise
+                except KeyboardInterrupt:
+                    self._terminate_all(signal.SIGINT)
+                    raise
 
-            except TimeoutError:
-                raise
+                except TimeoutError:
+                    raise
 
-            except BaseException:
-                logger.exception("Unhandled exception in process pool")
-                raise
-
+                except BaseException:
+                    logger.exception("Unhandled exception in process pool")
+                    raise
+                finally:
+                    live.update()
         return compute_returncode(self.queue.cases())
 
     def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
@@ -224,7 +237,7 @@ class ResourceQueueExecutor:
                     slot.job.measurements.update(measurements)
                     slot.job.save()
                     slot.proc.join()
-                    self.inflight.pop(pid)
+                    self.finished[pid] = self.inflight.pop(pid)
                     self.queue.done(slot.job)
                     self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
@@ -237,6 +250,7 @@ class ResourceQueueExecutor:
 
         for pid in finished_pids:
             slot = self.inflight.pop(pid)
+            self.finished[pid] = slot
 
             # Get the final result before cleaning up
             result = None
@@ -276,16 +290,17 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self) -> None:
+    def _wait_all(self, live: "CanaryLive") -> None:
         """Wait for all active processes to complete."""
         while self.inflight:
             self._check_finished_processes()
             if self.inflight:
-                time.sleep(0.05)
+                time.sleep(0.075)
+            live.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
-        for pid, slot in self.inflight.items():
+        for pid, slot in list(self.inflight.items()):
             if slot.proc.is_alive():
                 measurements = slot.proc.get_measurements()
                 slot.proc.shutdown(signum, grace_period=0.05)
@@ -307,6 +322,7 @@ class ResourceQueueExecutor:
         for slot in self.inflight.values():
             slot.proc.join()
 
+        self.finished.update(self.inflight)
         self.inflight.clear()
         self.queue.clear("CANCELLED" if signum == signal.SIGINT else "ERROR")
 
@@ -328,3 +344,92 @@ class ResourceQueueExecutor:
         elif t := config.get("timeout:multiplier"):
             return float(t)
         return 1.0
+
+    def _render_dashboard(self) -> Table:
+        table = Table(expand=True)
+        table.add_column("Job")
+        table.add_column("ID")
+        table.add_column("State")
+        table.add_column("Elapsed")
+        table.add_column("Rank")
+
+        for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
+            elapsed = slot.job.timekeeper.duration
+            table.add_row(
+                slot.job.display_name(rich=True),
+                slot.job.id[:7],
+                slot.job.status.display_name(rich=True),
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
+        now = time.time()
+        for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
+            elapsed = now - slot.start_time
+            table.add_row(
+                slot.job.display_name(rich=True),
+                slot.job.id[:7],
+                "[green]RUNNING[/green]",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
+        while len(table.rows) < self.max_workers:
+            table.add_row("", "", "", "", "")
+
+        return table
+
+
+class CanaryLive:
+    def __init__(
+        self,
+        factory: Callable[[], Table],
+        *,
+        refresh_per_second: int = 4,
+        console: Console | None = None,
+    ) -> None:
+        self.factory = factory
+        self.enabled = console is not None
+        self.live: Live | None = None
+        self.refresh_per_second = refresh_per_second
+        self.console = console
+
+        # Logging control
+        self._filter = logging.MuteConsoleFilter()
+        self._stream_handlers: list[logging.StreamHandler] = []
+
+    def __enter__(self):
+        if self.enabled:
+            self._mute_stream_handlers()
+            self.live = Live(
+                self.factory(),
+                refresh_per_second=self.refresh_per_second,
+                console=self.console,
+                transient=False,
+            )
+            self.live.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.live:
+            self.live.__exit__(exc_type, exc, tb)
+            self._unmute_stream_handlers()
+
+    def update(self) -> None:
+        if self.live:
+            try:
+                self.live.update(self.factory(), refresh=True)
+            except BlockingIOError:
+                pass
+
+    def _mute_stream_handlers(self) -> None:
+        root = logging.builtin_logging.getLogger(logging.root_log_name)
+        for h in root.handlers:
+            if isinstance(h, logging.StreamHandler):
+                h.addFilter(self._filter)
+                self._stream_handlers.append(h)
+
+    def _unmute_stream_handlers(self) -> None:
+        for h in self._stream_handlers:
+            h.removeFilter(self._filter)
+        self._stream_handlers.clear()

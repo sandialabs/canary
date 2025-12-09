@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import Any
+
 import canary
 from _canary.status import Status
 
@@ -20,6 +22,9 @@ class BatchStatus:
     @property
     def category(self) -> str:
         return self.base_status.category
+
+    def display_name(self, **kwargs: Any) -> str:
+        return self.base_status.display_name(**kwargs)
 
     @property
     def cname(self) -> str:

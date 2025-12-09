@@ -156,13 +156,25 @@ class BaseSpec(Generic[T]):
     @cached_property
     def pretty_name(self) -> str:
         if not self.parameters:
-            return self.name
+            return self.family
         parts: list[str] = []
         colors = itertools.cycle("bmgycr")
         for key in sorted(self.parameters):
             value = stringify(self.parameters[key])
             parts.append("@%s{%s=%s}" % (next(colors), key, value))
-        return f"{self.name}[{','.join(parts)}]"
+        return f"{self.family}[{','.join(parts)}]"
+
+    @cached_property
+    def rich_name(self) -> str:
+        if not self.parameters:
+            return self.family
+        parts: list[str] = []
+        colors = itertools.cycle(["blue", "magenta", "green", "yellow", "cyan", "red"])
+        for key in sorted(self.parameters):
+            value = stringify(self.parameters[key])
+            c = next(colors)
+            parts.append("[%s]%s=%s[/%s]" % (c, key, value, c))
+        return f"{self.family}.{'.'.join(parts)}"
 
     @property
     def implicit_keywords(self) -> set[str]:

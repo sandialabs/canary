@@ -40,6 +40,7 @@ dependencies = [
     "psutil",
     "pyyaml",
     "schema",
+    "rich",
     "typing_extensions; python_version < '3.11'",
 ]
 

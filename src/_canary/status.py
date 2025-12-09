@@ -117,7 +117,12 @@ class Status:
 
     def display_name(self, **kwargs) -> str:
         name = self._category.replace("_", " ")
-        if kwargs.get("color"):
+        if kwargs.get("rich"):
+            tag = self.color.lower()
+            if self.color[0].isupper():
+                tag = f"bold {tag}"
+            return f"[{tag}]{name}[/{tag}]"
+        elif kwargs.get("color"):
             return "@*%s{%s}" % (self.color[0], name)
         return name
 
