@@ -23,6 +23,9 @@ from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
+from _canary.launcher import Launcher
+from _canary.launcher import PythonFileLauncher
+from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
@@ -30,9 +33,6 @@ from _canary.plugins.types import CanarySubcommand
 from _canary.protocols import JobProtocol
 from _canary.select import Selector
 from _canary.testcase import TestCase
-from _canary.testexec import ExecutionPolicy
-from _canary.testexec import PythonFileExecutionPolicy
-from _canary.testexec import SubprocessExecutionPolicy
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.testspec import DependencyPatterns
@@ -87,9 +87,9 @@ __all__ = [
     "CanarySubcommand",
     "JobProtocol",
     "TestCase",
-    "ExecutionPolicy",
-    "PythonFileExecutionPolicy",
-    "SubprocessExecutionPolicy",
+    "Launcher",
+    "PythonFileLauncher",
+    "SubprocessLauncher",
     "TestInstance",
     "TestMultiInstance",
     "DependencyPatterns",

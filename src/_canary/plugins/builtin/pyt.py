@@ -22,12 +22,12 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...hookspec import hookimpl
+from ...launcher import Launcher
+from ...launcher import PythonFileLauncher
+from ...launcher import PythonRunpyLauncher
+from ...launcher import SubprocessLauncher
 from ...paramset import ParameterSet
 from ...testcase import TestCase
-from ...testexec import ExecutionPolicy
-from ...testexec import PythonFileExecutionPolicy
-from ...testexec import PythonRunpyExecutionPolicy
-from ...testexec import SubprocessExecutionPolicy
 from ...testspec import Mask
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
@@ -1007,11 +1007,11 @@ def canary_collectstart(collector) -> None:
 
 
 @hookimpl
-def canary_runtest_execution_policy(case: TestCase) -> ExecutionPolicy | None:
+def canary_runtest_launcher(case: TestCase) -> Launcher | None:
     if case.spec.file.suffix in (".pyt", ".py"):
         if script := case.get_attribute("alt_script"):
-            return SubprocessExecutionPolicy([f"./{script}"])
-        if os.getenv("CANARY_USE_RUNPY_EXECUTION_POLICY"):
-            return PythonRunpyExecutionPolicy()
-        return PythonFileExecutionPolicy()
+            return SubprocessLauncher([f"./{script}"])
+        if os.getenv("CANARY_USE_RUNPY_LAUNCHER"):
+            return PythonRunpyLauncher()
+        return PythonFileLauncher()
     return None

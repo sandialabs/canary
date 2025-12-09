@@ -13,7 +13,7 @@ def test_issue_90(tmpdir):
         assert cp.returncode != 0
         try:
             os.environ["FIX_B"] = "1"
-            cp = run("--rerun-failed", check=False)
+            cp = run("--rerun=failed", check=False)
         finally:
             os.environ.pop("FIX_B")
         assert cp.returncode == 0

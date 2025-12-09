@@ -44,9 +44,9 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
 
 
 @canary.hookimpl
-def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
     if case.spec.file.suffix == ".cmake":
-        return canary.SubprocessExecutionPolicy(["./runtest.sh"])
+        return canary.SubprocessLauncher(["./runtest.sh"])
     return None
 
 

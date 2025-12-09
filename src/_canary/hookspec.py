@@ -20,13 +20,13 @@ if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
     from .generator import AbstractTestGenerator
+    from .launcher import Launcher
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
     from .testcase import TestCase
-    from .testexec import ExecutionPolicy
     from .workspace import Session
 
 
@@ -130,7 +130,7 @@ def canary_configure(config: "CanaryConfig") -> None:
 
 
 @hookspec
-def canary_sessionstart(workspace: "Session") -> None: ...
+def canary_sessionstart(session: "Session") -> None: ...
 
 
 @hookspec
@@ -299,17 +299,17 @@ def canary_runtests_report(runner: "Runner") -> None:
 
 
 @hookspec(firstresult=True)
-def canary_runtest_execution_policy(case: "TestCase") -> "ExecutionPolicy":
-    """Returns the execution policy for a test case.
+def canary_runtest_launcher(case: "TestCase") -> "Launcher":
+    """Returns the launcher for a test case.
 
     Args:
         case: The test case.
 
     Returns:
-        The execution policy.
+        The launcher.
 
-    Raises:
-        NotImplementedError: This function is not implemented.
+    Note:
+
     """
     raise NotImplementedError
 

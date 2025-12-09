@@ -51,10 +51,33 @@ DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
 class Session:
     name: str
     cases: list[TestCase]
-    returncode: int
-    started_on: datetime.datetime
-    finished_on: datetime.datetime
     prefix: Path
+    returncode: int = dataclasses.field(init=False, default=-1)
+    started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
+    finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
+
+    def __post_init__(self) -> None:
+        if any(c.mask for c in self.cases):
+            raise ValueError("Test session go masked test case")
+
+    def run(self, workspace: "Workspace") -> None:
+        self.prefix.mkdir(parents=True, exist_ok=True)
+        ready = [case for case in self.cases if case.status.category in ("READY", "PENDING")]
+        runner = Runner(ready, self.name, workspace=workspace)
+        if not ready:
+            raise StopExecution("no cases to run", exit_code=notests_exit_status)
+        starting_dir = os.getcwd()
+        try:
+            self.started_on = datetime.datetime.now()
+            os.chdir(str(self.prefix))
+            canary_runtests(runner=runner)
+        except Exception:
+            logger.exception("session run failed")
+            self.returncode = 1
+        finally:
+            self.finished_on = datetime.datetime.now()
+            os.chdir(starting_dir)
+            self.returncode = runner.returncode
 
 
 class Workspace:
@@ -236,43 +259,21 @@ class Workspace:
     ) -> Session:
         now = datetime.datetime.now()
         session_name = session_name or now.isoformat(timespec="microseconds").replace(":", "-")
-        session = self.sessions_dir / session_name
+        session_dir = self.sessions_dir / session_name
 
-        cases = self.construct_testcases(specs, session)
+        cases = self.construct_testcases(specs, session_dir)
 
         selector = select.RuntimeSelector(cases, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.run()
 
-        starting_dir = os.getcwd()
-        session.mkdir(parents=True, exist_ok=True)
-        started_on = datetime.datetime.now()
-        ready = [
-            case for case in cases if case.status.category in ("READY", "PENDING") and not case.mask
-        ]
-        if not ready:
-            raise StopExecution("no cases to run", exit_code=notests_exit_status)
-        runner = Runner(cases=ready, session=session.name, workspace=self)
-
-        try:
-            os.chdir(str(session))
-            canary_runtests(runner=runner)
-        except Exception:
-            logger.exception("session run failed")
-        finally:
-            finished_on = datetime.datetime.now()
-            os.chdir(starting_dir)
-            results = Session(
-                name=session.name,
-                cases=[case for case in cases if not case.mask],
-                returncode=runner.returncode,
-                started_on=started_on,
-                finished_on=finished_on,
-                prefix=session,
-            )
-            self.add_session_results(results, update_view=update_view)
-            config.pluginmanager.hook.canary_sessionfinish(session=session)
-            return results
+        unmasked = [case for case in cases if not case.mask]
+        session = Session(name=session_dir.name, prefix=session_dir, cases=unmasked)
+        config.pluginmanager.hook.canary_sessionstart(session=session)
+        session.run(workspace=self)
+        config.pluginmanager.hook.canary_sessionfinish(session=session)
+        self.add_session_results(session, update_view=update_view)
+        return session
 
     def add_session_results(self, results: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
@@ -555,8 +556,8 @@ class Workspace:
     def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
-        if tag == "__failed__":
-            return self.compute_rerun_list()
+        if tag == "::failed::":
+            return self.compute_failed_rerun_list()
         snapshot = self.db.get_selection(tag)
         resolved = self.db.get_specs()
         if snapshot.is_compatible_with_specs(resolved):
@@ -640,21 +641,37 @@ class Workspace:
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
-    def compute_rerun_list(self) -> list["ResolvedSpec"]:
+    def compute_rerun_list(self, predicate: Callable[[str, dict], bool]) -> list["ResolvedSpec"]:
         results = self.db.get_results()
-        failed: set[str] = set()
+        selected: set[str] = set()
         for id, result in results.items():
-            if result["status"]["category"] in ("FAILED", "ERROR", "BROKEN", "DIFFED", "BLOCKED"):
-                failed.add(id)
+            if predicate(id, result):
+                selected.add(id)
         graph = self.db.get_dependency_graph()
-        upstream, downstream = reachable_up_down(graph, failed)
-        run_specs = failed | downstream
+        upstream, downstream = reachable_up_down(graph, selected)
+        run_specs = selected | downstream
         load_specs = run_specs | upstream
         resolved = self.db.get_specs(ids=list(load_specs))
         for spec in resolved:
             if spec.id not in run_specs:
-                spec.mask = Mask.masked("ID not in failed IDs or downstream")
+                spec.mask = Mask.masked("ID not in requested subset or downstream")
         return resolved
+
+    def compute_failed_rerun_list(self) -> list["ResolvedSpec"]:
+        def predicate(id: str, result: dict) -> bool:
+            if result["status"]["category"] in ("FAILED", "ERROR", "BROKEN", "DIFFED", "BLOCKED"):
+                return True
+            return False
+
+        return self.compute_rerun_list(predicate)
+
+    def compute_rerun_list_for_specs(self, ids: list[str]) -> list["ResolvedSpec"]:
+        self.db.resolve_spec_ids(ids)
+
+        def predicate(id: str, result: dict) -> bool:
+            return id in ids
+
+        return self.compute_rerun_list(predicate)
 
     def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
         if not ids:
@@ -979,14 +996,13 @@ class WorkspaceDatabase:
             for i in range(0, len(ids), batch_size):
                 batch = ids[i : i + batch_size]
                 placeholders = ", ".join("?" * len(batch))
-                cursor.execute(
-                    f"""SELECT r.*
+                query = f"""\
+                  SELECT r.*
                     FROM results AS r
                     WHERE r.id in ({placeholders})
                     AND r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
-                    """,
-                    batch,
-                )  # nosec B608
+                """  # nosec B608
+                cursor.execute(query, batch)  # nosec B608
                 rows.extend(cursor.fetchall())
         data: dict[str, dict[str, Any]] = {}
         for row in rows:

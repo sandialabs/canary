@@ -6,6 +6,8 @@ import argparse
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
+from typing import Sequence
 
 from ... import config
 from ...collect import Collector
@@ -76,9 +78,7 @@ class Run(CanarySubcommand):
             help="Do not collect a test's process information [default: %(default)s]",
         )
         parser.add_argument(
-            "--rerun-failed",
-            action="store_true",
-            help="Rerun failed tests [default: False]",
+            "--rerun", metavar="MODE", action=RerunAction, help=RerunAction.p_help()
         )
 
         group = parser.add_argument_group("console reporting")
@@ -143,7 +143,14 @@ class Run(CanarySubcommand):
     def rerun_failed(self, path: Path, args: "argparse.Namespace") -> int:
         # Load test cases, filter, and run
         workspace = Workspace.load(path)
-        specs = workspace.get_selection(tag="__failed__")
+        specs = workspace.compute_failed_rerun_list()
+        session = workspace.run(specs)
+        return session.returncode
+
+    def rerun_spec(self, path: Path, spec: str, args: "argparse.Namespace") -> int:
+        # Load test cases, filter, and run
+        workspace = Workspace.load(path)
+        specs = workspace.compute_rerun_list_for_specs(ids=[spec])
         session = workspace.run(specs)
         return session.returncode
 
@@ -155,8 +162,10 @@ class Run(CanarySubcommand):
         defined = [o for o in opts if getattr(args, o, None) is not None]
         if len(defined) > 1:
             raise ValueError(f"only one of {', '.join(defined)} may be provided")
-        if args.rerun_failed:
+        if args.rerun == ("mode", "failed"):
             return self.rerun_failed(path, args)
+        elif args.rerun and args.rerun[0] == "spec":
+            return self.rerun_spec(path, args.rerun[1], args)
         elif args.start:
             return self.run_inview(path, args.start, args)
         elif args.runtag:
@@ -220,3 +229,29 @@ def filter_specs_by_keyword(specs: list["ResolvedSpec"], args: "argparse.Namespa
         if not outcome:
             spec.mask = Mask.masked(outcome.reason or rule.default_reason)
     return
+
+
+class RerunAction(argparse.Action):
+    BUILTINS = {"failed"}
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        assert isinstance(values, str)
+        if values in self.BUILTINS:
+            setattr(namespace, self.dest, ("mode", values))
+        elif values.startswith("spec="):
+            setattr(namespace, self.dest, ("spec", values[5:]))
+        else:
+            choices = ", ".join(f"{_!r}" for _ in self.BUILTINS) + ", 'spec=.*'"
+            parser.error(
+                f"argument {option_string}: invalid choice: {values!r} (choose from {choices})"
+            )
+
+    @staticmethod
+    def p_help() -> str:
+        return f"Rerun a subset of tests, choices are {'|'.join(RerunAction.BUILTINS)} or a spec-likep pattern spec=.*"

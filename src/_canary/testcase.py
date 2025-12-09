@@ -26,8 +26,8 @@ from .error import TestSkipped
 from .error import TestTimedOut
 from .error import diff_exit_status
 from .error import fail_exit_status
+from .launcher import Launcher
 from .status import Status
-from .testexec import ExecutionPolicy
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -55,7 +55,7 @@ class TestCase:
         self.workspace = workspace
         self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
-        self.execution_policy: ExecutionPolicy = pm.canary_runtest_execution_policy(case=self)
+        self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
@@ -347,16 +347,16 @@ class TestCase:
 
     def run(self, queue: multiprocessing.Queue) -> None:
         code: int
+        xstatus = self.spec.xstatus
         try:
             if self.status == "READY":
                 with self.workspace.openfile(self.stdout, "a") as fh:
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
-                xstatus = self.spec.xstatus
                 with self.workspace.enter(), self.timekeeper.timeit():
                     self.status.set("RUNNING")
                     self.save()
-                    code = self.execution_policy.execute(case=self)
+                    code = self.launcher.run(case=self)
                     self.update_status_from_exit_code(code=code)
         except KeyboardInterrupt:
             self.status.set("CANCELLED", reason="Keyboard interrupt", code=signal.SIGINT.value)

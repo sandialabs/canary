@@ -36,9 +36,9 @@ def canary_runteststart(case: "canary.TestCase") -> None:
 
 
 @canary.hookimpl
-def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
     if case.spec.file.suffix == ".vvt":
-        return canary.PythonFileExecutionPolicy()
+        return canary.PythonFileLauncher()
     return None
 
 
