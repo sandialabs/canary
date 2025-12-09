@@ -6,11 +6,12 @@ import datetime
 import os
 import shutil
 import sqlite3
-import yaml
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 from typing import Callable
+
+import yaml
 
 from . import config
 from . import rules
