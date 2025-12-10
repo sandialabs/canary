@@ -70,6 +70,9 @@ class Rule:
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         raise NotImplementedError
 
+    def __str__(self):
+        return f"{self.__class__.__name__}: {self.__dict__}"
+
     def asdict(self) -> dict[str, Any]:
         """Return a dictionary representation of the rule.
 
@@ -133,6 +136,8 @@ class Rule:
         Rule.validate(meta)
         module = importlib.import_module(meta["module"])
         cls: Type[Rule] = getattr(module, meta["classname"])
+        if "default_reason" in meta["params"]:
+            meta["params"].pop("default_reason")
         rule = cls.from_dict(meta["params"])
         return rule
 
@@ -219,9 +224,6 @@ class OwnersRule(Rule):
     @cached_property
     def default_reason(self) -> str:
         return "not owned by @*{%s}" % ", ".join(self.owners)
-
-    def asdict(self) -> dict[str, Any]:
-        return {"owners": list(self.owners)}
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if self.owners.intersection(spec.owners or []):
