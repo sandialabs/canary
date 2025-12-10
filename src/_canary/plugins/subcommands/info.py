@@ -6,6 +6,8 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
+from ...rules import Rule
+
 from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
@@ -40,11 +42,12 @@ class Info(CanarySubcommand):
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        specs = workspace.get_selection(tag)
-        #        fh.write(f"Selected on: {selection.created_on}\n")
-        #        fh.write("Selection filters:\n")
-        #        for key, value in selection.filters.items():
-        #            fh.write(f"  • {key}: {value}\n")
+        selector = workspace.get_selector(tag)
+        specs = [spec for spec in workspace.get_selection(tag) if not spec.mask]
+        fh.write(f"Selected on: {selector.created_on}\n")
+        fh.write("Selection filters:\n")
+        for rule in selector.rules:
+            fh.write(f"  • {Rule.reconstruct(rule)}\n")
         fh.write(f"Test specs (n = {len(specs)}):\n")
         for spec in specs:
             name = spec.file_path.parent / spec.pretty_name

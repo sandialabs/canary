@@ -554,17 +554,22 @@ class Workspace:
         if tag is None and len(selector.rules) == 0:
             # Default: 1 rule for resource availability
             tag = "default"
+        selector.run()
         if tag:
             self.db.put_selection(tag, selector.snapshot())
-        selector.run()
         return selector.specs
+
+    def get_selector(self, tag: str = "default"):
+        if tag == "default" and not self.db.is_selection(tag):
+            return select.SelectorSnapshot("", dict(), [], "")
+        return self.db.get_selection(tag)
 
     def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
         if tag == "::failed::":
             return self.compute_failed_rerun_list()
-        snapshot = self.db.get_selection(tag)
+        snapshot = self.get_selector(tag)
         resolved = self.db.get_specs()
         if snapshot.is_compatible_with_specs(resolved):
             snapshot.apply(resolved)
