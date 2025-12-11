@@ -23,4 +23,4 @@ if __name__ == '__main__':
             )
         run = CanaryCommand("run")
         cp = run("-w", ".")
-        assert cp.returncode == 8
+        assert cp.returncode == 4

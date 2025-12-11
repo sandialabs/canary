@@ -11,10 +11,11 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 
+import rich
+
 from . import config
 from .hookspec import hookimpl
 from .status import Status
-from .third_party.color import colorize
 from .util import glyphs
 from .util import logging
 from .util.returncode import compute_returncode
@@ -127,7 +128,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
     passed tests in the summary
 
     """
-    if config.getoption("no_summary"):
+    if not config.get("debug") or config.getoption("no_summary"):
         return
     include_pass = False
     truncate = 10
@@ -135,29 +136,25 @@ def print_short_test_status_summary(runner: Runner) -> None:
     if not runner.cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[str, list["TestCase"]] = {}
+        totals: dict[tuple[str, str], list["TestCase"]] = {}
         for case in runner.cases:
-            totals.setdefault(case.status.category, []).append(case)
-        for name in totals:
-            if not include_pass and name in ("SUCCESS", "XDIFF", "XFAIL"):
+            key = (case.status.category, case.status.status)
+            totals.setdefault(key, []).append(case)
+        for key in totals:
+            if not include_pass and key[0] == "PASS":
                 continue
             n: int = 0
-            for case in sorted(totals[name], key=lambda t: t.name):
-                file.write(case.statline)
+            for case in sorted(totals[key], key=lambda t: t.name):
+                file.write(case.statline + "\n")
                 n += 1
                 if truncate > 0 and truncate == n:
-                    cname = case.status.cname
-                    bullets = "@*{%s}" % (3 * ".")
-                    fmt = "%s %s %s truncating summary to the first %d entries. "
-                    alert = io.StringIO()
-                    alert.write(fmt % (case.status.glyph, cname, bullets, truncate))
-                    alert.write("See @*{canary status} for the full summary\n")
-                    file.write(alert.getvalue())
+                    file.write(f"... truncating summary to the first {truncate} entries.\n")
+                    file.write("See [bold]canary status[/bold] for the full summary\n")
                     break
     string = file.getvalue()
     if string.strip():
-        string = "\n@*{Short test summary info}\n" + string
-    logger.log(logging.EMIT, string, extra={"prefix": ""})
+        string = "\n[bold]Short test summary info[/bold]\n" + string
+    rich.print(string)
 
 
 @hookimpl(specname="canary_runtests_report")
@@ -174,18 +171,17 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: "Runner", title: str) -> None:
     """Return a short, high-level, summary of test results"""
-    string = io.StringIO()
     duration = runner.finish - runner.start
     totals: dict[str, list["TestCase"]] = {}
     for case in runner.cases:
         totals.setdefault(case.status.category, []).append(case)
     N = len(runner.cases)
-    summary = ["@*b{%d total}:" % N]
-    for name in totals:
-        n = len(totals[name])
+    summary = [f"[bold blue]{N} total[/bold blue]:"]
+    for category in totals:
+        n = len(totals[category])
         if n:
-            color = Status.categories[name][1][0]
-            summary.append("@%s{%d %s}" % (color[0], n, name.lower()))
+            color = Status.color_for_category[category]
+            summary.append(f"[{color}]{n} {category.lower()}[/{color}]")
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {
@@ -195,25 +191,22 @@ def print_footer(runner: "Runner", title: str) -> None:
         "t": hhmmss(None if duration < 0 else duration),
         "title": title,
     }
-    string.write("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}" % kwds)
-    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
-
-
-def bold(string: str) -> str:
-    return colorize("@*{%s}" % string)
+    rich.print("%(x)s%(x)s [bold]%(title)s[/bold] -- %(s)s in [bold]%(t)s[/bold]" % kwds)
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
-    string = io.StringIO()
-    cases = [c for c in cases if c.timekeeper.duration >= 0]
-    sorted_cases = sorted(cases, key=lambda x: x.timekeeper.duration)
+    cases.sort(key=lambda x: x.timekeeper.duration)
+    ix = list(range(len(cases)))
     if N > 0:
-        sorted_cases = sorted_cases[-N:]
+        ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
-    string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
-    for case in sorted_cases:
-        string.write(
-            "  %6.2f   %s   %s\n" % (case.timekeeper.duration, case.id[:7], case.display_name())
-        )
-    string.write("\n")
-    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
+    fp = io.StringIO()
+    fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
+    for i in ix:
+        duration = cases[i].timekeeper.duration
+        if duration < 0:
+            continue
+        name = cases[i].display_name(style="rich")
+        id = cases[i].id[:7]
+        fp.write("  %6.2f   %s %s\n" % (duration, id, name))
+    rich.print(fp.getvalue().strip())

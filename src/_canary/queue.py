@@ -12,6 +12,7 @@ from typing import Any
 
 from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
+from .status import Status
 from .third_party import color
 from .util import logging
 from .util.progress import progress
@@ -81,8 +82,8 @@ class ResourceQueue:
     def put(self, *jobs: JobProtocol) -> None:
         # Precompute heap
         for job in jobs:
-            if job.status.category not in ("READY", "PENDING"):
-                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.category}")
+            if job.status.state not in ("READY", "PENDING"):
+                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.state}")
             required = job.required_resources()
             if not required:
                 raise ValueError("{job}: a test should require at least 1 cpu")
@@ -108,21 +109,19 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
-                if job.status.category in ("SKIPPED", "BLOCKED"):
-                    logger.debug(
-                        f"Job {job.id} marked {job.status.category} and removed from queue"
-                    )
+                if job.status.category == "SKIP":
+                    logger.debug(f"Job {job.id} with status SKIP and removed from queue")
                     self._finished[job.id] = job
                     continue
 
-                if job.status.category not in ("READY", "PENDING"):
+                if job.status.state not in ("READY", "PENDING"):
                     # Job will never by ready
-                    job.status.set("ERROR", "State became unrunable for unknown reasons")
+                    job.status = Status.ERROR(reason="State became unrunable for unknown reasons")
                     logger.debug(f"Job {job.id} marked ERROR and removed from queue")
                     self._finished[job.id] = job
                     continue
 
-                if job.status.category != "READY":
+                if job.status.state != "READY":
                     deferred_slots.append(slot)
                     continue
 
@@ -154,7 +153,7 @@ class ResourceQueue:
     def clear(self, status: str = "CANCELLED") -> None:
         while self._heap:
             slot = self._heap.pop()
-            slot.job.set_status(status)
+            slot.job.set_status(status=status)
 
     def done(self, job: JobProtocol) -> None:
         with self.lock:
@@ -200,11 +199,11 @@ class ResourceQueue:
             pending = len(self._heap)
             total = done + busy + pending
             for job in self._finished.values():
-                if job.status.category in ("SUCCESS", "XDIFF", "XFAIL"):
+                if job.status.category == "PASS":
                     p += 1
-                elif job.status.category == "DIFFED":
+                elif job.status.status == "DIFFED":
                     d += 1
-                elif job.status.category == "TIMEOUT":
+                elif job.status.status == "TIMEOUT":
                     t += 1
                 else:
                     f += 1

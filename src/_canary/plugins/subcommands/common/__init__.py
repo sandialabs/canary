@@ -145,12 +145,6 @@ def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCa
     return [c for c in cases if c.workspace.dir.relative_to(prefix)]
 
 
-def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:
-    if isinstance(status, str):
-        status = (status,)
-    return [c for c in cases if c.status.category in status]
-
-
 def bold(arg: str) -> str:
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"**{arg}**"

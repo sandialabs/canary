@@ -6,8 +6,6 @@ import argparse
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import Any
-from typing import Sequence
 
 from ... import config
 from ...collect import Collector
@@ -29,9 +27,6 @@ logger = logging.get_logger(__name__)
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Run())
-
-
-ok_status = ("SKIPPED", "SUCCESS", "XDIFF", "XFAIL", "TIMEOUT")
 
 
 class Run(CanarySubcommand):
@@ -57,39 +52,13 @@ class Run(CanarySubcommand):
             help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
         )
         parser.add_argument(
-            "--no-reset",
-            "--dont-restage",
-            dest="dont_restage",
-            default=None,
-            action="store_true",
-            help="Do not return the test execution directory "
-            "to its original stage before re-running a test",
-        )
-        parser.add_argument(
             "--copy-all-resources",
             default=None,
             action="store_true",
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
-        parser.add_argument(
-            "--dont-measure",
-            default=None,
-            action="store_true",
-            help="Do not collect a test's process information [default: %(default)s]",
-        )
-        parser.add_argument(
-            "--rerun", metavar="MODE", action=RerunAction, help=RerunAction.p_help()
-        )
 
         group = parser.add_argument_group("console reporting")
-        group.add_argument(
-            "--format",
-            default="short",
-            action="store",
-            choices=["short", "long", "progress-bar"],
-            help="Change the format of the test case's name as printed to the screen. "
-            "Options are 'short' and 'long' [default: %(default)s]",
-        )
         group.add_argument(
             "-e",
             choices=("separate", "merge"),
@@ -140,20 +109,6 @@ class Run(CanarySubcommand):
         session = workspace.run(specs)
         return session.returncode
 
-    def rerun_failed(self, path: Path, args: "argparse.Namespace") -> int:
-        # Load test cases, filter, and run
-        workspace = Workspace.load(path)
-        specs = workspace.compute_failed_rerun_list()
-        session = workspace.run(specs)
-        return session.returncode
-
-    def rerun_spec(self, path: Path, spec: str, args: "argparse.Namespace") -> int:
-        # Load test cases, filter, and run
-        workspace = Workspace.load(path)
-        specs = workspace.compute_rerun_list_for_specs(ids=[spec])
-        session = workspace.run(specs)
-        return session.returncode
-
     def run_inworkspace(self, path: Path, args: "argparse.Namespace") -> int:
         """The workspace already exists, now let's run some test cases within it"""
         if args.scanpaths:
@@ -162,11 +117,7 @@ class Run(CanarySubcommand):
         defined = [o for o in opts if getattr(args, o, None) is not None]
         if len(defined) > 1:
             raise ValueError(f"only one of {', '.join(defined)} may be provided")
-        if args.rerun == ("mode", "failed"):
-            return self.rerun_failed(path, args)
-        elif args.rerun and args.rerun[0] == "spec":
-            return self.rerun_spec(path, args.rerun[1], args)
-        elif args.start:
+        if args.start:
             return self.run_inview(path, args.start, args)
         elif args.runtag:
             return self.run_tag(path, args.runtag, args)
@@ -229,29 +180,3 @@ def filter_specs_by_keyword(specs: list["ResolvedSpec"], args: "argparse.Namespa
         if not outcome:
             spec.mask = Mask.masked(outcome.reason or rule.default_reason)
     return
-
-
-class RerunAction(argparse.Action):
-    BUILTINS = {"failed"}
-
-    def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        values: str | Sequence[Any] | None,
-        option_string: str | None = None,
-    ) -> None:
-        assert isinstance(values, str)
-        if values in self.BUILTINS:
-            setattr(namespace, self.dest, ("mode", values))
-        elif values.startswith("spec="):
-            setattr(namespace, self.dest, ("spec", values[5:]))
-        else:
-            choices = ", ".join(f"{_!r}" for _ in self.BUILTINS) + ", 'spec=.*'"
-            parser.error(
-                f"argument {option_string}: invalid choice: {values!r} (choose from {choices})"
-            )
-
-    @staticmethod
-    def p_help() -> str:
-        return f"Rerun a subset of tests, choices are {'|'.join(RerunAction.BUILTINS)} or a spec-likep pattern spec=.*"

@@ -29,7 +29,6 @@ class ExecutionSpace:
     root: Path
     path: Path
     session: str | None = None
-    dir: Path = dataclasses.field(default_factory=Path, init=False, repr=False)
 
     def __str__(self) -> str:
         return str(self.dir)
@@ -37,7 +36,6 @@ class ExecutionSpace:
     def __post_init__(self) -> None:
         self.root = Path(self.root)
         self.path = Path(self.path)
-        self.dir = self.root / self.path
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -45,6 +43,10 @@ class ExecutionSpace:
     @classmethod
     def from_dict(cls, state: dict[str, Any]) -> "ExecutionSpace":
         return cls(root=Path(state["root"]), path=Path(state["path"]), session=state["session"])
+
+    @property
+    def dir(self) -> Path:
+        return self.root / self.path
 
     def create(self, exist_ok: bool = False) -> None:
         self.dir.mkdir(parents=True, exist_ok=exist_ok)

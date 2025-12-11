@@ -34,9 +34,28 @@ class Timekeeper:
         finally:
             self.stop()
 
+    def reset(self) -> None:
+        self.started_on = "NA"
+        self.finished_on = "NA"
+        self.duration = -1.0
+        self.mark = -1.0
+
+    def update(self, *, started_on: str, finished_on: str, duration: float) -> None:
+        self.started_on = started_on
+        self.finished_on = finished_on
+        self.duration = duration
+
     def asdict(self) -> dict[str, Any]:
         return {
             "started_on": self.started_on,
             "finished_on": self.finished_on,
             "duration": self.duration,
         }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Timekeeper":
+        self = cls()
+        self.started_on = d["started_on"]
+        self.finished_on = d["finished_on"]
+        self.duration = d["duration"]
+        return self

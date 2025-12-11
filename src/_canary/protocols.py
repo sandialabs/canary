@@ -13,12 +13,18 @@ if TYPE_CHECKING:
 
 
 class StatusProtocol(Protocol):
+    state: str
     category: str
+    status: str
+    reason: str | None
+    code: int
     color: str
 
     def set(
         self,
-        status: "str | int | StatusProtocol",
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
         reason: str | None = None,
         code: int | None = None,
     ) -> None: ...
@@ -49,7 +55,9 @@ class JobProtocol(Protocol):
 
     def set_status(
         self,
-        status: str | int | StatusProtocol,
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
         reason: str | None = None,
         code: int | None = None,
     ) -> None: ...

@@ -20,141 +20,198 @@ class Status:
     """
 
     # Status definitions: (default_code, color, glyph, extra label)
-    categories = {
-        "PENDING": (-3, "Blue", "○", ()),
-        "READY": (-2, "Blue", "○", ()),
-        "RUNNING": (-1, "green", "▶", ()),
-        "SUCCESS": (0, "Green", "✓", ("PASS",)),
-        "XFAIL": (50, "Cyan", "✓", ()),
-        "XDIFF": (51, "Cyan", "✓", ()),
-        "RETRY": (52, "Yellow", "⟳", ()),
-        "BLOCKED": (62, "Magenta", "⊘", ()),
-        "SKIPPED": (63, "Magenta", "⊘", ()),
-        "DIFFED": (64, "Magenta", "✗", ("DIFF",)),
-        "FAILED": (65, "Red", "✗", ("FAIL",)),
-        "TIMEOUT": (66, "Red", "⏱", ()),
-        "ERROR": (67, "Red", "⚠", ()),
-        "BROKEN": (68, "Red", "✗", ()),
-        "CANCELLED": (69, "Magenta", "⊘", ()),
+    states: set[str] = {"PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE"}
+    categories: dict[str, tuple[str, ...]] = {
+        "PASS": ("SUCCESS", "XDIFF", "XFAIL"),
+        "FAIL": ("DIFFED", "FAILED", "ERROR", "BROKEN", "TIMEOUT", "INVALID"),
+        "CANCEL": ("CANCELLED", "INTERRUPTED"),
+        "SKIP": ("SKIPPED", "BLOCKED"),
+        "NONE": ("NONE",),
+    }
+    categories_for_state: dict[str, set[str]] = {
+        "PENDING": {"NONE"},
+        "READY": {"NONE"},
+        "RUNNING": {"NONE"},
+        "NOTRUN": {"SKIP"},
+        "COMPLETE": {"PASS", "FAIL", "CANCEL"},
+    }
+    color_for_category: dict[str, str] = {
+        "PASS": "bold green",
+        "FAIL": "bold red",
+        "SKIP": "yellow",
+        "CANCEL": "bold magenta",
+        "NONE": "bold",
+    }
+    html_color_for_category: dict[str, str] = {
+        "PASS": "#02FE20",
+        "FAIL": "#FF3333",
+        "SKIP": "#FEFD02",
+        "CANCEL": "#F202FE",
+        "NONE": "",
+    }
+    code_for_status: dict[str, int] = {
+        "PENDING": -1,
+        "READY": -1,
+        "RUNNING": -1,
+        "SUCCESS": 0,
+        "XDIFF": 10,
+        "XFAIL": 11,
+        "DIFFED": 64,
+        "FAILED": 65,
+        "ERROR": 66,
+        "BROKEN": 67,
+        "TIMEOUT": 68,
+        "INVALID": 69,
+        "CANCELLED": 70,
+        "INTERRUPTED": 71,
+        "SKIPPED": 80,
+        "BLOCKED": 81,
+    }
+    glyph_for_status: dict[str, str] = {
+        "PENDING": "○",
+        "READY": "○",
+        "RUNNING": "▶",
+        "SUCCESS": "✓",
+        "XFAIL": "✓",
+        "XDIFF": "✓",
+        "DIFFED": "✗",
+        "FAILED": "✗",
+        "ERROR": "⚠",
+        "BROKEN": "✗",
+        "TIMEOUT": "⏱",
+        "CANCELLED": "⊘",
+        "INTERRUPTED": "⊘",
+        "SKIPPED": "⊘",
+        "BLOCKED": "⊘",
     }
 
-    # Reverse mapping: code -> category (for default codes only)
-    code2category = {code: category for category, (code, _, _, _) in categories.items()}
+    state: str
+    category: str
+    status: str
+    reason: str | None
 
     def __init__(
         self,
-        status: "str | int | Status" = "PENDING",
+        *,
+        state: str = "PENDING",
+        category: str = "NONE",
+        status: str = "NONE",
         reason: str | None = None,
-        code: int | None = None,
-        kind: str | None = None,
-    ):
-        """Create a Status from a category, code, or another Status.
-
-        Args:
-            status: Status category (str), return code (int), or Status object
-            reason: Optional reason associated with this status
-            code: Optional custom return code (overrides default)
-        """
-        self._category: str
-        self._reason: str | None
-        self._code: int
-        self._kind: str | None
-        self.set(status, reason, code, kind)
-
-    def set(
-        self,
-        status: "str | int | Status" = "PENDING",
-        reason: str | None = None,
-        code: int | None = None,
-        kind: str | None = None,
+        code: int = -1,
     ) -> None:
-        if isinstance(status, Status):
-            self._category = status._category
-            self._reason = reason if reason is not None else status._reason
-            self._code = code if code is not None else status._code
-            self._kind = status._kind
-            return
-        if isinstance(status, int):
-            # Look up by code (only works for default codes)
-            if status in self.code2category:
-                self._category = self.code2category[status]
-            else:
-                self._category = "FAILED"
-            self._code = code if code is not None else status
-        elif isinstance(status, str):
-            # Look up by category
-            category = status.upper()
-            if category not in self.categories:
-                raise ValueError(f"Unknown status category: {status}")
-            self._category = category
-            # Use provided code or default
-            default_code = self.categories[category][0]
-            self._code = code if code is not None else default_code
-            self._kind = kind
+        self.set(state=state, category=category, status=status, reason=reason, code=code)
+
+    def __eq__(self, o) -> bool:
+        if isinstance(o, Status):
+            return self.__hash__() == o.__hash__()
         else:
-            raise TypeError(f"Status must be str, int, or Status, not {type(status)}")
-        self._reason = reason
-        self._kind = kind
+            if self.state in ("PENDING", "READY", "RUNNING"):
+                return self.state == o
+            return self.status == o
 
-    @property
-    def category(self) -> str:
-        """Status category (e.g., 'SUCCESS')."""
-        return self._category
+    def __hash__(self):
+        """Allow Status to be used in sets and as dict keys."""
+        return hash((self.state, self.category, self.status, self.reason, self.code))
 
-    @property
-    def kind(self) -> str | None:
-        return self._kind
+    def __str__(self) -> str:
+        """String representation."""
+        if self.reason:
+            return f"{self.status}: {self.reason}"
+        return f"{self.category} ({self.status})"
 
-    @property
-    def code(self) -> int:
-        """Return code (default or custom)."""
-        return self._code
+    def __repr__(self) -> str:
+        """Developer representation."""
+        parts = [f"{self.status!r}"]
+        if self.reason:
+            parts.append(f"reason={self.reason!r}")
+        # Show code if it's not the default
+        return f"Status({', '.join(parts)})"
 
-    @property
-    def reason(self) -> str | None:
-        """Optional reason associated with this status."""
-        return self._reason
-
-    def display_name(self, **kwargs) -> str:
-        name = self._category.replace("_", " ")
-        if kwargs.get("rich"):
-            tag = self.color.lower()
-            if self.color[0].isupper():
-                tag = f"bold {tag}"
-            return f"[{tag}]{name}[/{tag}]"
-        elif kwargs.get("color"):
-            return "@*%s{%s}" % (self.color[0], name)
-        return name
-
-    @property
-    def cname(self) -> str:
-        return "@*%s{%s}" % (self.color[0], self.category)
-
-    @property
-    def html_name(self) -> str:
-        color = {
-            "r": "#FF3333",
-            "b": "#3354FF",
-            "m": "#F202FE",
-            "g": "#02FE20",
-            "y": "#FEFD02",
-            "c": "#00FFFF",
-        }[self.color[0].lower()]
-        return f"<font color={color}>{self.category}</font>"
-
-    @property
-    def color(self) -> str:
-        """Associated color (e.g., 'green' for SUCCESS)."""
-        return self.categories[self._category][1]
+    def __int__(self) -> int:
+        """Convert to int (return code)."""
+        return self.code
 
     @property
     def glyph(self) -> str:
-        """Associated glyph (e.g., '✓' for SUCCESS)."""
-        return self.categories[self._category][2]
+        if self.state in ("PENDING", "READY", "RUNNING"):
+            return self.glyph_for_status[self.state]
+        return self.glyph_for_status[self.status]
 
     @property
-    def labels(self) -> list[str]:
-        return list(self.categories[self._category][-1])
+    def color(self) -> str:
+        return self.color_for_category[self.category]
+
+    def set(
+        self,
+        *,
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
+        if state in ("READY", "PENDING", "RUNNING"):
+            category = category or "NONE"
+            status = status or "NONE"
+        if category == "PASS":
+            state = state or "COMPLETE"
+            status = status or self.categories[category][0]
+        elif category == "FAIL":
+            state = state or "COMPLETE"
+            status = status or self.categories[category][0]
+        elif category == "CANCEL":
+            state = state or "COMPLETE"
+            status = status or self.categories[category][0]
+        elif category == "SKIP":
+            state = state or "NOTRUN"
+            status = status or self.categories[category][0]
+        if status is not None:
+            category = category or self._category_from_status(status)
+            state = state or self._state_from_category(category)
+
+        if state not in self.states:
+            raise ValueError(f"Invalid state: {state}")
+
+        allowed_categories = self.categories_for_state[state]
+        if category not in allowed_categories:
+            s = ", ".join(allowed_categories)
+            raise ValueError(f"Invalid category {category} for state {state}: allowed: {s}")
+
+        allowed_status = self.categories[category]
+        if status not in allowed_status:
+            s = ", ".join(allowed_status)
+            raise ValueError(f"Invalid status {status} for category {category}: allowed: {s}")
+
+        self.state = state
+        self.category = category
+        self.status = status
+        self.reason = reason
+        if code < 0:
+            code = self.code_for_status.get(self.status, -1)
+        self.code = code
+
+    def _category_from_status(self, value: str) -> str:
+        for category, statuses in self.categories.items():
+            if value in statuses:
+                return category
+        raise ValueError(f"Invalid status: {value}")
+
+    def _state_from_category(self, value: str) -> str:
+        for state, categories in self.categories_for_state.items():
+            if value in categories:
+                return state
+        raise ValueError(f"Invalid category: {value}")
+
+    def display_name(self, **kwargs) -> str:
+        style = kwargs.get("style", "none")
+        if style == "rich":
+            color = self.color_for_category[self.category]
+            return f"[{color}]{self.category}[/{color}] ({self.status})"
+        elif style == "html":
+            color = self.html_color_for_category[self.category]
+            return f"<font color={color}>{self.category}</font> ({self.status})"
+        else:
+            return f"{self.category} ({self.status})"
 
     def asdict(self) -> dict:
         """
@@ -164,10 +221,11 @@ class Status:
             Dictionary with category, code, and reason (if present)
         """
         result = {
-            "category": self._category,
-            "code": self._code,
-            "reason": self._reason,
-            "kind": self._kind,
+            "state": self.state,
+            "category": self.category,
+            "status": self.status,
+            "reason": self.reason,
+            "code": self.code,
         }
         return result
 
@@ -182,104 +240,109 @@ class Status:
         Returns:
             Status object
         """
-        return cls(
-            status=data["category"],
-            code=data["code"],
-            reason=data.get("reason"),
-            kind=data.get("kind"),
-        )
-
-    def __eq__(self, other) -> bool:
-        """Compare by category, code, and reason."""
-        if isinstance(other, Status):
-            return (
-                self._category == other._category
-                and self._code == other._code
-                and self._reason == other._reason
-                and self._kind == other._kind
-            )
-        elif isinstance(other, str):
-            # String comparison only checks category, not reason or code
-            return self._category == other.upper()
-        elif isinstance(other, int):
-            # Int comparison only checks code, not category or reason
-            return self.code == other
-        return False
-
-    def __hash__(self):
-        """Allow Status to be used in sets and as dict keys."""
-        return hash((self._category, self._code, self._reason, self._kind))
-
-    def __str__(self) -> str:
-        """String representation."""
-        if self._reason:
-            return f"{self._category}: {self._reason}"
-        return self._category
-
-    def __repr__(self) -> str:
-        """Developer representation."""
-        parts = [f"{self._category!r}"]
-        if self._reason:
-            parts.append(f"reason={self._reason!r}")
-        # Show code if it's not the default
-        default_code = self.categories[self._category][0]
-        if self._code != default_code:
-            parts.append(f"code={self._code}")
-        return f"Status({', '.join(parts)})"
-
-    def __int__(self) -> int:
-        """Convert to int (return code)."""
-        return self.code
+        self = cls()
+        self.state = data["state"]
+        self.category = data["category"]
+        self.status = data["status"]
+        self.reason = data["reason"]
+        self.code = data["code"]
+        return self
 
     # Class-level constants for convenience
     @classmethod
-    def PENDING(cls, reason: str | None = None, code: int | None = None):
-        return cls("PENDING", reason=reason, code=code)
+    def PENDING(cls):
+        self = cls()
+        return self
 
     @classmethod
-    def READY(cls, reason: str | None = None, code: int | None = None):
-        return cls("READY", reason=reason, code=code)
+    def READY(cls):
+        self = cls()
+        self.state = "READY"
+        return self
 
     @classmethod
-    def RUNNING(cls, reason: str | None = None, code: int | None = None):
-        return cls("RUNNING", reason=reason, code=code)
+    def RUNNING(cls):
+        self = cls()
+        self.state = "RUNNING"
+        return self
 
     @classmethod
-    def SUCCESS(cls, reason: str | None = None, code: int | None = None):
-        return cls("SUCCESS", reason=reason, code=code)
+    def SUCCESS(cls):
+        self = cls()
+        self.set(state="COMPLETE", category="PASS", status="SUCCESS", code=0)
+        return self
 
     @classmethod
-    def XFAIL(cls, reason: str | None = None, code: int | None = None):
-        return cls("XFAIL", reason=reason, code=code)
+    def XFAIL(cls):
+        self = cls()
+        self.set(state="COMPLETE", category="PASS", status="XFAIL")
+        return self
 
     @classmethod
-    def XDIFF(cls, reason: str | None = None, code: int | None = None):
-        return cls("XDIFF", reason=reason, code=code)
+    def XDIFF(cls):
+        self = cls()
+        self.set(state="COMPLETE", category="PASS", status="XDIFF")
+        return self
 
     @classmethod
-    def SKIPPED(cls, reason: str | None = None, code: int | None = None):
-        return cls("SKIPPED", reason=reason, code=code)
+    def FAILED(cls, reason: str | None = None, code: int = -1):
+        self = cls()
+        self.set(state="COMPLETE", category="FAIL", status="FAILED", reason=reason, code=code)
+        return self
 
     @classmethod
-    def BLOCKED(cls, reason: str | None = None, code: int | None = None):
-        return cls("BLOCKED", reason=reason, code=code)
+    def DIFFED(cls, reason: str | None = None, code: int = -1):
+        self = cls()
+        self.set(state="COMPLETE", category="FAIL", status="DIFFED", reason=reason, code=code)
+        return self
 
     @classmethod
-    def FAILED(cls, reason: str | None = None, code: int | None = None):
-        return cls("FAILED", reason=reason, code=code)
+    def TIMEOUT(cls, code: int = -1):
+        self = cls()
+        self.set(state="COMPLETE", category="FAIL", status="TIMEOUT", code=code)
+        return self
 
     @classmethod
-    def DIFFED(cls, reason: str | None = None, code: int | None = None):
-        return cls("DIFFED", reason=reason, code=code)
+    def ERROR(cls, reason: str | None = None, code: int = -1):
+        self = cls()
+        self.set(state="COMPLETE", category="FAIL", status="ERROR", code=code)
+        return self
 
     @classmethod
-    def TIMEOUT(cls, reason: str | None = None, code: int | None = None):
-        return cls("TIMEOUT", reason=reason, code=code)
+    def BROKEN(cls, reason: str | None = None, code: int = -1):
+        self = cls()
+        self.set(state="COMPLETE", category="FAIL", status="BROKEN", code=code)
+        return self
 
     @classmethod
-    def ERROR(cls, reason: str | None = None, code: int | None = None):
-        return cls("ERROR", reason=reason, code=code)
+    def SKIPPED(cls, reason: str | None = None):
+        self = cls()
+        self.set(state="NOTRUN", category="SKIP", status="SKIPPED", reason=reason)
+        return self
 
     @classmethod
-    def BROKEN(cls, reason: str | None = None, code: int | None = None):
-        return cls("BROKEN", reason=reason, code=code)
+    def BLOCKED(cls, reason: str | None = None):
+        self = cls()
+        self.set(state="NOTRUN", category="SKIP", status="BLOCKED", reason=reason)
+        return self
+
+    @classmethod
+    def CANCELLED(cls):
+        self = cls()
+        self.set(state="COMPLETE", category="CANCEL", status="CANCELLED")
+        return self
+
+    @classmethod
+    def INTERRUPTED(cls, reason: str | None = None):
+        import signal
+
+        self = cls()
+        reason = reason or "Keyboard interrupt"
+        self.set(
+            state="COMPLETE",
+            category="CANCEL",
+            status="INTERRUPED",
+            reason=reason,
+            code=signal.SIGINT.value,
+        )
+        return self

@@ -29,7 +29,7 @@ def test_repo_bfilter(tmpdir):
             specs = workspace.get_selection()
             workspace.run(specs)
             files = glob.glob(
-                "tests/.canary/tmp/canary-hpc/batches/**/canary-inp.sh",
+                "tests/.canary/cache/canary-hpc/batches/**/canary-inp.sh",
                 recursive=True,
             )
             assert len(files) == 2

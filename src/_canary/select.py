@@ -68,6 +68,7 @@ from . import config
 from .hookspec import hookimpl
 from .rules import Rule
 from .rules import RuntimeRule
+from .status import Status
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
@@ -254,17 +255,22 @@ class RuntimeSelector:
             for rule in self.rules:
                 outcome = rule(case)
                 if not outcome:
-                    case.status.set("SKIPPED", reason=outcome.reason or rule.default_reason)
+                    case.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
                     break
         config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
         self.propagate()
+        for case in self.cases:
+            if not case.mask:
+                case.status = Status.PENDING()
+                case.timekeeper.reset()
+                case.measurements.reset()
         pm.done()
         config.pluginmanager.hook.canary_rtselect_report(selector=self)
         return
 
     def propagate(self) -> None:
         # Propagate skipped/broken tests
-        queue = deque([c for c in self.cases if c.status.category in ("SKIPPED", "BROKEN")])
+        queue = deque([c for c in self.cases if c.mask and c.status.state in ("READY", "PENDING")])
         case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
         # Precompute reverse graph
         dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
@@ -275,8 +281,8 @@ class RuntimeSelector:
             excluded = queue.popleft()
             for child_id in dependents[excluded.id]:
                 child = case_map[child_id]
-                if child.status.category in ("READY", "PENDING"):
-                    child.status.set("SKIPPED", "One or more dependencies skipped or broken")
+                if not child.mask:
+                    child.mask = Mask.masked(reason="One or more dependencies do not have results")
                     queue.append(child)
         return
 
@@ -334,7 +340,9 @@ def select_report(specs: list["ResolvedSpec"]) -> None:
 def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     excluded: list["TestCase"] = []
     for case in selector.cases:
-        if case.status.category in ("SKIPPED", "BROKEN"):
+        if case._mask:
+            # A case can have its own mask, different than the specs, it is only assigned during
+            # rtselect
             excluded.append(case)
     unmasked = [case for case in selector.cases if not case.mask]
     n = len(unmasked) - len(excluded)
@@ -344,7 +352,7 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
         logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
         reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
-            reasons.setdefault(case.status.reason, []).append(case)
+            reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()

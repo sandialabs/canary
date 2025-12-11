@@ -6,15 +6,14 @@ import argparse
 import io
 import itertools
 import re
-import sys
 from typing import TYPE_CHECKING
-from typing import TextIO
+
+from rich.console import Console
+from rich.table import Table
 
 from ... import status
 from ...hookspec import hookimpl
 from ...testcase import TestCase
-from ...third_party import colify
-from ...third_party.color import clen
 from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
@@ -82,28 +81,26 @@ class Status(CanarySubcommand):
             choices=("duration", "name"),
             help="Sort cases by this field [default: %(default)s]",
         )
-        parser.add_argument(
-            "--dump", action="store_true", help="Dump test cases to lock lock file [default: False]"
-        )
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
         cases = workspace.load_testcases()
         table = self.get_status_table(cases, args)
-        fh = io.StringIO()
-        colify.colify_table(table, output=fh)
+        console = Console()
+        with console.pager():
+            console.print(table, markup=True)
         if args.durations:
-            fh.write("\n")
-            print_durations(cases, N=args.durations, file=fh)
-        print(fh.getvalue().strip())
+            console.print(format_durations(cases, args.durations))
         return 0
 
-    def get_status_table(
-        self, cases: list[TestCase], args: "argparse.Namespace"
-    ) -> list[list[str]]:
-        cases.sort(key=lambda c: status_sort_map.get(c.status.category, 50))
+    def get_status_table(self, cases: list[TestCase], args: "argparse.Namespace") -> Table:
+        cases.sort(key=lambda c: (c.status.category, c.status.status, c.timekeeper.duration))
         cases = filter_by_status(cases, args.report_chars)
         cols = args.format_cols.split(",")
+        table = Table(expand=True)
+        for col in cols:
+            table.add_column(col)
+
         map: dict[str, str] = {
             "ID": "id",
             "Name": "name",
@@ -112,40 +109,34 @@ class Status(CanarySubcommand):
             "Exit Code": "returncode",
             "Duration": "duration",
             "Status": "status_name",
-            "Details": "status_message",
+            "Details": "status_reason",
         }
-        table: list[list[str]] = []
-        widths = [len(_) for _ in cols]
         for case in cases:
             row: list[str] = []
-            for j, name in enumerate(cols):
-                key = map[name]
+            for col in cols:
+                key = map[col]
                 value = get_case_attribute(case, key)
-                widths[j] = max(widths[j], clen(value))
                 row.append(value)
-            table.append(row)
-        hlines: list[str] = ["=" * width for width in widths]
-        table.insert(0, cols)
-        table.insert(1, hlines)
+            table.add_row(*row)
         return table
 
 
 def get_case_attribute(case: TestCase, attr: str) -> str:
     if attr == "id":
-        return colorize("@*b{%s}" % case.id[:7])
+        return case.id[:7]
     elif attr == "name":
-        return pretty_test_name(case.spec.display_name)
+        return case.display_name(style="rich")
     elif attr == "fullname":
-        return pretty_test_name(str(case.spec.file_path.parent / case.spec.display_name))
+        return case.display_name(style="rich", full=True)
     elif attr == "session":
         return str(case.workspace.session)
     elif attr == "returncode":
         return str(case.status.code)
     elif attr == "duration":
-        return colorize("@*{%s}" % dformat(case.timekeeper.duration))
+        return dformat(case.timekeeper.duration)
     elif attr == "status_name":
-        return pretty_status_name(case.status.category)
-    elif attr == "status_message":
+        return case.status.display_name(style="rich")
+    elif attr == "status_reason":
         return case.status.reason or ""
     raise AttributeError(attr)
 
@@ -216,67 +207,49 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
     return None
 
 
-status_sort_map = {
-    "CREATED": 0,
-    "RETRY": 0,
-    "PENDING": 0,
-    "READY": 0,
-    "RUNNING": 0,
-    "SUCCESS": 10,
-    "XFAIL": 11,
-    "XDIFF": 12,
-    "CANCELLED": 20,
-    "SKIPPED": 21,
-    "BROKEN": 22,
-    "TIMEOUT": 23,
-    "DIFFED": 30,
-    "FAILED": 31,
-    "ERROR": 32,
-    "UNKNOWN": 40,
-}
-
-
 def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]:
     chars = chars or "dftns"
     if "A" in chars:
         return cases
     keep = [False] * len(cases)
     for i, case in enumerate(cases):
-        stat = case.status.category
         if "a" in chars:
-            keep[i] = stat != "SUCCESS"
-        elif stat == "SKIPPED":
+            keep[i] = case.status.category != "PASS"
+        elif case.status.category == "SKIP":
             keep[i] = "s" in chars
-        elif stat in ("SUCCESS", "XDIFF", "XFAIL"):
+        elif case.status.category == "PASS":
             keep[i] = "p" in chars
-        elif stat in ("FAILED", "ERROR", "BLOCKED"):
+        elif case.status.status in ("FAILED", "ERROR", "BROKEN"):
             keep[i] = "f" in chars
-        elif stat == "DIFFED":
+        elif case.status.status == "DIFFED":
             keep[i] = "d" in chars
-        elif stat == "TIMEOUT":
+        elif case.status.status == "TIMEOUT":
             keep[i] = "t" in chars
-        elif stat in ("READY", "CREATED", "PENDING", "CANCELLED", "BROKEN"):
+        elif case.status.state in ("READY", "PENDING"):
+            keep[i] = "n" in chars
+        elif case.status.category == "CANCEL":
             keep[i] = "n" in chars
         else:
-            logger.warning(f"Unhandled status {stat}")
+            logger.warning(f"Unhandled status {case.status}")
     return [case for i, case in enumerate(cases) if keep[i]]
 
 
-def print_durations(cases: list[TestCase], N: int, file: TextIO = sys.stdout) -> None:
+def format_durations(cases: list[TestCase], N: int) -> str:
     cases.sort(key=lambda x: x.timekeeper.duration)
     ix = list(range(len(cases)))
     if N > 0:
         ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
-    file.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
+    fp = io.StringIO()
+    fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
         duration = cases[i].timekeeper.duration
         if duration < 0:
             continue
-        name = cases[i].display_name()
+        name = cases[i].display_name(style="rich")
         id = cases[i].id[:7]
-        file.write("  %6.2f   %s %s\n" % (duration, id, name))
-    file.write("\n")
+        fp.write("  %6.2f   %s %s\n" % (duration, id, name))
+    return fp.getvalue().strip()
 
 
 def dformat(arg: float) -> str:

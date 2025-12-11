@@ -27,7 +27,7 @@ def config(request):
 
 
 def glob_files_in_session(pattern):
-    return glob.glob(f".canary/tmp/canary-hpc/batches/**/{pattern}", recursive=True)
+    return glob.glob(f".canary/cache/canary-hpc/batches/**/{pattern}", recursive=True)
 
 
 def test_batched(tmpdir):

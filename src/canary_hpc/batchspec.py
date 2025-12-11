@@ -103,8 +103,8 @@ class TestBatch:
         name = str(self)
         if not kwargs.get("status"):
             return name
-        if self.status.category in ("READY", "PENDING"):
-            return f"{name} ({len(self)} {self.status.cname})"
+        if self.status.state in ("READY", "PENDING"):
+            return f"{name} ({len(self)} {self.status.state})"
         else:
             combined_stat = self._combined_status()
             return f"{name} ({combined_stat})"
@@ -205,12 +205,12 @@ class TestBatch:
 
     @property
     def status(self) -> BatchStatus:
-        if self._status.category == "PENDING":
+        if self._status.state == "PENDING":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             pending = 0
             for case in self.cases:
                 for dep in case.dependencies:
-                    if dep.status.category in ("PENDING", "READY", "RUNNING"):
+                    if dep.status.state in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
                 self._status.set("READY", propagate=False)
@@ -218,11 +218,13 @@ class TestBatch:
 
     def set_status(
         self,
-        status: str | int | Status,
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
         reason: str | None = None,
-        code: int | None = None,
+        code: int = -1,
     ) -> None:
-        self.status.set(status, reason=reason, code=code)
+        self.status.set(state=state, category=category, status=status, reason=reason, code=code)
 
     def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:8]}")
@@ -240,15 +242,15 @@ class TestBatch:
             if rc is None:
                 rc = 1
             self.refresh()
-            stat = "SUCCESS" if all(case.status == "SUCCESS" for case in self) else "FAILED"
-            self.status.set(stat, propagate=False)
+            stat = "SUCCESS" if all(case.status.category == "PASS" for case in self) else "FAILED"
+            self.status.set(status=stat, propagate=False)
             data: dict[str, Any] = {}
-            data[self.id] = {"status": self.status.status, "timekeeper": self.timekeeper}
+            data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
             for case in self.cases:
-                if case.status.category in ("PENDING", "READY"):
-                    case.status.set("BROKEN")
-                elif case.status.category == "RUNNING":
-                    case.status.set("CANCELLED")
+                if case.status.state in ("PENDING", "READY"):
+                    case.status = Status.BROKEN()
+                elif case.status.state == "RUNNING":
+                    case.status = Status.CANCELLED()
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
             logger.debug("Batch @*b{%s}: batch exited with code %s" % (self.id[:8], str(rc)))
@@ -265,10 +267,11 @@ class TestBatch:
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
                 self.status.set(
-                    stat.category,
+                    state=stat.state,
+                    category=stat.category,
+                    status=stat.status,
                     reason=stat.reason,
                     code=stat.code,
-                    kind=stat.kind,
                     propagate=False,
                 )
             if timekeeper := mydata.get("timekeeper"):
@@ -298,8 +301,7 @@ class TestBatch:
             stat[case.status.category] = stat.get(case.status.category, 0) + 1
         parts: list[str] = []
         for name, n in stat.items():
-            color = Status.categories[name][1][0]
-            parts.append("@%s{%d %s}" % (color, n, name))
+            parts.append("%d %s" % (n, name))
         return ", ".join(parts)
 
     def times(self) -> tuple[float | None, float | None, float | None]:

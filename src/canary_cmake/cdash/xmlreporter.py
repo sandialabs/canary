@@ -260,46 +260,31 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
-            if case.status.category in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING"):
+            if case.status.state != "COMPLETED":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status.category == "SKIPPED":
+            elif case.status.category == "SKIP":
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.category in ("SUCCESS", "XFAIL", "XDIFF"):
+            elif case.status.category == "PASS":
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status.category == "DIFFED":
-                status = "failed"
-                exit_code = "Diffed"
-                completion_status = "Completed"
-                fail_reason = case.status.reason or "Test diffed"
-            elif case.status.category == "FAILED":
-                status = "failed"
-                exit_code = "Failed"
-                completion_status = "Completed"
-                fail_reason = case.status.reason or "Test execution failed"
-            elif case.status.category == "TIMEOUT":
+            elif case.status.status == "TIMEOUT":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status.category == "BROKEN":
+            elif case.status.category == "FAIL":
                 status = "failed"
-                exit_code = "Not Run"
+                exit_code = case.status.status.title()
                 completion_status = "Completed"
-                fail_reason = case.status.reason or "Test case was unexpectedly not run"
-            elif case.status.category == "CANCELLED":
+                fail_reason = case.status.reason or f"Test {case.status.status.lower()}"
+            elif case.status.category == "CANCEL":
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
                 fail_reason = case.status.reason or "Test case was cancelled"
-            elif case.status.category == "UNKNOWN":
-                status = "failed"
-                exit_code = "Unknown"
-                completion_status = "Completed"
-                fail_reason = case.status.reason or "Test case was unexpectedly not run"
             else:
                 status = "failed"
                 exit_code = "No Status"
@@ -350,9 +335,9 @@ class CDashXMLReporter:
                 when = artifact["when"]
                 if when == "never":
                     continue
-                elif when == "on_success" and case.status.category != "SUCCESS":
+                elif when == "on_success" and case.status.category != "PASS":
                     continue
-                elif when == "on_failure" and case.status.category == "SUCCESS":
+                elif when == "on_failure" and case.status.category == "PASS":
                     continue
                 file = artifact["file"]
                 if not os.path.exists(file) and not os.path.isabs(file):
@@ -536,18 +521,16 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status.category == "DIFFED":
+        if case.status.status == "DIFFED":
             self.status |= 2**1
-        elif case.status.category == "FAILED":
-            self.status |= 2**2
-        elif case.status.category == "TIMEOUT":
+        elif case.status.status == "TIMEOUT":
             self.status |= 2**3
-        elif case.status.category == "SKIPPED":  # notdone
+        elif case.status.category == "FAIL":
+            self.status |= 2**2
+        elif case.status.category == "SKIP":  # notdone
             self.status |= 2**4
-        elif case.status.category == "READY":
+        elif case.status.state in ("READY", "PENDING"):
             self.status |= 2**5
-        elif case.status.category == "BROKEN":
-            self.status |= 2**6
 
     def add_test(self, case: "canary.TestCase") -> None:
         if case.timekeeper.started_on != "NA" and case.timekeeper.finished_on != "NA":

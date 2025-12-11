@@ -218,9 +218,15 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         runtime=lock["runtime"],
         baseline=spec["baseline"],
         sources=sources,
-        work_tree=str(workspace["dir"]),
-        working_directory=str(workspace["dir"]),
-        status=Status(status["category"], status["reason"], status["code"]),
+        work_tree=os.path.join(workspace["root"], workspace["path"]),
+        working_directory=os.path.join(workspace["root"], workspace["path"]),
+        status=Status(
+            state=status["state"],
+            category=status["category"],
+            status=status["status"],
+            reason=status["reason"],
+            code=status["code"],
+        ),
         start=start,
         stop=stop,
         id=spec["id"],
@@ -229,7 +235,7 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         dependencies=dependencies,
         ofile=lock["stdout"],
         efile=lock["stderr"],
-        lockfile=os.path.join(lock["workspace"]["dir"], "testcase.lock"),
+        lockfile=os.path.join(lock["workspace"]["root"], lock["workspace"]["path"], "testcase.lock"),
     )
     return instance
 

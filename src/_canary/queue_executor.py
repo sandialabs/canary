@@ -37,7 +37,6 @@ from .util.returncode import compute_returncode
 logger = logging.get_logger(__name__)
 
 
-
 @dataclasses.dataclass
 class ExecutionSlot:
     job: JobProtocol
@@ -56,7 +55,7 @@ def with_traceback(executor: Callable, job: JobProtocol, queue: mp.Queue, **kwar
         traceback.print_exc(file=fh)
         text = fh.getvalue()
         logger.debug(f"Child process failed: {text}")
-        job.set_status("ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
+        job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
         while not queue.empty():
             queue.get_nowait()
         queue.put({"status": job.status})
@@ -132,7 +131,7 @@ class ResourceQueueExecutor:
         start = time.time()
 
         console: Console | None = None
-        if not config.get("debug") and sys.stdin.isatty():
+        if os.getenv("CANARY_LEVEL") != "1" and not config.get("debug") and sys.stdin.isatty():
             console = Console(file=sys.stdout, force_terminal=True)
         with CanaryLive(self._render_dashboard, console=console) as live:
             while True:
@@ -184,20 +183,24 @@ class ResourceQueueExecutor:
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
                     self._wait_all(live)
+                    live.update(final=True)
                     break
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
+                    live.update(final=True)
                     raise
 
                 except TimeoutError:
+                    live.update(final=True)
                     raise
 
                 except BaseException:
                     logger.exception("Unhandled exception in process pool")
+                    live.update(final=True)
                     raise
-                finally:
-                    live.update()
+
+            live.update(final=True)
         return compute_returncode(self.queue.cases())
 
     def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
@@ -217,7 +220,10 @@ class ResourceQueueExecutor:
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("Finished job @*b{%s}: %s" % (job.id[:7], job.display_name(status=True)))
+        fmt.write(
+            "Finished job @*b{%s}: %s: %s"
+            % (job.id[:7], job.display_name(), job.status.display_name())
+        )
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def _check_timeouts(self) -> None:
@@ -233,7 +239,9 @@ class ResourceQueueExecutor:
                     measurements = slot.proc.get_measurements()
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
                     slot.job.refresh()
-                    slot.job.set_status("TIMEOUT", reason=f"Job timed out after {total_timeout} s.")
+                    slot.job.set_status(
+                        status="TIMEOUT", reason=f"Job timed out after {total_timeout} s."
+                    )
                     slot.job.measurements.update(measurements)
                     slot.job.save()
                     slot.proc.join()
@@ -265,7 +273,7 @@ class ResourceQueueExecutor:
                 slot.job.on_result(result)
             else:
                 slot.job.set_status(
-                    "ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
+                    status="ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
                 )
 
             # Get measurements and store in job
@@ -306,7 +314,7 @@ class ResourceQueueExecutor:
                 slot.proc.shutdown(signum, grace_period=0.05)
                 slot.job.refresh()
                 stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
-                slot.job.set_status(stat, f"Job terminated with code {signum}")
+                slot.job.set_status(status=stat, reason=f"Job terminated with code {signum}")
                 slot.job.measurements.update(measurements)
                 slot.job.save()
                 self.queue.done(slot.job)
@@ -345,13 +353,27 @@ class ResourceQueueExecutor:
             return float(t)
         return 1.0
 
-    def _render_dashboard(self) -> Table:
+    def _render_dashboard(self, final: bool = False) -> Table:
         table = Table(expand=True)
         table.add_column("Job")
         table.add_column("ID")
-        table.add_column("State")
+        table.add_column("Status")
         table.add_column("Elapsed")
         table.add_column("Rank")
+
+        if final:
+            for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
+                if slot.job.status.category == "PASS":
+                    continue
+                elapsed = slot.job.timekeeper.duration
+                table.add_row(
+                    slot.job.display_name(style="rich"),
+                    slot.job.id[:7],
+                    slot.job.status.display_name(style="rich"),
+                    f"{elapsed:5.1f}s",
+                    f"{slot.qrank}/{slot.qsize}",
+                )
+            return table
 
         max_rows: int = 45
         num_inflight = len(self.inflight)
@@ -360,9 +382,9 @@ class ResourceQueueExecutor:
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
                 elapsed = slot.job.timekeeper.duration
                 table.add_row(
-                    slot.job.display_name(rich=True),
+                    slot.job.display_name(style="rich"),
                     slot.job.id[:7],
-                    slot.job.status.display_name(rich=True),
+                    slot.job.status.display_name(style="rich"),
                     f"{elapsed:5.1f}s",
                     f"{slot.qrank}/{slot.qsize}",
                 )
@@ -371,7 +393,7 @@ class ResourceQueueExecutor:
         for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
             elapsed = now - slot.start_time
             table.add_row(
-                slot.job.display_name(rich=True),
+                slot.job.display_name(style="rich"),
                 slot.job.id[:7],
                 "[green]RUNNING[/green]",
                 f"{elapsed:5.1f}s",
@@ -384,7 +406,7 @@ class ResourceQueueExecutor:
 class CanaryLive:
     def __init__(
         self,
-        factory: Callable[[], Table],
+        factory: Callable[..., Table],
         *,
         refresh_per_second: int = 4,
         console: Console | None = None,
@@ -416,9 +438,9 @@ class CanaryLive:
             self.live.__exit__(exc_type, exc, tb)
             self.unmute_stream_handlers()
 
-    def update(self) -> None:
+    def update(self, final: bool = False) -> None:
         if self.live:
-            self.live.update(self.factory(), refresh=True)
+            self.live.update(self.factory(final=final), refresh=True)
 
     def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)

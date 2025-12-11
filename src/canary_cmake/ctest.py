@@ -14,6 +14,7 @@ from typing import Any
 import schema
 
 import canary
+from _canary.status import Status
 
 warning_cache = set()
 
@@ -367,40 +368,48 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
 def finish_ctest(case: "canary.TestCase") -> None:
     output = case.read_output()
 
-    if case.status.category in ("TIMEOUT", "SKIPPED", "CANCELLED"):
+    if case.status.category in ("SKIP", "CANCEL"):
+        return
+    elif case.status.status == "TIMEOUT":
         return
 
     if pass_regular_expression := case.spec.attributes.get("pass_regular_expression"):
         for regex in pass_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status.set("SUCCESS")
+                case.status = Status.SUCCESS()
                 break
         else:
             regex = ", ".join(pass_regular_expression)
-            case.status.set("FAILED", f"Regular expressions {regex} not found in {case.stdout}")
+            case.status = Status.FAILED(
+                reason=f"Regular expressions {regex} not found in {case.stdout}"
+            )
 
     if skip_return_code := case.spec.attributes.get("skip_return_code"):
         if case.status.code == skip_return_code:
-            case.status.set("SKIPPED", f"Return code={skip_return_code!r}")
+            case.status = Status.SKIPPED(f"Return code={skip_return_code!r}")
 
     if skip_regular_expression := case.attributes.get("skip_regular_expression"):
         for regex in skip_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status.set("SKIPPED", f"Regular expression {regex!r} found in {case.stdout}")
+                case.status = Status.SKIPPED(
+                    reason=f"Regular expression {regex!r} found in {case.stdout}"
+                )
                 break
 
     if fail_regular_expression := case.spec.attributes.get("fail_regular_expression"):
         for regex in fail_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status.set("FAILED", f"Regular expression {regex!r} found in {case.stdout}")
+                case.status = Status.FAILED(
+                    reason=f"Regular expression {regex!r} found in {case.stdout}"
+                )
                 break
 
     # invert logic
     if case.spec.attributes.get("will_fail"):
-        if case.status.category == "SUCCESS":
-            case.status.set("FAILED", "Test case marked will_fail but succeeded")
-        elif case.status.category not in ("SKIPPED",):
-            case.status.set("SUCCESS")
+        if case.status.category == "PASS":
+            case.status = Status.FAILED(reason="Test case marked will_fail but succeeded")
+        elif case.status.category != "SKIP":
+            case.status = Status.SUCCESS()
 
 
 def safeint(arg: str) -> None | int:

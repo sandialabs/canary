@@ -3,42 +3,23 @@
 # SPDX-License-Identifier: MIT
 
 import _canary.status as status
-from _canary.error import diff_exit_status
-from _canary.error import fail_exit_status
-from _canary.error import skip_exit_status
-from _canary.error import timeout_exit_status
 
 
 def test_status_0():
     stat = status.Status()
-    stat.set("failed", reason="Just because")
+    stat.set(status="FAILED", reason="Just because")
 
     other = status.Status()
     assert other != stat
-    other.set("failed", reason="Just because")
+    other.set(status="FAILED", reason="Just because")
     assert other == stat
 
-    stat.set("ready")
+    stat.set(state="READY")
     assert stat == "READY"
 
-    stat.set("pending")
+    stat.set(state="PENDING")
     assert stat == "PENDING"
 
-    stat.set(0)
-    assert stat == "SUCCESS"
-    stat.set(diff_exit_status)
-    assert stat == "DIFFED"
-    stat.set(skip_exit_status)
-    assert stat == "SKIPPED"
-    stat.set(fail_exit_status)
-    assert stat == "FAILED"
-    stat.set(timeout_exit_status)
-    assert stat == "TIMEOUT"
-    stat.set(66)
-    assert stat == "TIMEOUT"
-    stat.set(22)
-    assert stat == "FAILED"
-
-    stat.set("broken", reason="reason")
+    stat.set(state="BROKEN", reason="reason")
     assert stat.category == "BROKEN"
-    assert stat.display_name() == "BROKEN"
+    assert stat.display_name() == "FAILED (BROKEN)"

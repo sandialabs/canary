@@ -20,15 +20,19 @@ class BatchStatus:
             self.base_status = Status.READY()
 
     @property
+    def state(self) -> str:
+        return self.base_status.state
+
+    @property
     def category(self) -> str:
         return self.base_status.category
 
+    @property
+    def status(self) -> str:
+        return self.base_status.status
+
     def display_name(self, **kwargs: Any) -> str:
         return self.base_status.display_name(**kwargs)
-
-    @property
-    def cname(self) -> str:
-        return self.base_status.cname
 
     @property
     def color(self) -> str:
@@ -39,23 +43,24 @@ class BatchStatus:
 
     def set(
         self,
-        status: str | int | Status,
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
         reason: str | None = None,
-        code: int | None = None,
-        kind: str | None = None,
+        code: int = -1,
         propagate: bool = True,
     ) -> None:
-        self.base_status.set(status, reason=reason, code=code, kind=kind)
+        self.base_status.set(
+            state=state, category=category, status=status, reason=reason, code=code
+        )
         if propagate:
             for child in self._children:
-                if child.status.category in ("READY", "PENDING"):
-                    child.status.set("BROKEN")
-                elif child.status.category == "RUNNING":
+                if child.status.state in ("READY", "PENDING"):
+                    child.status = Status.BROKEN()
+                elif child.status.state == "RUNNING":
                     child.timekeeper.stop()
-                    child.status.set("CANCELLED")
+                    child.status = Status.CANCELLED()
                 else:
-                    child.status.set(status, reason=reason, code=code, kind=kind)
-
-    @property
-    def status(self) -> Status:
-        return self.base_status
+                    child.status.set(
+                        state=state, category=category, status=status, reason=reason, code=code
+                    )

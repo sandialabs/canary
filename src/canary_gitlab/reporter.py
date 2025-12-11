@@ -109,17 +109,9 @@ class MergeRequest:
 
 def group_failed_tests(cases: list["canary.TestCase"]):
     failed: dict[str, list["canary.TestCase"]] = {}
-    nonpass = (
-        "skipped",
-        "diffed",
-        "failed",
-        "timeout",
-        "broken",
-        "cancelled",
-    )
     for case in cases:
-        if case.status.category.lower() in nonpass:
-            failed.setdefault(case.status.category, []).append(case)
+        if case.status.category != "PASS":
+            failed.setdefault(case.status.status, []).append(case)
     return failed
 
 

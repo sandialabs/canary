@@ -155,14 +155,12 @@ class Builder:
     def run(self) -> list["ResolvedSpec"]:
         config.pluginmanager.hook.canary_buildstart(builder=self)
         locked: list[list["UnresolvedSpec"]] = []
-        pm = logger.progress_monitor("@*{Generating} test specs")
         if config.get("debug"):
             for f in self.generators:
                 locked.append(lock_file(f, self.on_options))
         else:
             locked.extend(starmap(lock_file, [(f, self.on_options) for f in self.generators]))
         drafts: list["UnresolvedSpec"] = [draft for group in locked for draft in group]
-        pm.done()
         self.validate(drafts)
         pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
         self.specs = resolve(drafts)

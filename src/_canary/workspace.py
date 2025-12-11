@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 import dataclasses
 import datetime
+import fnmatch
 import os
 import shutil
 import sqlite3
@@ -24,11 +25,13 @@ from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
+from .status import Status
 from .testcase import Measurements
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import Mask
 from .testspec import ResolvedSpec
+from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import force_remove
@@ -59,12 +62,13 @@ class Session:
     finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
 
     def __post_init__(self) -> None:
-        if any(c.mask for c in self.cases):
-            raise ValueError("Test session go masked test case")
+        for case in self.cases:
+            if case.mask:
+                raise ValueError(f"{case}: unexpectedly masked test case")
 
     def run(self, workspace: "Workspace") -> None:
         self.prefix.mkdir(parents=True, exist_ok=True)
-        ready = [case for case in self.cases if case.status.category in ("READY", "PENDING")]
+        ready = [case for case in self.cases if case.status.state in ("READY", "PENDING")]
         runner = Runner(ready, self.name, workspace=workspace)
         if not ready:
             raise StopExecution("no cases to run", exit_code=notests_exit_status)
@@ -262,6 +266,7 @@ class Workspace:
         specs: list["ResolvedSpec"],
         session_name: str | None = None,
         update_view: bool = True,
+        only: str = "include_all",
     ) -> Session:
         now = datetime.datetime.now()
         session_name = session_name or now.isoformat(timespec="microseconds").replace(":", "-")
@@ -271,10 +276,20 @@ class Workspace:
 
         selector = select.RuntimeSelector(cases, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
+        selector.add_rule(rules.RerunRule(strategy=only))
         selector.run()
 
-        unmasked = [case for case in cases if not case.mask]
-        session = Session(name=session_dir.name, prefix=session_dir, cases=unmasked)
+        ready: list["TestCase"] = []
+        for case in cases:
+            if case.mask:
+                continue
+            elif case.workspace.session != session_name:
+                # This case must have been previously run in a different session
+                case.workspace.root = session_dir
+                case.workspace.session = session_dir.name
+            ready.append(case)
+
+        session = Session(name=session_dir.name, prefix=session_dir, cases=ready)
         config.pluginmanager.hook.canary_sessionstart(session=session)
         session.run(workspace=self)
         config.pluginmanager.hook.canary_sessionfinish(session=session)
@@ -407,15 +422,14 @@ class Workspace:
                     session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-                case.status.set(
-                    mine["status"]["category"],
+                case.status = Status(
+                    state=mine["status"]["state"],
+                    category=mine["status"]["category"],
+                    status=mine["status"]["status"],
                     reason=mine["status"]["reason"],
                     code=mine["status"]["code"],
-                    kind=mine["status"]["kind"],
                 )
-                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
-                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
-                case.timekeeper.duration = mine["timekeeper"]["duration"]
+                case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
                 lookup[spec.id] = case
         if ids:
@@ -479,7 +493,7 @@ class Workspace:
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
             case: TestCase
-            if spec.mask and spec.id in latest:
+            if spec.id in latest:
                 # This case won't run, but it may be needed by dependents
                 mine = latest[spec.id]
                 space = ExecutionSpace(
@@ -488,15 +502,14 @@ class Workspace:
                     session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-                case.status.set(
-                    mine["status"]["category"],
+                case.status = Status(
+                    state=mine["status"]["state"],
+                    category=mine["status"]["category"],
+                    status=mine["status"]["status"],
                     reason=mine["status"]["reason"],
                     code=mine["status"]["code"],
-                    kind=mine["status"]["kind"],
                 )
-                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
-                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
-                case.timekeeper.duration = mine["timekeeper"]["duration"]
+                case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
             else:
                 space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
@@ -567,9 +580,7 @@ class Workspace:
     def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
             return self.select(tag="default")
-        if tag == "::failed::":
-            return self.compute_failed_rerun_list()
-        snapshot = self.get_selector(tag)
+        snapshot = self.db.get_selection(tag)
         resolved = self.db.get_specs()
         if snapshot.is_compatible_with_specs(resolved):
             snapshot.apply(resolved)
@@ -677,11 +688,10 @@ class Workspace:
         return self.compute_rerun_list(predicate)
 
     def compute_rerun_list_for_specs(self, ids: list[str]) -> list["ResolvedSpec"]:
-        self.db.resolve_spec_ids(ids)
-
         def predicate(id: str, result: dict) -> bool:
             return id in ids
 
+        self.db.resolve_spec_ids(ids)
         return self.compute_rerun_list(predicate)
 
     def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
@@ -694,6 +704,24 @@ class Workspace:
             if spec.id not in ids:
                 spec.mask = Mask.masked("ID not requested")
         return specs
+
+    def find_specids(self, ids: list[str]) -> list[str | None]:
+        specs = self.db.get_specs()
+        found: list[str | None] = []
+        for id in ids:
+            for spec in specs:
+                if spec.id.startswith(id):
+                    found.append(spec.id)
+                    break
+                elif id in (spec.name, spec.fullname, spec.display_name):
+                    found.append(spec.id)
+                    break
+                elif fnmatch.fnmatch(id, spec.name):
+                    found.append(spec.id)
+                    break
+            else:
+                found.append(None)
+        return found
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
@@ -739,8 +767,9 @@ class WorkspaceDatabase:
         query = """CREATE TABLE IF NOT EXISTS results (
           id TEXT,
           session TEXT,
+          statstate TEXT,
           statcategory TEXT,
-          statkind TEXT,
+          statstatus TEXT,
           statreason TEXT,
           statcode INTEGER,
           started_on TEXT,
@@ -950,14 +979,18 @@ class WorkspaceDatabase:
         return list(lookup.values())
 
     def put_results(self, session: Session) -> None:
+        """Store results in the DB.  We store status, timekeeper across columns for future
+        enhancements to use results without actually creating a testcase to hold them
+        """
         rows = []
         for case in session.cases:
             rows.append(
                 (
                     case.id,
                     session.name,
+                    case.status.state,
                     case.status.category,
-                    case.status.kind or "",
+                    case.status.status,
                     case.status.reason or "",
                     case.status.code,
                     case.timekeeper.started_on,
@@ -974,8 +1007,9 @@ class WorkspaceDatabase:
             INSERT OR IGNORE INTO results (
               id,
               session,
+              statstate,
               statcategory,
-              statkind,
+              statstatus,
               statreason,
               statcode,
               started_on,
@@ -984,7 +1018,7 @@ class WorkspaceDatabase:
               workspace,
               measurements
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -1019,14 +1053,22 @@ class WorkspaceDatabase:
         for row in rows:
             d = data.setdefault(row[0], {})  # ID
             d["session"] = row[1]
-            d["status"] = {"category": row[2], "kind": row[3], "reason": row[4], "code": row[5]}
-            d["timekeeper"] = {
-                "started_on": row[6],
-                "finished_on": row[7],
-                "duration": float(row[8]),
+            d["status"] = {
+                "state": row[2],
+                "category": row[3],
+                "status": row[4],
+                "reason": row[5],
+                "code": row[6],
             }
-            d["workspace"] = row[9]
-            d["measurements"] = Measurements.from_dict(json.loads(row[10]))
+            d["timekeeper"] = Timekeeper.from_dict(
+                {
+                    "started_on": row[7],
+                    "finished_on": row[8],
+                    "duration": float(row[9]),
+                }
+            )
+            d["workspace"] = row[10]
+            d["measurements"] = Measurements.from_dict(json.loads(row[11]))
         return data
 
     def get_single_result(self, id: str) -> list:
@@ -1037,14 +1079,22 @@ class WorkspaceDatabase:
         for row in rows:
             d = {}
             d["session"] = row[1]
-            d["status"] = {"category": row[2], "kind": row[3], "reason": row[4], "code": row[5]}
-            d["timekeeper"] = {
-                "started_on": row[6],
-                "finished_on": row[7],
-                "duration": float(row[8]),
+            d["status"] = {
+                "state": row[2],
+                "category": row[3],
+                "status": row[4],
+                "reason": row[5],
+                "code": row[6],
             }
-            d["workspace"] = row[9]
-            d["measurements"] = json.loads(row[10])
+            d["timekeeper"] = Timekeeper.from_dict(
+                {
+                    "started_on": row[7],
+                    "finished_on": row[8],
+                    "duration": float(row[9]),
+                }
+            )
+            d["workspace"] = row[10]
+            d["measurements"] = json.loads(row[11])
             data.append(d)
         return data
 

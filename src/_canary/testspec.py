@@ -174,7 +174,7 @@ class BaseSpec(Generic[T]):
             value = stringify(self.parameters[key])
             c = next(colors)
             parts.append("[%s]%s=%s[/%s]" % (c, key, value, c))
-        return f"{self.family}.{'.'.join(parts)}"
+        return r"%s\[%s]" % (self.family, ",".join(parts))
 
     @property
     def implicit_keywords(self) -> set[str]:

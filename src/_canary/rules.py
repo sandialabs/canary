@@ -316,9 +316,6 @@ class ResourceCapacityRule(RuntimeRule):
     def default_reason(self) -> str:
         return "not enough resources"
 
-    def asdict(self) -> dict[str, Any]:
-        return {}
-
     def freeze_resource_set(
         self, resource_set: list[dict[str, Any]]
     ) -> tuple[tuple[str, Hashable], ...]:
@@ -343,6 +340,37 @@ class ResourceCapacityRule(RuntimeRule):
                     outcome = RuleOutcome.failed("Resource capacity evaluation failed")
                 self.cache[frozen] = outcome
         return self.cache[frozen]
+
+
+class RerunRule(RuntimeRule):
+    STRATEGIES = ("include_all", "exclude_passed", "only_ready", "only_failed")
+
+    def __init__(self, strategy: str = "only_ready") -> None:
+        self.strategy = strategy
+        if self.strategy not in self.STRATEGIES:
+            raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "previous result is not empty"
+
+    def __call__(self, case: "TestCase") -> RuleOutcome:
+        if self.strategy == "include_all":
+            return RuleOutcome(ok=True)
+        elif self.strategy == "only_ready":
+            if case.status.state in ("READY", "PENDING"):
+                return RuleOutcome(ok=True)
+            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
+        elif self.strategy == "exclude_passed":
+            if case.status.category != "PASS":
+                return RuleOutcome(ok=True)
+            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
+        elif self.strategy == "only_failed":
+            if case.status.category == "FAIL":
+                return RuleOutcome(ok=True)
+            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
+        else:
+            raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
 
 
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:

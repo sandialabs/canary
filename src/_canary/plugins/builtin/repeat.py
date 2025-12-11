@@ -48,12 +48,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.category == "FAILED") and (count := config.getoption("repeat_until_pass")):
+    if (case.status.category == "FAIL") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if case.status.category == "SUCCESS":
+            if case.status.category == "PASS":
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
@@ -62,12 +62,12 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.category == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
+    if (case.status.status == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if not case.status.category == "TIMEOUT":
+            if not case.status.status == "TIMEOUT":
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
@@ -76,12 +76,12 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
-    if (case.status.category == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
+    if (case.status.category == "PASS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
             rerun_case(case, queue, i)
-            if not case.status.category == "SUCCESS":
+            if not case.status.category == "PASS":
                 break
         else:
             return
@@ -96,12 +96,12 @@ def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
     try:
         case.restore_workspace()
         if summary := job_start_summary(case):
-            logger.log(logging.EMIT, summary, extra={"prefix": ""})
+            logger.debug(summary)
         case.setup()
         case.run(queue=queue)
     finally:
         if summary := job_finish_summary(case, attempt=attempt):
-            logger.log(logging.EMIT, summary, extra={"prefix": ""})
+            logger.debug(summary)
         if dont_restage:
             config.set("options:dont_restage", dont_restage, scope="command_line")
 
@@ -124,6 +124,6 @@ def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     fmt.write(
         f"Finished @*b{{%s}} (attempt {attempt + 1}): %s %s"
-        % (case.id[:7], case.display_name(), case.status.cname)
+        % (case.id[:7], case.display_name(), case.status.display_name())
     )
     return fmt.getvalue().strip()
