@@ -5,14 +5,12 @@
 
 class Status:
     """Lightweight status object for test cases.
-    Can be created from either status category or return code.
-    JSON serializable via to_dict() and from_dict().
 
     Examples:
-        status = Status('SUCCESS')
-        status = Status('SUCCESS', code=42)  # Custom code
-        status = Status(0, reason="All tests passed")
-        status = Status.SUCCESS("Build completed")
+        status = Status(status='SUCCESS')
+        status = Status(status='SUCCESS', code=42)  # Custom code
+        status = Status(status='SUCCESS', reason="All tests passed")
+        status = Status.SUCCESS()
 
         # JSON serialization
         json_str = json.dumps(status.to_dict())
