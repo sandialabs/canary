@@ -181,7 +181,7 @@ def test_cpu_count(tmpdir):
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4
-        assert len([case for case in cases if case.status.state == "READY"]) == 1
+        assert len([case for case in cases if not case.mask]) == 1
         canary.config.pluginmanager.unregister(name="myhook")
 
 

@@ -13,7 +13,7 @@ def test_issue_20_0(tmpdir):
         run = CanaryCommand("run")
         f = os.path.join(os.path.dirname(__file__), "issue-20-0.vvt")
         cp = run(f, debug=True)
-        assert cp.returncode == 6
+        assert cp.returncode == 10
 
 
 def test_issue_20_1(tmpdir):
@@ -22,4 +22,4 @@ def test_issue_20_1(tmpdir):
         f = os.path.join(os.path.dirname(__file__), "issue-20-1.vvt")
         cp = run(f)
         # some tests intentionally fail, so a non-zero returncode is expected:
-        assert cp.returncode == 6
+        assert cp.returncode == 10
