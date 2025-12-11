@@ -11,6 +11,7 @@ import shlex
 import string
 import sys
 from functools import cached_property
+from functools import lru_cache
 from pathlib import Path
 from typing import IO
 from typing import Any
@@ -85,7 +86,7 @@ class BaseSpec(Generic[T]):
         return hash(self.id)
 
     def __str__(self) -> str:
-        return self.display_name
+        return self.display_name()
 
     def __repr__(self) -> str:
         p = self.family
@@ -140,11 +141,34 @@ class BaseSpec(Generic[T]):
     def execpath(self, arg: str) -> None:
         self.attributes["execpath"] = arg
 
-    @cached_property
-    def display_name(self) -> str:
-        name = self.family
-        if p := self.s_params():
-            name = f"{name}[{p}]"
+    @lru_cache
+    def display_name(
+        self, style: Literal["none", "rich", "legacy-color"] = "none", resolve: bool = False
+    ) -> str:
+        if style == "none":
+            return self.name if not resolve else self.fullname
+        elif not self.parameters:
+            return self.family
+
+        colors = ["blue", "magenta", "green", "yellow", "cyan", "red"]
+        color_cycler: itertools.cycle
+        if style == "legacy-color":
+            color_cycler = itertools.cycle([_[0] for _ in colors])
+        else:
+            color_cycler = itertools.cycle(colors)
+        parts = []
+        params = [(p, stringify(self.parameters[p])) for p in sorted(self.parameters)]
+        for key, value in params:
+            value = stringify(self.parameters[key])
+            color = next(color_cycler)
+            if style == "legacy-color":
+                part = f"@{color}{{{key}={value}}}"
+            else:
+                part = f"[{color}]{key}={value}[/{color}]"
+            parts.append(part)
+        name = f"{self.family}.{'.'.join(parts)}"
+        if resolve:
+            name = f"{self.file_path.parent}/{name}"
         return name
 
     def s_params(self, sep: str = ",") -> str | None:
@@ -152,29 +176,6 @@ class BaseSpec(Generic[T]):
             parts = [f"{p}={stringify(self.parameters[p])}" for p in sorted(self.parameters.keys())]
             return sep.join(parts)
         return None
-
-    @cached_property
-    def pretty_name(self) -> str:
-        if not self.parameters:
-            return self.family
-        parts: list[str] = []
-        colors = itertools.cycle("bmgycr")
-        for key in sorted(self.parameters):
-            value = stringify(self.parameters[key])
-            parts.append("@%s{%s=%s}" % (next(colors), key, value))
-        return f"{self.family}[{','.join(parts)}]"
-
-    @cached_property
-    def rich_name(self) -> str:
-        if not self.parameters:
-            return self.family
-        parts: list[str] = []
-        colors = itertools.cycle(["blue", "magenta", "green", "yellow", "cyan", "red"])
-        for key in sorted(self.parameters):
-            value = stringify(self.parameters[key])
-            c = next(colors)
-            parts.append("[%s]%s=%s[/%s]" % (c, key, value, c))
-        return r"%s\[%s]" % (self.family, ",".join(parts))
 
     @property
     def implicit_keywords(self) -> set[str]:
@@ -210,9 +211,9 @@ class BaseSpec(Generic[T]):
             self.name,
             self.family,
             self.fullname,
-            self.display_name,
+            self.display_name(),
             str(self.file_path),
-            str(self.file_path.parent / self.display_name),
+            str(self.file_path.parent / self.display_name()),
         )
 
     def asdict(self) -> dict[str, Any]:
@@ -291,6 +292,9 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     dependencies: Sequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def __repr__(self) -> str:
         p = self.family
         if self.parameters:
@@ -347,9 +351,9 @@ class DependencyPatterns:
             spec.name,
             spec.family,
             spec.fullname,
-            spec.display_name,
+            spec.display_name(),
+            spec.display_name(resolve=True),
             str(spec.file_path),
-            str(spec.file_path.parent / spec.display_name),
         }
         for pattern in self.patterns:
             for name in names:
@@ -399,6 +403,9 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
         self.dep_patterns = self._generate_dependency_patterns(self.dependencies or [])
         self._generate_analyze_action()
+
+    def __hash__(self) -> int:
+        return hash(self.id)
 
     def resolve(
         self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None

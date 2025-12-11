@@ -146,31 +146,19 @@ class TestCase:
     def mask(self, arg: "Mask") -> None:
         self._mask = arg
 
-    @property
-    def pretty_name(self) -> str:
-        return self.spec.pretty_name
-
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
             raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
         return self.id == other.id
 
     def __str__(self) -> str:
-        return self.spec.display_name
+        return self.spec.display_name()
 
     def __repr__(self) -> str:
-        return self.spec.display_name
+        return self.spec.display_name()
 
     def display_name(self, **kwargs) -> str:
-        style = kwargs.get("style", "none")
-        name: str
-        if style == "rich":
-            name = self.spec.rich_name
-        else:
-            name = self.spec.display_name
-        if kwargs.get("full"):
-            name = f"{self.spec.file_path.parent}/{name}"
-        return name
+        return self.spec.display_name(**kwargs)
 
     def set_status(
         self,
@@ -412,7 +400,7 @@ class TestCase:
     def do_baseline(self) -> None:
         if not self.spec.baseline:
             return
-        logger.info(f"Rebaselining {self.spec.pretty_name}")
+        logger.info(f"Rebaselining {self.spec.display_name()}")
         with self.workspace.enter():
             for arg in self.spec.baseline:
                 if arg["type"] == "exe":
@@ -433,7 +421,7 @@ class TestCase:
         if xcode == Status.code_for_status["DIFFED"]:
             if code != Status.code_for_status["DIFFED"]:
                 self.status = Status.FAILED(
-                    reason=f"{self.spec.display_name}: expected test to diff",
+                    reason=f"{self.spec.display_name()}: expected test to diff",
                     code=code,
                 )
             else:
@@ -442,12 +430,12 @@ class TestCase:
             # Expected to fail
             if xcode > 0 and code != code:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name}: expected to exit with code={code}",
+                    f"{self.spec.display_name()}: expected to exit with code={code}",
                     code=code,
                 )
             elif code == 0:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name}: expected to exit with code != 0",
+                    f"{self.spec.display_name()}: expected to exit with code != 0",
                     code=code,
                 )
             else:
@@ -616,7 +604,7 @@ class TestCase:
             cache = {
                 ".version": [3, 0],
                 "meta": {
-                    "name": self.spec.display_name,
+                    "name": self.spec.display_name(),
                     "id": self.spec.id,
                     "root": self.spec.file_root,
                     "path": self.spec.file_path,

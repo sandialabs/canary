@@ -104,6 +104,7 @@ class Run(CanarySubcommand):
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
+            owners=args.owners,
             regex=args.regex_filter,
         )
         session = workspace.run(specs)
@@ -159,6 +160,7 @@ class Run(CanarySubcommand):
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
+            owners=args.owners,
             regex=args.regex_filter,
         )
         session = workspace.run(specs)

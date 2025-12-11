@@ -192,7 +192,7 @@ class Builder:
                 for spec in dspecs:
                     logger.log(
                         logging.EMIT,
-                        f"  - {spec.display_name}: {spec.file_path}",
+                        f"  - {spec.display_name()}: {spec.file_path}",
                         extra={"prefix": ""},
                     )
             raise ValueError("Duplicate test IDs in test suite")
@@ -236,10 +236,10 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         # Index non-unique identifiers (for both draft and resolved)
         non_unique_idx[spec.name].append(spec.id)
         non_unique_idx[spec.fullname].append(spec.id)
-        non_unique_idx[spec.display_name].append(spec.id)
+        non_unique_idx[spec.display_name()].append(spec.id)
         non_unique_idx[spec.family].append(spec.id)
         non_unique_idx[str(spec.file_path)].append(spec.id)
-        non_unique_idx[str(spec.file_path.parent / spec.display_name)].append(spec.id)
+        non_unique_idx[spec.display_name(resolve=True)].append(spec.id)
 
     # All specs that can be matched (both draft and resolved)
     matchable_specs = draft_specs + resolved_specs
@@ -420,9 +420,9 @@ def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -
         spec.name,
         spec.family,
         spec.fullname,
-        spec.display_name,
+        spec.display_name(),
         str(spec.file_path),
-        str(spec.file_path.parent / spec.display_name),
+        spec.display_name(resolve=True),
     )
 
     for name in names:

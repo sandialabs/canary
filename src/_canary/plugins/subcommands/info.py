@@ -6,9 +6,10 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
+import rich
+
 from ...hookspec import hookimpl
 from ...rules import Rule
-from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 
@@ -29,15 +30,13 @@ class Info(CanarySubcommand):
         parser.add_argument("-t", "--tag", help="Show information about this tag")
 
     def execute(self, args: argparse.Namespace) -> int:
-        text: str
         if args.tag:
-            text = self.get_tag_info(args.tag)
+            self.print_tag_info(args.tag)
         else:
-            text = self.get_workspace_info()
-        logging.pager(text)
+            self.print_workspace_info()
         return 0
 
-    def get_tag_info(self, tag: str) -> str:
+    def print_tag_info(self, tag: str) -> None:
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
@@ -49,11 +48,12 @@ class Info(CanarySubcommand):
             fh.write(f"  • {Rule.reconstruct(rule)}\n")
         fh.write(f"Test specs (n = {len(specs)}):\n")
         for spec in specs:
-            name = spec.file_path.parent / spec.pretty_name
-            fh.write(f"  • {spec.id[:7]}: {name}\n")
-        return fh.getvalue()
+            fh.write(f"  • {spec.id[:7]}: {spec.display_name(resolve=True)}\n")
+        console = rich.console.Console()
+        with console.pager():
+            console.print(fh.getvalue())
 
-    def get_workspace_info(self) -> str:
+    def print_workspace_info(self) -> None:
         workspace = Workspace.load()
         info = workspace.info()
         fh = io.StringIO()
@@ -63,4 +63,4 @@ class Info(CanarySubcommand):
         fh.write(f"Sessions:    {info['session_count']}\n")
         fh.write(f"Latest:      {info['latest_session']}\n")
         fh.write(f"Tags:        {', '.join(info['tags'])}\n")
-        return fh.getvalue()
+        rich.print(fh.getvalue())

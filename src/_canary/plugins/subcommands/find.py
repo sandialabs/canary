@@ -1,13 +1,15 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import argparse
-import os
-import sys
+import io
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import TextIO
+
+import rich
+from rich.columns import Columns
+from rich.rule import Rule
 
 from ... import config
 from ... import rules
@@ -16,13 +18,9 @@ from ...collect import Collector
 from ...error import StopExecution
 from ...hookspec import hookimpl
 from ...select import Selector
-from ...third_party.colify import colified
-from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
 from ...util.json_helper import json
-from ...util.term import terminal_size
-from ...util.time import hhmmss
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
 from .common import add_resource_arguments
@@ -50,9 +48,7 @@ class Find(CanarySubcommand):
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test specs")
         add_group_argument(group, "lock", "Dump test specs to lock file")
-        parser.add_argument(
-            "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
-        )
+        add_group_argument(group, "keywords", "Print keywords by root", False)
         add_filter_arguments(parser)
         add_resource_arguments(parser)
         Collector.setup_parser(parser)
@@ -86,6 +82,8 @@ class Find(CanarySubcommand):
             pprint_files(final)
         elif args.print_graph:
             pprint_graph(final)
+        elif args.print_keywords:
+            pprint_keywords(final)
         elif args.print_lock:
             file = Path(config.invocation_dir) / "testspecs.lock"
             states = [spec.asdict() for spec in final]
@@ -104,47 +102,62 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
     group.add_argument(*args, **kwargs)
 
 
-def pprint_paths(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_paths(specs: list["ResolvedSpec"]) -> None:
     unique_generators: dict[str, set[str]] = dict()
     for spec in specs:
         unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
-    _, max_width = terminal_size()
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
     for root, paths in unique_generators.items():
-        label = colorize("@m{%s}" % root)
-        logging.hline(label, max_width=max_width, file=file)
-        cols = colified(sorted(paths), indent=2, width=max_width)
-        file.write(cols + "\n")
+        console.print(Rule(title=f"[magenta]{root}[/magenta]"))
+        columns = Columns(sorted(paths))
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())
 
 
-def pprint_files(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
-    for f in sorted(set([spec.file for spec in specs])):
-        file.write("%s\n" % os.path.relpath(f, os.getcwd()))
+def pprint_files(specs: list["ResolvedSpec"]) -> None:
+    console = rich.console.Console()
+    columns = Columns(sorted(set([str(spec.file) for spec in specs])))
+    with console.pager():
+        console.print(columns)
 
 
-def pprint_keywords(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
+def pprint_keywords(specs: list["ResolvedSpec"]) -> None:
     unique_kwds: dict[str, set[str]] = dict()
     for spec in specs:
         unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
-    _, max_width = terminal_size()
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
     for root, kwds in unique_kwds.items():
-        label = colorize("@m{%s}" % root)
-        logging.hline(label, max_width=max_width, file=file)
-        cols = colified(sorted(kwds), indent=2, width=max_width)
-        file.write(cols + "\n")
+        console.print(Rule(title=f"[magenta]{root}[/magenta]"))
+        columns = Columns(sorted(kwds))
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())
 
 
-def pprint_graph(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
-    graph.print(specs, file=file)
+def pprint_graph(specs: list["ResolvedSpec"]) -> None:
+    file = io.StringIO()
+    graph.print(specs, file=file, style="rich")
+    console = rich.console.Console()
+    with console.pager():
+        console.print(file.getvalue())
 
 
-def pprint(specs: list["ResolvedSpec"], file: TextIO = sys.stdout) -> None:
-    _, max_width = terminal_size()
+def pprint(specs: list["ResolvedSpec"]) -> None:
     tree: dict[str, list[str]] = {}
     for spec in specs:
-        line = f"{hhmmss(spec.timeout):11s}    {spec.fullname}"
+        line = spec.display_name(style="rich", resolve=True)
         tree.setdefault(str(spec.file_root), []).append(line)
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
     for root, lines in tree.items():
-        cols = colified(lines, indent=2, width=max_width)
-        label = colorize("@m{%s}" % root)
-        logging.hline(label, max_width=max_width, file=file)
-        file.write(cols + "\n")
+        console.print(Rule(f"[magenta]{root}[/magenta]"))
+        columns = Columns(lines, expand=True)
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())

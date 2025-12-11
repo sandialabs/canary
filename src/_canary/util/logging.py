@@ -13,16 +13,12 @@ import logging as builtin_logging
 import math
 import os
 import sys
-import termios
 import time
-from contextlib import contextmanager
 from typing import IO
 from typing import Any
-from typing import Generator
 from typing import Literal
 from typing import cast
 
-from ..third_party.color import clen
 from ..third_party.color import colorize
 from .term import terminal_size
 from .time import hhmmss
@@ -114,16 +110,10 @@ class JsonFormatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{%s} %s: " % (
-                    level_color(record.levelno),
-                    arrow,
-                    record.levelname.title(),
-                )
+            if record.levelno in (WARNING, ERROR, CRITICAL):
+                prefix = f"{arrow} {record.levelname.title()}"
             else:
-                prefix = "@*{%s} " % arrow
+                prefix = arrow
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()
@@ -327,96 +317,3 @@ def progress_bar(
     n = bar_width - len(bar)
     pad = " " * n
     file.write(f"\r{lsep}{bar}{pad}{rsep}{info}")
-
-
-def hline(
-    label: str | None = None,
-    char: str = "-",
-    max_width: int = 64,
-    file: IO[Any] = sys.stdout,
-    end: str = "\n",
-) -> None:
-    """Draw a labeled horizontal line.
-
-    Keyword Arguments:
-        char (str): Char to draw the line with.  Default '-'
-        max_width (int): Maximum width of the line.  Default is 64 chars.
-    """
-    _, cols = terminal_size()
-    if max_width < 0:
-        max_width = cols
-    cols = min(max_width, cols - 2)
-
-    if label is None:
-        file.write(char * max_width)
-    else:
-        label = str(label)
-        prefix = char * 2 + " "
-        suffix = " " + (cols - len(prefix) - clen(label)) * char
-        file.write(prefix)
-        file.write(label)
-        file.write(suffix)
-        file.write(end)
-
-
-def fileno(file_or_fd):
-    if not hasattr(file_or_fd, "fileno"):
-        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
-    return file_or_fd.fileno()
-
-
-def streamify(arg: IO[Any] | str, mode: str) -> tuple[IO[Any], bool]:
-    if isinstance(arg, str):
-        return open(arg, mode), True
-    else:
-        return arg, False
-
-
-@contextmanager
-def redirect_stdout(
-    to: str | IO[Any] = os.devnull, stdout: IO[Any] | None = None
-) -> Generator[IO[Any], None, None]:
-    stdout = stdout or sys.stdout
-    stdout_fd = fileno(stdout)
-    # copy stdout_fd before it is overwritten
-    # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
-    with os.fdopen(os.dup(stdout_fd), "wb") as copied:
-        stdout.flush()  # flush library buffers that dup2 knows nothing about
-        os.dup2(fileno(to), stdout_fd)  # $ exec >&file
-        try:
-            yield stdout  # allow code to be run with the redirected stdout
-        finally:
-            # restore stdout to its previous value
-            # NOTE: dup2 makes stdout_fd inheritable unconditionally
-            stdout.flush()
-            os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
-
-
-def merged_stderr_stdout():  # $ exec 2>&1
-    return redirect_stdout(to=sys.stdout, stdout=sys.stderr)
-
-
-@contextmanager
-def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, None]:
-    if file_like is None:
-        yield
-    else:
-        file, fown = streamify(file_like, mode)
-        with redirect_stdout(to=file):
-            with merged_stderr_stdout():
-                yield
-        if fown:
-            file.close()
-
-
-def reset():
-    if sys.stdin.isatty():
-        fd = sys.stdin.fileno()
-        save_tty_attr = termios.tcgetattr(fd)
-        termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
-
-
-def pager(text: str) -> None:
-    import pydoc
-
-    pydoc.ttypager(colorize(text))

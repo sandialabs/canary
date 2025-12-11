@@ -3,14 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import io
 from typing import TYPE_CHECKING
 
 import rich
 from rich.table import Table
 
 from ...hookspec import hookimpl
-from ...third_party import colify
 from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand

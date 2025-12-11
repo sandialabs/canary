@@ -5,7 +5,6 @@
 import sys
 from collections import deque
 from graphlib import TopologicalSorter
-from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 from typing import Sequence
@@ -40,12 +39,12 @@ def static_order_ix(specs: Sequence["ResolvedSpec"]) -> list[int]:
 def print_spec(
     spec: "ResolvedSpec",
     level: int = -1,
-    file=None,
-    indent="",
-    end=False,
+    file: TextIO = sys.stdout,
+    indent: str = "",
+    style: str = "none",
+    end: bool = False,
 ):
     """Given a list of test specs, print a visual tree structure"""
-    file = file or sys.stdout
     space = "    "
     branch = "│   "
     tee = "├── "
@@ -58,28 +57,19 @@ def print_spec(
         pointers = [tee] * (len(dependencies) - 1) + [last]
         for pointer, dependency in zip(pointers, dependencies):
             if dependency.dependencies:
-                yield prefix + pointer + dependency.pretty_name
+                yield prefix + pointer + dependency.display_name(style=style)
                 extension = branch if pointer == tee else space
                 yield from inner(dependency, prefix=prefix + extension, level=level - 1)
             else:
-                yield prefix + pointer + dependency.pretty_name
+                yield prefix + pointer + dependency.display_name(style=style)
 
-    file.write(f"{tee if not end else last}{indent}{spec.pretty_name}\n")
+    file.write(f"{tee if not end else last}{indent}{spec.display_name(style=style)}\n")
     iterator = inner(spec, level=level)
     for line in iterator:
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(specs: Sequence["ResolvedSpec"], file: str | Path | TextIO = sys.stdout) -> None:
-    def streamify(arg) -> tuple[TextIO, bool]:
-        if isinstance(arg, str):
-            arg = Path(arg)
-        if isinstance(arg, Path):
-            return arg.open("w"), True
-        else:
-            return arg, False
-
-    file, fown = streamify(file)
+def print(specs: Sequence["ResolvedSpec"], style: str = "none", file: TextIO = sys.stdout) -> None:
     specs = static_order(specs)  # ty: ignore[invalid-argument-type]
     all_deps = [dep for spec in specs for dep in spec.dependencies]
     remove = []
@@ -88,9 +78,7 @@ def print(specs: Sequence["ResolvedSpec"], file: str | Path | TextIO = sys.stdou
             remove.append(spec)
     specs = [spec for spec in specs if spec not in remove]
     for i, spec in enumerate(specs):
-        print_spec(spec, file=file, end=i == len(specs) - 1)
-    if fown:
-        file.close()
+        print_spec(spec, file=file, end=i == len(specs) - 1, style=style)
 
 
 def reachable_nodes(graph: dict[str, list[str]], roots: Iterable[str]) -> list[str]:

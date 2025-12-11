@@ -44,6 +44,9 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
     )
     group.add_argument(
+        "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
+    )
+    group.add_argument(
         "-p",
         dest="parameter_expr",
         metavar="expression",

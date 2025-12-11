@@ -701,7 +701,7 @@ class Workspace:
                 if spec.id.startswith(id):
                     found.append(spec.id)
                     break
-                elif id in (spec.name, spec.fullname, spec.display_name):
+                elif id in (spec.name, spec.display_name(), spec.display_name(resolve=True)):
                     found.append(spec.id)
                     break
                 elif fnmatch.fnmatch(id, spec.name):
@@ -1041,13 +1041,15 @@ class WorkspaceDatabase:
         for row in rows:
             d = data.setdefault(row[0], {})  # ID
             d["session"] = row[1]
-            d["status"] = Status.from_dict({
-                "state": row[2],
-                "category": row[3],
-                "status": row[4],
-                "reason": row[5],
-                "code": row[6],
-            })
+            d["status"] = Status.from_dict(
+                {
+                    "state": row[2],
+                    "category": row[3],
+                    "status": row[4],
+                    "reason": row[5],
+                    "code": row[6],
+                }
+            )
             d["timekeeper"] = Timekeeper.from_dict(
                 {
                     "started_on": row[7],
@@ -1068,13 +1070,14 @@ class WorkspaceDatabase:
             d = {}
             d["session"] = row[1]
             d["status"] = Status.from_dict(
-            {
-                "state": row[2],
-                "category": row[3],
-                "status": row[4],
-                "reason": row[5],
-                "code": row[6],
-            })
+                {
+                    "state": row[2],
+                    "category": row[3],
+                    "status": row[4],
+                    "reason": row[5],
+                    "code": row[6],
+                }
+            )
             d["timekeeper"] = Timekeeper.from_dict(
                 {
                     "started_on": row[7],
