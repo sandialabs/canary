@@ -341,7 +341,7 @@ class Status:
         self.set(
             state="COMPLETE",
             category="CANCEL",
-            status="INTERRUPED",
+            status="INTERRUPTED",
             reason=reason,
             code=signal.SIGINT.value,
         )
