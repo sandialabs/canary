@@ -171,17 +171,23 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: "Runner", title: str) -> None:
     """Return a short, high-level, summary of test results"""
+    def sortkey(x):
+        n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+        return (n, x[1])
     duration = runner.finish - runner.start
-    totals: dict[str, list["TestCase"]] = {}
+    totals: dict[tuple[str, str], list["TestCase"]] = {}
     for case in runner.cases:
-        totals.setdefault(case.status.category, []).append(case)
+        status = "" if case.status.category == "PASS" else case.status.status
+        key = (case.status.category, status)
+        totals.setdefault(key, []).append(case)
     N = len(runner.cases)
     summary = [f"[bold blue]{N} total[/bold blue]:"]
-    for category in totals:
-        n = len(totals[category])
+    for category, status in sorted(totals, key=sortkey):
+        n = len(totals[(category, status)])
         if n:
             color = Status.color_for_category[category]
-            summary.append(f"[{color}]{n} {category.lower()}[/{color}]")
+            t = category if not status else status
+            summary.append(f"[{color}]{n} {t.lower()}[/{color}]")
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {

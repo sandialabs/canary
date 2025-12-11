@@ -130,10 +130,10 @@ class ResourceQueueExecutor:
         qrank, qsize = 0, len(self.queue)
         start = time.time()
 
-        console: Console | None = None
-        if os.getenv("CANARY_LEVEL") != "1" and not config.get("debug") and sys.stdin.isatty():
-            console = Console(file=sys.stdout, force_terminal=True)
-        with CanaryLive(self._render_dashboard, console=console) as live:
+        enable_live_monitoring = not config.get("debug") and sys.stdin.isatty()
+        if os.getenv("CANARY_LEVEL") == "1":
+            enable_live_monitoring = False
+        with CanaryLive(self._render_dashboard, enable=enable_live_monitoring) as live:
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
@@ -164,7 +164,6 @@ class ResourceQueueExecutor:
                         kwargs=kwargs,
                     )
                     proc.start()
-                    self.on_job_start(job, qrank, qsize)
                     pid: int = proc.pid  # type: ignore
                     self.inflight[pid] = ExecutionSlot(
                         proc=proc,
@@ -175,6 +174,7 @@ class ResourceQueueExecutor:
                         qsize=qsize,
                     )
                     live.update()
+                    self.on_job_start(job, qrank, qsize)
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -204,7 +204,7 @@ class ResourceQueueExecutor:
         return compute_returncode(self.queue.cases())
 
     def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        if logging.get_level() > logging.INFO:
             return
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
@@ -214,7 +214,7 @@ class ResourceQueueExecutor:
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        if logging.get_level() > logging.INFO:
             return
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
@@ -353,15 +353,13 @@ class ResourceQueueExecutor:
             return float(t)
         return 1.0
 
-    def _render_dashboard(self, final: bool = False) -> Table:
+    def _render_dashboard(self, final: bool = False) -> Table | None:
         table = Table(expand=False)
-        table.add_column("Job")
-        table.add_column("ID")
-        table.add_column("Status")
-        table.add_column("Elapsed")
-        table.add_column("Rank")
-
         if final:
+            table.add_column("Job")
+            table.add_column("ID")
+            table.add_column("Status")
+            table.add_column("Duration")
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
                 if slot.job.status.category == "PASS":
                     continue
@@ -371,11 +369,17 @@ class ResourceQueueExecutor:
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
                     f"{elapsed:5.1f}s",
-                    f"{slot.qrank}/{slot.qsize}",
                 )
-            return table
+            return table if table.row_count > 0 else None
 
-        max_rows: int = 40
+        table = Table(expand=False)
+        table.add_column("Job")
+        table.add_column("ID")
+        table.add_column("Status")
+        table.add_column("Elapsed")
+        table.add_column("Rank")
+
+        max_rows: int = 50
         num_inflight = len(self.inflight)
         if num_inflight < max_rows:
             n = max_rows - num_inflight
@@ -406,29 +410,32 @@ class ResourceQueueExecutor:
 class CanaryLive:
     def __init__(
         self,
-        factory: Callable[..., Table],
+        factory: Callable[..., Table | None],
         *,
-        refresh_per_second: int = 4,
+        enable: bool = True,
         console: Console | None = None,
     ) -> None:
         self.factory = factory
-        self.enabled = console is not None
+        self.enabled = enable
         self.live: Live | None = None
-        self.refresh_per_second = refresh_per_second
-        self.console = console
+        self.console: Console | None = None
+        if self.enabled:
+            self.console = Console(file=sys.stdout, force_terminal=True)
 
         # Logging control
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
+        self._monotonic: float = -1.0
 
     def __enter__(self):
         if self.enabled:
             self.mute_stream_handlers()
             self.live = Live(
                 self.factory(),
-                refresh_per_second=self.refresh_per_second,
+                refresh_per_second=1,
                 console=self.console,
                 transient=False,
+                auto_refresh=False,
             )
             self.live.__enter__()
         return self
@@ -440,7 +447,7 @@ class CanaryLive:
 
     def update(self, final: bool = False) -> None:
         if self.live:
-            self.live.update(self.factory(final=final), refresh=True)
+            self.live.update(self.factory(final=final) or "", refresh=True)
 
     def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)

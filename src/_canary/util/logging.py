@@ -10,18 +10,13 @@
 import datetime
 import json
 import logging as builtin_logging
-import math
 import os
 import sys
 import time
-from typing import IO
-from typing import Any
 from typing import Literal
 from typing import cast
 
 from ..third_party.color import colorize
-from .term import terminal_size
-from .time import hhmmss
 
 NOTSET = builtin_logging.NOTSET
 TRACE = builtin_logging.DEBUG - 5
@@ -273,47 +268,3 @@ def get_level() -> int:
         if isinstance(handler, StreamHandler):
             return handler.level
     return logger.getEffectiveLevel()
-
-
-def progress_bar(
-    total: int,
-    complete: int,
-    elapsed: float,
-    average: float | None = None,
-    width: int | None = None,
-    level: int = 0,
-    file: IO[Any] = sys.stderr,
-) -> None:
-    """Display test session progress
-
-    Args:
-    ----------
-    case : Active test cases
-
-    """
-    blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
-    lsep, rsep = "▏", "▕"
-
-    total_width = width or (terminal_size()[1] - 3)
-
-    frac = complete / total
-    percent = frac * 100
-    eta = None if not complete else round(elapsed * (1.0 - frac) / frac)
-
-    w = len(str(total))
-    info = f"  {complete:{w}d}/{total} {percent:5.1f}% ["
-    info += f"elapsed: {hhmmss(elapsed, threshold=1)} "
-    info += f"eta: {hhmmss(eta, threshold=0)} "
-    info += f"ave: {hhmmss(average, threshold=1)}]   "
-
-    bar_width = total_width - len(info)
-    v = frac * bar_width
-    x = math.floor(v)
-    y = v - x
-    base = 0.125
-    prec = 3
-    i = int(round(base * math.floor(float(y) / base), prec) / base)
-    bar = "█" * x + blocks[i]
-    n = bar_width - len(bar)
-    pad = " " * n
-    file.write(f"\r{lsep}{bar}{pad}{rsep}{info}")

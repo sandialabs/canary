@@ -107,7 +107,7 @@ def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
 
 
 def job_start_summary(case: "TestCase") -> str:
-    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+    if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
@@ -117,7 +117,7 @@ def job_start_summary(case: "TestCase") -> str:
 
 
 def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
-    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+    if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):

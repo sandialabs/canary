@@ -29,7 +29,7 @@ class Rerun(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.set_defaults(banner=True)
-        add_filter_arguments(parser)
+        add_filter_arguments(parser, tagged=False)
         parser.add_argument(
             "--fail-fast",
             default=None,

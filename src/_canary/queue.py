@@ -15,9 +15,7 @@ from .resource_pool.rpool import ResourceUnavailable
 from .status import Status
 from .third_party import color
 from .util import logging
-from .util.progress import progress
 from .util.time import hhmmss
-from .util.time import timestamp
 
 if TYPE_CHECKING:
     from .resource_pool.rpool import ResourcePool
@@ -183,12 +181,6 @@ class ResourceQueue:
         cases.extend(self._busy.values())
         cases.extend(self._finished.values())
         return cases
-
-    def update_progress_bar(self, start: float, last: bool = False) -> None:
-        with self.lock:
-            progress(self.cases(), timestamp() - start)
-            if last:
-                logger.log(logging.EMIT, "\n", extra={"prefix": ""})
 
     def status(self, start: float | None = None) -> str:
         string = io.StringIO()
