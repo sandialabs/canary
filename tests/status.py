@@ -21,5 +21,6 @@ def test_status_0():
     assert stat == "PENDING"
 
     stat.set(status="BROKEN", reason="reason")
-    assert stat.category == "BROKEN"
-    assert stat.display_name() == "FAILED (BROKEN)"
+    assert stat.category == "FAIL"
+    assert stat.status == "BROKEN"
+    assert stat.display_name() == "FAIL (BROKEN)"
