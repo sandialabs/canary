@@ -6,9 +6,8 @@ import argparse
 import io
 from typing import TYPE_CHECKING
 
-from ...rules import Rule
-
 from ...hookspec import hookimpl
+from ...rules import Rule
 from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand

@@ -235,7 +235,9 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         dependencies=dependencies,
         ofile=lock["stdout"],
         efile=lock["stderr"],
-        lockfile=os.path.join(lock["workspace"]["root"], lock["workspace"]["path"], "testcase.lock"),
+        lockfile=os.path.join(
+            lock["workspace"]["root"], lock["workspace"]["path"], "testcase.lock"
+        ),
     )
     return instance
 
