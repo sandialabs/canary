@@ -6,6 +6,7 @@ import argparse
 import io
 import itertools
 import re
+import shutil
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -87,7 +88,10 @@ class Status(CanarySubcommand):
         cases = workspace.load_testcases()
         table = self.get_status_table(cases, args)
         console = Console()
-        with console.pager():
+        if table.row_count > shutil.get_terminal_size().lines:
+            with console.pager():
+                console.print(table, markup=True)
+        else:
             console.print(table, markup=True)
         if args.durations:
             console.print(format_durations(cases, args.durations))

@@ -11,6 +11,7 @@ from ... import config
 from ...collect import Collector
 from ...hookspec import hookimpl
 from ...util import logging
+from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 from .common import add_filter_arguments
@@ -38,6 +39,16 @@ class Run(CanarySubcommand):
         parser.set_defaults(banner=True)
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
+        parser.add_argument(
+            "--only",
+            choices=("not_done", "failed", "all"),
+            default="not_done",
+            help="Which tests to run after selection\n\n"
+            "  all      - run all selected tests, even if already passing\n\n"
+            "  failed   - run only previously failing tests\n\n"
+            "  new      - run tests that have never been executed\n\n"
+            "  not_done - run tests that are incomplete, boken, or never run (default)",
+        )
         parser.add_argument(
             "--fail-fast",
             default=None,
@@ -83,102 +94,44 @@ class Run(CanarySubcommand):
         work_tree = args.work_tree or os.getcwd()
         if args.wipe:
             Workspace.remove(work_tree)
-        if path := Workspace.find_workspace(work_tree):
-            return self.run_inworkspace(path, args)
-        else:
-            return self.create_workspace_and_run(args)
-
-    def create_workspace_and_run(self, args: "argparse.Namespace") -> int:
-        workspace = Workspace.create(args.work_tree or os.getcwd())
+        workspace: Workspace
+        try:
+            workspace = Workspace.load(start=work_tree)
+        except NotAWorkspaceError:
+            workspace = Workspace.create(path=work_tree)
+        # start, specids, runtag, and scanpaths are mutually exclusive
+        specs: list["ResolvedSpec"]
         if args.start:
-            raise ValueError("Illegal option in new workspace: 'start'")
-        if args.runtag:
-            raise ValueError("Illegal option in new workspace: 'runtag'")
-        if args.specids:
-            raise ValueError("Illegal option in new workspace: 'specids'")
-        scanpaths = args.scanpaths or {os.getcwd(): []}
-        parsing_policy = config.getoption("parsing_policy") or "pedantic"
-        workspace.add(scanpaths, pedantic=parsing_policy == "pedantic")
-        specs = workspace.select(
-            tag=args.tag,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            on_options=args.on_options,
-            owners=args.owners,
-            regex=args.regex_filter,
-        )
-        session = workspace.run(specs)
-        return session.returncode
-
-    def run_inworkspace(self, path: Path, args: "argparse.Namespace") -> int:
-        """The workspace already exists, now let's run some test cases within it"""
-        if args.scanpaths:
-            raise ValueError("Add new scanpaths to workspace with 'canary add ...'")
-        opts = ("start", "runtag", "specids")
-        defined = [o for o in opts if getattr(args, o, None) is not None]
-        if len(defined) > 1:
-            raise ValueError(f"only one of {', '.join(defined)} may be provided")
-        if args.start:
-            return self.run_inview(path, args.start, args)
-        elif args.runtag:
-            return self.run_tag(path, args.runtag, args)
+            specs = workspace.select_from_view(path=Path(args.start))
         elif args.specids:
-            return self.run_specids(path, args.specids, args)
+            specs = workspace.select(ids=args.specids, tag=args.tag)
+        elif args.runtag:
+            specs = workspace.get_selection(args.runtag)
+        elif not args.scanpaths:
+            # scanpaths must be explicit
+            args.runtag = "default"
+            specs = workspace.get_selection(args.runtag)
         else:
-            return self.run_inplace(path, args)
-
-    def run_inview(self, path: Path, start: str, args: "argparse.Namespace") -> int:
-        workspace = Workspace.load(path)
-        if args.parameter_expr:
-            raise TypeError(f"{start}: parameter expression incompatible with start dir")
-        if args.regex_filter:
-            raise TypeError(f"{start}: regular expression incompatible with start dir")
-        if args.tag:
-            raise TypeError(f"{start}: tags incompatible with start dir")
-        specs = workspace.select_from_view(path=Path(start))
-        filter_specs_by_keyword(specs, args)
-        session = workspace.run(specs)
+            scanpaths = args.scanpaths or {os.getcwd(): []}
+            parsing_policy = config.getoption("parsing_policy") or "pedantic"
+            workspace.add(scanpaths, pedantic=parsing_policy == "pedantic")
+            specs = workspace.select(
+                tag=args.tag,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                on_options=args.on_options,
+                owners=args.owners,
+                regex=args.regex_filter,
+            )
+        if args.start or args.specids or args.runtag:
+            # Apply additional filters, if any
+            workspace.apply_selection_rules(
+                specs,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                owners=args.owners,
+                regex=args.regex_filter,
+                tag=args.tag,
+            )
+        session = workspace.run(specs, only=args.only)
         return session.returncode
-
-    def run_tag(self, path: Path, tag: str, args: "argparse.Namespace") -> int:
-        workspace = Workspace.load(path)
-        specs = workspace.get_selection(tag)
-        session = workspace.run(specs)
-        return session.returncode
-
-    def run_specids(self, path: Path, specids: list[str], args: "argparse.Namespace") -> int:
-        workspace = Workspace.load(path)
-        specs = workspace.select(ids=specids, tag=args.tag)
-        session = workspace.run(specs)
-        return session.returncode
-
-    def run_inplace(self, path: Path, args: "argparse.Namespace") -> int:
-        # Load test cases, filter, and run
-        workspace = Workspace.load(path)
-        specs = workspace.select(
-            tag=args.tag,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            on_options=args.on_options,
-            owners=args.owners,
-            regex=args.regex_filter,
-        )
-        session = workspace.run(specs)
-        return session.returncode
-
-
-def filter_specs_by_keyword(specs: list["ResolvedSpec"], args: "argparse.Namespace") -> None:
-    from ... import rules
-    from ...testspec import Mask
-
-    if not args.keyword_exprs:
-        return
-    keyword_exprs = list(args.keyword_exprs)
-    if (":all:" in keyword_exprs) or ("__all__" in keyword_exprs):
-        return
-    rule = rules.KeywordRule(keyword_exprs)
-    for spec in specs:
-        outcome = rule(spec)
-        if not outcome:
-            spec.mask = Mask.masked(outcome.reason or rule.default_reason)
-    return

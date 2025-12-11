@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import rich
+import rich.console
 from rich.columns import Columns
 from rich.rule import Rule
 

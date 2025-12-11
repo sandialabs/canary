@@ -4,9 +4,11 @@
 
 import argparse
 import io
+import shutil
 from typing import TYPE_CHECKING
 
 import rich
+import rich.console
 
 from ...hookspec import hookimpl
 from ...rules import Rule
@@ -44,13 +46,19 @@ class Info(CanarySubcommand):
         specs = [spec for spec in workspace.get_selection(tag) if not spec.mask]
         fh.write(f"Selected on: {selector.created_on}\n")
         fh.write("Selection filters:\n")
+        n = 2
         for rule in selector.rules:
+            n += 1
             fh.write(f"  • {Rule.reconstruct(rule)}\n")
         fh.write(f"Test specs (n = {len(specs)}):\n")
         for spec in specs:
+            n += 1
             fh.write(f"  • {spec.id[:7]}: {spec.display_name(resolve=True)}\n")
         console = rich.console.Console()
-        with console.pager():
+        if n > shutil.get_terminal_size().lines:
+            with console.pager():
+                console.print(fh.getvalue())
+        else:
             console.print(fh.getvalue())
 
     def print_workspace_info(self) -> None:

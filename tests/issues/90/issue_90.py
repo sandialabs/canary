@@ -6,7 +6,6 @@ from _canary.util.testing import CanaryCommand
 
 def test_issue_90(tmpdir):
     run = CanaryCommand("run")
-    rerun = CanaryCommand("rerun")
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             write_testfile(fh)
@@ -14,7 +13,7 @@ def test_issue_90(tmpdir):
         assert cp.returncode != 0
         try:
             os.environ["FIX_B"] = "1"
-            cp = rerun("b", debug=True)
+            cp = run("--only=failed", "b", debug=True)
         finally:
             os.environ.pop("FIX_B")
         assert cp.returncode == 0

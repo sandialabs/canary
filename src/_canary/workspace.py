@@ -132,7 +132,6 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.dbfile = self.root / "workspace.sqlite3"
-        self._spec_ids: set[str] = set()
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
@@ -266,7 +265,7 @@ class Workspace:
         specs: list["ResolvedSpec"],
         session_name: str | None = None,
         update_view: bool = True,
-        only: str = "include_all",
+        only: str = "not_done",
     ) -> Session:
         now = datetime.datetime.now()
         session_name = session_name or now.isoformat(timespec="microseconds").replace(":", "-")
@@ -539,7 +538,30 @@ class Workspace:
 
         """
         resolved = self.construct_testspecs(on_options=on_options)
-        selector = select.Selector(resolved, self.root)
+        self.apply_selection_rules(
+            resolved,
+            tag=tag,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            ids=ids,
+        )
+        return resolved
+
+    def apply_selection_rules(
+        self,
+        specs: list["ResolvedSpec"],
+        tag: str | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+        ids: list[str] | None = None,
+        prefixes: list[str] | None = None,
+    ) -> None:
+        selector = select.Selector(specs, self.root)
         if ids:
             selector.add_rule(rules.IDsRule(ids))
         if keyword_exprs:
@@ -558,7 +580,6 @@ class Workspace:
         selector.run()
         if tag:
             self.db.put_selection(tag, selector.snapshot())
-        return selector.specs
 
     def get_selector(self, tag: str = "default"):
         if tag == "default" and not self.db.is_selection(tag):
@@ -697,6 +718,8 @@ class Workspace:
         specs = self.db.get_specs()
         found: list[str | None] = []
         for id in ids:
+            if id.startswith(testspec.select_sygil):
+                id = id[1:]
             for spec in specs:
                 if spec.id.startswith(id):
                     found.append(spec.id)

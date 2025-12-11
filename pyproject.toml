@@ -50,6 +50,7 @@ optional-dependencies.dev = [
     "pydata-sphinx-theme",
     "pytest",
     "ruff",
+    "bandit",
     "sphinx",
     "sphinx-design",
     "xmlschema",

@@ -316,35 +316,43 @@ class PathSpec(argparse.Action):
         if ns.script_args:
             namespace.script_args.extend(ns.script_args)
 
-        scanpaths: list[str] = ns.scanpaths or []
-        for path in scanpaths:
-            if os.path.isfile(path) and path.endswith("testcases.lock"):
+        possible_specs: list[str] = []
+        items: list[str] = ns.items
+        for item in items:
+            if os.path.isfile(item) and item.endswith("testcases.lock"):
                 raise NotImplementedError
-            elif workspace is not None and workspace.is_tag(path):
-                namespace.runtag = path
-            elif workspace is not None and workspace.inside_view(path):
-                namespace.start = os.path.abspath(path)
-            elif os.path.isfile(path):
-                abspath = os.path.abspath(path)
-                root, name = os.path.split(abspath)
+            elif workspace is not None and workspace.is_tag(item):
+                namespace.runtag = item
+            elif workspace is not None and workspace.inside_view(item):
+                namespace.start = os.path.abspath(item)
+            elif os.path.isfile(item):
+                root, name = os.path.split(os.path.abspath(item))
                 namespace.scanpaths.setdefault(root, []).append(name)
-            elif os.path.isdir(path):
-                namespace.scanpaths.setdefault(os.path.abspath(path), [])
-            elif path.startswith(vc_prefixes):
-                if not os.path.isdir(path.partition("@")[2]):
-                    p = path.partition("@")[2]
+            elif os.path.isdir(item):
+                namespace.scanpaths.setdefault(os.path.abspath(item), [])
+            elif item.startswith(vc_prefixes):
+                if not os.path.isdir(item.partition("@")[2]):
+                    p = item.partition("@")[2]
                     raise ValueError(f"{p}: no such file or directory")
-                namespace.scanpaths.setdefault(path, [])
-            elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
+                namespace.scanpaths.setdefault(item, [])
+            elif os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
                 # allow specifying as root:name
-                root, name = path.split(os.pathsep, 1)
+                root, name = item.split(os.pathsep, 1)
                 namespace.scanpaths.setdefault(os.path.abspath(root), []).append(
                     name.replace(os.pathsep, os.path.sep)
                 )
-            elif path.startswith("/") and not os.path.exists(path):
-                setdefault(namespace, "specids", []).append(path[1:])
             else:
-                raise ValueError(f"{path}: no such file or directory")
+                possible_specs.append(item)
+        if workspace and possible_specs:
+            ids: list[str] = []
+            found = workspace.find_specids(possible_specs)
+            for i, id in enumerate(found):
+                if id is None:
+                    raise ValueError(
+                        f"{possible_specs[i]}: not a file, directory, or test identifier"
+                    )
+                ids.append(id)
+            setattr(namespace, "specids", ids)
 
         check_mutually_exclusive_pathspec_args(namespace)
 
@@ -356,13 +364,13 @@ class PathSpec(argparse.Action):
         - pathspec: everything up to ``--``
         - script_args: anything following ``--``
         """
-        namespace = argparse.Namespace(script_args=[], scanpaths=[])
+        namespace = argparse.Namespace(script_args=[], items=[])
         for i, item in enumerate(values):
             if item == "--":
                 namespace.script_args = values[i + 1 :]
                 break
             else:
-                namespace.scanpaths.append(item)
+                namespace.items.append(item)
         return namespace
 
     @staticmethod
@@ -459,7 +467,7 @@ def code(arg: str) -> str:
 def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:
     if ns.specids:
         if any([ns.scanpaths, ns.runtag, ns.start]):
-            raise TypeError("/HASH pathspec argument[s] incompatible with other pathspec arguments")
+            raise TypeError("HASH pathspec argument[s] incompatible with other pathspec arguments")
     if ns.start:
         if any([ns.scanpaths, ns.runtag, ns.specids]):
             raise TypeError(f"{ns.start}: argument incompatible with other pathspec arguments")

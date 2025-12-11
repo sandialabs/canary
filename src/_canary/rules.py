@@ -343,9 +343,9 @@ class ResourceCapacityRule(RuntimeRule):
 
 
 class RerunRule(RuntimeRule):
-    STRATEGIES = ("include_all", "exclude_passed", "only_ready", "only_failed")
+    STRATEGIES = ("all", "failed", "not_done", "new")
 
-    def __init__(self, strategy: str = "only_ready") -> None:
+    def __init__(self, strategy: str = "not_done") -> None:
         self.strategy = strategy
         if self.strategy not in self.STRATEGIES:
             raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
@@ -355,18 +355,20 @@ class RerunRule(RuntimeRule):
         return "previous result is not empty"
 
     def __call__(self, case: "TestCase") -> RuleOutcome:
-        if self.strategy == "include_all":
+        if self.strategy == "all":
             return RuleOutcome(ok=True)
-        elif self.strategy == "only_ready":
-            if case.status.state in ("READY", "PENDING"):
-                return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
-        elif self.strategy == "exclude_passed":
+        elif self.strategy == "not_done":
             if case.status.category != "PASS":
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
-        elif self.strategy == "only_failed":
+            return RuleOutcome(ok=False, reason="previous result = PASS")
+        elif self.strategy == "failed":
             if case.status.category == "FAIL":
+                return RuleOutcome(ok=True)
+            return RuleOutcome(
+                ok=False, reason=f"previous result = {case.status.category!r} != FAIL"
+            )
+        elif self.strategy == "new":
+            if case.status.category == "NONE":
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
         else:

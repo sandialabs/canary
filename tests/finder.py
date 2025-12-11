@@ -191,7 +191,7 @@ def test_dep_patterns(tmpdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
             fh.write("import canary\n")
-            fh.write("canary.directives.depends_on('b/g[n=1]')\n")
+            fh.write("canary.directives.depends_on('b/g.n=1')\n")
         mkdirp("b")
         with open("b/g.pyt", "w") as fh:
             fh.write("import canary\n")

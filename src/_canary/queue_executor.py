@@ -353,7 +353,7 @@ class ResourceQueueExecutor:
             return float(t)
         return 1.0
 
-    def _render_dashboard(self, final: bool = False) -> Table | None:
+    def _render_dashboard(self, final: bool = False) -> Table | str:
         table = Table(expand=False)
         if final:
             table.add_column("Job")
@@ -370,7 +370,9 @@ class ResourceQueueExecutor:
                     slot.job.status.display_name(style="rich"),
                     f"{elapsed:5.1f}s",
                 )
-            return table if table.row_count > 0 else None
+            if not table.row_count:
+                return "[blue]==>[/] All tests finished with status [bold green]PASS[/]"
+            return table
 
         table = Table(expand=False)
         table.add_column("Job")
@@ -410,7 +412,7 @@ class ResourceQueueExecutor:
 class CanaryLive:
     def __init__(
         self,
-        factory: Callable[..., Table | None],
+        factory: Callable[..., Table | str],
         *,
         enable: bool = True,
         console: Console | None = None,

@@ -21,7 +21,6 @@ from . import log
 from . import rebaseline
 from . import refresh
 from . import report
-from . import rerun
 from . import rm
 from . import run
 from . import select
@@ -48,7 +47,6 @@ plugins = [
     rebaseline,
     refresh,
     report,
-    rerun,
     rm,
     run,
     select,

@@ -171,9 +171,11 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: "Runner", title: str) -> None:
     """Return a short, high-level, summary of test results"""
+
     def sortkey(x):
         n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
         return (n, x[1])
+
     duration = runner.finish - runner.start
     totals: dict[tuple[str, str], list["TestCase"]] = {}
     for case in runner.cases:
