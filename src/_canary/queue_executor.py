@@ -354,7 +354,7 @@ class ResourceQueueExecutor:
         return 1.0
 
     def _render_dashboard(self, final: bool = False) -> Table:
-        table = Table(expand=True)
+        table = Table(expand=False)
         table.add_column("Job")
         table.add_column("ID")
         table.add_column("Status")
@@ -375,7 +375,7 @@ class ResourceQueueExecutor:
                 )
             return table
 
-        max_rows: int = 45
+        max_rows: int = 40
         num_inflight = len(self.inflight)
         if num_inflight < max_rows:
             n = max_rows - num_inflight

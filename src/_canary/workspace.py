@@ -422,13 +422,7 @@ class Workspace:
                     session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-                case.status = Status(
-                    state=mine["status"]["state"],
-                    category=mine["status"]["category"],
-                    status=mine["status"]["status"],
-                    reason=mine["status"]["reason"],
-                    code=mine["status"]["code"],
-                )
+                case.status = mine["status"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
                 lookup[spec.id] = case
@@ -502,13 +496,7 @@ class Workspace:
                     session=mine["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
-                case.status = Status(
-                    state=mine["status"]["state"],
-                    category=mine["status"]["category"],
-                    status=mine["status"]["status"],
-                    reason=mine["status"]["reason"],
-                    code=mine["status"]["code"],
-                )
+                case.status = mine["status"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
             else:
@@ -1053,13 +1041,13 @@ class WorkspaceDatabase:
         for row in rows:
             d = data.setdefault(row[0], {})  # ID
             d["session"] = row[1]
-            d["status"] = {
+            d["status"] = Status.from_dict({
                 "state": row[2],
                 "category": row[3],
                 "status": row[4],
                 "reason": row[5],
                 "code": row[6],
-            }
+            })
             d["timekeeper"] = Timekeeper.from_dict(
                 {
                     "started_on": row[7],
@@ -1079,13 +1067,14 @@ class WorkspaceDatabase:
         for row in rows:
             d = {}
             d["session"] = row[1]
-            d["status"] = {
+            d["status"] = Status.from_dict(
+            {
                 "state": row[2],
                 "category": row[3],
                 "status": row[4],
                 "reason": row[5],
                 "code": row[6],
-            }
+            })
             d["timekeeper"] = Timekeeper.from_dict(
                 {
                     "started_on": row[7],
