@@ -173,10 +173,9 @@ class TestCase:
     def add_variables(self, **kwds: str) -> None:
         self.variables.update(kwds)
 
-    @property
-    def statline(self) -> str:
-        status_name = self.status.display_name(style="rich")
-        name = self.display_name(style="rich", full=True)
+    def statline(self, style: str = "none") -> str:
+        status_name = self.status.display_name(style=style)
+        name = self.display_name(style=style, resolve=True)
         return f"{status_name} {name}"
 
     def set_attribute(self, name: str, value: Any) -> None:

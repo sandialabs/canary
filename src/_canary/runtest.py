@@ -145,7 +145,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
                 continue
             n: int = 0
             for case in sorted(totals[key], key=lambda t: t.name):
-                file.write(case.statline + "\n")
+                file.write(case.statline(style="rich") + "\n")
                 n += 1
                 if truncate > 0 and truncate == n:
                     file.write(f"... truncating summary to the first {truncate} entries.\n")

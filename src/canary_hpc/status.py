@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from collections import Counter
 from typing import Any
 
 import canary
@@ -32,7 +33,29 @@ class BatchStatus:
         return self.base_status.status
 
     def display_name(self, **kwargs: Any) -> str:
-        return self.base_status.display_name(**kwargs)
+        def sortkey(x):
+            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+            return (n, x[1])
+
+        counts: Counter[tuple[str, str]] = Counter()
+        for child in self._children:
+            if child.status.category == "PASS":
+                counts[(child.status.category, "PASS")] += 1
+            else:
+                counts[(child.status.category, child.status.status)] += 1
+        style = kwargs.get("style")
+        parts: list[str] = []
+        for cat, stat in sorted(counts, key=sortkey):
+            count = counts[(cat, stat)]
+            if style == "rich":
+                color = self.base_status.color_for_category[cat]
+                parts.append(f"{count} [{color}]{stat}[/{color}]")
+            elif style == "rich":
+                color = self.base_status.color_for_category[cat][0]
+                parts.append("%d @%s{%s}" % (count, color, stat))
+            else:
+                parts.append(f"{count} {stat}")
+        return f"{self.base_status.category} ({', '.join(parts)})"
 
     @property
     def color(self) -> str:
