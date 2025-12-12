@@ -81,6 +81,7 @@ class BaseSpec(Generic[T]):
     owners: list[str] | None = None
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    implicit_parameters: dict[str, Any] = dataclasses.field(default_factory=dict, init=False)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -104,7 +105,16 @@ class BaseSpec(Generic[T]):
             self.timeout = self._default_timeout()
         if self.xstatus is None:
             self.xstatus = 0
-        self.validate()
+        self.implicit_parameters["runtime"] = self.timeout
+
+    def asdict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
+    def dump(self, file: IO[Any], **kwargs: Any) -> None:
+        json.dump(self.asdict(), file, **kwargs)
+
+    def dumps(self, **kwargs: Any) -> Any:
+        return json.dumps(self.asdict(), **kwargs)
 
     @classmethod
     def from_dict(cls: Type[T], d: dict, lookup: dict[str, T]) -> T:
@@ -114,7 +124,11 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
-        return cls(**d)  # ty: ignore[missing-argument]
+        ip = d.pop("implicit_parameters", {})
+        self = cls(**d)  # ty: ignore[missing-argument]
+        if ip:
+            self.implicit_parameters.update(ip)
+        return self
 
     @cached_property
     def file(self) -> Path:
@@ -182,28 +196,6 @@ class BaseSpec(Generic[T]):
         """Implicit keywords, used for some filtering operations"""
         return {self.id, self.name, self.family, str(self.file)}
 
-    @property
-    def implicit_parameters(self) -> dict[str, Any]:
-        parameters: dict[str, Any] = {}
-        if "cpus" not in self.parameters:
-            parameters["cpus"] = 1
-        if "gpus" not in self.parameters:
-            parameters["gpus"] = 0
-        if "nodes" not in self.parameters:
-            parameters["nodes"] = 1
-        if rt := getattr(self, "runtime", None):
-            parameters["runtime"] = float(rt)
-
-        # vvtest compatibility
-        if "np" not in self.parameters:
-            parameters["np"] = self.parameters.get("cpus", parameters.get("cpus"))
-        if "nnode" not in self.parameters:
-            parameters["nnode"] = self.parameters.get("nodes", parameters.get("nodes"))
-        if "ndevice" not in self.parameters:
-            parameters["ndevice"] = self.parameters.get("gpus", parameters.get("gpus"))
-
-        return parameters
-
     @cached_property
     def match_names(self) -> tuple[str, ...]:
         return (
@@ -215,15 +207,6 @@ class BaseSpec(Generic[T]):
             str(self.file_path),
             str(self.file_path.parent / self.display_name()),
         )
-
-    def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
-
-    def dump(self, file: IO[Any], **kwargs: Any) -> None:
-        json.dump(self.asdict(), file, **kwargs)
-
-    def dumps(self, **kwargs: Any) -> Any:
-        return json.dumps(self.asdict(), **kwargs)
 
     def matches(self, arg: str) -> bool:
         if arg.startswith(select_sygil) and not Path(arg).exists():
@@ -274,16 +257,6 @@ class BaseSpec(Generic[T]):
         if t := config.get("timeout:all"):
             return float(t)
         return float(config.get("timeout:default"))
-
-    def validate(self):
-        exclusive_pairs = [("cpus", "np"), ("gpus", "ndevice"), ("nodes", "nnode")]
-        for a, b in exclusive_pairs:
-            if a in self.parameters and b in self.parameters:
-                raise MutuallyExclusiveParametersError(a, b)
-        if {"nodes", "nnode"} & self.parameters.keys():
-            bad = {"cpus", "gpus", "np", "ndevice"} & self.parameters.keys()
-            if bad:
-                raise MutuallyExclusiveParametersError("nodes", ",".join(bad))
 
 
 @dataclasses.dataclass

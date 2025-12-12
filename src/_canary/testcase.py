@@ -63,47 +63,6 @@ class TestCase:
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
-    def get_resource_parameters_from_spec(self) -> dict[str, int]:
-        """Default parameters used to set up resources required by test case"""
-        rparameters: dict[str, int] = {}
-        rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
-        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        resource_types.update(("np", "gpus", "nnode"))  # vvtest compatibility
-        data = self.spec.parameters
-        for key, value in data.items():
-            if key in resource_types and not isinstance(value, int):
-                raise InvalidTypeError(key, value)
-        rpcount = config.pluginmanager.hook.canary_resource_pool_count
-        if {"nodes", "nnode"} & self.spec.parameters.keys():
-            nodes = cast(int, self.spec.parameters.get("nodes", self.spec.parameters.get("nnode")))
-            rparameters["nodes"] = int(nodes)
-            rparameters["cpus"] = nodes * rpcount(type="cpu")
-            rparameters["gpus"] = nodes * rpcount(type="gpu")
-        if {"cpus", "np"} & self.spec.parameters.keys():
-            cpus = cast(int, self.spec.parameters.get("cpus", self.spec.parameters.get("np")))
-            rparameters["cpus"] = int(cpus)
-            cpu_count = rpcount(type="cpu")
-            node_count = rpcount(type="node")
-            cpus_per_node = math.ceil(cpu_count / node_count)
-            if cpus_per_node > 0:
-                nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
-                rparameters["nodes"] = nodes
-        if {"gpus", "ndevice"} & self.spec.parameters.keys():
-            gpus = cast(int, self.spec.parameters.get("gpus", self.spec.parameters.get("ndevice")))
-            rparameters["gpus"] = int(gpus)
-            gpu_count = rpcount(type="gpu")
-            node_count = rpcount(type="node")
-            gpus_per_node = math.ceil(gpu_count / node_count)
-            if gpus_per_node > 0:
-                nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
-                rparameters["nodes"] = nodes
-        # We have already done validation, now just fill in missing resource types
-        resource_types -= {"nodes", "cpus", "gpus", "nnode", "np", "ndevice"}
-        for key, value in self.spec.parameters.items():
-            if key in resource_types:
-                rparameters[key] = int(value)
-        return rparameters
-
     @property
     def id(self) -> str:
         return self.spec.id
@@ -490,6 +449,50 @@ class TestCase:
         variables["PYTHONPATH"] = f"{self.workspace.dir}:{os.getenv('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.workspace.dir}:{os.environ['PATH']}"
         return variables
+
+    def get_resource_parameters_from_spec(self) -> dict[str, int]:
+        """Default parameters used to set up resources required by test case"""
+        rparameters: dict[str, int] = {}
+        rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
+        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
+        data = self.spec.parameters | self.spec.implicit_parameters
+        for key, value in data.items():
+            if key in resource_types and not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+        rpcount = config.pluginmanager.hook.canary_resource_pool_count
+        if "nodes" in data:
+            nodes = cast(int, data["nodes"])
+            rparameters["nodes"] = int(nodes)
+            if "cpus" not in data:
+                rparameters["cpus"] = nodes * rpcount(type="cpu")
+            if "gpus" not in data:
+                rparameters["gpus"] = nodes * rpcount(type="gpu")
+        if "cpus" in data:
+            cpus = cast(int, data["cpus"])
+            rparameters["cpus"] = int(cpus)
+            if "nodes" not in data:
+                cpu_count = rpcount(type="cpu")
+                node_count = rpcount(type="node")
+                cpus_per_node = math.ceil(cpu_count / node_count)
+                if cpus_per_node > 0:
+                    nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
+                    rparameters["nodes"] = nodes
+        if "gpus" in data:
+            gpus = cast(int, data["gpus"])
+            rparameters["gpus"] = int(gpus)
+            if "nodes" not in data:
+                gpu_count = rpcount(type="gpu")
+                node_count = rpcount(type="node")
+                gpus_per_node = math.ceil(gpu_count / node_count)
+                if gpus_per_node > 0:
+                    nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
+                    rparameters["nodes"] = nodes
+        # We have already done validation, now just fill in missing resource types
+        resource_types -= {"nodes", "cpus", "gpus"}
+        for key, value in data.items():
+            if key in resource_types:
+                rparameters[key] = int(value)
+        return rparameters
 
     def teardown(self) -> None:
         pass
