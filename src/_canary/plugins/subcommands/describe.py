@@ -5,6 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Union
 
 import yaml
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...generator import AbstractTestGenerator
     from ...testcase import TestCase
+    from ...testspec import ResolvedSpec
 
 
 @hookimpl
@@ -51,8 +53,11 @@ class Describe(CanarySubcommand):
 
         # could be a test case in the test session?
         workspace = Workspace.load()
-        case = workspace.find(case=args.testspec)
-        describe_testcase(case)
+        try:
+            case_or_spec = workspace.find(case=args.testspec)
+        except:
+            case_or_spec = workspace.find(spec=args.testspec)
+        describe_testcase(case_or_spec)
         return 0
 
 
@@ -68,7 +73,7 @@ def dump(data: dict[str, Any]) -> str:
     return yaml.dump(data, default_flow_style=False)
 
 
-def describe_testcase(case: "TestCase", indent: str = "") -> None:
+def describe_testcase(case: Union["TestCase", "ResolvedSpec"], indent: str = "") -> None:
     from pygments import highlight
     from pygments.formatters import (
         TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
