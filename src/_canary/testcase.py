@@ -455,9 +455,9 @@ class TestCase:
         rparameters: dict[str, int] = {}
         rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
         resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        parameters = self.spec.parameters | self.spec.implicit_parameters
-        assert "cpus" in parameters, "Expected cpus to be in spec.parameters or implicit_parameters"
-        assert "gpus" in parameters, "Expected cpus to be in spec.parameters or implicit_parameters"
+        parameters = self.spec.parameters | self.spec.meta_parameters
+        assert "cpus" in parameters, "Expected cpus to be in spec.parameters or meta_parameters"
+        assert "gpus" in parameters, "Expected cpus to be in spec.parameters or meta_parameters"
         for key, value in parameters.items():
             if key in resource_types and not isinstance(value, int):
                 raise InvalidTypeError(key, value)

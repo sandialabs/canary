@@ -79,4 +79,4 @@ def test_vvt_generator(tmpdir):
             final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2")
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 3
+            assert len(final) == 4

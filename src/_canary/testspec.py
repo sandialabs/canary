@@ -81,7 +81,7 @@ class BaseSpec(Generic[T]):
     owners: list[str] | None = None
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
-    implicit_parameters: dict[str, Any] = dataclasses.field(default_factory=dict, init=False)
+    meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -106,10 +106,10 @@ class BaseSpec(Generic[T]):
         if self.xstatus is None:
             self.xstatus = 0
         if "cpus" not in self.parameters:
-            self.implicit_parameters["cpus"] = 1
+            self.meta_parameters["cpus"] = 1
         if "gpus" not in self.parameters:
-            self.implicit_parameters["gpus"] = 0
-        self.implicit_parameters["runtime"] = self.timeout
+            self.meta_parameters["gpus"] = 0
+        self.meta_parameters["runtime"] = self.timeout
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -128,10 +128,7 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
-        ip = d.pop("implicit_parameters", {})
         self = cls(**d)  # ty: ignore[missing-argument]
-        if ip:
-            self.implicit_parameters.update(ip)
         return self
 
     @cached_property

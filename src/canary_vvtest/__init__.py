@@ -27,11 +27,11 @@ def canary_build_modifyitems(builder: "canary.Builder") -> None:
             spec.stderr = None
             set_vvtest_execpath(spec)
             if "np" in spec.parameters:
-                spec.implicit_parameters["cpus"] = spec.parameters["np"]
+                spec.meta_parameters["cpus"] = spec.parameters["np"]
             if "ndevice" in spec.parameters:
-                spec.implicit_parameters["gpus"] = spec.parameters["ndevice"]
+                spec.meta_parameters["gpus"] = spec.parameters["ndevice"]
             if "nnode" in spec.parameters:
-                spec.implicit_parameters["nodes"] = spec.parameters["nnode"]
+                spec.meta_parameters["nodes"] = spec.parameters["nnode"]
 
 
 @canary.hookimpl
