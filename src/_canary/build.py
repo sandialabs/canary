@@ -171,20 +171,16 @@ class Builder:
         return self.specs
 
     def validate(self, specs: list["UnresolvedSpec"]) -> None:
-        pm = logger.progress_monitor("@*{Searching} for duplicated tests")
+        logger.info("@*{Searching} for duplicated tests")
         ids = [spec.id for spec in specs]
         counts: dict[str, int] = {}
         for id in ids:
             counts[id] = counts.get(id, 0) + 1
-
         duplicate_ids = {id for id, count in counts.items() if count > 1}
         duplicates: dict[str, list["UnresolvedSpec"]] = {}
-
         # if there are duplicates, we are in error condition and lookup cost is not important
         for id in duplicate_ids:
             duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
-        pm.done()
-
         if duplicates:
             logger.error("Duplicate test IDs generated for the following test cases")
             for id, dspecs in duplicates.items():

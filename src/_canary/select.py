@@ -83,40 +83,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
-    """Register Selection-related command-line options.
-
-    This hook adds ``--show-excluded-tests`` to the console reporting
-    group for the ``canary run`` command.
-
-    Args:
-        parser: The argument parser used to register command-line flags.
-    """
-    parser.add_argument(
-        "--show-excluded-tests",
-        group="console reporting",
-        command=("run", "find", "select"),
-        action="store_true",
-        default=False,
-        help="Show names of tests that are excluded from the test session %(default)s",
-    )
-
-
-@hookimpl
-def canary_select_report(selector: "Selector") -> None:
-    """Emit a report summarizing which specs were selected or excluded.
-
-    Reporting includes the count of selected and excluded tests, grouped
-    by mask reason. If ``--show-excluded-tests`` was provided, individual
-    spec names are also emitted.
-
-    Args:
-        selector: The ``Selector`` instance whose results are being reported.
-    """
-    select_report(selector.specs, updated_masks=selector.masked)
-
-
 @dataclasses.dataclass(frozen=True)
 class SelectorSnapshot:
     """Serializable snapshot of a completed selection run.
@@ -244,13 +210,15 @@ class RuntimeSelector:
         self.cases = cases
         self.workspace = workspace
         self.rules: list[RuntimeRule] = list(rules)
+        self.masked: set[str] = set()
 
     def add_rule(self, rule: RuntimeRule) -> None:
         assert isinstance(rule, RuntimeRule)
         self.rules.append(rule)
 
     def run(self) -> None:
-        pm = logger.progress_monitor("@*{Selecting} test cases based on runtime environment")
+        self.masked.clear()
+        pm = logger.progress_monitor("@*{Filtering} test cases based on runtime environment")
         config.pluginmanager.hook.canary_rtselectstart(selector=self)
         for case in self.cases:
             if case.mask:
@@ -259,6 +227,7 @@ class RuntimeSelector:
                 outcome = rule(case)
                 if not outcome:
                     case.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
+                    self.masked.add(case.id)
                     break
         config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
         self.propagate()
@@ -308,22 +277,49 @@ def propagate_masks(specs: list["ResolvedSpec"]):
                 queue.append(child)
 
 
-def select_report(specs: list["ResolvedSpec"], updated_masks: set[str]) -> None:
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    """Register Selection-related command-line options.
+
+    This hook adds ``--show-excluded-tests`` to the console reporting
+    group for the ``canary run`` command.
+
+    Args:
+        parser: The argument parser used to register command-line flags.
+    """
+    parser.add_argument(
+        "--show-excluded-tests",
+        group="console reporting",
+        command=("run", "find", "select"),
+        action="store_true",
+        default=False,
+        help="Show names of tests that are excluded from the test session %(default)s",
+    )
+
+
+@hookimpl
+def canary_select_report(selector: "Selector") -> None:
     """Emit a report summarizing which specs were selected or excluded.
 
     Reporting includes the count of selected and excluded tests, grouped
     by mask reason. If ``--show-excluded-tests`` was provided, individual
     spec names are also emitted.
 
+    Args:
+        selector: The ``Selector`` instance whose results are being reported.
     """
+    if not selector.masked:
+        return
     excluded: list["ResolvedSpec"] = []
-    for spec in specs:
-        if spec.id in updated_masks:
+    for spec in selector.specs:
+        if spec.id in selector.masked:
             excluded.append(spec)
-    n = len(specs) - len(excluded)
-    logger.info("@*{Selected} %d of %d test %s " % (n, len(specs), pluralize("spec", n)))
-    show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
+    N = len(selector.specs)
+    n = len(selector.masked)
+    m = len([spec for spec in selector.specs if spec.mask])
+    logger.info("@*{Excluded} %d of %d test %s " % (n, N - (m - n), pluralize("spec", N)))
     if excluded:
+        show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
         logger.info("@*{Excluding} %d test specs for the following reasons:" % n)
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
@@ -336,20 +332,18 @@ def select_report(specs: list["ResolvedSpec"], updated_masks: set[str]) -> None:
             logger.info(f"{reason} ({n} excluded)", extra={"prefix": "... "})
             if show_excluded_tests:
                 for spec in reasons[key]:
-                    logger.info(f"{spec.display_name()}", extra={  "prefix": "    • "})
+                    logger.info(f"{spec.display_name()}", extra={"prefix": "    • "})
 
 
 @hookimpl
 def canary_rtselect_report(selector: "RuntimeSelector") -> None:
-    excluded: list["TestCase"] = []
-    for case in selector.cases:
-        if case._mask:
-            # A case can have its own mask, different than the specs, it is only assigned during
-            # rtselect
-            excluded.append(case)
-    unmasked = [case for case in selector.cases if not case.mask]
-    n = len(unmasked) - len(excluded)
-    logger.info("@*{Selected} %d of %d test %s " % (n, len(unmasked), pluralize("case", n)))
+    if not selector.masked:
+        return
+    excluded: list["TestCase"] = [case for case in selector.cases if case.id in selector.masked]
+    N = len(selector.cases)
+    n = len(selector.masked)
+    m = len([case for case in selector.cases if case.mask])
+    logger.info("@*{Excluded} %d of %d test %s" % (n, N - (m - n), pluralize("case", N)))
     if excluded:
         n = len(excluded)
         reasons: dict[str | None, list["TestCase"]] = {}

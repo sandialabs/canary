@@ -274,9 +274,7 @@ class Workspace:
         else:
             session_name = now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
-
         cases = self.construct_testcases(specs, session_dir)
-
         selector = select.RuntimeSelector(cases, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
