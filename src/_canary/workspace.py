@@ -374,7 +374,8 @@ class Workspace:
             link = (self.refs_dir / "latest").read_text().strip()
             path = self.refs_dir / link
             latest_session = path.stem
-        generator_count = self.db.count("generaors")
+        generators = self.db.get_generators()
+        generator_count = len(generators)
         info = {
             "root": str(self.root),
             "generator_count": generator_count,
@@ -749,13 +750,6 @@ class WorkspaceDatabase:
     """Database wrapper for the "latest results" index."""
 
     connection: sqlite3.Connection
-    tables: tuple[str] = (
-        "generators",
-        "specs",
-        "dependencies",
-        "selections",
-        "results",
-    )
 
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
@@ -834,14 +828,6 @@ class WorkspaceDatabase:
         )
         self.connection.commit()
         pm.done()
-
-    def count(self, table: str) -> int:
-        if table not in self.tables:
-            raise ValueError(f"{table} is not a valid table name")
-
-        cursor = self.connection.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM {table};")
-        return cursor.fetchall()
 
     def get_generators(self) -> list[AbstractTestGenerator]:
         cursor = self.connection.cursor()
