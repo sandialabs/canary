@@ -84,7 +84,7 @@ class ResourceQueue:
                 raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.state}")
             required = job.required_resources()
             if not required:
-                raise ValueError("{job}: a test should require at least 1 cpu")
+                raise ValueError(f"{job}: a test should require at least 1 cpu")
             if not self.rpool.accommodates(required):
                 raise ValueError(f"Not enough resources for job {job}")
             slot = HeapSlot(job=job)

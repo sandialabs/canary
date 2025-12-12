@@ -103,15 +103,22 @@ class Run(CanarySubcommand):
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
         if args.start:
+            logger.info(f"@*{{Running}} tests from {args.start}")
             specs = workspace.select_from_view(path=Path(args.start))
             reuse = True
         elif args.specids:
+            specs_to_run = [id[:7] for id in args.specids]
+            if len(specs_to_run) > 3:
+                specs_to_run = [*specs_to_run[:2], "...", specs_to_run[-1]]
+            logger.info(f"@*{{Running}} specs {', '.join(specs_to_run)}")
             specs = workspace.select(ids=args.specids, tag=args.tag)
         elif args.runtag:
+            logger.info(f"@*{{Running}} tests in tag {args.runtag}")
             specs = workspace.get_selection(args.runtag)
         elif not args.scanpaths:
             # scanpaths must be explicit
             args.runtag = "default"
+            logger.info(f"@*{{Running}} tests in tag {args.runtag}")
             specs = workspace.get_selection(args.runtag)
         else:
             scanpaths = args.scanpaths or {os.getcwd(): []}

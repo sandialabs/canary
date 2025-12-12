@@ -371,7 +371,7 @@ class ResourceQueueExecutor:
                     f"{elapsed:5.1f}s",
                 )
             if not table.row_count:
-                return "[blue]==>[/] All tests finished with status [bold green]PASS[/]"
+                return "[blue]INFO[/]: All tests finished with status [bold green]PASS[/]"
             return table
 
         table = Table(expand=False)

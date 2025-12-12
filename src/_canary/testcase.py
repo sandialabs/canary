@@ -455,41 +455,41 @@ class TestCase:
         rparameters: dict[str, int] = {}
         rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
         resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        data = self.spec.parameters | self.spec.implicit_parameters
-        for key, value in data.items():
+        parameters = self.spec.parameters | self.spec.implicit_parameters
+        assert "cpus" in parameters, "Expected cpus to be in spec.parameters or implicit_parameters"
+        assert "gpus" in parameters, "Expected cpus to be in spec.parameters or implicit_parameters"
+        for key, value in parameters.items():
             if key in resource_types and not isinstance(value, int):
                 raise InvalidTypeError(key, value)
         rpcount = config.pluginmanager.hook.canary_resource_pool_count
-        if "nodes" in data:
-            nodes = cast(int, data["nodes"])
+        if "nodes" in parameters:
+            nodes = cast(int, parameters["nodes"])
             rparameters["nodes"] = int(nodes)
-            if "cpus" not in data:
-                rparameters["cpus"] = nodes * rpcount(type="cpu")
-            if "gpus" not in data:
-                rparameters["gpus"] = nodes * rpcount(type="gpu")
-        if "cpus" in data:
-            cpus = cast(int, data["cpus"])
-            rparameters["cpus"] = int(cpus)
-            if "nodes" not in data:
+            rparameters["cpus"] = max(nodes * rpcount(type="cpu"), parameters["cpus"])
+            rparameters["gpus"] = max(nodes * rpcount(type="gpu"), parameters["gpus"])
+        if "cpus" in parameters:
+            cpus = cast(int, parameters["cpus"])
+            rparameters["cpus"] = max(int(cpus), rparameters["cpus"])
+            if "nodes" not in parameters:
                 cpu_count = rpcount(type="cpu")
                 node_count = rpcount(type="node")
                 cpus_per_node = math.ceil(cpu_count / node_count)
                 if cpus_per_node > 0:
                     nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
-                    rparameters["nodes"] = nodes
-        if "gpus" in data:
-            gpus = cast(int, data["gpus"])
-            rparameters["gpus"] = int(gpus)
-            if "nodes" not in data:
+                    rparameters["nodes"] = max(nodes, rparameters["nodes"])
+        if "gpus" in parameters:
+            gpus = cast(int, parameters["gpus"])
+            rparameters["gpus"] = max(int(gpus), rparameters["gpus"])
+            if "nodes" not in parameters:
                 gpu_count = rpcount(type="gpu")
                 node_count = rpcount(type="node")
                 gpus_per_node = math.ceil(gpu_count / node_count)
                 if gpus_per_node > 0:
                     nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
-                    rparameters["nodes"] = nodes
+                    rparameters["nodes"] = max(nodes, rparameters["nodes"])
         # We have already done validation, now just fill in missing resource types
         resource_types -= {"nodes", "cpus", "gpus"}
-        for key, value in data.items():
+        for key, value in parameters.items():
             if key in resource_types:
                 rparameters[key] = int(value)
         return rparameters
@@ -521,6 +521,7 @@ class TestCase:
             "stderr": self.stderr,
             "runtime": self.runtime,
             "dependencies": [dep.lockfile for dep in self.dependencies],
+            "rparameters": self.rparameters,
         }
         record["spec"]["name"] = self.spec.name
 
@@ -535,6 +536,7 @@ class TestCase:
             "variables": self.variables,
             "resources": self.resources,
             "dependencies": [dep.id for dep in self.dependencies],
+            "rparameters": self.rparameters,
         }
         return json.dumps_min(record)
 

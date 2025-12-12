@@ -217,7 +217,7 @@ class server:
             n = len(buildgroup["builds"])
             logger.info(f"Getting build summaries for build group {buildgroup['name']}")
             for i, build in enumerate(buildgroup["builds"], start=1):
-                cwrite("\r@*b{==>} Getting build summary for build %d of %d" % (i, n))
+                cwrite("\r@*b{INFO}: Getting build summary for build %d of %d" % (i, n))
                 if self.contains(build["site"], skip_sites):
                     continue
                 build["unixtimestamp"] = buildgroup["unixtimestamp"]

@@ -30,7 +30,6 @@ EMIT = builtin_logging.CRITICAL + 5
 
 builtin_print = print
 root_log_name = "canary"
-arrow = "==>"
 
 
 class FileHandler(builtin_logging.FileHandler): ...
@@ -78,16 +77,10 @@ class Formatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{%s} " % (level_color(record.levelno), arrow)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{%s} %s: " % (
-                    level_color(record.levelno),
-                    arrow,
-                    record.levelname.title(),
-                )
+            if level_color(record.levelno):
+                prefix = "@*%s{%s}: " % (level_color(record.levelno), record.levelname.upper())
             else:
-                prefix = "@*{%s} " % arrow
+                prefix = f"{record.levelname.upper()}: "
             extra["prefix"] = prefix
 
         record.__dict__.update(extra)
@@ -105,10 +98,10 @@ class JsonFormatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = f"{arrow} {record.levelname.title()}"
+            if record.levelno in (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
+                prefix = f"{record.levelname.upper()}: "
             else:
-                prefix = arrow
+                prefix = ""
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()

@@ -96,7 +96,7 @@ def canary_addoption(parser: "Parser") -> None:
     parser.add_argument(
         "--show-excluded-tests",
         group="console reporting",
-        command=("run", "find"),
+        command=("run", "find", "select"),
         action="store_true",
         default=False,
         help="Show names of tests that are excluded from the test session %(default)s",
@@ -114,7 +114,7 @@ def canary_select_report(selector: "Selector") -> None:
     Args:
         selector: The ``Selector`` instance whose results are being reported.
     """
-    select_report(selector.specs)
+    select_report(selector.specs, updated_masks=selector.masked)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -187,6 +187,7 @@ class Selector:
         self.specs = specs
         self.workspace = workspace
         self.rules: list[Rule] = list(rules)
+        self.masked: set[str] = set()
 
     def add_rule(self, rule: Rule) -> None:
         assert isinstance(rule, Rule)
@@ -195,6 +196,7 @@ class Selector:
     def run(self) -> None:
         logger.debug("@*{Selecting} specs based on rules")
         config.pluginmanager.hook.canary_selectstart(selector=self)
+        self.masked.clear()
         for spec in self.specs:
             if spec.mask:
                 continue
@@ -202,6 +204,7 @@ class Selector:
                 outcome = rule(spec)
                 if not outcome:
                     spec.mask = Mask.masked(outcome.reason or rule.default_reason)
+                    self.masked.add(spec.id)
                     break
         config.pluginmanager.hook.canary_select_modifyitems(selector=self)
         config.pluginmanager.hook.canary_select_report(selector=self)
@@ -305,7 +308,7 @@ def propagate_masks(specs: list["ResolvedSpec"]):
                 queue.append(child)
 
 
-def select_report(specs: list["ResolvedSpec"]) -> None:
+def select_report(specs: list["ResolvedSpec"], updated_masks: set[str]) -> None:
     """Emit a report summarizing which specs were selected or excluded.
 
     Reporting includes the count of selected and excluded tests, grouped
@@ -315,14 +318,14 @@ def select_report(specs: list["ResolvedSpec"]) -> None:
     """
     excluded: list["ResolvedSpec"] = []
     for spec in specs:
-        if spec.mask:
+        if spec.id in updated_masks:
             excluded.append(spec)
     n = len(specs) - len(excluded)
     logger.info("@*{Selected} %d of %d test %s " % (n, len(specs), pluralize("spec", n)))
     show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
     if excluded:
         n = len(excluded)
-        logger.info("@*{Excluded} %d test specs for the following reasons:" % n)
+        logger.info("@*{Excluding} %d test specs for the following reasons:" % n)
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
@@ -330,10 +333,10 @@ def select_report(specs: list["ResolvedSpec"]) -> None:
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
+            logger.info(f"{reason} ({n} excluded)", extra={"prefix": "... "})
             if show_excluded_tests:
                 for spec in reasons[key]:
-                    logger.log(logging.EMIT, f"  ◦ {spec.display_name()}", extra={"prefix": ""})
+                    logger.info(f"{spec.display_name()}", extra={  "prefix": "    • "})
 
 
 @hookimpl
@@ -349,12 +352,12 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     logger.info("@*{Selected} %d of %d test %s " % (n, len(unmasked), pluralize("case", n)))
     if excluded:
         n = len(excluded)
-        logger.info("@*{Excluded} %d test cases for the following reasons:" % n)
         reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
             reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
+        logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logger.log(logging.EMIT, f"• {reason} ({n} excluded)", extra={"prefix": ""})
+            logger.info(f"{reason} ({n} excluded)", extra={"prefix": "... "})
