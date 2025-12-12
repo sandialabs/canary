@@ -95,6 +95,7 @@ class Run(CanarySubcommand):
         if args.wipe:
             Workspace.remove(work_tree)
         workspace: Workspace
+        reuse: bool = False
         try:
             workspace = Workspace.load(start=work_tree)
         except NotAWorkspaceError:
@@ -103,6 +104,7 @@ class Run(CanarySubcommand):
         specs: list["ResolvedSpec"]
         if args.start:
             specs = workspace.select_from_view(path=Path(args.start))
+            reuse = True
         elif args.specids:
             specs = workspace.select(ids=args.specids, tag=args.tag)
         elif args.runtag:
@@ -133,5 +135,5 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
                 tag=args.tag,
             )
-        session = workspace.run(specs, only=args.only)
+        session = workspace.run(specs, reuse_session=reuse, only=args.only)
         return session.returncode

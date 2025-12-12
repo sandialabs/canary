@@ -263,12 +263,16 @@ class Workspace:
     def run(
         self,
         specs: list["ResolvedSpec"],
-        session_name: str | None = None,
+        reuse_session: bool | str = False,
         update_view: bool = True,
         only: str = "not_done",
     ) -> Session:
         now = datetime.datetime.now()
-        session_name = session_name or now.isoformat(timespec="microseconds").replace(":", "-")
+        session_name: str
+        if isinstance(reuse_session, str):
+            session_name = reuse_session
+        else:
+            session_name = now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
 
         cases = self.construct_testcases(specs, session_dir)
@@ -278,12 +282,14 @@ class Workspace:
         selector.add_rule(rules.RerunRule(strategy=only))
         selector.run()
 
+        # At this point, test cases have been reconstructed and, if previous results exist,
+        # restored to their last ran state.  If reuse_session is True, we leave the test case as
+        # is.  Otherwise, we swap out the old session for the new.
         ready: list["TestCase"] = []
         for case in cases:
             if case.mask:
                 continue
-            elif case.workspace.session != session_name:
-                # This case must have been previously run in a different session
+            elif not reuse_session:
                 case.workspace.root = session_dir
                 case.workspace.session = session_dir.name
             ready.append(case)
@@ -302,8 +308,12 @@ class Workspace:
         if update_view:
             view_entries: dict[Path, list[Path]] = {}
             for case in results.cases:
-                relpath = case.workspace.dir.relative_to(results.prefix)
-                view_entries.setdefault(results.prefix, []).append(relpath)
+                if case.workspace.session is not None:
+                    prefix = self.sessions_dir / case.workspace.session
+                else:
+                    prefix = results.prefix
+                relpath = case.workspace.dir.relative_to(prefix)
+                view_entries.setdefault(prefix, []).append(relpath)
             self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -322,10 +332,6 @@ class Workspace:
         if not self.view:
             return
         logger.info(f"Rebuilding view at {self.root}")
-
-        def mtime(path: Path):
-            return path.stat().st_mtime
-
         view: dict[str, tuple[str, str]] = {}
         for case in self.load_testcases():
             if not case.workspace.session:

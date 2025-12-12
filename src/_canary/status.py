@@ -325,9 +325,9 @@ class Status:
         return self
 
     @classmethod
-    def CANCELLED(cls):
+    def CANCELLED(cls, reason: str | None = None):
         self = cls()
-        self.set(state="COMPLETE", category="CANCEL", status="CANCELLED")
+        self.set(state="COMPLETE", category="CANCEL", status="CANCELLED", reason=reason)
         return self
 
     @classmethod

@@ -48,7 +48,7 @@ class CanaryHPCExecutor:
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
         specs = workspace.load_testspecs(ids=self.cases)
-        session = workspace.run(specs, session_name=self.session, update_view=False, only="all")
+        session = workspace.run(specs, reuse_session=self.session, update_view=False, only="all")
         return session.returncode
 
     @canary.hookimpl

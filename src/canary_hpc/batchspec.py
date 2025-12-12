@@ -248,9 +248,13 @@ class TestBatch:
             data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
             for case in self.cases:
                 if case.status.state in ("PENDING", "READY"):
-                    case.status = Status.BROKEN()
+                    case.status = Status.BROKEN(
+                        reason=f"case.status = {case.status.state} after execution of batch"
+                    )
                 elif case.status.state == "RUNNING":
-                    case.status = Status.CANCELLED()
+                    case.status = Status.CANCELLED(
+                        reason=f"case.status = {case.status.state} after execution of batch"
+                    )
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
             logger.debug("Batch @*b{%s}: batch exited with code %s" % (self.id[:8], str(rc)))
