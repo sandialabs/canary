@@ -105,9 +105,9 @@ class BaseSpec(Generic[T]):
             self.timeout = self._default_timeout()
         if self.xstatus is None:
             self.xstatus = 0
-        if "cpus" not in self.parameters:
+        if "cpus" not in self.parameters | self.meta_parameters:
             self.meta_parameters["cpus"] = 1
-        if "gpus" not in self.parameters:
+        if "gpus" not in self.parameters | self.meta_parameters:
             self.meta_parameters["gpus"] = 0
         self.meta_parameters["runtime"] = self.timeout
 
@@ -400,6 +400,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
             dep_done_criteria=dep_done_criteria,
             keywords=self.keywords,
             parameters=self.parameters,
+            meta_parameters=self.meta_parameters,
             assets=self.assets,
             baseline=self.baseline_actions,
             artifacts=self.artifacts,
