@@ -209,7 +209,7 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("[bold]\[%s][/]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
@@ -219,7 +219,7 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("[bold]\[%s][/]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write(
             "[bold]Finished[/] job %s: %s: %s"
             % (job.id[:7], job.display_name(), job.status.display_name())
