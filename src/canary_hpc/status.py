@@ -32,6 +32,10 @@ class BatchStatus:
     def status(self) -> str:
         return self.base_status.status
 
+    @property
+    def reason(self) -> str | None:
+        return self.base_status.reason
+
     def display_name(self, **kwargs: Any) -> str:
         def sortkey(x):
             n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1

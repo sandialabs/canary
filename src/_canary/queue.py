@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 import heapq
-import io
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass
 from dataclasses import field
 from typing import TYPE_CHECKING
@@ -14,8 +14,6 @@ from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
 from .status import Status
 from .util import logging
-from .util.rich import clen
-from .util.rich import colorize
 from .util.time import hhmmss
 
 if TYPE_CHECKING:
@@ -184,32 +182,29 @@ class ResourceQueue:
         return cases
 
     def status(self, start: float | None = None) -> str:
-        string = io.StringIO()
+        def sortkey(x):
+            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+            return (n, x[1])
+
         with self.lock:
-            p = d = f = t = 0
             done = len(self._finished)
             busy = len(self._busy)
             pending = len(self._heap)
             total = done + busy + pending
+            totals: Counter[tuple[str, str]] = Counter()
             for job in self._finished.values():
-                if job.status.category == "PASS":
-                    p += 1
-                elif job.status.status == "DIFFED":
-                    d += 1
-                elif job.status.status == "TIMEOUT":
-                    t += 1
-                else:
-                    f += 1
-            fmt = "%d/%d running, %d/%d done, %d/%d queued "
+                if job.status.state == "COMPLETE":
+                    key = (job.status.category, job.status.status)
+                    totals[key] += 1
+            row: list[str] = []
+            if busy:
+                row.append(f"{busy}/{total} [green]RUNNING[/]")
+            else:
+                row.append(f"{total}/{total} [blue]COMPLETE[/]")
+            for key in sorted(totals, key=sortkey):
+                color = Status.color_for_category[key[0]]
+                row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)
-                fmt += f"in {duration} "
-            fmt += "([green]%d pass[/], [yellow]%d diff[/], "
-            fmt += "[red]%d fail[/], [magenta]%d timeout[/]})"
-            text = fmt % (busy, total, done, total, pending, total, p, d, f, t)
-            n = clen(text)
-            header = "[bold cyan]%s[/]" % " status ".center(n + 10, "=")
-            footer = "[bold cyan]%s[/]" % "=" * (n + 10)
-            pad = colorize("[bold cyan]====[/]")
-            string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
-        return string.getvalue()
+                row.append(f"in {duration}")
+            return ", ".join(row)

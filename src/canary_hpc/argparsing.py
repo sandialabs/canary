@@ -187,6 +187,9 @@ class CanaryHPCResourceSetter(argparse.Action):
             if raw not in ("conservative", "agressive"):
                 raise ValueError(f"Incorrect batch timeout choice: {raw}")
             setattr(namespace, "canary_hpc_batch_timeout_strategy", raw)
+        elif match := re.search(r"^queue_timeout[:=](.+)$", value):
+            raw = strip_quotes(match.group(1))
+            setattr(namespace, "canary_hpc_queue_timeout", time_in_seconds(raw))
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
             dest = "canary_hpc_scheduler_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()

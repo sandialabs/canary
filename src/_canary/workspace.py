@@ -787,12 +787,14 @@ class WorkspaceDatabase:
 
         query = """CREATE TABLE IF NOT EXISTS results (
           id TEXT,
+          spec_name TEXT,
+          spec_fullname TEXT,
           session TEXT,
-          statstate TEXT,
-          statcategory TEXT,
-          statstatus TEXT,
-          statreason TEXT,
-          statcode INTEGER,
+          status_state TEXT,
+          status_category TEXT,
+          status_status TEXT,
+          status_reason TEXT,
+          status_code INTEGER,
           started_on TEXT,
           finished_on TEXT,
           duration TEXT,
@@ -1016,6 +1018,8 @@ class WorkspaceDatabase:
             rows.append(
                 (
                     case.id,
+                    case.spec.name,
+                    case.spec.fullname,
                     session.name,
                     case.status.state,
                     case.status.category,
@@ -1035,19 +1039,21 @@ class WorkspaceDatabase:
             """
             INSERT OR IGNORE INTO results (
               id,
+              spec_name,
+              spec_fullname,
               session,
-              statstate,
-              statcategory,
-              statstatus,
-              statreason,
-              statcode,
+              status_state,
+              status_category,
+              status_status,
+              status_reason,
+              status_code,
               started_on,
               finished_on,
               duration,
               workspace,
               measurements
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -1080,27 +1086,34 @@ class WorkspaceDatabase:
                 rows.extend(cursor.fetchall())
         data: dict[str, dict[str, Any]] = {}
         for row in rows:
-            d = data.setdefault(row[0], {})  # ID
-            d["session"] = row[1]
-            d["status"] = Status.from_dict(
-                {
-                    "state": row[2],
-                    "category": row[3],
-                    "status": row[4],
-                    "reason": row[5],
-                    "code": row[6],
-                }
-            )
-            d["timekeeper"] = Timekeeper.from_dict(
-                {
-                    "started_on": row[7],
-                    "finished_on": row[8],
-                    "duration": float(row[9]),
-                }
-            )
-            d["workspace"] = row[10]
-            d["measurements"] = Measurements.from_dict(json.loads(row[11]))
+            data[row[0]] = self._expand_results_row(row)
         return data
+
+    def _expand_results_row(self, row: list[Any]) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+        d["id"] = row[0]
+        d["spec_name"] = row[1]
+        d["spec_fullname"] = row[2]
+        d["session"] = row[3]
+        d["status"] = Status.from_dict(
+            {
+                "state": row[4],
+                "category": row[5],
+                "status": row[6],
+                "reason": row[7],
+                "code": row[8],
+            }
+        )
+        d["timekeeper"] = Timekeeper.from_dict(
+            {
+                "started_on": row[9],
+                "finished_on": row[10],
+                "duration": float(row[11]),
+            }
+        )
+        d["workspace"] = row[12]
+        d["measurements"] = Measurements.from_dict(json.loads(row[13]))
+        return d
 
     def get_single_result(self, id: str) -> list:
         cursor = self.connection.cursor()
@@ -1108,26 +1121,7 @@ class WorkspaceDatabase:
         rows = cursor.fetchall()
         data: list[dict] = []
         for row in rows:
-            d = {}
-            d["session"] = row[1]
-            d["status"] = Status.from_dict(
-                {
-                    "state": row[2],
-                    "category": row[3],
-                    "status": row[4],
-                    "reason": row[5],
-                    "code": row[6],
-                }
-            )
-            d["timekeeper"] = Timekeeper.from_dict(
-                {
-                    "started_on": row[7],
-                    "finished_on": row[8],
-                    "duration": float(row[9]),
-                }
-            )
-            d["workspace"] = row[10]
-            d["measurements"] = json.loads(row[11])
+            d = self._expand_results_row(row)
             data.append(d)
         return data
 

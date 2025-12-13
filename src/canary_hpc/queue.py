@@ -3,14 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 import heapq
-import io
 import time
+from collections import Counter
 
 import canary
 from _canary import queue
 from _canary.protocols import JobProtocol
-from _canary.util.rich import clen
-from _canary.util.rich import colorize
+from _canary.status import Status
 from _canary.util.time import hhmmss
 
 logger = canary.get_logger(__name__)
@@ -45,33 +44,30 @@ class ResourceQueue(queue.ResourceQueue):
         return cases
 
     def status(self, start: float | None = None) -> str:
-        string = io.StringIO()
+        def sortkey(x):
+            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+            return (n, x[1])
+
         with self.lock:
-            p = d = f = t = 0
             done = sum([len(_) for _ in self._finished.values()])
             busy = sum([len(_) for _ in self._busy.values()])
             pending = sum([len(_.job) for _ in self._heap])  # type: ignore
             total = done + busy + pending
+            totals: Counter[tuple[str, str]] = Counter()
             for batch in self._finished.values():
                 for case in batch:
-                    if case.status.category == "PASS":
-                        p += 1
-                    elif case.status.status == "DIFFED":
-                        d += 1
-                    elif case.status.status == "TIMEOUT":
-                        t += 1
-                    else:
-                        f += 1
-            fmt = "%d/%d running, %d/%d done, %d/%d queued "
+                    if case.status.state == "COMPLETE":
+                        key = (case.status.category, case.status.status)
+                        totals[key] += 1
+            row: list[str] = []
+            if busy:
+                row.append(f"{busy}/{total} [green]RUNNING[/]")
+            else:
+                row.append(f"{total}/{total} [blue]COMPLETE[/]")
+            for key in sorted(totals, key=sortkey):
+                color = Status.color_for_category[key[0]]
+                row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)
-                fmt += f"in {duration} "
-            fmt += "([green]%d pass[/], [yellow]%d diff[/], "
-            fmt += "[red]%d fail[/], [magenta]%d timeout[/])"
-            text = colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
-            n = clen(text)
-            header = colorize("[bold]%s[/]" % " status ".center(n + 10, "="))
-            footer = colorize("[bold cyan]%s[/]" % "=" * (n + 10))
-            pad = colorize("[bold]====[/]")
-            string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
-        return string.getvalue()
+                row.append(f"in {duration}")
+            return ", ".join(row)

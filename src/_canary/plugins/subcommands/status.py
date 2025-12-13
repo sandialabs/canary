@@ -6,12 +6,13 @@ import argparse
 import io
 import shutil
 from typing import TYPE_CHECKING
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
 
 from ...hookspec import hookimpl
-from ...testcase import TestCase
+from ...status import Status as _Status
 from ...util import glyphs
 from ...util import logging
 from ...workspace import Workspace
@@ -81,8 +82,8 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
-        cases = workspace.load_testcases()
-        table = self.get_status_table(cases, args)
+        results = workspace.db.get_results()
+        table = self.get_status_table(results, args)
         console = Console()
         if table.row_count > shutil.get_terminal_size().lines:
             with console.pager():
@@ -90,13 +91,17 @@ class Status(CanarySubcommand):
         else:
             console.print(table, markup=True)
         if args.durations:
-            console.print(format_durations(cases, args.durations))
+            console.print(format_durations(results, args.durations))
         return 0
 
-    def get_status_table(self, cases: list[TestCase], args: "argparse.Namespace") -> Table:
-        cases.sort(key=lambda c: (c.status.category, c.status.status, c.timekeeper.duration))
-        cases = filter_by_status(cases, args.report_chars)
+    def get_status_table(self, results: dict[str, Any], args: "argparse.Namespace") -> Table:
+        rows = sorted(
+            results.values(),
+            key=lambda x: (x["status"].category, x["status"].status, x["timekeeper"].duration),  # type: ignore
+        )
+        rows = filter_by_status(rows, args.report_chars)
         cols = args.format_cols.split(",")
+
         table = Table(expand=True)
         for col in cols:
             table.add_column(col)
@@ -111,33 +116,33 @@ class Status(CanarySubcommand):
             "Status": "status_name",
             "Details": "status_reason",
         }
-        for case in cases:
-            row: list[str] = []
+        for row in rows:
+            r: list[str] = []
             for col in cols:
                 key = map[col]
-                value = get_case_attribute(case, key)
-                row.append(value)
-            table.add_row(*row)
+                value = get_attribute(row, key)
+                r.append(value)
+            table.add_row(*r)
         return table
 
 
-def get_case_attribute(case: TestCase, attr: str) -> str:
+def get_attribute(row: dict[str, Any], attr: str) -> str:
     if attr == "id":
-        return case.id[:7]
+        return row["id"][:7]
     elif attr == "name":
-        return case.display_name(style="rich")
+        return row["spec_name"]  # fixme: add color
     elif attr == "fullname":
-        return case.display_name(style="rich", full=True)
+        return row["spec_fullname"]
     elif attr == "session":
-        return str(case.workspace.session)
+        return row["session"]
     elif attr == "returncode":
-        return str(case.status.code)
+        return str(row["status"].code)
     elif attr == "duration":
-        return dformat(case.timekeeper.duration)
+        return dformat(row["timekeeper"].duration)
     elif attr == "status_name":
-        return case.status.display_name(style="rich")
+        return row["status"].display_name(style="rich")
     elif attr == "status_reason":
-        return case.status.reason or ""
+        return row["status"].reason or ""
     raise AttributeError(attr)
 
 
@@ -182,47 +187,48 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
     return None
 
 
-def filter_by_status(cases: list[TestCase], chars: str | None) -> list[TestCase]:
+def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
     chars = chars or "dftns"
     if "A" in chars:
-        return cases
-    keep = [False] * len(cases)
-    for i, case in enumerate(cases):
+        return rows
+    keep = [False] * len(rows)
+    for i, row in enumerate(rows):
+        status: _Status = row["status"]
         if "a" in chars:
-            keep[i] = case.status.category != "PASS"
-        elif case.status.category == "SKIP":
+            keep[i] = status.category != "PASS"
+        elif status.category == "SKIP":
             keep[i] = "s" in chars
-        elif case.status.category == "PASS":
+        elif status.category == "PASS":
             keep[i] = "p" in chars
-        elif case.status.status in ("FAILED", "ERROR", "BROKEN"):
+        elif status.status in ("FAILED", "ERROR", "BROKEN"):
             keep[i] = "f" in chars
-        elif case.status.status == "DIFFED":
+        elif status.status == "DIFFED":
             keep[i] = "d" in chars
-        elif case.status.status == "TIMEOUT":
+        elif status.status == "TIMEOUT":
             keep[i] = "t" in chars
-        elif case.status.state in ("READY", "PENDING"):
+        elif status.state in ("READY", "PENDING"):
             keep[i] = "n" in chars
-        elif case.status.category == "CANCEL":
+        elif status.category == "CANCEL":
             keep[i] = "n" in chars
         else:
-            logger.warning(f"Unhandled status {case.status}")
-    return [case for i, case in enumerate(cases) if keep[i]]
+            logger.warning(f"Unhandled status {status}")
+    return [row for i, row in enumerate(rows) if keep[i]]
 
 
-def format_durations(cases: list[TestCase], N: int) -> str:
-    cases.sort(key=lambda x: x.timekeeper.duration)
-    ix = list(range(len(cases)))
+def format_durations(results: dict[str, Any], N: int) -> str:
+    rows = sorted(results.values(), key=lambda x: x["timekeeper"].duration)
+    ix = list(range(len(rows)))
     if N > 0:
         ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = cases[i].timekeeper.duration
+        duration = rows[i]["timekeeper"].duration
         if duration < 0:
             continue
-        name = cases[i].display_name(style="rich")
-        id = cases[i].id[:7]
+        name = rows[i]["spec_name"]
+        id = rows[i]["id"][:7]
         fp.write("  %6.2f   %s %s\n" % (duration, id, name))
     return fp.getvalue().strip()
 

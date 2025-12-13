@@ -21,6 +21,7 @@ from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
 from _canary.util.rich import colorize
+from _canary.util.time import time_in_seconds
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
@@ -229,6 +230,14 @@ class CanaryHPCConductor:
             choices=("aggressive", "conservative"),
             help="Estimate batch runtime (queue time) conservatively or aggressively "
             "[alias: -b timeout=STRATEGY] [default: aggressive]",
+        )
+        parser.add_argument(
+            "--queue-timeout",
+            dest="canary_hpc_queue_timeout",
+            metavar="T",
+            type=time_in_seconds,
+            default=30 * 60,
+            help="Maximum time to wait in queue [alias: -b queue_timeout=T] [default: 30min]",
         )
 
     @staticmethod

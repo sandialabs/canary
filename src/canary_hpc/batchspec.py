@@ -89,7 +89,10 @@ class TestBatch:
         return len(self.cases)
 
     def __str__(self) -> str:
-        return f"batch[id={self.id[:8]}]"
+        p = [f"id={self.id[:8]}"]
+        if self.jobid:
+            p.append(f"jobid={self.jobid}")
+        return f"TestBatch({','.join(p)})"
 
     def __repr__(self) -> str:
         case_repr: str
@@ -149,9 +152,10 @@ class TestBatch:
 
     @property
     def timeout(self) -> float:
-        return self.qtime()
+        queue_timeout = canary.config.getoption("canary_hpc_queue_timeout") or 30 * 60
+        return queue_timeout + self.estimated_runtime()
 
-    def qtime(self) -> float:
+    def estimated_runtime(self) -> float:
         if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):
             p = argparse.ArgumentParser()
             p.add_argument("--time", dest="qtime")

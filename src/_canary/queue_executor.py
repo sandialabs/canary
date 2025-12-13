@@ -19,6 +19,7 @@ from typing import Callable
 from uuid import uuid4
 
 from rich.console import Console
+from rich.console import Group
 from rich.live import Live
 from rich.table import Table
 
@@ -28,7 +29,6 @@ from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
 from .util import cpu_count
-from .util import keyboard
 from .util import logging
 from .util.misc import digits
 from .util.procutils import MeasuredProcess
@@ -93,6 +93,7 @@ class ResourceQueueExecutor:
         self.inflight: dict[int, ExecutionSlot] = {}
         self.finished: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
+        self.started_on: float = -1.0
 
     def __enter__(self) -> "ResourceQueueExecutor":
         from .workspace import Workspace
@@ -110,12 +111,14 @@ class ResourceQueueExecutor:
             logger.exception("Unable to create configuration")
             raise
         self.entered = True
+        self.started_on = time.time()
         return self
 
     def __exit__(self, *args):
         if f := os.getenv(config.CONFIG_ENV_FILENAME):
             Path(f).unlink(missing_ok=True)
         self.entered = False
+        self.started_on = -1.0
 
     def run(self, **kwargs: Any) -> int:
         """Main loop: get jobs from queue and launch processes."""
@@ -139,8 +142,6 @@ class ResourceQueueExecutor:
                     if timeout >= 0.0 and time.time() - start > timeout:
                         self._terminate_all(signal.SIGUSR2)
                         raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
-
-                    self._check_keyboard_input(start)
 
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
@@ -334,16 +335,6 @@ class ResourceQueueExecutor:
         self.inflight.clear()
         self.queue.clear("CANCELLED" if signum == signal.SIGINT else "ERROR")
 
-    def _check_keyboard_input(self, start: float):
-        if key := keyboard.get_key():
-            if key in "sS":
-                text = self.queue.status(start=start)
-                logger.log(logging.EMIT, text, extra={"prefix": ""})
-            elif key in "qQ":
-                logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
-                self._terminate_all(signal.SIGTERM)
-                raise KeyboardInterrupt
-
     @cached_property
     def timeout_multiplier(self) -> float:
         if cli_timeouts := config.getoption("timeout"):
@@ -353,26 +344,36 @@ class ResourceQueueExecutor:
             return float(t)
         return 1.0
 
-    def _render_dashboard(self, final: bool = False) -> Table | str:
+    def _render_dashboard(self, final: bool = False) -> Group | str:
+        text = self.queue.status(start=self.started_on)
+        footer = Table(expand=True, show_header=False, box=None)
+        footer.add_column("stats")
+        footer.add_row(text)
         table = Table(expand=False)
+        fmt = config.getoption("live_name_fmt")
         if final:
             table.add_column("Job")
             table.add_column("ID")
             table.add_column("Status")
+            table.add_column("Details")
             table.add_column("Duration")
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
                 if slot.job.status.category == "PASS":
                     continue
                 elapsed = slot.job.timekeeper.duration
                 table.add_row(
-                    slot.job.display_name(style="rich"),
+                    slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
+                    slot.job.status.reason or "",
                     f"{elapsed:5.1f}s",
                 )
             if not table.row_count:
-                return "[blue]INFO[/]: All tests finished with status [bold green]PASS[/]"
-            return table
+                n = len(self.finished)
+                return Group(
+                    f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]"
+                )
+            return Group(table, footer)
 
         table = Table(expand=False)
         table.add_column("Job")
@@ -388,7 +389,7 @@ class ResourceQueueExecutor:
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
                 elapsed = slot.job.timekeeper.duration
                 table.add_row(
-                    slot.job.display_name(style="rich"),
+                    slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
                     f"{elapsed:5.1f}s",
@@ -399,24 +400,18 @@ class ResourceQueueExecutor:
         for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
             elapsed = now - slot.start_time
             table.add_row(
-                slot.job.display_name(style="rich"),
+                slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
                 "[green]RUNNING[/green]",
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
 
-        return table
+        return Group(table, footer)
 
 
 class CanaryLive:
-    def __init__(
-        self,
-        factory: Callable[..., Table | str],
-        *,
-        enable: bool = True,
-        console: Console | None = None,
-    ) -> None:
+    def __init__(self, factory: Callable[..., Group | str], *, enable: bool = True) -> None:
         self.factory = factory
         self.enabled = enable
         self.live: Live | None = None
@@ -427,7 +422,7 @@ class CanaryLive:
         # Logging control
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
-        self._monotonic: float = -1.0
+        self._mark: float = -1.0
 
     def __enter__(self):
         if self.enabled:
@@ -440,6 +435,7 @@ class CanaryLive:
                 auto_refresh=False,
             )
             self.live.__enter__()
+        self._mark = time.monotonic()
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -449,7 +445,9 @@ class CanaryLive:
 
     def update(self, final: bool = False) -> None:
         if self.live:
-            self.live.update(self.factory(final=final) or "", refresh=True)
+            if final or time.monotonic() - self._mark > 0.25:
+                self.live.update(self.factory(final=final) or "", refresh=True)
+                self._mark = time.monotonic()
 
     def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)

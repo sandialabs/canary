@@ -165,7 +165,8 @@ def print_runtests_durations(runner: Runner) -> None:
 @hookimpl(specname="canary_runtests_report", trylast=True)
 def runtests_footer(runner: Runner) -> None:
     """Return a short, high-level, summary of test results"""
-    print_footer(runner, "Session done")
+    if config.get("debug"):
+        print_footer(runner, "Session done")
 
 
 def print_footer(runner: "Runner", title: str) -> None:

@@ -113,7 +113,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             error=str(batch.workspace.joinpath(batch.stdout)),
             submit_flags=self.scheduler_args(),
             variables=variables,
-            qtime=batch.qtime() * batch.timeout_multiplier,
+            qtime=batch.estimated_runtime() * batch.timeout_multiplier,
         )
         return proc
 

@@ -85,6 +85,13 @@ class Run(CanarySubcommand):
             "to the screen (tee).  Warning: this could result in a large amount of text printed "
             "to the screen [default: log]",
         )
+        group.add_argument(
+            "--format",
+            dest="live_name_fmt",
+            choices=("long", "short"),
+            default="short",
+            help="Print test case fullname (long) in live status bar [default: short]",
+        )
 
         parser.add_argument("-r", help=argparse.SUPPRESS)
         add_resource_arguments(parser)
@@ -144,3 +151,33 @@ class Run(CanarySubcommand):
             )
         session = workspace.run(specs, reuse_session=reuse, only=args.only)
         return session.returncode
+
+
+class StatusFormatAction(argparse.Action):
+    _choices: list[str] = [
+        "ID",
+        "FullName",
+        "Name",
+        "Duration",
+        "Status",
+        "Details",
+        "Rank",
+    ]
+
+    def __call__(self, parser, namespace, value, option_string=None):
+        items = value.split(",")
+        for i, item in enumerate(items):
+            if choice := match_case_insensitive(item, self._choices):
+                items[i] = choice
+            else:
+                choices = ",".join(self._choices)
+                parser.error(f"Invalid status format {item!r}, choose from {choices}")
+        value = ",".join(items)
+        setattr(namespace, self.dest, value)
+
+
+def match_case_insensitive(s: str, choices: list[str]) -> str | None:
+    for choice in choices:
+        if s.lower() == choice.lower():
+            return choice
+    return None
