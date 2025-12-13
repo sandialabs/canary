@@ -410,7 +410,7 @@ class TestCase:
     def refresh(self) -> None:
         try:
             data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
-        except FileNotFoundError:
+        except (json.JSONDecodeError, FileNotFoundError):
             return
         status = data["status"]
         self.status = Status(

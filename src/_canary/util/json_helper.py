@@ -12,6 +12,10 @@ from typing import Any
 from .filesystem import mkdirp
 from .string import pluralize
 
+JSONDecodeError = json.decoder.JSONDecodeError
+
+__all__ = ["JSONDecodeError", "dump", "dumps", "dumps_min", "load", "loads", "try_loads"]
+
 
 class PathEncoder(json.JSONEncoder):
     def default(self, o):

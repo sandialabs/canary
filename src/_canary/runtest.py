@@ -189,7 +189,6 @@ def print_footer(runner: "Runner", title: str) -> None:
             color = Status.color_for_category[category]
             t = category if not status else status
             summary.append(f"[{color}]{n} {t.lower()}[/{color}]")
-    emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     kwds = {
         "s": summary[0] + " " + ", ".join(summary[1:]),
         "t": hhmmss(None if duration < 0 else duration),
