@@ -840,7 +840,7 @@ class WorkspaceDatabase:
             raise ValueError(f"{table} is not a valid table name")
 
         cursor = self.connection.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM {table};")
+        cursor.execute(f"SELECT COUNT(*) FROM {table};")  # nosec B608
         return int(cursor.fetchone()[0])
 
     def get_generators(self) -> list[AbstractTestGenerator]:
