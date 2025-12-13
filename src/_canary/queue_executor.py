@@ -124,7 +124,7 @@ class ResourceQueueExecutor:
                 "ResourceQueueExecutor.run must be called in a ResourceQueueExector context"
             )
 
-        logger.info(f"@*{{Starting}} process pool with max {self.max_workers} workers")
+        logger.info(f"[bold]Starting[/] process pool with max {self.max_workers} workers")
 
         timeout = float(config.get("timeout:session", -1))
         qrank, qsize = 0, len(self.queue)
@@ -209,8 +209,8 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("Starting job @*b{%s}: %s" % (job.id[:7], job.display_name()))
+        fmt.write("[bold]\[%s][/]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
@@ -219,9 +219,9 @@ class ResourceQueueExecutor:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write("@*{[%s]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write("[bold]\[%s][/]} " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write(
-            "Finished job @*b{%s}: %s: %s"
+            "[bold]Finished[/] job %s: %s: %s"
             % (job.id[:7], job.display_name(), job.status.display_name())
         )
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
@@ -381,7 +381,7 @@ class ResourceQueueExecutor:
         table.add_column("Elapsed")
         table.add_column("Rank")
 
-        max_rows: int = 50
+        max_rows: int = 30
         num_inflight = len(self.inflight)
         if num_inflight < max_rows:
             n = max_rows - num_inflight

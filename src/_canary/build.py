@@ -153,16 +153,20 @@ class Builder:
         return signature
 
     def run(self) -> list["ResolvedSpec"]:
+        pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")
         config.pluginmanager.hook.canary_buildstart(builder=self)
-        locked: list[list["UnresolvedSpec"]] = []
+        locked: list[list["UnresolvedSpec | ResolvedSpec"]] = []
         if config.get("debug"):
             for f in self.generators:
                 locked.append(lock_file(f, self.on_options))
         else:
             locked.extend(starmap(lock_file, [(f, self.on_options) for f in self.generators]))
-        drafts: list["UnresolvedSpec"] = [draft for group in locked for draft in group]
+        drafts: list["UnresolvedSpec | ResolvedSpec"] = [
+            draft for group in locked for draft in group
+        ]
+        pm.done()
         self.validate(drafts)
-        pm = logger.progress_monitor("@*{Resolving} test spec dependencies")
+        pm = logger.progress_monitor("[bold]Resolving[/] test spec dependencies")
         self.specs = resolve(drafts)
         self.ready = True
         pm.done()
@@ -170,8 +174,8 @@ class Builder:
         config.pluginmanager.hook.canary_build_report(builder=self)
         return self.specs
 
-    def validate(self, specs: list["UnresolvedSpec"]) -> None:
-        logger.info("@*{Searching} for duplicated tests")
+    def validate(self, specs: list["UnresolvedSpec | ResolvedSpec"]) -> None:
+        logger.info("[bold]Searching[/] for duplicated tests")
         ids = [spec.id for spec in specs]
         counts: dict[str, int] = {}
         for id in ids:
@@ -198,7 +202,7 @@ class Builder:
 @hookimpl
 def canary_build_report(builder: Builder) -> None:
     nc, ng = len(builder.specs), len(builder.generators)
-    logger.info("@*{Generated} %d test specs from %d generators" % (nc, ng))
+    logger.info("[bold]Generated[/] %d test specs from %d generators" % (nc, ng))
 
 
 def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):

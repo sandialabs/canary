@@ -112,7 +112,7 @@ def job_start_summary(case: "TestCase") -> str:
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    fmt.write("Repeating @*b{%s}: %s" % (case.id[:7], case.display_name(resolve=True)))
+    fmt.write("[bold]Repeating[/] %s: %s" % (case.id[:7], case.display_name(resolve=True)))
     return fmt.getvalue().strip()
 
 
@@ -123,7 +123,7 @@ def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     fmt.write(
-        f"Finished @*b{{%s}} (attempt {attempt + 1}): %s %s"
+        f"[bold]Finished[/] %s (attempt {attempt + 1}): %s %s"
         % (case.id[:7], case.display_name(resolve=True), case.status.display_name())
     )
     return fmt.getvalue().strip()

@@ -17,9 +17,9 @@ from .config.argparsing import Parser
 from .config.schemas import testpaths_schema
 from .generator import AbstractTestGenerator
 from .hookspec import hookimpl
-from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
+from .util.rich import bold
 
 logger = logging.get_logger(__name__)
 
@@ -68,7 +68,7 @@ class Collector:
         return self.generators
 
     def finalize(self) -> None:
-        pm = logger.progress_monitor("@*{Instantiating} generators from collected files")
+        pm = logger.progress_monitor("[bold]Instantiating[/] generators from collected files")
         errors = 0
         generators: list["AbstractTestGenerator"] = []
         all_paths: list[tuple[set[Type[AbstractTestGenerator]], str, str]] = []
@@ -94,7 +94,7 @@ class Collector:
         assert root_path.exists()
         cwd = Path.cwd()
         sp = root_path if not root_path.is_relative_to(cwd) else root_path.relative_to(cwd)
-        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {sp}")
+        pm = logger.progress_monitor(f"[bold]Collecting[/] generator files from {sp}")
         full_path = root_path if scanpath.path is None else root_path / scanpath.path
         if full_path.is_file() and self.matches(full_path.name):
             assert scanpath.path is not None
@@ -117,7 +117,9 @@ class Collector:
     def collect_from_vc(self, root: str) -> None:
         assert root.startswith(vc_prefixes)
         type, _, vcroot = root.partition("@")
-        pm = logger.progress_monitor(f"@*{{Collecting}} generator files from {vcroot} using {type}")
+        pm = logger.progress_monitor(
+            f"[bold]Collecting[/] generator files from {vcroot} using {type}"
+        )
         files = _from_version_control(type, vcroot, self.file_patterns)
         self.add_files(vcroot, files)
         pm.done()
@@ -450,18 +452,6 @@ pathspec file schema syntax:
     ]
   }"""
         return text
-
-
-def bold(arg: str) -> str:
-    if os.getenv("COLOR_WHEN", "auto") == "never":
-        return f"**{arg}**"
-    return colorize("@*{%s}" % arg)
-
-
-def code(arg: str) -> str:
-    if os.getenv("COLOR_WHEN", "auto") == "never":
-        return f"``{arg}``"
-    return colorize("@*{%s}" % arg)
 
 
 def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:

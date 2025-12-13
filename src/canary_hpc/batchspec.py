@@ -257,7 +257,9 @@ class TestBatch:
                     )
                 data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
             queue.put(data)
-            logger.debug("Batch @*b{%s}: batch exited with code %s" % (self.id[:8], str(rc)))
+            logger.debug(
+                "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:8], str(rc))
+            )
 
         return
 

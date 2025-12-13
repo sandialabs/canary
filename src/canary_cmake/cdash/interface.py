@@ -15,7 +15,6 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import canary
-from _canary.third_party.color import cwrite
 from _canary.util.executable import Executable
 from _canary.util.filesystem import force_remove
 
@@ -217,7 +216,7 @@ class server:
             n = len(buildgroup["builds"])
             logger.info(f"Getting build summaries for build group {buildgroup['name']}")
             for i, build in enumerate(buildgroup["builds"], start=1):
-                cwrite("\r@*b{INFO}: Getting build summary for build %d of %d" % (i, n))
+                logger.info("Getting build summary for build %d of %d" % (i, n))
                 if self.contains(build["site"], skip_sites):
                     continue
                 build["unixtimestamp"] = buildgroup["unixtimestamp"]
@@ -236,7 +235,6 @@ class server:
                 else:
                     build["build_type"] = "Unknown"
                 builds.append(build)
-            cwrite("\n")
         return builds
 
     def get_buildgroups(self, date, buildgroups=None):

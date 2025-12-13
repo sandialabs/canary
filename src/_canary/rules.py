@@ -164,7 +164,7 @@ class KeywordRule(Rule):
                 match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                 if not match:
                     return RuleOutcome.failed(
-                        "keyword expression @*{%r} did not match" % keyword_expr
+                        "keyword expression [bold]%r[/] did not match" % keyword_expr
                     )
         return RuleOutcome(True)
 
@@ -180,7 +180,7 @@ class ParameterRule(Rule):
 
     @cached_property
     def default_reason(self) -> str:
-        return "parameter expression @*{%s} did not match" % self.parameter_expr
+        return "parameter expression [bold]%s[/] did not match" % self.parameter_expr
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         match = when.when(
@@ -203,7 +203,7 @@ class IDsRule(Rule):
 
     @cached_property
     def default_reason(self) -> str:
-        return "test ID not in @*{%s}" % ",".join(self.ids)
+        return "test ID not in [bold]%s[/]" % ",".join(self.ids)
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if not any(spec.id.startswith(id) for id in self.ids):
@@ -223,7 +223,7 @@ class OwnersRule(Rule):
 
     @cached_property
     def default_reason(self) -> str:
-        return "not owned by @*{%s}" % ", ".join(self.owners)
+        return "not owned by [bold]%s[/]" % ", ".join(self.owners)
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if self.owners.intersection(spec.owners or []):
@@ -265,7 +265,7 @@ class RegexRule(Rule):
 
     @cached_property
     def default_reason(self) -> str:
-        return "@*{re.search(%r) is None} evaluated to @*g{True}" % self.string
+        return "[bold]re.search(%r) is None[/] evaluated to [bold]True[/]" % self.string
 
     def asdict(self) -> dict[str, Any]:
         return {"regex": self.string}
@@ -332,7 +332,7 @@ class ResourceCapacityRule(RuntimeRule):
                 result = pm.canary_resource_pool_accommodates(case=case)
                 outcome = RuleOutcome(ok=result.ok, reason=result.reason)
             except Exception as e:
-                outcome = RuleOutcome.failed("@*{%s}(%r)" % (e.__class__.__name__, e.args[0]))
+                outcome = RuleOutcome.failed("[bold]%s[/](%r)" % (e.__class__.__name__, e.args[0]))
                 if config.get("debug"):
                     raise
             finally:

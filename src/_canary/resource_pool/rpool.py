@@ -11,9 +11,9 @@ from typing import Any
 
 import yaml
 
-from ..third_party.color import colorize
 from ..util import cpu_count
 from ..util import logging
+from ..util.rich import colorize
 from ..util.string import pluralize
 from .schemas import resource_pool_schema
 
@@ -218,7 +218,7 @@ class ResourcePool:
             else:
                 missing.add(rtype)
         if missing:
-            types = colorize("@*{%s}" % ",".join(sorted(missing)))
+            types = "[bold]%s[/]" % ",".join(sorted(missing))
             key = pluralize("Resource", n=len(missing))
             return Outcome(False, reason=f"{key} unavailable: {types}")
 
@@ -232,11 +232,15 @@ class ResourcePool:
             reason: str
             levelno: int = logging.get_level()
             if levelno <= logging.DEBUG:
-                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (
+                    colorize(t),
+                    n,
+                    m,
+                )
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
                 reason = f"insufficient slots of {types}"
             else:
-                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                types = ", ".join("[bold]%s[/]" % t for t in wanting)
                 reason = f"insufficient slots of {types}"
             return Outcome(False, reason=reason)
 

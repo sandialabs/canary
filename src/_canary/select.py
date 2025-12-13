@@ -160,7 +160,7 @@ class Selector:
         self.rules.append(rule)
 
     def run(self) -> None:
-        logger.debug("@*{Selecting} specs based on rules")
+        logger.debug("[bold]Selecting[/] specs based on rules")
         config.pluginmanager.hook.canary_selectstart(selector=self)
         self.masked.clear()
         for spec in self.specs:
@@ -218,7 +218,7 @@ class RuntimeSelector:
 
     def run(self) -> None:
         self.masked.clear()
-        pm = logger.progress_monitor("@*{Filtering} test cases based on runtime environment")
+        pm = logger.progress_monitor("[bold]Filtering[/] test cases based on runtime environment")
         config.pluginmanager.hook.canary_rtselectstart(selector=self)
         for case in self.cases:
             if case.mask:
@@ -317,11 +317,11 @@ def canary_select_report(selector: "Selector") -> None:
     N = len(selector.specs)
     n = len(selector.masked)
     m = len([spec for spec in selector.specs if spec.mask])
-    logger.info("@*{Excluded} %d of %d test %s " % (n, N - (m - n), pluralize("spec", N)))
+    logger.info("[bold]Excluded[/] %d of %d test %s " % (n, N - (m - n), pluralize("spec", N)))
     if excluded:
         show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
-        logger.info("@*{Excluding} %d test specs for the following reasons:" % n)
+        logger.info("[bold]Excluding[/] %d test specs for the following reasons:" % n)
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
@@ -343,14 +343,14 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     N = len(selector.cases)
     n = len(selector.masked)
     m = len([case for case in selector.cases if case.mask])
-    logger.info("@*{Excluded} %d of %d test %s" % (n, N - (m - n), pluralize("case", N)))
+    logger.info("[bold]Excluded[/] %d of %d test %s" % (n, N - (m - n), pluralize("case", N)))
     if excluded:
         n = len(excluded)
         reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
             reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
+        logger.info("[bold]Excluding[/] %d test cases for the following reasons:" % n)
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])

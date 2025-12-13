@@ -16,11 +16,11 @@ from typing import cast
 import yaml
 
 from ..pluginmanager import CanaryPluginManager
-from ..third_party import color
 from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge
 from ..util.filesystem import write_directory_tag
+from ..util.rich import set_color_when
 from ._machine import system_config
 from .schemas import config_schema
 from .schemas import environment_variable_schema
@@ -207,7 +207,7 @@ class Config:
 
         logging.set_level(logging.INFO)
         if args.color is not None:
-            color.set_color_when(args.color)
+            set_color_when(args.color)
 
         if args.q or args.v:
             level_index: int = log_levels.index(logging.INFO)

@@ -136,7 +136,7 @@ class Workspace:
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
         relpath = Path(start).absolute().relative_to(Path.cwd())
-        pm = logger.progress_monitor(f"@*{{Removing}} workspace from {relpath}")
+        pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {relpath}")
         anchor = Workspace.find_anchor(start=start)
         if anchor is None:
             pm.done("no workspace found")
@@ -190,7 +190,7 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        logger.info(f"@*{{Initializing}} empty canary workspace at {path}")
+        logger.info(f"[bold]Initializing[/] empty canary workspace at {path}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():
@@ -345,7 +345,7 @@ class Workspace:
         self.update_view(view_entries)
 
     def update_view(self, view_entries: dict[Path, list[Path]]) -> None:
-        logger.info(f"@*{{Updating}} view at {self.view}")
+        logger.info(f"[bold]Updating[/] view at {self.view}")
         if self.view is None:
             return
         for root, paths in view_entries.items():
@@ -388,7 +388,9 @@ class Workspace:
 
     def load_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
-        pm = logger.progress_monitor("@*{Loading} test case generators from workspace database")
+        pm = logger.progress_monitor(
+            "[bold]Loading[/bold] test case generators from workspace database"
+        )
         generators = self.db.get_generators()
         pm.done()
         return generators
@@ -404,7 +406,7 @@ class Workspace:
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
         self.db.put_generators(generators)
-        logger.info(f"@*{{Added}} {len(generators)} new test case generators to {self.root}")
+        logger.info(f"[bold]Added[/] {len(generators)} new test case generators to {self.root}")
         return generators
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
@@ -472,12 +474,10 @@ class Workspace:
         generators = self.load_generators()
         builder = Builder(generators, workspace=self.root, on_options=on_options or [])
         if cached := self.db.get_specs(signature=builder.signature):
-            logger.info("@*{Retrieved} %d test specs from workspace database" % len(cached))
+            logger.info("[bold]Retrieved[/] %d test specs from workspace database" % len(cached))
             return cached
-        pm = logger.progress_monitor("@*{Generating} test specs from generators")
         resolved = builder.run()
-        pm.done()
-        pm = logger.progress_monitor("@*{Putting} test specs in workspace database")
+        pm = logger.progress_monitor("[bold]Putting[/] test specs in workspace database")
         self.db.put_specs(builder.signature, resolved)
         pm.done()
         return resolved
@@ -820,7 +820,7 @@ class WorkspaceDatabase:
         self.connection.close()
 
     def put_generators(self, generators: list[AbstractTestGenerator]) -> None:
-        pm = logger.progress_monitor("@*{Putting} test generators into database")
+        pm = logger.progress_monitor("[bold]Putting[/] test generators into database")
         cursor = self.connection.cursor()
         cursor.execute("BEGIN IMMEDIATE;")
         rows = [(gen.id, gen.serialize()) for gen in generators]

@@ -601,7 +601,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = "skipif expression @*b{%s} evaluating to @*g{True}" % expression
+        reason = f"skipif expression [bold blue]{expression}[/] evaluating to [bold green]True[/]"
     return True, reason
 
 

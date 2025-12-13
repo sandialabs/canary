@@ -9,7 +9,8 @@ import time
 import canary
 from _canary import queue
 from _canary.protocols import JobProtocol
-from _canary.third_party import color
+from _canary.util.rich import clen
+from _canary.util.rich import colorize
 from _canary.util.time import hhmmss
 
 logger = canary.get_logger(__name__)
@@ -65,11 +66,12 @@ class ResourceQueue(queue.ResourceQueue):
             if start is not None:
                 duration = hhmmss(time.time() - start)
                 fmt += f"in {duration} "
-            fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-            text = color.colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
-            n = color.clen(text)
-            header = color.colorize("@*c{%s}" % " status ".center(n + 10, "="))
-            footer = color.colorize("@*c{%s}" % "=" * (n + 10))
-            pad = color.colorize("@*c{====}")
+            fmt += "([green]%d pass[/], [yellow]%d diff[/], "
+            fmt += "[red]%d fail[/], [magenta]%d timeout[/])"
+            text = colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
+            n = clen(text)
+            header = colorize("[bold]%s[/]" % " status ".center(n + 10, "="))
+            footer = colorize("[bold cyan]%s[/]" % "=" * (n + 10))
+            pad = colorize("[bold]====[/]")
             string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         return string.getvalue()

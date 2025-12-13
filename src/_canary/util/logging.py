@@ -16,7 +16,7 @@ import time
 from typing import Literal
 from typing import cast
 
-from ..third_party.color import colorize
+from .rich import colorize
 
 NOTSET = builtin_logging.NOTSET
 TRACE = builtin_logging.DEBUG - 5
@@ -78,7 +78,10 @@ class Formatter(builtin_logging.Formatter):
         }
         if not hasattr(record, "prefix"):
             if level_color(record.levelno):
-                prefix = "@*%s{%s}: " % (level_color(record.levelno), record.levelname.upper())
+                prefix = "[bold %s]%s[/]: " % (
+                    level_color(record.levelno),
+                    record.levelname.upper(),
+                )
             else:
                 prefix = f"{record.levelname.upper()}: "
             extra["prefix"] = prefix
@@ -237,19 +240,19 @@ def add_file_handler(file: str, levelno: int) -> None:
 
 def level_color(levelno: int) -> str:
     if levelno == NOTSET:
-        return "c"
+        return "cyan"
     elif levelno == TRACE:
-        return "m"
+        return "magenta"
     elif levelno == DEBUG:
-        return "g"
+        return "green"
     elif levelno == INFO:
-        return "b"
+        return "blue"
     elif levelno == WARNING:
-        return "Y"
+        return "bright_yellow"
     elif levelno == ERROR:
-        return "r"
+        return "red"
     elif levelno == CRITICAL:
-        return "r"
+        return "red"
     elif levelno == EMIT:
         return ""
     raise ValueError(levelno)

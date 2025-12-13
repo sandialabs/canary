@@ -489,7 +489,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
-                reason = result.reason or "@*{enable=False}"
+                reason = result.reason or "[bold]enable=False[/]"
                 return False, reason
         return True, None
 

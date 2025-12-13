@@ -8,8 +8,8 @@ from typing import IO
 from typing import Any
 
 from .. import version
-from ..third_party.color import colorize
 from . import logging
+from .rich import colorize
 
 bird = """\
               ....
@@ -47,13 +47,15 @@ def banner(color: bool = True) -> str:
     # banner = info["banner"]
     if not color:
         return banner + f"\nversion: {version.version}"
-    colors = cycle(["c", "c", "b", "b", "m", "m", "G", "G"])
+    colors = cycle(
+        ["cyan", "cyan", "blue", "blue", "magenta", "magenta", "bright_green", "bright_green"]
+    )
     lines: list[str] = []
     for line in banner.splitlines():
         if not line.split() and not lines:
             continue
         elif line.split():
-            line = "@*%s{%s}" % (next(colors), line)
+            line = "[bold %s]%s[/]" % (next(colors), line)
         lines.append(line)
     banner = "\n".join(lines).rstrip()
     return banner + f"\nversion: {version.version}"

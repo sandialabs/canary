@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 import dataclasses
 import io
-import random
 import time
 from contextlib import contextmanager
 from multiprocessing import Queue
@@ -33,7 +32,7 @@ logger = logging.get_logger(__name__)
 def canary_runtests(runner: "Runner") -> None:
     pm = config.pluginmanager.hook
     try:
-        logger.info(f"@*{{Starting}} session {runner.session}")
+        logger.info(f"[bold]Starting[/] session {runner.session}")
         pm.canary_runtests_start(runner=runner)
         with runner.timeit():
             pm.canary_runtests(runner=runner)
@@ -45,7 +44,7 @@ def canary_runtests(runner: "Runner") -> None:
         raise
     finally:
         logger.info(
-            f"@*{{Finished}} session in {(runner.finish - runner.start):.2f} s. "
+            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
             f"with returncode {runner.returncode}"
         )
         pm.canary_runtests_report(runner=runner)
@@ -191,15 +190,16 @@ def print_footer(runner: "Runner", title: str) -> None:
             t = category if not status else status
             summary.append(f"[{color}]{n} {t.lower()}[/{color}]")
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
-    x, y = random.sample(emojis, 2)
     kwds = {
-        "x": x,
-        "y": y,
         "s": summary[0] + " " + ", ".join(summary[1:]),
         "t": hhmmss(None if duration < 0 else duration),
         "title": title,
     }
-    rich.print("%(x)s%(x)s [bold]%(title)s[/bold] -- %(s)s in [bold]%(t)s[/bold]" % kwds)
+    logger.log(
+        logging.EMIT,
+        "[bold]%(title)s[/bold] -- %(s)s in [bold]%(t)s[/bold]" % kwds,
+        extra={"prefix": f"{glyphs.sparkles}{glyphs.sparkles} "},
+    )
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:

@@ -4,18 +4,14 @@
 
 import argparse
 import io
-import itertools
-import re
 import shutil
 from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.table import Table
 
-from ... import status
 from ...hookspec import hookimpl
 from ...testcase import TestCase
-from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
 from ...workspace import Workspace
@@ -143,31 +139,6 @@ def get_case_attribute(case: TestCase, attr: str) -> str:
     elif attr == "status_reason":
         return case.status.reason or ""
     raise AttributeError(attr)
-
-
-def pretty_test_name(name: str) -> str:
-    colors = itertools.cycle("bmgycr")
-    if match := re.search(r"(\w+)\[(.*)\]", name):
-        stem = match.group(1)
-        params = match.group(2).split(",")
-        string = ",".join("@%s{%s}" % (next(colors), p) for p in params)
-        return colorize("%s[%s]" % (stem, string))
-    return name
-
-
-def pretty_status_name(name: str) -> str:
-    color: str = ""
-    fmt: str = "%(name)s"
-    if name in ("RETRY", "PENDING", "READY", "SKIPPED", "BLOCKED"):
-        color = status.Status.categories[name][1][0]
-        fmt = "@*c{NOT RUN} (@*%(color)s{%(name)s})"
-    elif name in ("DIFFED", "FAILED", "BROKEN", "ERROR", "TIMEOUT"):
-        color = status.Status.categories[name][1][0]
-        fmt = "@*r{FAILED} (@*%(color)s{%(name)s})"
-    else:
-        color = status.Status.categories[name][1][0]
-        fmt = "@*%(color)s{%(name)s}"
-    return colorize(fmt % {"color": color, "name": name})
 
 
 class ReportCharAction(argparse.Action):

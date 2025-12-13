@@ -17,10 +17,11 @@ from typing import Sequence
 from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
-from .third_party import color
 from .util import logging
 from .util.banner import banner
 from .util.collections import contains_any
+from .util.rich import colorize
+from .util.rich import set_color_when
 
 if TYPE_CHECKING:
     from .plugins.types import CanarySubcommand
@@ -48,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             sys.stderr.write(shlex.join(a) + "\n")
         if args.color:
-            color.set_color_when(args.color)
+            set_color_when(args.color)
         config.set_main_options(args)
         print_banner()
         config.pluginmanager.hook.canary_configure(config=config)
@@ -167,7 +168,7 @@ def print_banner() -> None:
         return
     print_the_banner = config.getoption("banner") and logging.get_level() <= logging.INFO
     if print_the_banner:
-        print(color.colorize(banner()), file=sys.stderr)
+        print(colorize(banner()), file=sys.stderr)
 
 
 def print_current_config() -> None:

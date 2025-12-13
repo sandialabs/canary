@@ -19,8 +19,8 @@ from _canary.resource_pool import ResourcePool
 from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
-from _canary.third_party.color import colorize
 from _canary.util import cpu_count
+from _canary.util.rich import colorize
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
@@ -115,7 +115,7 @@ class CanaryHPCConductor:
             else:
                 missing.add(rtype)
         if missing:
-            types = colorize("@*{%s}" % ",".join(sorted(missing)))
+            types = colorize("[bold]%s[/]" % ",".join(sorted(missing)))
             key = canary.string.pluralize("Resource", n=len(missing))
             return Outcome(False, reason=f"{key} unavailable: {types}")
 
@@ -128,11 +128,11 @@ class CanaryHPCConductor:
         if wanting:
             reason: str
             if canary.config.get("debug"):
-                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (t, n, m)
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
                 reason = f"{case}: insufficient slots of {types}"
             else:
-                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                types = ", ".join("[bold]%s[/]" % t for t in wanting)
                 reason = f"insufficient slots of {types}"
             return Outcome(False, reason=reason)
 
@@ -169,7 +169,7 @@ class CanaryHPCConductor:
             raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
 
         key = canary.string.pluralize("batch", n=len(batch_specs))
-        fmt = "@*{Generated} %d test %s from %d test cases"
+        fmt = "[bold]Generated[/] %d test %s from %d test cases"
         logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
         root = runner.workspace.cache_dir / "canary-hpc"
         batches: list[TestBatch] = []

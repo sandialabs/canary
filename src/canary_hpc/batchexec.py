@@ -39,7 +39,7 @@ class HPCConnectRunner:
                         if proc.poll() is not None:
                             break
                     except Exception:
-                        logger.exception("Batch @*b{%s}: polling job failed!" % batch.id[:7])
+                        logger.exception("Batch %s: polling job failed!" % batch.id[:7])
                         break
                     time.sleep(self.backend.polling_frequency)
         return getattr(proc, "returncode", None)

@@ -12,7 +12,7 @@ import yaml
 from ... import config
 from ...collect import Collector
 from ...hookspec import hookimpl
-from ...third_party.color import colorize
+from ...util.rich import colorize
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 

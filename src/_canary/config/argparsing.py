@@ -18,8 +18,8 @@ from typing import Any
 from typing import Sequence
 
 from .. import version
-from ..third_party.color import colorize
 from ..util.collections import merge
+from ..util.rich import colorize
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
@@ -326,7 +326,7 @@ def make_argument_parser(**kwargs):
         default=None,
         metavar="path",
         help=colorize(
-            "Run as if canary was started in @*{path} instead of the current working directory."
+            "Run as if canary was started in [bold]path[/] instead of the current working directory."
         ),
     )
     parser.add_argument(
@@ -419,7 +419,7 @@ def make_argument_parser(**kwargs):
         action=ConfigMods,
         metavar="path",
         help="Add the colon-separated path to test session's configuration, "
-        "e.g. %s" % colorize("@*{-c debug:true}"),
+        "e.g. %s" % colorize("[bold]-c debug:true[/]"),
     )
     group.add_argument(
         "-e",
@@ -428,7 +428,7 @@ def make_argument_parser(**kwargs):
         default=None,
         action=EnvironmentModification,
         help="Add environment variable %s to the testing environment with value %s. "
-        % (colorize("@*{var}"), colorize("@*{val}")),
+        % (colorize("[bold]var[/]"), colorize("[bold]val[/]")),
     )
     parser.add_argument(
         "--cache-dir",

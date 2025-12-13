@@ -7,8 +7,8 @@ import os
 import re
 from typing import TYPE_CHECKING
 
-from ....third_party.color import colorize
 from ....util import logging
+from ....util.rich import bold
 from ....util.time import time_in_seconds
 
 __all__ = [
@@ -146,9 +146,3 @@ class TimeoutResource(argparse.Action):
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
     prefix = os.path.abspath(pathspec)
     return [c for c in cases if c.workspace.dir.relative_to(prefix)]
-
-
-def bold(arg: str) -> str:
-    if os.getenv("COLOR_WHEN", "auto") == "never":
-        return f"**{arg}**"
-    return colorize("@*{%s}" % arg)

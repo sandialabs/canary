@@ -13,8 +13,9 @@ from typing import Any
 from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
 from .status import Status
-from .third_party import color
 from .util import logging
+from .util.rich import clen
+from .util.rich import colorize
 from .util.time import hhmmss
 
 if TYPE_CHECKING:
@@ -203,11 +204,12 @@ class ResourceQueue:
             if start is not None:
                 duration = hhmmss(time.time() - start)
                 fmt += f"in {duration} "
-            fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-            text = color.colorize(fmt % (busy, total, done, total, pending, total, p, d, f, t))
-            n = color.clen(text)
-            header = color.colorize("@*c{%s}" % " status ".center(n + 10, "="))
-            footer = color.colorize("@*c{%s}" % "=" * (n + 10))
-            pad = color.colorize("@*c{====}")
+            fmt += "([green]%d pass[/], [yellow]%d diff[/], "
+            fmt += "[red]%d fail[/], [magenta]%d timeout[/]})"
+            text = fmt % (busy, total, done, total, pending, total, p, d, f, t)
+            n = clen(text)
+            header = "[bold cyan]%s[/]" % " status ".center(n + 10, "=")
+            footer = "[bold cyan]%s[/]" % "=" * (n + 10)
+            pad = colorize("[bold cyan]====[/]")
             string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         return string.getvalue()
