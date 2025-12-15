@@ -181,7 +181,7 @@ class Builder:
         for id in ids:
             counts[id] = counts.get(id, 0) + 1
         duplicate_ids = {id for id, count in counts.items() if count > 1}
-        duplicates: dict[str, list["UnresolvedSpec"]] = {}
+        duplicates: dict[str, list["UnresolvedSpec | ResolvedSpec"]] = {}
         # if there are duplicates, we are in error condition and lookup cost is not important
         for id in duplicate_ids:
             duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
