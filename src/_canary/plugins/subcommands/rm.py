@@ -37,5 +37,5 @@ class RemoveWorkspace(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         if p := Workspace.remove(start=Path(args.rm_path)):
-            logger.info(f"Removed canary workspace from {p}")
+            logger.info(f"[bold]Removed[/] workspace at {p}")
         return 0

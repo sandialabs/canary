@@ -8,7 +8,7 @@ import _canary.config as config
 from _canary import rules
 from _canary import select
 from _canary import workspace
-from _canary.build import Builder
+from _canary.generate import Generator
 from _canary.util.filesystem import working_dir
 
 
@@ -40,8 +40,8 @@ def select_specs(
 
 
 def generate_specs(generators, on_options=None):
-    builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
-    specs = builder.run()
+    generator = Generator(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
+    specs = generator.run()
     return specs
 
 
@@ -65,8 +65,8 @@ def test_vvt_generator(tmpdir):
             assert specs[-1].attributes.get("multicase") is not None
             assert len(final) == 7
 
-            # without the baz option, the `cpus` parameter will not be expanded so we will be left with
-            # three test cases and one analyze.  The analyze will not be masked because the `cpus`
+            # without the baz option, the `np` parameter will not be expanded so we will be left with
+            # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
             specs = generate_specs(generators)
             assert specs[-1].attributes.get("multicase") is not None
@@ -74,9 +74,9 @@ def test_vvt_generator(tmpdir):
             final = select_specs(specs, keyword_exprs=["test and unit"])
             assert len(final) == 4
 
-            # with cpus<2, some of the cases will be filtered
+            # with np<2, some of the cases will be filtered
             specs = generate_specs(generators, on_options=["baz"])
-            final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2")
+            final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="np < 2")
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 4
+            assert len(final) == 3

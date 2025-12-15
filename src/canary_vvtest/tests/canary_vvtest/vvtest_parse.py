@@ -13,10 +13,10 @@ from _canary.enums import list_parameter_space
 
 
 def generate_specs(generators, on_options=None):
-    from _canary import build
+    from _canary import generate
 
-    builder = build.Builder(generators, workspace=Path.cwd(), on_options=on_options or [])
-    specs = builder.run()
+    generator = generate.Generator(generators, workspace=Path.cwd(), on_options=on_options or [])
+    specs = generator.run()
     return specs
 
 

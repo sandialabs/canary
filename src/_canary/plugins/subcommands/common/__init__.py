@@ -36,14 +36,6 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
         "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
     )
     group.add_argument(
-        "-o",
-        dest="on_options",
-        default=None,
-        metavar="option",
-        action="append",
-        help="Turn option(s) on, such as '-o dbg' or '-o intel'",
-    )
-    group.add_argument(
         "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
     )
     group.add_argument(

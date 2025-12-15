@@ -57,23 +57,27 @@ extensibility.
 import dataclasses
 import datetime
 import hashlib
+import sys
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 
+import rich.box
+from rich.console import Console
+from rich.table import Table
 from schema import Or
 from schema import Schema
 
 from . import config
+from .config.argparsing import Parser
 from .hookspec import hookimpl
+from .rules import CaseRule
 from .rules import Rule
-from .rules import RuntimeRule
 from .status import Status
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
-from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
@@ -161,7 +165,7 @@ class Selector:
         self.rules.append(rule)
 
     def run(self) -> None:
-        logger.debug("[bold]Selecting[/] specs based on rules")
+        logger.info(f"[bold]Selecting[/] specs based on {len(self.rules)} rules")
         config.pluginmanager.hook.canary_selectstart(selector=self)
         self.masked.clear()
         for spec in self.specs:
@@ -201,25 +205,63 @@ class Selector:
             self.add_rule(rule)
         return self
 
+    @staticmethod
+    def setup_parser(parser: "Parser", tagged: bool = True) -> None:
+        group = parser.add_argument_group("test spec selection")
+        group.add_argument(
+            "-k",
+            dest="keyword_exprs",
+            metavar="expression",
+            action="append",
+            help="Only run tests matching given keyword expression. "
+            "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
+        )
+        group.add_argument(
+            "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
+        )
+        group.add_argument(
+            "-p",
+            dest="parameter_expr",
+            metavar="expression",
+            help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
+        )
+        group.add_argument(
+            "--search",
+            "--regex",
+            dest="regex_filter",
+            metavar="regex",
+            help="Include tests containing the regular expression regex in at least 1 of its "
+            "file assets.  regex is a python regular expression, see "
+            "https://docs.python.org/3/library/re.html",
+        )
+        group.add_argument(
+            "-r", action="append", dest="select_paths", help="Select tests found in these paths"
+        )
+        if tagged:
+            group.add_argument(
+                "--tag",
+                help="Tag this test case selection for future runs [default: False]",
+            )
 
-class RuntimeSelector:
+
+class CaseSelector:
     """Apply rule-based masking to a set of test cases."""
 
     def __init__(
-        self, cases: list["TestCase"], workspace: Path, rules: Iterable[RuntimeRule] = ()
+        self, cases: list["TestCase"], workspace: Path, rules: Iterable[CaseRule] = ()
     ) -> None:
         self.cases = cases
         self.workspace = workspace
-        self.rules: list[RuntimeRule] = list(rules)
+        self.rules: list[CaseRule] = list(rules)
         self.masked: set[str] = set()
 
-    def add_rule(self, rule: RuntimeRule) -> None:
-        assert isinstance(rule, RuntimeRule)
+    def add_rule(self, rule: CaseRule) -> None:
+        assert isinstance(rule, CaseRule)
         self.rules.append(rule)
 
     def run(self) -> None:
         self.masked.clear()
-        pm = logger.progress_monitor("[bold]Filtering[/] test cases based on runtime environment")
+        pm = logger.progress_monitor("[bold]Selecting[/] test cases based on runtime environment")
         config.pluginmanager.hook.canary_rtselectstart(selector=self)
         for case in self.cases:
             if case.mask:
@@ -315,44 +357,54 @@ def canary_select_report(selector: "Selector") -> None:
     for spec in selector.specs:
         if spec.id in selector.masked:
             excluded.append(spec)
-    N = len(selector.specs)
-    n = len(selector.masked)
-    m = len([spec for spec in selector.specs if spec.mask])
-    logger.info("[bold]Excluded[/] %d of %d test %s " % (n, N - (m - n), pluralize("spec", N)))
+    logger.info("[bold]Selected[/] %d test specs" % (len(selector.specs) - len(selector.masked)))
     if excluded:
+        n = len(selector.masked)
         show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
-        logger.info("[bold]Excluding[/] %d test specs for the following reasons:" % n)
+        logger.info("[bold]Excluded[/] %d test specs" % n)
+        table = Table(
+            show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD, pad_edge=True
+        )
+        table.add_column("Reason", no_wrap=True)
+        table.add_column("Count", justify="right")
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
-            n = len(reasons[key])
-            logger.info(f"{reason} ({n} excluded)", extra={"prefix": "... "})
-            if show_excluded_tests:
+            table.add_row(reason, str(len(reasons[key])))
+        console = Console(file=sys.stderr)
+        console.print(table)
+        if show_excluded_tests:
+            for key in reversed(keys):
+                reason = "Unspecified" if key is None else key.lstrip()
+                console.print(f"[bold]{reason}[/]")
                 for spec in reasons[key]:
-                    logger.info(f"{spec.display_name()}", extra={"prefix": "    • "})
+                    console.print(f"  • {spec.display_name(style='rich')}")
 
 
 @hookimpl
-def canary_rtselect_report(selector: "RuntimeSelector") -> None:
+def canary_rtselect_report(selector: "CaseSelector") -> None:
     if not selector.masked:
         return
     excluded: list["TestCase"] = [case for case in selector.cases if case.id in selector.masked]
-    N = len(selector.cases)
     n = len(selector.masked)
-    m = len([case for case in selector.cases if case.mask])
-    logger.info("[bold]Excluded[/] %d of %d test %s" % (n, N - (m - n), pluralize("case", N)))
     if excluded:
         n = len(excluded)
         reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
             reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        logger.info("[bold]Excluding[/] %d test cases for the following reasons:" % n)
+        logger.info("[bold]Excluded[/] %d test cases" % n)
+        table = Table(
+            show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD, pad_edge=True
+        )
+        table.add_column("Reason", no_wrap=True)
+        table.add_column("Count", justify="right")
         for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            n = len(reasons[key])
-            logger.info(f"{reason} ({n} excluded)", extra={"prefix": "... "})
+            reason = "Unspecified" if key is None else key.lstrip()
+            table.add_row(reason, str(len(reasons[key])))
+        console = Console(file=sys.stderr)
+        console.print(table)

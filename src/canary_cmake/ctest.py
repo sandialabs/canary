@@ -132,7 +132,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
     def resolve_inter_dependencies(
         self, drafts: list["canary.UnresolvedSpec"]
     ) -> list["canary.ResolvedSpec"]:
-        from _canary.build import resolve
+        from _canary.generate import resolve
 
         resolved = resolve(drafts)
         return resolved

@@ -14,16 +14,15 @@ from rich.rule import Rule
 
 from ... import config
 from ... import rules
-from ...build import Builder
 from ...collect import Collector
 from ...error import StopExecution
+from ...generate import Generator
 from ...hookspec import hookimpl
 from ...select import Selector
 from ...util import graph
 from ...util import logging
 from ...util.json_helper import json
 from ..types import CanarySubcommand
-from .common import add_filter_arguments
 from .common import add_resource_arguments
 
 if TYPE_CHECKING:
@@ -50,17 +49,18 @@ class Find(CanarySubcommand):
         add_group_argument(group, "graph", "Print DAG of test specs")
         add_group_argument(group, "lock", "Dump test specs to lock file")
         add_group_argument(group, "keywords", "Print keywords by root", False)
-        add_filter_arguments(parser)
-        add_resource_arguments(parser)
         Collector.setup_parser(parser)
+        Generator.setup_parser(parser)
+        Selector.setup_parser(parser, tagged=False)
+        add_resource_arguments(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
         collector = Collector()
         collector.add_scanpaths(args.scanpaths)
         generators = collector.run()
 
-        builder = Builder(generators, workspace=Path.cwd(), on_options=args.on_options or [])
-        resolved = builder.run()
+        generator = Generator(generators, workspace=Path.cwd(), on_options=args.on_options or [])
+        resolved = generator.run()
 
         selector = Selector(resolved, Path.cwd())
         if args.keyword_exprs:

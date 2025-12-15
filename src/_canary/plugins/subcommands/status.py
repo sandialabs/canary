@@ -95,10 +95,7 @@ class Status(CanarySubcommand):
         return 0
 
     def get_status_table(self, results: dict[str, Any], args: "argparse.Namespace") -> Table:
-        rows = sorted(
-            results.values(),
-            key=lambda x: (x["status"].category, x["status"].status, x["timekeeper"].duration),  # type: ignore
-        )
+        rows = sorted(results.values(), key=sortkey)
         rows = filter_by_status(rows, args.report_chars)
         cols = args.format_cols.split(",")
 
@@ -124,6 +121,15 @@ class Status(CanarySubcommand):
                 r.append(value)
             table.add_row(*r)
         return table
+
+
+def sortkey(row: dict) -> tuple:
+    c = 1
+    if row["status"].category == "PASS":
+        c = 0
+    if row["status"].category == "FAIL":
+        c = 2
+    return (c, row["status"].status, row["timekeeper"].duration)
 
 
 def get_attribute(row: dict[str, Any], attr: str) -> str:

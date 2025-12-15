@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import _canary.testspec as spec
-from _canary import build
+from _canary import generate
 from _canary.util.filesystem import working_dir
 
 
@@ -15,7 +15,7 @@ def test_depends_on_one(tmpdir):
             spec.UnresolvedSpec(file_root=Path("."), file_path=Path("f1.pyt"), dependencies=[]),
             spec.UnresolvedSpec(file_root=Path("."), file_path=Path("f2.pyt"), dependencies=["f1"]),
         ]
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == [resolved[0]]
 
@@ -30,7 +30,7 @@ def test_depends_on_one_to_many(tmpdir):
         Path("f3.pyt").touch()
         b3 = spec.UnresolvedSpec(file_root=root, file_path=Path("f3.pyt"), dependencies=["f1"])
         drafts = [b1, b2, b3]
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == [resolved[0]]
         assert resolved[2].dependencies == [resolved[0]]
@@ -49,7 +49,7 @@ def test_depends_on_param(tmpdir):
         Path("f2.pyt").touch()
         b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=2"])
         drafts.append(b)
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -73,7 +73,7 @@ def test_depends_on_many_to_one(tmpdir):
             file_root=root, file_path=f1, dependencies=["f1.a=1", "f1.a=3", "f1.a=4"]
         )
         drafts.append(b)
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -94,7 +94,7 @@ def test_depends_on_glob(tmpdir):
         Path("f2.pyt").touch()
         b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
@@ -125,7 +125,7 @@ def test_depends_on_param_subs(tmpdir):
             parameters={"my_var": 0.1},
         )
         drafts.append(b)
-        resolved = build.resolve(drafts)
+        resolved = generate.resolve(drafts)
         assert resolved[1].dependencies == [resolved[0]]
 
 
@@ -135,7 +135,7 @@ def test_depends_on_missing(tmpdir):
         Path("f1.pyt").touch()
         b = spec.UnresolvedSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=["f2"])
         with pytest.raises(spec.UnresolvedDependenciesErrors):
-            build.resolve([b])
+            generate.resolve([b])
 
 
 def test_generate_specs(tmpdir):
@@ -152,6 +152,6 @@ def test_generate_specs(tmpdir):
         Path("f2.pyt").touch()
         b = spec.UnresolvedSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        resolved = build.resolve(specs=drafts)
+        resolved = generate.resolve(specs=drafts)
         assert len(resolved) == 4
         assert len(resolved[-1].dependencies) == 3

@@ -10,7 +10,6 @@ import schema
 
 import _canary.config as config
 import _canary.enums as enums
-from _canary.build import Builder
 from _canary.collect import Collector
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
@@ -20,6 +19,7 @@ from _canary.enums import random_parameter_space
 from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
+from _canary.generate import Generator
 from _canary.generator import AbstractTestGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
@@ -65,7 +65,7 @@ logging = _logging.get_logger()
 
 __all__ = [
     "schema",
-    "Builder",
+    "Generator",
     "Collector",
     "config",
     "enums",

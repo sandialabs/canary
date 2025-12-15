@@ -18,10 +18,10 @@ from . import config
 from . import rules
 from . import select
 from . import testspec
-from .build import Builder
 from .collect import Collector
 from .error import StopExecution
 from .error import notests_exit_status
+from .generate import Generator
 from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
@@ -161,7 +161,7 @@ class Workspace:
         elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
         else:
-            pm.done(f"error: unaable to remove {workspace}")
+            pm.done(f"error: unable to remove {workspace}")
             return None
 
     @staticmethod
@@ -275,7 +275,7 @@ class Workspace:
             session_name = now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
         cases = self.construct_testcases(specs, session_dir)
-        selector = select.RuntimeSelector(cases, workspace=self.root)
+        selector = select.CaseSelector(cases, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
         selector.run()
@@ -388,9 +388,7 @@ class Workspace:
 
     def load_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
-        pm = logger.progress_monitor(
-            "[bold]Loading[/bold] test case generators from workspace database"
-        )
+        pm = logger.progress_monitor("[bold]Loading[/bold] test case generators from cache")
         generators = self.db.get_generators()
         pm.done()
         return generators
@@ -398,7 +396,7 @@ class Workspace:
     def active_testcases(self) -> list[TestCase]:
         return self.load_testcases()
 
-    def add(
+    def find_and_add_generators(
         self, scanpaths: dict[str, list[str]], pedantic: bool = True
     ) -> list[AbstractTestGenerator]:
         """Find test case generators in scan_paths and add them to this workspace"""
@@ -458,7 +456,7 @@ class Workspace:
     def is_tag(self, tag: str) -> bool:
         return self.db.is_selection(tag)
 
-    def construct_testspecs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
+    def generate_testspecs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
         """Generate resolved test specs
 
         Args:
@@ -472,13 +470,13 @@ class Workspace:
         """
         on_options = on_options or []
         generators = self.load_generators()
-        builder = Builder(generators, workspace=self.root, on_options=on_options or [])
-        if cached := self.db.get_specs(signature=builder.signature):
-            logger.info("[bold]Retrieved[/] %d test specs from workspace database" % len(cached))
+        generator = Generator(generators, workspace=self.root, on_options=on_options or [])
+        if cached := self.db.get_specs(signature=generator.signature):
+            logger.info("[bold]Retrieved[/] %d test specs from cache" % len(cached))
             return cached
-        resolved = builder.run()
-        pm = logger.progress_monitor("[bold]Putting[/] test specs in workspace database")
-        self.db.put_specs(builder.signature, resolved)
+        resolved = generator.run()
+        pm = logger.progress_monitor("[bold]Caching[/] test specs")
+        self.db.put_specs(generator.signature, resolved)
         pm.done()
         return resolved
 
@@ -508,18 +506,17 @@ class Workspace:
             cases.append(case)
         return cases
 
-    def select(
+    def make_selection(
         self,
         tag: str | None = None,
         prefixes: list[str] | None = None,
-        on_options: list[str] | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
         ids: list[str] | None = None,
     ) -> list["ResolvedSpec"]:
-        """Generate and select final test specs
+        """Select final test specs
 
         Args:
           keyword_exprs: Used to filter tests by keyword.  E.g., if two test define the keywords
@@ -531,16 +528,17 @@ class Workspace:
             you can filter the other two cases with the parameter expression
             ``parameter_expr='a=1'``.  Any test case not having ``a=1`` will be marked as "skipped by
             parameter expression".
-          on_options: Used to filter tests by option.  In the typical case, options are added to
-            ``on_options`` by passing them on the command line, e.g., ``-o dbg`` would add ``dbg`` to
-            ``on_options``.  Tests can define filtering criteria based on what options are on.
           owners: Used to filter tests by owner.
 
         Returns:
           Test spec selection
 
         """
-        resolved = self.construct_testspecs(on_options=on_options)
+        resolved = self.load_testspecs()
+        if not resolved:
+            raise RuntimeError(
+                "There are no test specs in this workspace, did you run `canary generate`?"
+            )
         self.apply_selection_rules(
             resolved,
             tag=tag,
@@ -591,7 +589,7 @@ class Workspace:
 
     def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
         if tag == "default" and not self.db.is_selection(tag):
-            return self.select(tag="default")
+            return self.make_selection(tag="default")
         snapshot = self.db.get_selection(tag)
         resolved = self.db.get_specs()
         if snapshot.is_compatible_with_specs(resolved):

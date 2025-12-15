@@ -355,8 +355,8 @@ class ResourceQueueExecutor:
             table.add_column("Job")
             table.add_column("ID")
             table.add_column("Status")
-            table.add_column("Details")
             table.add_column("Duration")
+            table.add_column("Details")
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
                 if slot.job.status.category == "PASS":
                     continue
@@ -365,8 +365,8 @@ class ResourceQueueExecutor:
                     slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
-                    slot.job.status.reason or "",
                     f"{elapsed:5.1f}s",
+                    slot.job.status.reason or "",
                 )
             if not table.row_count:
                 n = len(self.finished)

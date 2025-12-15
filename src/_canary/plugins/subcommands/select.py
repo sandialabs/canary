@@ -35,14 +35,6 @@ class Select(CanarySubcommand):
             "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
         )
         parser.add_argument(
-            "-o",
-            dest="on_options",
-            default=None,
-            metavar="option",
-            action="append",
-            help="Turn option(s) on, such as '-o dbg' or '-o intel'",
-        )
-        parser.add_argument(
             "-p",
             dest="parameter_expr",
             metavar="expression",
@@ -64,12 +56,11 @@ class Select(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
-        workspace.select(
+        workspace.make_selection(
             tag=args.tag,
             prefixes=args.select_paths,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
-            on_options=args.on_options,
             regex=args.regex_filter,
         )
         logger.info(f"To run this selection execute 'canary run {args.tag}'")

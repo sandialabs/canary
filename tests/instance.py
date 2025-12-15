@@ -15,10 +15,10 @@ from _canary.util.filesystem import working_dir
 
 
 def generate_specs(generators, on_options=None):
-    from _canary.build import Builder
+    from _canary.generate import Generator
 
-    builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
-    specs = builder.run()
+    g = Generator(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
+    specs = g.run()
     return specs
 
 

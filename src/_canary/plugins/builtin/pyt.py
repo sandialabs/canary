@@ -110,7 +110,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         return f"{type(self).__name__}({self.path})"
 
     def describe(self, on_options: list[str] | None = None) -> str:
-        from ...build import resolve
+        from ...generate import resolve
 
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")

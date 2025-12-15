@@ -1,11 +1,10 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import argparse
 from typing import TYPE_CHECKING
 
-from ...collect import Collector
+from ...generate import Generator
 from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
@@ -13,26 +12,24 @@ from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-
+    from ...generate import Generator
 
 logger = logging.get_logger(__name__)
 
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
-    parser.add_command(Add())
+    parser.add_command(Generate())
 
 
-class Add(CanarySubcommand):
-    name = "add"
-    description = "Add test generators to Canary session"
+class Generate(CanarySubcommand):
+    name = "generate"
+    description = "Generate test specs"
 
-    def setup_parser(self, parser: "Parser"):
-        Collector.setup_parser(parser)
+    def setup_parser(self, parser: "Parser") -> None:
+        Generator.setup_parser(parser)
 
-    def execute(self, args: "argparse.Namespace") -> int:
+    def execute(self, args: argparse.Namespace) -> int:
         workspace = Workspace.load()
-        if not args.scanpaths:
-            raise ValueError("Missing required argument 'scanpaths'")
-        workspace.find_and_add_generators(args.scanpaths, pedantic=True)
+        workspace.generate_testspecs(on_options=args.on_options)
         return 0

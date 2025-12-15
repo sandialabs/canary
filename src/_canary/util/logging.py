@@ -142,20 +142,21 @@ def level_name_mapping() -> dict[int, str]:
 
 
 class ProgressMonitor:
-    def __init__(self, logger_name: str, message: str) -> None:
+    def __init__(self, logger_name: str, message: str, levelno: int = INFO) -> None:
         self.message = message
         self.logger_name = logger_name
         self.start = time.monotonic()
-        get_logger(self.logger_name).log(INFO, self.message, extra={"end": "..."})
+        self.levelno = levelno
+        get_logger(self.logger_name).log(self.levelno, self.message, extra={"end": "..."})
 
     def done(self, status: str = "done") -> None:
-        end = "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start)
-        get_logger(self.logger_name).log(INFO, self.message, extra={"end": end, "rewind": True})
+        x = {"end": "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start), "rewind": True}
+        get_logger(self.logger_name).log(self.levelno, self.message, extra=x)
 
 
 class CanaryLogger(builtin_logging.Logger):
-    def progress_monitor(self, message: str) -> ProgressMonitor:
-        return ProgressMonitor(self.name, message)
+    def progress_monitor(self, message: str, levelno: int = INFO) -> ProgressMonitor:
+        return ProgressMonitor(self.name, message, levelno)
 
 
 builtin_logging.setLoggerClass(CanaryLogger)

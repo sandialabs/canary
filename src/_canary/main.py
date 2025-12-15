@@ -236,7 +236,7 @@ def console_main() -> int:
             raise
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
-        if plugin := determine_plugin_from_tb(tb):
-            err += f" (from plugin: {plugin})"
+        # if plugin := determine_plugin_from_tb(tb):
+        #    err += f" (from plugin: {plugin})"
         logger.error(err)
         return 3

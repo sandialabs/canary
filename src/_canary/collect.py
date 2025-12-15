@@ -304,13 +304,15 @@ class PathSpec(argparse.Action):
             workspace = None
 
         setdefault(namespace, "script_args", [])
-        setdefault(namespace, "scanpaths", {})
+        setdefault(namespace, "scanpaths", None)
         setdefault(namespace, "runtag", None)
         setdefault(namespace, "start", None)
         setdefault(namespace, "specids", None)
 
         if self.dest == "f_pathspec":
-            namespace.scanpaths.update(self.read_paths(values))
+            scanpaths = getattr(namespace, "scanpaths", None) or {}
+            scanpaths.update(self.read_paths(values))
+            setattr(namespace, "scanpaths", scanpaths)
             return
 
         assert isinstance(values, list)
@@ -320,6 +322,7 @@ class PathSpec(argparse.Action):
 
         possible_specs: list[str] = []
         items: list[str] = ns.items
+        scanpaths = getattr(namespace, "scanpaths", None) or {}
         for item in items:
             if os.path.isfile(item) and item.endswith("testcases.lock"):
                 raise NotImplementedError
@@ -329,18 +332,18 @@ class PathSpec(argparse.Action):
                 namespace.start = os.path.abspath(item)
             elif os.path.isfile(item):
                 root, name = os.path.split(os.path.abspath(item))
-                namespace.scanpaths.setdefault(root, []).append(name)
+                scanpaths.setdefault(root, []).append(name)
             elif os.path.isdir(item):
-                namespace.scanpaths.setdefault(os.path.abspath(item), [])
+                scanpaths.setdefault(os.path.abspath(item), [])
             elif item.startswith(vc_prefixes):
                 if not os.path.isdir(item.partition("@")[2]):
                     p = item.partition("@")[2]
                     raise ValueError(f"{p}: no such file or directory")
-                namespace.scanpaths.setdefault(item, [])
+                scanpaths.setdefault(item, [])
             elif os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
                 # allow specifying as root:name
                 root, name = item.split(os.pathsep, 1)
-                namespace.scanpaths.setdefault(os.path.abspath(root), []).append(
+                scanpaths.setdefault(os.path.abspath(root), []).append(
                     name.replace(os.pathsep, os.path.sep)
                 )
             else:
@@ -355,6 +358,9 @@ class PathSpec(argparse.Action):
                     )
                 ids.append(id)
             setattr(namespace, "specids", ids)
+
+        if scanpaths:
+            setattr(namespace, "scanpaths", scanpaths)
 
         check_mutually_exclusive_pathspec_args(namespace)
 

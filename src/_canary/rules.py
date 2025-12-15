@@ -187,6 +187,7 @@ class ParameterRule(Rule):
             {"parameters": self.parameter_expr},
             parameters=spec.parameters | spec.meta_parameters,  # ty: ignore[unsupported-operator]
         )
+        print(spec, spec.parameters, self.parameter_expr)
         if match:
             return RuleOutcome(True)
         return RuleOutcome.failed(self.default_reason)
@@ -280,7 +281,7 @@ class RegexRule(Rule):
         return RuleOutcome(True)
 
 
-class RuntimeRule:
+class CaseRule:
     """Base class for all runtime selection rules.
 
     Subclasses should override __call__ to evaluate whether a TestCase satisfies the rule.
@@ -301,7 +302,7 @@ class RuntimeRule:
         raise NotImplementedError
 
 
-class ResourceCapacityRule(RuntimeRule):
+class ResourceCapacityRule(CaseRule):
     """Selects cases based on system resource capacity.
 
     This rule queries plugin hooks to determine whether the available resource pool can accommodate
@@ -342,7 +343,7 @@ class ResourceCapacityRule(RuntimeRule):
         return self.cache[frozen]
 
 
-class RerunRule(RuntimeRule):
+class RerunRule(CaseRule):
     STRATEGIES = ("all", "failed", "not_done", "new")
 
     def __init__(self, strategy: str = "not_done") -> None:

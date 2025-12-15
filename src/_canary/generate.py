@@ -2,106 +2,37 @@
 #
 # SPDX-License-Identifier: MIT
 """
-Canary Build Pipeline
-=====================
+Canary Generate Pipeline
+========================
 
-This module implements the build lifecycle for converting generator output into fully resolved test
-specifications.  The central orchestrator is the ``Builder`` object, which progresses through
+This module implements the generateion lifecycle for converting generator output into fully resolved
+test specs. The central orchestrator is the ``Generator`` object, which progresses through
 validation, resolution, and finally hook-driven post-processing.
 
-The ``canary_build(builder)`` function coordinates the entire process using Pluggy hooks.  Plugins
-may observe or modify the build at specific stages.
+The ``canary_generate(generator)`` function coordinates the entire process using Pluggy hooks.  Plugins
+may observe or modify the generate at specific stages.
 
 Flow Diagram
 ------------
 
 The following diagram illustrates the full lifecycle:
 
-    +--------------------------------------------------+
-    |  Generator(s)                                    |
-    |    Produces [Un]resolved test specs              |
-    |                      ↓                           |
-    |  Builder(generators)                             |
-    |    Build UnresolvedSpec from generator outputs   |
-    |                      ↓                           |
-    |  canary_build(builder)                           |
-    |  • pluginmanager.hook.canary_buildstart()        |
-    |  • builder.run()                                 |
-    |    • validate(...)                               |
-    |    • resolve(...)                                |
-    |  • pluginmanager.hook.canary_build_modifyitems() |
-    |  • pluginmanager.hook.canary_build_report()      |
-    |  → builder.resolved_specs()                      |
-    +--------------------------------------------------+
-
-
-Functions
----------
-
-canary_build(builder)
-    Runs the full build pipeline.
-
-    Args:
-        builder (Builder): The builder instance containing generator output.
-
-    Returns:
-        list[ResolvedSpec]: The fully resolved and optionally plugin-modified
-        final specifications.
-
-    Lifecycle:
-        1. ``canary_buildstart(builder)``
-           Invoked before any processing. Plugins may inspect or adjust
-           input material.
-
-        2. ``builder.run()``
-           Runs validation and resolution.
-
-        3. ``canary_build_modifyitems(builder)``
-           Invoked after resolution. Plugins may modify resolved items before
-           finalization.
-
-        4. ``canary_build_report(builder)``
-           Invoked after modifications. Plugins may output or record final
-           information but should not mutate data.
-
-        5. Return ``builder.resolved_specs()``.
-
-
-Classes
--------
-
-class Builder:
-    Coordinates conversion from raw generator output into resolved specs.
-
-    Methods:
-        run():
-            Performs the two essential phases:
-
-            * validate(unresolved)
-              Ensures UnresolvedSpecs are structurally and semantically valid.
-
-            * resolve(unresolved)
-              Produces concrete resolved specs suitable for test execution.
-
-        resolved_specs():
-            Returns the final list of resolved ResolvedSpec after all hooks have executed.
-
-
-Hook Specifications
--------------------
-
-Plugins may implement the following hooks:
-
-canary_buildstart(builder):
-    Called before ``builder.run()``. Plugins may modify the builder or its inputs.
-
-canary_build_modifyitems(builder):
-    Called after resolution. Plugins may reorder, mutate, filter, or otherwise modify resolved
-    specs.
-
-canary_build_report(builder):
-    Called after modifications. Plugins should emit reports or summaries but generally should not
-    perform further mutation.
+    +------------------------------------------------------+
+    |  Generator(s)                                        |
+    |    Produces [Un]resolved test specs                  |
+    |                      ↓                               |
+    |  Generator(generators)                               |
+    |    Generate UnresolvedSpec from generator outputs    |
+    |                      ↓                               |
+    |  canary_generate(generators)                         |
+    |  • pluginmanager.hook.canary_generatestart()         |
+    |  • generator.run()                                   |
+    |    • validate(...)                                   |
+    |    • resolve(...)                                    |
+    |  • pluginmanager.hook.canary_generate_modifiyitems() |
+    |  • pluginmanager.hook.canary_generate_report()       |
+    |  → generator.resolved_specs()                        |
+    +------------------------------------------------------+
 
 """
 
@@ -124,6 +55,7 @@ from .util import logging
 from .util.parallel import starmap
 
 if TYPE_CHECKING:
+    from .config.argparsing import Parser
     from .generator import AbstractTestGenerator
     from .testspec import DependencyPatterns
     from .testspec import ResolvedSpec
@@ -133,7 +65,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class Builder:
+class Generator:
     def __init__(
         self,
         generators: list["AbstractTestGenerator"],
@@ -154,7 +86,7 @@ class Builder:
 
     def run(self) -> list["ResolvedSpec"]:
         pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")
-        config.pluginmanager.hook.canary_buildstart(builder=self)
+        config.pluginmanager.hook.canary_generatestart(generator=self)
         locked: list[list["UnresolvedSpec | ResolvedSpec"]] = []
         if config.get("debug"):
             for f in self.generators:
@@ -170,8 +102,8 @@ class Builder:
         self.specs = resolve(drafts)
         self.ready = True
         pm.done()
-        config.pluginmanager.hook.canary_build_modifyitems(builder=self)
-        config.pluginmanager.hook.canary_build_report(builder=self)
+        config.pluginmanager.hook.canary_generate_modifyitems(generator=self)
+        config.pluginmanager.hook.canary_generate_report(generator=self)
         return self.specs
 
     def validate(self, specs: list["UnresolvedSpec | ResolvedSpec"]) -> None:
@@ -198,10 +130,22 @@ class Builder:
             raise ValueError("Duplicate test IDs in test suite")
         return None
 
+    @staticmethod
+    def setup_parser(parser: "Parser") -> None:
+        group = parser.add_argument_group("test spec generation")
+        group.add_argument(
+            "-o",
+            dest="on_options",
+            default=None,
+            metavar="option",
+            action="append",
+            help="Turn option(s) on, such as '-o dbg' or '-o intel'",
+        )
+
 
 @hookimpl
-def canary_build_report(builder: Builder) -> None:
-    nc, ng = len(builder.specs), len(builder.generators)
+def canary_generate_report(generator: Generator) -> None:
+    nc, ng = len(generator.specs), len(generator.generators)
     logger.info("[bold]Generated[/] %d test specs from %d generators" % (nc, ng))
 
 
@@ -218,7 +162,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
     resolved_specs: list["ResolvedSpec"] = []
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"] = {}
 
-    # Build indices
+    # Generator indices
     unique_name_idx: dict[str, str] = {}
     non_unique_idx: dict[str, list[str]] = defaultdict(list)
 
@@ -243,7 +187,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
     # All specs that can be matched (both draft and resolved)
     matchable_specs = draft_specs + resolved_specs
 
-    # Build dependency graph in parallel, specs will be added as they resolve
+    # Generator dependency graph in parallel, specs will be added as they resolve
     graph: dict[str, list[str]] = {r.id: [_.id for _ in r.dependencies] for r in resolved_specs}
     draft_lookup: dict[str, list[str]] = {}
     dep_done_criteria: dict[str, list[str]] = {}

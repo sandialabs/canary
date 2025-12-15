@@ -20,6 +20,8 @@ def test_issue_84(tmpdir):
         subprocess.run(args)
         with open(".canary/config.yaml", "w") as fh:
             fh.write("canary:\n  timeout:\n    baz: 4m")
+        args = [sys.executable, "-m", "canary", "generate"]
+        subprocess.run(args)
         args = [sys.executable, "-m", "canary", "run"]
         cp = subprocess.run(args)
         assert cp.returncode == 0

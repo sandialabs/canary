@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from ... import when
 from ...collect import Collector
 from ...hookspec import hookimpl
+from ...select import Selector
 from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import add_filter_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -32,8 +32,8 @@ class Rebaseline(CanarySubcommand):
     description = "Rebaseline tests"
 
     def setup_parser(self, parser: "Parser") -> None:
-        add_filter_arguments(parser)
         Collector.setup_parser(parser)
+        Selector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         if not args.keyword_exprs and not args.start and not args.parameter_expr:

@@ -9,12 +9,13 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...collect import Collector
+from ...generate import Generator
 from ...hookspec import hookimpl
+from ...select import Selector
 from ...util import logging
 from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import add_filter_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
 
@@ -38,7 +39,9 @@ class Run(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         parser.set_defaults(banner=True)
         add_work_tree_arguments(parser)
-        add_filter_arguments(parser)
+        Collector.setup_parser(parser)
+        Generator.setup_parser(parser)
+        Selector.setup_parser(parser)
         parser.add_argument(
             "--only",
             choices=("not_done", "failed", "all"),
@@ -92,10 +95,7 @@ class Run(CanarySubcommand):
             default="short",
             help="Print test case fullname (long) in live status bar [default: short]",
         )
-
-        parser.add_argument("-r", help=argparse.SUPPRESS)
         add_resource_arguments(parser)
-        Collector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         work_tree = args.work_tree or os.getcwd()
@@ -109,37 +109,36 @@ class Run(CanarySubcommand):
             workspace = Workspace.create(path=work_tree)
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
-        if args.start:
-            logger.info(f"[bold]Running[/] tests from {args.start}")
-            specs = workspace.select_from_view(path=Path(args.start))
-            reuse = True
-        elif args.specids:
-            specs_to_run = [id[:7] for id in args.specids]
-            if len(specs_to_run) > 3:
-                specs_to_run = [*specs_to_run[:2], "...", specs_to_run[-1]]
-            logger.info(f"[bold]Running[/] specs {', '.join(specs_to_run)}")
-            specs = workspace.select(ids=args.specids, tag=args.tag)
-        elif args.runtag:
-            logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
-            specs = workspace.get_selection(args.runtag)
-        elif not args.scanpaths:
-            # scanpaths must be explicit
-            args.runtag = "default"
-            logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
-            specs = workspace.get_selection(args.runtag)
-        else:
-            scanpaths = args.scanpaths or {os.getcwd(): []}
+        if args.scanpaths is not None:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
-            workspace.add(scanpaths, pedantic=parsing_policy == "pedantic")
-            specs = workspace.select(
+            workspace.find_and_add_generators(args.scanpaths, pedantic=parsing_policy == "pedantic")
+            workspace.generate_testspecs(on_options=args.on_options)
+            specs = workspace.make_selection(
                 tag=args.tag,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
-                on_options=args.on_options,
                 owners=args.owners,
                 regex=args.regex_filter,
             )
-        if args.start or args.specids or args.runtag:
+        else:
+            if args.start:
+                logger.info(f"[bold]Running[/] tests from {args.start}")
+                specs = workspace.select_from_view(path=Path(args.start))
+                reuse = True
+            elif args.specids:
+                specs_to_run = [id[:7] for id in args.specids]
+                if len(specs_to_run) > 3:
+                    specs_to_run = [*specs_to_run[:2], "...", specs_to_run[-1]]
+                logger.info(f"[bold]Running[/] specs {', '.join(specs_to_run)}")
+                specs = workspace.make_selection(ids=args.specids, tag=args.tag)
+            elif args.runtag:
+                logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
+                specs = workspace.get_selection(args.runtag)
+            else:
+                # scanpaths must be explicit
+                args.runtag = "default"
+                logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
+                specs = workspace.get_selection(args.runtag)
             # Apply additional filters, if any
             workspace.apply_selection_rules(
                 specs,

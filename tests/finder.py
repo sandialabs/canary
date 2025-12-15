@@ -11,7 +11,7 @@ from _canary import select
 from _canary import testcase
 from _canary import testexec
 from _canary import workspace
-from _canary.build import Builder
+from _canary.generate import Generator
 from _canary.hookspec import hookimpl
 from _canary.resource_pool.rpool import Outcome
 from _canary.util.filesystem import mkdirp
@@ -46,13 +46,13 @@ def select_specs(
 
 
 def generate_specs(generators, on_options=None):
-    builder = Builder(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
-    specs = builder.run()
+    g = Generator(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
+    specs = g.run()
     return specs
 
 
 def filter_cases(cases):
-    f = select.RuntimeSelector(cases, workspace=Path.cwd())
+    f = select.CaseSelector(cases, workspace=Path.cwd())
     f.add_rule(rules.ResourceCapacityRule())
     f.run()
 
