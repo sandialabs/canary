@@ -38,6 +38,7 @@ from _canary.testinst import TestMultiInstance
 from _canary.testspec import DependencyPatterns
 from _canary.testspec import Mask
 from _canary.testspec import ResolvedSpec
+from _canary.testspec import Asset
 from _canary.testspec import UnresolvedSpec
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
@@ -93,6 +94,7 @@ __all__ = [
     "TestInstance",
     "TestMultiInstance",
     "DependencyPatterns",
+    "Asset",
     "ResolvedSpec",
     "UnresolvedSpec",
     "color",

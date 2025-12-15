@@ -373,7 +373,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     def __post_init__(self) -> None:
         super().__post_init__()
         # We make sure objects have the right type, in case any were passed in as name=None
-        self.assets = self._generate_assets(self.file_resources or {})
+        self.assets = self.assets or self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
         self.dep_patterns = self._generate_dependency_patterns(self.dependencies or [])
         self._generate_analyze_action()
