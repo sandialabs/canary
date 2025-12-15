@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 
+from schema import Or
 from schema import Schema
 
 from . import config
@@ -111,7 +112,7 @@ class SelectorSnapshot:
         s = Schema(
             {
                 "spec_set_id": str,
-                "masked": {str: str},
+                "masked": Or({str: str}, {}),
                 "rules": [str],
                 "created_on": str,
             }
