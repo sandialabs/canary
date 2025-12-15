@@ -11,6 +11,8 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import Sequence
+from typing import TypeVar
 
 import yaml
 
@@ -265,7 +267,7 @@ class Workspace:
         specs: list["ResolvedSpec"],
         reuse_session: bool | str = False,
         update_view: bool = True,
-        only: str = "not_done",
+        only: str = "not_pass",
     ) -> Session:
         now = datetime.datetime.now()
         session_name: str
@@ -275,7 +277,7 @@ class Workspace:
             session_name = now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
         cases = self.construct_testcases(specs, session_dir)
-        selector = select.CaseSelector(cases, workspace=self.root)
+        selector = select.RuntimeSelector(cases, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
         selector.run()
@@ -515,6 +517,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
         ids: list[str] | None = None,
+        generate: bool | None = None,
     ) -> list["ResolvedSpec"]:
         """Select final test specs
 
@@ -535,9 +538,12 @@ class Workspace:
 
         """
         resolved = self.load_testspecs()
+        if not resolved and generate in (True, None):
+            resolved = self.generate_testspecs()
         if not resolved:
-            raise RuntimeError(
-                "There are no test specs in this workspace, did you run `canary generate`?"
+            raise StopExecution(
+                "There are no test specs in this workspace, did you run `canary generate`?",
+                exit_code=notests_exit_status,
             )
         self.apply_selection_rules(
             resolved,
@@ -673,7 +679,9 @@ class Workspace:
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
-    def compute_rerun_list(self, predicate: Callable[[str, dict], bool]) -> list["ResolvedSpec"]:
+    def compute_rerun_list(
+        self, predicate: Callable[[str, dict], bool]
+    ) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
         results = self.db.get_results()
         selected: set[str] = set()
         for id, result in results.items():
@@ -684,12 +692,9 @@ class Workspace:
         run_specs = selected | downstream
         load_specs = run_specs | upstream
         resolved = self.db.get_specs(ids=list(load_specs))
-        for spec in resolved:
-            if spec.id not in run_specs:
-                spec.mask = Mask.masked("ID not in requested subset or downstream")
-        return resolved
+        return stable_partition(resolved, predicate=lambda spec: spec.id not in run_specs)
 
-    def compute_failed_rerun_list(self) -> list["ResolvedSpec"]:
+    def compute_failed_rerun_list(self) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
         def predicate(id: str, result: dict) -> bool:
             if result["status"]["category"] in ("FAILED", "ERROR", "BROKEN", "DIFFED", "BLOCKED"):
                 return True
@@ -697,7 +702,9 @@ class Workspace:
 
         return self.compute_rerun_list(predicate)
 
-    def compute_rerun_list_for_specs(self, ids: list[str]) -> list["ResolvedSpec"]:
+    def compute_rerun_list_for_specs(
+        self, ids: list[str]
+    ) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
         def predicate(id: str, result: dict) -> bool:
             return id in ids
 
@@ -774,7 +781,9 @@ class WorkspaceDatabase:
         query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT)"
         cursor.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS specs (id TEXT PRIMARY KEY, signature TEXT, data TEXT)"
+        query = """CREATE TABLE IF NOT EXISTS specs (
+          id TEXT PRIMARY KEY, signature TEXT, data TEXT
+        )"""
         cursor.execute(query)
 
         query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
@@ -1171,12 +1180,13 @@ class WorkspaceDatabase:
         return True
 
 
-def stable_partition(
-    sequence: list[str], predicate: Callable[[str], bool]
-) -> tuple[list[str], list[str]]:
-    true: list[str] = []
-    false: list[str] = []
-    for item in sequence:
+T = TypeVar("T")
+
+
+def stable_partition(seq: Sequence[T], predicate: Callable[[T], bool]) -> tuple[list[T], list[T]]:
+    true: list[T] = []
+    false: list[T] = []
+    for item in seq:
         if predicate(item):
             true.append(item)
         else:

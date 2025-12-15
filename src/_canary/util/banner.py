@@ -7,9 +7,10 @@ from itertools import cycle
 from typing import IO
 from typing import Any
 
+import rich
+
 from .. import version
 from . import logging
-from .rich import colorize
 
 bird = """\
               ....
@@ -38,7 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 def print_banner(file: IO[Any] | None = None) -> None:
-    print(colorize(banner()), file=file)
+    rich.print(banner(), file=file)
 
 
 def banner(color: bool = True) -> str:

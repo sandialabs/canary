@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 import dataclasses
 import io
+import sys
 import time
 from contextlib import contextmanager
 from multiprocessing import Queue
@@ -153,7 +154,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
     string = file.getvalue()
     if string.strip():
         string = "\n[bold]Short test summary info[/bold]\n" + string
-    rich.print(string)
+    rich.print(string, file=sys.stderr)
 
 
 @hookimpl(specname="canary_runtests_report")
@@ -217,4 +218,4 @@ def print_durations(cases: list["TestCase"], N: int) -> None:
         name = cases[i].display_name(style="rich")
         id = cases[i].id[:7]
         fp.write("  %6.2f   %s %s\n" % (duration, id, name))
-    rich.print(fp.getvalue().strip())
+    rich.print(fp.getvalue().strip(), file=sys.stderr)

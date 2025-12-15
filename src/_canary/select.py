@@ -61,6 +61,7 @@ import sys
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Generator
 from typing import Iterable
 
 import rich.box
@@ -72,8 +73,8 @@ from schema import Schema
 from . import config
 from .config.argparsing import Parser
 from .hookspec import hookimpl
-from .rules import CaseRule
 from .rules import Rule
+from .rules import RuntimeRule
 from .status import Status
 from .testspec import Mask
 from .util import json_helper as json
@@ -164,22 +165,45 @@ class Selector:
         assert isinstance(rule, Rule)
         self.rules.append(rule)
 
+    def iter_rules(self) -> Generator["Rule", None, None]:
+        for _, rule in sorted(enumerate(self.rules), key=lambda x: (-x[1].priority, x[0])):
+            yield rule
+
     def run(self) -> None:
-        logger.info(f"[bold]Selecting[/] specs based on {len(self.rules)} rules")
         config.pluginmanager.hook.canary_selectstart(selector=self)
         self.masked.clear()
-        for spec in self.specs:
-            if spec.mask:
-                continue
-            for rule in self.rules:
-                outcome = rule(spec)
-                if not outcome:
-                    spec.mask = Mask.masked(outcome.reason or rule.default_reason)
-                    self.masked.add(spec.id)
-                    break
+        if self.rules:
+            logger.info(f"[bold]Selecting[/] specs based on {len(self.rules)} rules")
+            for spec in self.specs:
+                if spec.mask:
+                    continue
+                for rule in self.iter_rules():
+                    outcome = rule(spec)
+                    if not outcome:
+                        spec.mask = Mask.masked(outcome.reason or rule.default_reason)
+                        self.masked.add(spec.id)
+                        break
         config.pluginmanager.hook.canary_select_modifyitems(selector=self)
+        self.propagate()
         config.pluginmanager.hook.canary_select_report(selector=self)
         return
+
+    def propagate(self):
+        # Propagate masks
+        queue = deque([spec for spec in self.specs if spec.mask])
+        spec_map: dict[str, "ResolvedSpec"] = {spec.id: spec for spec in self.specs}
+        # Precompute reverse graph
+        dependents: dict[str, list[str]] = {s.id: [] for s in self.specs}
+        for s in self.specs:
+            for dep in s.dependencies:
+                dependents[dep.id].append(s.id)
+        while queue:
+            masked = queue.popleft()
+            for child_id in dependents[masked.id]:
+                child = spec_map[child_id]
+                if not child.mask:
+                    child.mask = Mask.masked("One or more dependencies masked")
+                    queue.append(child)
 
     @staticmethod
     def spec_set_id(specs: list["ResolvedSpec"]) -> str:
@@ -202,7 +226,7 @@ class Selector:
         self = cls(specs, workspace)
         for serialized_rule in snapshot.rules:
             rule = Rule.reconstruct(serialized_rule)
-            self.add_rule(rule)
+            self.rules.append(rule)
         return self
 
     @staticmethod
@@ -244,20 +268,24 @@ class Selector:
             )
 
 
-class CaseSelector:
+class RuntimeSelector:
     """Apply rule-based masking to a set of test cases."""
 
     def __init__(
-        self, cases: list["TestCase"], workspace: Path, rules: Iterable[CaseRule] = ()
+        self, cases: list["TestCase"], workspace: Path, rules: Iterable[RuntimeRule] = ()
     ) -> None:
         self.cases = cases
         self.workspace = workspace
-        self.rules: list[CaseRule] = list(rules)
+        self.rules: list[RuntimeRule] = list(rules)
         self.masked: set[str] = set()
 
-    def add_rule(self, rule: CaseRule) -> None:
-        assert isinstance(rule, CaseRule)
+    def add_rule(self, rule: RuntimeRule) -> None:
+        assert isinstance(rule, RuntimeRule)
         self.rules.append(rule)
+
+    def iter_rules(self) -> Generator["RuntimeRule", None, None]:
+        for _, rule in sorted(enumerate(self.rules), key=lambda x: (-x[1].priority, x[0])):
+            yield rule
 
     def run(self) -> None:
         self.masked.clear()
@@ -266,7 +294,7 @@ class CaseSelector:
         for case in self.cases:
             if case.mask:
                 continue
-            for rule in self.rules:
+            for rule in self.iter_rules():
                 outcome = rule(case)
                 if not outcome:
                     case.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
@@ -300,24 +328,6 @@ class CaseSelector:
                     child.mask = Mask.masked(reason="One or more dependencies do not have results")
                     queue.append(child)
         return
-
-
-def propagate_masks(specs: list["ResolvedSpec"]):
-    # Propagate masks
-    queue = deque([spec for spec in specs if spec.mask])
-    spec_map: dict[str, "ResolvedSpec"] = {spec.id: spec for spec in specs}
-    # Precompute reverse graph
-    dependents: dict[str, list[str]] = {s.id: [] for s in specs}
-    for s in specs:
-        for dep in s.dependencies:
-            dependents[dep.id].append(s.id)
-    while queue:
-        masked = queue.popleft()
-        for child_id in dependents[masked.id]:
-            child = spec_map[child_id]
-            if not child.mask:
-                child.mask = Mask.masked("One or more dependencies masked")
-                queue.append(child)
 
 
 @hookimpl
@@ -363,9 +373,7 @@ def canary_select_report(selector: "Selector") -> None:
         show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
         logger.info("[bold]Excluded[/] %d test specs" % n)
-        table = Table(
-            show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD, pad_edge=True
-        )
+        table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=True)
         table.add_column("Count", justify="right")
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
@@ -386,7 +394,7 @@ def canary_select_report(selector: "Selector") -> None:
 
 
 @hookimpl
-def canary_rtselect_report(selector: "CaseSelector") -> None:
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     if not selector.masked:
         return
     excluded: list["TestCase"] = [case for case in selector.cases if case.id in selector.masked]
@@ -398,9 +406,7 @@ def canary_rtselect_report(selector: "CaseSelector") -> None:
             reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         logger.info("[bold]Excluded[/] %d test cases" % n)
-        table = Table(
-            show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD, pad_edge=True
-        )
+        table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=True)
         table.add_column("Count", justify="right")
         for key in reversed(keys):

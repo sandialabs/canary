@@ -13,6 +13,7 @@ from ...generate import Generator
 from ...hookspec import hookimpl
 from ...select import Selector
 from ...util import logging
+from ...util.string import pluralize
 from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
 from ..types import CanarySubcommand
@@ -44,13 +45,14 @@ class Run(CanarySubcommand):
         Selector.setup_parser(parser)
         parser.add_argument(
             "--only",
-            choices=("not_done", "failed", "all"),
-            default="not_done",
+            choices=("not_pass", "failed", "not_run", "all", "changed"),
+            default="not_pass",
             help="Which tests to run after selection\n\n"
             "  all      - run all selected tests, even if already passing\n\n"
             "  failed   - run only previously failing tests\n\n"
-            "  new      - run tests that have never been executed\n\n"
-            "  not_done - run tests that are incomplete, boken, or never run (default)",
+            "  not_run  - run tests that have never been executed\n\n"
+            "  changed  - run tests that whose specs have newer modification time\n\n"
+            "  not_pass - run tests that are incomplete, boken, or never run (default)",
         )
         parser.add_argument(
             "--fail-fast",
@@ -126,11 +128,12 @@ class Run(CanarySubcommand):
                 specs = workspace.select_from_view(path=Path(args.start))
                 reuse = True
             elif args.specids:
-                specs_to_run = [id[:7] for id in args.specids]
-                if len(specs_to_run) > 3:
-                    specs_to_run = [*specs_to_run[:2], "...", specs_to_run[-1]]
-                logger.info(f"[bold]Running[/] specs {', '.join(specs_to_run)}")
-                specs = workspace.make_selection(ids=args.specids, tag=args.tag)
+                sids = [id[:7] for id in args.specids]
+                if len(sids) > 3:
+                    sids = [*sids[:2], "…", sids[-1]]
+                logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
+                upstream, downstream = workspace.compute_rerun_list_for_specs(ids=args.specids)
+                specs = upstream + downstream
             elif args.runtag:
                 logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
                 specs = workspace.get_selection(args.runtag)

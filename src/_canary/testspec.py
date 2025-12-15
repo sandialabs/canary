@@ -135,6 +135,10 @@ class BaseSpec(Generic[T]):
     def file(self) -> Path:
         return self.file_root / self.file_path
 
+    @property
+    def mtime(self) -> float:
+        return self.file.stat().st_mtime
+
     @cached_property
     def name(self) -> str:
         name = self.family

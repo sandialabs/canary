@@ -52,7 +52,7 @@ def generate_specs(generators, on_options=None):
 
 
 def filter_cases(cases):
-    f = select.CaseSelector(cases, workspace=Path.cwd())
+    f = select.RuntimeSelector(cases, workspace=Path.cwd())
     f.add_rule(rules.ResourceCapacityRule())
     f.run()
 
@@ -287,7 +287,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             )
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
-            assert len(final) == 4
+            assert len(final) == 3
 
 
 def test_many_composite(tmpdir):

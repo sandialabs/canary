@@ -35,10 +35,12 @@ class History(CanarySubcommand):
         workspace = Workspace.load()
         results = workspace.db.get_single_result(args.id)
         table = Table(expand=False)
-        for col in ["Session", "Exit Code", "Duration", "Status", "Details"]:
+        for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for entry in results:
             row: list[str] = []
+            row.append(entry["spec_name"])
+            row.append(entry["id"][:7])
             row.append(entry["session"])
             row.append(str(entry["status"].code))
             row.append(str(entry["timekeeper"].duration))

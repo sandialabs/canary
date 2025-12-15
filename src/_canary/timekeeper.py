@@ -52,6 +52,11 @@ class Timekeeper:
             "duration": self.duration,
         }
 
+    def start_time(self) -> float:
+        if self.started_on == "NA":
+            return -1.0
+        return datetime.datetime.fromisoformat(self.started_on).timestamp()
+
     @classmethod
     def from_dict(cls, d: dict) -> "Timekeeper":
         self = cls()

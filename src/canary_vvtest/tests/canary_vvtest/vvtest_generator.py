@@ -80,3 +80,10 @@ def test_vvt_generator(tmpdir):
             assert len(specs) == 7
             assert specs[-1].attributes.get("multicase") is not None
             assert len(final) == 3
+
+            # this should also work with cpus < 2 since the vvtest plugin maps np to cpus
+            specs = generate_specs(generators, on_options=["baz"])
+            final = select_specs(specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2")
+            assert len(specs) == 7
+            assert specs[-1].attributes.get("multicase") is not None
+            assert len(final) == 3

@@ -193,7 +193,7 @@ class ResourceQueue:
             total = done + busy + pending
             totals: Counter[tuple[str, str]] = Counter()
             for job in self._finished.values():
-                if job.status.state == "COMPLETE":
+                if job.status.state in ("COMPLETE", "NOTRUN"):
                     key = (job.status.category, job.status.status)
                     totals[key] += 1
             row: list[str] = []

@@ -20,8 +20,8 @@ def canary_collectstart(collector) -> None:
 
 
 @canary.hookimpl
-def canary_build_modifyitems(builder: "canary.Builder") -> None:
-    for spec in builder.specs:
+def canary_generate_modifyitems(generator: "canary.Generator") -> None:
+    for spec in generator.specs:
         if spec.file_path.suffix == ".vvt":
             spec.stdout = "execute.log"
             spec.stderr = None

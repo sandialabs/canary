@@ -67,6 +67,9 @@ class Rule:
     Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
     """
 
+    def __init__(self, priority: int = 0) -> None:
+        self.priority = priority
+
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         raise NotImplementedError
 
@@ -148,7 +151,8 @@ class KeywordRule(Rule):
     A spec passes if all keyword expressions match its explicit or implicit keywords, unless the
     expression list contains '__all__' or ':all:', in which case all specs pass."""
 
-    def __init__(self, keyword_exprs: list[str]):
+    def __init__(self, keyword_exprs: list[str], priority: int = 0):
+        super().__init__(priority=priority)
         self.keyword_exprs = keyword_exprs
 
     @cached_property
@@ -175,7 +179,8 @@ class ParameterRule(Rule):
     The spec passes if the parameter expression matches any of the spec's explicit or implicit
     parameters."""
 
-    def __init__(self, parameter_expr: str) -> None:
+    def __init__(self, parameter_expr: str, priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.parameter_expr = parameter_expr
 
     @cached_property
@@ -187,7 +192,6 @@ class ParameterRule(Rule):
             {"parameters": self.parameter_expr},
             parameters=spec.parameters | spec.meta_parameters,  # ty: ignore[unsupported-operator]
         )
-        print(spec, spec.parameters, self.parameter_expr)
         if match:
             return RuleOutcome(True)
         return RuleOutcome.failed(self.default_reason)
@@ -199,12 +203,14 @@ class IDsRule(Rule):
     A spec passes if its ID begins with any of the configured prefixes.
     """
 
-    def __init__(self, ids: Iterable[str] = ()) -> None:
+    def __init__(self, ids: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.ids = list(ids)
 
     @cached_property
     def default_reason(self) -> str:
-        return "test ID not in [bold]%s[/]" % ",".join(self.ids)
+        ids = [id[:7] + "…" for id in self.ids]
+        return "test ID not in [bold]%s[/]" % ",".join(ids)
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if not any(spec.id.startswith(id) for id in self.ids):
@@ -219,7 +225,8 @@ class OwnersRule(Rule):
     configured owner set.
     """
 
-    def __init__(self, owners: Iterable[str] = ()) -> None:
+    def __init__(self, owners: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.owners = set(owners)
 
     @cached_property
@@ -239,7 +246,8 @@ class PrefixRule(Rule):
     configured prefixes.
     """
 
-    def __init__(self, prefixes: Iterable[str] = ()) -> None:
+    def __init__(self, prefixes: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.prefixes = list(prefixes)
 
     @cached_property
@@ -259,7 +267,8 @@ class RegexRule(Rule):
     referenced asset file.
     """
 
-    def __init__(self, regex: str) -> None:
+    def __init__(self, regex: str, priority: int = 0) -> None:
+        super().__init__(priority=priority)
         logger.warning("Regular expression search can be slow for large test suites")
         self.string: str = regex
         self.rx: re.Pattern = re.compile(regex)
@@ -281,12 +290,15 @@ class RegexRule(Rule):
         return RuleOutcome(True)
 
 
-class CaseRule:
+class RuntimeRule:
     """Base class for all runtime selection rules.
 
     Subclasses should override __call__ to evaluate whether a TestCase satisfies the rule.
     Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
     """
+
+    def __init__(self, priority: int = 0) -> None:
+        self.priority = priority
 
     def __call__(self, case: "TestCase") -> RuleOutcome:
         raise NotImplementedError
@@ -302,7 +314,7 @@ class CaseRule:
         raise NotImplementedError
 
 
-class ResourceCapacityRule(CaseRule):
+class ResourceCapacityRule(RuntimeRule):
     """Selects cases based on system resource capacity.
 
     This rule queries plugin hooks to determine whether the available resource pool can accommodate
@@ -310,7 +322,8 @@ class ResourceCapacityRule(CaseRule):
     hashable representation.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.cache: dict[tuple[tuple[str, Any], ...], RuleOutcome] = {}
 
     @cached_property
@@ -343,10 +356,11 @@ class ResourceCapacityRule(CaseRule):
         return self.cache[frozen]
 
 
-class RerunRule(CaseRule):
-    STRATEGIES = ("all", "failed", "not_done", "new")
+class RerunRule(RuntimeRule):
+    STRATEGIES = ("all", "failed", "not_pass", "not_run", "changed")
 
-    def __init__(self, strategy: str = "not_done") -> None:
+    def __init__(self, strategy: str = "not_pass", priority: int = 0) -> None:
+        super().__init__(priority=priority)
         self.strategy = strategy
         if self.strategy not in self.STRATEGIES:
             raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
@@ -358,17 +372,20 @@ class RerunRule(CaseRule):
     def __call__(self, case: "TestCase") -> RuleOutcome:
         if self.strategy == "all":
             return RuleOutcome(ok=True)
-        elif self.strategy == "not_done":
+        elif self.strategy == "changed":
+            t = case.timekeeper.start_time()
+            if t > 0 and case.spec.file.stat().st_mtime > t:
+                return RuleOutcome(ok=True)
+            return RuleOutcome(ok=False, reason="case spec has not changed since last run")
+        elif self.strategy == "not_pass":
             if case.status.category != "PASS":
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason="previous result = PASS")
+            return RuleOutcome(ok=False, reason=f"previous result = {case.status.status}")
         elif self.strategy == "failed":
             if case.status.category == "FAIL":
                 return RuleOutcome(ok=True)
-            return RuleOutcome(
-                ok=False, reason=f"previous result = {case.status.category!r} != FAIL"
-            )
-        elif self.strategy == "new":
+            return RuleOutcome(ok=False, reason=f"previous result = {case.status.status} != FAIL")
+        elif self.strategy == "not_run":
             if case.status.category == "NONE":
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
