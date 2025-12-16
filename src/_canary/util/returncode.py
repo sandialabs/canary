@@ -8,36 +8,32 @@ from typing import Sequence
 from . import logging
 
 if TYPE_CHECKING:
+    from ..protocols import JobProtocol
     from ..testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
 
-def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) -> int:
+def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bool = False) -> int:
     returncode: int = 0
-
-    results: dict[str, int] = {}
-    for case in cases:
-        results[case.status.value] = results.get(case.status.value, 0) + 1
     warned: set[str] = set()
-    for result, n in results.items():
-        for i in range(n):
-            if result in ("success", "xfail", "xdiff"):
-                continue
-            elif result == "diffed":
-                returncode |= 2**1
-            elif result == "failed":
-                returncode |= 2**2
-            elif result == "timeout":
-                returncode |= 2**3
-            elif result in ("skipped", "not_run"):
-                returncode |= 2**4
-            elif result in ("cancelled", "ready"):
-                returncode |= 2**5
-            elif not permissive:
-                # any other code is a failure
-                returncode |= 2**6
-                if case.status.value not in warned:
-                    logger.warning(f"{case}: unhandled status: {case.status}")
-                    warned.add(case.status.value)
+    for case in cases:
+        if case.status.category in ("PASS", "SKIP"):
+            continue
+        elif case.status.status == "DIFFED":
+            returncode |= 2**1
+        elif case.status.status == "TIMEOUT":
+            returncode |= 2**2
+        elif case.status.category == "FAIL":
+            returncode |= 2**3
+        elif case.status.category == "CANCEL":
+            returncode |= 2**4
+        elif case.status.state in ("READY", "PENDING"):
+            returncode |= 2**5
+        elif not permissive:
+            # any other code is a failure
+            returncode |= 2**6
+            if case.status.status not in warned:
+                logger.warning(f"unhandled status: {case.status.status}")
+                warned.add(case.status.status)
     return returncode

@@ -9,7 +9,5 @@ plugins
    :maxdepth: 1
 
    builtin/index
-   hookspec
-   manager
    subcommands/index
    types

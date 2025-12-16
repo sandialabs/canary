@@ -5,7 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -24,10 +24,13 @@ class Help(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         parser.add_argument("--all", action="store_true", help="list all commands and options")
         parser.add_argument("--pathspec", action="store_true", help="help on path spec syntax")
+        parser.add_argument("--pathfile", action="store_true", help="help on path file syntax")
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.pathspec:
             self.print_pathspec_help(args)
+        elif args.pathfile:
+            self.print_pathfile_help(args)
         else:
             self.print_command_help(args)
         return 0
@@ -39,12 +42,17 @@ class Help(CanarySubcommand):
 
         parser = make_argument_parser(all=args.all)
         parser.add_main_epilog(parser)
-        for command in config.pluginmanager.hook.canary_subcommand():
-            parser.add_command(command, add_help_override=args.all)
+        config.pluginmanager.hook.canary_addcommand(parser=parser)
         parser.print_help()
 
     @staticmethod
     def print_pathspec_help(args: argparse.Namespace) -> None:
-        from .common.pathspec import PathSpec
+        from ...collect import PathSpec
 
-        print(PathSpec.description())
+        print(PathSpec.pathspec_help())
+
+    @staticmethod
+    def print_pathfile_help(args: argparse.Namespace) -> None:
+        from ...collect import PathSpec
+
+        print(PathSpec.pathfile_help())

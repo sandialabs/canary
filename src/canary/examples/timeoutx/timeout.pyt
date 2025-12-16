@@ -7,11 +7,11 @@ import time
 
 import canary
 
-canary.directives.timeout(0.5)
+canary.directives.timeout(2.0)
 
 
 def test() -> int:
-    time.sleep(1)
+    time.sleep(5)
     return 0
 
 

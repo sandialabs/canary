@@ -7,7 +7,7 @@ from typing import Generator
 
 from ... import config
 from ...generator import AbstractTestGenerator
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 
 
 @hookimpl(tryfirst=True, wrapper=True)

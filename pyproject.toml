@@ -40,6 +40,8 @@ dependencies = [
     "psutil",
     "pyyaml",
     "schema",
+    "rich",
+    "typing_extensions; python_version < '3.11'",
 ]
 
 optional-dependencies.dev = [
@@ -48,6 +50,7 @@ optional-dependencies.dev = [
     "pydata-sphinx-theme",
     "pytest",
     "ruff",
+    "bandit",
     "sphinx",
     "sphinx-design",
     "xmlschema",
@@ -106,9 +109,9 @@ testpaths = [
     "src/canary_vvtest/tests",
     "src/canary_cmake/tests",
     "src/canary_hpc/tests",
-    "src/canary_junit/tests"
+    "src/canary_gitlab/tests"
 ]
-norecursedirs = "mock"
+norecursedirs = "mock data generators"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
 python_files = "*.py"
@@ -135,6 +138,7 @@ exclude = [
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/canary_gitlab/tests/*",
 ]
 
 [[tool.mypy.overrides]]
@@ -204,15 +208,19 @@ ignore_errors = true
 [tool.ty.src]
 exclude = [
     "src/canary/examples",
-    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/third_party/distro.py",
     "src/_canary/third_party/programoutput/*",
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
+    "src/_canary/testspec.py",  # this file raises a bug in ty
+    "src/canary_cmake/tests/*",  # just until we get them fixed
+    "src/canary_vvtest/tests/*",  # just until we get them fixed
+    "src/canary_hpc/tests/*",  # just until we get them fixed
 ]
-include = ["src"]
+include = ["src", "tests"]
 
 
 [tool.bandit]

@@ -3,19 +3,18 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import datetime
 import importlib.resources as ir
 import json
 import os
 import sys
 import time
 import xml.dom.minidom as xdom
-from graphlib import TopologicalSorter
 from typing import IO
 from typing import Any
 
 import canary
-from _canary.testcase import factory as testcase_factory
-from _canary.util.compression import compress_str
+from _canary.util.compression import targz_compress
 
 from . import interface
 
@@ -34,39 +33,46 @@ class CDashXMLReporter:
         self.notes: dict[str, str] = {}
 
     @classmethod
-    def from_session(cls, session: "canary.Session", dest: str | None = None) -> "CDashXMLReporter":
-        self = cls(dest=dest or os.path.join(session.work_tree, "CDASH"))
-        for case in session.active_cases():
+    def from_workspace(cls, dest: str | None = None) -> "CDashXMLReporter":
+        workspace = canary.Workspace.load()
+        cases = workspace.load_testcases()
+        if dest is None:
+            dest = str((workspace.view or workspace.sessions_dir) / "CDASH")
+        self = cls(dest=dest)
+        for case in cases:
             self.data.add_test(case)
         return self
 
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
-        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
-        self = cls(dest=dest)
-        data = json.load(open(file))
-        ts: TopologicalSorter = TopologicalSorter()
-        for id, state in data.items():
-            for name, value in state["properties"].items():
-                if name == "dependencies":
-                    dependencies = value
-                    dep_ids = [d["properties"]["id"] for d in dependencies]
-                    ts.add(id, *dep_ids)
-                    break
-        cases: dict[str, canary.TestCase] = {}
-        for id in ts.static_order():
-            state = data[id]
-            case = testcase_factory(state.pop("type"))
-            case.setstate(state)
-            for i, dep in enumerate(case.dependencies):
-                case.dependencies[i] = cases[dep.id]
-            cases[id] = case
-        for case in cases.values():
-            if not case.masked():
-                # case.refresh()
-                self.data.add_test(case)
-        return self
+        raise NotImplementedError("No way of loading the case directly from lock yet")
+
+    #        from _canary.testcase import factory as testcase_factory
+    #
+    #        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
+    #        self = cls(dest=dest)
+    #        data = json.load(open(file))
+    #        ts: TopologicalSorter = TopologicalSorter()
+    #        for id, state in data.items():
+    #            for name, value in state["properties"].items():
+    #                if name == "dependencies":
+    #                    dependencies = value
+    #                    dep_ids = [d["properties"]["id"] for d in dependencies]
+    #                    ts.add(id, *dep_ids)
+    #                    break
+    #        cases: dict[str, canary.TestCase] = {}
+    #        for id in ts.static_order():
+    #            state = data[id]
+    #            case = testcase_factory(state.pop("type"))
+    #            case.setstate(state)
+    #            for i, dep in enumerate(case.dependencies):
+    #                case.dependencies[i] = cases[dep.id]
+    #            cases[id] = case
+    #        for case in cases.values():
+    #            # case.refresh()
+    #            self.data.add_test(case)
+    #        return self
 
     def create(
         self,
@@ -128,7 +134,7 @@ class CDashXMLReporter:
                 if name := subproject.getAttribute("name"):
                     subproject_labels.add(name)
                 for label in subproject.getElementsByTagName("Label"):
-                    if label.childNodes and (name := label.childNodes[0].nodeValue):
+                    if label.childNodes and (name := label.childNodes[0].nodeValue):  # type: ignore
                         subproject_labels.add(name)
         namespace.subproject_labels = None
         if subproject_labels:
@@ -247,136 +253,111 @@ class CDashXMLReporter:
 
         testlist = doc.createElement("TestList")
         for case in cases:
-            add_text_node(testlist, "Test", case.format("./%P/%D"))
+            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{case.display_name()}")
         l1.appendChild(testlist)
 
-        success = ("success", "xfail", "xdiff")
         status: str
         for case in cases:
-            exit_value = case.returncode
+            exit_value = case.status.code
             fail_reason = None
-            if case.status.satisfies(("retry", "created", "pending", "ready", "running")):
+            if case.status.state != "COMPLETED":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.masked():
-                status = "notdone"
-                exit_code = "Not Done"
-                completion_status = "notrun"
-            elif case.invalid():
-                status = "notdone"
-                exit_code = "Initialization Error"
-                completion_status = "notrun"
-            elif case.status == "skipped":
+            elif case.status.category == "SKIP":
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.value in success:
+            elif case.status.category == "PASS":
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status == "diffed":
-                status = "failed"
-                exit_code = "Diffed"
-                completion_status = "Completed"
-                fail_reason = case.status.details or "Test diffed"
-            elif case.status == "failed":
-                status = "failed"
-                exit_code = "Failed"
-                completion_status = "Completed"
-                fail_reason = case.status.details or "Test execution failed"
-            elif case.status == "timeout":
+            elif case.status.status == "TIMEOUT":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status == "not_run":
+            elif case.status.category == "FAIL":
                 status = "failed"
-                exit_code = "Not Run"
+                exit_code = case.status.status.title()
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was unexpectedly not run"
-            elif case.status == "cancelled":
+                fail_reason = case.status.reason or f"Test {case.status.status.lower()}"
+            elif case.status.category == "CANCEL":
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was cancelled"
-            elif case.status == "unknown":
-                status = "failed"
-                exit_code = "Unknown"
-                completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was unexpectedly not run"
+                fail_reason = case.status.reason or "Test case was cancelled"
             else:
                 status = "failed"
                 exit_code = "No Status"
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            name_fmt = "%P/%D" if canary.config.getoption("name_format") == "long" else "%D"
-            add_text_node(test_node, "Name", case.format(name_fmt))
-            add_text_node(test_node, "Path", case.format("./%P"))
-            add_text_node(test_node, "FullName", case.format("./%P/%D"))
-            add_text_node(test_node, "FullCommandLine", case.format("%x"))
+            name_fmt = canary.config.getoption("name_format")
+            name = case.display_name()
+            fullname = f"{case.workspace.path.parent}/{case.display_name()}"
+            add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
+            add_text_node(test_node, "Path", str(case.workspace.dir.parent))
+            add_text_node(test_node, "FullName", f"./{fullname}")
+            add_text_node(test_node, "FullCommandLine", str(case.get_attribute("command")))
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = case.stop - case.start
+            duration = case.timekeeper.duration
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
             add_named_measurement(results, "Completion Status", completion_status)
-            add_named_measurement(results, "Command Line", case.format("%x"), type="cdata")
+            add_named_measurement(
+                results, "Command Line", str(case.get_attribute("command")), type="cdata"
+            )
             add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
                 add_named_measurement(results, "GPUs", case.gpus)
-            if url := getattr(case, "url", None):
+            if url := case.get_attribute("url"):
                 add_named_measurement(results, "Test Script", url, type="text/link")
-            if case.measurements:
-                for name, value in case.measurements.items():
-                    if isinstance(value, str) and value.startswith(("https://", "http://")):
-                        add_named_measurement(results, name.title(), value, type="text/link")
-                    elif isinstance(value, (str, int, float)):
-                        add_named_measurement(results, name.title(), value)
-                    else:
-                        add_named_measurement(results, name.title(), json.dumps(value))
+            for name, value in case.attributes.items():
+                if isinstance(value, str) and value.startswith(("https://", "http://")):
+                    add_named_measurement(results, name.title(), value, type="text/link")
+            for name, value in case.measurements.items():
+                if isinstance(value, (str, int, float)):
+                    add_named_measurement(results, name.title(), value)
+                else:
+                    add_named_measurement(results, name.title(), json.dumps(value))
             add_measurement(
                 results,
-                case.output(compress=True),
+                case.read_output(compress=True),
                 encoding="base64",
                 compression="gzip",
             )
             test_node.appendChild(results)
 
-            if case.status.satisfies(("failed", "diffed")) and os.path.exists(case.file):
-                add_named_measurement(
-                    test_node,
-                    "Attached File",
-                    compress_str(open(case.file).read()),
-                    type="file",
-                    encoding="base64",
-                    compression="gzip",
-                    filename=os.path.basename(case.file),
-                )
-            for artifact in case.artifacts:
+            artifacts = []
+            for artifact in canary.config.pluginmanager.hook.canary_cdash_artifacts(case=case):
                 when = artifact["when"]
-                if when == "success" and case.status != "success":
+                if when == "never":
                     continue
-                elif when == "failure" and case.status == "success":
+                elif when == "on_success" and case.status.category != "PASS":
+                    continue
+                elif when == "on_failure" and case.status.category == "PASS":
                     continue
                 file = artifact["file"]
                 if not os.path.exists(file) and not os.path.isabs(file):
-                    if os.path.exists(os.path.join(case.working_directory, file)):
-                        file = os.path.join(case.working_directory, file)
-                    elif os.path.exists(os.path.join(case.file_dir, file)):
-                        file = os.path.join(case.file_dir, file)
+                    if os.path.exists(os.path.join(case.workspace.dir, file)):
+                        file = os.path.join(case.workspace.dir, file)
+                    elif os.path.exists(os.path.join(case.file.parent, file)):
+                        file = os.path.join(case.file.parent, file)
                 if os.path.exists(file):
-                    mode = "r" if file.endswith((".py", ".txt", ".cmake", ".pyt", ".log")) else "rb"
-                    add_named_measurement(
-                        test_node,
-                        "Attached File",
-                        compress_str(open(file, mode=mode).read()),
-                        type="file",
-                        encoding="base64",
-                        compression="gzip",
-                        filename=os.path.basename(file),
-                    )
+                    artifacts.append(file)
+            if artifacts:
+                payload = targz_compress(*artifacts, path="artifacts")
+                add_named_measurement(
+                    test_node,
+                    "Attached File",
+                    payload,
+                    type="file",
+                    encoding="base64",
+                    compression="tar/gzip",
+                    filename="artifacts",
+                )
 
             labels: set[str] = set(
                 canary.config.pluginmanager.hook.canary_cdash_labels(case=case) or []
@@ -540,23 +521,24 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status == "diffed":
+        if case.status.status == "DIFFED":
             self.status |= 2**1
-        elif case.status == "failed":
-            self.status |= 2**2
-        elif case.status == "timeout":
+        elif case.status.status == "TIMEOUT":
             self.status |= 2**3
-        elif case.status == "skipped":  # notdone
+        elif case.status.category == "FAIL":
+            self.status |= 2**2
+        elif case.status.category == "SKIP":  # notdone
             self.status |= 2**4
-        elif case.status == "ready":
+        elif case.status.state in ("READY", "PENDING"):
             self.status |= 2**5
-        elif case.status == "not_run":
-            self.status |= 2**6
 
     def add_test(self, case: "canary.TestCase") -> None:
-        if case.start > 0 and case.start < self.start:
-            self.start = case.start
-        if case.stop > 0 and case.stop > self.stop:
-            self.stop = case.stop
+        if case.timekeeper.started_on != "NA" and case.timekeeper.finished_on != "NA":
+            start = datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp()
+            finish = datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp()
+            if start < self.start:
+                self.start = start
+            if finish > self.stop:
+                self.stop = finish
         self.update_status(case)
         self.cases.append(case)

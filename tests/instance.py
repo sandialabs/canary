@@ -3,12 +3,23 @@
 # SPDX-License-Identifier: MIT
 
 import os
+from pathlib import Path
 
-import _canary.testinstance as inst
+import _canary.testcase as tc
+import _canary.testinst as inst
 import canary
-from _canary import finder
+from _canary import workspace
+from _canary.testexec import ExecutionSpace
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
+
+
+def generate_specs(generators, on_options=None):
+    from _canary.generate import Generator
+
+    g = Generator(generators=generators, workspace=Path.cwd(), on_options=on_options or [])
+    specs = g.run()
+    return specs
 
 
 def test_instance_deps(tmpdir):
@@ -19,21 +30,22 @@ def test_instance_deps(tmpdir):
             fh.write("canary.directives.analyze()\n")
             fh.write("canary.directives.parameterize('cpus', [1,2])\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-    f = finder.Finder()
-    f.add(workdir)
-    assert len(f.roots) == 1
-    f.prepare()
-    files = f.discover()
-    cases = finder.generate_test_cases(files)
-    assert len([c for c in cases if c.status != "masked"]) == 7
+    generators = workspace.find_generators_in_path(workdir)
+    specs = generate_specs(generators)
+    assert len([spec for spec in specs if not spec.mask]) == 7
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)
     with canary.config.override():
-        canary.config.set("session:work_tree", work_tree, scope="defaults")
-        for case in cases:
+        lookup = {}
+        for spec in specs:
+            p = Path(work_tree)
+            space = ExecutionSpace(p.parent, str(p.name))
+            deps = [lookup[d.id] for d in spec.dependencies]
+            case = tc.TestCase(spec=spec, workspace=space, dependencies=deps)
+            lookup[case.id] = case
             case.save()
-            instance = inst.load(case.working_directory)
-            if isinstance(case, inst.TestMultiInstance):
+            instance = inst.from_testcase(case)
+            if case.get_attribute("multicase"):
                 assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
                 assert instance.parameters.b == (1, 3, 5, 1, 3, 5)
                 assert instance.parameters.cpus == (1, 1, 1, 2, 2, 2)

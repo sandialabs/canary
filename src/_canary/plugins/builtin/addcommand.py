@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from typing import Generator
 
 from ... import config
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser

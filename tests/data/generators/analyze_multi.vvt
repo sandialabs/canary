@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+# VVT: parameterize (autotype) : a,b = 0,1 2,3
+# VVT: parameterize (autotype) : c,d = 4,5 6,7
+# VVT: analyze: --analyze
+
+import sys
+import vvtest_util as vvt
+
+
+def test():
+    assert vvt.a in (0, 2)
+    assert vvt.b in (1, 3)
+    assert vvt.c in (4, 6)
+    assert vvt.d in (5, 7)
+
+def analyze():
+    assert vvt.PARAM_a_b == [[0, 1], [2, 3]]
+    assert vvt.PARAM_c_d == [[4, 5], [6, 7]]
+
+
+if __name__ == '__main__':
+    if '--analyze' in sys.argv[1:]:
+        rc = analyze()
+    else:
+        rc = test()
+    sys.exit(rc)

@@ -6,10 +6,11 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...util.editor import editor
-from ..hookspec import hookimpl
+from ...workspace import NotAWorkspaceError
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -37,18 +38,9 @@ class Edit(CanarySubcommand):
 
 
 def find_file(testspec: str) -> str | None:
-    from ... import finder
-
     try:
-        generator = finder.find(testspec)
-        return generator.file
-    except Exception:  # nosec B110
-        pass
-    try:
-        session = load_session()
-    except Exception:
+        workspace = Workspace.load()
+    except NotAWorkspaceError:
         return None
-    for case in session.cases:
-        if case.matches(testspec):
-            return case.file
-    return None
+    spec = workspace.find(spec=testspec)
+    return spec.file

@@ -6,9 +6,13 @@ from argparse import Namespace
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ..util import logging
+
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..session import Session
+
+
+logger = logging.get_logger(__name__)
 
 
 class CanarySubcommand:
@@ -17,7 +21,7 @@ class CanarySubcommand:
     Args:
       name: Subcommand name (e.g., ``canary my-subcommand``)
       description: Subcommand description, shown in ``canary --help``
-      in_session: Subcommand should be exected inside a test session folder
+      in_repo: Subcommand should be exected inside a test session folder
       execute: Called when the subcommand is invoked
       setup_parser: Called when the subcommand parser is initialized
       epilog: Epilog printed for ``canary my-subcommand --help``
@@ -35,12 +39,6 @@ class CanarySubcommand:
 
     def execute(self, args: Namespace) -> int:
         raise NotImplementedError
-
-    def in_session_note(self) -> str | None:
-        note = f"Note: ``canary {self.name}`` must be executed within a test session folder. "
-        note += "You can do this by either navigating to the folder or by specifying the path "
-        note += f"with ``canary -C PATH {self.name} ...``"
-        return note
 
 
 class CanaryReporter:
@@ -72,27 +70,9 @@ class CanaryReporter:
                 "-o", dest="output", help=f"Output file name [default: {self.default_output}]"
             )
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def create(self, **kwargs: Any) -> None:
         raise NotImplementedError
 
-    def not_implemented(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def not_implemented(self, **kwargs: Any) -> None:
         action = kwargs["action"]
         raise NotImplementedError(f"{self}: {action} method is not implemented")
-
-
-class Result:
-    def __init__(self, ok: bool | None = None, reason: str | None = None) -> None:
-        if not ok:
-            ok = not bool(reason)
-        if not ok and not reason:
-            raise ValueError(f"{self.__class__.__name__}(False) requires a reason")
-        self.ok: bool = ok
-        self.reason: str | None = reason
-
-    def __bool__(self) -> bool:
-        return self.ok
-
-    def __repr__(self) -> str:
-        state = "ok" if self.ok else "fail"
-        reason = f": {self.reason}" if self.reason else ""
-        return f"<{self.__class__.__name__} {state}{reason}>"

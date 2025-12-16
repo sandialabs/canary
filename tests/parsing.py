@@ -13,7 +13,7 @@ def test_config_args():
     args = parser.parse_args(
         [
             "-c",
-            "config:debug:true",
+            "debug:true",
             "-c",
             "resource_pool:cpus:8",
             "-c",
@@ -24,7 +24,7 @@ def test_config_args():
     )
     config = Config()
     config.set_main_options(args)
-    assert config.get("config:debug") is True
+    assert config.get("debug") is True
     assert config.getoption("resource_pool_mods") == {"cpus": 8, "gpus": 4}
     assert config.get("environment")["set"]["SPAM"] == "EGGS"
     assert os.environ["SPAM"] == "EGGS"

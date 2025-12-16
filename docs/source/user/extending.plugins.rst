@@ -7,7 +7,7 @@
 Extend canary with plugins
 ==========================
 
-The default behavior of ``canary`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``canary`` session.  Plugins are loaded and managed by `pluggy <https://pluggy.readthedocs.io/en/stable/>`_.
+The default behavior of ``canary`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``canary`` workflow.  Plugins are loaded and managed by `pluggy <https://pluggy.readthedocs.io/en/stable/>`_.
 
 Plugin discovery
 ----------------
@@ -36,30 +36,7 @@ Plugin functions are registered with ``canary`` by decorating with ``canary.hook
     def canary_plugin_name(...):
        ...
 
-Recognized plugin hooks are:
-
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-| hook                                                 | Description                                                                         |
-+======================================================+=====================================================================================+
-|``canary_addoption(parser: canary.Parser)``           | Use this plugin to register  additional command line options with ``canary``        |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_configure(config: canary.Config)``           | Called after parsing arguments.  Use this plugin to modify the Canary configuration |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_start(session: canary.Session)``     | Called after session initialization and before test discovery                       |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_finish(session: canary.Session)``    | Called after the session finished                                                   |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_generator()``                                | Returns an instance of :class:`~_canary.generator.AbstractTestGenerator`            |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_modify(case: canary.TestCase)``     | Called after test cases have been masked by filtering criteria                      |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_setup(case: canary.TestCase)``      | Called after the test case's working directory is setup                             |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_teardown(case: canary.TestCase)``   | Called after the test case is run                                                   |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_reporter()``                         | Called by the ``canary report`` subcommand                                          |
-+------------------------------------------------------+-------------------------------------------------------------------------------------+
-
+Recognized plugin hooks defined in :ref:`hookspec`.
 
 Examples
 --------
@@ -71,9 +48,10 @@ Examples
     import canary
 
     @canary.hookimpl
-    def canary_testcase_modify(case: canary.TestCase):
-        if case.name in EXCLUSION_DB:
-            case.mask = "excluded due to ..."
+    def canary_select_modifyitems(selector: canary.Selector):
+        for spec in selector.specs:
+            if spec.name in EXCLUSION_DB:
+                spec.mask = canary.Mask.masked("excluded due to ...")
 
 
 * Add a flag to turn on test coverage and set the ``LLVM_PROFILE_FILE`` environment variable:
@@ -92,17 +70,17 @@ Examples
         )
 
     @canary.hookimpl
-    def canary_testcase_modify(case: canary.TestCase) -> None:
+    def canary_select_modifyitems(selector: canary.Selector) -> None:
         if not canary.config.getoption("code_coverage"):
             return
-        if case.mask:
+        if spec.mask:
             return
-        case.add_default_env("LLVM_PROFILE_FILE", f"{case.name}.profraw")
+        spec.environment["LLVM_PROFILE_FILE"] = f"{case.name}.profraw"
 
     @canary.hookimpl
-    def canary_session_finish(session: canary.Session) -> None:
+    def canary_sessionfinish(session: canary.Session) -> None:
         if not canary.config.getoption("code_coverage"):
             return
-        files = find_raw_profiling_files(session.work_tree)
+        files = find_raw_profiling_files(session.root)
         combined_files = combine_profiling_files(files)
         create_coverage_maps(combined_files)

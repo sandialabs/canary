@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # /Formatter
 #  Copyright NTESS. See COPYRIGHT file for details.
 #
@@ -6,20 +10,13 @@
 import datetime
 import json
 import logging as builtin_logging
-import math
 import os
 import sys
-import termios
-from contextlib import contextmanager
-from typing import IO
-from typing import Any
-from typing import Generator
+import time
 from typing import Literal
+from typing import cast
 
-from ..third_party.color import clen
-from ..third_party.color import colorize
-from .term import terminal_size
-from .time import hhmmss
+from .rich import colorize
 
 NOTSET = builtin_logging.NOTSET
 TRACE = builtin_logging.DEBUG - 5
@@ -38,7 +35,15 @@ root_log_name = "canary"
 class FileHandler(builtin_logging.FileHandler): ...
 
 
+class MuteConsoleFilter(builtin_logging.Filter):
+    def filter(self, record):
+        # Returning false = block record
+        return False
+
+
 class StreamHandler(builtin_logging.StreamHandler):
+    canary_stream = True
+
     def emit(self, record):
         """Emit a record.
 
@@ -72,12 +77,13 @@ class Formatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            if level_color(record.levelno):
+                prefix = "[bold %s]%s[/]: " % (
+                    level_color(record.levelno),
+                    record.levelname.upper(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = f"{record.levelname.upper()}: "
             extra["prefix"] = prefix
 
         record.__dict__.update(extra)
@@ -95,12 +101,10 @@ class JsonFormatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            if record.levelno in (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
+                prefix = f"{record.levelname.upper()}: "
             else:
-                prefix = "@*{==>} "
+                prefix = ""
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()
@@ -137,14 +141,35 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str | None = None) -> builtin_logging.Logger:
+class ProgressMonitor:
+    def __init__(self, logger_name: str, message: str, levelno: int = INFO) -> None:
+        self.message = message
+        self.logger_name = logger_name
+        self.start = time.monotonic()
+        self.levelno = levelno
+        get_logger(self.logger_name).log(self.levelno, self.message, extra={"end": "..."})
+
+    def done(self, status: str = "done") -> None:
+        x = {"end": "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start), "rewind": True}
+        get_logger(self.logger_name).log(self.levelno, self.message, extra=x)
+
+
+class CanaryLogger(builtin_logging.Logger):
+    def progress_monitor(self, message: str, levelno: int = INFO) -> ProgressMonitor:
+        return ProgressMonitor(self.name, message, levelno)
+
+
+builtin_logging.setLoggerClass(CanaryLogger)
+
+
+def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
     parts = name.split(".")
     if parts[0] != root_log_name:
         parts.insert(0, root_log_name)
         name = ".".join(parts)
-    logger = builtin_logging.getLogger(name)
+    logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
 
@@ -216,19 +241,19 @@ def add_file_handler(file: str, levelno: int) -> None:
 
 def level_color(levelno: int) -> str:
     if levelno == NOTSET:
-        return "c"
+        return "cyan"
     elif levelno == TRACE:
-        return "m"
+        return "magenta"
     elif levelno == DEBUG:
-        return "g"
+        return "green"
     elif levelno == INFO:
-        return "b"
+        return "blue"
     elif levelno == WARNING:
-        return "Y"
+        return "bright_yellow"
     elif levelno == ERROR:
-        return "r"
+        return "red"
     elif levelno == CRITICAL:
-        return "r"
+        return "red"
     elif levelno == EMIT:
         return ""
     raise ValueError(levelno)
@@ -240,134 +265,3 @@ def get_level() -> int:
         if isinstance(handler, StreamHandler):
             return handler.level
     return logger.getEffectiveLevel()
-
-
-def progress_bar(
-    total: int,
-    complete: int,
-    elapsed: float,
-    average: float | None = None,
-    width: int | None = None,
-    level: int = 0,
-    file: IO[Any] = sys.stderr,
-) -> None:
-    """Display test session progress
-
-    Args:
-    ----------
-    case : Active test cases
-
-    """
-    blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
-    lsep, rsep = "▏", "▕"
-
-    total_width = width or (terminal_size()[1] - 3)
-
-    frac = complete / total
-    percent = frac * 100
-    eta = None if not complete else round(elapsed * (1.0 - frac) / frac)
-
-    w = len(str(total))
-    info = f"  {complete:{w}d}/{total} {percent:5.1f}% ["
-    info += f"elapsed: {hhmmss(elapsed, threshold=1)} "
-    info += f"eta: {hhmmss(eta, threshold=0)} "
-    info += f"ave: {hhmmss(average, threshold=1)}]   "
-
-    bar_width = total_width - len(info)
-    v = frac * bar_width
-    x = math.floor(v)
-    y = v - x
-    base = 0.125
-    prec = 3
-    i = int(round(base * math.floor(float(y) / base), prec) / base)
-    bar = "█" * x + blocks[i]
-    n = bar_width - len(bar)
-    pad = " " * n
-    file.write(f"\r{lsep}{bar}{pad}{rsep}{info}")
-
-
-def hline(
-    label: str | None = None,
-    char: str = "-",
-    max_width: int = 64,
-    file: IO[Any] = sys.stdout,
-    end: str = "\n",
-) -> None:
-    """Draw a labeled horizontal line.
-
-    Keyword Arguments:
-        char (str): Char to draw the line with.  Default '-'
-        max_width (int): Maximum width of the line.  Default is 64 chars.
-    """
-    _, cols = terminal_size()
-    if max_width < 0:
-        max_width = cols
-    cols = min(max_width, cols - 2)
-
-    if label is None:
-        file.write(char * max_width)
-    else:
-        label = str(label)
-        prefix = char * 2 + " "
-        suffix = " " + (cols - len(prefix) - clen(label)) * char
-        file.write(prefix)
-        file.write(label)
-        file.write(suffix)
-        file.write(end)
-
-
-def fileno(file_or_fd):
-    if not hasattr(file_or_fd, "fileno"):
-        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
-    return file_or_fd.fileno()
-
-
-def streamify(arg: IO[Any] | str, mode: str) -> tuple[IO[Any], bool]:
-    if isinstance(arg, str):
-        return open(arg, mode), True
-    else:
-        return arg, False
-
-
-@contextmanager
-def redirect_stdout(
-    to: str | IO[Any] = os.devnull, stdout: IO[Any] | None = None
-) -> Generator[IO[Any], None, None]:
-    stdout = stdout or sys.stdout
-    stdout_fd = fileno(stdout)
-    # copy stdout_fd before it is overwritten
-    # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
-    with os.fdopen(os.dup(stdout_fd), "wb") as copied:
-        stdout.flush()  # flush library buffers that dup2 knows nothing about
-        os.dup2(fileno(to), stdout_fd)  # $ exec >&file
-        try:
-            yield stdout  # allow code to be run with the redirected stdout
-        finally:
-            # restore stdout to its previous value
-            # NOTE: dup2 makes stdout_fd inheritable unconditionally
-            stdout.flush()
-            os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
-
-
-def merged_stderr_stdout():  # $ exec 2>&1
-    return redirect_stdout(to=sys.stdout, stdout=sys.stderr)
-
-
-@contextmanager
-def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, None]:
-    if file_like is None:
-        yield
-    else:
-        file, fown = streamify(file_like, mode)
-        with redirect_stdout(to=file):
-            with merged_stderr_stdout():
-                yield
-        if fown:
-            file.close()
-
-
-def reset():
-    if sys.stdin.isatty():
-        fd = sys.stdin.fileno()
-        save_tty_attr = termios.tcgetattr(fd)
-        termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)

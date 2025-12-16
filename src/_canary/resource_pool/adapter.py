@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import getpass
 import json
 import os
@@ -5,15 +9,15 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..plugins.types import Result
 from ..testcase import TestCase
+from .rpool import Outcome
 from .rpool import ResourceUnavailable
 
 
 class ResourcePoolAdapter:
     """Adapter to communicate with the pool server via curl + Unix socket."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sockefile: Path | None = None
         self.host: str | None = None
         self.port: int | None = None
@@ -29,7 +33,7 @@ class ResourcePoolAdapter:
         else:
             raise RuntimeError("CANARY_RESOURCE_POOL_ADDR is not defined")
 
-    def curl(self, endpoint: str, method: str = "POST", data: dict | None = None):
+    def curl(self, endpoint: str, method: str = "POST", data: Any = None):
         cmd = ["curl", "-s", "-w", "\n%{http_code}"]
         baseurl: str
         if self.socketfile is not None:
@@ -49,9 +53,9 @@ class ResourcePoolAdapter:
         if result.returncode != 0:
             raise RuntimeError(result.stderr)
         lines = result.stdout.splitlines()
-        data = json.loads("\n".join(lines[:-1]))
-        data["http_code"] = int(lines[-1])
-        return data
+        d = json.loads("\n".join(lines[:-1]))
+        d["http_code"] = int(lines[-1])
+        return d
 
     def empty(self) -> bool:
         return False
@@ -65,9 +69,9 @@ class ResourcePoolAdapter:
         response = self.curl("/types", method="GET")
         return response["types"]
 
-    def accommodates(self, case: TestCase) -> Result:
+    def accommodates(self, case: TestCase) -> Outcome:
         response = self.curl("/accommodates", data=case.required_resources())
-        return Result(response["ok"], reason=response["reason"])
+        return Outcome(response["ok"], reason=response["reason"])
 
     def checkout(self, request: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         response = self.curl("/checkout", data=request)

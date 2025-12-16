@@ -5,47 +5,58 @@ import argparse
 import json
 import os
 import threading
+from pathlib import Path
 from typing import Any
 
 import hpc_connect
 
 import canary
 
-from .batching import TestBatch
+from .batchspec import TestBatch
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
 class CanaryHPCExecutor:
-    def __init__(self, *, backend: str, batch: str, case: str | None = None) -> None:
+    def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
-        if "CANARY_BATCH_ID" not in os.environ:
-            os.environ["CANARY_BATCH_ID"] = batch
-        elif batch != os.environ["CANARY_BATCH_ID"]:
-            raise ValueError("env batch id inconsistent with cli batch id")
-        self.batch = batch
-        config = TestBatch.loadconfig(self.batch)
+        config = TestBatch.loadconfig(workspace)
+        self.session: str = config["session"]
+        self.batch: str = config["id"]
+        assert workspace == config["workspace"]
+        self.workspace = Path(config["workspace"])
         self.cases: list[str] = []
         if case is not None:
             self.cases.append(case)
         else:
             self.cases.extend(config["cases"])
-        self.stage = TestBatch.stage(self.batch)
-        f = self.stage / "hpc_connect.yaml"
+        f = self.workspace / "hpc_connect.yaml"
         if not f.exists():
             with open(f, "w") as fh:
                 self.backend.config.dump(fh)
+        if "CANARY_BATCH_ID" not in os.environ:
+            os.environ["CANARY_BATCH_ID"] = self.batch
+        elif self.batch != os.environ["CANARY_BATCH_ID"]:
+            raise ValueError("env batch id inconsistent with cli batch id")
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_executor")
+
+    def run(self, args: argparse.Namespace) -> int:
+        n = len(self.cases)
+        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
+        workspace = canary.Workspace.load()
+        specs = workspace.load_testspecs(ids=self.cases)
+        session = workspace.run(specs, reuse_session=self.session, update_view=False, only="all")
+        return session.returncode
 
     @canary.hookimpl
     def canary_resource_pool_fill(
         self, config: canary.Config, pool: dict[str, dict[str, Any]]
     ) -> None:
         mypool = self.generate_resource_pool()
-        f = self.stage / "resource_pool.json"
+        f = self.workspace / "resource_pool.json"
         if not f.exists():
             f.write_text(json.dumps({"resource_pool": mypool}, indent=2))
         # require full control of resource pool
@@ -53,17 +64,6 @@ class CanaryHPCExecutor:
         pool["additional_properties"].update(mypool["additional_properties"])
         pool["resources"].clear()
         pool["resources"].update(mypool["resources"])
-
-    def run(self, args: argparse.Namespace) -> int:
-        n = len(self.cases)
-        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {args.batch_id}")
-        case_specs = [f"/{case}" for case in self.cases]
-        session = canary.Session.casespecs_view(os.getcwd(), case_specs)
-        session.run()
-        canary.config.pluginmanager.hook.canary_runtests_summary(
-            cases=session.active_cases(), include_pass=False, truncate=10
-        )
-        return session.exitstatus
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:
@@ -74,7 +74,9 @@ class CanaryHPCExecutor:
             "--backend", dest="canary_hpc_backend", help="The HPC connect backend name"
         )
         parser.add_argument("--case", dest="canary_hpc_case", help="Run only this case")
-        parser.add_argument("batch_id")
+        parser.add_argument(
+            "--workspace", dest="canary_hpc_workspace", help="The batch's workspace", required=True
+        )
 
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend

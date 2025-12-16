@@ -7,21 +7,16 @@ import os
 import re
 from typing import TYPE_CHECKING
 
-from ....third_party.color import colorize
 from ....util import logging
+from ....util.rich import bold
 from ....util.time import time_in_seconds
 
 __all__ = [
-    "PathSpec",
-    "setdefault",
     "add_filter_arguments",
     "add_work_tree_arguments",
     "add_resource_arguments",
 ]
 
-
-from .pathspec import PathSpec
-from .pathspec import setdefault
 
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
@@ -30,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def add_filter_arguments(parser: "Parser") -> None:
+def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
@@ -41,12 +36,7 @@ def add_filter_arguments(parser: "Parser") -> None:
         "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
     )
     group.add_argument(
-        "-o",
-        dest="on_options",
-        default=None,
-        metavar="option",
-        action="append",
-        help="Turn option(s) on, such as '-o dbg' or '-o intel'",
+        "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
     )
     group.add_argument(
         "-p",
@@ -63,19 +53,11 @@ def add_filter_arguments(parser: "Parser") -> None:
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
     )
-    group.add_argument(
-        "--rerun-failed",
-        nargs=0,
-        action=RerunFailed,
-        help="Rerun failed tests [default: False]",
-    )
-
-
-class RerunFailed(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        keyword_exprs = getattr(args, "keyword_exprs") or []
-        keyword_exprs.append("not success")
-        args.keyword_exprs = keyword_exprs
+    if tagged:
+        group.add_argument(
+            "--tag",
+            help="Tag this test case selection for future runs [default: False]",
+        )
 
 
 def add_work_tree_arguments(parser: "Parser") -> None:
@@ -86,14 +68,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",
     )
-    parser.add_argument(
-        "-d",
-        "--work-tree",
-        dest="work_tree",
-        metavar="directory",
-        help="Set the path to the working tree. It can be an absolute path or a "
-        "path relative to the current working directory. [default: ./TestResults]",
-    )
+    parser.add_argument("-d", "--work-tree", dest="work_tree", help=argparse.SUPPRESS)
 
 
 def add_resource_arguments(parser: "Parser") -> None:
@@ -162,22 +137,4 @@ class TimeoutResource(argparse.Action):
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
     prefix = os.path.abspath(pathspec)
-    return [c for c in cases if c.matches(pathspec) or c.working_directory.startswith(prefix)]
-
-
-def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:
-    if isinstance(status, str):
-        status = (status,)
-    return [c for c in cases if c.status.value in status]
-
-
-def load_session(root: str | None = None, mode: str = "r"):
-    from ....session import Session
-
-    return Session(root or os.getcwd(), mode=mode)
-
-
-def bold(arg: str) -> str:
-    if os.getenv("COLOR_WHEN", "auto") == "never":
-        return f"**{arg}**"
-    return colorize("@*{%s}" % arg)
+    return [c for c in cases if c.workspace.dir.relative_to(prefix)]

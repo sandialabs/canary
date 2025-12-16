@@ -7,10 +7,10 @@ import os
 import types
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...third_party import argparsewriter as aw
-from ...third_party.color import set_color_when
 from ...util.filesystem import mkdirp
-from ..hookspec import hookimpl
+from ...util.rich import set_color_when
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -71,7 +71,6 @@ def autodoc_commands(dest: str) -> None:
     from ...config.argparsing import make_argument_parser
 
     parser = make_argument_parser()
-    for command in config.pluginmanager.hook.canary_subcommand():
-        parser.add_command(command)
+    config.pluginmanager.hook.canary_addcommand(parser=parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)

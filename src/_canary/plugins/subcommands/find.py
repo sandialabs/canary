@@ -1,25 +1,33 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import argparse
-import json
-import os
+import io
+import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import rich
+import rich.console
+from rich.columns import Columns
+from rich.rule import Rule
+
+from ... import config
+from ... import rules
+from ...collect import Collector
 from ...error import StopExecution
+from ...generate import Generator
+from ...hookspec import hookimpl
+from ...select import Selector
+from ...util import graph
 from ...util import logging
-from ...util.banner import banner
-from ...util.filesystem import find_work_tree
-from ...util.graph import static_order
-from ..hookspec import hookimpl
+from ...util.json_helper import json
 from ..types import CanarySubcommand
-from .common import PathSpec
-from .common import add_filter_arguments
 from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testspec import ResolvedSpec
 
 logger = logging.get_logger(__name__)
 
@@ -38,71 +46,52 @@ class Find(CanarySubcommand):
         group = parser.add_mutually_exclusive_group()
         add_group_argument(group, "paths", "Print file paths, grouped by root", False)
         add_group_argument(group, "files", "Print file paths", False)
-        add_group_argument(group, "graph", "Print DAG of test cases")
-        add_group_argument(group, "lock", "Dump test cases to lock file")
-        parser.add_argument(
-            "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
-        )
-        add_filter_arguments(parser)
+        add_group_argument(group, "graph", "Print DAG of test specs")
+        add_group_argument(group, "lock", "Dump test specs to lock file")
+        add_group_argument(group, "keywords", "Print keywords by root", False)
+        Collector.setup_parser(parser)
+        Generator.setup_parser(parser)
+        Selector.setup_parser(parser, tagged=False)
         add_resource_arguments(parser)
-        PathSpec.setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ... import config
-        from ... import finder
+        collector = Collector()
+        collector.add_scanpaths(args.scanpaths)
+        generators = collector.run()
 
-        work_tree = find_work_tree(os.getcwd())
-        if work_tree is not None:
-            raise ValueError("find must be executed outside of a canary work tree")
-        quiet = bool(args.print_files)
-        if quiet:
-            logging.set_level(logging.ERROR)
-        else:
-            logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-        f = finder.Finder()
-        for root, paths in args.paths.items():
-            f.add(root, *paths, tolerant=True)
-        f.prepare()
-        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in f.roots)
-        logger.info("@*{Searching} for tests in %s" % s)
-        generators = f.discover()
-        logger.debug(f"Discovered {len(generators)} test files")
+        generator = Generator(generators, workspace=Path.cwd(), on_options=args.on_options or [])
+        resolved = generator.run()
 
-        cases = finder.generate_test_cases(generators, on_options=args.on_options)
+        selector = Selector(resolved, Path.cwd())
+        if args.keyword_exprs:
+            selector.add_rule(rules.KeywordRule(args.keyword_exprs))
+        if args.parameter_expr:
+            selector.add_rule(rules.ParameterRule(args.parameter_expr))
+        if args.owners:
+            selector.add_rule(rules.OwnersRule(args.owners))
+        if args.regex_filter:
+            selector.add_rule(rules.RegexRule(args.regex_filter))
+        selector.run()
 
-        config.pluginmanager.hook.canary_testsuite_mask(
-            cases=cases,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            owners=None if not args.owners else set(args.owners),
-            regex=args.regex_filter,
-            case_specs=None,
-            stage=None,
-            start=None,
-            ignore_dependencies=False,
-        )
-        for case in static_order(cases):
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
-        cases_to_run = [case for case in cases if not case.wont_run()]
-        if not cases_to_run:
+        final = [spec for spec in resolved if not spec.mask]
+        if not final:
             raise StopExecution("No tests to run", 7)
-        if not quiet:
-            config.pluginmanager.hook.canary_collectreport(cases=cases)
-        cases_to_run.sort(key=lambda x: x.name)
+        final.sort(key=lambda x: x.name)
         if args.print_paths:
-            finder.pprint_paths(cases_to_run)
+            pprint_paths(final)
         elif args.print_files:
-            finder.pprint_files(cases_to_run)
+            pprint_files(final)
         elif args.print_graph:
-            finder.pprint_graph(cases_to_run)
+            pprint_graph(final)
+        elif args.print_keywords:
+            pprint_keywords(final)
         elif args.print_lock:
-            file = os.path.join(config.invocation_dir, "testcases.lock")
-            states = [case.getstate() for case in cases_to_run]
-            with open(file, "w") as fh:
-                json.dump({"testcases": states}, fh, indent=2)
-            logger.info("test cases written to testcase.lock")
+            file = Path(config.invocation_dir) / "testspecs.lock"
+            states = [spec.asdict() for spec in final]
+            file.write_text(json.dumps({"testspecs": states}, indent=2))
+            logger.info("test specs written to testspec.lock")
         else:
-            finder.pprint(cases_to_run)
+            pprint(final)
         return 0
 
 
@@ -112,3 +101,64 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
         args.insert(0, f"-{name[0]}")
     kwargs = dict(dest=f"print_{name}", action="store_true", default=False, help=help_string)
     group.add_argument(*args, **kwargs)
+
+
+def pprint_paths(specs: list["ResolvedSpec"]) -> None:
+    unique_generators: dict[str, set[str]] = dict()
+    for spec in specs:
+        unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
+    for root, paths in unique_generators.items():
+        console.print(Rule(title=f"[magenta]{root}[/magenta]"))
+        columns = Columns(sorted(paths))
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())
+
+
+def pprint_files(specs: list["ResolvedSpec"]) -> None:
+    console = rich.console.Console()
+    columns = Columns(sorted(set([str(spec.file) for spec in specs])))
+    with console.pager():
+        console.print(columns)
+
+
+def pprint_keywords(specs: list["ResolvedSpec"]) -> None:
+    unique_kwds: dict[str, set[str]] = dict()
+    for spec in specs:
+        unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
+    for root, kwds in unique_kwds.items():
+        console.print(Rule(title=f"[magenta]{root}[/magenta]"))
+        columns = Columns(sorted(kwds))
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())
+
+
+def pprint_graph(specs: list["ResolvedSpec"]) -> None:
+    file = io.StringIO()
+    graph.print(specs, file=file, style="rich")
+    console = rich.console.Console()
+    with console.pager():
+        console.print(file.getvalue())
+
+
+def pprint(specs: list["ResolvedSpec"]) -> None:
+    tree: dict[str, list[str]] = {}
+    for spec in specs:
+        line = spec.display_name(style="rich", resolve=True)
+        tree.setdefault(str(spec.file_root), []).append(line)
+    width = shutil.get_terminal_size().columns
+    file = io.StringIO()
+    console = rich.console.Console(file=file, width=width)
+    for root, lines in tree.items():
+        console.print(Rule(f"[magenta]{root}[/magenta]"))
+        columns = Columns(lines, expand=True)
+        console.print(columns)
+    with console.pager():
+        console.print(file.getvalue())

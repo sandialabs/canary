@@ -6,7 +6,8 @@ import sys
 
 import canary
 
-canary.directives.keywords("basic", "first")
+canary.directives.name("FFO")
+canary.directives.keywords("basic")
 
 
 def add(a: int, b: int) -> int:

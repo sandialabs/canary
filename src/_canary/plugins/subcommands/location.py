@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -22,10 +23,7 @@ class Location(CanarySubcommand):
     name = "location"
     description = "Print locations of test files and directories"
     epilog = """\
-If no options are give, -x is assumed.
-
-Note: this command must be run from inside of a test session directory.
-"""
+If no options are give, -x is assumed."""
 
     def setup_parser(self, parser: "Parser") -> None:
         group = parser.add_mutually_exclusive_group()
@@ -61,29 +59,20 @@ Note: this command must be run from inside of a test session directory.
 
     def execute(self, args: argparse.Namespace) -> int:
         from ...testcase import TestCase
-        from ...testcase import TestMultiCase
-        from ...testcase import from_id as testcase_from_id
+        from ...testspec import ResolvedSpec
 
-        case: TestCase | TestMultiCase
-        if args.testspec.startswith("/"):
-            case = testcase_from_id(args.testspec[1:])
+        workspace = Workspace.load()
+        f: Path | str
+        if args.show_input or args.show_source_dir:
+            spec: ResolvedSpec = workspace.find(spec=args.testspec)
+            f = spec.file if args.show_input else spec.file.parent
         else:
-            session = load_session()
-            for case in session.cases:
-                if case.matches(args.testspec):
-                    break
+            case: TestCase = workspace.find(case=args.testspec)
+            if args.show_log:
+                f = case.workspace.joinpath(case.stdout)
+            elif args.show_working_directory:
+                f = case.workspace.dir
             else:
-                raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
-        f: str
-        if args.show_log:
-            f = case.stdout_file
-        elif args.show_input:
-            f = case.file
-        elif args.show_source_dir:
-            f = case.file_dir
-        elif args.show_working_directory:
-            f = case.working_directory
-        else:
-            f = case.working_directory
+                f = case.workspace.dir
         print(f)
         return 0

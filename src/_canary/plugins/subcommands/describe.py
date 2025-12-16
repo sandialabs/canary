@@ -5,18 +5,22 @@
 import argparse
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Union
 
 import yaml
 
-from ...generator import AbstractTestGenerator
-from ...third_party.color import colorize
-from ..hookspec import hookimpl
+from ... import config
+from ...collect import Collector
+from ...hookspec import hookimpl
+from ...util.rich import colorize
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...generator import AbstractTestGenerator
     from ...testcase import TestCase
+    from ...testspec import ResolvedSpec
 
 
 @hookimpl
@@ -40,26 +44,25 @@ class Describe(CanarySubcommand):
         parser.add_argument("testspec", help="Test file or test case spec")
 
     def execute(self, args: argparse.Namespace) -> int:
-        import _canary.finder as finder
-
-        if finder.is_test_file(args.testspec):
-            file = finder.find(args.testspec)
-            describe_generator(file, on_options=args.on_options)
-            return 0
-
-        # could be a test case in the test session?
-        session = load_session()
-        for case in session.cases:
-            if case.matches(args.testspec):
-                describe_testcase(case)
+        collector = Collector()
+        config.pluginmanager.hook.canary_collectstart(collector=collector)
+        for type in collector.types:
+            if gen := type.factory(args.testspec):
+                describe_generator(gen, on_options=args.on_options)
                 return 0
 
-        print(f"{args.testspec}: could not find matching generator or test case")
-        return 1
+        # could be a test case in the test session?
+        workspace = Workspace.load()
+        try:
+            case_or_spec = workspace.find(case=args.testspec)
+        except:
+            case_or_spec = workspace.find(spec=args.testspec)
+        describe_testcase(case_or_spec)
+        return 0
 
 
 def describe_generator(
-    file: AbstractTestGenerator,
+    file: "AbstractTestGenerator",
     on_options: list[str] | None = None,
 ) -> None:
     description = file.describe(on_options=on_options)
@@ -70,17 +73,15 @@ def dump(data: dict[str, Any]) -> str:
     return yaml.dump(data, default_flow_style=False)
 
 
-def describe_testcase(case: "TestCase", indent: str = "") -> None:
+def describe_testcase(case: Union["TestCase", "ResolvedSpec"], indent: str = "") -> None:
     from pygments import highlight
     from pygments.formatters import (
         TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
     )
     from pygments.lexers import get_lexer_by_name
 
-    if case.work_tree is None:
-        case.work_tree = "."
-    state = case.getstate()
-    text = dump({"name": case.display_name, **state})
+    state = case.asdict()
+    text = dump({"name": case.display_name(), **state})
     lexer = get_lexer_by_name("yaml")
     formatter = Formatter(bg="dark", style="monokai")
     formatted_text = highlight(text.strip(), lexer, formatter)

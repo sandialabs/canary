@@ -54,7 +54,6 @@ if __name__ == "__main__":
             "fail": 1,
             "skip": vvt.skip_exit_status,
         }[status_type]
-        print(vvt.NAME, status_type, retcode)
         sys.exit(retcode)
     elif vvt.NAME.startswith("bar_analyze_"):
         gold_statuses = set(vvt.NAME[len("bar_analyze_"):].split("_"))

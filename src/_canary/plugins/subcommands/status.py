@@ -3,18 +3,25 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
-import os
+import io
+import shutil
 from typing import TYPE_CHECKING
+from typing import Any
 
-from ... import config
-from ..builtin.reporting import determine_cases_to_show
-from ..hookspec import hookimpl
+from rich.console import Console
+from rich.table import Table
+
+from ...hookspec import hookimpl
+from ...status import Status as _Status
+from ...util import glyphs
+from ...util import logging
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+
+logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -27,7 +34,6 @@ class Status(CanarySubcommand):
     description = "Print information about a test run"
 
     def setup_parser(self, parser: "Parser"):
-        parser.epilog = self.in_session_note()
         parser.add_argument(
             "--durations",
             nargs="?",
@@ -37,11 +43,19 @@ class Status(CanarySubcommand):
             help="Show N slowest test durations (N<0 for all) [default: 10]",
         )
         parser.add_argument(
-            "--format",
-            default="short",
-            action="store",
-            choices=["short", "long"],
-            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
+            "-o",
+            dest="format_cols",
+            default="ID,Name,Session,Exit Code,Duration,Status,Details",
+            action=StatusFormatAction,
+            help="Comma separated list of fields to print to the screen [default: %(default)s]. "
+            "Choices are:\n\n"
+            "• Name: the testcase name\n\n"
+            "• FullName: the testcase full name (name including relative execution path)\n\n"
+            "• Session: the session name the testcase was last ran in\n\n"
+            "• Exit Code: the testcase's exit code\n\n"
+            "• Duration: testcase duration\n\n"
+            "• Status: testcase exit status\n\n"
+            "• Details: additional details, if any\n\n",
         )
         parser.add_argument(
             "-r",
@@ -56,7 +70,6 @@ class Status(CanarySubcommand):
             "(f)ailed, "
             "(n)ot run, "
             "(s)kipped, "
-            "e(x)cluded, "
             "(a)ll (except passed), "
             "(A)ll.  [default: dftns]",
         )
@@ -67,21 +80,81 @@ class Status(CanarySubcommand):
             help="Sort cases by this field [default: %(default)s]",
         )
         parser.add_argument(
-            "--dump", action="store_true", help="Dump test cases to lock lock file [default: False]"
+            "specs", nargs=argparse.REMAINDER, help="Show status for these specific specs"
         )
-        parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        session = load_session()
-        config.pluginmanager.hook.canary_statusreport(session=session)
-        if args.dump:
-            report_chars = args.report_chars or "dftns"
-            cases_to_show = determine_cases_to_show(session, report_chars)
-            cases = [case.getstate() for case in cases_to_show]
-            file = os.path.join(config.invocation_dir, "testcases.lock")
-            with open(file, "w") as fh:
-                json.dump({"testcases": cases}, fh, indent=2)
+        workspace = Workspace.load()
+        results = workspace.db.get_results(ids=args.specs)
+        if args.specs:
+            args.report_chars = "A"
+        table = self.get_status_table(results, args)
+        console = Console()
+        if table.row_count > shutil.get_terminal_size().lines:
+            with console.pager():
+                console.print(table, markup=True)
+        else:
+            console.print(table, markup=True)
+        if args.durations:
+            console.print(format_durations(results, args.durations))
         return 0
+
+    def get_status_table(self, results: dict[str, Any], args: "argparse.Namespace") -> Table:
+        rows = sorted(results.values(), key=sortkey)
+        rows = filter_by_status(rows, args.report_chars)
+        cols = args.format_cols.split(",")
+
+        table = Table(expand=True)
+        for col in cols:
+            table.add_column(col)
+
+        map: dict[str, str] = {
+            "ID": "id",
+            "Name": "name",
+            "FullName": "fullname",
+            "Session": "session",
+            "Exit Code": "returncode",
+            "Duration": "duration",
+            "Status": "status_name",
+            "Details": "status_reason",
+        }
+        for row in rows:
+            r: list[str] = []
+            for col in cols:
+                key = map[col]
+                value = get_attribute(row, key)
+                r.append(value)
+            table.add_row(*r)
+        return table
+
+
+def sortkey(row: dict) -> tuple:
+    c = 1
+    if row["status"].category == "PASS":
+        c = 0
+    if row["status"].category == "FAIL":
+        c = 2
+    return (c, row["status"].status, row["timekeeper"].duration)
+
+
+def get_attribute(row: dict[str, Any], attr: str) -> str:
+    if attr == "id":
+        return row["id"][:7]
+    elif attr == "name":
+        return row["spec_name"]  # fixme: add color
+    elif attr == "fullname":
+        return row["spec_fullname"]
+    elif attr == "session":
+        return row["session"]
+    elif attr == "returncode":
+        return str(row["status"].code)
+    elif attr == "duration":
+        return dformat(row["timekeeper"].duration)
+    elif attr == "status_name":
+        return row["status"].display_name(style="rich")
+    elif attr == "status_reason":
+        return row["status"].reason or ""
+    raise AttributeError(attr)
 
 
 class ReportCharAction(argparse.Action):
@@ -92,3 +165,84 @@ class ReportCharAction(argparse.Action):
             if value not in self.chars:
                 parser.error(f"Invalid report char {value!r}, choose any from {self.chars!r}")
         setattr(args, self.dest, values)
+
+
+class StatusFormatAction(argparse.Action):
+    _choices: list[str] = [
+        "ID",
+        "FullName",
+        "Name",
+        "Session",
+        "Exit Code",
+        "Duration",
+        "Status",
+        "Details",
+    ]
+
+    def __call__(self, parser, namespace, value, option_string=None):
+        items = value.split(",")
+        for i, item in enumerate(items):
+            if choice := match_case_insensitive(item, self._choices):
+                items[i] = choice
+            else:
+                choices = ",".join(self._choices)
+                parser.error(f"Invalid status format {item!r}, choose from {choices}")
+        value = ",".join(items)
+        setattr(namespace, self.dest, value)
+
+
+def match_case_insensitive(s: str, choices: list[str]) -> str | None:
+    for choice in choices:
+        if s.lower() == choice.lower():
+            return choice
+    return None
+
+
+def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
+    chars = chars or "dftns"
+    if "A" in chars:
+        return rows
+    keep = [False] * len(rows)
+    for i, row in enumerate(rows):
+        status: _Status = row["status"]
+        if "a" in chars:
+            keep[i] = status.category != "PASS"
+        elif status.category == "SKIP":
+            keep[i] = "s" in chars
+        elif status.category == "PASS":
+            keep[i] = "p" in chars
+        elif status.status in ("FAILED", "ERROR", "BROKEN"):
+            keep[i] = "f" in chars
+        elif status.status == "DIFFED":
+            keep[i] = "d" in chars
+        elif status.status == "TIMEOUT":
+            keep[i] = "t" in chars
+        elif status.state in ("READY", "PENDING"):
+            keep[i] = "n" in chars
+        elif status.category == "CANCEL":
+            keep[i] = "n" in chars
+        else:
+            logger.warning(f"Unhandled status {status}")
+    return [row for i, row in enumerate(rows) if keep[i]]
+
+
+def format_durations(results: dict[str, Any], N: int) -> str:
+    rows = sorted(results.values(), key=lambda x: x["timekeeper"].duration)
+    ix = list(range(len(rows)))
+    if N > 0:
+        ix = ix[-N:]
+    kwds = {"t": glyphs.turtle, "N": N}
+    fp = io.StringIO()
+    fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
+    for i in ix:
+        duration = rows[i]["timekeeper"].duration
+        if duration < 0:
+            continue
+        name = rows[i]["spec_name"]
+        id = rows[i]["id"][:7]
+        fp.write("  %6.2f   %s %s\n" % (duration, id, name))
+    return fp.getvalue().strip()
+
+
+def dformat(arg: float) -> str:
+    return "NA" if arg < 0 else f"{arg:.02f}"

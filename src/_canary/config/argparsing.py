@@ -18,8 +18,8 @@ from typing import Any
 from typing import Sequence
 
 from .. import version
-from ..third_party.color import colorize
 from ..util.collections import merge
+from ..util.rich import colorize
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
@@ -163,6 +163,8 @@ class Parser(argparse.ArgumentParser):
             kwds["add_help"] = False  # ty: ignore[invalid-assignment]
             kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
             kwds["help"] = command.description
+        if hasattr(command, "aliases"):
+            kwds["aliases"] = command.aliases  # ty: ignore[invalid-assignment]
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
         command.setup_parser(subparser)  # type: ignore
@@ -278,8 +280,7 @@ class RegisterPlugin(argparse.Action):
         option_str: str | None = None,
     ):
         config_mods = getattr(namespace, self.dest, None) or {}
-        config_section = config_mods.setdefault("config", {})
-        config_section.setdefault("plugins", []).append(option)
+        config_mods.setdefault("plugins", []).append(option)
         setattr(namespace, self.dest, config_mods)
 
 
@@ -325,7 +326,7 @@ def make_argument_parser(**kwargs):
         default=None,
         metavar="path",
         help=colorize(
-            "Run as if canary was started in @*{path} instead of the current working directory."
+            "Run as if canary was started in [bold]path[/] instead of the current working directory."
         ),
     )
     parser.add_argument(
@@ -349,6 +350,12 @@ def make_argument_parser(**kwargs):
         default=0,
         action="count",
         help="Decrease console logging level by 1",
+    )
+    group.add_argument(
+        "--banner",
+        dest="banner",
+        action=argparse.BooleanOptionalAction,
+        help="Print banner [default: %(default)s]",
     )
     parser.add_argument(
         "-d",
@@ -412,7 +419,7 @@ def make_argument_parser(**kwargs):
         action=ConfigMods,
         metavar="path",
         help="Add the colon-separated path to test session's configuration, "
-        "e.g. %s" % colorize("@*{-c config:debug:true}"),
+        "e.g. %s" % colorize("[bold]-c debug:true[/]"),
     )
     group.add_argument(
         "-e",
@@ -420,16 +427,14 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default=None,
         action=EnvironmentModification,
-        help="Add environment variable %s to the testing environment with value %s.  Accepts "
-        "optional scope using the form %s:var=val.  Valid scopes are: "
-        "session: set environment variable for whole session; "
-        "test: set environment variable only during test execution"
-        % (colorize("@*{var}"), colorize("@*{val}"), colorize("@*{scope}")),
+        help="Add environment variable %s to the testing environment with value %s. "
+        % (colorize("[bold]var[/]"), colorize("[bold]val[/]")),
     )
     parser.add_argument(
         "--cache-dir",
         help="Store test case cache info in the given folder [default: .canary_cache/]",
     )
+    parser.set_defaults(banner=False)
 
     return parser
 

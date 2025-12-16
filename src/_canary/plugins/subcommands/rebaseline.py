@@ -3,17 +3,20 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ... import when
+from ...collect import Collector
+from ...hookspec import hookimpl
+from ...select import Selector
 from ...util import logging
-from ...util.banner import banner
-from ..hookspec import hookimpl
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import PathSpec
-from .common import add_filter_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -29,28 +32,36 @@ class Rebaseline(CanarySubcommand):
     description = "Rebaseline tests"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = self.in_session_note()
-        add_filter_arguments(parser)
-        PathSpec.setup_parser(parser)
+        Collector.setup_parser(parser)
+        Selector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        from ...session import Session
-
-        if getattr(args, "work_tree", None) is None:
-            raise ValueError("rebaseline must be executed in a canary work tree")
-
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
-            # Rebaseline diffed tests by default
-            args.keyword_exprs = ["diff"]
-
-        logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-        session = Session(args.work_tree, mode="r")
-        session.filter(
-            start=args.start,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            case_specs=getattr(args, "case_specs", None),
-        )
-        for case in session.active_cases():
+            raise ValueError("At least one filtering criteria required")
+        workspace = Workspace.load()
+        cases: list[TestCase]
+        if args.start:
+            specs = workspace.select_from_view(path=Path(args.start))
+            cases = workspace.load_testcases(ids=[spec.id for spec in specs])
+        else:
+            cases = workspace.load_testcases(args.case_specs)
+        if args.keyword_exprs:
+            cases = filter_cases_by_keyword(cases, args.keyword_exprs)
+        for case in cases:
             case.do_baseline()
         return 0
+
+
+def filter_cases_by_keyword(cases: list["TestCase"], keyword_exprs: list[str]) -> list["TestCase"]:
+    masks: dict[str, bool] = {}
+    for case in cases:
+        kwds = set(case.spec.keywords)
+        kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
+        kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
+        if not kwd_all:
+            for keyword_expr in keyword_exprs:
+                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                if not match:
+                    masks[case.id] = True
+                    break
+    return [case for case in cases if not masks.get(case.id)]

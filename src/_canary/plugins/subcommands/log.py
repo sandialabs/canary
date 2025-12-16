@@ -6,12 +6,12 @@ import argparse
 import datetime
 import io
 import json
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -28,7 +28,6 @@ class Log(CanarySubcommand):
     description = "Show the session or a test case's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = self.in_session_note()
         parser.add_argument(
             "-e",
             "--error",
@@ -48,20 +47,20 @@ class Log(CanarySubcommand):
             help="Test name or /TEST_ID.  If not given, the session log will be shown",
         )
 
-    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> str:
+    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> Path | None:
         if args.error:
-            return case.stderr_file or ""
+            if case.stderr is None:
+                return None
+            return case.workspace.joinpath(case.stderr)
         else:
-            return case.stdout_file
+            return case.workspace.joinpath(case.stdout)
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...testcase import from_id as testcase_from_id
+        workspace = Workspace.load()
 
-        file: str
         if not args.testspec:
-            session = load_session(mode="r+")
-            file = os.path.join(session.config_dir, "canary-log.txt")
-            if os.path.exists(file):
+            file = workspace.logs_dir / "canary-log.txt"
+            if file.exists():
                 text: str
                 if args.raw:
                     text = open(file).read()
@@ -69,27 +68,19 @@ class Log(CanarySubcommand):
                     text = reconstruct_log(file)
                 page_text(text)
                 return 0
-            raise ValueError(f"no log file found in {session.config_dir}")
+            raise ValueError(f"no log file found in {workspace.root}")
 
-        if args.testspec.startswith("/"):
-            case = testcase_from_id(args.testspec[1:])
-            file = self.get_logfile(case, args)
-            display_file(file)
-            return 0
-
-        session = load_session()
-        for case in session.cases:
-            if case.matches(args.testspec):
-                file = self.get_logfile(case, args)
-                display_file(file)
-                return 0
-
-        raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
+        case = workspace.find(case=args.testspec)
+        f = self.get_logfile(case, args)
+        if f:
+            display_file(f)
+        return 0
 
 
-def reconstruct_log(file: str) -> str:
+def reconstruct_log(file: str | Path) -> str:
+    file = Path(file)
     fp = io.StringIO()
-    if not os.path.isfile(file):
+    if not file.is_file():
         raise ValueError(f"{file}: no such file")
     fmt = "[%(time)s] %(level)s: %(message)s\n"
     records: list[dict[str, str]] = []
@@ -101,11 +92,11 @@ def reconstruct_log(file: str) -> str:
     return fp.getvalue()
 
 
-def display_file(file: str) -> None:
+def display_file(file: Path) -> None:
     print(f"{file}:")
-    if not os.path.isfile(file):
-        raise ValueError(f"{file}: no such file")
-    page_text(open(file).read())
+    if not file.exists():
+        raise FileNotFoundError(file)
+    page_text(file.read_text())
 
 
 def page_text(text: str) -> None:

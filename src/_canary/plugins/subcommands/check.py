@@ -11,9 +11,9 @@ import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.filesystem import working_dir
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -49,6 +49,9 @@ class Check(CanarySubcommand):
         parser.add_argument("-f", nargs=0, action=Action, help="run ruff format (default)")
         parser.add_argument("-c", nargs=0, action=Action, help="run ruff check (default)")
         parser.add_argument("-m", nargs=0, action=Action, help="run mypy (default)")
+        parser.add_argument(
+            "-b", nargs=0, action=Action, help="run bandit security checks (default)"
+        )
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage (default)")
         parser.add_argument("-e", nargs=0, action=Action, help="run examples test")
@@ -67,11 +70,13 @@ class Check(CanarySubcommand):
             raise ValueError("canary check must be run from a editable install of canary")
         self.root = os.path.normpath(str(root))
         if not hasattr(args, "action"):
-            args.action = set("fcmC")
+            args.action = set("fcmbC")
         if shutil.which("ruff") is None and "f" in args.action:
             raise ValueError("ruff must be on PATH to format and check code")
         if shutil.which("ruff") is None and "c" in args.action:
             raise ValueError("ruff must be on PATH to lint check code")
+        if shutil.which("bandit") is None and "b" in args.action:
+            raise ValueError("bandit must be on PATH to format and check code")
         if "m" in args.action:
             if shutil.which("ty") is None and shutil.which("mypy") is None:
                 raise ValueError("type checking requires ty or mypy be on PATH")
@@ -86,6 +91,9 @@ class Check(CanarySubcommand):
 
         if "c" in args.action:
             self.lint_check_code(args)
+
+        if "b" in args.action and shutil.which("bandit"):
+            self.security_check(args)
 
         if "m" in args.action:
             self.type_check_code(args)
@@ -109,60 +117,85 @@ class Check(CanarySubcommand):
 
     def format_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logger.info(f"Formatting examples in {self.root}/src/canary/examples")
+            pm = logger.progress_monitor(f"Formatting examples in {self.root}/src/canary/examples")
             paths = Check.find_pyt_files("./src/canary/examples")
             ruff("format", *paths)
             ruff("format", "./src/canary/examples")
+            pm.done()
 
-            logger.info(f"Formatting examples in {self.root}/docs/source/static")
+            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs/source/static")
             ruff("format", "./docs/source/static")
+            pm.done()
 
-            logger.info(f"Formatting tests in {self.root}/tests")
+            pm = logger.progress_monitor(f"Formatting tests in {self.root}/tests")
             ruff("format", "./tests")
+            pm.done()
 
-            logger.info(f"Formatting source in {self.root}/src")
+            pm = logger.progress_monitor(f"Formatting source in {self.root}/src")
             ruff("format", "./src")
+            pm.done()
 
     def lint_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logger.info(f"Lint checking examples in {self.root}/src/canary/examples")
+            pm = logger.progress_monitor(
+                f"Lint checking examples in {self.root}/src/canary/examples"
+            )
             paths = Check.find_pyt_files("./src/canary/examples")
             ruff("check", "--fix", *paths)
             ruff("check", "--fix", "./src/canary/examples")
+            pm.done()
 
-            logger.info(f"Lint checking examples in {self.root}/docs/source/static")
+            pm = logger.progress_monitor(
+                f"Lint checking examples in {self.root}/docs/source/static"
+            )
             ruff("check", "--fix", "./docs/source/static")
+            pm.done()
 
-            logger.info(f"Lint checking tests in {self.root}/tests")
+            pm = logger.progress_monitor(f"Lint checking tests in {self.root}/tests")
             ruff("check", "--fix", "./tests")
+            pm.done()
 
-            logger.info(f"Lint checking source in {self.root}/src")
+            pm = logger.progress_monitor(f"Lint checking source in {self.root}/src")
             ruff("check", "--fix", "./src")
+            pm.done()
+
+    def security_check(self, args: argparse.Namespace):
+        with working_dir(self.root):
+            pm = logger.progress_monitor("Checking source for security violations")
+            bandit("-c", "./pyproject.toml", "-r", "src/")
+            pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logger.info(f"Type checking source in {self.root}/src")
+            pm = logger.progress_monitor(f"Type checking source in {self.root}/src")
             typecheck("./src")
+            pm.done()
 
     def run_tests(self, args: argparse.Namespace):
         if "e" in args.action:
             os.environ["CANARY_RUN_EXAMPLES_TEST"] = "1"
         with working_dir(self.root):
             if "C" not in args.action:
-                logger.info(f"Running tests in {self.root}/tests")
+                pm = logger.progress_monitor(f"Running tests in {self.root}/tests")
                 pytest("./tests")
-                logger.info(f"Running tests in {self.root}/canary_cmake/tests")
+                pm.done()
+                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_cmake/tests")
                 pytest("./src/canary_cmake/tests")
-                logger.info(f"Running tests in {self.root}/canary_hpc/tests")
+                pm.done()
+                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_hpc/tests")
                 pytest("./src/canary_hpc/tests")
-                logger.info(f"Running tests in {self.root}/canary_vvtest/tests")
+                pm.done()
+                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_vvtest/tests")
                 pytest("./src/canary_vvtest/tests")
+                pm.done()
             else:
-                logger.info(f"Running coverage in {self.root}/tests")
+                pm = logger.progress_monitor(f"Running coverage in {self.root}/tests")
                 coverage("run")
-                logger.info("Creating coverage report")
+                pm.done()
+                pm = logger.progress_monitor("Creating coverage report")
                 coverage("report")
                 coverage("html")
+                pm.done()
 
     def make_docs(self, args: argparse.Namespace):
         with working_dir(f"{self.root}/docs"):
@@ -192,6 +225,21 @@ def ruff(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
     command = ["ruff", *args]
+    cp = subprocess.run(command, **kwargs)
+    if cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+    return cp
+
+
+def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+    command = ["bandit", *args]
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:

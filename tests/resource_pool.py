@@ -4,9 +4,7 @@
 
 
 import _canary.resource_pool.schemas as schemas
-from _canary.atc import AbstractTestCase
 from _canary.resource_pool import ResourcePool
-from _canary.status import Status
 
 
 def test_fill_simple():
@@ -18,73 +16,13 @@ def test_fill_simple():
     }
 
 
-class Case(AbstractTestCase):
-    @property
-    def id(self) -> str:
-        return "id"
-
-    @property
-    def cpus(self) -> int:
-        return 4
-
-    @property
-    def gpus(self) -> int:
-        return 4
-
-    @property
-    def timeout(self) -> float:
-        return 100.0
-
-    def command(self, stage: str = "") -> list[str]:
-        raise NotImplementedError
-
-    @property
-    def cputime(self) -> float:
-        raise NotImplementedError
-
-    @property
-    def runtime(self) -> float:
-        raise NotImplementedError
-
-    @property
-    def path(self) -> str:
-        raise NotImplementedError
-
-    @property
-    def working_directory(self) -> str:
-        raise NotImplementedError
-
-    def refresh(self) -> None:
-        raise NotImplementedError
-
-    def reload_and_check(self) -> None:
-        raise NotImplementedError
-
-    def run(self) -> None:
-        raise NotImplementedError
-
-    def save(self) -> None:
-        raise NotImplementedError
-
-    def finish(self) -> None:
-        raise NotImplementedError
-
-    @property
-    def duration(self) -> float:
-        raise NotImplementedError
-
-    def size(self) -> int:
-        raise NotImplementedError
-
-    def status(self) -> Status:
-        raise NotImplementedError
-
-    def required_resources(self) -> list[list[dict[str, object]]]:
+class Case:
+    def required_resources(self) -> list[dict[str, object]]:
         group: list[dict[str, object]] = []
         group.extend([{"type": "cpus", "slots": 1} for _ in range(2)])
         group.extend([{"type": "gpus", "slots": 1} for _ in range(2)])
         # by default, only one resource group is returned
-        return [group]
+        return group
 
 
 def test_resource_pool_checkout():
@@ -92,12 +30,10 @@ def test_resource_pool_checkout():
     pool = ResourcePool()
     pool.populate(cpus=4, gpus=4)
     resources = pool.checkout(case.required_resources())
-    expected = [
-        {
-            "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
-            "gpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
-        }
-    ]
+    expected = {
+        "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
+        "gpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
+    }
     assert resources == expected
     assert pool.resources == {
         "cpus": [
@@ -124,15 +60,10 @@ def test_resource_populate():
     }
 
 
-def test_resource_pool_modify():
+def test_resource_populate_nogpu():
     rp = ResourcePool()
-    rp.populate(cpus=1)
-    assert rp.resources == {"cpus": [{"id": "0", "slots": 1}]}
-    rp.modify(gpus=1)
-    assert rp.resources == {
-        "cpus": [{"id": "0", "slots": 1}],
-        "gpus": [{"id": "0", "slots": 1}],
-    }
+    rp.populate(cpus=1, gpus=0)
+    assert rp.resources == {"cpus": [{"id": "0", "slots": 1}], "gpus": []}
 
 
 def test_resource_pool_fill():
@@ -157,8 +88,8 @@ def test_resource_checkout():
         },
     }
     rp.fill(pool)
-    x = rp.checkout([[{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]])
-    assert x == [{"cpus": [{"id": "01", "slots": 1}], "gpus": [{"id": "02", "slots": 1}]}]
+    x = rp.checkout([{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}])
+    assert x == {"cpus": [{"id": "01", "slots": 1}], "gpus": [{"id": "02", "slots": 1}]}
     rp.checkin(x)
-    x = rp.checkout([[{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}]])
-    assert x == [{"cpus": [{"id": "ab", "slots": 3}], "gpus": [{"id": "02", "slots": 3}]}]
+    x = rp.checkout([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}])
+    assert x == {"cpus": [{"id": "ab", "slots": 3}], "gpus": [{"id": "02", "slots": 3}]}

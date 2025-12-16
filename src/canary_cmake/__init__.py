@@ -1,26 +1,70 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
+from pathlib import Path
 from typing import Any
+from typing import Generator
+
+from schema import And
+from schema import Optional
+from schema import Or
+from schema import Schema
+from schema import Use
 
 import canary
 
 from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
+from .ctest import finish_ctest
 from .ctest import read_resource_specs
+from .ctest import setup_ctest
 
 logger = canary.get_logger(__name__)
 
 
-@canary.hookimpl(specname="canary_testcase_generator")
-def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return CTestTestGenerator(root, path=path)
+@canary.hookimpl
+def canary_collectstart(collector: canary.Collector) -> None:
+    collector.add_generator(CTestTestGenerator)
+
+
+@canary.hookimpl
+def canary_collect_modifyitems(collector: canary.Collector) -> None:
+    ctest_files: dict[str, list[str]] = {}
+    for root, path in collector.iter_files():
+        if os.path.basename(path) == "CTestTestfile.cmake":
+            ctest_files.setdefault(root, []).append(path)
+    for root, paths in ctest_files.items():
+        if len(paths) > 1:
+            paths.sort(key=lambda p: (p.split(os.sep), p))
+            for path in paths[1:]:
+                collector.remove_file(root, path)
+
+
+@canary.hookimpl
+def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
+    if case.spec.file.suffix == ".cmake":
+        return canary.SubprocessLauncher(["./runtest.sh"])
     return None
+
+
+@canary.hookimpl
+def canary_runteststart(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        setup_ctest(case)
+
+
+@canary.hookimpl
+def canary_runtest_finish(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        finish_ctest(case)
 
 
 @canary.hookimpl(specname="canary_configure")
 def add_default_ctest_timeout(config: canary.Config):
-    config.set("config:timeout:ctest", 1500.0, scope="defaults")
+    config.set("timeout:ctest", 1500.0)
 
 
 @canary.hookimpl(specname="canary_addoption")
@@ -93,6 +137,11 @@ class CDashHooks:
         """Return CDash labels for ``case``"""
         ...
 
+    @canary.hookspec
+    def canary_cdash_artifacts(self, case: "canary.TestCase") -> list[dict[str, str]] | None:
+        """Return artifacts to transmit to CDash"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -107,7 +156,7 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 @canary.hookimpl(trylast=True)
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
-    return list(case.keywords)
+    return list(case.spec.keywords)
 
 
 @canary.hookimpl
@@ -122,3 +171,22 @@ def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, A
         pool["resources"].update(resource_specs["local"])
         if "cpus" not in pool["resources"]:
             pool["resources"]["cpus"] = cpu_spec
+
+
+@canary.hookimpl(wrapper=True)
+def canary_cdash_artifacts(
+    case: canary.TestCase,
+) -> Generator[None, list[dict[str, str]], list[dict[str, str]]]:
+    """Default implementation: return the test case's keywords"""
+    schema = Schema(
+        {
+            "file": And(Or(str, Path), Use(str)),
+            Optional("when", default="always"): Or("never", "always", "on_success", "on_failure"),
+        }
+    )
+    artifacts = list(case.spec.artifacts) or []
+    result = yield
+    artifacts.extend([_ for _ in result if _])
+    for i, artifact in enumerate(artifacts):
+        artifacts[i] = schema.validate(artifact)
+    return artifacts

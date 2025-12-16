@@ -2,19 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
-import datetime
 import io
 from typing import TYPE_CHECKING
 
 from ... import config
 from ...config.argparsing import Parser
+from ...hookspec import hookimpl
 from ...util import logging
 from ...util.sendmail import sendmail
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...session import Session
     from ...testcase import TestCase
+    from ...workspace import Session
 
 logger = logging.get_logger(__name__)
 
@@ -34,7 +33,7 @@ def canary_addoption(parser: Parser) -> None:
 
 
 @hookimpl(trylast=True)
-def canary_session_finish(session: "Session", exitstatus: int) -> None:
+def canary_sessionfinish(session: "Session") -> None:
     mail_to = config.getoption("mail_to")
     if mail_to is None:
         return
@@ -43,17 +42,15 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
         raise RuntimeError("missing required argument --mail-from")
     recvaddrs = [_.strip() for _ in mail_to.split(",") if _.split()]
     html_report = generate_html_report(session)
-    date = datetime.datetime.fromtimestamp(session.start)
-    st_time = date.strftime("%m/%d/%Y")
-    subject = f"Canary Summary for {st_time}"
+    subject = "Canary Summary"
     logger.info(f"Sending summary to {', '.join(recvaddrs)}")
     sendmail(sendaddr, recvaddrs, subject, html_report, subtype="html")
 
 
 def generate_html_report(session: "Session") -> str:
     totals: dict[str, list["TestCase"]] = {}
-    for case in session.active_cases():
-        group = case.status.name.title()
+    for case in session.cases:
+        group = case.status.category.title()
         totals.setdefault(group, []).append(case)
     file = io.StringIO()
     file.write("<html><head><style>\n")
@@ -65,11 +62,11 @@ def generate_html_report(session: "Session") -> str:
     file.write("<body>\n<h1>Canary test summary</h1>\n<table>\n")
     file.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
     for group, cases in totals.items():
-        for case in sorted(cases, key=lambda c: c.duration):
+        for case in sorted(cases, key=lambda c: c.timekeeper.duration):
             file.write(
-                f"<tr><td>{case.display_name}</td>"
-                f"<td>{case.duration:.2f}</td>"
-                f"<td>{case.status.html_name}</td></tr>\n"
+                f"<tr><td>{case.display_name()}</td>"
+                f"<td>{case.timekeeper.duration:.2f}</td>"
+                f"<td>{case.status.display_name(style='html')}</td></tr>\n"
             )
     file.write("</table>\n</body>\n</html>")
     return file.getvalue()

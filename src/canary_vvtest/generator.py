@@ -15,6 +15,7 @@ import tokenize
 from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
 from typing import Generator
@@ -26,10 +27,15 @@ from _canary.util import string
 
 from . import scalar
 
+if TYPE_CHECKING:
+    pass
+
 logger = canary.get_logger(__name__)
 
 
 class VVTTestGenerator(PYTTestGenerator):
+    file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
+
     def load(self, file: str | None = None) -> None:
         file = file or self.file
         for arg in p_VVT(file):
@@ -64,10 +70,6 @@ class VVTTestGenerator(PYTTestGenerator):
                     )
                 case _:
                     raise VVTParseError(f"Unknown command: {arg.command}", arg)
-
-    @classmethod
-    def matches(cls, path: str) -> bool:
-        return path.endswith(".vvt")
 
     def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
         """# VVT : keywords [:=] word1 word2 ... wordn"""
@@ -599,7 +601,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = "skipif expression @*b{%s} evaluating to @*g{True}" % expression
+        reason = f"skipif expression [bold blue]{expression}[/] evaluating to [bold green]True[/]"
     return True, reason
 
 

@@ -1,13 +1,17 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import io
+import multiprocessing as mp
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ... import config
+from ...hookspec import hookimpl
 from ...util import logging
-from ...util.misc import digits
 from ...util.string import pluralize
-from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -42,42 +46,42 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(specname="canary_testcase_run")
-def repeat_until_pass(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("failed") and (count := config.getoption("repeat_until_pass")):
+@hookimpl(specname="canary_runtest")
+def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
+    if (case.status.category == "FAIL") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if case.status.satisfies("success"):
+            rerun_case(case, queue, i)
+            if case.status.category == "PASS":
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
         )
 
 
-@hookimpl(specname="canary_testcase_run")
-def repeat_after_timeout(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("timeout") and (count := config.getoption("repeat_after_timeout")):
+@hookimpl(specname="canary_runtest")
+def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
+    if (case.status.status == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("timeout"):
+            rerun_case(case, queue, i)
+            if not case.status.status == "TIMEOUT":
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
         )
 
 
-@hookimpl(specname="canary_testcase_run")
-def repeat_until_fail(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("success") and (count := config.getoption("repeat_until_fail")):
+@hookimpl(specname="canary_runtest")
+def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
+    if (case.status.category == "PASS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("success"):
+            rerun_case(case, queue, i)
+            if not case.status.category == "PASS":
                 break
         else:
             return
@@ -87,42 +91,39 @@ def repeat_until_fail(case: "TestCase", qsize: int, qrank: int) -> None:
         )
 
 
-def rerun_case(case: "TestCase", qsize: int, qrank: int, attempt: int) -> None:
+def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
     dont_restage = config.getoption("dont_restage")
     try:
-        case.reset()
-        if summary := job_start_summary(case, qsize=qsize, qrank=qrank):
-            logger.log(logging.EMIT, summary, extra={"prefix": ""})
-        config.pluginmanager.hook.canary_testcase_setup(case=case)
-        case.run()
+        case.restore_workspace()
+        if summary := job_start_summary(case):
+            logger.debug(summary)
+        case.setup()
+        case.run(queue=queue)
     finally:
-        if summary := job_finish_summary(case, qsize=qsize, qrank=qrank, attempt=attempt):
-            logger.log(logging.EMIT, summary, extra={"prefix": ""})
+        if summary := job_finish_summary(case, attempt=attempt):
+            logger.debug(summary)
         if dont_restage:
-            config.options.dont_restage = dont_restage
+            config.set("options:dont_restage", dont_restage, scope="command_line")
 
 
-def job_start_summary(case: "TestCase", qrank: int | None, qsize: int | None) -> str:
-    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+def job_start_summary(case: "TestCase") -> str:
+    if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Repeating @*b{%id}: %X")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write("[bold]Repeating[/] %s: %s" % (case.id[:7], case.display_name(resolve=True)))
+    return fmt.getvalue().strip()
 
 
-def job_finish_summary(
-    case: "TestCase", *, qrank: int | None, qsize: int | None, attempt: int
-) -> str:
-    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
+    if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write(f"Finished @*b{{%id}} (attempt {attempt + 1}): %X %s.n")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write(
+        f"[bold]Finished[/] %s (attempt {attempt + 1}): %s %s"
+        % (case.id[:7], case.display_name(resolve=True), case.status.display_name())
+    )
+    return fmt.getvalue().strip()

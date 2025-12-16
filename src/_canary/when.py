@@ -169,7 +169,7 @@ class When:
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(PlatformMatcher()):
-            fmt = "@*{{platforms={0}}} evaluated to @*r{{False}} for platforms={1}"
+            fmt = "[bold]platforms={0}[/] evaluated to [bold red]False[/] for platforms={1}"
             input = ",".join(PlatformMatcher().own_platform_names)
             reason = fmt.format(expr.string, input)
             return reason
@@ -178,14 +178,14 @@ class When:
     def evaluate_testname_expression(self, testname_arg: str | None, **kwds: str) -> str | None:
         assert self.testname_expr is not None
         if testname_arg is None:
-            fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname=None"
+            fmt = "[bold]testname={0}[/] evaluated to [bold red]False[/] for testname=None"
             reason = fmt.format(self.testname_expr)
             return reason
         string = safe_substitute(self.testname_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(NameMatcher({testname_arg})):
-            fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname={1}"
+            fmt = "[bold]testname={0}[/] evaluated to [bold]False[/] for testname={1}"
             reason = fmt.format(expr.string, testname_arg)
             return reason
         return None
@@ -197,7 +197,7 @@ class When:
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(OptionMatcher(set(options_arg))):
-            fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options={1}"
+            fmt = "[bold]options={0}[/] evaluated to [bold red]False[/] for options={1}"
             reason = fmt.format(expr.string, json.dumps(options_arg))
             return reason
         return None
@@ -211,7 +211,7 @@ class When:
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(AnyMatcher(set(keywords_arg), False)):
-            fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords={1}"
+            fmt = "[bold]keywords={0}[/] evaluated to [bold red]False[/] for keywords={1}"
             reason = fmt.format(expr.string, json.dumps(keywords_arg))
             return reason
         return None
@@ -225,7 +225,7 @@ class When:
         string = remove_surrounding_quotes(string)
         expr = ParameterExpression(string)
         if not expr.evaluate(parameters_arg):
-            fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters={1}"
+            fmt = "[bold]parameters={0}[/] evaluated to [bold red]False[/] for parameters={1}"
             reason = fmt.format(expr.string, json.dumps(parameters_arg))
             return reason
         return None
@@ -338,9 +338,9 @@ class PlatformMatcher:
         return anymatch(self.own_platform_names, name, case_sensitive=False)
 
 
-def match_any(code: str, items: list[str]) -> bool:
+def match_any(code: str, items: list[str], ignore_case: bool = False) -> bool:
     expr = Expression.compile(code, allow_wildcards=True)
-    return expr.evaluate(AnyMatcher(set(items), True))
+    return expr.evaluate(AnyMatcher(set(items), case_sensitive=not ignore_case))
 
 
 def safe_substitute(arg: str, **kwds) -> str:

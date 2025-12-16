@@ -2,11 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanaryReporter
 from ..types import CanarySubcommand
 
@@ -26,7 +25,6 @@ class Report(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         from ... import config
 
-        parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
         for reporter in config.pluginmanager.hook.canary_session_reporter():
             parent = subparsers.add_parser(reporter.type, help=reporter.description)
@@ -34,8 +32,6 @@ class Report(CanarySubcommand):
 
     def execute(self, args: Namespace) -> int:
         from ... import config
-        from ...session import NotASession
-        from ...session import Session
 
         reporter: CanaryReporter
         for reporter in config.pluginmanager.hook.canary_session_reporter():
@@ -44,12 +40,7 @@ class Report(CanarySubcommand):
         else:
             raise ValueError(f"canary report: unknown report type {args.type!r}")
 
-        session: Session | None
-        try:
-            session = Session(os.getcwd(), mode="r")
-        except NotASession:
-            session = None
         kwargs = vars(args)
         action = getattr(reporter, args.action.replace("-", "_"), reporter.not_implemented)
-        action(session, **kwargs)
+        action(**kwargs)
         return 0

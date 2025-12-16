@@ -11,12 +11,12 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ...hookspec import hookimpl
 from ...util.filesystem import mkdirp
-from ..hookspec import hookimpl
+from ...workspace import Workspace
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...session import Session
     from ...testcase import TestCase
 
 
@@ -30,16 +30,13 @@ class JunitReporter(CanaryReporter):
     description = "JUnit reporter"
     default_output = "junit.xml"
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report junit: session required")
-
+    def create(self, **kwargs: Any) -> None:
+        workspace = Workspace.load()
+        cases = workspace.load_testcases()
         doc = JunitDocument()
-        root = doc.create_testsuite_element(
-            session.active_cases(), name=get_root_name(), tagname="testsuites"
-        )
+        root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output
-        groups = groupby_classname(session.active_cases())
+        groups = groupby_classname(cases)
         for classname, cases in groups.items():
             suite = doc.create_testsuite_element(cases, name=classname)
             for case in cases:
@@ -66,8 +63,15 @@ def groupby_classname(cases: list["TestCase"]) -> dict[str, list["TestCase"]]:
     """Group tests by status"""
     grouped: dict[str, list["TestCase"]] = {}
     for case in cases:
-        grouped.setdefault(case.classname, []).append(case)
+        classname = get_classname(case)
+        grouped.setdefault(classname, []).append(case)
     return grouped
+
+
+def get_classname(case: "TestCase") -> str:
+    if "classname" in case.spec.attributes:
+        return case.spec.attributes["classname"]
+    return case.spec.file_path.parent.name
 
 
 class JunitDocument(xdom.Document):
@@ -117,26 +121,16 @@ class JunitDocument(xdom.Document):
 
         """
         testcase = self.create_element("testcase")
-        testcase.setAttribute("name", case.display_name)
-        testcase.setAttribute("classname", case.classname)
-        testcase.setAttribute("time", str(case.duration))
-        testcase.setAttribute("file", getattr(case, "relpath", case.file_path))
-        not_done = (
-            "retry",
-            "created",
-            "pending",
-            "ready",
-            "running",
-            "cancelled",
-            "not_run",
-            "unknown",
-        )
-        if case.status.value in ("failed", "timeout", "diffed"):
+        testcase.setAttribute("name", case.display_name())
+        testcase.setAttribute("classname", get_classname(case))
+        testcase.setAttribute("time", str(case.timekeeper.duration))
+        testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
+        if case.status.category == "FAIL":
             failure = self.create_element("failure")
-            failure.setAttribute("message", f"Test case status: {case.status.value}")
-            failure.setAttribute("type", case.status.name)
+            failure.setAttribute("message", f"Test case status: {case.status.status}")
+            failure.setAttribute("type", case.status.status)
             testcase.appendChild(failure)
-            text = self.create_cdata_node(case.output())
+            text = self.create_cdata_node(case.read_output())
             system_out = self.create_element("system-out")
             system_out.appendChild(text)
             testcase.appendChild(system_out)
@@ -146,39 +140,45 @@ class JunitDocument(xdom.Document):
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
                     failure.appendChild(text)
-        elif case.status.value in not_done:
+        elif case.status.category != "COMPLETE":
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", case.status.value.upper())
+            skipped.setAttribute("message", case.status.status)
             testcase.appendChild(skipped)
         return testcase
 
 
 def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
-    stats = SimpleNamespace(
-        num_skipped=0,
-        num_failed=0,
-        num_error=0,
-        num_tests=0,
-        start=datetime.now().timestamp(),
-        stop=-1,
-    )
+    stats = SimpleNamespace(num_skipped=0, num_failed=0, num_error=0, num_tests=0, time=0.0)
+    started_on: datetime | None = None
+    finished_on: datetime | None = None
     for case in cases:
-        if case.masked():
-            continue
         stats.num_tests += 1
-        if case.status.satisfies(("diffed", "failed", "timeout")):
+        if case.status.category == "FAIL":
             stats.num_failed += 1
-        elif case.status.satisfies(("cancelled", "not_run", "skipped")):
+        elif case.status.category == "SKIP":
             stats.num_skipped += 1
-        elif case.status.satisfies(("retry", "created", "pending", "ready", "running", "invalid")):
+        elif case.status.state in ("PENDING", "READY", "RUNNING"):
             stats.num_error += 1
-        if case.status.complete():
-            if case.start > 0 and case.start < stats.start:
-                stats.start = case.start
-            if case.stop > 0 and case.stop > stats.stop:
-                stats.stop = case.stop
-    stats.time = max(0.0, stats.stop - stats.start)
-    stats.timestamp = datetime.fromtimestamp(stats.start).strftime("%Y-%m-%dT%H:%M:%S")
+        if case.status.state == "COMPLETE":
+            t = case.timekeeper.started_on
+            if started_on is None:
+                if t != "NA":
+                    started_on = datetime.fromisoformat(t)
+            elif t != "NA" and datetime.fromisoformat(t) < started_on:
+                started_on = datetime.fromisoformat(t)
+            t = case.timekeeper.finished_on
+            if finished_on is None:
+                if t != "NA":
+                    finished_on = datetime.fromisoformat(t)
+            elif t != "NA" and datetime.fromisoformat(t) > finished_on:
+                finished_on = datetime.fromisoformat(t)
+    stats.started_on = started_on
+    stats.finished_on = finished_on
+    if started_on is not None and finished_on is not None:
+        stats.timestamp = started_on.strftime("%Y-%m-%dT%H:%M:%S")
+        stats.time = (finished_on - started_on).total_seconds()
+    else:
+        stats.timestamp = "NA"
     return stats
 
 

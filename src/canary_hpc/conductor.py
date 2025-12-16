@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import io
-import os
+import multiprocessing as mp
 import threading
 from collections import Counter
-from datetime import datetime
+from pathlib import Path
 from typing import Any
 from typing import Sequence
 
@@ -15,20 +14,21 @@ import hpc_connect
 
 import canary
 from _canary.plugins.subcommands.run import Run
-from _canary.plugins.types import Result
-from _canary.queue import process_queue
+from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
-from _canary.third_party.color import colorize
+from _canary.resource_pool.rpool import Outcome
+from _canary.runtest import Runner
+from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
-from _canary.util import logging
-from _canary.util.misc import digits
-from _canary.util.string import pluralize
-from _canary.util.time import hhmmss
+from _canary.util.rich import colorize
+from _canary.util.time import time_in_seconds
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
-from .batching import TestBatch
+from .batching import batch_testcases
+from .batchspec import BatchSpec
+from .batchspec import TestBatch
 from .queue import ResourceQueue
 
 global_lock = threading.Lock()
@@ -54,7 +54,7 @@ class CanaryHPCConductor:
         # to finish.  Batches have no specialized resource requirements, just need cpus to run the
         # submission on.
         self.rpool = ResourcePool()
-        self.rpool.populate(cpus=cpu_count())
+        self.rpool.populate(cpus=cpu_count(), gpus=0)
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_conductor")
@@ -99,27 +99,26 @@ class CanaryHPCConductor:
         return self.available_resource_types
 
     @canary.hookimpl
-    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Result:
+    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Outcome:
         return self.backend_accommodates(case)
 
-    def backend_accommodates(self, case: canary.TestCase) -> Result:
+    def backend_accommodates(self, case: canary.TestCase) -> Outcome:
         """determine if the resources for this test are available"""
 
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
 
-        # Step 1: Gathre resource requirements and detect missing types
-        for group in case.required_resources():
-            for member in group:
-                rtype = member["type"]
-                if rtype in self.slots_per_resource_type:
-                    slots_needed[rtype] += member["slots"]
-                else:
-                    missing.add(rtype)
+        # Step 1: Gather resource requirements and detect missing types
+        for member in case.required_resources():
+            rtype = member["type"]
+            if rtype in self.slots_per_resource_type:
+                slots_needed[rtype] += member["slots"]
+            else:
+                missing.add(rtype)
         if missing:
-            types = colorize("@*{%s}" % ",".join(sorted(missing)))
+            types = colorize("[bold]%s[/]" % ",".join(sorted(missing)))
             key = canary.string.pluralize("Resource", n=len(missing))
-            return Result(False, reason=f"{key} unavailable: {types}")
+            return Outcome(False, reason=f"{key} unavailable: {types}")
 
         # Step 2: Check available slots vs. needed slots
         wanting: dict[str, tuple[int, int]] = {}
@@ -128,22 +127,21 @@ class CanaryHPCConductor:
             if slots_avail < slots:
                 wanting[rtype] = (slots, slots_avail)
         if wanting:
-            types: str
             reason: str
-            if canary.config.get("config:debug"):
-                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+            if canary.config.get("debug"):
+                fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (t, n, m)
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
                 reason = f"{case}: insufficient slots of {types}"
             else:
-                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                types = ", ".join("[bold]%s[/]" % t for t in wanting)
                 reason = f"insufficient slots of {types}"
-            return Result(False, reason=reason)
+            return Outcome(False, reason=reason)
 
         # Step 3: all good
-        return Result(True)
+        return Outcome(True)
 
     @canary.hookimpl(tryfirst=True)
-    def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
+    def canary_runtests(self, runner: "Runner") -> bool:
         """Run each test case in ``cases``.
 
         Args:
@@ -153,9 +151,43 @@ class CanaryHPCConductor:
         The session returncode (0 for success)
 
         """
-        queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
-        runner = Runner()
-        return process_queue(queue, runner, backend=self.backend.name)
+        batchspec = canary.config.getoption("canary_hpc_batchspec")
+        if not batchspec:
+            raise ValueError("Cannot partition test cases: missing batching options")
+        batch_specs: list[BatchSpec] = batch_testcases(
+            cases=runner.cases,
+            layout=batchspec["layout"],
+            count=batchspec["count"],
+            duration=batchspec["duration"],
+            nodes=batchspec["nodes"],
+        )
+        if not batch_specs:
+            raise ValueError(
+                "No test batches generated (this should never happen, "
+                "the default batching scheme should have been used)"
+            )
+        if missing := {c.id for c in runner.cases} - {c.id for b in batch_specs for c in b.cases}:
+            raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
+
+        key = canary.string.pluralize("batch", n=len(batch_specs))
+        fmt = "[bold]Generated[/] %d test %s from %d test cases"
+        logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
+        root = runner.workspace.cache_dir / "canary-hpc"
+        batches: list[TestBatch] = []
+        for batch_spec in batch_specs:
+            path = f"batches/{batch_spec.id[:8]}"
+            workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
+            batch = TestBatch(batch_spec, workspace=workspace)
+            batches.append(batch)
+        queue = ResourceQueue(global_lock, resource_pool=self.rpool)
+        queue.put(*batches)  # type: ignore
+        queue.prepare()
+        executor = BatchExecutor()
+        max_workers = canary.config.getoption("workers") or 10
+        with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+            ex.run(backend=self.backend.name)
+
+        return True
 
     @staticmethod
     def setup_parser(
@@ -199,6 +231,14 @@ class CanaryHPCConductor:
             help="Estimate batch runtime (queue time) conservatively or aggressively "
             "[alias: -b timeout=STRATEGY] [default: aggressive]",
         )
+        parser.add_argument(
+            "--queue-timeout",
+            dest="canary_hpc_queue_timeout",
+            metavar="T",
+            type=time_in_seconds,
+            default=30 * 60,
+            help="Maximum time to wait in queue [alias: -b queue_timeout=T] [default: 30min]",
+        )
 
     @staticmethod
     def setup_legacy_parser(parser: canary.Parser) -> None:
@@ -211,7 +251,7 @@ class LegacyParserAdapter:
         self.parser = parser
         self.parser.add_argument(
             "-b",
-            command=("run", "find"),
+            command="run",
             group="canary hpc",
             metavar="option=value",
             action=CanaryHPCResourceSetter,
@@ -220,7 +260,7 @@ class LegacyParserAdapter:
 
     def add_argument(self, flag: str, *args, **kwargs):
         flag = "--hpc-" + flag[2:]
-        self.parser.add_argument(flag, *args, command=("run", "find"), group="canary hpc", **kwargs)
+        self.parser.add_argument(flag, *args, command="run", group="canary hpc", **kwargs)
 
     def parse_args(self, args: Sequence[str] | None = None) -> argparse.Namespace:
         return self.parser.parse_args(args)
@@ -230,52 +270,12 @@ class KeyboardQuit(Exception):
     pass
 
 
-class Runner:
-    """Class for running ``AbstractTestCase``."""
+class BatchExecutor:
+    """Class for running ``ResourceQueue``."""
 
-    def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
+    def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
-        try:
-            backend = hpc_connect.get_backend(kwargs["backend"])
-            qrank = kwargs.get("qrank", 0)
-            qsize = kwargs.get("qsize", 1)
-            if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
-                logger.log(logging.EMIT, summary, extra={"prefix": ""})
-            batch.setup()
-            batch.run(backend=backend, qsize=qsize, qrank=qrank)
-        finally:
-            if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):
-                logger.log(logging.EMIT, summary, extra={"prefix": ""})
-
-
-def batch_start_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
-    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-        return ""
-    fmt = io.StringIO()
-    if os.getenv("GITLAB_CI"):
-        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(batch))}")
-    if batch.jobid:
-        fmt.write(" (jobid: %j)")
-    return batch.format(fmt.getvalue().strip())
-
-
-def batch_finish_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
-    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-        return ""
-    fmt = io.StringIO()
-    if os.getenv("GITLAB_CI"):
-        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    if qrank is not None and qsize is not None:
-        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    times = batch.times()
-    fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
-    if times[1]:
-        fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
-    if times[2]:
-        fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
-    fmt.write(")")
-    return batch.format(fmt.getvalue().strip())
+        backend = hpc_connect.get_backend(kwargs["backend"])
+        batch.setup()
+        batch.run(queue, backend=backend)
