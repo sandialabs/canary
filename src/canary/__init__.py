@@ -31,6 +31,10 @@ from _canary.pluginmanager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
 from _canary.protocols import JobProtocol
+from _canary.rules import Rule
+from _canary.rules import RuleOutcome
+from _canary.rules import RuntimeRule
+from _canary.select import RuntimeSelector
 from _canary.select import Selector
 from _canary.testcase import TestCase
 from _canary.testinst import TestInstance
@@ -72,6 +76,10 @@ __all__ = [
     "Parser",
     "Config",
     "Selector",
+    "Rule",
+    "RuntimeSelector",
+    "RuntimeRule",
+    "RuleOutcome",
     "Mask",
     "centered_parameter_space",
     "list_parameter_space",
