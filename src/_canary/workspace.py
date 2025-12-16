@@ -776,48 +776,46 @@ class WorkspaceDatabase:
         Create the 'LATEST' table if it doesn't exist.
         """
         self = cls(path)
-        cursor = self.connection.cursor()
+        with self.connection:
+            query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT)"
+            self.connection.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT)"
-        cursor.execute(query)
+            query = """CREATE TABLE IF NOT EXISTS specs (
+            id TEXT PRIMARY KEY, signature TEXT, data TEXT
+            )"""
+            self.connection.execute(query)
 
-        query = """CREATE TABLE IF NOT EXISTS specs (
-          id TEXT PRIMARY KEY, signature TEXT, data TEXT
-        )"""
-        cursor.execute(query)
+            query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
+            self.connection.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
-        cursor.execute(query)
+            query = "CREATE TABLE IF NOT EXISTS selections (tag TEXT PRIMARY KEY, data TEXT)"
+            self.connection.execute(query)
 
-        query = "CREATE TABLE IF NOT EXISTS selections (tag TEXT PRIMARY KEY, data TEXT)"
-        cursor.execute(query)
+            query = """CREATE TABLE IF NOT EXISTS results (
+            id TEXT,
+            spec_name TEXT,
+            spec_fullname TEXT,
+            session TEXT,
+            status_state TEXT,
+            status_category TEXT,
+            status_status TEXT,
+            status_reason TEXT,
+            status_code INTEGER,
+            started_on TEXT,
+            finished_on TEXT,
+            duration TEXT,
+            workspace TEXT,
+            measurements TEXT,
+            PRIMARY KEY (id, session)
+            )"""
+            self.connection.execute(query)
 
-        query = """CREATE TABLE IF NOT EXISTS results (
-          id TEXT,
-          spec_name TEXT,
-          spec_fullname TEXT,
-          session TEXT,
-          status_state TEXT,
-          status_category TEXT,
-          status_status TEXT,
-          status_reason TEXT,
-          status_code INTEGER,
-          started_on TEXT,
-          finished_on TEXT,
-          duration TEXT,
-          workspace TEXT,
-          measurements TEXT,
-          PRIMARY KEY (id, session)
-        )"""
-        cursor.execute(query)
+            query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (id)"
+            self.connection.execute(query)
 
-        query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (id)"
-        cursor.execute(query)
+            query = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
+            self.connection.execute(query)
 
-        query = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
-        cursor.execute(query)
-
-        self.connection.commit()
         return self
 
     @classmethod
@@ -830,56 +828,52 @@ class WorkspaceDatabase:
 
     def put_generators(self, generators: list[AbstractTestGenerator]) -> None:
         pm = logger.progress_monitor("[bold]Putting[/] test generators into database")
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN IMMEDIATE;")
-        rows = [(gen.id, gen.serialize()) for gen in generators]
-        cursor.executemany(
-            """
-            INSERT INTO generators (id, data)
-            VALUES (?, ?)
-            ON CONFLICT(id) DO UPDATE SET data=excluded.data
-            """,
-            rows,
-        )
-        self.connection.commit()
+        with self.connection:
+            rows = ((gen.id, gen.serialize()) for gen in generators)
+            self.connection.executemany(
+                """
+                INSERT INTO generators (id, data)
+                VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET data=excluded.data
+                """,
+                rows,
+            )
         pm.done()
 
     def count(self, table: str) -> int:
         if table not in self.tables:
             raise ValueError(f"{table} is not a valid table name")
 
-        cursor = self.connection.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM {table};")  # nosec B608
-        return int(cursor.fetchone()[0])
+        row = self.connection.execute(f"SELECT COUNT(*) FROM {table};").fetchone()  # nosec B608
+        return int(row[0])
 
     def get_generators(self) -> list[AbstractTestGenerator]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT data FROM generators;")
-        rows = cursor.fetchall()
+        rows = self.connection.execute("SELECT data FROM generators;").fetchall()
         with ProcessPoolExecutor() as ex:
             generators = list(ex.map(AbstractTestGenerator.reconstruct, [row[0] for row in rows]))
         return generators
 
     def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN IMMEDIATE;")
-        cursor.executemany(
-            """
-            INSERT INTO specs (id, signature, data)
-            VALUES (?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET signature=excluded.signature, data=excluded.data
-            """,
-            [(spec.id, signature, json.dumps_min(spec.asdict())) for spec in specs],
-        )
-        cursor.executemany(
-            """
-            INSERT INTO dependencies (id, data)
-            VALUES (?, ?)
-            ON CONFLICT(id) DO UPDATE SET data=excluded.data
-            """,
-            [(spec.id, json.dumps_min([dep.id for dep in spec.dependencies])) for spec in specs],
-        )
-        self.connection.commit()
+        with self.connection:
+            self.connection.executemany(
+                """
+                INSERT INTO specs (id, signature, data)
+                VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET signature=excluded.signature, data=excluded.data
+                """,
+                ((spec.id, signature, json.dumps_min(spec.asdict())) for spec in specs),
+            )
+            self.connection.executemany(
+                """
+                INSERT INTO dependencies (id, data)
+                VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET data=excluded.data
+                """,
+                (
+                    (spec.id, json.dumps_min([dep.id for dep in spec.dependencies]))
+                    for spec in specs
+                ),
+            )
 
     def reachable_spec_ids(self, ids: list[str]) -> list[str]:
         graph = self.get_dependency_graph()
@@ -889,15 +883,15 @@ class WorkspaceDatabase:
     def resolve_spec_id(self, id: str) -> str | None:
         if id.startswith(testspec.select_sygil):
             id = id[1:]
-        cursor = self.connection.cursor()
         try:
             hi = increment_hex_prefix(id)
         except ValueError:
             return None
         if hi is None:
             return None
-        cursor.execute("SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi))
-        rows = cursor.fetchall()
+        rows = self.connection.execute(
+            "SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi)
+        ).fetchall()
         if len(rows) == 0:
             return None
         elif len(rows) > 1:
@@ -906,7 +900,6 @@ class WorkspaceDatabase:
 
     def resolve_spec_ids(self, ids: list[str]):
         """Given partial spec IDs in ``ids``, expand them to their full size"""
-        cursor = self.connection.cursor()
         for i, id in enumerate(ids):
             if id.startswith(testspec.select_sygil):
                 id = id[1:]
@@ -914,13 +907,15 @@ class WorkspaceDatabase:
                 continue
             hi = increment_hex_prefix(id)
             assert hi is not None
-            cursor.execute("SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi))
-            rows = cursor.fetchall()
-            if len(rows) == 0:
+            cur = self.connection.execute(
+                "SELECT id FROM specs WHERE id >= ? AND id < ? ORDER BY id LIMIT 2", (id, hi)
+            )
+            row = cur.fetchone()
+            if row is None:
                 raise ValueError(f"No match for spec ID {id!r}")
-            elif len(rows) > 1:
+            if cur.fetchone():
                 raise ValueError(f"Ambiguous spec ID {id!r}")
-            ids[i] = rows[0][0]
+            ids[i] = row[0]
 
     def get_specs(
         self, ids: list[str] | None = None, signature: str | None = None
@@ -935,34 +930,30 @@ class WorkspaceDatabase:
             return self._get_all_specs()
 
     def _get_all_specs(self) -> list[ResolvedSpec]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM specs")
-        rows = cursor.fetchall()
+        rows = self.connection.execute("SELECT * FROM specs").fetchall()
         return self._reconstruct_specs(rows)
 
     def _get_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM specs WHERE signature = ?", (signature,))
-        rows = cursor.fetchall()
+        rows = self.connection.execute(
+            "SELECT * FROM specs WHERE signature = ?", (signature,)
+        ).fetchall()
         return self._reconstruct_specs(rows)
 
     def _get_specs_by_exact_id(self, exact: list[str]) -> list[Any]:
         rows = list()
-        cursor = self.connection.cursor()
         base_query = "SELECT * FROM specs WHERE id IN"
         if exact:
             while rem := len(exact) > 0:
                 nvar = min(900, rem)
                 placeholders = ",".join(["?"] * nvar)
                 query = f"{base_query} ({placeholders})"
-                cursor.execute(query, exact[:nvar])
-                rows.extend(cursor.fetchall())
+                cur = self.connection.execute(query, exact[:nvar])
+                rows.extend(cur.fetchall())
                 exact = exact[nvar:]
         return rows
 
     def _get_specs_by_partial_id(self, partial: list[str]) -> list[Any]:
         rows = list()
-        cursor = self.connection.cursor()
         base_query = "SELECT * FROM specs WHERE"
         if partial:
             while rem := len(partial) > 0:
@@ -970,8 +961,8 @@ class WorkspaceDatabase:
                 clauses = " OR ".join(["id LIKE ?"] * nvar)
                 params = [f"{p}%" for p in partial[:nvar]]
                 query = f"{base_query} {clauses}"
-                cursor.execute(query, params)
-                rows.extend(cursor.fetchall())
+                cur = self.connection.execute(query, params)
+                rows.extend(cur.fetchall())
                 partial = partial[nvar:]
         return rows
 
@@ -1000,9 +991,7 @@ class WorkspaceDatabase:
             params.append(f"{p}%")
         where = " OR ".join(clauses)
         query = f"SELECT * FROM specs WHERE signature = ? AND ({where})"  # nosec B608
-        cursor = self.connection.cursor()
-        cursor.execute(query, (signature, *params))
-        rows = cursor.fetchall()
+        rows = self.connection.execute(query, (signature, *params)).fetchall()
         specs = self._reconstruct_specs(rows)
         return [spec for spec in specs if spec.id in ids]
 
@@ -1040,42 +1029,38 @@ class WorkspaceDatabase:
                     json.dumps_min(case.measurements.asdict()),
                 )
             )
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN EXCLUSIVE;")
-        cursor.executemany(
-            """
-            INSERT OR IGNORE INTO results (
-              id,
-              spec_name,
-              spec_fullname,
-              session,
-              status_state,
-              status_category,
-              status_status,
-              status_reason,
-              status_code,
-              started_on,
-              finished_on,
-              duration,
-              workspace,
-              measurements
+        with self.connection:
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO results (
+                id,
+                spec_name,
+                spec_fullname,
+                session,
+                status_state,
+                status_category,
+                status_status,
+                status_reason,
+                status_code,
+                started_on,
+                finished_on,
+                duration,
+                workspace,
+                measurements
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-        self.connection.commit()
 
     def get_results(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
-        cursor = self.connection.cursor()
         if not ids:
-            cursor.execute(
+            rows = self.connection.execute(
                 """SELECT *
                 FROM results AS r
                 WHERE r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
                 """
-            )
-            rows = cursor.fetchall()
+            ).fetchall()
         else:
             rows = []
             batch_size = 900
@@ -1089,8 +1074,8 @@ class WorkspaceDatabase:
                     WHERE r.id in ({placeholders})
                     AND r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
                 """  # nosec B608
-                cursor.execute(query, batch)  # nosec B608
-                rows.extend(cursor.fetchall())
+                cur = self.connection.execute(query, batch)  # nosec B608
+                rows.extend(cur.fetchall())
         data: dict[str, dict[str, Any]] = {}
         for row in rows:
             data[row[0]] = self._expand_results_row(row)
@@ -1123,9 +1108,9 @@ class WorkspaceDatabase:
         return d
 
     def get_single_result(self, id: str) -> list:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM results WHERE id LIKE ? ORDER BY session ASC", (f"{id}%",))
-        rows = cursor.fetchall()
+        rows = self.connection.execute(
+            "SELECT * FROM results WHERE id LIKE ? ORDER BY session ASC", (f"{id}%",)
+        ).fetchall()
         data: list[dict] = []
         for row in rows:
             d = self._expand_results_row(row)
@@ -1133,28 +1118,22 @@ class WorkspaceDatabase:
         return data
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT id, data FROM dependencies;")
-        rows = cursor.fetchall()
+        rows = self.connection.execute("SELECT id, data FROM dependencies;").fetchall()
         return {id: json.loads(data) for id, data in rows}
 
     def put_selection(self, tag: str, snapshot: select.SelectorSnapshot) -> None:
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN IMMEDIATE")
-        cursor.execute(
-            """
-            INSERT INTO selections (tag, data)
-            VALUES (?, ?)
-            ON CONFLICT(tag) DO UPDATE SET data=excluded.data
-            """,
-            (tag, snapshot.serialize()),
-        )
-        self.connection.commit()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO selections (tag, data)
+                VALUES (?, ?)
+                ON CONFLICT(tag) DO UPDATE SET data=excluded.data
+                """,
+                (tag, snapshot.serialize()),
+            )
 
     def get_selection(self, tag: str) -> select.SelectorSnapshot:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT * FROM selections WHERE tag = ?", (tag,))
-        row = cursor.fetchone()
+        row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
         if row is None:
             raise NotASelection(tag)
         snapshot = select.SelectorSnapshot.reconstruct(row[1])
@@ -1162,21 +1141,16 @@ class WorkspaceDatabase:
 
     @property
     def tags(self) -> list[str]:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT tag FROM selections")
-        rows = cursor.fetchall()
+        rows = self.connection.execute("SELECT tag FROM selections").fetchall()
         return [row[0] for row in rows]
 
     def is_selection(self, tag: str) -> bool:
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT 1 FROM selections WHERE tag = ? LIMIT 1", (tag,))
-        return cursor.fetchone() is not None
+        cur = self.connection.execute("SELECT 1 FROM selections WHERE tag = ? LIMIT 1", (tag,))
+        return cur.fetchone() is not None
 
     def delete_selection(self, tag: str) -> bool:
-        cursor = self.connection.cursor()
-        cursor.execute("BEGIN IMMEDIATE")
-        cursor.execute("DELETE FROM selections WHERE tag = ?", (tag,))
-        self.connection.commit()
+        with self.connection:
+            self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
 
 
