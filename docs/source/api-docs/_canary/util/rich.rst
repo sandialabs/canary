@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-progress
-========
+rich
+====
 
-.. automodule:: _canary.util.progress
+.. automodule:: _canary.util.rich
    :members:
    :undoc-members:
    :show-inheritance:

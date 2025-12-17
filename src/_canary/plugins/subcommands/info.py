@@ -11,7 +11,6 @@ import rich
 import rich.console
 
 from ...hookspec import hookimpl
-from ...rules import Rule
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 
@@ -42,20 +41,35 @@ class Info(CanarySubcommand):
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        selector = workspace.get_selector(tag)
-        specs = [spec for spec in workspace.get_selection(tag) if not spec.mask]
-        fh.write(f"Selected on: {selector.created_on}\n")
-        fh.write("Selection filters:\n")
-        n = 2
-        for rule in selector.rules:
-            n += 1
-            fh.write(f"  • {Rule.reconstruct(rule)}\n")
+        selection = workspace.db.get_selection_metadata(tag)
+        specs = [spec for spec in workspace.db.get_specs_from_selection(tag) if not spec.mask]
+        fh.write(f"Created on: {selection.created_on}\n")
+        fh.write("Scan paths:\n")
+        for root, paths in selection.scanpaths.items():
+            fh.write(f"  {root}:\n")
+            for path in paths:
+                fh.write(f"    {path}\n")
+        if selection.on_options:
+            fh.write("Generation options:\n")
+            for opt in selection.on_options:
+                fh.write(f"  -o {opt}\n")
+        if selection.keyword_exprs:
+            fh.write("Keyword expressions:\n")
+            for expr in selection.keyword_exprs:
+                fh.write(f"  -k {expr}\n")
+        if selection.parameter_expr:
+            fh.write(f"Parameter expression:\n  -p {selection.parameter_expr}\n")
+        if selection.owners:
+            fh.write("Owners:\n")
+            for o in selection.owners:
+                fh.write(f"  --owner {o}\n")
+        if selection.regex:
+            fh.write(f"Regular expression filter:\n  --regex {selection.regex}\n")
         fh.write(f"Test specs (n = {len(specs)}):\n")
         for spec in specs:
-            n += 1
             fh.write(f"  • {spec.id[:7]}: {spec.display_name(resolve=True)}\n")
         console = rich.console.Console()
-        if n > shutil.get_terminal_size().lines:
+        if len(specs) > shutil.get_terminal_size().lines:
             with console.pager():
                 console.print(fh.getvalue())
         else:
@@ -67,7 +81,6 @@ class Info(CanarySubcommand):
         fh = io.StringIO()
         fh.write(f"Workspace:   {info['root']}\n")
         fh.write(f"Version:     {info['version']}\n")
-        fh.write(f"Generators:  {info['generator_count']}\n")
         fh.write(f"Sessions:    {info['session_count']}\n")
         fh.write(f"Latest:      {info['latest_session']}\n")
         fh.write(f"Tags:        {', '.join(info['tags'])}\n")

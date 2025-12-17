@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-from . import add
 from . import autodoc
 from . import check
 from . import config
@@ -12,7 +11,6 @@ from . import edit
 from . import fetch
 from . import find
 from . import gc
-from . import generate
 from . import help
 from . import history
 from . import info
@@ -24,12 +22,11 @@ from . import refresh
 from . import report
 from . import rm
 from . import run
-from . import select
+from . import selection
 from . import status
 from . import tree
 
 plugins = [
-    add,
     autodoc,
     check,
     config,
@@ -39,7 +36,6 @@ plugins = [
     fetch,
     find,
     gc,
-    generate,
     help,
     history,
     info,
@@ -51,7 +47,7 @@ plugins = [
     report,
     rm,
     run,
-    select,
+    selection,
     status,
     tree,
 ]

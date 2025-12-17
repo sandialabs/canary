@@ -79,6 +79,7 @@ from .status import Status
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
+from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
@@ -169,7 +170,7 @@ class Selector:
         for _, rule in sorted(enumerate(self.rules), key=lambda x: (-x[1].priority, x[0])):
             yield rule
 
-    def run(self) -> None:
+    def run(self) -> list["ResolvedSpec"]:
         config.pluginmanager.hook.canary_selectstart(selector=self)
         self.masked.clear()
         if self.rules:
@@ -186,9 +187,9 @@ class Selector:
         config.pluginmanager.hook.canary_select_modifyitems(selector=self)
         self.propagate()
         config.pluginmanager.hook.canary_select_report(selector=self)
-        return
+        return [spec for spec in self.specs if spec.id not in self.masked]
 
-    def propagate(self):
+    def propagate(self) -> None:
         # Propagate masks
         queue = deque([spec for spec in self.specs if spec.mask])
         spec_map: dict[str, "ResolvedSpec"] = {spec.id: spec for spec in self.specs}
@@ -230,7 +231,7 @@ class Selector:
         return self
 
     @staticmethod
-    def setup_parser(parser: "Parser", tagged: bool = True) -> None:
+    def setup_parser(parser: "Parser", tagged: str = "required") -> None:
         group = parser.add_argument_group("test spec selection")
         group.add_argument(
             "-k",
@@ -258,10 +259,12 @@ class Selector:
             "file assets.  regex is a python regular expression, see "
             "https://docs.python.org/3/library/re.html",
         )
-        group.add_argument(
-            "-r", action="append", dest="select_paths", help="Select tests found in these paths"
-        )
-        if tagged:
+        if tagged == "required":
+            group.add_argument(
+                "tag",
+                help="Tag this test case selection for future runs [default: False]",
+            )
+        elif tagged == "optional":
             group.add_argument(
                 "--tag",
                 help="Tag this test case selection for future runs [default: False]",
@@ -343,7 +346,7 @@ def canary_addoption(parser: "Parser") -> None:
     parser.add_argument(
         "--show-excluded-tests",
         group="console reporting",
-        command=("run", "find", "select"),
+        command=("run", "find", "selection"),
         action="store_true",
         default=False,
         help="Show names of tests that are excluded from the test session %(default)s",
@@ -372,7 +375,7 @@ def canary_select_report(selector: "Selector") -> None:
         n = len(selector.masked)
         show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
-        logger.info("[bold]Excluded[/] %d test specs" % n)
+        logger.info("[bold]Excluded[/] %d test %s during selection" % (n, pluralize("spec", n)))
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=True)
         table.add_column("Count", justify="right")

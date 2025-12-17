@@ -8,7 +8,6 @@ canary_hpc
 .. toctree::
    :maxdepth: 1
 
-   .canary_cache/index
    argparsing
    batchexec
    batching

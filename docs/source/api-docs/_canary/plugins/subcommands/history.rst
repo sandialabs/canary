@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-startup
+history
 =======
 
-.. automodule:: _canary.resource_pool.startup
+.. automodule:: _canary.plugins.subcommands.history
    :members:
    :undoc-members:
    :show-inheritance:

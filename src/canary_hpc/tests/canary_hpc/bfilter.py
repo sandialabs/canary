@@ -25,11 +25,9 @@ def test_repo_bfilter(tmpdir):
             conductor = CanaryHPCConductor(backend="shell")
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
             workspace = Workspace.create("tests", force=True)
-            workspace.find_and_add_generators(
-                {str(examples / "basic"): [], str(examples / "vvt"): []}
+            specs = workspace.create_selection(
+                "default", {str(examples / "basic"): [], str(examples / "vvt"): []}
             )
-            workspace.generate_testspecs()
-            specs = workspace.get_selection()
             workspace.run(specs)
             files = glob.glob(
                 "tests/.canary/cache/canary-hpc/batches/**/canary-inp.sh",

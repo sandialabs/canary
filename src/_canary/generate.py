@@ -39,6 +39,7 @@ The following diagram illustrates the full lifecycle:
 import fnmatch
 import hashlib
 import os
+import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
@@ -48,11 +49,16 @@ from typing import TYPE_CHECKING
 from typing import Iterable
 from typing import Sequence
 
+import rich.box
+from rich.console import Console
+from rich.table import Table
+
 from . import config
 from .hookspec import hookimpl
 from .util import json_helper as json
 from .util import logging
 from .util.parallel import starmap
+from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
@@ -147,6 +153,22 @@ class Generator:
 def canary_generate_report(generator: Generator) -> None:
     nc, ng = len(generator.specs), len(generator.generators)
     logger.info("[bold]Generated[/] %d test specs from %d generators" % (nc, ng))
+    excluded = [spec for spec in generator.specs if spec.mask]
+    if excluded:
+        n = len(excluded)
+        logger.info("[bold]Excluded[/] %d test %s during generation" % (n, pluralize("spec", n)))
+        table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
+        table.add_column("Reason", no_wrap=True)
+        table.add_column("Count", justify="right")
+        reasons: dict[str | None, list["ResolvedSpec"]] = {}
+        for spec in excluded:
+            reasons.setdefault(spec.mask.reason, []).append(spec)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
+        for key in reversed(keys):
+            reason = key if key is None else key.lstrip()
+            table.add_row(reason, str(len(reasons[key])))
+        console = Console(file=sys.stderr)
+        console.print(table)
 
 
 def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):

@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-build
-=====
+generate
+========
 
-.. automodule:: _canary.build
+.. automodule:: _canary.generate
    :members:
    :undoc-members:
    :show-inheritance:

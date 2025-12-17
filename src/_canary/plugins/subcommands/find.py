@@ -51,7 +51,7 @@ class Find(CanarySubcommand):
         add_group_argument(group, "keywords", "Print keywords by root", False)
         Collector.setup_parser(parser)
         Generator.setup_parser(parser)
-        Selector.setup_parser(parser, tagged=False)
+        Selector.setup_parser(parser, tagged="none")
         add_resource_arguments(parser)
 
     def execute(self, args: argparse.Namespace) -> int:

@@ -16,12 +16,13 @@ def test_issue_84(tmpdir):
             fh.write(open(f).read())
         args = [sys.executable, "-m", "canary", "init", "."]
         subprocess.run(args)
-        args = [sys.executable, "-m", "canary", "add", "."]
+        args = [sys.executable, "-m", "canary", "config", "set", "--local", "timeout:baz", "4m"]
         subprocess.run(args)
-        with open(".canary/config.yaml", "w") as fh:
-            fh.write("canary:\n  timeout:\n    baz: 4m")
-        args = [sys.executable, "-m", "canary", "generate"]
+        args = [sys.executable, "-m", "canary", "selection", "create", "-r", ".", "my-selection"]
         subprocess.run(args)
-        args = [sys.executable, "-m", "canary", "run"]
+        args = [sys.executable, "-m", "canary", "run", "my-selection"]
         cp = subprocess.run(args)
+        if cp.returncode != 0:
+            print(open("TestResults/issue-84/canary-out.txt").read())
+            print(open(".canary/config.yaml").read())
         assert cp.returncode == 0

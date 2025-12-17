@@ -32,6 +32,7 @@ def canary_generate_modifyitems(generator: "canary.Generator") -> None:
                 spec.meta_parameters["gpus"] = spec.parameters["ndevice"]
             if "nnode" in spec.parameters:
                 spec.meta_parameters["nodes"] = spec.parameters["nnode"]
+            spec.update_id()
 
 
 @canary.hookimpl

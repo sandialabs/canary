@@ -12,5 +12,3 @@ resource_pool
    hooks
    rpool
    schemas
-   server_app
-   startup

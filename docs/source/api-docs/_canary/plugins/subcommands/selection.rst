@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-add
-===
+selection
+=========
 
-.. automodule:: _canary.plugins.subcommands.add
+.. automodule:: _canary.plugins.subcommands.selection
    :members:
    :undoc-members:
    :show-inheritance:

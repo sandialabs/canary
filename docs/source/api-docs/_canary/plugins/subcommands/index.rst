@@ -8,7 +8,7 @@ plugins.subcommands
 .. toctree::
    :maxdepth: 1
 
-   add
+   .canary_cache/index
    autodoc
    check
    common/index
@@ -20,6 +20,7 @@ plugins.subcommands
    find
    gc
    help
+   history
    info
    init
    location
@@ -29,6 +30,6 @@ plugins.subcommands
    report
    rm
    run
-   select
+   selection
    status
    tree

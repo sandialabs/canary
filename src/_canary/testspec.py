@@ -61,7 +61,6 @@ class BaseSpec(Generic[T]):
     file_root: Path
     file_path: Path
     family: str = ""
-    id: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
     dependencies: Sequence[Any] = dataclasses.field(default_factory=list)
@@ -82,9 +81,7 @@ class BaseSpec(Generic[T]):
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
     meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def __hash__(self) -> int:
-        return hash(self.id)
+    id: str = dataclasses.field(init=False)
 
     def __str__(self) -> str:
         return self.display_name()
@@ -97,8 +94,6 @@ class BaseSpec(Generic[T]):
 
     def __post_init__(self) -> None:
         self.family = self.family or self.file.stem
-        if not self.id:
-            self.id = self._generate_default_id()
         if self.timeout is None:
             self.timeout = -1.0
         if self.timeout < 0:
@@ -110,6 +105,7 @@ class BaseSpec(Generic[T]):
         if "gpus" not in self.parameters | self.meta_parameters:
             self.meta_parameters["gpus"] = 0
         self.meta_parameters["runtime"] = self.timeout
+        self.id = self._generate_id()
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -128,8 +124,28 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
+        d.pop("id", None)
         self = cls(**d)  # ty: ignore[missing-argument]
         return self
+
+    def _generate_id(self) -> str:
+        # Hasher is used to build ID
+        hasher = hashlib.sha256()
+        hasher.update(self.family.encode())
+        if self.parameters:
+            for p in sorted(self.parameters):
+                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
+        hasher.update(self.file.read_bytes())
+        d = self.file.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                f = str(os.path.relpath(str(self.file), str(d)))
+                hasher.update(f.encode())
+                break
+            d = d.parent
+        else:
+            hasher.update(str(self.file_path.parent / self.name).encode())
+        return hasher.hexdigest()
 
     @cached_property
     def file(self) -> Path:
@@ -199,12 +215,11 @@ class BaseSpec(Generic[T]):
     @property
     def implicit_keywords(self) -> set[str]:
         """Implicit keywords, used for some filtering operations"""
-        return {self.id, self.name, self.family, str(self.file)}
+        return {self.name, self.family, str(self.file)}
 
     @cached_property
     def match_names(self) -> tuple[str, ...]:
         return (
-            self.id,
             self.name,
             self.family,
             self.fullname,
@@ -216,8 +231,6 @@ class BaseSpec(Generic[T]):
     def matches(self, arg: str) -> bool:
         if arg.startswith(select_sygil) and not Path(arg).exists():
             arg = arg[1:]
-        if self.id.startswith(arg):
-            return True
         if self.display_name == arg:
             return True
         if self.name == arg:
@@ -229,25 +242,6 @@ class BaseSpec(Generic[T]):
 
     def set_attributes(self, **kwds: Any) -> None:
         self.attributes.update(**kwds)
-
-    def _generate_default_id(self) -> str:
-        # Hasher is used to build ID
-        hasher = hashlib.sha256()
-        hasher.update(self.name.encode())
-        if self.parameters:
-            for p in sorted(self.parameters):
-                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
-        hasher.update(self.file.read_bytes())
-        d = self.file.parent
-        while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
-                f = str(os.path.relpath(str(self.file), str(d)))
-                hasher.update(f.encode())
-                break
-            d = d.parent
-        else:
-            hasher.update(str(self.file_path.parent / self.name).encode())
-        return hasher.hexdigest()
 
     def _default_timeout(self) -> float:
         if cli_timeouts := config.getoption("timeout"):
@@ -285,6 +279,55 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
         if mask:
             d["mask"] = Mask(mask["value"], mask["reason"])
         return super().from_dict(d, lookup)
+
+    def update_id(self) -> None:
+        self.id = self._generate_id()
+
+    def _generate_id(self) -> str:
+        # Hasher is used to build ID
+        hasher = hashlib.sha256()
+        hasher.update(self.family.encode())
+        hasher.update(self.stdout.encode())
+        if self.stderr:
+            hasher.update(self.stderr.encode())
+        if self.dependencies:
+            hasher.update(",".join(dep.id for dep in self.dependencies).encode())
+        if self.dep_done_criteria:
+            hasher.update(",".join(self.dep_done_criteria).encode())
+        if self.attributes:
+            hasher.update(json.dumps_min(self.attributes, sort_keys=True).encode())
+        if self.keywords:
+            hasher.update(",".join(sorted(self.keywords)).encode())
+        if self.artifacts:
+            hasher.update(json.dumps_min(self.artifacts, sort_keys=True).encode())
+        hasher.update(f"{self.timeout:.12f}".encode())
+        hasher.update(f"{self.xstatus}".encode())
+        if self.modules:
+            hasher.update(",".join(sorted(self.modules)).encode())
+        if self.rcfiles:
+            hasher.update(",".join(sorted(self.rcfiles)).encode())
+        if self.owners:
+            hasher.update(",".join(sorted(self.owners)).encode())
+        if self.environment:
+            hasher.update(json.dumps_min(self.environment, sort_keys=True).encode())
+        if self.environment_modifications:
+            hasher.update(json.dumps_min(self.environment_modifications, sort_keys=True).encode())
+        hasher.update(self.name.encode())
+        parameters = self.parameters | self.meta_parameters
+        if parameters:
+            for p in sorted(parameters):
+                hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
+        hasher.update(self.file.read_bytes())
+        d = self.file.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                f = str(os.path.relpath(str(self.file), str(d)))
+                hasher.update(f.encode())
+                break
+            d = d.parent
+        else:
+            hasher.update(str(self.file_path.parent / self.name).encode())
+        return hasher.hexdigest()
 
 
 @dataclasses.dataclass
@@ -325,7 +368,7 @@ class DependencyPatterns:
 
     def matches(self, spec: "UnresolvedSpec") -> bool:
         names = {
-            spec.id,
+            spec.name,
             spec.name,
             spec.family,
             spec.fullname,
@@ -396,7 +439,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
         if errors:
             raise UnresolvedDependenciesErrors(errors)
         return ResolvedSpec(
-            id=self.id,
             file_root=self.file_root,
             file_path=self.file_path,
             family=self.family,

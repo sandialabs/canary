@@ -28,8 +28,8 @@ util
    parallel
    paramview
    procutils
-   progress
    returncode
+   rich
    rprobe
    sendmail
    shell

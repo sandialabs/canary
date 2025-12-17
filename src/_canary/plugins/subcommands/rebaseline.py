@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import when
-from ...collect import Collector
 from ...hookspec import hookimpl
 from ...select import Selector
 from ...util import logging
@@ -31,9 +30,18 @@ class Rebaseline(CanarySubcommand):
     aliases = ["baseline"]
     description = "Rebaseline tests"
 
+    @staticmethod
+    def inview_dir(arg: str) -> str:
+        workspace = Workspace.load()
+        if workspace.inside_view(arg):
+            return arg
+        raise ValueError(f"{arg}: is not in a view")
+
     def setup_parser(self, parser: "Parser") -> None:
-        Collector.setup_parser(parser)
-        Selector.setup_parser(parser)
+        parser.add_argument(
+            "start", nargs="?", type=self.inview_dir, help="Find tests in this view"
+        )
+        Selector.setup_parser(parser, tagged="none")
 
     def execute(self, args: "argparse.Namespace") -> int:
         if not args.keyword_exprs and not args.start and not args.parameter_expr:

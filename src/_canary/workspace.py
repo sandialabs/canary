@@ -4,10 +4,11 @@
 import dataclasses
 import datetime
 import fnmatch
+import hashlib
 import os
 import shutil
 import sqlite3
-from concurrent.futures import ProcessPoolExecutor
+import uuid
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -42,6 +43,7 @@ from .util.graph import TopologicalSorter
 from .util.graph import reachable_nodes
 from .util.graph import reachable_up_down
 from .util.graph import static_order
+from .version import __static_version__
 
 logger = logging.get_logger(__name__)
 
@@ -229,7 +231,7 @@ class Workspace:
             file.write_text(link)
 
         self.db = WorkspaceDatabase.create(self.dbfile)
-        file = self.root / "canary.yaml"
+        file = self.root / "config.yaml"
         cfg: dict[str, Any] = {}
         if mods := config.getoption("config_mods"):
             cfg.update(mods)
@@ -369,45 +371,74 @@ class Workspace:
         return Path(path).absolute().is_relative_to(self.view)
 
     def info(self) -> dict[str, Any]:
-        import canary
-
         latest_session: str | None = None
         if (self.refs_dir / "latest").exists():
             link = (self.refs_dir / "latest").read_text().strip()
             path = self.refs_dir / link
             latest_session = path.stem
-        generator_count = self.db.count("generators")
         info = {
             "root": str(self.root),
-            "generator_count": generator_count,
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
             "latest_session": latest_session,
             "tags": self.db.tags,
-            "version": canary.version,
+            "version": __static_version__,
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
         return info
 
-    def load_generators(self) -> list[AbstractTestGenerator]:
-        """Load test case generators"""
-        pm = logger.progress_monitor("[bold]Loading[/bold] test case generators from cache")
-        generators = self.db.get_generators()
-        pm.done()
-        return generators
-
     def active_testcases(self) -> list[TestCase]:
         return self.load_testcases()
 
-    def find_and_add_generators(
-        self, scanpaths: dict[str, list[str]], pedantic: bool = True
-    ) -> list[AbstractTestGenerator]:
+    def create_selection(
+        self,
+        tag: str | None,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["ResolvedSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
+        tag = tag or datetime.datetime.now().isoformat(timespec="microseconds")
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
-        self.db.put_generators(generators)
-        logger.info(f"[bold]Added[/] {len(generators)} new test case generators to {self.root}")
-        return generators
+        signature, resolved = self.generate_testspecs(generators=generators, on_options=on_options)
+        selector = select.Selector(resolved, self.root)
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        specs = selector.run()
+        self.db.put_selection(
+            tag,
+            signature,
+            specs,
+            scanpaths=scanpaths,
+            on_options=on_options,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        return specs
+
+    def refresh_selection(self, tag: str) -> list["ResolvedSpec"]:
+        selection = self.db.get_selection_metadata(tag)
+        return self.create_selection(
+            tag=tag,
+            scanpaths=selection.scanpaths,
+            on_options=selection.on_options,
+            keyword_exprs=selection.keyword_exprs,
+            parameter_expr=selection.parameter_expr,
+            owners=selection.owners,
+            regex=selection.regex,
+        )
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
@@ -446,9 +477,6 @@ class Workspace:
         return resolved
 
     def remove_tag(self, tag: str) -> bool:
-        if tag == "default":
-            logger.error("Cannot remove default tag")
-            return False
         if not self.db.is_selection(tag):
             logger.error(f"{tag!r} is not a tag")
             return False
@@ -458,7 +486,11 @@ class Workspace:
     def is_tag(self, tag: str) -> bool:
         return self.db.is_selection(tag)
 
-    def generate_testspecs(self, on_options: list[str] | None = None) -> list[ResolvedSpec]:
+    def generate_testspecs(
+        self,
+        generators: list["AbstractTestGenerator"],
+        on_options: list[str] | None = None,
+    ) -> tuple[str, list[ResolvedSpec]]:
         """Generate resolved test specs
 
         Args:
@@ -470,17 +502,19 @@ class Workspace:
           Resolved specs
 
         """
+        # canary selection create -r examples -k foo-bar foo-bar
+        # canary selection create -r examples -k baz baz
+        # canary selection refresh baz
         on_options = on_options or []
-        generators = self.load_generators()
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
         if cached := self.db.get_specs(signature=generator.signature):
             logger.info("[bold]Retrieved[/] %d test specs from cache" % len(cached))
-            return cached
+            return generator.signature, cached
         resolved = generator.run()
         pm = logger.progress_monitor("[bold]Caching[/] test specs")
         self.db.put_specs(generator.signature, resolved)
         pm.done()
-        return resolved
+        return generator.signature, resolved
 
     def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
         lookup: dict[str, TestCase] = {}
@@ -508,59 +542,9 @@ class Workspace:
             cases.append(case)
         return cases
 
-    def make_selection(
-        self,
-        tag: str | None = None,
-        prefixes: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-        ids: list[str] | None = None,
-        generate: bool | None = None,
-    ) -> list["ResolvedSpec"]:
-        """Select final test specs
-
-        Args:
-          keyword_exprs: Used to filter tests by keyword.  E.g., if two test define the keywords
-            ``baz`` and ``spam``, respectively and ``keyword_expr = 'baz or spam'`` both tests will
-            be locked and marked as ready.  However, if a test defines only the keyword ``ham`` it
-            will be marked as "skipped by keyword expression".
-          parameter_expr: Used to filter tests by parameter.  E.g., if a test is parameterized by
-            ``a`` with values ``1``, ``2``, and ``3`` and you want to only run the case for ``a=1``
-            you can filter the other two cases with the parameter expression
-            ``parameter_expr='a=1'``.  Any test case not having ``a=1`` will be marked as "skipped by
-            parameter expression".
-          owners: Used to filter tests by owner.
-
-        Returns:
-          Test spec selection
-
-        """
-        resolved = self.load_testspecs()
-        if not resolved and generate in (True, None):
-            resolved = self.generate_testspecs()
-        if not resolved:
-            raise StopExecution(
-                "There are no test specs in this workspace, did you run `canary generate`?",
-                exit_code=notests_exit_status,
-            )
-        self.apply_selection_rules(
-            resolved,
-            tag=tag,
-            prefixes=prefixes,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-            ids=ids,
-        )
-        return resolved
-
     def apply_selection_rules(
         self,
         specs: list["ResolvedSpec"],
-        tag: str | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
@@ -581,31 +565,11 @@ class Workspace:
             selector.add_rule(rules.OwnersRule(owners))
         if regex:
             selector.add_rule(rules.RegexRule(regex))
-        if tag is None and len(selector.rules) == 0:
-            # Default: 1 rule for resource availability
-            tag = "default"
-        selector.run()
-        if tag:
-            self.db.put_selection(tag, selector.snapshot())
-
-    def get_selector(self, tag: str = "default"):
-        if tag == "default" and not self.db.is_selection(tag):
-            return select.SelectorSnapshot("", dict(), [], "")
-        return self.db.get_selection(tag)
-
-    def get_selection(self, tag: str = "default") -> list["ResolvedSpec"]:
-        if tag == "default" and not self.db.is_selection(tag):
-            return self.make_selection(tag="default")
-        snapshot = self.db.get_selection(tag)
-        resolved = self.db.get_specs()
-        if snapshot.is_compatible_with_specs(resolved):
-            snapshot.apply(resolved)
-            return resolved
-        else:
-            selector = select.Selector.from_snapshot(resolved, self.root, snapshot)
+        if selector.rules:
             selector.run()
-            self.db.put_selection(tag, selector.snapshot())
-            return selector.specs
+
+    def get_selection(self, tag: str) -> list["ResolvedSpec"]:
+        return self.db.get_specs_from_selection(tag)
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -772,23 +736,40 @@ class WorkspaceDatabase:
 
     @classmethod
     def create(cls, path: Path) -> "WorkspaceDatabase":
-        """
-        Create the 'LATEST' table if it doesn't exist.
-        """
         self = cls(path)
         with self.connection:
-            query = "CREATE TABLE IF NOT EXISTS generators (id TEXT PRIMARY KEY, data TEXT)"
-            self.connection.execute(query)
-
             query = """CREATE TABLE IF NOT EXISTS specs (
-            id TEXT PRIMARY KEY, signature TEXT, data TEXT
+              id TEXT PRIMARY KEY, signature TEXT, data TEXT
             )"""
             self.connection.execute(query)
 
             query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
             self.connection.execute(query)
 
-            query = "CREATE TABLE IF NOT EXISTS selections (tag TEXT PRIMARY KEY, data TEXT)"
+            query = """CREATE TABLE IF NOT EXISTS selection_specs (
+              selection_id TEXT,
+              spec_id TEXT,
+              position INTEGEGER,
+              PRIMARY KEY (selection_id, spec_id),
+              FOREIGN KEY (selection_id) REFERENCES selections(id) ON DELETE CASCADE
+            )"""
+            self.connection.execute(query)
+
+            query = """CREATE TABLE IF NOT EXISTS selections (
+              id TEXT PRIMARY KEY,
+              tag TEXT UNIQUE,
+              gen_signature TEXT,
+              created_on TEXT,
+              canary_version TEXT,
+              scanpaths TEXT,
+              on_options TEXT,
+              keyword_exprs TEXT,
+              parameter_expr TEXT,
+              owners TEXT,
+              regex TEXT,
+              fingerprint TEXT
+            )
+            """
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS results (
@@ -825,33 +806,6 @@ class WorkspaceDatabase:
 
     def close(self):
         self.connection.close()
-
-    def put_generators(self, generators: list[AbstractTestGenerator]) -> None:
-        pm = logger.progress_monitor("[bold]Putting[/] test generators into database")
-        with self.connection:
-            rows = ((gen.id, gen.serialize()) for gen in generators)
-            self.connection.executemany(
-                """
-                INSERT INTO generators (id, data)
-                VALUES (?, ?)
-                ON CONFLICT(id) DO UPDATE SET data=excluded.data
-                """,
-                rows,
-            )
-        pm.done()
-
-    def count(self, table: str) -> int:
-        if table not in self.tables:
-            raise ValueError(f"{table} is not a valid table name")
-
-        row = self.connection.execute(f"SELECT COUNT(*) FROM {table};").fetchone()  # nosec B608
-        return int(row[0])
-
-    def get_generators(self) -> list[AbstractTestGenerator]:
-        rows = self.connection.execute("SELECT data FROM generators;").fetchall()
-        with ProcessPoolExecutor() as ex:
-            generators = list(ex.map(AbstractTestGenerator.reconstruct, [row[0] for row in rows]))
-        return generators
 
     def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
         with self.connection:
@@ -1121,18 +1075,118 @@ class WorkspaceDatabase:
         rows = self.connection.execute("SELECT id, data FROM dependencies;").fetchall()
         return {id: json.loads(data) for id, data in rows}
 
-    def put_selection(self, tag: str, snapshot: select.SelectorSnapshot) -> None:
+    def put_selection(
+        self,
+        tag: str,
+        signature: str,
+        specs: list["ResolvedSpec"],
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> None:
+        row: list[str] = []
+        id = uuid.uuid4().hex
+        row.extend((id, tag, signature, datetime.datetime.now().isoformat(), __static_version__))
+
+        hasher = hashlib.sha256()
+        row.append(json.dumps_min(scanpaths, sort_keys=True))
+        hasher.update(row[-1].encode())
+
+        row.append(json.dumps_min(on_options, sort_keys=True))
+        hasher.update(row[-1].encode())
+
+        row.append(json.dumps_min(keyword_exprs, sort_keys=True))
+        hasher.update(row[-1].encode())
+
+        row.append(json.dumps_min(parameter_expr))
+        hasher.update(row[-1].encode())
+
+        row.append(json.dumps_min(owners, sort_keys=True))
+        hasher.update(row[-1].encode())
+
+        row.append(json.dumps_min(regex))
+        hasher.update(row[-1].encode())
+
+        fingerprint = hasher.hexdigest()
+        row.append(fingerprint)
+
         with self.connection:
+            self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
+            self.connection.executemany(
+                """
+                INSERT INTO selection_specs (selection_id, spec_id, position)
+                VALUES (?, ?, ?)
+                """,
+                ((id, spec.id, pos) for pos, spec in enumerate(static_order(specs))),
+            )
             self.connection.execute(
                 """
-                INSERT INTO selections (tag, data)
-                VALUES (?, ?)
-                ON CONFLICT(tag) DO UPDATE SET data=excluded.data
+                INSERT INTO selections (
+                  id,
+                  tag,
+                  gen_signature,
+                  created_on,
+                  canary_version,
+                  scanpaths,
+                  on_options,
+                  keyword_exprs,
+                  parameter_expr,
+                  owners,
+                  regex,
+                  fingerprint
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (tag, snapshot.serialize()),
+                row,
             )
 
-    def get_selection(self, tag: str) -> select.SelectorSnapshot:
+    def rename_selection(self, old: str, new: str) -> None:
+        with self.connection:
+            self.connection.execute("UPDATE selections SET tag = ? WHERE tag = ?", (new, old))
+
+    def get_specs_from_selection(self, tag: str) -> list["ResolvedSpec"]:
+        rows = self.connection.execute(
+            """
+            SELECT sp.data
+            FROM selection_specs ssp
+            JOIN selections sel ON ssp.selection_id = sel.id
+            JOIN specs sp ON sp.id = ssp.spec_id AND sp.signature = sel.gen_signature
+            WHERE sel.tag = ?
+            ORDER BY ssp.position ASC
+            """,
+            (tag,),
+        ).fetchall()
+        if not rows:
+            raise NotASelection(tag)
+        lookup: dict[str, ResolvedSpec] = {}
+        for row in rows:
+            spec = ResolvedSpec.from_dict(json.loads(row[0]), lookup)
+            lookup[spec.id] = spec
+        return list(lookup.values())
+
+    def get_selection_metadata(self, tag: str) -> "Selection":
+        row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
+        if not row:
+            raise NotASelection(tag)
+        return Selection(
+            id=row[0],
+            tag=row[1],
+            gen_signature=row[2],
+            created_on=datetime.datetime.fromisoformat(row[3]),
+            canary_version=row[4],
+            scanpaths=json.loads(row[5]),
+            on_options=json.loads(row[6]),
+            keyword_exprs=json.loads(row[7]),
+            parameter_expr=json.loads(row[8]),
+            owners=json.loads(row[9]),
+            regex=json.loads(row[10]),
+            fingerprint=row[11],
+        )
+
+    def get_selection_old(self, tag: str) -> select.SelectorSnapshot:
         row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
         if row is None:
             raise NotASelection(tag)
@@ -1178,6 +1232,22 @@ def increment_hex_prefix(prefix: str) -> str | None:
         logger.warning("No valid upper bound - prefix overflow")
         return None
     return f"{value + 1:0{len(prefix)}x}"
+
+
+@dataclasses.dataclass
+class Selection:
+    id: str
+    tag: str
+    gen_signature: str
+    created_on: datetime.datetime
+    canary_version: str
+    scanpaths: dict[str, list[str]]
+    on_options: list[str] | None
+    keyword_exprs: list[str] | None
+    parameter_expr: str | None
+    owners: list[str] | None
+    regex: str | None
+    fingerprint: str
 
 
 class WorkspaceExistsError(Exception):

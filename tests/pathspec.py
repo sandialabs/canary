@@ -6,17 +6,9 @@ import argparse
 import json
 import os
 
-import _canary.collect as collect
+from _canary.plugins.subcommands.run import PathSpec
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
-
-
-def test_pathspec_setdefault():
-    obj = type("a", (), {})
-    x = collect.setdefault(obj, "foo", [])
-    x.append("a")
-    y = collect.setdefault(obj, "foo", [])
-    assert y == ["a"]
 
 
 def test_pathspec_parse_new(tmpdir):
@@ -38,10 +30,10 @@ def test_pathspec_parse_new(tmpdir):
             "--foo",
             "--bar",
         ]
-        p = collect.PathSpec("", "f_pathspec")
+        p = PathSpec("", "f_pathspec")
         args = argparse.Namespace()
         p(None, args, "foo.json", option_string="-f")
-        p = collect.PathSpec("", "pathspec")
+        p = PathSpec("", "pathspec")
         p(None, args, values)
         d = os.getcwd()
         assert args.scanpaths == {

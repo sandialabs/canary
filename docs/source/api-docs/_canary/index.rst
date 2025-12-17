@@ -8,8 +8,6 @@ _canary
 .. toctree::
    :maxdepth: 1
 
-   .canary_cache/index
-   build
    collect
    conductor
    config/index
@@ -17,8 +15,10 @@ _canary
    error
    expression
    finder
+   generate
    generator
    hookspec
+   launcher
    main
    paramset
    pluginmanager
@@ -30,7 +30,6 @@ _canary
    rules
    runtest
    select
-   session
    status
    testcase
    testexec
