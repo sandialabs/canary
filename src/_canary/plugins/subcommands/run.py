@@ -140,24 +140,32 @@ class Run(CanarySubcommand):
                 owners=args.owners,
                 regex=args.regex_filter,
             )
-        elif args.start:
-            logger.info(f"[bold]Running[/] tests from {args.start}")
-            specs = workspace.select_from_view(path=Path(args.start))
-            reuse = True
-        elif args.specids:
-            sids = [id[:7] for id in args.specids]
-            if len(sids) > 3:
-                sids = [*sids[:2], "…", sids[-1]]
-            logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
-            upstream, downstream = workspace.compute_rerun_list_for_specs(ids=args.specids)
-            specs = upstream + downstream
-        elif args.runtag:
-            logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
-            specs = workspace.get_selection(args.runtag)
         else:
-            tag = config.get("selection:default_tag")
-            logger.info(f"[bold]Running[/] tests in default tag {tag}")
-            specs = workspace.get_selection(tag)
+            if args.start:
+                logger.info(f"[bold]Running[/] tests from {args.start}")
+                specs = workspace.select_from_view(path=Path(args.start))
+                reuse = True
+            elif args.specids:
+                sids = [id[:7] for id in args.specids]
+                if len(sids) > 3:
+                    sids = [*sids[:2], "…", sids[-1]]
+                logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
+                upstream, downstream = workspace.compute_rerun_list_for_specs(ids=args.specids)
+                specs = upstream + downstream
+            elif args.runtag:
+                logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
+                specs = workspace.get_selection(args.runtag)
+            else:
+                tag = config.get("selection:default_tag")
+                logger.info(f"[bold]Running[/] tests in default tag {tag}")
+                specs = workspace.get_selection(tag)
+            workspace.apply_selection_rules(
+                specs,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                owners=args.owners,
+                regex=args.regex_filter,
+            )
         session = workspace.run(specs, reuse_session=reuse, only=args.only)
         return session.returncode
 

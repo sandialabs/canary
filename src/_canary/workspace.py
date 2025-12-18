@@ -424,6 +424,26 @@ class Workspace:
         )
         return specs
 
+    def apply_selection_rules(
+        self,
+        specs: list["ResolvedSpec"],
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> None:
+        selector = select.Selector(specs, self.root)
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        if selector.rules:
+            selector.run()
+
     def refresh_selection(self, tag: str) -> list["ResolvedSpec"]:
         selection = self.db.get_selection_metadata(tag)
         return self.create_selection(
@@ -836,13 +856,14 @@ class WorkspaceDatabase:
     def get_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[ResolvedSpec]:
+        rows: list[tuple[str, str, str]]
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
         self.resolve_spec_ids(ids)
         upstream = self.get_upstream_ids(ids)
         load_ids = list(upstream.union(ids))
-        rows: list[tuple[str, str]] = []
+        rows = []
         base_query = "SELECT * FROM specs WHERE spec_id IN"
         for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
             chunk = load_ids[i : i + SQL_CHUNK_SIZE]
@@ -881,7 +902,7 @@ class WorkspaceDatabase:
             lookup[spec.id] = spec
         return list(lookup.values())
 
-    def _reconstruct_specs(self, rows: list[list]) -> list[ResolvedSpec]:
+    def _reconstruct_specs(self, rows: list[tuple[str, str, str]]) -> list[ResolvedSpec]:
         data = {id: json.loads(data) for id, _, data in rows}
         graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
         lookup: dict[str, ResolvedSpec] = {}
@@ -992,7 +1013,7 @@ class WorkspaceDatabase:
             data.append(d)
         return data
 
-    def _reconstruct_results(self, row: list[Any]) -> dict[str, Any]:
+    def _reconstruct_results(self, row: tuple[str, ...]) -> dict[str, Any]:
         d: dict[str, Any] = {}
         d["id"] = row[0]
         d["spec_name"] = row[1]
