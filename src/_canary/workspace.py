@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import collections
 import dataclasses
 import datetime
 import fnmatch
@@ -32,7 +33,6 @@ from .status import Status
 from .testcase import Measurements
 from .testcase import TestCase
 from .testexec import ExecutionSpace
-from .testspec import Mask
 from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -40,8 +40,6 @@ from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
-from .util.graph import reachable_nodes
-from .util.graph import reachable_up_down
 from .util.graph import static_order
 from .version import __static_version__
 
@@ -54,6 +52,7 @@ view_tag = "VIEW.TAG"
 
 DB_MAX_RETRIES = 8
 DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
+SQL_CHUNK_SIZE = 900
 
 
 @dataclasses.dataclass
@@ -214,7 +213,7 @@ class Workspace:
         file = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(file), logging.TRACE)
 
-        if var := config.get("view"):
+        if var := config.get("workspace:view"):
             if isinstance(var, str):
                 self.view = (self.root.parent / var).resolve()
             else:
@@ -335,11 +334,11 @@ class Workspace:
             return
         logger.info(f"Rebuilding view at {self.root}")
         view: dict[str, tuple[str, str]] = {}
-        for case in self.load_testcases():
-            if not case.workspace.session:
-                continue
-            relpath = case.workspace.dir.relative_to(self.sessions_dir / case.workspace.session)
-            view[case.id] = (str(self.sessions_dir / case.workspace.session), str(relpath))
+        latest = self.db.get_results()
+        for id, data in latest.items():
+            dir = self.sessions_dir / data["session"] / data["workspace"]
+            relpath = dir.relative_to(self.sessions_dir / data["session"])
+            view[id] = (str(self.sessions_dir / data["session"]), str(relpath))
         for path in self.view.iterdir():
             if path.is_dir():
                 shutil.rmtree(path)
@@ -385,9 +384,6 @@ class Workspace:
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
         return info
-
-    def active_testcases(self) -> list[TestCase]:
-        return self.load_testcases()
 
     def create_selection(
         self,
@@ -443,16 +439,13 @@ class Workspace:
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
         lookup: dict[str, TestCase] = {}
-        reachable: list[str] | None = None
-        if ids:
-            reachable = self.db.reachable_spec_ids(ids)
-        latest = self.db.get_results(ids=reachable)
-        specs = self.db.get_specs(ids=reachable)
+        latest = self.db.get_results(ids, include_upstreams=True)
+        specs = self.db.get_specs(ids, include_upstreams=True)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
                 space = ExecutionSpace(
-                    root=self.root / "sessions" / mine["session"],
+                    root=self.sessions_dir / mine["session"],
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
@@ -507,7 +500,7 @@ class Workspace:
         # canary selection refresh baz
         on_options = on_options or []
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
-        if cached := self.db.get_specs(signature=generator.signature):
+        if cached := self.db.get_specs_by_signature(generator.signature):
             logger.info("[bold]Retrieved[/] %d test specs from cache" % len(cached))
             return generator.signature, cached
         resolved = generator.run()
@@ -519,7 +512,7 @@ class Workspace:
     def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
         lookup: dict[str, TestCase] = {}
         cases: list[TestCase] = []
-        latest = self.db.get_results()
+        latest = self.db.get_results([spec.id for spec in specs])
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
             case: TestCase
@@ -542,34 +535,10 @@ class Workspace:
             cases.append(case)
         return cases
 
-    def apply_selection_rules(
-        self,
-        specs: list["ResolvedSpec"],
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-        ids: list[str] | None = None,
-        prefixes: list[str] | None = None,
-    ) -> None:
-        selector = select.Selector(specs, self.root)
-        if ids:
-            selector.add_rule(rules.IDsRule(ids))
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if prefixes:
-            selector.add_rule(rules.PrefixRule(prefixes))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
-        if selector.rules:
-            selector.run()
-
-    def get_selection(self, tag: str) -> list["ResolvedSpec"]:
-        return self.db.get_specs_from_selection(tag)
+    def get_selection(self, tag: str | None) -> list["ResolvedSpec"]:
+        if tag is None or tag == ":all:":
+            return self.db.get_specs()
+        return self.db.get_specs_by_tagname(tag)
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -651,8 +620,7 @@ class Workspace:
         for id, result in results.items():
             if predicate(id, result):
                 selected.add(id)
-        graph = self.db.get_dependency_graph()
-        upstream, downstream = reachable_up_down(graph, selected)
+        upstream, downstream = self.db.get_updownstream_ids(list(selected))
         run_specs = selected | downstream
         load_specs = run_specs | upstream
         resolved = self.db.get_specs(ids=list(load_specs))
@@ -676,15 +644,7 @@ class Workspace:
         return self.compute_rerun_list(predicate)
 
     def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
-        if not ids:
-            return self.db.get_specs()
-        graph = self.db.get_dependency_graph()
-        reachable = reachable_nodes(graph, ids)
-        specs = self.db.get_specs(ids=reachable)
-        for spec in specs:
-            if spec.id not in ids:
-                spec.mask = Mask.masked("ID not requested")
-        return specs
+        return self.db.get_specs(ids)
 
     def find_specids(self, ids: list[str]) -> list[str | None]:
         specs = self.db.get_specs()
@@ -715,16 +675,9 @@ def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
 
 
 class WorkspaceDatabase:
-    """Database wrapper for the "latest results" index."""
+    """Database wrapper"""
 
     connection: sqlite3.Connection
-    tables = (
-        "generators",
-        "specs",
-        "dependencies",
-        "selections",
-        "results",
-    )
 
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
@@ -739,11 +692,13 @@ class WorkspaceDatabase:
         self = cls(path)
         with self.connection:
             query = """CREATE TABLE IF NOT EXISTS specs (
-              id TEXT PRIMARY KEY, signature TEXT, data TEXT
+              spec_id TEXT PRIMARY KEY, signature TEXT, data TEXT
             )"""
             self.connection.execute(query)
 
-            query = "CREATE TABLE IF NOT EXISTS dependencies (id TEXT PRIMARY KEY, data TEXT)"
+            query = """CREATE TABLE IF NOT EXISTS spec_deps (
+              spec_id TEXT PRIMARY KEY, dep_id TEXT NULL
+            )"""
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS selection_specs (
@@ -751,12 +706,12 @@ class WorkspaceDatabase:
               spec_id TEXT,
               position INTEGEGER,
               PRIMARY KEY (selection_id, spec_id),
-              FOREIGN KEY (selection_id) REFERENCES selections(id) ON DELETE CASCADE
+              FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
             )"""
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS selections (
-              id TEXT PRIMARY KEY,
+              spec_id TEXT PRIMARY KEY,
               tag TEXT UNIQUE,
               gen_signature TEXT,
               created_on TEXT,
@@ -773,9 +728,11 @@ class WorkspaceDatabase:
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS results (
-            id TEXT,
+            spec_id TEXT,
             spec_name TEXT,
             spec_fullname TEXT,
+            file_root TEXT,
+            file_path TEXT,
             session TEXT,
             status_state TEXT,
             status_category TEXT,
@@ -787,11 +744,11 @@ class WorkspaceDatabase:
             duration TEXT,
             workspace TEXT,
             measurements TEXT,
-            PRIMARY KEY (id, session)
+            PRIMARY KEY (spec_id, session)
             )"""
             self.connection.execute(query)
 
-            query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (id)"
+            query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)"
             self.connection.execute(query)
 
             query = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
@@ -808,31 +765,30 @@ class WorkspaceDatabase:
         self.connection.close()
 
     def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
+        rows: list[tuple[str, str | None]] = []
+        for spec in specs:
+            if spec.dependencies:
+                for dep in spec.dependencies:
+                    rows.append((spec.id, dep.id))
+            else:
+                rows.append((spec.id, None))  # standalone node
         with self.connection:
             self.connection.executemany(
                 """
-                INSERT INTO specs (id, signature, data)
+                INSERT INTO specs (spec_id, signature, data)
                 VALUES (?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET signature=excluded.signature, data=excluded.data
+                ON CONFLICT(spec_id) DO UPDATE SET signature=excluded.signature, data=excluded.data
                 """,
                 ((spec.id, signature, json.dumps_min(spec.asdict())) for spec in specs),
             )
             self.connection.executemany(
-                """
-                INSERT INTO dependencies (id, data)
-                VALUES (?, ?)
-                ON CONFLICT(id) DO UPDATE SET data=excluded.data
-                """,
-                (
-                    (spec.id, json.dumps_min([dep.id for dep in spec.dependencies]))
-                    for spec in specs
-                ),
+                "DELETE FROM spec_deps WHERE spec_id = ?",
+                ((spec.id,) for spec in specs),
             )
-
-    def reachable_spec_ids(self, ids: list[str]) -> list[str]:
-        graph = self.get_dependency_graph()
-        self.resolve_spec_ids(ids)
-        return reachable_nodes(graph, ids)
+            self.connection.executemany(
+                "INSERT OR REPLACE INTO spec_deps(spec_id, dep_id) VALUES (?, ?)",
+                rows,
+            )
 
     def resolve_spec_id(self, id: str) -> str | None:
         if id.startswith(testspec.select_sygil):
@@ -844,7 +800,7 @@ class WorkspaceDatabase:
         if hi is None:
             return None
         rows = self.connection.execute(
-            "SELECT id FROM specs WHERE id >= ? AND id < ? LIMIT 2", (id, hi)
+            "SELECT spec_id FROM specs WHERE spec_id >= ? AND spec_id < ? LIMIT 2", (id, hi)
         ).fetchall()
         if len(rows) == 0:
             return None
@@ -862,7 +818,13 @@ class WorkspaceDatabase:
             hi = increment_hex_prefix(id)
             assert hi is not None
             cur = self.connection.execute(
-                "SELECT id FROM specs WHERE id >= ? AND id < ? ORDER BY id LIMIT 2", (id, hi)
+                """
+                SELECT spec_id
+                FROM specs
+                WHERE spec_id >= ? AND spec_id < ?
+                ORDER BY spec_id LIMIT 2
+                """,
+                (id, hi),
             )
             row = cur.fetchone()
             if row is None:
@@ -872,82 +834,52 @@ class WorkspaceDatabase:
             ids[i] = row[0]
 
     def get_specs(
-        self, ids: list[str] | None = None, signature: str | None = None
+        self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[ResolvedSpec]:
-        if ids and signature:
-            return self._get_specs_by_id_and_signature(ids, signature)
-        elif ids:
-            return self._get_specs_by_id(ids)
-        elif signature:
-            return self._get_specs_by_signature(signature)
-        else:
-            return self._get_all_specs()
+        if not ids:
+            rows = self.connection.execute("SELECT * FROM specs").fetchall()
+            return self._reconstruct_specs(rows)
+        self.resolve_spec_ids(ids)
+        upstream = self.get_upstream_ids(ids)
+        load_ids = list(upstream.union(ids))
+        rows: list[tuple[str, str]] = []
+        base_query = "SELECT * FROM specs WHERE spec_id IN"
+        for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
+            chunk = load_ids[i : i + SQL_CHUNK_SIZE]
+            placeholders = ",".join("?" for _ in chunk)
+            query = f"{base_query} ({placeholders})"
+            cursor = self.connection.execute(query, chunk)
+            rows.extend(cursor.fetchall())
+        specs = self._reconstruct_specs(rows)
+        if include_upstreams:
+            return specs
+        return [spec for spec in specs if spec.id in ids]
 
-    def _get_all_specs(self) -> list[ResolvedSpec]:
-        rows = self.connection.execute("SELECT * FROM specs").fetchall()
-        return self._reconstruct_specs(rows)
-
-    def _get_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
+    def get_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
         rows = self.connection.execute(
             "SELECT * FROM specs WHERE signature = ?", (signature,)
         ).fetchall()
         return self._reconstruct_specs(rows)
 
-    def _get_specs_by_exact_id(self, exact: list[str]) -> list[Any]:
-        rows = list()
-        base_query = "SELECT * FROM specs WHERE id IN"
-        if exact:
-            while rem := len(exact) > 0:
-                nvar = min(900, rem)
-                placeholders = ",".join(["?"] * nvar)
-                query = f"{base_query} ({placeholders})"
-                cur = self.connection.execute(query, exact[:nvar])
-                rows.extend(cur.fetchall())
-                exact = exact[nvar:]
-        return rows
-
-    def _get_specs_by_partial_id(self, partial: list[str]) -> list[Any]:
-        rows = list()
-        base_query = "SELECT * FROM specs WHERE"
-        if partial:
-            while rem := len(partial) > 0:
-                nvar = min(900, rem)
-                clauses = " OR ".join(["id LIKE ?"] * nvar)
-                params = [f"{p}%" for p in partial[:nvar]]
-                query = f"{base_query} {clauses}"
-                cur = self.connection.execute(query, params)
-                rows.extend(cur.fetchall())
-                partial = partial[nvar:]
-        return rows
-
-    def _get_specs_by_id(self, ids: list[str]) -> list[ResolvedSpec]:
-        self.resolve_spec_ids(ids)
-        graph = self.get_dependency_graph()
-        reachable = reachable_nodes(graph, ids)
-        exact, partial = stable_partition(reachable, predicate=lambda x: len(x) >= 64)
-        rows = self._get_specs_by_exact_id(exact)
-        rows.extend(self._get_specs_by_partial_id(partial))
-        specs = self._reconstruct_specs(rows)
-        return [spec for spec in specs if spec.id in ids]
-
-    def _get_specs_by_id_and_signature(self, ids: list[str], signature: str) -> list[ResolvedSpec]:
-        graph = self.get_dependency_graph()
-        reachable = reachable_nodes(graph, ids)
-        exact, partial = stable_partition(reachable, predicate=lambda x: len(x) >= 64)
-        clauses: list[str] = []
-        params: list[str] = []
-        if exact:
-            placeholders = ",".join(["?"] * len(exact))
-            clauses.append(f"id IN ({placeholders})")
-            params.extend(exact)
-        for p in partial:
-            clauses.append("id LIKE ?")
-            params.append(f"{p}%")
-        where = " OR ".join(clauses)
-        query = f"SELECT * FROM specs WHERE signature = ? AND ({where})"  # nosec B608
-        rows = self.connection.execute(query, (signature, *params)).fetchall()
-        specs = self._reconstruct_specs(rows)
-        return [spec for spec in specs if spec.id in ids]
+    def get_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
+        rows = self.connection.execute(
+            """
+            SELECT sp.data
+            FROM selection_specs ssp
+            JOIN selections sel ON ssp.selection_id = sel.spec_id
+            JOIN specs sp ON sp.spec_id = ssp.spec_id AND sp.signature = sel.gen_signature
+            WHERE sel.tag = ?
+            ORDER BY ssp.position ASC
+            """,
+            (tag,),
+        ).fetchall()
+        if not rows:
+            raise NotASelection(tag)
+        lookup: dict[str, ResolvedSpec] = {}
+        for row in rows:
+            spec = ResolvedSpec.from_dict(json.loads(row[0]), lookup)
+            lookup[spec.id] = spec
+        return list(lookup.values())
 
     def _reconstruct_specs(self, rows: list[list]) -> list[ResolvedSpec]:
         data = {id: json.loads(data) for id, _, data in rows}
@@ -970,6 +902,8 @@ class WorkspaceDatabase:
                     case.id,
                     case.spec.name,
                     case.spec.fullname,
+                    str(case.spec.file_root),
+                    str(case.spec.file_path),
                     session.name,
                     case.status.state,
                     case.status.category,
@@ -987,9 +921,11 @@ class WorkspaceDatabase:
             self.connection.executemany(
                 """
                 INSERT OR IGNORE INTO results (
-                id,
+                spec_id,
                 spec_name,
                 spec_fullname,
+                file_root,
+                file_path,
                 session,
                 status_state,
                 status_category,
@@ -1002,78 +938,87 @@ class WorkspaceDatabase:
                 workspace,
                 measurements
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
 
-    def get_results(self, ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+    def get_results(
+        self,
+        ids: list[str] | None = None,
+        include_upstreams: bool = False,
+    ) -> dict[str, dict[str, Any]]:
+        rows: list[tuple[str, ...]]
         if not ids:
             rows = self.connection.execute(
                 """SELECT *
                 FROM results AS r
-                WHERE r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
+                WHERE r.session = (
+                  SELECT MAX(session)
+                  FROM results AS r2
+                  WHERE r2.spec_id = r.spec_id
+                )
                 """
             ).fetchall()
-        else:
-            rows = []
-            batch_size = 900
-            self.resolve_spec_ids(ids)
-            for i in range(0, len(ids), batch_size):
-                batch = ids[i : i + batch_size]
-                placeholders = ", ".join("?" * len(batch))
-                query = f"""\
-                  SELECT r.*
-                    FROM results AS r
-                    WHERE r.id in ({placeholders})
-                    AND r.session = (SELECT MAX(session) FROM results AS r2 WHERE r2.id = r.id)
-                """  # nosec B608
-                cur = self.connection.execute(query, batch)  # nosec B608
-                rows.extend(cur.fetchall())
-        data: dict[str, dict[str, Any]] = {}
+            return {row[0]: self._reconstruct_results(row) for row in rows}
+        rows = []
+        self.resolve_spec_ids(ids)
+        upstream = self.get_upstream_ids(ids) if include_upstreams else set()
+        load_ids = list(upstream.union(ids))
+        for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
+            chunk = ids[i : i + SQL_CHUNK_SIZE]
+            placeholders = ", ".join("?" for _ in chunk)
+            query = f"""\
+              SELECT r.*
+                FROM results AS r
+                WHERE r.spec_id in ({placeholders})
+                AND r.session = (
+                  SELECT MAX(session)
+                  FROM results AS r2
+                  WHERE r2.spec_id = r.spec_id
+                )
+            """  # nosec B608
+            cur = self.connection.execute(query, chunk)  # nosec B608
+            rows.extend(cur.fetchall())
+        return {row[0]: self._reconstruct_results(row) for row in rows}
+
+    def get_result_history(self, id: str) -> list:
+        rows = self.connection.execute(
+            "SELECT * FROM results WHERE spec_id LIKE ? ORDER BY session ASC", (f"{id}%",)
+        ).fetchall()
+        data: list[dict] = []
         for row in rows:
-            data[row[0]] = self._expand_results_row(row)
+            d = self._reconstruct_results(row)
+            data.append(d)
         return data
 
-    def _expand_results_row(self, row: list[Any]) -> dict[str, Any]:
+    def _reconstruct_results(self, row: list[Any]) -> dict[str, Any]:
         d: dict[str, Any] = {}
         d["id"] = row[0]
         d["spec_name"] = row[1]
         d["spec_fullname"] = row[2]
-        d["session"] = row[3]
+        d["file_root"] = row[3]
+        d["file_path"] = row[4]
+        d["session"] = row[5]
         d["status"] = Status.from_dict(
             {
-                "state": row[4],
-                "category": row[5],
-                "status": row[6],
-                "reason": row[7],
-                "code": row[8],
+                "state": row[6],
+                "category": row[7],
+                "status": row[8],
+                "reason": row[9],
+                "code": row[10],
             }
         )
         d["timekeeper"] = Timekeeper.from_dict(
             {
-                "started_on": row[9],
-                "finished_on": row[10],
-                "duration": float(row[11]),
+                "started_on": row[11],
+                "finished_on": row[12],
+                "duration": float(row[13]),
             }
         )
-        d["workspace"] = row[12]
-        d["measurements"] = Measurements.from_dict(json.loads(row[13]))
+        d["workspace"] = row[14]
+        d["measurements"] = Measurements.from_dict(json.loads(row[15]))
         return d
-
-    def get_single_result(self, id: str) -> list:
-        rows = self.connection.execute(
-            "SELECT * FROM results WHERE id LIKE ? ORDER BY session ASC", (f"{id}%",)
-        ).fetchall()
-        data: list[dict] = []
-        for row in rows:
-            d = self._expand_results_row(row)
-            data.append(d)
-        return data
-
-    def get_dependency_graph(self) -> dict[str, list[str]]:
-        rows = self.connection.execute("SELECT id, data FROM dependencies;").fetchall()
-        return {id: json.loads(data) for id, data in rows}
 
     def put_selection(
         self,
@@ -1087,6 +1032,8 @@ class WorkspaceDatabase:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> None:
+        if tag == ":all:":
+            raise ValueError("Tag name :all: is reserved")
         row: list[str] = []
         id = uuid.uuid4().hex
         row.extend((id, tag, signature, datetime.datetime.now().isoformat(), __static_version__))
@@ -1125,7 +1072,7 @@ class WorkspaceDatabase:
             self.connection.execute(
                 """
                 INSERT INTO selections (
-                  id,
+                  spec_id,
                   tag,
                   gen_signature,
                   created_on,
@@ -1147,26 +1094,6 @@ class WorkspaceDatabase:
         with self.connection:
             self.connection.execute("UPDATE selections SET tag = ? WHERE tag = ?", (new, old))
 
-    def get_specs_from_selection(self, tag: str) -> list["ResolvedSpec"]:
-        rows = self.connection.execute(
-            """
-            SELECT sp.data
-            FROM selection_specs ssp
-            JOIN selections sel ON ssp.selection_id = sel.id
-            JOIN specs sp ON sp.id = ssp.spec_id AND sp.signature = sel.gen_signature
-            WHERE sel.tag = ?
-            ORDER BY ssp.position ASC
-            """,
-            (tag,),
-        ).fetchall()
-        if not rows:
-            raise NotASelection(tag)
-        lookup: dict[str, ResolvedSpec] = {}
-        for row in rows:
-            spec = ResolvedSpec.from_dict(json.loads(row[0]), lookup)
-            lookup[spec.id] = spec
-        return list(lookup.values())
-
     def get_selection_metadata(self, tag: str) -> "Selection":
         row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
         if not row:
@@ -1186,13 +1113,6 @@ class WorkspaceDatabase:
             fingerprint=row[11],
         )
 
-    def get_selection_old(self, tag: str) -> select.SelectorSnapshot:
-        row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
-        if row is None:
-            raise NotASelection(tag)
-        snapshot = select.SelectorSnapshot.reconstruct(row[1])
-        return snapshot
-
     @property
     def tags(self) -> list[str]:
         rows = self.connection.execute("SELECT tag FROM selections").fetchall()
@@ -1206,6 +1126,86 @@ class WorkspaceDatabase:
         with self.connection:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
+
+    def get_updownstream_ids(self, ids: list[str] | None = None) -> tuple[set[str], set[str]]:
+        """Get both upstream dependencies and downstream dependents in a single query.
+
+        Args:
+            ids: List of spec IDs to find dependencies for
+
+        Returns:
+            upstream, downstream IDs
+        """
+        if not ids:
+            set(), set()
+
+        assert ids is not None
+        placeholders = ",".join("?" * len(ids))
+        query = f"""
+            WITH RECURSIVE
+            upstream_nodes AS (
+              -- Base case: direct dependencies of starting nodes
+              SELECT spec_id, dep_id AS upstream_id, 1 AS depth
+              FROM spec_deps
+              WHERE spec_id IN ({placeholders})
+              AND dep_id IS NOT NULL
+
+              UNION
+
+              -- Recursive case: dependencies of dependencies
+              SELECT s.spec_id, s.dep_id AS upstream_id, un.depth + 1 AS depth
+              FROM spec_deps s
+              INNER JOIN upstream_nodes un ON s.spec_id = un.upstream_id
+              WHERE s.dep_id IS NOT NULL
+            ),
+            downstream_nodes AS (
+              -- Base case: specs that directly depend on our starting nodes
+              SELECT spec_id AS downstream_id, dep_id, 1 AS depth
+              FROM spec_deps
+              WHERE dep_id IN ({placeholders})
+
+              UNION
+
+              -- Recursive case: specs that depend on the dependents
+              SELECT s.spec_id AS downstream_id, s.dep_id, dn.depth + 1 AS depth
+              FROM spec_deps s
+              INNER JOIN downstream_nodes dn ON s.dep_id = dn.downstream_id
+            )
+            SELECT 'upstream' AS direction, upstream_id AS spec_id FROM upstream_nodes
+            UNION ALL
+            SELECT 'downstream' AS direction, downstream_id AS spec_id FROM downstream_nodes
+        """  #  nosec B608
+
+        upstream: set[str] = set()
+        downstream: set[str] = set()
+        with self.connection:
+            rows = self.connection.execute(query, ids + ids).fetchall()
+        for direction, id in rows:
+            if direction == "upstream":
+                upstream.add(id)
+            else:
+                downstream.add(id)
+        return upstream, downstream
+
+    def get_downstream_ids(self, ids: list[str]) -> set[str]:
+        """Return dependencies in instantiation order."""
+        return self.get_updownstream_ids(ids)[1]
+
+    def get_upstream_ids(self, ids: list[str]) -> set[str]:
+        """Return dependents in reverse instantiation order."""
+        return self.get_updownstream_ids(ids)[0]
+
+    def get_dependency_graph(self) -> dict[str, list[str]]:
+        """
+        Return the entire dependency graph, including disconnected nodes.
+        Every spec appears, standalone nodes have dep_id=None (empty list).
+        """
+        graph: dict[str, list[str]] = collections.defaultdict(list)
+        for spec_id, dep_id in self.connection.execute("SELECT spec_id, dep_id FROM spec_deps"):
+            graph[spec_id]  # creates an empty list if it doesn't exist
+            if dep_id is not None:
+                graph[spec_id].append(dep_id)
+        return graph
 
 
 T = TypeVar("T")

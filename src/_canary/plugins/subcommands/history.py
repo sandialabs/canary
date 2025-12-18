@@ -33,7 +33,7 @@ class History(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
-        results = workspace.db.get_single_result(args.id)
+        results = workspace.db.get_result_history(args.id)
         table = Table(expand=False)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)

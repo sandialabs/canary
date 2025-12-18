@@ -87,7 +87,7 @@ class MarkdownReporter(CanaryReporter):
             group = case.status.status.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {os.uname().nodename} ")
-        fh.write(f"| {config.get('build:project')} ")
+        fh.write(f"| {config.get('cmake:project')} ")
         for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("| 0 ")

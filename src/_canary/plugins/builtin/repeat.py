@@ -92,7 +92,6 @@ def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
 
 
 def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
-    dont_restage = config.getoption("dont_restage")
     try:
         case.restore_workspace()
         if summary := job_start_summary(case):
@@ -102,8 +101,6 @@ def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
     finally:
         if summary := job_finish_summary(case, attempt=attempt):
             logger.debug(summary)
-        if dont_restage:
-            config.set("options:dont_restage", dont_restage, scope="command_line")
 
 
 def job_start_summary(case: "TestCase") -> str:

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ... import config
 from ...collect import vc_prefixes
 from ...config.schemas import testpaths_schema
 from ...generate import Generator
@@ -154,7 +155,9 @@ class Run(CanarySubcommand):
             logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
             specs = workspace.get_selection(args.runtag)
         else:
-            raise ValueError("Missing required argument, one of SCANPATHS, SPECS, RUNTAG")
+            tag = config.get("selection:default_tag")
+            logger.info(f"[bold]Running[/] tests in default tag {tag}")
+            specs = workspace.get_selection(tag)
         session = workspace.run(specs, reuse_session=reuse, only=args.only)
         return session.returncode
 
@@ -249,8 +252,6 @@ class PathSpec(argparse.Action):
                 namespace.runtag = item
             elif workspace is not None and workspace.inside_view(item):
                 namespace.start = os.path.abspath(item)
-            elif workspace is not None and workspace.inside_view(item):
-                raise ValueError("This operation cannot be run inside a workspace view")
             elif os.path.isfile(item):
                 root, name = os.path.split(os.path.abspath(item))
                 scanpaths.setdefault(root, []).append(name)

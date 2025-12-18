@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import rich
 import rich.console
+import rich.table
 
 from ...hookspec import hookimpl
 from ...workspace import Workspace
@@ -42,7 +43,7 @@ class Info(CanarySubcommand):
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
         selection = workspace.db.get_selection_metadata(tag)
-        specs = [spec for spec in workspace.db.get_specs_from_selection(tag) if not spec.mask]
+        specs = [spec for spec in workspace.db.get_specs_by_tagname(tag) if not spec.mask]
         fh.write(f"Created on: {selection.created_on}\n")
         fh.write("Scan paths:\n")
         for root, paths in selection.scanpaths.items():
@@ -65,15 +66,17 @@ class Info(CanarySubcommand):
                 fh.write(f"  --owner {o}\n")
         if selection.regex:
             fh.write(f"Regular expression filter:\n  --regex {selection.regex}\n")
-        fh.write(f"Test specs (n = {len(specs)}):\n")
-        for spec in specs:
-            fh.write(f"  • {spec.id[:7]}: {spec.display_name(resolve=True)}\n")
+        fh.write("Test specs:")
+        table = rich.table.Table("No.", "ID", "Name")
+        for i, spec in enumerate(specs):
+            table.add_row(str(i), spec.id[:7], spec.display_name(resolve=True, style="rich"))
         console = rich.console.Console()
+        groups = rich.console.Group(fh.getvalue(), table)
         if len(specs) > shutil.get_terminal_size().lines:
             with console.pager():
-                console.print(fh.getvalue())
+                console.print(groups)
         else:
-            console.print(fh.getvalue())
+            console.print(groups)
 
     def print_workspace_info(self) -> None:
         workspace = Workspace.load()

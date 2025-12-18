@@ -69,34 +69,6 @@ optional_str = Or(str, None)  # type: ignore
 
 any_schema = Schema({}, ignore_extra_keys=True)
 
-build_schema = Schema(
-    {
-        Optional("project"): optional_str,
-        Optional("type"): optional_str,
-        Optional("date"): optional_str,
-        Optional("build_directory"): optional_str,
-        Optional("source_directory"): optional_str,
-        Optional("compiler"): {
-            Optional("vendor"): optional_str,
-            Optional("version"): optional_str,
-            Optional("paths"): {
-                Optional("cc"): optional_str,
-                Optional("cxx"): optional_str,
-                Optional("fc"): optional_str,
-                Optional("mpicc"): optional_str,
-                Optional("mpicxx"): optional_str,
-                Optional("mpifc"): optional_str,
-            },
-            Optional("cc"): optional_str,
-            Optional("cxx"): optional_str,
-            Optional("fc"): optional_str,
-            Optional("mpicc"): optional_str,
-            Optional("mpicxx"): optional_str,
-            Optional("mpifc"): optional_str,
-        },
-    },
-    ignore_extra_keys=True,
-)
 environment_schema = Schema(
     {
         Optional("set"): vardict,
@@ -105,25 +77,24 @@ environment_schema = Schema(
         Optional("append-path"): vardict,
     }
 )
+workspace_schema = Schema({Optional("view", default="TestResults"): Or(bool, str, None)})
+run_schema = Schema(
+    {
+        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+    }
+)
+selection_schema = Schema({Optional("default_tag", default=":all:"): str})
 
 config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
-        Optional("cache_dir"): str,
-        Optional("view"): Or(bool, str, None),
-        Optional("multiprocessing"): {
-            Optional("context"): multiprocessing_contexts,
-            Optional("max_tasks_per_child"): positive_int,
-        },
-        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
-        Optional("polling_frequency"): {
-            Optional("testcase"): Use(time_in_seconds),
-        },
+        Optional("workspace", default={"view": "TestResults"}): workspace_schema,
         Optional("plugins"): list_of_str,
-        Optional("build"): build_schema,
         Optional("environment"): environment_schema,
         Optional("scratch"): any_schema,
+        Optional("run"): run_schema,
+        Optional("selection", default={"default_tag": ":all:"}): selection_schema,
     },
     ignore_extra_keys=True,
 )
@@ -153,7 +124,6 @@ environment_variable_schema = EnvarSchema(
     {
         Optional("CANARY_DEBUG"): Use(boolean),
         Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
-        Optional("CANARY_CACHE_DIR"): Use(str),
         Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
         Optional("CANARY_MULTIPROCESSING_CONTEXT"): multiprocessing_contexts,
         Optional("CANARY_MULTIPROCESSING_MAX_TASKS_PER_CHILD"): positive_int,

@@ -208,8 +208,8 @@ class CDashXMLReporter:
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
             self.meta["Generator"] = self.generator
-            if vendor := canary.config.get("build:compiler:vendor"):
-                version = canary.config.get("build:compiler:version")
+            if vendor := canary.config.get("cmake:compiler:vendor"):
+                version = canary.config.get("cmake:compiler:version")
                 self.meta["CompilerName"] = vendor
                 self.meta["CompilerVersion"] = version
             self.meta["Hostname"] = host
@@ -252,11 +252,14 @@ class CDashXMLReporter:
         add_text_node(l1, "StartTestTime", int(starttime))
 
         testlist = doc.createElement("TestList")
+        pm = canary.config.pluginmanager.hook
         for case in cases:
-            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{case.display_name()}")
+            name = pm.canary_cdash_name(case=case) or case.display_name()
+            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{name}")
         l1.appendChild(testlist)
 
         status: str
+        pm = canary.config.pluginmanager.hook
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
@@ -292,8 +295,8 @@ class CDashXMLReporter:
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
             name_fmt = canary.config.getoption("name_format")
-            name = case.display_name()
-            fullname = f"{case.workspace.path.parent}/{case.display_name()}"
+            name = pm.canary_cdash_name(case=case) or case.display_name()
+            fullname = f"{case.workspace.path.parent}/{name}"
             add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
             add_text_node(test_node, "Path", str(case.workspace.dir.parent))
             add_text_node(test_node, "FullName", f"./{fullname}")

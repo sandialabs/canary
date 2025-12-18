@@ -89,9 +89,9 @@ class HTMLReporter(CanaryReporter):
             "Project",
             "Not Run",
             "Timeout",
-            "Fail",
-            "Diff",
-            "Pass",
+            "Failed",
+            "Diffed",
+            "Success",
             "Invalid",
             "Cancelled",
             "Total",
@@ -104,8 +104,8 @@ class HTMLReporter(CanaryReporter):
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{os.uname().nodename}</td>")
-        fh.write(f"<td>{config.get('build:project')}</td>")
-        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
+        fh.write(f"<td>{config.get('cmake:project')}</td>")
+        for group in ("Not Run", "Timeout", "Fail", "Diffed", "Success", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("<td>0</td>")
             else:

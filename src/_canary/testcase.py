@@ -590,67 +590,67 @@ class TestCase:
         return text
 
     def load_cached_runs(self) -> dict[str, Any] | None:
-        cache_dir = Path(config.cache_dir)
-        file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
-        if file.exists():
-            return json.loads(file.read_text())["cache"]
+        if cache_dir := find_cache_dir(start=self.workspace.root):
+            file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+            if file.exists():
+                return json.loads(file.read_text())["cache"]
         return None
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
-        if self.status.state != "COMPLETE":
+        if self.status.category != "PASS":
             return
-        cache_dir = Path(config.cache_dir)
-        file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
-        file.parent.mkdir(parents=True, exist_ok=True)
-        cache: dict[str, Any]
-        if not file.exists():
-            cache = {
-                ".version": [3, 0],
-                "meta": {
-                    "name": self.spec.display_name(),
-                    "id": self.spec.id,
-                    "root": self.spec.file_root,
-                    "path": self.spec.file_path,
-                    "parameters": self.spec.parameters,
-                },
-            }
-        else:
-            cache = json.loads(file.read_text())["cache"]
-        history = cache.setdefault("history", {})
-        dt = (
-            datetime.datetime.fromisoformat(self.timekeeper.started_on)
-            if self.timekeeper.started_on != "NA"
-            else None
-        )
-        if dt is not None:
-            history["last_run"] = dt.strftime("%c")
-        name = self.status.category.lower()
-        history[name] = history.get(name, 0) + 1
-        if self.timekeeper.duration >= 0 and self.status.category == "PASS":
-            count: int = 0
-            metrics = cache.setdefault("metrics", {})
-            t = metrics.setdefault("time", {})
-            if t:
-                # Welford's single pass online algorithm to update statistics
-                count, mean, variance = t["count"], t["mean"], t["variance"]
-                delta = self.timekeeper.duration - mean
-                mean += delta / (count + 1)
-                M2 = variance * count
-                delta2 = self.timekeeper.duration - mean
-                M2 += delta * delta2
-                variance = M2 / (count + 1)
-                minimum = min(t["min"], self.timekeeper.duration)
-                maximum = max(t["max"], self.timekeeper.duration)
+        if cache_dir := find_cache_dir(start=self.workspace.root):
+            file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+            file.parent.mkdir(parents=True, exist_ok=True)
+            cache: dict[str, Any]
+            if not file.exists():
+                cache = {
+                    ".version": [3, 0],
+                    "meta": {
+                        "name": self.spec.display_name(),
+                        "id": self.spec.id,
+                        "root": self.spec.file_root,
+                        "path": self.spec.file_path,
+                        "parameters": self.spec.parameters,
+                    },
+                }
             else:
-                variance = 0.0
-                mean = minimum = maximum = self.timekeeper.duration
-            t["mean"] = mean
-            t["min"] = minimum
-            t["max"] = maximum
-            t["variance"] = variance
-            t["count"] = count + 1
-        file.write_text(json.dumps({"cache": cache}, indent=2))
+                cache = json.loads(file.read_text())["cache"]
+            history = cache.setdefault("history", {})
+            dt = (
+                datetime.datetime.fromisoformat(self.timekeeper.started_on)
+                if self.timekeeper.started_on != "NA"
+                else None
+            )
+            if dt is not None:
+                history["last_run"] = dt.strftime("%c")
+            name = self.status.category.lower()
+            history[name] = history.get(name, 0) + 1
+            if self.timekeeper.duration >= 0 and self.status.category == "PASS":
+                count: int = 0
+                metrics = cache.setdefault("metrics", {})
+                t = metrics.setdefault("time", {})
+                if t:
+                    # Welford's single pass online algorithm to update statistics
+                    count, mean, variance = t["count"], t["mean"], t["variance"]
+                    delta = self.timekeeper.duration - mean
+                    mean += delta / (count + 1)
+                    M2 = variance * count
+                    delta2 = self.timekeeper.duration - mean
+                    M2 += delta * delta2
+                    variance = M2 / (count + 1)
+                    minimum = min(t["min"], self.timekeeper.duration)
+                    maximum = max(t["max"], self.timekeeper.duration)
+                else:
+                    variance = 0.0
+                    mean = minimum = maximum = self.timekeeper.duration
+                t["mean"] = mean
+                t["min"] = minimum
+                t["max"] = maximum
+                t["variance"] = variance
+                t["count"] = count + 1
+            file.write_text(json.dumps({"cache": cache}, indent=2))
 
 
 def load_testcase_from_file(arg: Path | str | None) -> TestCase:
@@ -694,6 +694,17 @@ class Measurements:
     def items(self) -> Generator[tuple[str, Any], None, None]:
         for item in self.data.items():
             yield item
+
+
+def find_cache_dir(start: Path) -> Path | None:
+    if "CANARY_CACHE_DIR" in os.environ:
+        return Path(os.environ["CANARY_CACHE_DIR"])
+    d = start
+    while d != d.parent:
+        if (d / "WORKSPACE.TAG").exists():
+            return d / "cache"
+        d = d.parent
+    return None
 
 
 class MissingSourceError(Exception):

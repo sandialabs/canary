@@ -5,7 +5,6 @@
 import argparse
 import os
 import sys
-from functools import cached_property
 from pathlib import Path
 from string import Template
 from typing import IO
@@ -14,12 +13,13 @@ from typing import Literal
 from typing import cast
 
 import yaml
+from schema import Optional
+from schema import Schema
 
 from ..pluginmanager import CanaryPluginManager
 from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge
-from ..util.filesystem import write_directory_tag
 from ..util.rich import set_color_when
 from ._machine import system_config
 from .schemas import config_schema
@@ -47,30 +47,27 @@ logger = logging.get_logger(__name__)
 def default_config_values() -> dict[str, Any]:
     defaults = {
         "debug": False,
-        "view": "TestResults",
         "log_level": "INFO",
-        "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
-        "multiprocessing": {
-            "context": "spawn",
-            "max_tasks_per_child": 1,
-        },
-        "timeout": {
-            "session": -1.0,
-            "multiplier": 1.0,
-            "fast": 120.0,
-            "default": 300.0,
-            "long": 900.0,
-        },
         "plugins": [],
-        "polling_frequency": {
-            "testcase": 0.05,
-        },
         "environment": {
             "prepend-path": {},
             "append-path": {},
             "set": {},
             "unset": [],
         },
+        "workspace": {
+            "view": "TestResults",
+        },
+        "run": {
+            "timeout": {
+                "session": -1.0,
+                "multiplier": 1.0,
+                "fast": 120.0,
+                "default": 300.0,
+                "long": 900.0,
+            },
+        },
+        "selection": {"default_tag": ":all:"},
         "scratch": {},
         "system": system_config(),
     }
@@ -132,25 +129,6 @@ class Config:
         value = getattr(self.options, name, None)
         return value or default
 
-    @cached_property
-    def cache_dir(self) -> str | None:
-        """Get the directory for cache files.
-
-        Lazily initializes the cache directory path, creating it if necessary.
-
-        Returns:
-            The path to the cache directory or None if not set.
-        """
-        cache_dir: str
-        if dir := self.get("cache_dir"):
-            cache_dir = os.path.expanduser(dir)
-        else:
-            cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
-        if isnullpath(cache_dir):
-            return None
-        create_cache_dir(cache_dir)
-        return cache_dir
-
     def get(self, path: str, default: Any = None) -> Any:
         parts = process_config_path(path)
         if parts[0] == "config":
@@ -164,6 +142,9 @@ class Config:
                 return default
             value = value[key]
         return value
+
+    def add_section(self, name: str, schema: Schema) -> None:
+        config_schema._schema.update({Optional(name): schema})
 
     def set(self, path: str, value: Any) -> None:
         parts = process_config_path(path)
@@ -201,9 +182,6 @@ class Config:
         if args.config_file:
             if fd := read_config_file(args.config_file):
                 data = config_schema.validate(fd)
-
-        if cache_dir := getattr(args, "cache_dir", None):
-            data["cache_dir"] = cache_dir
 
         logging.set_level(logging.INFO)
         if args.color is not None:
@@ -358,14 +336,6 @@ def expandvars(arg: Any, mapping: dict) -> Any:
         t = Template(arg)
         return t.safe_substitute(mapping)
     return arg
-
-
-def create_cache_dir(path: str) -> None:
-    if isnullpath(path):
-        return
-    p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
-    write_directory_tag(p / "CANARY_CACHE.TAG")
 
 
 class LocalScopeDoesNotExistError(Exception):

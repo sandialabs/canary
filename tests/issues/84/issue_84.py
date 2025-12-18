@@ -16,7 +16,7 @@ def test_issue_84(tmpdir):
             fh.write(open(f).read())
         args = [sys.executable, "-m", "canary", "init", "."]
         subprocess.run(args)
-        args = [sys.executable, "-m", "canary", "config", "set", "--local", "timeout:baz", "4m"]
+        args = [sys.executable, "-m", "canary", "config", "set", "--local", "run:timeout:baz", "4m"]
         subprocess.run(args)
         args = [sys.executable, "-m", "canary", "selection", "create", "-r", ".", "my-selection"]
         subprocess.run(args)

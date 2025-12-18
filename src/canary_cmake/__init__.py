@@ -64,7 +64,8 @@ def canary_runtest_finish(case: canary.TestCase) -> None:
 
 @canary.hookimpl(specname="canary_configure")
 def add_default_ctest_timeout(config: canary.Config):
-    config.set("timeout:ctest", 1500.0)
+    config.set("run:timeout:ctest", 1500.0)
+    config.add_section(name="cmake", schema=cmake_schema)
 
 
 @canary.hookimpl(specname="canary_addoption")
@@ -142,6 +143,11 @@ class CDashHooks:
         """Return artifacts to transmit to CDash"""
         ...
 
+    @canary.hookspec(firstresult=True)
+    def canary_cdash_name(self, case: "canary.TestCase") -> str | None:
+        """Return the name to use on CDash"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -157,6 +163,15 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
     return list(case.spec.keywords)
+
+
+@canary.hookimpl(trylast=True)
+def canary_cdash_name(case: canary.TestCase) -> str:
+    """Default implementation: return the test case's keywords"""
+    if not case.spec.parameters:
+        return case.spec.family
+    s_params = case.spec.s_params()
+    return f"{case.spec.family}[{s_params}]"
 
 
 @canary.hookimpl
@@ -190,3 +205,33 @@ def canary_cdash_artifacts(
     for i, artifact in enumerate(artifacts):
         artifacts[i] = schema.validate(artifact)
     return artifacts
+
+
+cmake_schema = Schema(
+    {
+        Optional("project"): Optional(str),
+        Optional("type"): Optional(str),
+        Optional("date"): Optional(str),
+        Optional("build_directory"): Optional(str),
+        Optional("source_directory"): Optional(str),
+        Optional("compiler"): {
+            Optional("vendor"): Optional(str),
+            Optional("version"): Optional(str),
+            Optional("paths"): {
+                Optional("cc"): Optional(str),
+                Optional("cxx"): Optional(str),
+                Optional("fc"): Optional(str),
+                Optional("mpicc"): Optional(str),
+                Optional("mpicxx"): Optional(str),
+                Optional("mpifc"): Optional(str),
+            },
+            Optional("cc"): Optional(str),
+            Optional("cxx"): Optional(str),
+            Optional("fc"): Optional(str),
+            Optional("mpicc"): Optional(str),
+            Optional("mpicxx"): Optional(str),
+            Optional("mpifc"): Optional(str),
+        },
+    },
+    ignore_extra_keys=True,
+)

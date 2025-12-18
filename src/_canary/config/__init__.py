@@ -9,6 +9,8 @@ from .config import CONFIG_ENV_FILENAME  # noqa: F401
 from .config import Config
 from .config import get_scope_filename  # noqa: F401
 
+__all__ = ["Config", "CONFIG_ENV_FILENAME", "get_scope_filename"]
+
 
 class _resource_pool_attr_error:
     def __getattribute__(self, name):
@@ -37,6 +39,9 @@ if typing.TYPE_CHECKING:
     _config = typing.cast(Config, _config)
     pluginmanager = _config.pluginmanager
     getoption = _config.getoption
+    add_section = _config.add_section
+    get = _config.get
+    set = _config.set
     data = _config.data
     write_new = _config.write_new
 

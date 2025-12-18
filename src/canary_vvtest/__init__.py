@@ -4,6 +4,8 @@
 
 import argparse
 import json
+import os
+import re
 import sys
 import typing
 
@@ -33,6 +35,18 @@ def canary_generate_modifyitems(generator: "canary.Generator") -> None:
             if "nnode" in spec.parameters:
                 spec.meta_parameters["nodes"] = spec.parameters["nnode"]
             spec.update_id()
+
+
+@canary.hookimpl
+def canary_cdash_name(case: canary.TestCase) -> str | None:
+    if not case.spec.file_path.suffix == ".vvt":
+        return None
+    elif not case.spec.parameters:
+        return case.spec.family
+    _, _, s = os.path.basename(case.spec.execpath).partition(".")
+    pattern = re.compile(r"([^.=]+)=.*?(?=\. [^.=]+=|$)", re.VERBOSE)
+    s_params = ",".join([m.group() for m in pattern.finditer(s)])
+    return f"{case.spec.family}[{s_params}]"
 
 
 @canary.hookimpl
@@ -105,7 +119,6 @@ class AnalyzeAction(argparse.Action):
         opts = getattr(namespace, "canary_vvtest", None) or {}
         opts[self.dest] = True
         setattr(namespace, "canary_vvtest", opts)
-        setattr(namespace, "dont_restage", True)
 
 
 def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
@@ -130,8 +143,8 @@ def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
 def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs = {}
     compiler_spec = None
-    if vendor := canary.config.get("build:compiler:vendor"):
-        version = canary.config.get("build:compiler:version")
+    if vendor := canary.config.get("cmake:compiler:vendor"):
+        version = canary.config.get("cmake:compiler:version")
         compiler_spec = f"{vendor}@{version}"
     attrs["CASEID"] = case.spec.id
     attrs["NAME"] = case.spec.family

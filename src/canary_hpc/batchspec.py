@@ -146,7 +146,7 @@ class TestBatch:
         if cli_timeouts := canary.config.getoption("timeout"):
             if t := cli_timeouts.get("multiplier"):
                 return float(t)
-        elif t := canary.config.get("timeout:multiplier"):
+        elif t := canary.config.get("run:timeout:multiplier"):
             return float(t)
         return 1.0
 

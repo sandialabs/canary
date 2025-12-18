@@ -251,11 +251,11 @@ class BaseSpec(Generic[T]):
             if t := cli_timeouts.get("*"):
                 return float(t)
         for keyword in self.keywords:
-            if t := config.get(f"timeout:{keyword}"):
+            if t := config.get(f"run:timeout:{keyword}"):
                 return float(t)
-        if t := config.get("timeout:all"):
+        if t := config.get("run:timeout:all"):
             return float(t)
-        return float(config.get("timeout:default"))
+        return float(config.get("run:timeout:default"))
 
 
 @dataclasses.dataclass

@@ -79,8 +79,7 @@ class Runner:
 @hookimpl(wrapper=True)
 def canary_runteststart(case: "TestCase") -> Generator[None, None, bool]:
     case.workspace.create(exist_ok=True)
-    if not config.getoption("dont_restage"):
-        case.setup()
+    case.setup()
     yield
     case.save()
     return True
