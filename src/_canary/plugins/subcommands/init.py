@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ... import config
 from ...hookspec import hookimpl
 from ...util import logging
 from ...workspace import Workspace
@@ -23,6 +24,11 @@ def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Init())
 
 
+@hookimpl(trylast=True)
+def canary_initfinish(workspace: Workspace) -> None:
+    logger.info(f"[bold]Finished[/] initializing canary workspace at {workspace.root.parent}")
+
+
 class Init(CanarySubcommand):
     name = "init"
     description = "Initialize a Canary session"
@@ -37,5 +43,6 @@ class Init(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        Workspace.create(Path(args.path).absolute(), force=args.w)
+        ws = Workspace.create(Path(args.path).absolute(), force=args.w)
+        config.pluginmanager.hook.canary_initfinish(workspace=ws)
         return 0
