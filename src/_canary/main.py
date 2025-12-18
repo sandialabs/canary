@@ -80,6 +80,8 @@ class CanaryMain:
         if args.debug:
             reraise = True
         if args.C:
+            if not os.path.exists(args.C):
+                raise ValueError(f"cannot change to {args.C!r}: No such file or directory")
             os.chdir(args.C)
 
         # Consider plugins passed in the environment and the command line early, before parsing the

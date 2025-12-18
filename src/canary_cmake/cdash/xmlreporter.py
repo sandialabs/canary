@@ -36,6 +36,8 @@ class CDashXMLReporter:
     def from_workspace(cls, dest: str | None = None) -> "CDashXMLReporter":
         workspace = canary.Workspace.load()
         cases = workspace.load_testcases()
+        if not cases:
+            raise ValueError(f"No results found in {workspace.root}")
         if dest is None:
             dest = str((workspace.view or workspace.sessions_dir) / "CDASH")
         self = cls(dest=dest)
@@ -524,16 +526,12 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status.status == "DIFFED":
-            self.status |= 2**1
-        elif case.status.status == "TIMEOUT":
-            self.status |= 2**3
+        if case.status.category == "PASS":
+            return
         elif case.status.category == "FAIL":
+            self.status |= 2**1
+        else:
             self.status |= 2**2
-        elif case.status.category == "SKIP":  # notdone
-            self.status |= 2**4
-        elif case.status.state in ("READY", "PENDING"):
-            self.status |= 2**5
 
     def add_test(self, case: "canary.TestCase") -> None:
         if case.timekeeper.started_on != "NA" and case.timekeeper.finished_on != "NA":
