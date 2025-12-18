@@ -41,6 +41,7 @@ dependencies = [
     "pyyaml",
     "schema",
     "rich",
+    "randomname",
     "typing_extensions; python_version < '3.11'",
 ]
 
@@ -140,6 +141,10 @@ exclude = [
     "src/_canary/third_party/imagesvg/*",
     "src/canary_gitlab/tests/*",
 ]
+
+[[tool.mypy.overrides]]
+module = "randomname.*"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "requests.*"
