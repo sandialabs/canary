@@ -235,7 +235,7 @@ class Collector:
             self.files[root] = paths
 
     def iter_files(self) -> Iterator[tuple[str, str]]:
-        for root, paths in self.scanpaths.items():
+        for root, paths in self.files.items():
             for path in paths:
                 yield root, path
 
