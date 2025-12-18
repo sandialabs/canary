@@ -404,7 +404,7 @@ class Workspace:
         regex: str | None = None,
     ) -> list["ResolvedSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
-        tag = tag or self.get_unique_random_tag()
+        tag = tag or unique_random_name(self.db.tags)
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
@@ -432,10 +432,6 @@ class Workspace:
         )
         logger.info(f"Created selection '[bold]{tag}[/]'")
         return specs
-
-    def get_unique_random_tag(self) -> str:
-        current_tags = self.db.tags
-        return unique_random_name(current_tags)
 
     def apply_selection_rules(
         self,
