@@ -105,10 +105,7 @@ def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
 
 class RerunAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        keywords = getattr(namespace, "keyword_exprs", None) or []
-        keywords.append(":all:")
-        namespace.keyword_exprs = list(keywords)
-        setattr(namespace, self.dest, True)
+        setattr(namespace, "only", "all")
 
 
 class AnalyzeAction(argparse.Action):
