@@ -63,7 +63,7 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
 def add_work_tree_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-w",
-        dest="wipe",
+        dest="wipe_workspace",
         default=False,
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",

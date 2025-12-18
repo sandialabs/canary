@@ -717,17 +717,17 @@ class WorkspaceDatabase:
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS spec_deps (
-              spec_id TEXT PRIMARY KEY, dep_id TEXT NULL
+              spec_id TEXT NOT NULL,
+              dep_id TEXT NULL,
+              PRIMARY KEY (spec_id, dep_id),
+              FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
             )"""
             self.connection.execute(query)
 
-            query = """CREATE TABLE IF NOT EXISTS selection_specs (
-              selection_id TEXT,
-              spec_id TEXT,
-              position INTEGEGER,
-              PRIMARY KEY (selection_id, spec_id),
-              FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
-            )"""
+            query = "CREATE INDEX IF NOT EXISTS ix_spec_deps_spec_id ON spec_deps (spec_id)"
+            self.connection.execute(query)
+
+            query = "CREATE INDEX IF NOT EXISTS ix_spec_deps_dep_id ON spec_deps (dep_id)"
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS selections (
@@ -745,6 +745,15 @@ class WorkspaceDatabase:
               fingerprint TEXT
             )
             """
+            self.connection.execute(query)
+
+            query = """CREATE TABLE IF NOT EXISTS selection_specs (
+              selection_id TEXT,
+              spec_id TEXT,
+              position INTEGER,
+              PRIMARY KEY (selection_id, spec_id),
+              FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
+            )"""
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS results (
@@ -987,7 +996,7 @@ class WorkspaceDatabase:
         upstream = self.get_upstream_ids(ids) if include_upstreams else set()
         load_ids = list(upstream.union(ids))
         for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
-            chunk = ids[i : i + SQL_CHUNK_SIZE]
+            chunk = load_ids[i : i + SQL_CHUNK_SIZE]
             placeholders = ", ".join("?" for _ in chunk)
             query = f"""\
               SELECT r.*
@@ -1149,63 +1158,62 @@ class WorkspaceDatabase:
         return True
 
     def get_updownstream_ids(self, ids: list[str] | None = None) -> tuple[set[str], set[str]]:
-        """Get both upstream dependencies and downstream dependents in a single query.
+        """
+        Get upstream dependencies and downstream dependents for the given spec IDs.
 
         Args:
-            ids: List of spec IDs to find dependencies for
+            ids: Seed spec IDs
 
         Returns:
-            upstream, downstream IDs
+            (upstream_ids, downstream_ids), excluding the seed IDs themselves
         """
         if not ids:
-            set(), set()
+            return set(), set()
 
-        assert ids is not None
-        placeholders = ",".join("?" * len(ids))
+        values = ",".join("(?)" for _ in ids)
+
         query = f"""
-            WITH RECURSIVE
-            upstream_nodes AS (
-              -- Base case: direct dependencies of starting nodes
-              SELECT spec_id, dep_id AS upstream_id, 1 AS depth
-              FROM spec_deps
-              WHERE spec_id IN ({placeholders})
-              AND dep_id IS NOT NULL
-
-              UNION
-
-              -- Recursive case: dependencies of dependencies
-              SELECT s.spec_id, s.dep_id AS upstream_id, un.depth + 1 AS depth
-              FROM spec_deps s
-              INNER JOIN upstream_nodes un ON s.spec_id = un.upstream_id
-              WHERE s.dep_id IS NOT NULL
-            ),
-            downstream_nodes AS (
-              -- Base case: specs that directly depend on our starting nodes
-              SELECT spec_id AS downstream_id, dep_id, 1 AS depth
-              FROM spec_deps
-              WHERE dep_id IN ({placeholders})
-
-              UNION
-
-              -- Recursive case: specs that depend on the dependents
-              SELECT s.spec_id AS downstream_id, s.dep_id, dn.depth + 1 AS depth
-              FROM spec_deps s
-              INNER JOIN downstream_nodes dn ON s.dep_id = dn.downstream_id
-            )
-            SELECT 'upstream' AS direction, upstream_id AS spec_id FROM upstream_nodes
-            UNION ALL
-            SELECT 'downstream' AS direction, downstream_id AS spec_id FROM downstream_nodes
-        """  #  nosec B608
+        WITH RECURSIVE
+        seeds(id) AS (VALUES {values}),
+        upstream(id) AS (
+          SELECT d.dep_id
+          FROM spec_deps d
+          JOIN seeds s ON d.spec_id = s.id
+          WHERE d.dep_id IS NOT NULL
+          UNION ALL
+          SELECT d.dep_id
+          FROM spec_deps d
+          JOIN upstream u ON d.spec_id = u.id
+          WHERE d.dep_id IS NOT NULL
+        ),
+        downstream(id) AS (
+          SELECT d.spec_id
+          FROM spec_deps d
+          JOIN seeds s ON d.dep_id = s.id
+          UNION ALL
+          SELECT d.spec_id
+          FROM spec_deps d
+          JOIN downstream d2 ON d.dep_id = d2.id
+        )
+        SELECT 'upstream', id FROM upstream
+        WHERE id NOT IN (SELECT id FROM seeds)
+        UNION ALL
+        SELECT 'downstream', id FROM downstream
+        WHERE id NOT IN (SELECT id FROM seeds)
+        """  # nosec B608
 
         upstream: set[str] = set()
         downstream: set[str] = set()
+
         with self.connection:
-            rows = self.connection.execute(query, ids + ids).fetchall()
-        for direction, id in rows:
+            rows = self.connection.execute(query, ids).fetchall()
+
+        for direction, spec_id in rows:
             if direction == "upstream":
-                upstream.add(id)
+                upstream.add(spec_id)
             else:
-                downstream.add(id)
+                downstream.add(spec_id)
+
         return upstream, downstream
 
     def get_downstream_ids(self, ids: list[str]) -> set[str]:

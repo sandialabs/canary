@@ -120,7 +120,7 @@ class Run(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         work_tree = args.work_tree or os.getcwd()
-        if args.wipe:
+        if args.wipe_workspace:
             Workspace.remove(work_tree)
         workspace: Workspace
         reuse: bool = False
