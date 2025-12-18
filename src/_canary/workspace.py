@@ -37,6 +37,7 @@ from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
+from .util.filesystem import async_rmtree
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
@@ -166,6 +167,12 @@ class Workspace:
         else:
             pm.done(f"error: unable to remove {workspace}")
             return None
+
+    def rmf(self) -> None:
+        # This is dangerous!!!
+        if self.view:
+            async_rmtree(self.view)
+        async_rmtree(self.root)
 
     @staticmethod
     def find_anchor(start: str | Path = Path.cwd()) -> Path | None:

@@ -13,6 +13,7 @@ import shlex
 import shutil
 import stat
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any
@@ -26,6 +27,7 @@ __all__ = [
     "movefile",
     "remove",
     "rmtree2",
+    "async_rmtree",
     "synctree",
     "getuser",
     "gethome",
@@ -213,6 +215,32 @@ def rmtree2(path: PathLike, n: int = 5) -> None:
             logger.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
             time.sleep(0.2 * n)
         attempts += 1
+
+
+def async_rmtree(path: PathLike) -> None:
+    path = pathlib.Path(path)
+    if not path.exists():
+        return
+    tombstone = path.with_name(f"{path.name}.{int(time.time())}.{os.getpid()}")
+
+    # Fast operation: rename/move
+    path.rename(tombstone)
+
+    # Slow operation: delete in background
+    def _rm_rf(p):
+        try:
+            rmtree2(p)
+        except Exception:  # nosec B110
+            # Best-effort cleanup, same spirit as `rm -rf >/dev/null`
+            pass
+
+    t = threading.Thread(
+        target=_rm_rf,
+        args=(tombstone,),
+        name=f"wipe-{tombstone.name}",
+        daemon=True,
+    )
+    t.start()
 
 
 def getuser() -> str:

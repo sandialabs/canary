@@ -6,6 +6,8 @@ import argparse
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
+from typing import Sequence
 
 from ... import config
 from ...collect import vc_prefixes
@@ -22,7 +24,6 @@ from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 from .common import add_resource_arguments
-from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -43,7 +44,20 @@ class Run(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.set_defaults(banner=True)
-        add_work_tree_arguments(parser)
+        parser.add_argument(
+            "-w",
+            dest="wipe_workspace",
+            nargs=0,
+            action=WipeAction,
+            help="Remove test execution directory, if it exists [default: %(default)s]",
+        )
+        parser.add_argument(
+            "-d",
+            "--work-tree",
+            action=DeprecatedStoreAction,
+            dest="work_tree",
+            help=argparse.SUPPRESS,
+        )
         parser.add_argument(
             "-f",
             action=PathSpec,
@@ -360,3 +374,39 @@ def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:
     if ns.start:
         if any([ns.runtag, ns.specids, ns.scanpaths]):
             raise TypeError(f"{ns.start}: argument incompatible with other pathspec arguments")
+
+
+class DeprecatedStoreAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        import warnings
+
+        warnings.warn(
+            f"{option_string} is deprecated and will be removed in a future release",
+            category=UserWarning,
+            stacklevel=2,
+        )
+        setattr(namespace, self.dest, values)
+
+
+class WipeAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        if getattr(namespace, self.dest, False):
+            return
+        try:
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            return
+        workspace.rmf()
+        setattr(namespace, self.dest, True)

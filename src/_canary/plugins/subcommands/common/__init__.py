@@ -60,17 +60,6 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
         )
 
 
-def add_work_tree_arguments(parser: "Parser") -> None:
-    parser.add_argument(
-        "-w",
-        dest="wipe_workspace",
-        default=False,
-        action="store_true",
-        help="Remove test execution directory, if it exists [default: %(default)s]",
-    )
-    parser.add_argument("-d", "--work-tree", dest="work_tree", help=argparse.SUPPRESS)
-
-
 def add_resource_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("resource control")
     group.add_argument(
