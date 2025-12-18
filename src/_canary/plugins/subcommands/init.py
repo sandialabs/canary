@@ -41,8 +41,16 @@ class Init(CanarySubcommand):
             nargs="?",
             help="Initialize session in this directory [default: %(default)s]",
         )
+        parser.add_argument(
+            "--no-post-actions",
+            action="store_false",
+            dest="post_actions",
+            help="Do not run post-initialization actions on the workspace",
+        )
+        parser.set_defaults(post_actions=True)
 
     def execute(self, args: "argparse.Namespace") -> int:
         ws = Workspace.create(Path(args.path).absolute(), force=args.w)
-        config.pluginmanager.hook.canary_initfinish(workspace=ws)
+        if args.post_actions:
+            config.pluginmanager.hook.canary_initfinish(workspace=ws)
         return 0
