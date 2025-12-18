@@ -42,6 +42,7 @@ from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import TopologicalSorter
 from .util.graph import static_order
+from .util.names import unique_random_name
 from .version import __static_version__
 
 logger = logging.get_logger(__name__)
@@ -403,7 +404,7 @@ class Workspace:
         regex: str | None = None,
     ) -> list["ResolvedSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
-        tag = tag or datetime.datetime.now().isoformat(timespec="microseconds")
+        tag = tag or unique_random_name(self.db.tags)
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
@@ -429,6 +430,7 @@ class Workspace:
             owners=owners,
             regex=regex,
         )
+        logger.info(f"Created selection '[bold]{tag}[/]'")
         return specs
 
     def apply_selection_rules(

@@ -49,7 +49,7 @@ class Selection(CanarySubcommand):
                 raise ValueError(
                     logging.colorize(
                         f"Selection {args.tag!r} already exists, run "
-                        f"[bold]canary refresh {args.tag}[/] to regnerate specs"
+                        f"[bold]canary selection refresh {args.tag}[/] to regnerate specs"
                     )
                 )
             if not args.scanpaths:
