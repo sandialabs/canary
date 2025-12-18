@@ -170,36 +170,6 @@ class Run(CanarySubcommand):
         return session.returncode
 
 
-class StatusFormatAction(argparse.Action):
-    _choices: list[str] = [
-        "ID",
-        "FullName",
-        "Name",
-        "Duration",
-        "Status",
-        "Details",
-        "Rank",
-    ]
-
-    def __call__(self, parser, namespace, value, option_string=None):
-        items = value.split(",")
-        for i, item in enumerate(items):
-            if choice := match_case_insensitive(item, self._choices):
-                items[i] = choice
-            else:
-                choices = ",".join(self._choices)
-                parser.error(f"Invalid status format {item!r}, choose from {choices}")
-        value = ",".join(items)
-        setattr(namespace, self.dest, value)
-
-
-def match_case_insensitive(s: str, choices: list[str]) -> str | None:
-    for choice in choices:
-        if s.lower() == choice.lower():
-            return choice
-    return None
-
-
 def setdefault(obj, attr, default):
     if getattr(obj, attr, None) is None:
         setattr(obj, attr, default)
