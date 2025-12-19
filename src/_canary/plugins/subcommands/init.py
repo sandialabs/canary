@@ -42,7 +42,7 @@ class Init(CanarySubcommand):
             help="Initialize session in this directory [default: %(default)s]",
         )
         parser.add_argument(
-            "--no-post-actions",
+            "-n,--no-post-actions",
             action="store_false",
             dest="post_actions",
             help="Do not run post-initialization actions on the workspace",
