@@ -1,30 +1,17 @@
-# Prototype Session Workflow Demo
+# Session workflow demo
 
-This document outlines steps for trying the "session" workflow prototyped by @tjfulle.
-The idea behind this workflow is that the list of tests are set and associated with a "tag" that simplifies management
-of test results directories, re-execution, etc.
-
-Please note that the prototype is **not** feature complete, and we are seeking feedback on whether we are headed in a useful
-direction before pursuing further.
-
-## Installation (dev branch, editable)
-This workflow is under active development on the branch `tjfulle/repo-layout`.
-For this reason, we advise cloning the branch and installing `canary` in editable mode to support pulling in updates without re-installation.
-Instructions for this installation process are listed below. Note that `canary` requires python>=3.10.
-```console
-git clone --branch=tjfulle/repo-layout https://github.com/sandialabs/canary
-cd canary
-python3 -m venv venv && source venv/bin/activate
-pip install -e .
-```
+This document outlines the "session" workflow in `canary`.  The idea behind this workflow is that the list of tests are set and associated with a "tag" that simplifies management of test results directories, re-execution, etc.
 
 ## Session Concepts
-The prototype introduces some new concepts to the `canary` execution workflow:
+
+The latest version of `canary` introduces some new concepts to the execution workflow:
+
   1. initialization
-  2. staging
+  2. selection
   3. execution
 
 ### Initialization
+
 <!-- canary init -h -->
 ```console
 canary init [-h] [path]
@@ -33,213 +20,186 @@ Initialize a Canary session
 
 positional arguments:
   path        Initialize session in this directory [default: $(pwd)]
-```
-The new initialization step establishes the working location for all subsequent `canary` commands and supports execution from anywhere below the specified `path`.
-Once a session is initialized, test generator `pathspecs` can be added with `canary add` as described below:
-<!-- canary add -h -->
-```console
-canary add [-h] pathspec [pathspec ...]
-
-Add test generators to Canary session
-
-positional arguments:
-  pathspec    Add test generators found in pathspec to Canary session
-```
-Note that the `add` command does not take filtering arguments. Filtering is performed as part of session staging steps described in the next session.
-
-### Staging
-<!-- canary stage -h -->
-```console
-canary stage [-h] [-k expression] [-o option] [-p expression] [--search regex] [--rerun-failed] tag
-
-Generate test cases for the given selection criteria and store the selection for later running
-
-positional arguments:
-  tag                   Tag this selection with TAG
 
 options:
-  -h, --help            Show this help message and exit.
+  -w          Wipe any existing session first
+  -h, --help  Show this help message and exit.
+```
 
-filtering:
-  -k expression         Only run tests matching given keyword expression. For example: `-k 'key1 and not key2'`. The keyword ``:all:`` matches all tests
+The new initialization step establishes the working location for all subsequent `canary` commands and supports execution from anywhere below the specified `path`.
+
+Once a session is initialized, tests can be added with `canary selection create` as described below:
+
+<!-- canary add -h -->
+```console
+$ canary selection create -h
+usage: canary selection create [-h] [-f file] [-r PATH] [-o option] [-k expression] [--owner OWNERS] [-p expression] [--search regex] tag
+
+options:
+  -h, --help            show this help message and exit
+  -f file               Read test paths from a json or yaml file. See 'canary help --pathfile' for help on the file schema
+  -r PATH               Recursively search PATH for test generators
+
+test spec generation:
   -o option             Turn option(s) on, such as '-o dbg' or '-o intel'
+
+test spec selection:
+  -k expression         Only run tests matching given keyword expression. For example: `-k 'key1 and not key2'`. The keyword ``:all:`` matches all tests
+  --owner OWNERS        Only run tests owned by 'owner'
   -p expression         Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'
   --search regex, --regex regex
-                        Include tests containing the regular expression regex in at least 1 of its file assets. regex is a python regular expression, see https://docs.python.org/3/library/re.html
-  --rerun-failed        Rerun failed tests [default: False]
-...
+                        Include tests containing the regular expression regex in at least 1 of its file assets. regex is a python regular expression, see
+                        https://docs.python.org/3/library/re.html
+  tag                   Tag this test case selection for future runs [default: False]
+
 ```
-The **optional** `stage` step(s) apply filters to create named test sets and generate the test case lock-files used by the execution phase.
-If `canary stage` is not invoked within a session, the first invocation of `canary run` will generate a `default` tag associated with all test cases and execute them.
 
-> **Note**: This step was previously performed by each invocation of `canary run`, whereas in the new workflow the lock files are cached between runs and only re-generated by `canary run` if the set of generators in the session changes
-
-When additional `pathspec`(s) are added to the session (via `canary add`), the selection criteria are re-applied to the enlarged test set upon regeneration of test case lock files (either explicitly with `canary stage` or implicitly via `canary run [tag]`).
+`section create` finds test files, generates test specs, applies filters, and creates a named set of tests that can be run by the execution phase.
 
 ### Test Execution
+
 ```console
 canary run [TAG]
 ```
-Under the session workflow, all test selection is intended to be done via `stage` and associated with named sets.
 
-> **Request for feedback**: What workflows need to be supported additionally? For example:
->  * running a specific test name/sha?
->  * filtering within a tag?
+Under the session workflow, test selection is intended to be done via `selection` and associated with named sets.
 
-Contrary to the current default behavior of `canary run` outside the session workflow, the full set of tests associated with the tag are executed on each invocation in separate directory trees.
-The `TestResults` directory is updated to point to the latest results directory in the internal datastore.
+> **Request for feedback**: What other workflows need to be supported additionally?
 
-## End-to-End Walkthrough
+Contrary to the current default behavior of `canary run` outside the session workflow, the full set of tests associated with the tag are executed on each invocation in separate work trees.  The `TestResults` directory is updated to point to the latest results directory in the internal datastore.
+
+## End-to-end walkthrough
+
 This section contains an end-to-end demonstration of the "session" workflow leveraging the `canary` tests/examples for input.
-If you are following along, the expectation is that the canary repository is at the tip of the development branch and the root of the project is the starting working directory.
 
 ### A first example
+
 We begin by initializing and inspecting a session.
+
 ```console
 $ canary init
-version: 25.11.3+4667fcaa
-==> Initialized empty canary session created at /.../canary/.canary
+INFO: Initializing empty canary workspace at ...
 $ canary info
-Test sessions repository: /.../canary/.canary
-Version:       25.11.3+4667fcaa
-Generators:    0
-Sessions:      0
-Latest:        None
+Workspace:   ...
+Version:     25.12.18+28f4bd50
+Sessions:    0
+Latest:      None
 Tags:
 $ canary status
-ID  Name  Session  Exit Code  Duration  Status  Details
-==  ====  =======  =========  ========  ======  =======
-
 ```
+
 The `init` subcommand creates a session in the current working directory and reports the path to the session.
+
 `canary info` now reports the session information: location, number of generators, number of sessions/executions, the latest session/execution, and the list of tags.
-As we can see, all of these values are zero/empty.
-Finally `canary status` shows that there are no tests in the session.
+
+As we can see, all of these values are zero/empty.  Finally `canary status` shows that there are no tests in the session.
 
 Adding the `examples/basic` directory to the session adds generators, but does not yet generate tests as shown by the empty status.
+
 ```console
-$ canary add examples
-==> Searching examples for test generators... done (0.07s.)
-==> Added 2 new test case generators to /.../.canary
-$ canary status
-ID  Name  Session  Exit Code  Duration  Status  Details
-==  ====  =======  =========  ========  ======  =======
+$ canary selection create -r ./examples/basdic basic
+INFO: Collecting generator files from examples/basic... done (0.00s.)
+INFO: Instantiating generators from collected files... done (0.81s.)
+INFO: Generating test specs from generators... done (0.00s.)
+INFO: Searching for duplicated tests
+INFO: Resolving test spec dependencies... done (0.00s.)
+INFO: Generated 2 test specs from 2 generators
+INFO: Caching test specs... done (0.01s.)
+INFO: Created selection 'basic'
+INFO: To run this selection execute 'canary run basic'
+```
+
+Executing `canary run`:
+
+```console
+$ canary run basic
+...
+version: 25.12.18+6e139aa9-dirty
+INFO: Running tests in tag basic
+INFO: Selecting test cases based on runtime environment... done (0.00s.)
+INFO: Starting session 2025-12-18T13-23-40.035876
+INFO: Starting process pool with max 9 workers
+INFO: 2/2 tests finished with status PASS
+INFO: Finished session in 2.12 s. with returncode 0
+INFO: Updating view at /opt/alegranevada/team/x/macos/src/canary/TestResults
+```
+
+Invoking `canary run` again, skips these steps and runs cases that did not previously finish.
+
+```console
+version: 25.12.18+6e139aa9-dirty
+INFO: Running tests in default tag :all:
+INFO: Selecting test cases based on runtime environment... done (0.00s.)
+INFO: Excluded 2 test cases
+
+  Reason                      Count
+ ───────────────────────────────────
+  previous result = SUCCESS       2
+
+ERROR: no cases to run
 
 ```
 
-Executing `canary run` without any staging creates the `default` tag and runs all tests.
-```console
-$ canary run
-version: 25.11.3+4667fcaa
-==> Creating default case selection
-==> Generating test cases... done (0.17s.)
-==> Generated 2 test cases from 2 generators
-==> Resolving test case dependencies... done (0.00s.)
-==> Masking test cases based on filtering criteria... done (0.10s.)
-==> Selected 2 test cases based on filtering criteria
-==> Running 2 jobs
-...
-⚡⚡ Session done -- 2 total, 2 pass in 00:00:00.00
-```
-Note that the execution began by creating the "default" test case selection, then generated the test cases.
-Invoking `canary run` again, skips these steps and runs all of the cases again.
-```console
-version: 25.11.3+4667fcaa
-==> Running 2 jobs
-...
-✨✨ Session done -- 2 total, 2 pass in 00:00:01.00
-```
 We can now see some more details in the session's info:
+
 ```console
 $ canary info
-Test sessions repository: /.../canary/.canary
-Version:       25.11.3+8b06d977
-Generators:    2
-Sessions:      2
-Latest:        2025-11-03T14-03-21
-Tags:          default
+Workspace:   ...
+Version:     25.12.18+28f4bd50
+Sessions:    2
+Latest:      2025-12-18T13-23-40
+Tags:        basic
 ```
-As mentioned, the `default` tag has been created, and we have executed 2 sessions.
-The status is updated to list details of the test cases:
+
 ```console
 $ canary status
-ID       Name    Session                     Exit Code  Duration  Status   Details
-=======  ======  ==========================  =========  ========  =======  =======
-254b775  first   2025-11-03T14-03-21.433176  0          1.0       success  
-96fb33c  second  2025-11-03T14-03-21.433176  0          1.0       success  
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ ID          ┃ Name       ┃ Session                               ┃ Exit Code      ┃ Duration     ┃ Status               ┃ Details   ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ 104bba2     │ FFO        │ 2025-12-18T13-23-40.035876            │ 0              │ 0.62         │ PASS (SUCCESS)       │           │
+│ eaf76e3     │ second     │ 2025-12-18T13-23-40.035876            │ 0              │ 0.68         │ PASS (SUCCESS)       │           │
+└─────────────┴────────────┴───────────────────────────────────────┴────────────────┴──────────────┴──────────────────────┴───────────
 ```
+
 This status represents *all* test cases in the session, not only those included by the latest invocation of `canary run`, e.g., if a tag representing a subset was specified.
 
 We've now demonstrated the workflow for starting a session, adding tests, and executing them. In the next section, we
 demonstrate how to expand the test set and "stage" test cases.
 
 ### Expanding the test set
+
 In this section, we add `pathspec`s to the session to increase the test of tests and demonstrate the re-generation of the test cases.
+
 We add the `examples` directory (which includes the previous set of tests, but it could be different) and examine the info/status.
+
 ```console
-$ canary add examples
-==> Searching examples for test generators... done (0.07s.)
-==> Warning: Invalidated previously locked test case cache
-==> Warning: Test case generator already in repo (PYTTestGenerator(basic/first/first.pyt))
-==> Warning: Test case generator already in repo (PYTTestGenerator(basic/second/second.pyt))
-==> Added 36 new test case generators to /.../canary/.canary
-$ canary info
-Test sessions repository: /.../canary/.canary
-Version:       25.11.3+8b06d977
-Generators:    38
-Sessions:      2
-Latest:        2025-11-03T14-03-21
-Tags:          default
+$ canary selection create -r examples examples
+INFO: Collecting generator files from examples... done (0.03s.)
+INFO: Instantiating generators from collected files... done (0.72s.)
+INFO: Generating test specs from generators... done (0.97s.)
+INFO: Searching for duplicated tests
+INFO: Resolving test spec dependencies... done (0.01s.)
+INFO: Generated 84 test specs from 38 generators
+INFO: Excluded 1 test spec during generation
+
+  Reason                                             Count
+ ──────────────────────────────────────────────────────────
+  options=enable evaluated to False for options=[]       1
+
+INFO: Caching test specs... done (0.01s.)
+INFO: Created selection 'examples'
+INFO: To run this selection execute 'canary run examples'
+
 ```
-Here, we see that `canary` detected that the test case cache has been invalidated and that there are some duplicate generators that are already in the session repo.
-36 new generators are added to the session and this is reported by `info`.
 
-We can regenerate the `default` test case cache/lock files and see the new test cases that are created.
 ```console
-$ canary stage default
-==> Generating test cases... done (0.11s.)
-==> Generated 84 test cases from 38 generators
-==> Resolving test case dependencies... done (0.00s.)
-==> Masking test cases based on filtering criteria... done (0.12s.)
-==> Selected 78 test cases based on filtering criteria
-==> To run this collection of test cases, execute 'canary run default'
-
-$ canary status
-ID       Name                                    Session                     Exit Code  Duration  Status   Details
-=======  ======================================  ==========================  =========  ========  =======  =======
-d328b06  a                                       None                        NA         NA        created  
-7f814d8  analyze_only                            None                        NA         NA        created  
-5a00423  analyze_only[a=1,b=2,cpus=1]            None                        NA         NA        created  
-6aff2fa  analyze_only[a=1,b=2,cpus=2]            None                        NA         NA        created 
+$ canary run examples
 ...
-254b775  first                                   2025-11-03T14-03-21.433176  0          1.0       success  
-96fb33c  second                                  2025-11-03T14-03-21.433176  0          1.0       success  
 ```
-Note there are now many tests with status `created` that have not been run in the session.
 
-We can run the `default` selection again and examine the status again.
-```console
-$ canary run
-version: 25.11.3+8b06d977
-==> Running 78 jobs
-...
-💥💥 Session done -- 78 total, 67 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 4 fail, 2 timeout in 00:00:13
-```
-Note that there was no test case generation as the cache was already up to date. The session status is updated and shows
-that there remain some tests that still have not run.
 ```console
 $ canary status
-ID       Name                                    Session                     Exit Code  Duration  Status   Details
-=======  ======================================  ==========================  =========  ========  =======  ==========================================
-30bc0af  enable                                  None                        NA         NA        created  
-b066c7a  resource_group_test_1[cpus=2,gpus=2]    None                        NA         NA        created  
-eccf7e9  resource_group_test_2[cpus=2,gpus=2]    None                        NA         NA        created  
-ab7d00d  resources[cpus=1,gpus=1]                None                        NA         NA        created  
-56852ee  resources[cpus=1000,gpus=1000]          None                        NA         NA        created  
-e40c89f  resources[cpus=4,gpus=4]                None                        NA         NA        created
-...
 ```
-These tests did not run because their resource or other requirements were not met (i.e., `enable` requires a command line option, and the demo machine does not have any GPU resources).
 
 We've now demonstrated how an existing test session can be expanded and the behavior of the `stage` command. In the next
 section, we demonstrate using `stage` to partition test cases into selection sets that can be executed via `canary run`.
@@ -316,3 +276,14 @@ for the increasingly diverse Canary user community. Some potential areas for fee
   * how would you want to navigate between prior sessions? How important of a use-case is this for us to consider?
   * how should report generation behave (not functional in the prototype)? Should the report be generated for the complete set of latest results, or only the latest session?
   * anything else you can think of!
+
+## Feedback
+
+* jhniede: frequently run wrong thing, etc. and need to kill running jobs.  Sometimes [ctl-c]
+  takes a long time to complete and doesn't always scancel jobs reliably.
+* jbcarle: look for keyboard input and abort.
+* jhniede: canary.kill file similar to alegra.cmd file
+* jhniede: make sure documentation is up to date, reliable, and detailed.
+* tjfulle: forcefully rerun if explicitly requests
+* tjfulle: should also run all downstreams
+* acrobin: restart-like capability to continue test that may have timed out

@@ -209,8 +209,11 @@ class IDsRule(Rule):
 
     @cached_property
     def default_reason(self) -> str:
-        ids = [id[:7] + "…" for id in self.ids]
-        return "test ID not in [bold]%s[/]" % ",".join(ids)
+        if len(self.ids) > 4:
+            ids = [self.ids[0][:7], self.ids[1][:7], "…", self.ids[-1][:7]]
+        else:
+            ids = [id[:7] for id in self.ids]
+        return "test ID not in [bold]%s[/]" % ", ".join(ids)
 
     def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
         if not any(spec.id.startswith(id) for id in self.ids):
@@ -357,24 +360,38 @@ class ResourceCapacityRule(RuntimeRule):
 
 
 class RerunRule(RuntimeRule):
-    STRATEGIES = ("all", "failed", "not_pass", "not_run", "changed")
+    STRATEGIES = ("all", "failed", "not_pass", "not_run", "changed", "ids:...")
 
     def __init__(self, strategy: str = "not_pass", priority: int = 0) -> None:
         super().__init__(priority=priority)
-        self.strategy = strategy
-        if self.strategy not in self.STRATEGIES:
-            raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
+        self.strategy: str
+        self._ids: list[str] = []
+        if strategy.startswith("ids:"):
+            self.strategy = "ids"
+            self._ids.extend(set(strategy[4:].split(",")))
+        else:
+            self.strategy = strategy
+            if self.strategy not in self.STRATEGIES:
+                raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
 
     @cached_property
     def default_reason(self) -> str:
         return "previous result is not empty"
 
     def __call__(self, case: "TestCase") -> RuleOutcome:
-        if self.strategy == "all":
+        if self.strategy == "ids":
+            if case.spec.id in self._ids:
+                return RuleOutcome(ok=True)
+            if len(self._ids) > 4:
+                ids = [self._ids[0][:7], self._ids[1][:7], "…", self._ids[-1][:7]]
+            else:
+                ids = [id[:7] for id in self._ids]
+            return RuleOutcome(False, reason="test ID not in [bold]%s[/]" % ", ".join(ids))
+        elif self.strategy == "all":
             return RuleOutcome(ok=True)
         elif self.strategy == "changed":
             t = case.timekeeper.start_time()
-            if t > 0 and case.spec.file.stat().st_mtime > t:
+            if t < 0 or case.spec.file.stat().st_mtime > t:
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason="case spec has not changed since last run")
         elif self.strategy == "not_pass":

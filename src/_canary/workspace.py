@@ -440,6 +440,7 @@ class Workspace:
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
+        ids: list[str] | None = None,
     ) -> None:
         selector = select.Selector(specs, self.root)
         if keyword_exprs:
@@ -450,6 +451,8 @@ class Workspace:
             selector.add_rule(rules.OwnersRule(owners))
         if regex:
             selector.add_rule(rules.RegexRule(regex))
+        if ids:
+            selector.add_rule(rules.IDsRule(ids))
         if selector.rules:
             selector.run()
 
@@ -641,7 +644,7 @@ class Workspace:
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
-    def compute_rerun_list(
+    def compute_rerun_closure(
         self, predicate: Callable[[str, dict], bool]
     ) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
         results = self.db.get_results()
@@ -649,7 +652,7 @@ class Workspace:
         for id, result in results.items():
             if predicate(id, result):
                 selected.add(id)
-        upstream, downstream = self.db.get_updownstream_ids(list(selected))
+        upstream, downstream = self.db.get_updownstream_ids(selected)
         run_specs = selected | downstream
         load_specs = run_specs | upstream
         resolved = self.db.get_specs(ids=list(load_specs))
@@ -661,7 +664,7 @@ class Workspace:
                 return True
             return False
 
-        return self.compute_rerun_list(predicate)
+        return self.compute_rerun_closure(predicate)
 
     def compute_rerun_list_for_specs(
         self, ids: list[str]
@@ -670,7 +673,7 @@ class Workspace:
             return id in ids
 
         self.db.resolve_spec_ids(ids)
-        return self.compute_rerun_list(predicate)
+        return self.compute_rerun_closure(predicate)
 
     def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
         return self.db.get_specs(ids)
@@ -1166,72 +1169,57 @@ class WorkspaceDatabase:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
 
-    def get_updownstream_ids(self, ids: list[str] | None = None) -> tuple[set[str], set[str]]:
-        """
-        Get upstream dependencies and downstream dependents for the given spec IDs.
-
-        Args:
-            ids: Seed spec IDs
-
-        Returns:
-            (upstream_ids, downstream_ids), excluding the seed IDs themselves
-        """
-        if not ids:
+    def get_updownstream_ids(self, seeds: list[str] | None = None) -> tuple[set[str], set[str]]:
+        if seeds is None:
             return set(), set()
+        downstream = self.get_downstream_ids(seeds)
+        upstream = self.get_upstream_ids(list(downstream.union(seeds)))
+        return upstream, downstream
 
-        values = ",".join("(?)" for _ in ids)
+    def get_downstream_ids(self, seeds: list[str]) -> set[str]:
+        """Return dependencies in instantiation order."""
+        if not seeds:
+            return set()
+        values = ",".join("(?)" for _ in seeds)
+        query = f"""
+        WITH RECURSIVE
+        seeds(id) AS (VALUES {values}),
+        downstream(id) AS (
+          SELECT spec_id
+          FROM spec_deps
+          WHERE dep_id IN (SELECT id FROM seeds)
+          UNION
+          SELECT d.spec_id
+          FROM spec_deps d
+          JOIN downstream dn ON d.dep_id = dn.id
+        )
+        SELECT DISTINCT id FROM downstream
+        """  #  nosec B608
+        rows = self.connection.execute(query, tuple(seeds)).fetchall()
+        return {r[0] for r in rows}
 
+    def get_upstream_ids(self, seeds: list[str]) -> set[str]:
+        """Return dependents in reverse instantiation order."""
+        if not seeds:
+            return set()
+        values = ",".join("(?)" for _ in seeds)
         query = f"""
         WITH RECURSIVE
         seeds(id) AS (VALUES {values}),
         upstream(id) AS (
-          SELECT d.dep_id
-          FROM spec_deps d
-          JOIN seeds s ON d.spec_id = s.id
-          WHERE d.dep_id IS NOT NULL
-          UNION ALL
+          SELECT dep_id
+          FROM spec_deps
+          WHERE spec_id IN (SELECT id FROM seeds) AND dep_id IS NOT NULL
+          UNION
           SELECT d.dep_id
           FROM spec_deps d
           JOIN upstream u ON d.spec_id = u.id
           WHERE d.dep_id IS NOT NULL
-        ),
-        downstream(id) AS (
-          SELECT d.spec_id
-          FROM spec_deps d
-          JOIN seeds s ON d.dep_id = s.id
-          UNION ALL
-          SELECT d.spec_id
-          FROM spec_deps d
-          JOIN downstream d2 ON d.dep_id = d2.id
         )
-        SELECT 'upstream', id FROM upstream
-        WHERE id NOT IN (SELECT id FROM seeds)
-        UNION ALL
-        SELECT 'downstream', id FROM downstream
-        WHERE id NOT IN (SELECT id FROM seeds)
+        SELECT DISTINCT id FROM upstream
         """  # nosec B608
-
-        upstream: set[str] = set()
-        downstream: set[str] = set()
-
-        with self.connection:
-            rows = self.connection.execute(query, ids).fetchall()
-
-        for direction, spec_id in rows:
-            if direction == "upstream":
-                upstream.add(spec_id)
-            else:
-                downstream.add(spec_id)
-
-        return upstream, downstream
-
-    def get_downstream_ids(self, ids: list[str]) -> set[str]:
-        """Return dependencies in instantiation order."""
-        return self.get_updownstream_ids(ids)[1]
-
-    def get_upstream_ids(self, ids: list[str]) -> set[str]:
-        """Return dependents in reverse instantiation order."""
-        return self.get_updownstream_ids(ids)[0]
+        rows = self.connection.execute(query, tuple(seeds)).fetchall()
+        return {r[0] for r in rows}
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
         """

@@ -9,9 +9,8 @@ canary.directives.parameterize("type", ("eggs", "ham", "lettuce", "bacon", "toma
 
 def test():
     instance = canary.get_instance()
-    if instance.parameters["type"] == "bacon":
-        assert 0
+    assert instance is not None
 
 
-# if __name__ == "__main__":
-#    test()
+if __name__ == "__main__":
+    test()

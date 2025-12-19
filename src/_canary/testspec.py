@@ -105,7 +105,7 @@ class BaseSpec(Generic[T]):
         if "gpus" not in self.parameters | self.meta_parameters:
             self.meta_parameters["gpus"] = 0
         self.meta_parameters["runtime"] = self.timeout
-        self.id = self._generate_id()
+        self.id = self.generate_id()
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -124,28 +124,11 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
-        d.pop("id", None)
         self = cls(**d)  # ty: ignore[missing-argument]
         return self
 
-    def _generate_id(self) -> str:
-        # Hasher is used to build ID
-        hasher = hashlib.sha256()
-        hasher.update(self.family.encode())
-        if self.parameters:
-            for p in sorted(self.parameters):
-                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
-        hasher.update(self.file.read_bytes())
-        d = self.file.parent
-        while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
-                f = str(os.path.relpath(str(self.file), str(d)))
-                hasher.update(f.encode())
-                break
-            d = d.parent
-        else:
-            hasher.update(str(self.file_path.parent / self.name).encode())
-        return hasher.hexdigest()
+    def generate_id(self) -> str:
+        raise NotImplementedError
 
     @cached_property
     def file(self) -> Path:
@@ -278,20 +261,16 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
         mask = d.pop("mask", None)
         if mask:
             d["mask"] = Mask(mask["value"], mask["reason"])
+        d.pop("id", None)
         return super().from_dict(d, lookup)
 
-    def update_id(self) -> None:
-        self.id = self._generate_id()
-
-    def _generate_id(self) -> str:
+    def generate_id(self) -> str:
         # Hasher is used to build ID
         hasher = hashlib.sha256()
         hasher.update(self.family.encode())
         hasher.update(self.stdout.encode())
         if self.stderr:
             hasher.update(self.stderr.encode())
-        if self.dependencies:
-            hasher.update(",".join(dep.id for dep in self.dependencies).encode())
         if self.dep_done_criteria:
             hasher.update(",".join(self.dep_done_criteria).encode())
         if self.attributes:
@@ -300,6 +279,8 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
             hasher.update(",".join(sorted(self.keywords)).encode())
         if self.artifacts:
             hasher.update(json.dumps_min(self.artifacts, sort_keys=True).encode())
+        for dep in self.dependencies:
+            hasher.update(dep.id.encode())
         hasher.update(f"{self.timeout:.12f}".encode())
         hasher.update(f"{self.xstatus}".encode())
         if self.modules:
@@ -427,6 +408,52 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def generate_id(self) -> str:
+        # Hasher is used to build ID
+        hasher = hashlib.sha256()
+        hasher.update(self.family.encode())
+        hasher.update(self.stdout.encode())
+        if self.stderr:
+            hasher.update(self.stderr.encode())
+        if self.dep_done_criteria:
+            hasher.update(",".join(self.dep_done_criteria).encode())
+        if self.attributes:
+            hasher.update(json.dumps_min(self.attributes, sort_keys=True).encode())
+        if self.keywords:
+            hasher.update(",".join(sorted(self.keywords)).encode())
+        if self.artifacts:
+            hasher.update(json.dumps_min(self.artifacts, sort_keys=True).encode())
+        for dep in self.dep_patterns:
+            hasher.update(dep.pattern.encode())
+        hasher.update(f"{self.timeout:.12f}".encode())
+        hasher.update(f"{self.xstatus}".encode())
+        if self.modules:
+            hasher.update(",".join(sorted(self.modules)).encode())
+        if self.rcfiles:
+            hasher.update(",".join(sorted(self.rcfiles)).encode())
+        if self.owners:
+            hasher.update(",".join(sorted(self.owners)).encode())
+        if self.environment:
+            hasher.update(json.dumps_min(self.environment, sort_keys=True).encode())
+        if self.environment_modifications:
+            hasher.update(json.dumps_min(self.environment_modifications, sort_keys=True).encode())
+        hasher.update(self.name.encode())
+        parameters = self.parameters | self.meta_parameters
+        if parameters:
+            for p in sorted(parameters):
+                hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
+        hasher.update(self.file.read_bytes())
+        d = self.file.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                f = str(os.path.relpath(str(self.file), str(d)))
+                hasher.update(f.encode())
+                break
+            d = d.parent
+        else:
+            hasher.update(str(self.file_path.parent / self.name).encode())
+        return hasher.hexdigest()
 
     def resolve(
         self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None

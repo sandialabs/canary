@@ -164,8 +164,9 @@ class Run(CanarySubcommand):
                 if len(sids) > 3:
                     sids = [*sids[:2], "…", sids[-1]]
                 logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
-                upstream, downstream = workspace.compute_rerun_list_for_specs(ids=args.specids)
-                specs = upstream + downstream
+                loadspecs, runspecs = workspace.compute_rerun_list_for_specs(ids=args.specids)
+                specs = loadspecs + runspecs
+                setattr(args, "only", f"ids:{','.join(s.id for s in runspecs)}")
             elif args.runtag:
                 logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
                 specs = workspace.get_selection(args.runtag)

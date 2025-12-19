@@ -24,6 +24,7 @@ from rich.live import Live
 from rich.table import Table
 
 from . import config
+from .error import StopExecution
 from .protocols import JobProtocol
 from .queue import Busy
 from .queue import Empty
@@ -187,6 +188,11 @@ class ResourceQueueExecutor:
                     live.update(final=True)
                     break
 
+                except CanaryKill:
+                    self._terminate_all(signal.SIGINT)
+                    live.update(final=True)
+                    raise StopExecution("canary.kill found", signal.SIGTERM)
+
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
                     live.update(final=True)
@@ -254,6 +260,10 @@ class ResourceQueueExecutor:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
         self._check_timeouts()
+
+        if Path("canary.kill").exists():
+            Path("canary.kill").unlink()
+            raise CanaryKill
 
         finished_pids = [pid for pid, slot in self.inflight.items() if not slot.proc.is_alive()]
 
@@ -465,3 +475,7 @@ class CanaryLive:
         for h in self._stream_handlers:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
+
+
+class CanaryKill(Exception):
+    pass
