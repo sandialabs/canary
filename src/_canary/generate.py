@@ -113,7 +113,7 @@ class Generator:
         return self.specs
 
     def validate(self, specs: list["UnresolvedSpec | ResolvedSpec"]) -> None:
-        logger.info("[bold]Searching[/] for duplicated tests")
+        pm = logger.progress_monitor("[bold]Searching[/] for duplicated tests")
         ids = [spec.id for spec in specs]
         counts: dict[str, int] = {}
         for id in ids:
@@ -134,6 +134,7 @@ class Generator:
                         extra={"prefix": ""},
                     )
             raise ValueError("Duplicate test IDs in test suite")
+        pm.done()
         return None
 
     @staticmethod
