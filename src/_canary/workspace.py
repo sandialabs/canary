@@ -743,7 +743,7 @@ class WorkspaceDatabase:
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS selections (
-              spec_id TEXT PRIMARY KEY,
+              selection_id TEXT PRIMARY KEY,
               tag TEXT UNIQUE,
               gen_signature TEXT,
               created_on TEXT,
@@ -764,7 +764,7 @@ class WorkspaceDatabase:
               spec_id TEXT,
               position INTEGER,
               PRIMARY KEY (selection_id, spec_id),
-              FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
+              FOREIGN KEY (selection_id) REFERENCES selections(selection_id) ON DELETE CASCADE
             )"""
             self.connection.execute(query)
 
@@ -908,7 +908,7 @@ class WorkspaceDatabase:
             """
             SELECT sp.data
             FROM selection_specs ssp
-            JOIN selections sel ON ssp.selection_id = sel.spec_id
+            JOIN selections sel ON ssp.selection_id = sel.selection_id
             JOIN specs sp ON sp.spec_id = ssp.spec_id AND sp.signature = sel.gen_signature
             WHERE sel.tag = ?
             ORDER BY ssp.position ASC
@@ -1114,7 +1114,7 @@ class WorkspaceDatabase:
             self.connection.execute(
                 """
                 INSERT INTO selections (
-                  spec_id,
+                  selection_id,
                   tag,
                   gen_signature,
                   created_on,
