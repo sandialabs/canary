@@ -194,8 +194,9 @@ class PYTTestGenerator(AbstractTestGenerator):
 
             my_drafts: list["UnresolvedSpec"] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
+            test_mask: str | None = None
             for parameters in ParameterSet.combine(paramsets) or [{}]:
-                test_mask: str | None = skip_reason
+                test_mask = skip_reason
                 keywords = self.keywords(testname=name, parameters=parameters)
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 draft = UnresolvedSpec(
@@ -262,7 +263,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                         "Generation of composite base case requires at least one parameter"
                     )
                 modules = self.modules(testname=name, on_options=on_options)
-                dependencies = [
+                dependencies: list[str | DependencyPatterns] = [
                     DependencyPatterns(pattern=d.id, expects=1, result_match="success")
                     for d in my_drafts
                 ]
@@ -586,7 +587,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> list["DependencyPatterns"]:
+    ) -> list["str | DependencyPatterns"]:
         from ...testspec import DependencyPatterns
 
         kwds: dict[str, Any] = {}
@@ -596,7 +597,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             kwds["name"] = testname
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
-        dependencies: list["DependencyPatterns"] = []
+        dependencies: list["str | DependencyPatterns"] = []
         for ns in self._depends_on:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters

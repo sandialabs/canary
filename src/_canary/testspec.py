@@ -18,6 +18,7 @@ from typing import IO
 from typing import Any
 from typing import Generic
 from typing import Literal
+from typing import MutableSequence
 from typing import Sequence
 from typing import Type
 from typing import TypeVar
@@ -66,7 +67,7 @@ class BaseSpec(Generic[T]):
     family: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
-    dependencies: Sequence[Any] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence[Any] = dataclasses.field(default_factory=list)
     dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -246,7 +247,7 @@ class BaseSpec(Generic[T]):
 @dataclasses.dataclass
 class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: Sequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
 
     def __hash__(self) -> int:
@@ -343,7 +344,9 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
 
-    dependencies: Sequence[str | DependencyPatterns] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence[str | DependencyPatterns] = dataclasses.field(
+        default_factory=list
+    )
     file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = (
         dataclasses.field(default_factory=dict)
     )
