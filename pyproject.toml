@@ -224,6 +224,7 @@ exclude = [
     "src/canary_cmake/tests/*",  # just until we get them fixed
     "src/canary_vvtest/tests/*",  # just until we get them fixed
     "src/canary_hpc/tests/*",  # just until we get them fixed
+    "src/_canary/rerun.py",
 ]
 include = ["src", "tests"]
 

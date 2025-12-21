@@ -7,12 +7,14 @@ import datetime
 import fnmatch
 import hashlib
 import os
+import pickle  # nosec B403
 import shutil
 import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import Iterable
 from typing import Sequence
 from typing import TypeVar
 
@@ -40,7 +42,6 @@ from .util import logging
 from .util.filesystem import async_rmtree
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
-from .util.graph import TopologicalSorter
 from .util.graph import static_order
 from .util.names import unique_random_name
 from .version import __static_version__
@@ -652,10 +653,10 @@ class Workspace:
         for id, result in results.items():
             if predicate(id, result):
                 selected.add(id)
-        upstream, downstream = self.db.get_updownstream_ids(selected)
+        upstream, downstream = self.db.get_updownstream_ids(list(selected))
         run_specs = selected | downstream
-        load_specs = run_specs | upstream
-        resolved = self.db.get_specs(ids=list(load_specs))
+        get_specs = run_specs | upstream
+        resolved = self.db.get_specs(ids=list(get_specs))
         return stable_partition(resolved, predicate=lambda spec: spec.id not in run_specs)
 
     def compute_failed_rerun_list(self) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
@@ -724,15 +725,19 @@ class WorkspaceDatabase:
         self = cls(path)
         with self.connection:
             query = """CREATE TABLE IF NOT EXISTS specs (
-              spec_id TEXT PRIMARY KEY, signature TEXT, data TEXT
+              spec_id TEXT PRIMARY KEY,
+              signature TEXT NOT NULL,
+              file TEXT NOT NULL,
+              data BLOB NOT NULL
             )"""
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS spec_deps (
               spec_id TEXT NOT NULL,
-              dep_id TEXT NULL,
+              dep_id TEXT NOT NULL,
               PRIMARY KEY (spec_id, dep_id),
               FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
+              FOREIGN KEY (dep_id)  REFERENCES specs(spec_id)
             )"""
             self.connection.execute(query)
 
@@ -743,7 +748,7 @@ class WorkspaceDatabase:
             self.connection.execute(query)
 
             query = """CREATE TABLE IF NOT EXISTS selections (
-              spec_id TEXT PRIMARY KEY,
+              id TEXT PRIMARY KEY,
               tag TEXT UNIQUE,
               gen_signature TEXT,
               created_on TEXT,
@@ -762,7 +767,6 @@ class WorkspaceDatabase:
             query = """CREATE TABLE IF NOT EXISTS selection_specs (
               selection_id TEXT,
               spec_id TEXT,
-              position INTEGER,
               PRIMARY KEY (selection_id, spec_id),
               FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
             )"""
@@ -806,30 +810,46 @@ class WorkspaceDatabase:
         self.connection.close()
 
     def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
-        rows: list[tuple[str, str | None]] = []
+        spec_rows: list[tuple[str, str, str, bytes]] = []
+        dep_rows: list[tuple[str, str]] = []
         for spec in specs:
-            if spec.dependencies:
-                for dep in spec.dependencies:
-                    rows.append((spec.id, dep.id))
-            else:
-                rows.append((spec.id, None))  # standalone node
+            try:
+                deps = spec.dependencies
+                spec.dependencies = []
+                blob = pickle.dumps(spec, protocol=pickle.HIGHEST_PROTOCOL)
+            finally:
+                spec.dependencies = deps
+            spec_rows.append((spec.id, signature, str(spec.file), blob))
+            for dep in spec.dependencies:
+                dep_rows.append((spec.id, dep.id))
         with self.connection:
+            self.connection.execute("CREATE TEMP TABLE _spec_ids(id TEXT PRIMARY KEY)")
             self.connection.executemany(
-                """
-                INSERT INTO specs (spec_id, signature, data)
-                VALUES (?, ?, ?)
-                ON CONFLICT(spec_id) DO UPDATE SET signature=excluded.signature, data=excluded.data
-                """,
-                ((spec.id, signature, json.dumps_min(spec.asdict())) for spec in specs),
-            )
-            self.connection.executemany(
-                "DELETE FROM spec_deps WHERE spec_id = ?",
+                "INSERT INTO _spec_ids(id) VALUES (?)",
                 ((spec.id,) for spec in specs),
             )
+            # 2. Bulk insert/update specs
             self.connection.executemany(
-                "INSERT OR REPLACE INTO spec_deps(spec_id, dep_id) VALUES (?, ?)",
-                rows,
+                """
+                  INSERT INTO specs (spec_id, signature, file, data)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT(spec_id) DO UPDATE SET signature=excluded.signature, data=excluded.data
+                  """,
+                spec_rows,
             )
+
+            # 3. Bulk delete old dependencies for these specs
+            self.connection.execute(
+                "DELETE FROM spec_deps WHERE spec_id IN (SELECT id FROM _spec_ids)"
+            )
+
+            # 4. Bulk insert new dependencies using generator (minimal memory)
+            self.connection.executemany(
+                "INSERT INTO spec_deps(spec_id, dep_id) VALUES (?, ?)", dep_rows
+            )
+
+            # 5. Drop temporary table
+            self.connection.execute("DROP TABLE _spec_ids")
 
     def resolve_spec_id(self, id: str) -> str | None:
         if id.startswith(testspec.select_sygil):
@@ -877,7 +897,7 @@ class WorkspaceDatabase:
     def get_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[ResolvedSpec]:
-        rows: list[tuple[str, str, str]]
+        rows: list[tuple[str, str, str, bytes]]
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
@@ -906,32 +926,42 @@ class WorkspaceDatabase:
     def get_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
         rows = self.connection.execute(
             """
-            SELECT sp.data
-            FROM selection_specs ssp
-            JOIN selections sel ON ssp.selection_id = sel.spec_id
-            JOIN specs sp ON sp.spec_id = ssp.spec_id AND sp.signature = sel.gen_signature
-            WHERE sel.tag = ?
-            ORDER BY ssp.position ASC
+            SELECT ss.spec_id
+            FROM selections s
+            JOIN selection_specs ss
+            ON ss.selection_id = s.id
+            WHERE s.tag = ?
             """,
             (tag,),
         ).fetchall()
         if not rows:
             raise NotASelection(tag)
-        lookup: dict[str, ResolvedSpec] = {}
-        for row in rows:
-            spec = ResolvedSpec.from_dict(json.loads(row[0]), lookup)
-            lookup[spec.id] = spec
-        return list(lookup.values())
+        return self.get_specs([r[0] for r in rows])
 
-    def _reconstruct_specs(self, rows: list[tuple[str, str, str]]) -> list[ResolvedSpec]:
-        data = {id: json.loads(data) for id, _, data in rows}
-        graph = {id: [_["id"] for _ in s["dependencies"]] for id, s in data.items()}
-        lookup: dict[str, ResolvedSpec] = {}
-        ts = TopologicalSorter(graph)
-        for id in ts.static_order():
-            spec = ResolvedSpec.from_dict(data[id], lookup)
-            lookup[id] = spec
-        return list(lookup.values())
+    def _reconstruct_specs(self, rows: list[tuple[str, str, str, bytes]]) -> list[ResolvedSpec]:
+        specs: dict[str, ResolvedSpec] = {}
+        for row in rows:
+            spec = pickle.loads(row[-1])  # nosec B301
+            spec.dependencies = []
+            specs[spec.id] = spec
+        ids = [spec.id for spec in specs.values()]
+        edges = self.get_edges(ids)
+        for spec_id, dep_id in edges:
+            specs[spec_id].dependencies.append(specs[dep_id])
+        return list(specs.values())
+
+    def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
+        if not ids:
+            return self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
+        rows: list[tuple[str, str]] = []
+        base_query = "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN"
+        for i in range(0, len(ids), SQL_CHUNK_SIZE):
+            chunk = ids[i : i + SQL_CHUNK_SIZE]
+            placeholders = ",".join("?" for _ in chunk)
+            query = f"{base_query} ({placeholders})"
+            cursor = self.connection.execute(query, chunk)
+            rows.extend(cursor.fetchall())
+        return rows
 
     def put_results(self, session: Session) -> None:
         """Store results in the DB.  We store status, timekeeper across columns for future
@@ -1106,15 +1136,15 @@ class WorkspaceDatabase:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
             self.connection.executemany(
                 """
-                INSERT INTO selection_specs (selection_id, spec_id, position)
-                VALUES (?, ?, ?)
+                INSERT INTO selection_specs (selection_id, spec_id)
+                VALUES (?, ?)
                 """,
-                ((id, spec.id, pos) for pos, spec in enumerate(static_order(specs))),
+                ((id, spec.id) for spec in specs),
             )
             self.connection.execute(
                 """
                 INSERT INTO selections (
-                  spec_id,
+                  id,
                   tag,
                   gen_signature,
                   created_on,
@@ -1176,7 +1206,7 @@ class WorkspaceDatabase:
         upstream = self.get_upstream_ids(list(downstream.union(seeds)))
         return upstream, downstream
 
-    def get_downstream_ids(self, seeds: list[str]) -> set[str]:
+    def get_downstream_ids(self, seeds: Iterable[str]) -> set[str]:
         """Return dependencies in instantiation order."""
         if not seeds:
             return set()
@@ -1209,12 +1239,11 @@ class WorkspaceDatabase:
         upstream(id) AS (
           SELECT dep_id
           FROM spec_deps
-          WHERE spec_id IN (SELECT id FROM seeds) AND dep_id IS NOT NULL
+          WHERE spec_id IN (SELECT id FROM seeds)
           UNION
           SELECT d.dep_id
           FROM spec_deps d
           JOIN upstream u ON d.spec_id = u.id
-          WHERE d.dep_id IS NOT NULL
         )
         SELECT DISTINCT id FROM upstream
         """  # nosec B608
@@ -1227,10 +1256,12 @@ class WorkspaceDatabase:
         Every spec appears, standalone nodes have dep_id=None (empty list).
         """
         graph: dict[str, list[str]] = collections.defaultdict(list)
-        for spec_id, dep_id in self.connection.execute("SELECT spec_id, dep_id FROM spec_deps"):
-            graph[spec_id]  # creates an empty list if it doesn't exist
-            if dep_id is not None:
-                graph[spec_id].append(dep_id)
+        rows = self.connection.execute("SELECT spec_id FROM specs").fetchall()
+        for (spec_id,) in rows:
+            graph[spec_id] = []
+        rows = self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
+        for spec_id, dep_id in rows:
+            graph[spec_id].append(dep_id)
         return graph
 
 
