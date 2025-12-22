@@ -197,7 +197,7 @@ class ResourceQueue:
                     key = (job.status.category, job.status.status)
                     totals[key] += 1
             row: list[str] = []
-            if busy:
+            if pending:
                 row.append(f"{busy}/{total} [green]RUNNING[/]")
             else:
                 row.append(f"{total}/{total} [blue]COMPLETE[/]")
