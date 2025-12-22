@@ -58,8 +58,8 @@ class WorkspaceDatabase:
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-        self.connection.execute("PRAGMA journal_mode=WAL;")
-        self.connection.execute("PRAGMA synchronous=NORMAL;")
+        self.connection.execute("PRAGMA journal_mode=MEMORY;")
+        self.connection.execute("PRAGMA synchronous=OFF;")
         self.connection.execute("PRAGMA foreign_key=ON;")
 
     @classmethod
