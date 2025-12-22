@@ -487,7 +487,8 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
 class _GlobalSpecCache:
     """Simple cache for storing re-used data feeding the spec ID"""
     _file_hash: dict[Path, bytes] = {}
-    _repo_root: dict[Path, bytes] = {}
+    _repo_root: dict[Path, tuple[bytes, Path]] = {}
+    _rel_root: dict[Path, bytes] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -507,19 +508,36 @@ class _GlobalSpecCache:
     def repo_root(cls, path: Path) -> bytes:
         path = path.absolute()
         try:
-            return cls._repo_root[path]
+            return cls._repo_root[path][0]
         except KeyError:
             pass
         d = path.parent
         while d.parent != d:
             if (d / ".git").exists() or (d / ".repo").exists():
-                root = str(d).encode()
+                root = (str(d).encode(), d)
                 break
             d = d.parent
         else:
-            root = str(path.parent).encode()
+            root = (str(path.parent).encode(), path.parent)
         with cls._lock:
-            return cls._repo_root.setdefault(path, root)
+            return cls._repo_root.setdefault(path, root)[0]
+
+    @classmethod
+    def rel_root(cls, path: Path) -> bytes:
+        path = path.absolute()
+        try:
+            return cls._rel_root[path]
+        except KeyError:
+            pass
+
+        try:
+            _, root = cls._repo_root[path]
+            rel = path.relative_to(root)
+        except KeyError:
+            raise RuntimeError("Need to call repo_root first")
+
+        with cls._lock:
+            return cls._rel_root.setdefault(path, str(rel).encode())
 
 
 def build_spec_id(spec: BaseSpec) -> str:
@@ -532,6 +550,7 @@ def build_spec_id(spec: BaseSpec) -> str:
             hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
     hasher.update(_GlobalSpecCache.file_hash(spec.file))
     hasher.update(_GlobalSpecCache.repo_root(spec.file))
+    hasher.update(_GlobalSpecCache.rel_root(spec.file))
     return hasher.hexdigest()
 
 
