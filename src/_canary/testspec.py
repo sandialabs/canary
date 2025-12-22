@@ -60,7 +60,9 @@ T = TypeVar("T", bound="BaseSpec")
 @dataclasses.dataclass
 class BaseSpec(Generic[T]):
     file_root: Path
+    """The search path contiaining the generated spec; typically the some version-control root"""
     file_path: Path
+    """The path to the test file relative to `file_root`"""
     family: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
@@ -131,6 +133,7 @@ class BaseSpec(Generic[T]):
 
     @cached_property
     def file(self) -> Path:
+        """Path to the test specification file"""
         return self.file_root / self.file_path
 
     @property
@@ -482,12 +485,13 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
 
 
 class _GlobalSpecCache:
-    _file_hash: dict[Path, str] = {}
-    _repo_root: dict[Path, Path] = {}
+    """Simple cache for storing re-used data feeding the spec ID"""
+    _file_hash: dict[Path, bytes] = {}
+    _repo_root: dict[Path, bytes] = {}
     _lock = threading.Lock()
 
     @classmethod
-    def file_hash(cls, path: Path) -> str:
+    def file_hash(cls, path: Path) -> bytes:
         path = path.absolute()
         try:
             return cls._file_hash[path]
@@ -495,12 +499,12 @@ class _GlobalSpecCache:
             pass
         h = hashlib.blake2b(digest_size=16)
         h.update(path.read_bytes())
-        digest = h.hexdigest()
+        digest = h.hexdigest().encode()
         with cls._lock:
             return cls._file_hash.setdefault(path, digest)
 
     @classmethod
-    def repo_root(cls, path: Path) -> Path:
+    def repo_root(cls, path: Path) -> bytes:
         path = path.absolute()
         try:
             return cls._repo_root[path]
@@ -509,11 +513,11 @@ class _GlobalSpecCache:
         d = path.parent
         while d.parent != d:
             if (d / ".git").exists() or (d / ".repo").exists():
-                root = d
+                root = str(d).encode()
                 break
             d = d.parent
         else:
-            root = path.parent
+            root = str(path.parent).encode()
         with cls._lock:
             return cls._repo_root.setdefault(path, root)
 
@@ -526,8 +530,8 @@ def build_spec_id(spec: BaseSpec) -> str:
     if parameters:
         for p in sorted(parameters):
             hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
-    hasher.update(_GlobalSpecCache.file_hash(spec.file).encode())
-    hasher.update(str(_GlobalSpecCache.repo_root(spec.file)).encode())
+    hasher.update(_GlobalSpecCache.file_hash(spec.file))
+    hasher.update(_GlobalSpecCache.repo_root(spec.file))
     return hasher.hexdigest()
 
 
