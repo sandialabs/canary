@@ -507,7 +507,7 @@ class _GlobalSpecCache:
                 break
             d = d.parent
         else:
-            root = path.parent
+            root = d
         return root
 
     @classmethod
@@ -535,11 +535,6 @@ class _GlobalSpecCache:
         return cls._file_hash[key]
 
     @classmethod
-    def repo_root(cls, path: Path) -> bytes:
-        key = cls.populate_cache(path)
-        return cls._repo_root[key]
-
-    @classmethod
     def rel_repo(cls, path: Path) -> bytes:
         key = cls.populate_cache(path)
         return cls._rel_repo[key]
@@ -554,7 +549,6 @@ def build_spec_id(spec: BaseSpec) -> str:
         for p in sorted(parameters):
             hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
     hasher.update(_GlobalSpecCache.file_hash(spec.file))
-    hasher.update(_GlobalSpecCache.repo_root(spec.file))
     hasher.update(_GlobalSpecCache.rel_repo(spec.file))
     return hasher.hexdigest()
 
