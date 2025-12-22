@@ -486,58 +486,59 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
 
 class _GlobalSpecCache:
     """Simple cache for storing re-used data feeding the spec ID"""
+    _key: dict[Path, Path] = {}
+    """Maps the input file path to a key index (absolute path)"""
+
     _file_hash: dict[Path, bytes] = {}
-    _repo_root: dict[Path, tuple[bytes, Path]] = {}
-    _rel_root: dict[Path, bytes] = {}
+    _repo_root: dict[Path, bytes] = {}
+    _rel_repo: dict[Path, bytes] = {}
     _lock = threading.Lock()
 
     @classmethod
-    def file_hash(cls, path: Path) -> bytes:
-        path = path.absolute()
-        try:
-            return cls._file_hash[path]
-        except KeyError:
-            pass
-        h = hashlib.blake2b(digest_size=16)
-        h.update(path.read_bytes())
-        digest = h.hexdigest().encode()
-        with cls._lock:
-            return cls._file_hash.setdefault(path, digest)
-
-    @classmethod
-    def repo_root(cls, path: Path) -> bytes:
-        path = path.absolute()
-        try:
-            return cls._repo_root[path][0]
-        except KeyError:
-            pass
+    def _compute_repo_root(cls, path: Path) -> Path:
         d = path.parent
         while d.parent != d:
             if (d / ".git").exists() or (d / ".repo").exists():
-                root = (str(d).encode(), d)
+                root = d
                 break
             d = d.parent
         else:
-            root = (str(path.parent).encode(), path.parent)
-        with cls._lock:
-            return cls._repo_root.setdefault(path, root)[0]
+            root = path.parent
+        return root
 
     @classmethod
-    def rel_root(cls, path: Path) -> bytes:
-        path = path.absolute()
+    def populate_cache(cls, path: Path) -> Path:
         try:
-            return cls._rel_root[path]
+            return cls._key[path]
         except KeyError:
             pass
 
-        try:
-            _, root = cls._repo_root[path]
-            rel = path.relative_to(root)
-        except KeyError:
-            raise RuntimeError("Need to call repo_root first")
+        key = path.absolute()
+        h = hashlib.blake2b(digest_size=16)
+        h.update(key.read_bytes())
+        root = cls._compute_repo_root(key)
+        rel = key.relative_to(root)
 
         with cls._lock:
-            return cls._rel_root.setdefault(path, str(rel).encode())
+            cls._repo_root[key] = str(root).encode()
+            cls._rel_repo[key] = str(rel).encode()
+            cls._file_hash[key] = h.hexdigest().encode()
+            return cls._key.setdefault(path, key)
+
+    @classmethod
+    def file_hash(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._file_hash[key]
+
+    @classmethod
+    def repo_root(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._repo_root[key]
+
+    @classmethod
+    def rel_repo(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._rel_repo[key]
 
 
 def build_spec_id(spec: BaseSpec) -> str:
@@ -550,7 +551,7 @@ def build_spec_id(spec: BaseSpec) -> str:
             hasher.update(f"{p}={stringify(parameters[p], float_fmt='%.16e')}".encode())
     hasher.update(_GlobalSpecCache.file_hash(spec.file))
     hasher.update(_GlobalSpecCache.repo_root(spec.file))
-    hasher.update(_GlobalSpecCache.rel_root(spec.file))
+    hasher.update(_GlobalSpecCache.rel_repo(spec.file))
     return hasher.hexdigest()
 
 
