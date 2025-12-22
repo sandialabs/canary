@@ -301,7 +301,7 @@ class WorkspaceDatabase:
             SELECT s.spec_id, s.data
             FROM specs s
             JOIN specs_meta sm ON s.spec_id = sm.spec_id
-            JOIN selections sel ON sel.signature = sm.gen_signature
+            JOIN selections sel ON sel.gen_signature = sm.gen_signature
             WHERE sel.tag = ?
             """,
             (tag,),
