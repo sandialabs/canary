@@ -58,8 +58,8 @@ class WorkspaceDatabase:
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-        self.connection.execute("PRAGMA journal_mode=WAL;")
-        self.connection.execute("PRAGMA synchronous=NORMAL;")
+        self.connection.execute("PRAGMA journal_mode=MEMORY;")
+        self.connection.execute("PRAGMA synchronous=OFF;")
         self.connection.execute("PRAGMA foreign_key=ON;")
 
     @classmethod
@@ -178,6 +178,7 @@ class WorkspaceDatabase:
             meta_rows.append((spec.id, source.as_posix(), view.as_posix(), gen_signature))
             for dep in spec.dependencies:
                 dep_rows.append((spec.id, dep.id))
+
         with self.connection:
             self.connection.execute("CREATE TEMP TABLE _spec_ids(id TEXT PRIMARY KEY)")
             self.connection.executemany(
@@ -187,21 +188,36 @@ class WorkspaceDatabase:
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
-                  INSERT INTO specs (spec_id, data)
-                  VALUES (?, ?)
-                  ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
-                  """,
+                INSERT INTO specs (spec_id, data)
+                VALUES (?, ?)
+                ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
+                """,
                 spec_rows,
             )
+
+            self.connection.execute(
+                """CREATE TEMP TABLE _meta_tmp(
+                    spec_id TEXT, source TEXT, view TEXT, gen_signature TEXT
+                )
+                """
+            )
+
             self.connection.executemany(
                 """
-                  INSERT INTO specs_meta (spec_id, source, view, gen_signature)
-                  VALUES (?, ?, ?, ?)
-                  ON CONFLICT(spec_id, gen_signature)
-                    DO UPDATE SET source=excluded.source, view=excluded.view
-                  """,
+                INSERT INTO _meta_tmp(spec_id, source, view, gen_signature)
+                VALUES (?, ?, ?, ?)
+                """,
                 meta_rows,
             )
+
+            self.connection.execute(
+                """
+                INSERT OR REPLACE INTO specs_meta(spec_id, source, view, gen_signature)
+                SELECT spec_id, source, view, gen_signature
+                FROM _meta_tmp
+                """
+            )
+            self.connection.execute("DROP TABLE _meta_tmp")
 
             # 3. Bulk delete old dependencies for these specs
             self.connection.execute(
@@ -300,8 +316,8 @@ class WorkspaceDatabase:
             """
             SELECT s.spec_id, s.data
             FROM specs s
-            JOIN specs_meta sm ON s.spec_id = sm.spec_id
-            JOIN selections sel ON sel.signature = sm.gen_signature
+            JOIN selection_specs ss ON ss.spec_id = s.spec_id
+            JOIN selections sel ON sel.id = ss.selection_id
             WHERE sel.tag = ?
             """,
             (tag,),

@@ -320,7 +320,7 @@ class PathSpec(argparse.Action):
                     errors.append(f"Cannot mix {request.get('kind')} with scanpaths {item}")
                     continue
                 request["kind"] = "scanpaths"
-                payload: dict[str, list[str]] = request.setdefault("payload", {})
+                payload = request.setdefault("payload", {})
                 payload[item] = []
                 continue
 
@@ -331,7 +331,7 @@ class PathSpec(argparse.Action):
                     continue
                 request["kind"] = "scanpaths"
                 root, name = item.split(os.pathsep, 1)
-                payload: dict[str, list[str]] = request.setdefault("payload", {})
+                payload = request.setdefault("payload", {})
                 payload.setdefault(os.path.abspath(root), []).append(
                     name.replace(os.pathsep, os.path.sep)
                 )
