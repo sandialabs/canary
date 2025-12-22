@@ -486,6 +486,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
 
 class _GlobalSpecCache:
     """Simple cache for storing re-used data feeding the spec ID"""
+
     _key: dict[Path, Path] = {}
     """Maps the input file path to a key index (absolute path)"""
 

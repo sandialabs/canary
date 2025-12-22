@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import Iterable
 from typing import Sequence
 from typing import TypeVar
 
@@ -1169,14 +1170,14 @@ class WorkspaceDatabase:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
 
-    def get_updownstream_ids(self, seeds: list[str] | None = None) -> tuple[set[str], set[str]]:
+    def get_updownstream_ids(self, seeds: Iterable[str] | None = None) -> tuple[set[str], set[str]]:
         if seeds is None:
             return set(), set()
         downstream = self.get_downstream_ids(seeds)
-        upstream = self.get_upstream_ids(list(downstream.union(seeds)))
+        upstream = self.get_upstream_ids(downstream.union(seeds))
         return upstream, downstream
 
-    def get_downstream_ids(self, seeds: list[str]) -> set[str]:
+    def get_downstream_ids(self, seeds: Iterable[str]) -> set[str]:
         """Return dependencies in instantiation order."""
         if not seeds:
             return set()
@@ -1198,7 +1199,7 @@ class WorkspaceDatabase:
         rows = self.connection.execute(query, tuple(seeds)).fetchall()
         return {r[0] for r in rows}
 
-    def get_upstream_ids(self, seeds: list[str]) -> set[str]:
+    def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
         """Return dependents in reverse instantiation order."""
         if not seeds:
             return set()
