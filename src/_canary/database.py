@@ -188,10 +188,10 @@ class WorkspaceDatabase:
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
-                    INSERT INTO specs (spec_id, data)
-                    VALUES (?, ?)
-                    ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
-                    """,
+                INSERT INTO specs (spec_id, data)
+                VALUES (?, ?)
+                ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
+                """,
                 spec_rows,
             )
 
