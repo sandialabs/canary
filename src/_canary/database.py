@@ -178,6 +178,7 @@ class WorkspaceDatabase:
             meta_rows.append((spec.id, source.as_posix(), view.as_posix(), gen_signature))
             for dep in spec.dependencies:
                 dep_rows.append((spec.id, dep.id))
+
         with self.connection:
             self.connection.execute("CREATE TEMP TABLE _spec_ids(id TEXT PRIMARY KEY)")
             self.connection.executemany(
@@ -187,21 +188,36 @@ class WorkspaceDatabase:
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
-                  INSERT INTO specs (spec_id, data)
-                  VALUES (?, ?)
-                  ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
-                  """,
+                    INSERT INTO specs (spec_id, data)
+                    VALUES (?, ?)
+                    ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
+                    """,
                 spec_rows,
             )
+
+            self.connection.execute(
+                """CREATE TEMP TABLE _meta_tmp(
+                    spec_id TEXT, source TEXT, view TEXT, gen_signature TEXT
+                )
+                """
+            )
+
             self.connection.executemany(
                 """
-                  INSERT INTO specs_meta (spec_id, source, view, gen_signature)
-                  VALUES (?, ?, ?, ?)
-                  ON CONFLICT(spec_id, gen_signature)
-                    DO UPDATE SET source=excluded.source, view=excluded.view
-                  """,
+                INSERT INTO _meta_tmp(spec_id, source, view, gen_signature)
+                VALUES (?, ?, ?, ?)
+                """,
                 meta_rows,
             )
+
+            self.connection.execute(
+                """
+                INSERT OR REPLACE INTO specs_meta(spec_id, source, view, gen_signature)
+                SELECT spec_id, source, view, gen_signature
+                FROM _meta_tmp
+                """
+            )
+            self.connection.execute("DROP TABLE _meta_tmp")
 
             # 3. Bulk delete old dependencies for these specs
             self.connection.execute(
