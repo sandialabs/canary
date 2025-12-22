@@ -8,7 +8,7 @@ from pathlib import Path
 import _canary.testcase as tc
 import _canary.testinst as inst
 import canary
-from _canary import workspace
+from _canary import collect
 from _canary.testexec import ExecutionSpace
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
@@ -30,7 +30,7 @@ def test_instance_deps(tmpdir):
             fh.write("canary.directives.analyze()\n")
             fh.write("canary.directives.parameterize('cpus', [1,2])\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-    generators = workspace.find_generators_in_path(workdir)
+    generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 7
     work_tree = os.path.join(workdir, "tests")

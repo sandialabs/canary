@@ -23,6 +23,7 @@ def test_issue_84(tmpdir):
         args = [sys.executable, "-m", "canary", "run", "my-selection"]
         cp = subprocess.run(args)
         if cp.returncode != 0:
+            print(os.listdir("TestResults"))
             print(open("TestResults/issue-84/canary-out.txt").read())
             print(open(".canary/config.yaml").read())
         assert cp.returncode == 0

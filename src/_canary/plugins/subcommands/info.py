@@ -43,7 +43,7 @@ class Info(CanarySubcommand):
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
         selection = workspace.db.get_selection_metadata(tag)
-        specs = [spec for spec in workspace.db.get_specs_by_tagname(tag) if not spec.mask]
+        specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
         fh.write(f"Created on: {selection.created_on}\n")
         fh.write("Scan paths:\n")
         for root, paths in selection.scanpaths.items():

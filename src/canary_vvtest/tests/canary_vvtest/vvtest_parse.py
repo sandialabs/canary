@@ -8,7 +8,7 @@ from pathlib import Path
 
 import _canary.util.filesystem as fs
 import canary_vvtest.generator as generator
-from _canary import workspace
+from _canary import collect
 from _canary.enums import list_parameter_space
 
 
@@ -285,7 +285,7 @@ if __name__ == "__main__":
             fh.write("else:\n    assert 0\n")
         fs.set_executable("vvtest_param_generator.py")
     with fs.working_dir(tmpdir.strpath):
-        generators = workspace.find_generators_in_path(".")
+        generators = collect.find_generators_in_path(".")
         specs = generate_specs(generators)
         assert len(specs) == 6
         assert specs[0].name == "create_inputs.a=A.b=B.np=1"

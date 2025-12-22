@@ -308,3 +308,10 @@ def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:
     except Exception:
         logger.exception(f"Failed to parse test from {root}/{f}")
         return False, None
+
+
+def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
+    collector = Collector()
+    collector.add_scanpath(str(path), [])
+    generators = collector.run()
+    return generators

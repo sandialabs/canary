@@ -7,6 +7,7 @@ import json
 import os
 
 from _canary.plugins.subcommands.run import PathSpec
+from _canary.plugins.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
 
@@ -30,13 +31,13 @@ def test_pathspec_parse_new(tmpdir):
             "--foo",
             "--bar",
         ]
-        p = PathSpec("", "f_pathspec")
+        p = ReadPathsFromFile("", "f_pathspec")
         args = argparse.Namespace()
         p(None, args, "foo.json", option_string="-f")
         p = PathSpec("", "pathspec")
         p(None, args, values)
         d = os.getcwd()
-        assert args.scanpaths == {
+        assert args.request["payload"] == {
             os.getcwd(): ["bacon"],
             f"{d}/baz": [],
             f"{d}/spam": [],

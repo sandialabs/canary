@@ -8,9 +8,6 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any
-from typing import Callable
-from typing import Sequence
-from typing import TypeVar
 
 import yaml
 
@@ -364,11 +361,20 @@ class Workspace:
                 except FileExistsError:
                     pass
 
-    def inside_view(self, path: Path | str) -> bool:
-        """Is ``path`` inside of a self.view?"""
+    def relative_to_view(self, path: str | os.PathLike[str]) -> str | None:
+        """
+        If `path` is inside TestResults, return the relative path (which
+        may include glob characters). Otherwise return None.
+
+        Examples:
+          /ws/TestResults/foo/bar/test.py  -> foo/bar/test.py
+        """
         if self.view is None:
-            return False
-        return Path(path).absolute().is_relative_to(self.view)
+            return None
+        p = Path(path).absolute()
+        if p.is_relative_to(self.view):
+            return str(p.relative_to(self.view))
+        return None
 
     def info(self) -> dict[str, Any]:
         latest_session: str | None = None
@@ -465,7 +471,7 @@ class Workspace:
         """Load cached test cases.  Dependency resolution is performed."""
         lookup: dict[str, TestCase] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
-        specs = self.db.get_specs(ids, include_upstreams=True)
+        specs = self.db.load_specs(ids, include_upstreams=True)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
                 dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -491,7 +497,7 @@ class Workspace:
         for file in path.rglob("*/testcase.lock"):
             lock_data = json.loads(file.read_text())
             ids.append(lock_data["spec"]["id"])
-        resolved = self.db.get_specs(ids=ids)
+        resolved = self.db.load_specs(ids=ids)
         return resolved
 
     def remove_tag(self, tag: str) -> bool:
@@ -525,7 +531,7 @@ class Workspace:
         # canary selection refresh baz
         on_options = on_options or []
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
-        if cached := self.db.get_specs_by_signature(generator.signature):
+        if cached := self.db.load_specs_by_signature(generator.signature):
             logger.info("[bold]Retrieved[/] %d test specs from cache" % len(cached))
             return generator.signature, cached
         resolved = generator.run()
@@ -562,8 +568,8 @@ class Workspace:
 
     def get_selection(self, tag: str | None) -> list["ResolvedSpec"]:
         if tag is None or tag == ":all:":
-            return self.db.get_specs()
-        return self.db.get_specs_by_tagname(tag)
+            return self.db.load_specs()
+        return self.db.load_specs_by_tagname(tag)
 
     def gc(self, dryrun: bool = False) -> None:
         """Keep only the latet results"""
@@ -627,52 +633,21 @@ class Workspace:
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
-                return self.db.get_specs([id])[0]
+                return self.db.load_specs([id])[0]
             except IndexError:
                 raise ValueError(f"{id}: no matching spec found in {self.root}")
         # Do the full (slow) lookup
-        specs = self.db.get_specs()
+        specs = self.db.load_specs()
         for spec in specs:
             if spec.matches(root):
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
-    def compute_rerun_closure(
-        self, predicate: Callable[[str, dict], bool]
-    ) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
-        results = self.db.get_results()
-        selected: set[str] = set()
-        for id, result in results.items():
-            if predicate(id, result):
-                selected.add(id)
-        upstream, downstream = self.db.get_updownstream_ids(list(selected))
-        run_specs = selected | downstream
-        get_specs = run_specs | upstream
-        resolved = self.db.get_specs(ids=list(get_specs))
-        return stable_partition(resolved, predicate=lambda spec: spec.id not in run_specs)
-
-    def compute_failed_rerun_list(self) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
-        def predicate(id: str, result: dict) -> bool:
-            if result["status"]["category"] in ("FAILED", "ERROR", "BROKEN", "DIFFED", "BLOCKED"):
-                return True
-            return False
-
-        return self.compute_rerun_closure(predicate)
-
-    def compute_rerun_list_for_specs(
-        self, ids: list[str]
-    ) -> tuple[list["ResolvedSpec"], list["ResolvedSpec"]]:
-        def predicate(id: str, result: dict) -> bool:
-            return id in ids
-
-        self.db.resolve_spec_ids(ids)
-        return self.compute_rerun_closure(predicate)
-
     def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
-        return self.db.get_specs(ids)
+        return self.db.load_specs(ids)
 
     def find_specids(self, ids: list[str]) -> list[str | None]:
-        specs = self.db.get_specs()
+        specs = self.db.load_specs()
         found: list[str | None] = []
         for id in ids:
             if id.startswith(testspec.select_sygil):
@@ -690,27 +665,6 @@ class Workspace:
             else:
                 found.append(None)
         return found
-
-
-def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
-    collector = Collector()
-    collector.add_scanpath(str(path), [])
-    generators = collector.run()
-    return generators
-
-
-T = TypeVar("T")
-
-
-def stable_partition(seq: Sequence[T], predicate: Callable[[T], bool]) -> tuple[list[T], list[T]]:
-    true: list[T] = []
-    false: list[T] = []
-    for item in seq:
-        if predicate(item):
-            true.append(item)
-        else:
-            false.append(item)
-    return true, false
 
 
 class WorkspaceExistsError(Exception):

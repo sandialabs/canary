@@ -5,9 +5,9 @@
 from pathlib import Path
 
 import _canary.config as config
+from _canary import collect
 from _canary import rules
 from _canary import select
-from _canary import workspace
 from _canary.generate import Generator
 from _canary.util.filesystem import working_dir
 
@@ -58,7 +58,7 @@ def test_vvt_generator(tmpdir):
 """
             )
         with config.override():
-            generators = workspace.find_generators_in_path(".")
+            generators = collect.find_generators_in_path(".")
             specs = generate_specs(generators, on_options=["baz"])
             final = select_specs(specs, keyword_exprs=["test and unit"])
             assert len(specs) == 7
