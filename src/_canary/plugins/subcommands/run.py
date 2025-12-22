@@ -4,12 +4,15 @@
 
 import argparse
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Optional
 from typing import Sequence
 
+import yaml
+
 from ... import config
+from ... import rerun
 from ...collect import vc_prefixes
 from ...config.schemas import testpaths_schema
 from ...generate import Generator
@@ -60,7 +63,7 @@ class Run(CanarySubcommand):
         )
         parser.add_argument(
             "-f",
-            action=PathSpec,
+            action=ReadPathsFromFile,
             dest="f_pathspec",
             metavar="file",
             help="Read test paths from a json or yaml file. "
@@ -68,17 +71,7 @@ class Run(CanarySubcommand):
         )
         Generator.setup_parser(parser)
         Selector.setup_parser(parser, tagged="optional")
-        parser.add_argument(
-            "--only",
-            choices=("not_pass", "failed", "not_run", "all", "changed"),
-            default="not_pass",
-            help="Which tests to run after selection\n\n"
-            "  all      - run all selected tests, even if already passing\n\n"
-            "  failed   - run only previously failing tests\n\n"
-            "  not_run  - run tests that have never been executed\n\n"
-            "  changed  - run tests that whose specs have newer modification time\n\n"
-            "  not_pass - run tests that are incomplete, boken, or never run (default)",
-        )
+        rerun.setup_parser(parser)
         parser.add_argument(
             "--fail-fast",
             default=None,
@@ -124,7 +117,7 @@ class Run(CanarySubcommand):
         )
         add_resource_arguments(parser)
         parser.add_argument(
-            "scanpaths",
+            "runpaths",
             action=PathSpec,
             nargs=argparse.REMAINDER,
             metavar="pathspec [--] [user args...]",
@@ -137,17 +130,21 @@ class Run(CanarySubcommand):
         if args.wipe_workspace:
             Workspace.remove(work_tree)
         workspace: Workspace
-        reuse: bool = False
         try:
             workspace = Workspace.load(start=work_tree)
         except NotAWorkspaceError:
             workspace = Workspace.create(path=work_tree)
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
-        if args.scanpaths is not None:
+
+        request = getattr(args, "request", None) or {
+            "kind": "tag",
+            "payload": config.get("selection:default_tag"),
+        }
+        if request["kind"] == "scanpaths":
             specs = workspace.create_selection(
                 tag=args.tag,
-                scanpaths=args.scanpaths,
+                scanpaths=request["payload"],
                 on_options=args.on_options,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
@@ -155,25 +152,24 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         else:
-            if args.start:
-                logger.info(f"[bold]Running[/] tests from {args.start}")
-                specs = workspace.select_from_view(path=Path(args.start))
-                reuse = True
-            elif args.specids:
-                sids = [id[:7] for id in args.specids]
+            if request["kind"] == "specids":
+                specids = request["payload"]
+                workspace.db.resolve_spec_ids(specids)
+                sids = [id[:7] for id in specids]
                 if len(sids) > 3:
                     sids = [*sids[:2], "…", sids[-1]]
                 logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
-                loadspecs, runspecs = workspace.compute_rerun_list_for_specs(ids=args.specids)
-                specs = loadspecs + runspecs
-                setattr(args, "only", f"ids:{','.join(s.id for s in runspecs)}")
-            elif args.runtag:
-                logger.info(f"[bold]Running[/] tests in tag {args.runtag}")
-                specs = workspace.get_selection(args.runtag)
+                specs = rerun.compute_rerun_closure(workspace.db, roots=specids)
+                args.only = "all"
+            elif request["kind"] == "viewpaths":
+                logger.info("[bold]Running[/] tests from view paths")
+                specs = rerun.get_specs_from_view(workspace.db, prefixes=request["payload"])
+                args.only = "all"
             else:
-                tag = config.get("selection:default_tag")
-                logger.info(f"[bold]Running[/] tests in default tag {tag}")
-                specs = workspace.get_selection(tag)
+                assert request["kind"] == "tag"
+                tag = request["payload"]
+                logger.info(f"[bold]Running[/] tests in tag {tag}")
+                specs = rerun.get_specs(workspace.db, strategy=args.only, tag=tag)
             workspace.apply_selection_rules(
                 specs,
                 keyword_exprs=args.keyword_exprs,
@@ -181,200 +177,17 @@ class Run(CanarySubcommand):
                 owners=args.owners,
                 regex=args.regex_filter,
             )
-        session = workspace.run(specs, reuse_session=reuse, only=args.only)
+        reuse = request.get("kind") == "viewpaths"
+        session = workspace.run(specs, reuse_session=reuse, only=args.only or "not_pass")
         return session.returncode
 
 
 def setdefault(obj, attr, default):
-    if getattr(obj, attr, None) is None:
+    if not hasattr(obj, attr):
+        setattr(obj, attr, default)
+    elif getattr(obj, attr) is None:
         setattr(obj, attr, default)
     return getattr(obj, attr)
-
-
-class PathSpec(argparse.Action):
-    """Parse the ``pathspec`` argument.
-
-    The ``pathspec`` can take on different meanings, each entry in pathspec
-    can represent one of
-
-    - an input file containing search path information when creating a new session
-    - a directory to search for test files when creating a new session
-    - a filter when re-using a previous session
-    - a test ID to run
-
-    """
-
-    def __call__(self, parser, namespace, values, option_string=None) -> None:
-        """When this function call exits, the following variables will be set on ``namespace``:
-
-        scanpaths: dict[str, list[str]]
-          paths.keys() are the roots to search for new tests in
-          paths.values() are (optional) specific files to read from the associated root
-
-        """
-        workspace: Workspace | None
-        try:
-            workspace = Workspace.load()
-        except NotAWorkspaceError:
-            workspace = None
-
-        setdefault(namespace, "script_args", [])
-        setdefault(namespace, "scanpaths", None)
-        setdefault(namespace, "runtag", None)
-        setdefault(namespace, "specids", None)
-        setdefault(namespace, "start", None)
-
-        if self.dest == "f_pathspec":
-            scanpaths = getattr(namespace, "scanpaths", None) or {}
-            scanpaths.update(self.read_paths(values))
-            setattr(namespace, "scanpaths", scanpaths)
-            return
-
-        assert isinstance(values, list)
-        ns = self.parse(values)
-        if ns.script_args:
-            namespace.script_args.extend(ns.script_args)
-
-        possible_specs: list[str] = []
-        items: list[str] = ns.items
-        scanpaths = getattr(namespace, "scanpaths", None) or {}
-        for item in items:
-            if os.path.isfile(item) and item.endswith("testcases.lock"):
-                raise NotImplementedError
-            elif workspace is not None and workspace.is_tag(item):
-                namespace.runtag = item
-            elif workspace is not None and workspace.inside_view(item):
-                namespace.start = os.path.abspath(item)
-            elif os.path.isfile(item):
-                root, name = os.path.split(os.path.abspath(item))
-                scanpaths.setdefault(root, []).append(name)
-            elif os.path.isdir(item):
-                scanpaths.setdefault(os.path.abspath(item), [])
-            elif item.startswith(vc_prefixes):
-                if not os.path.isdir(item.partition("@")[2]):
-                    p = item.partition("@")[2]
-                    raise ValueError(f"{p}: no such file or directory")
-                scanpaths.setdefault(item, [])
-            elif os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
-                # allow specifying as root:name
-                root, name = item.split(os.pathsep, 1)
-                scanpaths.setdefault(os.path.abspath(root), []).append(
-                    name.replace(os.pathsep, os.path.sep)
-                )
-            else:
-                possible_specs.append(item)
-        if workspace and possible_specs:
-            ids: list[str] = []
-            found = workspace.find_specids(possible_specs)
-            for i, id in enumerate(found):
-                if id is None:
-                    raise ValueError(
-                        f"{possible_specs[i]}: not a file, directory, or test identifier"
-                    )
-                ids.append(id)
-            setattr(namespace, "specids", ids)
-
-        if scanpaths:
-            setattr(namespace, "scanpaths", scanpaths)
-
-        check_mutually_exclusive_pathspec_args(namespace)
-
-        return
-
-    @staticmethod
-    def parse(values: list[str]) -> argparse.Namespace:
-        """Split ``values`` into:
-        - pathspec: everything up to ``--``
-        - script_args: anything following ``--``
-        """
-        namespace = argparse.Namespace(script_args=[], items=[])
-        for i, item in enumerate(values):
-            if item == "--":
-                namespace.script_args = values[i + 1 :]
-                break
-            else:
-                namespace.items.append(item)
-        return namespace
-
-    @staticmethod
-    def read_paths(file: str) -> dict[str, list[str]]:
-        data: dict
-        if file.endswith(".json"):
-            with open(file, "r") as fh:
-                data = json.load(fh)
-        else:
-            import yaml
-
-            with open(file, "r") as fh:
-                data = yaml.safe_load(fh)
-        testpaths_schema.validate(data)
-        file_dir = os.path.abspath(os.path.dirname(file) or ".")
-        paths: dict[str, list[str]] = {}
-        with working_dir(file_dir):
-            for p in data["testpaths"]:
-                if isinstance(p, str):
-                    paths.setdefault(os.path.abspath(p), [])
-                else:
-                    paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
-        return paths
-
-    @staticmethod
-    def pathspec_help() -> str:
-        pathspec_help = """\
-pathspec syntax:
-
-  pathspec [-- ...]
-
-  new test sessions:
-    %(path)s                                   scan path recursively for test generators
-    %(file)s                                   use this test generator
-    %(git)s@path                               find tests under git version control at path
-    %(repo)s@path                              find tests under repo version control at path
-
-  examples:
-    canary run path                        scan path for tests to run
-    canary run 7yral9i                     rerun test case with hash 7yral9i
-
-  script arguments:
-    Any argument following the %(sep)s separator is passed directly to each test script's command line.
-""" % {
-            "file": bold("file"),
-            "path": bold("path"),
-            "git": bold("git"),
-            "repo": bold("repo"),
-            "sep": bold("--"),
-        }
-        return pathspec_help
-
-    @staticmethod
-    def pathfile_help() -> str:
-        text = """\
-pathspec file schema syntax:
-
-  {
-    "testpaths": [
-      {
-        "root": str,
-        "paths": [str]
-      }
-    ]
-  }"""
-        return text
-
-
-def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:
-    if ns.specids:
-        if any([ns.scanpaths, ns.runtag, ns.start]):
-            raise TypeError("HASH pathspec argument[s] incompatible with other pathspec arguments")
-    if ns.runtag:
-        if any([ns.scanpaths, ns.specids, ns.start]):
-            raise TypeError(f"{ns.runtag}: argument incompatible with other pathspec arguments")
-    if ns.scanpaths:
-        if any([ns.runtag, ns.specids, ns.start]):
-            raise TypeError("PATH argument[s] incompatible with other pathspec arguments")
-    if ns.start:
-        if any([ns.runtag, ns.specids, ns.scanpaths]):
-            raise TypeError(f"{ns.start}: argument incompatible with other pathspec arguments")
 
 
 class DeprecatedStoreAction(argparse.Action):
@@ -411,3 +224,230 @@ class WipeAction(argparse.Action):
             return
         workspace.rmf()
         setattr(namespace, self.dest, True)
+
+
+class PathSpec(argparse.Action):
+    """Parse the REMAINDER pathspec argument.
+
+    Each entry can be one of:
+    - scanpaths (file or directory to scan, or YAML/JSON testpaths file)
+    - viewpaths (path inside a previous session view)
+    - specids (test IDs)
+    - runtag (test selection tag)
+    """
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        assert isinstance(values, list)
+
+        request: dict[str, Any] = setdefault(namespace, "request", {})
+        script_args: list[str] = setdefault(namespace, "script_args", [])
+
+        # Split REMAINDER into script_args (after '--') and items
+        for i, val in enumerate(values):
+            if val == "--":
+                script_args.extend(values[i + 1 :])
+                values = values[:i]
+                break
+
+        workspace: Workspace | None = None
+        try:
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            pass
+
+        errors: list[str] = []
+        possible_specs: list[str] = []
+        for item in values:
+            abspath = os.path.abspath(item)
+
+            # --- Lock file not supported ---
+            if os.path.isfile(item) and item.endswith("testcases.lock"):
+                errors.append(f"{item}: lock file scanning not implemented")
+                continue
+
+            # --- Tag ---
+            if workspace and workspace.is_tag(item):
+                if request.get("kind", "tag") != "tag":
+                    errors.append(f"Cannot mix {request.get('kind')} with tag {item}")
+                    continue
+                request["kind"] = "tag"
+                request["payload"] = item
+                continue
+
+            # --- View path ---
+            if workspace and (rel_path := workspace.relative_to_view(abspath)):
+                if request.get("kind", "viewpaths") != "viewpaths":
+                    errors.append(f"Cannot mix {request.get('kind')} with viewpaths {abspath}")
+                    continue
+                request["kind"] = "viewpaths"
+                p = rel_path if os.path.isfile(abspath) else rel_path.rstrip("/") + "/%"
+                request.setdefault("payload", []).append(p)
+                continue
+
+            # --- Directory scanpaths ---
+            if os.path.isdir(abspath):
+                if request.get("kind", "scanpaths") != "scanpaths":
+                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {abspath}")
+                    continue
+                request["kind"] = "scanpaths"
+                request.setdefault("payload", {})[abspath] = []
+                continue
+
+            # --- File scanpaths ---
+            elif os.path.isfile(abspath):
+                if request.get("kind", "scanpaths") != "scanpaths":
+                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {abspath}")
+                    continue
+                request["kind"] = "scanpaths"
+                root, name = os.path.split(abspath)
+                payload: dict[str, list[str]] = request.setdefault("payload", {})
+                payload.setdefault(root, []).append(name)
+                continue
+
+            # --- Version control prefix ---
+            if item.startswith(vc_prefixes):
+                path_part = item.partition("@")[2]
+                if not os.path.isdir(path_part):
+                    errors.append(f"{path_part}: no such directory")
+                    continue
+                if request.get("kind", "scanpaths") != "scanpaths":
+                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {item}")
+                    continue
+                request["kind"] = "scanpaths"
+                payload: dict[str, list[str]] = request.setdefault("payload", {})
+                payload[item] = []
+                continue
+
+            # --- root:name style ---
+            if os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
+                if request.get("kind", "scanpaths") != "scanpaths":
+                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {item}")
+                    continue
+                request["kind"] = "scanpaths"
+                root, name = item.split(os.pathsep, 1)
+                payload: dict[str, list[str]] = request.setdefault("payload", {})
+                payload.setdefault(os.path.abspath(root), []).append(
+                    name.replace(os.pathsep, os.path.sep)
+                )
+                continue
+
+            # --- Treat as possible test ID ---
+            possible_specs.append(item)
+
+        # --- Handle possible specs ---
+        if possible_specs:
+            if workspace is None:
+                errors.append("Spec IDs require an active workspace")
+            elif request.get("kind", "specids") != "specids":
+                errors.append(f"Cannot mix {request.get('kind')} with specids")
+            else:
+                request["kind"] = "specids"
+                found_ids: list[str | None] = workspace.find_specids(possible_specs)
+                valid_ids: list[str] = []
+                for i, fid in enumerate(found_ids):
+                    if fid is None:
+                        errors.append(f"{possible_specs[i]}: not a valid test identifier")
+                    else:
+                        valid_ids.append(fid)
+                request.setdefault("payload", []).extend(valid_ids)
+        if errors:
+            raise argparse.ArgumentError(self, "\n".join(errors))
+
+        setattr(namespace, "request", request)
+        setattr(namespace, "script_args", script_args)
+        setattr(namespace, self.dest, values)
+        # backward compat
+        if request["kind"] == "scanpaths":
+            setattr(namespace, "scanpaths", request["payload"])
+
+    @staticmethod
+    def canary_help() -> str:
+        pathspec_help = """\
+pathspec syntax:
+
+  pathspec [-- ...]
+
+  new test sessions:
+    %(path)s                                   scan path recursively for test generators
+    %(file)s                                   use this test generator
+    %(git)s@path                               find tests under git version control at path
+    %(repo)s@path                              find tests under repo version control at path
+
+  examples:
+    canary run path                        scan path for tests to run
+    canary run 7yral9i                     rerun test case with hash 7yral9i
+
+  script arguments:
+    Any argument following the %(sep)s separator is passed directly to each test script's command line.
+""" % {
+            "file": bold("file"),
+            "path": bold("path"),
+            "git": bold("git"),
+            "repo": bold("repo"),
+            "sep": bold("--"),
+        }
+        return pathspec_help
+
+
+class ReadPathsFromFile(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        assert isinstance(values, str)
+        request: dict[str, Any] = setdefault(namespace, "request", {})
+        if request.get("kind", "scanpaths") != "scanpaths":
+            raise argparse.ArgumentError(
+                self, f"Cannot mix {request.get('kind')} with file {values}"
+            )
+        request["kind"] = "scanpaths"
+        request.setdefault("payload", {}).update(self.read_paths(values))
+        setattr(namespace, "request", request)
+        setattr(namespace, self.dest, values)
+        # backward compat
+        setattr(namespace, "scanpaths", request["payload"])
+        return
+
+    @staticmethod
+    def read_paths(file: str) -> dict[str, list[str]]:
+        data: dict
+        if file.endswith(".json"):
+            with open(file, "r") as fh:
+                data = json.load(fh)
+        else:
+            with open(file, "r") as fh:
+                data = yaml.safe_load(fh)
+        testpaths_schema.validate(data)
+        file_dir = os.path.abspath(os.path.dirname(file) or ".")
+        paths: dict[str, list[str]] = {}
+        with working_dir(file_dir):
+            for p in data["testpaths"]:
+                if isinstance(p, str):
+                    paths.setdefault(os.path.abspath(p), [])
+                else:
+                    paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
+        return paths
+
+    @staticmethod
+    def canary_help() -> str:
+        text = """\
+pathspec file schema syntax:
+
+  {
+    "testpaths": [
+      {
+        "root": str,
+        "paths": [str]
+      }
+    ]
+  }"""
+        return text

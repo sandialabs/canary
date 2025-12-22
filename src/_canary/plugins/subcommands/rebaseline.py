@@ -33,7 +33,7 @@ class Rebaseline(CanarySubcommand):
     @staticmethod
     def inview_dir(arg: str) -> str:
         workspace = Workspace.load()
-        if workspace.inside_view(arg):
+        if workspace.relative_to_view(arg):
             return arg
         raise ValueError(f"{arg}: is not in a view")
 

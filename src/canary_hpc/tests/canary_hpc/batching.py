@@ -36,11 +36,11 @@ def generate_files(tmpdir):
 
 
 def generate_testcases(dirname):
+    import _canary.collect
     import _canary.testcase
     import _canary.testexec
-    import _canary.workspace
 
-    generators = _canary.workspace.find_generators_in_path(dirname)
+    generators = _canary.collect.find_generators_in_path(dirname)
     specs = generate_specs(generators)
     lookup = {}
     cases = []

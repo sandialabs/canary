@@ -49,10 +49,10 @@ class Help(CanarySubcommand):
     def print_pathspec_help(args: argparse.Namespace) -> None:
         from .run import PathSpec
 
-        print(PathSpec.pathspec_help())
+        print(PathSpec.canary_help())
 
     @staticmethod
     def print_pathfile_help(args: argparse.Namespace) -> None:
-        from .run import PathSpec
+        from .run import ReadPathsFromFile
 
-        print(PathSpec.pathfile_help())
+        print(ReadPathsFromFile.canary_help())

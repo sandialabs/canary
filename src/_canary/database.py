@@ -66,30 +66,40 @@ class WorkspaceDatabase:
     def create(cls, path: Path) -> "WorkspaceDatabase":
         self = cls(path)
         with self.connection:
-            query = """CREATE TABLE IF NOT EXISTS specs (
-              spec_id TEXT PRIMARY KEY,
-              signature TEXT NOT NULL,
-              file TEXT NOT NULL,
-              data BLOB NOT NULL
-            )"""
-            self.connection.execute(query)
+            sql = "CREATE TABLE IF NOT EXISTS specs (spec_id TEXT PRIMARY KEY, data BLOB NOT NULL)"
+            self.connection.execute(sql)
 
-            query = """CREATE TABLE IF NOT EXISTS spec_deps (
+            sql = """CREATE TABLE IF NOT EXISTS specs_meta (
+              spec_id TEXT NOT NULL,
+              source TEXT NOT NULL,
+              view TEXT NOT NULL,
+              gen_signature TEXT NOT NULL,
+              PRIMARY KEY (spec_id, gen_signature)
+            )"""
+            self.connection.execute(sql)
+
+            sql = "CREATE INDEX IF NOT EXISTS ix_spec_meta_src ON specs_meta (source)"
+            self.connection.execute(sql)
+
+            sql = "CREATE INDEX IF NOT EXISTS ix_spec_meta_view ON specs_meta (view)"
+            self.connection.execute(sql)
+
+            sql = """CREATE TABLE IF NOT EXISTS spec_deps (
               spec_id TEXT NOT NULL,
               dep_id TEXT NOT NULL,
               PRIMARY KEY (spec_id, dep_id),
               FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
               FOREIGN KEY (dep_id)  REFERENCES specs(spec_id)
             )"""
-            self.connection.execute(query)
+            self.connection.execute(sql)
 
-            query = "CREATE INDEX IF NOT EXISTS ix_spec_deps_spec_id ON spec_deps (spec_id)"
-            self.connection.execute(query)
+            sql = "CREATE INDEX IF NOT EXISTS ix_spec_deps_spec_id ON spec_deps (spec_id)"
+            self.connection.execute(sql)
 
-            query = "CREATE INDEX IF NOT EXISTS ix_spec_deps_dep_id ON spec_deps (dep_id)"
-            self.connection.execute(query)
+            sql = "CREATE INDEX IF NOT EXISTS ix_spec_deps_dep_id ON spec_deps (dep_id)"
+            self.connection.execute(sql)
 
-            query = """CREATE TABLE IF NOT EXISTS selections (
+            sql = """CREATE TABLE IF NOT EXISTS selections (
               id TEXT PRIMARY KEY,
               tag TEXT UNIQUE,
               gen_signature TEXT,
@@ -104,17 +114,17 @@ class WorkspaceDatabase:
               fingerprint TEXT
             )
             """
-            self.connection.execute(query)
+            self.connection.execute(sql)
 
-            query = """CREATE TABLE IF NOT EXISTS selection_specs (
+            sql = """CREATE TABLE IF NOT EXISTS selection_specs (
               selection_id TEXT,
               spec_id TEXT,
               PRIMARY KEY (selection_id, spec_id),
               FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
             )"""
-            self.connection.execute(query)
+            self.connection.execute(sql)
 
-            query = """CREATE TABLE IF NOT EXISTS results (
+            sql = """CREATE TABLE IF NOT EXISTS results (
             spec_id TEXT,
             spec_name TEXT,
             spec_fullname TEXT,
@@ -133,13 +143,13 @@ class WorkspaceDatabase:
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
             )"""
-            self.connection.execute(query)
+            self.connection.execute(sql)
 
-            query = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)"
-            self.connection.execute(query)
+            sql = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)"
+            self.connection.execute(sql)
 
-            query = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
-            self.connection.execute(query)
+            sql = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
+            self.connection.execute(sql)
 
         return self
 
@@ -151,8 +161,9 @@ class WorkspaceDatabase:
     def close(self):
         self.connection.close()
 
-    def put_specs(self, signature: str, specs: list[ResolvedSpec]) -> None:
-        spec_rows: list[tuple[str, str, str, bytes]] = []
+    def put_specs(self, gen_signature: str, specs: list[ResolvedSpec]) -> None:
+        spec_rows: list[tuple[str, bytes]] = []
+        meta_rows: list[tuple[str, str, str, str]] = []
         dep_rows: list[tuple[str, str]] = []
         for spec in specs:
             try:
@@ -161,7 +172,10 @@ class WorkspaceDatabase:
                 blob = pickle.dumps(spec, protocol=pickle.HIGHEST_PROTOCOL)
             finally:
                 spec.dependencies = deps
-            spec_rows.append((spec.id, signature, str(spec.file), blob))
+            spec_rows.append((spec.id, blob))
+            view = Path(spec.execpath) / spec.file.name
+            source = spec.file
+            meta_rows.append((spec.id, source.as_posix(), view.as_posix(), gen_signature))
             for dep in spec.dependencies:
                 dep_rows.append((spec.id, dep.id))
         with self.connection:
@@ -173,11 +187,20 @@ class WorkspaceDatabase:
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
-                  INSERT INTO specs (spec_id, signature, file, data)
-                  VALUES (?, ?, ?, ?)
-                  ON CONFLICT(spec_id) DO UPDATE SET signature=excluded.signature, data=excluded.data
+                  INSERT INTO specs (spec_id, data)
+                  VALUES (?, ?)
+                  ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
                   """,
                 spec_rows,
+            )
+            self.connection.executemany(
+                """
+                  INSERT INTO specs_meta (spec_id, source, view, gen_signature)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT(spec_id, gen_signature)
+                    DO UPDATE SET source=excluded.source, view=excluded.view
+                  """,
+                meta_rows,
             )
 
             # 3. Bulk delete old dependencies for these specs
@@ -236,10 +259,10 @@ class WorkspaceDatabase:
                 raise ValueError(f"Ambiguous spec ID {id!r}")
             ids[i] = row[0]
 
-    def get_specs(
+    def load_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[ResolvedSpec]:
-        rows: list[tuple[str, str, str, bytes]]
+        rows: list[tuple[str, bytes]]
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
@@ -247,40 +270,47 @@ class WorkspaceDatabase:
         upstream = self.get_upstream_ids(ids)
         load_ids = list(upstream.union(ids))
         rows = []
-        base_query = "SELECT * FROM specs WHERE spec_id IN"
+        base_sql = "SELECT * FROM specs WHERE spec_id IN"
         for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
             chunk = load_ids[i : i + SQL_CHUNK_SIZE]
             placeholders = ",".join("?" for _ in chunk)
-            query = f"{base_query} ({placeholders})"
-            cursor = self.connection.execute(query, chunk)
+            sql = f"{base_sql} ({placeholders})"
+            cursor = self.connection.execute(sql, chunk)
             rows.extend(cursor.fetchall())
         specs = self._reconstruct_specs(rows)
         if include_upstreams:
             return specs
         return [spec for spec in specs if spec.id in ids]
 
-    def get_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
+    def load_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
         rows = self.connection.execute(
-            "SELECT * FROM specs WHERE signature = ?", (signature,)
+            """
+            SELECT s.spec_id, s.data
+            FROM specs s
+            JOIN specs_meta sm
+            ON s.spec_id = sm.spec_id
+            where sm.gen_signature = ?
+            """,
+            (signature,),
         ).fetchall()
         return self._reconstruct_specs(rows)
 
-    def get_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
+    def load_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
         rows = self.connection.execute(
             """
-            SELECT ss.spec_id
-            FROM selections s
-            JOIN selection_specs ss
-            ON ss.selection_id = s.id
-            WHERE s.tag = ?
+            SELECT s.spec_id, s.data
+            FROM specs s
+            JOIN specs_meta sm ON s.spec_id = sm.spec_id
+            JOIN selections sel ON sel.signature = sm.gen_signature
+            WHERE sel.tag = ?
             """,
             (tag,),
         ).fetchall()
         if not rows:
             raise NotASelection(tag)
-        return self.get_specs([r[0] for r in rows])
+        return self._reconstruct_specs(rows)
 
-    def _reconstruct_specs(self, rows: list[tuple[str, str, str, bytes]]) -> list[ResolvedSpec]:
+    def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[ResolvedSpec]:
         specs: dict[str, ResolvedSpec] = {}
         for row in rows:
             spec = pickle.loads(row[-1])  # nosec 301
@@ -296,12 +326,12 @@ class WorkspaceDatabase:
         if not ids:
             return self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
         rows: list[tuple[str, str]] = []
-        base_query = "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN"
+        base_sql = "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN"
         for i in range(0, len(ids), SQL_CHUNK_SIZE):
             chunk = ids[i : i + SQL_CHUNK_SIZE]
             placeholders = ",".join("?" for _ in chunk)
-            query = f"{base_query} ({placeholders})"
-            cursor = self.connection.execute(query, chunk)
+            sql = f"{base_sql} ({placeholders})"
+            cursor = self.connection.execute(sql, chunk)
             rows.extend(cursor.fetchall())
         return rows
 
@@ -382,7 +412,7 @@ class WorkspaceDatabase:
         for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
             chunk = load_ids[i : i + SQL_CHUNK_SIZE]
             placeholders = ", ".join("?" for _ in chunk)
-            query = f"""\
+            sql = f"""\
               SELECT r.*
                 FROM results AS r
                 WHERE r.spec_id in ({placeholders})
@@ -392,7 +422,7 @@ class WorkspaceDatabase:
                   WHERE r2.spec_id = r.spec_id
                 )
             """  # nosec B608
-            cur = self.connection.execute(query, chunk)  # nosec B608
+            cur = self.connection.execute(sql, chunk)  # nosec B608
             rows.extend(cur.fetchall())
         return {row[0]: self._reconstruct_results(row) for row in rows}
 
@@ -545,7 +575,7 @@ class WorkspaceDatabase:
         if seeds is None:
             return set(), set()
         downstream = self.get_downstream_ids(seeds)
-        upstream = self.get_upstream_ids(list(downstream.union(seeds)))
+        upstream = self.get_upstream_ids(downstream.union(seeds))
         return upstream, downstream
 
     def get_downstream_ids(self, seeds: Iterable[str]) -> set[str]:
@@ -553,7 +583,7 @@ class WorkspaceDatabase:
         if not seeds:
             return set()
         values = ",".join("(?)" for _ in seeds)
-        query = f"""
+        sql = f"""
         WITH RECURSIVE
         seeds(id) AS (VALUES {values}),
         downstream(id) AS (
@@ -567,15 +597,16 @@ class WorkspaceDatabase:
         )
         SELECT DISTINCT id FROM downstream
         """  #  nosec B608
-        rows = self.connection.execute(query, tuple(seeds)).fetchall()
+        rows = self.connection.execute(sql, tuple(seeds)).fetchall()
         return {r[0] for r in rows}
 
-    def get_upstream_ids(self, seeds: list[str]) -> set[str]:
+    def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
         """Return dependents in reverse instantiation order."""
         if not seeds:
             return set()
-        values = ",".join("(?)" for _ in seeds)
-        query = f"""
+        seed_vals = tuple(seeds)
+        values = ",".join("(?)" for _ in seed_vals)
+        sql = f"""
         WITH RECURSIVE
         seeds(id) AS (VALUES {values}),
         upstream(id) AS (
@@ -589,7 +620,7 @@ class WorkspaceDatabase:
         )
         SELECT DISTINCT id FROM upstream
         """  # nosec B608
-        rows = self.connection.execute(query, tuple(seeds)).fetchall()
+        rows = self.connection.execute(sql, seed_vals).fetchall()
         return {r[0] for r in rows}
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
@@ -605,6 +636,99 @@ class WorkspaceDatabase:
         for spec_id, dep_id in rows:
             graph[spec_id].append(dep_id)
         return graph
+
+    def get_partial_specs(self, *, tag: str | None = None) -> list["PartialSpec"]:
+        if tag == ":all:":
+            tag = None
+        clauses: list[str] = []
+        params: list[str] = []
+        join = ""
+        if tag is not None:
+            join = """
+            JOIN selection_specs ss ON ss.spec_id = s.spec_id
+            JOIN selections sel ON sel.id = ss.selection_id
+            """
+            clauses.append("sel.tag = ?")
+            params.append(tag)
+        where = "" if not clauses else "WHERE " + " AND ".join(clauses)
+        sql = f"""
+        WITH latest_session AS (
+          SELECT spec_id, MAX(session) AS session
+          FROM results
+          GROUP BY spec_id
+        ),
+        latest_results AS (
+          SELECT
+            r.spec_id,
+            r.finished_on,
+            r.status_category,
+            r.status_status
+          FROM results r
+          JOIN latest_session ls
+          ON r.spec_id = ls.spec_id
+          AND r.session = ls.session
+        )
+        SELECT
+          s.spec_id,
+          sm.source,
+          sm.view,
+          lr.finished_on,
+          lr.status_category,
+          lr.status_status
+        FROM specs s
+        JOIN specs_meta sm
+          ON sm.spec_id = s.spec_id
+        LEFT JOIN latest_results lr
+          ON lr.spec_id = s.spec_id
+        {join}
+        {where}
+        """  # nosec B608
+        rows = self.connection.execute(sql, params).fetchall()
+        candidates: list[PartialSpec] = []
+        for row in rows:
+            start: float = -1
+            started_on = row[3]
+            if started_on and started_on != "NA":
+                start = datetime.datetime.fromisoformat(started_on).timestamp()
+            c = PartialSpec(
+                id=row[0],
+                file=Path(row[1]),
+                view=row[2],
+                started_at=start,
+                result_category=row[4],
+                result_status=row[5],
+            )
+            candidates.append(c)
+        return candidates
+
+    def select_from_view(self, prefixes: list[str]) -> list[str]:
+        """
+        Return spec IDs whose view matches ANY of the provided glob patterns.
+
+        `view` is stored as a TestResults-relative path, e.g.:
+          foo/bar/test_case.py
+
+        """
+        if not prefixes:
+            return []
+        clauses = ["view LIKE ?" if p.endswith("%") else "view = ?" for p in prefixes]
+        sql = f"""
+            SELECT DISTINCT spec_id
+            FROM specs_meta
+            WHERE {" OR ".join(clauses)}
+        """  # nosec B608
+        rows = self.connection.execute(sql, prefixes).fetchall()
+        return [row[0] for row in rows]
+
+
+@dataclasses.dataclass
+class PartialSpec:
+    id: str
+    file: Path
+    view: str
+    result_category: str
+    result_status: str
+    started_at: float
 
 
 def increment_hex_prefix(prefix: str) -> str | None:

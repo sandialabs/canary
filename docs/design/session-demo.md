@@ -287,3 +287,4 @@ for the increasingly diverse Canary user community. Some potential areas for fee
 * tjfulle: forcefully rerun if explicitly requests
 * tjfulle: should also run all downstreams
 * acrobin: restart-like capability to continue test that may have timed out
+* acrobin: --only=changed should work in new session
