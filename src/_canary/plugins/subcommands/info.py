@@ -66,7 +66,7 @@ class Info(CanarySubcommand):
                 fh.write(f"  --owner {o}\n")
         if selection.regex:
             fh.write(f"Regular expression filter:\n  --regex {selection.regex}\n")
-        fh.write("Test specs:")
+        fh.write(f"Test specs ({len(specs)}):")
         table = rich.table.Table("No.", "ID", "Name")
         for i, spec in enumerate(specs):
             table.add_row(str(i), spec.id[:7], spec.display_name(resolve=True, style="rich"))
