@@ -643,9 +643,6 @@ class Workspace:
                 return spec
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
-    def load_testspecs(self, ids: list[str] | None = None) -> list["ResolvedSpec"]:
-        return self.db.load_specs(ids)
-
     def find_specids(self, ids: list[str]) -> list[str | None]:
         specs = self.db.load_specs()
         found: list[str | None] = []

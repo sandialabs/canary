@@ -39,7 +39,6 @@ def main(outdir: Path, files: int, max_params: int, max_rows: int) -> None:
     for group in chunked(filenames, 1_000):
         for fname in group:
             name = Path(fname).stem
-            cache.append(name)
 
             num_params = random.randint(1, max_params)
             num_rows = random.randint(1, max_rows)
@@ -49,10 +48,11 @@ def main(outdir: Path, files: int, max_params: int, max_rows: int) -> None:
 
             kws = random.sample(KEYWORDS, random.randint(0, 3))
             deps = []
-            if random.random() < 0.2:
+            if cache and random.random() < 0.2:
                 dep = random.choice(cache)
                 deps = [dep]
 
+            cache.append(name)
             fp = io.StringIO()
             fp.write("#/usr/bin/env python3\n")
             fp.write("import canary\n")

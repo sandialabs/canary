@@ -47,7 +47,12 @@ class CanaryHPCExecutor:
         n = len(self.cases)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
-        specs = workspace.load_testspecs(ids=self.cases)
+        upstream = workspace.db.get_upstream_ids(seeds=self.cases)
+        loadspecs = upstream.union(self.cases)
+        specs = workspace.db.load_specs(ids=list(loadspecs))
+        for spec in specs:
+            if spec.id not in self.cases:
+                spec.mask = canary.Mask(True, reason=f"Case not in batch {self.batch}")
         session = workspace.run(specs, reuse_session=self.session, update_view=False, only="all")
         return session.returncode
 
