@@ -209,7 +209,8 @@ class Config:
 
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
-            timeouts: dict[str, float] = data.setdefault("timeout", {})
+            runcfg: dict[str, Any] = data.setdefault("run", {})
+            timeouts: dict[str, float] = runcfg.setdefault("timeout", {})
             for key, val in t.items():
                 timeouts[key] = float(val)
 

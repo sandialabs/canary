@@ -104,7 +104,8 @@ class ResourceQueueExecutor:
             # config object in the subprocess will read in the archive and use it to re-establish
             # the correct config
             ws = Workspace.load()
-            f = ws.tmp_dir / f"{uuid4().hex[:8]}.json"
+            f = ws.tmp_dir / f"config/{uuid4().hex[:8]}.json"
+            f.parent.mkdir(parents=True, exist_ok=True)
             with open(f, "w") as fh:
                 config.dump(fh)
             os.environ[config.CONFIG_ENV_FILENAME] = str(f)
@@ -116,8 +117,6 @@ class ResourceQueueExecutor:
         return self
 
     def __exit__(self, *args):
-        if f := os.getenv(config.CONFIG_ENV_FILENAME):
-            Path(f).unlink(missing_ok=True)
         self.entered = False
         self.started_on = -1.0
 
@@ -247,7 +246,8 @@ class ResourceQueueExecutor:
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
                     slot.job.refresh()
                     slot.job.set_status(
-                        status="TIMEOUT", reason=f"Job timed out after {total_timeout} s."
+                        status="TIMEOUT",
+                        reason=f"Job timed out after {slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
                     )
                     slot.job.measurements.update(measurements)
                     slot.job.save()

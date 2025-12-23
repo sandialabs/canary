@@ -18,7 +18,7 @@ from typing import Any
 from typing import Iterable
 
 PARAM_NAMES: list[str] = ["a", "b", "c", "x", "y", "z"]
-KEYWORDS: list[str] = ["fast", "slow", "cpu", "gpu", "io", "stress"]
+KEYWORDS: list[str] = ["fast", "long", "spam", "eggs", "ham"]
 
 
 def chunked(seq: list[str], size: int) -> Iterable[list[str]]:
