@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Iterable
 
 from .protocols import JobProtocol
 from .resource_pool.rpool import ResourceUnavailable
@@ -146,7 +147,8 @@ class ResourceQueue:
             if deferred_slots:
                 self.alogger.emit(
                     tuple(sorted(self._busy)),
-                    f"Queue busy: deferred={len(deferred_slots)}, running={len(self._busy)}",
+                    f"Queue busy: {len(deferred_slots)} deferred, "
+                    f"{len(self._busy)} running (ids={truncate(self._busy)})",
                 )
                 self.raise_if_stuck(deferred_slots)
                 raise Busy
@@ -325,6 +327,13 @@ class AdaptiveDebugLogger:
             logger.debug(msg, *args)
             self._last_emit = now
             self._interval = min(self._interval * self.growth, self.max_interval)
+
+
+def truncate(items: Iterable[str]) -> str:
+    ids = [item[:7] for item in items]
+    if len(ids) > 5:
+        ids = [ids[0], ids[1], ids[2], "…", ids[-2], ids[-1]]
+    return ",".join(ids)
 
 
 class StuckQueueError(RuntimeError):
