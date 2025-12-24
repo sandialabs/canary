@@ -64,6 +64,7 @@ class ResourceQueue:
         self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
         self.prepared = False
+        self.alogger = AdaptiveDebugLogger()
         if jobs:
             self.put(*jobs)
 
@@ -97,7 +98,7 @@ class ResourceQueue:
                 logger.debug("Queue empty on get()")
                 raise Empty
 
-            deferred_slots = []
+            deferred_slots: list[HeapSlot] = []
             while self._heap:
                 slot = heapq.heappop(self._heap)
                 job = slot.job
@@ -113,7 +114,7 @@ class ResourceQueue:
 
                 if job.status.state not in ("READY", "PENDING"):
                     # Job will never by ready
-                    job.status = Status.ERROR(reason="State became unrunable for unknown reasons")
+                    job.status = Status.ERROR(reason="State became unrunable for unknown reasons")  # type: ignore
                     logger.debug(f"Job {job.id} marked ERROR and removed from queue")
                     self._finished[job.id] = job
                     continue
@@ -143,6 +144,11 @@ class ResourceQueue:
                 heapq.heappush(self._heap, slot)
 
             if deferred_slots:
+                self.alogger.emit(
+                    tuple(sorted(self._busy)),
+                    f"Queue busy: deferred={len(deferred_slots)}, running={len(self._busy)}",
+                )
+                self.raise_if_stuck(deferred_slots)
                 raise Busy
             else:
                 raise Empty
@@ -208,3 +214,118 @@ class ResourceQueue:
                 duration = hhmmss(time.time() - start)
                 row.append(f"in {duration}")
             return ", ".join(row)
+
+    def stuck(self, deferred_slots: list[HeapSlot]) -> bool:
+        if not deferred_slots:
+            return False
+        # If anything is running, progress may still occur
+        if self._busy:
+            return False
+        for slot in deferred_slots:
+            job = slot.job
+            for dep in job.dependencies:
+                if dep.status.state not in ("COMPLETE", "NOTRUN"):
+                    if dep.id in self._busy:
+                        return False
+                    if any(s.job.id == dep.id for s in self._heap):
+                        return False
+                    break
+            else:
+                # All deps satisfied → resource or exclusivity may change
+                return False
+        return True
+
+    def raise_if_stuck(self, deferred_slots: list[HeapSlot]) -> None:
+        if not self.stuck(deferred_slots):
+            return
+
+        lines: list[str] = []
+        lines.append("RESOURCE QUEUE STUCK — NO FORWARD PROGRESS POSSIBLE")
+        lines.append("===================================================")
+        lines.append(f"Queued jobs: {len(self._heap)}")
+        lines.append(f"Busy jobs:   {len(self._busy)}")
+        lines.append(f"Finished:    {len(self._finished)}")
+        lines.append(f"Exclusive:   {self.exclusive_job_id}")
+        lines.append(f"Resources:   {self.rpool!r}")
+        lines.append("")
+
+        lines.append("Blocked jobs breakdown:")
+        for slot in deferred_slots:
+            job = slot.job
+            lines.append(f"- Job {job.id}:")
+            lines.append(f"    state={job.status.state}")
+            lines.append(f"    category={job.status.category}")
+            lines.append(f"    deps={[d.id for d in job.dependencies]}")
+            for reason in self._explain_blockage(slot):
+                lines.append(f"    BLOCKED: {reason}")
+            lines.append("")
+        report = "\n".join(lines)
+        logger.error(report)
+        raise StuckQueueError("ResourceQueue is stuck; see log for detailed diagnostic report")
+
+    def _explain_blockage(self, slot: HeapSlot) -> list[str]:
+        reasons: list[str] = []
+        job = slot.job
+        if job.status.status == "SKIP":
+            reasons.append("job is SKIP")
+        if job.status.state != "READY":
+            reasons.append(f"job state is {job.status.state}")
+        if self.exclusive_job_id and self.exclusive_job_id != job.id:
+            reasons.append(f"exclusive lock held by {self.exclusive_job_id}")
+        for dep in job.dependencies:
+            if dep.status.state not in ("DONE", "SKIP"):
+                if dep.id in self._busy:
+                    reasons.append(f"dependency {dep.id} running")
+                elif any(s.job.id == dep.id for s in self._heap):
+                    reasons.append(f"dependency {dep.id} queued")
+                else:
+                    reasons.append(f"dependency {dep.id} unreachable (state={dep.status.state})")
+        acquired: dict[str, list[dict]] = {}
+        try:
+            acquired = self.rpool.checkout(slot.resources)
+            self.rpool.checkin(acquired)
+        except Exception as exc:
+            reasons.append(f"resource deadlock: {exc}")
+        finally:
+            if acquired:
+                self.rpool.checkin(acquired)
+        return reasons or ["no identifiable blocker (invariant violated)"]
+
+
+class AdaptiveDebugLogger:
+    """
+    Dynamic debug logger that starts chatty and backs off exponentially
+    while conditions remain unchanged. Resets immediately on state change.
+    """
+
+    def __init__(
+        self,
+        *,
+        min_interval: float = 10.0,
+        max_interval: float = 120.0,
+        growth: float = 1.6,
+    ):
+        self.min_interval = min_interval
+        self.max_interval = max_interval
+        self.growth = growth
+
+        self._interval = min_interval
+        self._last_emit = 0.0
+        self._last_signature: tuple[str, ...] = ()
+
+    def emit(self, signature: tuple[str, ...], msg: str, *args) -> None:
+        now = time.monotonic()
+
+        if signature != self._last_signature:
+            self._interval = self.min_interval
+            self._last_signature = signature
+            self._last_emit = 0.0
+
+        if now - self._last_emit >= self._interval:
+            logger.debug(msg, *args)
+            self._last_emit = now
+            self._interval = min(self._interval * self.growth, self.max_interval)
+
+
+class StuckQueueError(RuntimeError):
+    """Queue is logically incapable of making progress."""
