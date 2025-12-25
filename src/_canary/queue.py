@@ -90,7 +90,7 @@ class ResourceQueue:
                 raise ValueError(f"Not enough resources for job {job}")
             slot = HeapSlot(job=job)
             heapq.heappush(self._heap, slot)
-            logger.debug(f"Job {job.id} added to queue with cost {-slot.cost}")
+            logger.debug(f"Job {job.id[:7]} added to queue with cost {-slot.cost}")
             self._dependents[job.id] = list(job.dependencies)
 
     def get(self) -> JobProtocol:
@@ -109,14 +109,14 @@ class ResourceQueue:
                     continue
 
                 if job.status.category == "SKIP":
-                    logger.debug(f"Job {job.id} with status SKIP and removed from queue")
+                    logger.debug(f"Job {job.id[:7]} with status SKIP and removed from queue")
                     self._finished[job.id] = job
                     continue
 
                 if job.status.state not in ("READY", "PENDING"):
                     # Job will never by ready
                     job.status = Status.ERROR(reason="State became unrunable for unknown reasons")  # type: ignore
-                    logger.debug(f"Job {job.id} marked ERROR and removed from queue")
+                    logger.debug(f"Job {job.id[:7]} marked ERROR and removed from queue")
                     self._finished[job.id] = job
                     continue
 
@@ -133,6 +133,7 @@ class ResourceQueue:
                 job.assign_resources(acquired)
                 self._busy[job.id] = job
                 if job.exclusive:
+                    logger.debug(f"Exclusive job {job.id[:7]} started, exclusive lock obtained")
                     self.exclusive_job_id = job.id
 
                 for slot in deferred_slots:
@@ -162,15 +163,17 @@ class ResourceQueue:
 
     def done(self, job: JobProtocol) -> None:
         with self.lock:
-            if job.id not in self._busy:
-                raise RuntimeError(f"Job {job} is not running")
-            self._finished[job.id] = self._busy.pop(job.id)
+            job = self._busy.pop(job.id, None)
+            if job is None:
+                logger.error(f"queue.done() called for non-busy job {job.id[:7]}")
+                return
+            self._finished[job.id] = job
             if job.exclusive:
                 self.exclusive_job_id = None
-                logger.debug(f"Exclusive job {job.id} finished, exclusive lock released")
+                logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
             self.rpool.checkin(job.free_resources())
             self.update_pending(job)
-            logger.debug(f"Job {job.id} marked done")
+            logger.debug(f"Job {job.id[:7]} marked done")
 
     def update_pending(self, finished_job: Any) -> None:
         """Update dependencies of jobs still in the heap."""
@@ -247,14 +250,15 @@ class ResourceQueue:
         lines.append(f"Queued jobs: {len(self._heap)}")
         lines.append(f"Busy jobs:   {len(self._busy)}")
         lines.append(f"Finished:    {len(self._finished)}")
-        lines.append(f"Exclusive:   {self.exclusive_job_id}")
+        xid = "none" if self.exclusive_job_id is None else self.exclusive_job_id[:7]
+        lines.append(f"Exclusive:   {xid}")
         lines.append(f"Resources:   {self.rpool!r}")
         lines.append("")
 
         lines.append("Blocked jobs breakdown:")
         for slot in deferred_slots:
             job = slot.job
-            lines.append(f"- Job {job.id}:")
+            lines.append(f"- Job {job.id[:7]}:")
             lines.append(f"    state={job.status.state}")
             lines.append(f"    category={job.status.category}")
             lines.append(f"    deps={[d.id for d in job.dependencies]}")
@@ -273,7 +277,7 @@ class ResourceQueue:
         if job.status.state != "READY":
             reasons.append(f"job state is {job.status.state}")
         if self.exclusive_job_id and self.exclusive_job_id != job.id:
-            reasons.append(f"exclusive lock held by {self.exclusive_job_id}")
+            reasons.append(f"exclusive lock held by {self.exclusive_job_id[:7]}")
         for dep in job.dependencies:
             if dep.status.state not in ("DONE", "SKIP"):
                 if dep.id in self._busy:
@@ -301,12 +305,8 @@ class AdaptiveDebugLogger:
     """
 
     def __init__(
-        self,
-        *,
-        min_interval: float = 10.0,
-        max_interval: float = 120.0,
-        growth: float = 1.6,
-    ):
+        self, min_interval: float = 10.0, max_interval: float = 120.0, growth: float = 1.6
+    ) -> None:
         self.min_interval = min_interval
         self.max_interval = max_interval
         self.growth = growth
@@ -315,7 +315,7 @@ class AdaptiveDebugLogger:
         self._last_emit = 0.0
         self._last_signature: tuple[str, ...] = ()
 
-    def emit(self, signature: tuple[str, ...], msg: str, *args) -> None:
+    def emit(self, signature: tuple[str, ...], msg: str) -> None:
         now = time.monotonic()
 
         if signature != self._last_signature:
@@ -324,7 +324,7 @@ class AdaptiveDebugLogger:
             self._last_emit = 0.0
 
         if now - self._last_emit >= self._interval:
-            logger.debug(msg, *args)
+            logger.debug(msg)
             self._last_emit = now
             self._interval = min(self._interval * self.growth, self.max_interval)
 

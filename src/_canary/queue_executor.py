@@ -96,6 +96,10 @@ class ResourceQueueExecutor:
         self.entered: bool = False
         self.started_on: float = -1.0
 
+        self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
+        if os.getenv("CANARY_LEVEL") == "1":
+            self.enable_live_monitoring = False
+
     def __enter__(self) -> "ResourceQueueExecutor":
         from .workspace import Workspace
 
@@ -133,18 +137,17 @@ class ResourceQueueExecutor:
         qrank, qsize = 0, len(self.queue)
         start = time.time()
 
-        enable_live_monitoring = not config.get("debug") and sys.stdin.isatty()
-        if os.getenv("CANARY_LEVEL") == "1":
-            enable_live_monitoring = False
-        with CanaryLive(self._render_dashboard, enable=enable_live_monitoring) as live:
+        with CanaryLive(self._render_dashboard, enable=self.enable_live_monitoring) as live:
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
                         self._terminate_all(signal.SIGUSR2)
+                        self._check_for_leaks(where="_terminate_all")
                         raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
 
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
+                    self._check_for_leaks(where="_check_finished_processes")
                     live.update()
 
                     # Wait for a slot if at max capacity
@@ -189,11 +192,13 @@ class ResourceQueueExecutor:
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
+                    self._check_for_leaks(where="_terminate_all")
                     live.update(final=True)
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
+                    self._check_for_leaks(where="_terminate_all")
                     live.update(final=True)
                     raise
 
@@ -210,21 +215,19 @@ class ResourceQueueExecutor:
         return compute_returncode(self.queue.cases())
 
     def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if logging.get_level() > logging.INFO:
+        if self.enable_live_monitoring:
             return
         fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
         logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
 
     def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if logging.get_level() > logging.INFO:
+        if self.enable_live_monitoring:
             return
         fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
         fmt.write(
             "[bold]Finished[/] job %s: %s: %s"
@@ -234,16 +237,27 @@ class ResourceQueueExecutor:
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
-        current_time = time.time()
-
+        now = time.time()
+        timed_out: list[tuple[int, ExecutionSlot]] = []
         for pid, slot in list(self.inflight.items()):
-            if slot.proc.is_alive():
-                total_timeout = slot.job.timeout * self.timeout_multiplier
-                elapsed = current_time - slot.start_time
-                if elapsed > total_timeout:
-                    # Get measurements before killing
+            if not slot.proc.is_alive():
+                continue
+            total_timeout = slot.job.timeout * self.timeout_multiplier
+            if now - slot.start_time > total_timeout:
+                timed_out.append((pid, slot))
+        for pid, slot in timed_out:
+            self.inflight.pop(pid, None)
+            self.finished[pid] = slot
+            try:
+                try:
                     measurements = slot.proc.get_measurements()
+                except Exception:
+                    measurements = {}
+                try:
                     slot.proc.shutdown(signal.SIGTERM, grace_period=0.05)
+                except Exception:
+                    logger.exception(f"Failed shutting down timed-out process {pid}")
+                try:
                     slot.job.refresh()
                     slot.job.set_status(
                         status="TIMEOUT",
@@ -251,15 +265,19 @@ class ResourceQueueExecutor:
                     )
                     slot.job.measurements.update(measurements)
                     slot.job.save()
-                    slot.proc.join()
-                    self.finished[pid] = self.inflight.pop(pid)
-                    self.queue.done(slot.job)
-                    self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                except Exception:
+                    logger.exception(f"Failed joining timed-out process {pid}")
+            except Exception:
+                logger.exception(f"Unexpected timeout finalization error for job {slot.job.id[:7]}")
+            finally:
+                self.queue.done(slot.job)
+                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
     def _check_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
         self._check_timeouts()
+        self._check_for_leaks(where="_check_timeouts")
 
         if Path("canary.kill").exists():
             Path("canary.kill").unlink()
@@ -270,42 +288,49 @@ class ResourceQueueExecutor:
         for pid in finished_pids:
             slot = self.inflight.pop(pid)
             self.finished[pid] = slot
-
-            # Get the final result before cleaning up
-            result = None
             try:
-                result = slot.queue.get_nowait()
-            except (EmptyResultQueue, OSError):
-                pass
+                # Get the final result before cleaning up
+                try:
+                    result = slot.queue.get_nowait()
+                except (EmptyResultQueue, OSError):
+                    slot.job.set_status(
+                        status="ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
+                    )
+                else:
+                    slot.job.on_result(result)
+
+                # Get measurements and store in job
+                measurements = slot.proc.get_measurements()
+                slot.job.measurements.update(measurements)
+                slot.job.save()
             except Exception:
-                logger.exception(f"Error retrieving result for {slot.job}")
+                logger.exception(f"Post-processing failed for job {slot.job}")
+                slot.job.set_status(status="ERROR", reason="Post-processing failure")
+            finally:
+                try:
+                    slot.queue.close()
+                    slot.queue.join_thread()
+                except Exception:  # nosec B110
+                    pass
 
-            if result is not None:
-                slot.job.on_result(result)
-            else:
-                slot.job.set_status(
-                    status="ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
-                )
+                try:
+                    slot.proc.join()  # Clean up the process
+                except Exception:  # nosec B110
+                    pass
 
-            # Get measurements and store in job
-            measurements = slot.proc.get_measurements()
-            slot.job.measurements.update(measurements)
-            slot.job.save()
+                self.queue.done(slot.job)
+                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
-            try:
-                slot.queue.close()
-                slot.queue.join_thread()
-            except Exception:  # nosec B110
-                pass
-
-            slot.proc.join()  # Clean up the process
-            self.queue.done(slot.job)
-            self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+    def _check_for_leaks(self, *, where: str) -> None:
+        leaked = set(self.queue._busy) - {slot.job.id for slot in self.inflight.values()}
+        if leaked:
+            logger.critical(f"Leaked busy jobs detected {','.join(leaked)} at {where}")
 
     def _wait_for_slot(self) -> None:
         """Wait until a process slot is available."""
         while len(self.inflight) >= self.max_workers:
             self._check_finished_processes()
+            self._check_for_leaks(where="_check_finished_processes")
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
@@ -313,36 +338,63 @@ class ResourceQueueExecutor:
         """Wait for all active processes to complete."""
         while self.inflight:
             self._check_finished_processes()
+            self._check_for_leaks(where="_check_finished_processes")
             if self.inflight:
                 time.sleep(0.075)
             live.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
-        for pid, slot in list(self.inflight.items()):
-            if slot.proc.is_alive():
-                measurements = slot.proc.get_measurements()
-                slot.proc.shutdown(signum, grace_period=0.05)
-                slot.job.refresh()
-                stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
-                slot.job.set_status(status=stat, reason=f"Job terminated with code {signum}")
-                slot.job.measurements.update(measurements)
-                slot.job.save()
+        inflight = list(self.inflight.items())
+        self.inflight.clear()
+        for pid, slot in inflight:
+            try:
+                if slot.proc.is_alive():
+                    try:
+                        measurements = slot.proc.get_measurements()
+                    except Exception:
+                        measurements = {}
+                    try:
+                        slot.proc.shutdown(signum, grace_period=0.05)
+                    except Exception:
+                        logger.exception(f"Failed shutting down process {pid}")
+                    slot.job.refresh()
+                    stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
+                    slot.job.set_status(status=stat, reason=f"Job terminated with signal {signum}")
+                    slot.job.measurements.update(measurements)
+                    try:
+                        slot.job.save()
+                    except Exception:
+                        logger.exception(f"Failed saving job {slot.job.id[:7]}")
+
+                try:
+                    slot.proc.join(timeout=0.1)
+                except Exception:
+                    logger.exception(f"Failed joining process {pid}")
+
+            except Exception:
+                logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
+            finally:
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
         # Force kill if still alive
-        for pid, slot in self.inflight.items():
-            if slot.proc.is_alive():
-                logger.warning(f"Killing process {pid} (job {slot.job})")
-                slot.proc.kill()
+        for pid, slot in inflight:
+            try:
+                if slot.proc.is_alive():
+                    logger.warning(f"Killing process {pid} (job {slot.job})")
+                    slot.proc.kill()
+            except Exception:
+                logger.exception(f"Failed force-killing process {pid}")
 
         # Clean up
-        for slot in self.inflight.values():
-            slot.proc.join()
+        for pid, slot in inflight:
+            try:
+                slot.proc.join(timeout=0.1)
+            except Exception:  # nosec B110
+                pass
 
-        self.finished.update(self.inflight)
-        self.inflight.clear()
+        self.finished.update(inflight)
         self.queue.clear("CANCELLED" if signum == signal.SIGINT else "ERROR")
 
     @cached_property
