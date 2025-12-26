@@ -81,6 +81,7 @@ class TestBatch:
         self.exclusive = False
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
+        self.dependencies: list["TestBatch"] = []
 
     def __iter__(self):
         return iter(self.cases)
