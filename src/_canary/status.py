@@ -19,6 +19,7 @@ class Status:
 
     # Status definitions: (default_code, color, glyph, extra label)
     states: set[str] = {"PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE"}
+    terminal_states = frozenset(("NOTRUN", "COMPLETE"))
     categories: dict[str, tuple[str, ...]] = {
         "PASS": ("SUCCESS", "XDIFF", "XFAIL"),
         "FAIL": ("DIFFED", "FAILED", "ERROR", "BROKEN", "TIMEOUT", "INVALID"),

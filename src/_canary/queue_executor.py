@@ -226,14 +226,17 @@ class ResourceQueueExecutor:
     def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
         if self.enable_live_monitoring:
             return
-        fmt = io.StringIO()
-        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write(
-            "[bold]Finished[/] job %s: %s: %s"
-            % (job.id[:7], job.display_name(), job.status.display_name())
-        )
-        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+        try:
+            fmt = io.StringIO()
+            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
+            fmt.write(
+                "[bold]Finished[/] job %s: %s: %s"
+                % (job.id[:7], job.display_name(), job.status.display_name())
+            )
+            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+        except Exception:
+            logger.exception(f"Failed logging finished state of {job.id[:7]}")
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -267,8 +270,10 @@ class ResourceQueueExecutor:
                     slot.job.save()
                 except Exception:
                     logger.exception(f"Failed joining timed-out process {pid}")
+
             except Exception:
                 logger.exception(f"Unexpected timeout finalization error for job {slot.job.id[:7]}")
+
             finally:
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
@@ -374,6 +379,7 @@ class ResourceQueueExecutor:
 
             except Exception:
                 logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
+
             finally:
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)

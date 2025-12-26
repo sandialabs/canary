@@ -162,18 +162,21 @@ class ResourceQueue:
             slot.job.set_status(status=status)
 
     def done(self, job: JobProtocol) -> None:
-        with self.lock:
-            job = self._busy.pop(job.id, None)
-            if job is None:
-                logger.error(f"queue.done() called for non-busy job {job.id[:7]}")
-                return
-            self._finished[job.id] = job
-            if job.exclusive:
-                self.exclusive_job_id = None
-                logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
-            self.rpool.checkin(job.free_resources())
-            self.update_pending(job)
-            logger.debug(f"Job {job.id[:7]} marked done")
+        try:
+            with self.lock:
+                job = self._busy.pop(job.id, None)
+                if job is None:
+                    logger.error(f"queue.done() called for non-busy job {job.id[:7]}")
+                    return
+                self._finished[job.id] = job
+                if job.exclusive:
+                    self.exclusive_job_id = None
+                    logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
+                self.rpool.checkin(job.free_resources())
+                self.update_pending(job)
+                logger.debug(f"Job {job.id[:7]} marked done")
+        except Exception:
+            logger.exception(f"Failed to mark {job.id[:7]} as done")
 
     def update_pending(self, finished_job: Any) -> None:
         """Update dependencies of jobs still in the heap."""
@@ -204,7 +207,7 @@ class ResourceQueue:
             total = done + busy + pending
             totals: Counter[tuple[str, str]] = Counter()
             for job in self._finished.values():
-                if job.status.state in ("COMPLETE", "NOTRUN"):
+                if job.status.state in Status.terminal_states:
                     key = (job.status.category, job.status.status)
                     totals[key] += 1
             row: list[str] = []
@@ -223,21 +226,32 @@ class ResourceQueue:
     def stuck(self, deferred_slots: list[HeapSlot]) -> bool:
         if not deferred_slots:
             return False
-        # If anything is running, progress may still occur
-        if self._busy:
-            return False
+
+        # If a running job could unblock a deferred job, progress is possible
+        for running in self._busy.values():
+            if running.status.state not in Status.terminal_states:
+                for slot in deferred_slots:
+                    if any(dep.id == running.id for dep in slot.job.dependencies):
+                        return False
+
+        # Check whether any deferred job could become runnable by other means
         for slot in deferred_slots:
             job = slot.job
+
+            # Dependency analysis
             for dep in job.dependencies:
-                if dep.status.state not in ("COMPLETE", "NOTRUN"):
+                if dep.status.state not in Status.terminal_states:
+                    # If dependency is queued or running, progress may still occur
                     if dep.id in self._busy:
                         return False
                     if any(s.job.id == dep.id for s in self._heap):
                         return False
                     break
             else:
-                # All deps satisfied → resource or exclusivity may change
+                # All dependencies satisfied; resources or exclusivity may change
                 return False
+
+        # No mechanism exists for forward progress
         return True
 
     def raise_if_stuck(self, deferred_slots: list[HeapSlot]) -> None:
@@ -279,7 +293,7 @@ class ResourceQueue:
         if self.exclusive_job_id and self.exclusive_job_id != job.id:
             reasons.append(f"exclusive lock held by {self.exclusive_job_id[:7]}")
         for dep in job.dependencies:
-            if dep.status.state not in ("DONE", "SKIP"):
+            if dep.status.state not in Status.terminal_states:
                 if dep.id in self._busy:
                     reasons.append(f"dependency {dep.id} running")
                 elif any(s.job.id == dep.id for s in self._heap):
