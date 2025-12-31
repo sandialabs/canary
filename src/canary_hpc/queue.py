@@ -56,7 +56,7 @@ class ResourceQueue(queue.ResourceQueue):
             totals: Counter[tuple[str, str]] = Counter()
             for batch in self._finished.values():
                 for case in batch:
-                    if case.status.state == "COMPLETE":
+                    if case.status.is_terminal():
                         key = (case.status.category, case.status.status)
                         totals[key] += 1
             row: list[str] = []

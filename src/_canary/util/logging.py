@@ -194,7 +194,7 @@ def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -
         levelno = get_levelno(level)
     else:
         levelno = level
-    for handler in builtin_logging.getLogger(root_log_name).handlers:
+    for handler in builtin_logging.getLogger().handlers:
         if only == "stream":
             if isinstance(handler, StreamHandler):
                 hold = handler.level
@@ -212,22 +212,24 @@ def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -
 
 
 def setup_logging() -> None:
-    logger = builtin_logging.getLogger(root_log_name)
+    root = builtin_logging.getLogger()
     builtin_logging.addLevelName(TRACE, "TRACE")
     builtin_logging.addLevelName(EMIT, "EMIT")
-    if not logger.handlers:
+    if not root.handlers:
         sh = StreamHandler(sys.stderr)
         fmt = Formatter(color=sys.stderr.isatty())
         sh.setFormatter(fmt)
         sh.setLevel(INFO)
         # set the logger level higher than the streamhandler to assure that the messages of level
         # INFO will be emmitted.
-        logger.addHandler(sh)
-        logger.setLevel(TRACE)
+        root.addHandler(sh)
+        root.setLevel(TRACE)
+    canary = builtin_logging.getLogger(root_log_name)
+    canary.propagate = True
 
 
 def add_file_handler(file: str, levelno: int) -> None:
-    logger = builtin_logging.getLogger(root_log_name)
+    logger = builtin_logging.getLogger()
     for handler in logger.handlers:
         if isinstance(handler, FileHandler) and handler.baseFilename == file:
             return
@@ -260,7 +262,7 @@ def level_color(levelno: int) -> str:
 
 
 def get_level() -> int:
-    logger = builtin_logging.getLogger(root_log_name)
+    logger = builtin_logging.getLogger()
     for handler in logger.handlers:
         if isinstance(handler, StreamHandler):
             return handler.level

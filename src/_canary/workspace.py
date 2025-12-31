@@ -239,6 +239,7 @@ class Workspace:
 
     @classmethod
     def load(cls, start: str | Path | None = None) -> "Workspace":
+        config.ensure_loaded()
         start = Path(start or Path.cwd())
         logger.debug(f"Loading Canary workspace from {start}")
         anchor = cls.find_anchor(start=start)

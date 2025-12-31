@@ -151,7 +151,6 @@ class ResourceQueue:
                     f"Queue busy: {len(deferred_slots)} deferred, "
                     f"{len(self._busy)} running (ids={truncate(self._busy)})",
                 )
-                self.raise_if_stuck(deferred_slots)
                 raise Busy
             else:
                 raise Empty
@@ -223,94 +222,6 @@ class ResourceQueue:
                 row.append(f"in {duration}")
             return ", ".join(row)
 
-    def stuck(self, deferred_slots: list[HeapSlot]) -> bool:
-        if not deferred_slots:
-            return False
-
-        # If a running job could unblock a deferred job, progress is possible
-        for running in self._busy.values():
-            if running.status.state not in Status.terminal_states:
-                for slot in deferred_slots:
-                    if any(dep.id == running.id for dep in slot.job.dependencies):
-                        return False
-
-        # Check whether any deferred job could become runnable by other means
-        for slot in deferred_slots:
-            job = slot.job
-
-            # Dependency analysis
-            for dep in job.dependencies:
-                if dep.status.state not in Status.terminal_states:
-                    # If dependency is queued or running, progress may still occur
-                    if dep.id in self._busy:
-                        return False
-                    if any(s.job.id == dep.id for s in self._heap):
-                        return False
-                    break
-            else:
-                # All dependencies satisfied; resources or exclusivity may change
-                return False
-
-        # No mechanism exists for forward progress
-        return True
-
-    def raise_if_stuck(self, deferred_slots: list[HeapSlot]) -> None:
-        if not self.stuck(deferred_slots):
-            return
-
-        lines: list[str] = []
-        lines.append("RESOURCE QUEUE STUCK — NO FORWARD PROGRESS POSSIBLE")
-        lines.append("===================================================")
-        lines.append(f"Queued jobs: {len(self._heap)}")
-        lines.append(f"Busy jobs:   {len(self._busy)}")
-        lines.append(f"Finished:    {len(self._finished)}")
-        xid = "none" if self.exclusive_job_id is None else self.exclusive_job_id[:7]
-        lines.append(f"Exclusive:   {xid}")
-        lines.append(f"Resources:   {self.rpool!r}")
-        lines.append("")
-
-        lines.append("Blocked jobs breakdown:")
-        for slot in deferred_slots:
-            job = slot.job
-            lines.append(f"- Job {job.id[:7]}:")
-            lines.append(f"    state={job.status.state}")
-            lines.append(f"    category={job.status.category}")
-            lines.append(f"    deps={[d.id for d in job.dependencies]}")
-            for reason in self._explain_blockage(slot):
-                lines.append(f"    BLOCKED: {reason}")
-            lines.append("")
-        report = "\n".join(lines)
-        logger.error(report)
-        raise StuckQueueError("ResourceQueue is stuck; see log for detailed diagnostic report")
-
-    def _explain_blockage(self, slot: HeapSlot) -> list[str]:
-        reasons: list[str] = []
-        job = slot.job
-        if job.status.status == "SKIP":
-            reasons.append("job is SKIP")
-        if job.status.state != "READY":
-            reasons.append(f"job state is {job.status.state}")
-        if self.exclusive_job_id and self.exclusive_job_id != job.id:
-            reasons.append(f"exclusive lock held by {self.exclusive_job_id[:7]}")
-        for dep in job.dependencies:
-            if dep.status.state not in Status.terminal_states:
-                if dep.id in self._busy:
-                    reasons.append(f"dependency {dep.id} running")
-                elif any(s.job.id == dep.id for s in self._heap):
-                    reasons.append(f"dependency {dep.id} queued")
-                else:
-                    reasons.append(f"dependency {dep.id} unreachable (state={dep.status.state})")
-        acquired: dict[str, list[dict]] = {}
-        try:
-            acquired = self.rpool.checkout(slot.resources)
-            self.rpool.checkin(acquired)
-        except Exception as exc:
-            reasons.append(f"resource deadlock: {exc}")
-        finally:
-            if acquired:
-                self.rpool.checkin(acquired)
-        return reasons or ["no identifiable blocker (invariant violated)"]
-
 
 class AdaptiveDebugLogger:
     """
@@ -348,7 +259,3 @@ def truncate(items: Iterable[str]) -> str:
     if len(ids) > 5:
         ids = [ids[0], ids[1], ids[2], "…", ids[-2], ids[-1]]
     return ",".join(ids)
-
-
-class StuckQueueError(RuntimeError):
-    """Queue is logically incapable of making progress."""

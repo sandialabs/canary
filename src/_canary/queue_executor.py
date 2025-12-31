@@ -251,6 +251,7 @@ class ResourceQueueExecutor:
         for pid, slot in timed_out:
             self.inflight.pop(pid, None)
             self.finished[pid] = slot
+            total_timeout = slot.job.timeout * self.timeout_multiplier
             try:
                 try:
                     measurements = slot.proc.get_measurements()
@@ -275,6 +276,10 @@ class ResourceQueueExecutor:
                 logger.exception(f"Unexpected timeout finalization error for job {slot.job.id[:7]}")
 
             finally:
+                logger.debug(
+                    f"ResourceQueueExecutor._check_timeouts(): {slot.job=} timed out after "
+                    f"{slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
+                )
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
@@ -322,14 +327,25 @@ class ResourceQueueExecutor:
                     slot.proc.join()  # Clean up the process
                 except Exception:  # nosec B110
                     pass
-
+                logger.debug(
+                    f"ResourceQueueExecutor._check_finished_processes(): {slot.job=} finished "
+                    f"with status {slot.job.status.status}"
+                )
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
     def _check_for_leaks(self, *, where: str) -> None:
-        leaked = set(self.queue._busy) - {slot.job.id for slot in self.inflight.values()}
-        if leaked:
-            logger.critical(f"Leaked busy jobs detected {','.join(leaked)} at {where}")
+        busy_ids = set(self.queue._busy)
+        inflight_ids = {slot.job.id for slot in self.inflight.values()}
+        if busy_ids != inflight_ids:
+            leaked = busy_ids - inflight_ids
+            missing = inflight_ids - busy_ids
+            logger.critical(f"Busy/inflight mismatch leaked={leaked}, missing={missing}")
+            raise StuckQueueError("Busy/inflight mismatch")
+        terminal_busy = {job.id for job in self.queue._busy.values() if job.status.is_terminal()}
+        if terminal_busy:
+            logger.critical(f"Terminal jobs still marked busy: {','.join(terminal_busy)}")
+            raise StuckQueueError(f"Terminal jobs still busy: {terminal_busy}")
 
     def _wait_for_slot(self) -> None:
         """Wait until a process slot is available."""
@@ -381,6 +397,7 @@ class ResourceQueueExecutor:
                 logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
 
             finally:
+                logger.debug(f"ResourceQueueExecutor._terminate_all(): {slot.job=} terminated")
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
@@ -536,4 +553,8 @@ class CanaryLive:
 
 
 class CanaryKill(Exception):
+    pass
+
+
+class StuckQueueError(Exception):
     pass

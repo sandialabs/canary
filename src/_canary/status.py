@@ -130,6 +130,9 @@ class Status:
         """Convert to int (return code)."""
         return self.code
 
+    def is_terminal(self) -> bool:
+        return self.state in self.terminal_states
+
     @property
     def glyph(self) -> str:
         if self.state in ("PENDING", "READY", "RUNNING"):

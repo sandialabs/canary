@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import logging
 import math
 import os
 import shlex
@@ -29,6 +30,15 @@ class HPCConnectRunner:
 
     def execute(self, batch: "TestBatch") -> int | None:
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
+
+        canary.Workspace.load()
+
+        # Force hpc_connect logger to use the root logger setup by canary
+        hpc = hpc_connect.get_logger("hpc_connect")
+        hpc.handlers.clear()
+        hpc.propagate = True
+        hpc.setLevel(logging.DEBUG)
+
         with batch.workspace.enter():
             proc = self.submit(batch)
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):

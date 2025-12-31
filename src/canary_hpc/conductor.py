@@ -20,6 +20,7 @@ from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
+from _canary.util import logging
 from _canary.util.rich import colorize
 from _canary.util.time import time_in_seconds
 
@@ -276,6 +277,8 @@ class BatchExecutor:
     def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
+        logging.setup_logging()
         backend = hpc_connect.get_backend(kwargs["backend"])
+
         batch.setup()
         batch.run(queue, backend=backend)

@@ -36,6 +36,9 @@ class BatchStatus:
     def reason(self) -> str | None:
         return self.base_status.reason
 
+    def is_terminal(self) -> bool:
+        return self.base_status.is_terminal()
+
     def display_name(self, **kwargs: Any) -> str:
         def sortkey(x):
             n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1

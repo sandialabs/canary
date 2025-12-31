@@ -106,13 +106,13 @@ class Config:
             config.invocation_dir = snapshot["invocation_dir"]
             config.options = argparse.Namespace(**snapshot["options"])
             config.data = snapshot["data"]
-            if not len(logger.handlers):
-                logging.setup_logging()
-            log_level = config.get("log_level")
-            if logging.get_level_name(logger.level) != log_level:
-                logging.set_level(log_level)
         else:
             config.init()
+        if not logger.handlers:
+            logging.setup_logging()
+        log_level = config.get("log_level")
+        if logging.get_level_name(logger.level) != log_level:
+            logging.set_level(log_level)
         for plugin in config.data["plugins"]:
             config.pluginmanager.consider_plugin(plugin)
         return config
