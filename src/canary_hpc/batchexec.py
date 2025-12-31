@@ -27,6 +27,7 @@ logger = canary.get_logger(__name__)
 class HPCConnectRunner:
     def __init__(self, backend: hpc_connect.HPCSubmissionManager) -> None:
         self.backend = backend
+        self.alogger = canary.logging.AdaptiveDebugLogger(logger)
 
     def execute(self, batch: "TestBatch") -> int | None:
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
@@ -46,7 +47,9 @@ class HPCConnectRunner:
             with self.handle_signals(proc, batch):
                 while True:
                     try:
-                        if proc.poll() is not None:
+                        rc = proc.poll()
+                        self.alogger.emit(("",), f"{batch}.poll() = {rc}")
+                        if rc is not None:
                             break
                     except Exception:
                         logger.exception("Batch %s: polling job failed!" % batch.id[:7])

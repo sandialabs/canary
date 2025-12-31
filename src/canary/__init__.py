@@ -47,7 +47,7 @@ from _canary.testspec import UnresolvedSpec
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import graph
-from _canary.util import logging as _logging
+from _canary.util import logging
 from _canary.util import module
 from _canary.util import rich as color
 from _canary.util import shell
@@ -63,8 +63,7 @@ from _canary.workspace import Workspace
 from . import directives
 from . import patterns
 
-get_logger = _logging.get_logger
-logging = _logging.get_logger()
+get_logger = logging.get_logger
 
 
 __all__ = [
@@ -97,6 +96,7 @@ __all__ = [
     "JobProtocol",
     "TestCase",
     "Launcher",
+    "logging",
     "PythonFileLauncher",
     "SubprocessLauncher",
     "TestInstance",

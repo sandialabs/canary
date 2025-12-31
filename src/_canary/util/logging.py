@@ -159,6 +159,42 @@ class CanaryLogger(builtin_logging.Logger):
         return ProgressMonitor(self.name, message, levelno)
 
 
+class AdaptiveDebugLogger:
+    """
+    Dynamic debug logger that starts chatty and backs off exponentially
+    while conditions remain unchanged. Resets immediately on state change.
+    """
+
+    def __init__(
+        self,
+        logger: CanaryLogger,
+        min_interval: float = 10.0,
+        max_interval: float = 120.0,
+        growth: float = 1.6,
+    ) -> None:
+        self.logger = logger
+        self.min_interval = min_interval
+        self.max_interval = max_interval
+        self.growth = growth
+
+        self._interval = min_interval
+        self._last_emit = 0.0
+        self._last_signature: tuple[str, ...] = ()
+
+    def emit(self, signature: tuple[str, ...], msg: str) -> None:
+        now = time.monotonic()
+
+        if signature != self._last_signature:
+            self._interval = self.min_interval
+            self._last_signature = signature
+            self._last_emit = 0.0
+
+        if now - self._last_emit >= self._interval:
+            self.logger.debug(msg)
+            self._last_emit = now
+            self._interval = min(self._interval * self.growth, self.max_interval)
+
+
 builtin_logging.setLoggerClass(CanaryLogger)
 
 
@@ -267,3 +303,23 @@ def get_level() -> int:
         if isinstance(handler, StreamHandler):
             return handler.level
     return logger.getEffectiveLevel()
+
+
+def info(*args, **kwargs):
+    logger = get_logger()
+    logger.info(*args, **kwargs)
+
+
+def warning(*args, **kwargs):
+    logger = get_logger()
+    logger.warning(*args, **kwargs)
+
+
+def error(*args, **kwargs):
+    logger = get_logger()
+    logger.error(*args, **kwargs)
+
+
+def critical(*args, **kwargs):
+    logger = get_logger()
+    logger.critical(*args, **kwargs)
