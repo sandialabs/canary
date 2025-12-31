@@ -167,12 +167,12 @@ class AdaptiveDebugLogger:
 
     def __init__(
         self,
-        logger: CanaryLogger,
+        name: str,
         min_interval: float = 10.0,
         max_interval: float = 120.0,
         growth: float = 1.6,
     ) -> None:
-        self.logger = logger
+        self.logger = get_logger(name)
         self.min_interval = min_interval
         self.max_interval = max_interval
         self.growth = growth

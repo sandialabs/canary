@@ -65,7 +65,7 @@ class ResourceQueue:
         self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
         self.prepared = False
-        self.alogger = logging.AdaptiveDebugLogger(logger)
+        self.alogger = logging.AdaptiveDebugLogger(__name__)
         if jobs:
             self.put(*jobs)
 

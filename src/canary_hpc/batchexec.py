@@ -27,7 +27,7 @@ logger = canary.get_logger(__name__)
 class HPCConnectRunner:
     def __init__(self, backend: hpc_connect.HPCSubmissionManager) -> None:
         self.backend = backend
-        self.alogger = canary.logging.AdaptiveDebugLogger(logger)
+        self.alogger = canary.logging.AdaptiveDebugLogger(__name__)
 
     def execute(self, batch: "TestBatch") -> int | None:
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
