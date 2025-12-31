@@ -1,12 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
-# /Formatter
-#  Copyright NTESS. See COPYRIGHT file for details.
-#
-# SPDX-License-Identifier: MIT
-
 import datetime
 import json
 import logging as builtin_logging
@@ -172,7 +166,7 @@ class AdaptiveDebugLogger:
         max_interval: float = 120.0,
         growth: float = 1.6,
     ) -> None:
-        self.logger = get_logger(name)
+        self.logger_name = name
         self.min_interval = min_interval
         self.max_interval = max_interval
         self.growth = growth
@@ -190,7 +184,7 @@ class AdaptiveDebugLogger:
             self._last_emit = 0.0
 
         if now - self._last_emit >= self._interval:
-            self.logger.debug(msg)
+            get_logger(self.logger_name).debug(msg)
             self._last_emit = now
             self._interval = min(self._interval * self.growth, self.max_interval)
 
@@ -201,10 +195,13 @@ builtin_logging.setLoggerClass(CanaryLogger)
 def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
-    parts = name.split(".")
-    if parts[0] != root_log_name:
-        parts.insert(0, root_log_name)
-        name = ".".join(parts)
+    else:
+        parts = name.split(".")
+        if parts[0] == "_canary":
+            parts[0] = root_log_name
+        elif parts[0] != root_log_name:
+            parts.insert(0, root_log_name)
+            name = ".".join(parts)
     logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
@@ -306,20 +303,20 @@ def get_level() -> int:
 
 
 def info(*args, **kwargs):
-    logger = get_logger()
-    logger.info(*args, **kwargs)
+    get_logger().info(*args, **kwargs)
 
 
 def warning(*args, **kwargs):
-    logger = get_logger()
-    logger.warning(*args, **kwargs)
+    get_logger().warning(*args, **kwargs)
 
 
 def error(*args, **kwargs):
-    logger = get_logger()
-    logger.error(*args, **kwargs)
+    get_logger().error(*args, **kwargs)
 
 
 def critical(*args, **kwargs):
-    logger = get_logger()
-    logger.critical(*args, **kwargs)
+    get_logger().critical(*args, **kwargs)
+
+
+def exception(*args, **kwargs):
+    get_logger().exception(*args, **kwargs)

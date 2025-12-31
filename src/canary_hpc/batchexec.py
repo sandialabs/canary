@@ -27,7 +27,7 @@ logger = canary.get_logger(__name__)
 class HPCConnectRunner:
     def __init__(self, backend: hpc_connect.HPCSubmissionManager) -> None:
         self.backend = backend
-        self.alogger = canary.logging.AdaptiveDebugLogger(__name__)
+        self.alogger = canary.logging.AdaptiveDebugLogger(__name__, max_interval=300.0)
 
     def execute(self, batch: "TestBatch") -> int | None:
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
@@ -35,10 +35,9 @@ class HPCConnectRunner:
         canary.Workspace.load()
 
         # Force hpc_connect logger to use the root logger setup by canary
-        hpc = hpc_connect.get_logger("hpc_connect")
+        hpc = logging.getLogger("hpc_connect")
         hpc.handlers.clear()
         hpc.propagate = True
-        hpc.setLevel(logging.DEBUG)
 
         with batch.workspace.enter():
             proc = self.submit(batch)
@@ -51,6 +50,8 @@ class HPCConnectRunner:
                         self.alogger.emit(("",), f"{batch}.poll() = {rc}")
                         if rc is not None:
                             break
+                        if self.alogger._interval >= self.alogger.max_interval:
+                            self.alogger._interval = self.alogger.min_interval
                     except Exception:
                         logger.exception("Batch %s: polling job failed!" % batch.id[:7])
                         break
