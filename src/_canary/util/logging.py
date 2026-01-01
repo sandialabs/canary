@@ -95,7 +95,7 @@ class JsonFormatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
+            if record.levelno in (NOTSET, TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
                 prefix = f"{record.levelname.upper()}: "
             else:
                 prefix = ""
@@ -256,12 +256,12 @@ def setup_logging() -> None:
         # set the logger level higher than the streamhandler to assure that the messages of level
         # INFO will be emmitted.
         root.addHandler(sh)
-        root.setLevel(TRACE)
+        root.setLevel(NOTSET)
     canary = builtin_logging.getLogger(root_log_name)
     canary.propagate = True
 
 
-def add_file_handler(file: str, levelno: int) -> None:
+def add_file_handler(file: str, levelno: int = NOTSET) -> None:
     logger = builtin_logging.getLogger()
     for handler in logger.handlers:
         if isinstance(handler, FileHandler) and handler.baseFilename == file:

@@ -38,6 +38,7 @@ class HPCConnectRunner:
         hpc = logging.getLogger("hpc_connect")
         hpc.handlers.clear()
         hpc.propagate = True
+        hpc.setLevel(logging.NOTSET)
 
         with batch.workspace.enter():
             proc = self.submit(batch)
