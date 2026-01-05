@@ -208,8 +208,7 @@ class Workspace:
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
-        file = self.logs_dir / "canary-log.txt"
-        logging.add_file_handler(str(file), logging.TRACE)
+        self.setup_logging()
 
         if var := config.get("workspace:view"):
             if isinstance(var, str):
@@ -257,10 +256,17 @@ class Workspace:
             view_file = self.view / view_tag
             if not view_file.exists():
                 write_directory_tag(view_file)
-        file = self.logs_dir / "canary-log.txt"
-        logging.add_file_handler(str(file), logging.TRACE)
+        self.setup_logging()
         self.db = WorkspaceDatabase.load(self.dbfile)
         return self
+
+    def setup_logging(self) -> None:
+        file = self.logs_dir / "canary-log.jsons"
+        fh = logging.FileHandler(file, mode="a")
+        fmt = logging.JsonFormatter()
+        fh.setFormatter(fmt)
+        fh.setLevel(logging.NOTSET)
+        logging.builtin_logging.getLogger().addHandler(fh)
 
     def run(
         self,

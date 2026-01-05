@@ -99,6 +99,7 @@ class Config:
 
     @staticmethod
     def factory() -> "Config":
+        logging.setup_logging()
         config: Config = Config(initialize=False)
         if f := os.getenv(CONFIG_ENV_FILENAME):
             with open(f, "r") as fh:
@@ -108,8 +109,6 @@ class Config:
             config.data = snapshot["data"]
         else:
             config.init()
-        if not logger.handlers:
-            logging.setup_logging()
         log_level = config.get("log_level")
         if logging.get_level_name(logger.level) != log_level:
             logging.set_level(log_level)
