@@ -246,17 +246,18 @@ def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -
 
 def setup_logging() -> None:
     root = builtin_logging.getLogger()
+    root.setLevel(NOTSET)
     builtin_logging.addLevelName(TRACE, "TRACE")
     builtin_logging.addLevelName(EMIT, "EMIT")
-    if not root.handlers:
+    for h in root.handlers:
+        if isinstance(h, StreamHandler):
+            break
+    else:
         sh = StreamHandler(sys.stderr)
         fmt = Formatter(color=sys.stderr.isatty())
         sh.setFormatter(fmt)
         sh.setLevel(INFO)
-        # set the logger level higher than the streamhandler to assure that the messages of level
-        # INFO will be emmitted.
         root.addHandler(sh)
-        root.setLevel(NOTSET)
     canary = builtin_logging.getLogger(root_log_name)
     canary.propagate = True
 

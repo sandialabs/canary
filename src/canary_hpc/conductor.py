@@ -176,7 +176,7 @@ class CanaryHPCConductor:
         root = runner.workspace.cache_dir / "canary-hpc"
         batches: list[TestBatch] = []
         for batch_spec in batch_specs:
-            path = f"batches/{batch_spec.id[:8]}"
+            path = f"batches/{batch_spec.id[:7]}"
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
             batch = TestBatch(batch_spec, workspace=workspace)
             batches.append(batch)
