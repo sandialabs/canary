@@ -65,8 +65,6 @@ def with_traceback(
         logger.debug(f"Job {job} process finished successfully")
     finally:
         try:
-            while not queue.empty():
-                queue.get()
             queue.put(job.getstate())
         except Exception:
             logger.critical("Failed to put job state into queue")
