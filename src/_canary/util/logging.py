@@ -265,11 +265,11 @@ def setup_logging() -> None:
 def add_file_handler(file: str | Path, levelno: int = NOTSET) -> None:
     logger = builtin_logging.getLogger()
     file = Path(file)
-    if file.exists():
-        for handler in logger.handlers:
-            if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
-                return
     file.parent.mkdir(parents=True, exist_ok=True)
+    file.touch(exist_ok=True)
+    for handler in logger.handlers:
+        if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
+            return
     fh = FileHandler(file, mode="a")
     fmt = JsonFormatter()
     fh.setFormatter(fmt)
