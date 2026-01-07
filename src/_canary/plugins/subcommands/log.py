@@ -59,7 +59,7 @@ class Log(CanarySubcommand):
         workspace = Workspace.load()
 
         if not args.testspec:
-            file = workspace.logs_dir / "canary-log.jsons"
+            file = workspace.logfile
             if file.exists():
                 text: str
                 if args.raw:
