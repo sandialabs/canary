@@ -265,12 +265,7 @@ class Workspace:
 
     def setup_logging(self) -> None:
         logging.setup_logging()
-        file = self.logfile
-        fh = logging.FileHandler(file, mode="a")
-        fmt = logging.JsonFormatter()
-        fh.setFormatter(fmt)
-        fh.setLevel(logging.NOTSET)
-        logging.builtin_logging.getLogger().addHandler(fh)
+        logging.add_file_handler(self.logfile)
 
     def run(
         self,

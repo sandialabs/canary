@@ -7,6 +7,7 @@ import logging as builtin_logging
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Literal
 from typing import cast
 
@@ -262,12 +263,13 @@ def setup_logging() -> None:
     canary.propagate = True
 
 
-def add_file_handler(file: str, levelno: int = NOTSET) -> None:
+def add_file_handler(file: str | Path, levelno: int = NOTSET) -> None:
     logger = builtin_logging.getLogger()
+    file = Path(file)
     for handler in logger.handlers:
-        if isinstance(handler, FileHandler) and handler.baseFilename == file:
+        if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
             return
-    os.makedirs(os.path.dirname(file), exist_ok=True)
+    file.parent.mkdir(parents=True, exist_ok=True)
     fh = FileHandler(file, mode="a")
     fmt = JsonFormatter()
     fh.setFormatter(fmt)
