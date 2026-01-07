@@ -377,8 +377,8 @@ def canary_select_report(selector: "Selector") -> None:
         n = len(excluded)
         logger.info("[bold]Excluded[/] %d test %s during selection" % (n, pluralize("spec", n)))
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
-        table.add_column("Reason", no_wrap=True)
-        table.add_column("Count", justify="right")
+        table.add_column("Reason", no_wrap=False)
+        table.add_column("Count", no_wrap=True, ratio=2, justify="right")
         reasons: dict[str | None, list["ResolvedSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
@@ -410,8 +410,8 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         logger.info("[bold]Excluded[/] %d test cases" % n)
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
-        table.add_column("Reason", no_wrap=True)
-        table.add_column("Count", justify="right")
+        table.add_column("Reason", no_wrap=False)
+        table.add_column("Count", no_wrap=True, ratio=2, justify="right")
         for key in reversed(keys):
             reason = "Unspecified" if key is None else key.lstrip()
             table.add_row(reason, str(len(reasons[key])))
