@@ -13,8 +13,6 @@ import pluggy
 from .plugins.types import CanarySubcommand
 
 if TYPE_CHECKING:
-    from multiprocessing import Queue
-
     from .collect import Collector
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
@@ -331,7 +329,7 @@ def canary_runteststart(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_runtest(case: "TestCase", queue: "Queue") -> bool:
+def canary_runtest(case: "TestCase") -> bool:
     """Called to run the test case
 
     Args:

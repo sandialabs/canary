@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import io
-import multiprocessing
 import threading
 from typing import TYPE_CHECKING
 from typing import Any
@@ -92,13 +91,9 @@ class CanaryConductor:
 class TestCaseExecutor:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(
-        self, case: "TestCase", queue: multiprocessing.Queue, *args: str, **kwargs: Any
-    ) -> None:
-        # Ensure the config is loaded, since this may be called in a new subprocess
-        config.ensure_loaded()
+    def __call__(self, case: "TestCase", *args: str, **kwargs: Any) -> None:
         try:
             config.pluginmanager.hook.canary_runteststart(case=case)
-            config.pluginmanager.hook.canary_runtest(case=case, queue=queue)
+            config.pluginmanager.hook.canary_runtest(case=case)
         finally:
             config.pluginmanager.hook.canary_runtest_finish(case=case)

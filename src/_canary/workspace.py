@@ -40,6 +40,7 @@ logger = logging.get_logger(__name__)
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 view_tag = "VIEW.TAG"
+workspace_log = "canary.log"
 
 
 DB_MAX_RETRIES = 8
@@ -105,6 +106,7 @@ class Workspace:
 
         # Text logs
         self.logs_dir: Path
+        self.logfile: Path
 
         # Pointer to latest session
         self.head: Path
@@ -125,6 +127,7 @@ class Workspace:
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
         self.logs_dir = self.root / "logs"
+        self.logfile = self.logs_dir / "canary.log"
         self.head = self.root / "HEAD"
         self.dbfile = self.root / "workspace.sqlite3"
 
@@ -261,7 +264,8 @@ class Workspace:
         return self
 
     def setup_logging(self) -> None:
-        file = self.logs_dir / "canary-log.jsons"
+        logging.setup_logging()
+        file = self.logfile
         fh = logging.FileHandler(file, mode="a")
         fmt = logging.JsonFormatter()
         fh.setFormatter(fmt)

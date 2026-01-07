@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import io
-import multiprocessing as mp
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -47,12 +46,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
+def repeat_until_pass(case: "TestCase") -> None:
     if (case.status.category == "FAIL") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, queue, i)
+            rerun_case(case, i)
             if case.status.category == "PASS":
                 return
         logger.error(
@@ -61,12 +60,12 @@ def repeat_until_pass(case: "TestCase", queue: mp.Queue) -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
+def repeat_after_timeout(case: "TestCase") -> None:
     if (case.status.status == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, queue, i)
+            rerun_case(case, i)
             if not case.status.status == "TIMEOUT":
                 return
         logger.error(
@@ -75,12 +74,12 @@ def repeat_after_timeout(case: "TestCase", queue: mp.Queue) -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
+def repeat_until_fail(case: "TestCase") -> None:
     if (case.status.category == "PASS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
-            rerun_case(case, queue, i)
+            rerun_case(case, i)
             if not case.status.category == "PASS":
                 break
         else:
@@ -91,13 +90,13 @@ def repeat_until_fail(case: "TestCase", queue: mp.Queue) -> None:
         )
 
 
-def rerun_case(case: "TestCase", queue: mp.Queue, attempt: int) -> None:
+def rerun_case(case: "TestCase", attempt: int) -> None:
     try:
         case.restore_workspace()
         if summary := job_start_summary(case):
             logger.debug(summary)
         case.setup()
-        case.run(queue=queue)
+        case.run()
     finally:
         if summary := job_finish_summary(case, attempt=attempt):
             logger.debug(summary)

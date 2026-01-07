@@ -10,7 +10,6 @@ import os
 import signal
 import sys
 import time
-import traceback
 from functools import cached_property
 from pathlib import Path
 from queue import Empty as EmptyResultQueue
@@ -45,22 +44,33 @@ class ExecutionSlot:
     qsize: int
     start_time: float
     proc: MeasuredProcess
-    queue: mp.Queue
+    queue: mp.SimpleQueue
 
 
-def with_traceback(executor: Callable, job: JobProtocol, queue: mp.Queue, **kwargs: Any) -> None:
+def with_traceback(
+    executor: Callable, job: JobProtocol, queue: mp.SimpleQueue, **kwargs: Any
+) -> None:
+    # We are running inside a new process, make sure config and logging are setup
+    config.ensure_loaded()
+    logging.setup_logging()
+    if f := os.getenv("CANARY_WORKSPACE_LOGFILE"):
+        logging.add_file_handler(f)
     try:
-        return executor(job, queue, **kwargs)
-    except Exception as e:  # nosec B110
-        fh = io.StringIO()
-        traceback.print_exc(file=fh)
-        text = fh.getvalue()
-        logger.debug(f"Child process failed: {text}")
+        executor(job, **kwargs)
+    except BaseException as e:  # nosec B110
+        logger.exception("Child process failed")
         job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
-        while not queue.empty():
-            queue.get_nowait()
-        queue.put({"status": job.status})
-        sys.exit(1)
+        raise
+    else:
+        logger.debug(f"Job {job} process finished successfully")
+    finally:
+        try:
+            while not queue.empty():
+                queue.get()
+            queue.put(job.getstate())
+        except Exception:
+            logger.critical("Failed to put job state into queue")
+            raise
 
 
 class ResourceQueueExecutor:
@@ -113,6 +123,7 @@ class ResourceQueueExecutor:
             with open(f, "w") as fh:
                 config.dump(fh)
             os.environ[config.CONFIG_ENV_FILENAME] = str(f)
+            os.environ["CANARY_WORKSPACE_LOGFILE"] = str(ws.logfile)
         except Exception:
             logger.exception("Unable to create configuration")
             raise
@@ -142,12 +153,12 @@ class ResourceQueueExecutor:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
                         self._terminate_all(signal.SIGUSR2)
-                        self._check_for_leaks(where="_terminate_all")
+                        self._check_for_leaks()
                         raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
 
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
-                    self._check_for_leaks(where="_check_finished_processes")
+                    self._check_for_leaks()
                     live.update()
 
                     # Wait for a slot if at max capacity
@@ -159,7 +170,7 @@ class ResourceQueueExecutor:
                     qrank += 1
 
                     # Create a result queue for this specific process
-                    result_queue: mp.Queue = mp.Queue()
+                    result_queue: mp.SimpleQueue = mp.SimpleQueue()
 
                     # Launch a new measured process
                     proc = MeasuredProcess(
@@ -192,13 +203,13 @@ class ResourceQueueExecutor:
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
-                    self._check_for_leaks(where="_terminate_all")
+                    self._check_for_leaks()
                     live.update(final=True)
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
-                    self._check_for_leaks(where="_terminate_all")
+                    self._check_for_leaks()
                     live.update(final=True)
                     raise
 
@@ -287,7 +298,7 @@ class ResourceQueueExecutor:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
         self._check_timeouts()
-        self._check_for_leaks(where="_check_timeouts")
+        self._check_for_leaks()
 
         if Path("canary.kill").exists():
             Path("canary.kill").unlink()
@@ -301,13 +312,13 @@ class ResourceQueueExecutor:
             try:
                 # Get the final result before cleaning up
                 try:
-                    result = slot.queue.get_nowait()
+                    result = slot.queue.get()
                 except (EmptyResultQueue, OSError):
                     slot.job.set_status(
                         status="ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
                     )
                 else:
-                    slot.job.on_result(result)
+                    slot.job.setstate(result)
 
                 # Get measurements and store in job
                 measurements = slot.proc.get_measurements()
@@ -319,7 +330,6 @@ class ResourceQueueExecutor:
             finally:
                 try:
                     slot.queue.close()
-                    slot.queue.join_thread()
                 except Exception:  # nosec B110
                     pass
 
@@ -334,7 +344,7 @@ class ResourceQueueExecutor:
                 self.queue.done(slot.job)
                 self.on_job_finish(slot.job, slot.qrank, slot.qsize)
 
-    def _check_for_leaks(self, *, where: str) -> None:
+    def _check_for_leaks(self) -> None:
         busy_ids = set(self.queue._busy)
         inflight_ids = {slot.job.id for slot in self.inflight.values()}
         if busy_ids != inflight_ids:
@@ -351,7 +361,7 @@ class ResourceQueueExecutor:
         """Wait until a process slot is available."""
         while len(self.inflight) >= self.max_workers:
             self._check_finished_processes()
-            self._check_for_leaks(where="_check_finished_processes")
+            self._check_for_leaks()
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
@@ -359,7 +369,7 @@ class ResourceQueueExecutor:
         """Wait for all active processes to complete."""
         while self.inflight:
             self._check_finished_processes()
-            self._check_for_leaks(where="_check_finished_processes")
+            self._check_for_leaks()
             if self.inflight:
                 time.sleep(0.075)
             live.update()

@@ -6,7 +6,6 @@ import dataclasses
 import datetime
 import io
 import math
-import multiprocessing
 import os
 import traceback
 from functools import cached_property
@@ -292,7 +291,7 @@ class TestCase:
         finally:
             file.close()
 
-    def run(self, queue: multiprocessing.Queue) -> None:
+    def run(self) -> None:
         code: int
         xstatus = self.spec.xstatus
         try:
@@ -335,12 +334,14 @@ class TestCase:
             self.status.set(status="ERROR", reason=reason)
         finally:
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
-            queue.put({"status": self.status, "timekeeper": self.timekeeper})
             self.save()
         return
 
-    def on_result(self, data: Any) -> None:
-        """The companion of queue.put, save results from the test ran in a child process in the
+    def getstate(self) -> dict[str, Any]:
+        return {"status": self.status, "timekeeper": self.timekeeper}
+
+    def setstate(self, data: dict[str, Any]) -> None:
+        """The companion of getstate, save results from the test ran in a child process in the
         parent process"""
         if status := data.get("status"):
             self.status.set(

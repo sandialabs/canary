@@ -6,7 +6,6 @@ import io
 import sys
 import time
 from contextlib import contextmanager
-from multiprocessing import Queue
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
@@ -86,8 +85,8 @@ def canary_runteststart(case: "TestCase") -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_runtest(case: "TestCase", queue: Queue) -> Generator[None, None, bool]:
-    case.run(queue)
+def canary_runtest(case: "TestCase") -> Generator[None, None, bool]:
+    case.run()
     yield
     case.save()
     return True

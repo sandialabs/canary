@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import multiprocessing
 import os
 from pathlib import Path
 
@@ -26,10 +25,9 @@ class TestCaseRunner:
     """Class for running ``AbstractTestCase``."""
 
     def __call__(self, case):
-        queue = multiprocessing.Queue()
         try:
             canary.config.pluginmanager.hook.canary_runteststart(case=case)
-            canary.config.pluginmanager.hook.canary_runtest(case=case, queue=queue)
+            canary.config.pluginmanager.hook.canary_runtest(case=case)
         finally:
             canary.config.pluginmanager.hook.canary_runtest_finish(case=case)
 

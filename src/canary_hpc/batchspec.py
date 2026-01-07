@@ -7,7 +7,6 @@ import dataclasses
 import datetime
 import json
 import math
-import multiprocessing as mp
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -231,7 +230,7 @@ class TestBatch:
     ) -> None:
         self.status.set(state=state, category=category, status=status, reason=reason, code=code)
 
-    def run(self, queue: mp.Queue, backend: hpc_connect.HPCSubmissionManager) -> None:
+    def run(self, backend: hpc_connect.HPCSubmissionManager) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
@@ -249,27 +248,29 @@ class TestBatch:
             self.refresh()
             stat = "SUCCESS" if all(case.status.category == "PASS" for case in self) else "FAILED"
             self.status.set(status=stat, propagate=False)
-            data: dict[str, Any] = {}
-            data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
-            for case in self.cases:
-                if case.status.state in ("PENDING", "READY"):
-                    case.status = Status.BROKEN(
-                        reason=f"case.status = {case.status.state} after execution of batch"
-                    )
-                elif case.status.state == "RUNNING":
-                    case.status = Status.CANCELLED(
-                        reason=f"case.status = {case.status.state} after execution of batch"
-                    )
-                data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
-            queue.put(data)
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
 
         return
 
-    def on_result(self, data: dict[str, Any]):
-        """Update my state.  This is the companion of queue.put
+    def getstate(self) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
+        for case in self.cases:
+            if case.status.state in ("PENDING", "READY"):
+                case.status = Status.BROKEN(
+                    reason=f"case.status = {case.status.state} after execution of batch"
+                )
+            elif case.status.state == "RUNNING":
+                case.status = Status.CANCELLED(
+                    reason=f"case.status = {case.status.state} after execution of batch"
+                )
+            data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
+        return data
+
+    def setstate(self, data: dict[str, Any]):
+        """Update my state.
 
         Called by the resource queue executor with the results put into the multiprocessing queue
         after a run
@@ -291,7 +292,7 @@ class TestBatch:
                 self.timekeeper.duration = timekeeper.duration
         for case in self.cases:
             if d := data.get(case.id):
-                case.on_result(d)
+                case.setstate(d)
         self.save()
 
     def finish(self) -> None:

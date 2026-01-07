@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import logging
 import math
 import os
 import shlex
@@ -10,7 +9,6 @@ import sys
 import time
 from contextlib import contextmanager
 from itertools import repeat
-from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Generator
 
@@ -31,48 +29,30 @@ class HPCConnectRunner:
         self.alogger = canary.logging.AdaptiveDebugLogger(__name__, max_interval=300.0)
 
     def execute(self, batch: "TestBatch") -> int | None:
-        ws = canary.Workspace.load()
-        file = ws.logs_dir / f"{batch.id[:7]}.jsons"
-        with self.logged(file):
-            logger.debug(f"Starting {batch} on pid {os.getpid()}")
-            with batch.workspace.enter():
-                proc = self.submit(batch)
-                if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
-                    batch.jobid = proc.jobid
-                with self.handle_signals(proc, batch):
-                    while True:
-                        try:
-                            rc = proc.poll()
-                            self.alogger.emit(("",), f"{batch}.poll() = {rc}")
-                            if rc is not None:
-                                break
-                            if self.alogger._interval >= self.alogger.max_interval:
-                                self.alogger._interval = self.alogger.min_interval
-                        except Exception:
-                            logger.exception("Batch %s: polling job failed!" % batch.id[:7])
+        logger.debug(f"Starting {batch} on pid {os.getpid()}")
+        with batch.workspace.enter():
+            proc = self.submit(batch)
+            if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
+                batch.jobid = proc.jobid
+            with self.handle_signals(proc, batch):
+                while True:
+                    try:
+                        rc = proc.poll()
+                        self.alogger.emit(("",), f"{batch}.poll() = {rc}")
+                        if rc is not None:
                             break
-                        time.sleep(self.backend.polling_frequency)
-        return getattr(proc, "returncode", None)
+                        if self.alogger._interval >= self.alogger.max_interval:
+                            self.alogger._interval = self.alogger.min_interval
+                    except Exception:
+                        logger.exception("Batch %s: polling job failed!" % batch.id[:7])
+                        break
+                    time.sleep(self.backend.polling_frequency)
+        rc = getattr(proc, "returncode", None)
+        logger.debug(f"Finished {batch} with exit code {rc}")
+        return rc
 
     def submit(self, batch: "TestBatch") -> hpc_connect.HPCProcess:
         raise NotImplementedError
-
-    @contextmanager
-    def logged(self, file: Path) -> Generator[None, None, None]:
-        fh = canary.logging.FileHandler(file, mode="a")
-        fmt = canary.logging.JsonFormatter()
-        fh.setFormatter(fmt)
-        fh.setLevel(logging.NOTSET)
-        logging.getLogger().addHandler(fh)
-
-        hpc = logging.getLogger("hpc_connect")
-        hpc.handlers.clear()
-        hpc.propagate = True
-        hpc.setLevel(logging.NOTSET)
-
-        yield
-
-        logging.getLogger().removeHandler(fh)
 
     def nodes_required(self, batch: "TestBatch") -> int:
         """Nodes required to run cases in ``batch``"""

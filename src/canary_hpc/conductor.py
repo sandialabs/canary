@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import multiprocessing as mp
+import logging
 import threading
 from collections import Counter
 from pathlib import Path
@@ -20,7 +20,6 @@ from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
-from _canary.util import logging
 from _canary.util.rich import colorize
 from _canary.util.time import time_in_seconds
 
@@ -274,11 +273,16 @@ class KeyboardQuit(Exception):
 class BatchExecutor:
     """Class for running ``ResourceQueue``."""
 
-    def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
+    def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
-        canary.config.ensure_loaded()
-        logging.setup_logging()
         backend = hpc_connect.get_backend(kwargs["backend"])
-
+        self.setup_logging()
         batch.setup()
-        batch.run(queue, backend=backend)
+        batch.run(backend=backend)
+        logger.debug(f"Done running {batch}")
+
+    def setup_logging(self) -> None:
+        hpc = logging.getLogger("hpc_connect")
+        hpc.handlers.clear()
+        hpc.propagate = True
+        hpc.setLevel(logging.NOTSET)
