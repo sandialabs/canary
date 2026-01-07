@@ -67,7 +67,7 @@ def with_traceback(
         try:
             queue.put(job.getstate())
         except Exception:
-            logger.critical("Failed to put job state into queue")
+            logger.exception("Failed to put job state into queue")
             raise
 
 
