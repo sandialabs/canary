@@ -4,7 +4,6 @@
 import datetime
 import json
 import logging as builtin_logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -266,9 +265,10 @@ def setup_logging() -> None:
 def add_file_handler(file: str | Path, levelno: int = NOTSET) -> None:
     logger = builtin_logging.getLogger()
     file = Path(file)
-    for handler in logger.handlers:
-        if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
-            return
+    if file.exists():
+        for handler in logger.handlers:
+            if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
+                return
     file.parent.mkdir(parents=True, exist_ok=True)
     fh = FileHandler(file, mode="a")
     fmt = JsonFormatter()
