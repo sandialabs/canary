@@ -52,10 +52,14 @@ class JobFunctor:
         job: JobProtocol,
         result_queue: mp.SimpleQueue,
         logging_queue: mp.Queue,
+        config_snapshot: dict[str, Any],
         **kwargs: Any,
     ) -> None:
         """Process entrypoint: bootstraps environment and executes a single job."""
-        self.startup(logging_queue)
+        config.load_snapshot(config_snapshot)
+        logging.clear_handlers()
+        h = logging.QueueHandler(logging_queue)
+        logging.add_handler(h)
         try:
             executor(job, **kwargs)
         except BaseException as e:
@@ -71,19 +75,7 @@ class JobFunctor:
                 logger.exception("Failed to put job state into queue")
                 raise
             finally:
-                self.teardown()
-
-    def startup(self, logging_queue: mp.Queue) -> None:
-        name = os.environ["CANARY_CONFIG_SHM"]
-        size = int(os.environ["CANARY_CONFIG_SIZE"])
-        snapshot = mp.get_from_shared_memory(name, size)
-        config.load_snapshot(snapshot)
-        logging.clear_handlers()
-        h = logging.QueueHandler(logging_queue)
-        logging.add_handler(h)
-
-    def teardown(self) -> None:
-        logging.clear_handlers()
+                logging.clear_handlers()
 
 
 class ResourceQueueExecutor:
@@ -131,11 +123,6 @@ class ResourceQueueExecutor:
             # Since test cases run in subprocesses, we archive the config to the environment.  The
             # config object in the subprocess will read in the archive and use it to re-establish
             # the correct config
-            name, n = mp.put_in_shared_memory(config.snapshot())
-            os.environ["CANARY_CONFIG_SHM"] = name
-            os.environ["CANARY_CONFIG_SIZE"] = str(n)
-            self._store["env"] = {}
-            self._store["env"].update(os.environ)
             self._start_mp_logging()
         except Exception:
             logger.exception("Unable to create configuration")
@@ -147,12 +134,7 @@ class ResourceQueueExecutor:
     def __exit__(self, *args):
         self.entered = False
         self.started_on = -1.0
-        name = os.environ["CANARY_CONFIG_SHM"]
-        mp.unlink_shared_memory(name)
-        os.environ.clear()
-        os.environ.update(self._store.pop("env"))
         self._stop_mp_logging()
-        self._store.clear()
 
     def _start_mp_logging(self):
         self._store["logging_queue"] = logging_queue = mp.Queue(-1)
@@ -195,6 +177,7 @@ class ResourceQueueExecutor:
         qrank, qsize = 0, len(self.queue)
         start = time.time()
         logging_queue: mp.Queue = self._store["logging_queue"]
+        config_snapshot = config.snapshot()
 
         with CanaryLive(self._render_dashboard, enable=self.enable_live_monitoring) as live:
             while True:
@@ -223,7 +206,7 @@ class ResourceQueueExecutor:
                     # Launch a new measured process
                     proc = mp.MeasuredProcess(
                         target=JobFunctor(),
-                        args=(self.executor, job, result_queue, logging_queue),
+                        args=(self.executor, job, result_queue, logging_queue, config_snapshot),
                         kwargs=kwargs,
                     )
                     proc.start()
