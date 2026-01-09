@@ -185,17 +185,9 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
-    import multiprocessing
-    import multiprocessing.reduction
+    from .util import multiprocessing
 
-    start_method: str
-    if var := os.getenv("CANARY_MULTIPROCESSING_START_METHOD"):
-        start_method = var
-    elif multiprocessing.reduction.HAVE_SEND_HANDLE and sys.platform != "darwin":
-        start_method = "forkserver"
-    else:
-        start_method = "spawn"
-    multiprocessing.set_start_method(start_method, force=True)
+    multiprocessing.initialize()
 
     # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
     # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them

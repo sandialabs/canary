@@ -5,9 +5,11 @@
 import multiprocessing
 import multiprocessing.context
 import multiprocessing.queues
+import multiprocessing.reduction
 import multiprocessing.shared_memory
 import os
 import pickle  # nosec B403
+import sys
 import time
 from typing import Any
 
@@ -35,6 +37,24 @@ def get_from_shared_memory(name: str, size: int) -> Any:
 def unlink_shared_memory(name: str) -> None:
     shared_mem = multiprocessing.shared_memory.SharedMemory(name=name)
     shared_mem.unlink()
+
+
+def initialize() -> None:
+    start_method: str
+    if var := os.getenv("CANARY_MULTIPROCESSING_START_METHOD"):
+        start_method = var
+    elif multiprocessing.reduction.HAVE_SEND_HANDLE and sys.platform != "darwin":
+        start_method = "forkserver"
+    else:
+        start_method = "spawn"
+    multiprocessing.set_start_method(start_method, force=True)
+    p = multiprocessing.Process(target=_noop)
+    p.start()
+    p.join()
+
+
+def _noop():
+    pass
 
 
 class SimpleQueue(multiprocessing.queues.SimpleQueue):
