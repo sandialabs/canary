@@ -94,8 +94,8 @@ def pool(*args, **kwargs):
 
     Arguments are forwarded to the multiprocessing.Pool.__init__ method.
     """
+    p = multiprocessing.Pool(*args, **kwargs)
     try:
-        p = multiprocessing.Pool(*args, **kwargs)
         yield p
     finally:
         p.terminate()

@@ -208,9 +208,13 @@ class Status:
         style = kwargs.get("style", "none")
         if style == "rich":
             color = self.color_for_category[self.category]
+            if self.state == "RUNNING":
+                return f"[{color}]{self.state}[/{color}]"
             return f"[{color}]{self.category}[/{color}] ({self.status})"
         elif style == "html":
             color = self.html_color_for_category[self.category]
+            if self.state == "RUNNING":
+                return f"<font color={color}>{self.state}</font>"
             return f"<font color={color}>{self.category}</font> ({self.status})"
         else:
             return f"{self.category} ({self.status})"

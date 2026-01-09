@@ -106,7 +106,6 @@ class Workspace:
 
         # Text logs
         self.logs_dir: Path
-        self.logfile: Path
 
         # Pointer to latest session
         self.head: Path
@@ -127,7 +126,6 @@ class Workspace:
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
         self.logs_dir = self.root / "logs"
-        self.logfile = self.logs_dir / "canary.log"
         self.head = self.root / "HEAD"
         self.dbfile = self.root / "workspace.sqlite3"
 
@@ -211,8 +209,6 @@ class Workspace:
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
-        self.setup_logging()
-
         if var := config.get("workspace:view"):
             if isinstance(var, str):
                 self.view = (self.root.parent / var).resolve()
@@ -259,13 +255,8 @@ class Workspace:
             view_file = self.view / view_tag
             if not view_file.exists():
                 write_directory_tag(view_file)
-        self.setup_logging()
         self.db = WorkspaceDatabase.load(self.dbfile)
         return self
-
-    def setup_logging(self) -> None:
-        logging.setup_logging()
-        logging.add_file_handler(self.logfile)
 
     def run(
         self,

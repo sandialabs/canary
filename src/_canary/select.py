@@ -204,6 +204,7 @@ class Selector:
                 child = spec_map[child_id]
                 if not child.mask:
                     child.mask = Mask.masked("One or more dependencies masked")
+                    self.masked.add(child.id)
                     queue.append(child)
 
     @staticmethod

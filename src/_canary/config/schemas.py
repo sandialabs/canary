@@ -49,14 +49,6 @@ def log_level_name(arg: typing.Any) -> str:
     raise SchemaError(f"Wrong log level {arg!r}, choose from {', '.join(logging_levels)}")
 
 
-def multiprocessing_contexts(arg: typing.Any) -> bool:
-    if not isinstance(arg, str):
-        return False
-    elif arg not in ("fork", "spawn"):
-        return False
-    return True
-
-
 def boolean(arg: typing.Any) -> bool:
     if isinstance(arg, str):
         return arg.lower() not in ("0", "off", "false", "no")
@@ -108,7 +100,7 @@ class EnvarSchema(Schema):
             validated = {}
             for key, val in data.items():
                 name = key[7:].lower()
-                if name.startswith(("timeout_", "multiprocessing_")):
+                if name.startswith(("timeout_",)):
                     root, _, leaf = name.partition("_")
                     validated.setdefault(root, {})[leaf] = val
                 elif name.endswith("_polling_frequency"):
@@ -125,8 +117,6 @@ environment_variable_schema = EnvarSchema(
         Optional("CANARY_DEBUG"): Use(boolean),
         Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
         Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
-        Optional("CANARY_MULTIPROCESSING_CONTEXT"): multiprocessing_contexts,
-        Optional("CANARY_MULTIPROCESSING_MAX_TASKS_PER_CHILD"): positive_int,
         Optional(Regex("CANARY_TIMEOUT_w+")): Use(time_in_seconds),
         Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
     },

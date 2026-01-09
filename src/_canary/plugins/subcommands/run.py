@@ -134,6 +134,9 @@ class Run(CanarySubcommand):
             workspace = Workspace.load(start=work_tree)
         except NotAWorkspaceError:
             workspace = Workspace.create(path=work_tree)
+        f = workspace.logs_dir / "canary.0.log"
+        h = logging.json_file_handler(f)
+        logging.add_handler(h)
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
 

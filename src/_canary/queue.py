@@ -194,6 +194,9 @@ class ResourceQueue:
         cases.extend(self._finished.values())
         return cases
 
+    def pending(self) -> list[JobProtocol]:
+        return [slot.job for slot in self._heap]
+
     def status(self, start: float | None = None) -> str:
         def sortkey(x):
             n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1

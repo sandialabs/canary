@@ -38,7 +38,7 @@ class ResourceQueue(queue.ResourceQueue):
                     job.dependencies[i] = completed[dep.id]
 
     def cases(self) -> list[JobProtocol]:
-        cases: list[JobProtocol] = [case for batch in self._heap for case in batch]  # type: ignore
+        cases: list[JobProtocol] = [case for slot in self._heap for case in slot.job]  # type: ignore
         cases.extend([case for batch in self._busy.values() for case in batch])
         cases.extend([case for batch in self._finished.values() for case in batch])
         return cases

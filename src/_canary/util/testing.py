@@ -168,8 +168,8 @@ def generate_random_test_files(
             (root / fname).write_text(fp.getvalue())
 
 
-def generate_spec_names(family: str, names: str, values: list[tuple[Any, ...]]) -> list[str]:
-    param_names = [n.strip() for n in names.split(",")]
+def generate_spec_names(family: str, arg_names: str, values: list[tuple[Any, ...]]) -> list[str]:
+    param_names = [n.strip() for n in arg_names.split(",")]
     if any(len(param_names) != len(v) for v in values):
         raise ValueError("Incorrect param name/value shape")
     names: list[str] = []

@@ -4,9 +4,11 @@
 import datetime
 import json
 import logging as builtin_logging
+import logging.handlers
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from typing import Literal
 from typing import cast
 
@@ -33,6 +35,14 @@ class MuteConsoleFilter(builtin_logging.Filter):
     def filter(self, record):
         # Returning false = block record
         return False
+
+
+class QueueHandler(logging.handlers.QueueHandler):
+    pass
+
+
+class QueueListener(logging.handlers.QueueListener):
+    pass
 
 
 class StreamHandler(builtin_logging.StreamHandler):
@@ -173,9 +183,9 @@ class AdaptiveDebugLogger:
 
         self._interval = min_interval
         self._last_emit = 0.0
-        self._last_signature: tuple[str, ...] = ()
+        self._last_signature: tuple[Any, ...] = ()
 
-    def emit(self, signature: tuple[str, ...], msg: str) -> None:
+    def emit(self, signature: tuple[Any, ...], msg: str) -> None:
         now = time.monotonic()
 
         if signature != self._last_signature:
@@ -195,13 +205,15 @@ builtin_logging.setLoggerClass(CanaryLogger)
 def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
+    elif name == "root":
+        name = ""
     else:
         parts = name.split(".")
         if parts[0] == "_canary":
             parts[0] = root_log_name
         elif parts[0] != root_log_name:
             parts.insert(0, root_log_name)
-            name = ".".join(parts)
+        name = ".".join(parts)
     logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
@@ -253,28 +265,45 @@ def setup_logging() -> None:
         if isinstance(h, StreamHandler):
             break
     else:
-        sh = StreamHandler(sys.stderr)
-        fmt = Formatter(color=sys.stderr.isatty())
-        sh.setFormatter(fmt)
-        sh.setLevel(INFO)
+        sh = stream_handler()
         root.addHandler(sh)
     canary = builtin_logging.getLogger(root_log_name)
     canary.propagate = True
 
 
-def add_file_handler(file: str | Path, levelno: int = NOTSET) -> None:
-    logger = builtin_logging.getLogger()
+def stream_handler(levelno: int = INFO) -> StreamHandler:
+    handler = StreamHandler(sys.stderr)
+    fmt = Formatter(color=sys.stderr.isatty())
+    handler.setFormatter(fmt)
+    handler.setLevel(levelno)
+    return handler
+
+
+def json_file_handler(file: str | Path, levelno: int = NOTSET) -> FileHandler:
     file = Path(file)
     file.parent.mkdir(parents=True, exist_ok=True)
     file.touch(exist_ok=True)
-    for handler in logger.handlers:
-        if isinstance(handler, FileHandler) and file.samefile(handler.baseFilename):
-            return
-    fh = FileHandler(file, mode="a")
+    handler = FileHandler(file, mode="a")
     fmt = JsonFormatter()
-    fh.setFormatter(fmt)
-    fh.setLevel(levelno)
-    logger.addHandler(fh)
+    handler.setFormatter(fmt)
+    handler.setLevel(levelno)
+    return handler
+
+
+def add_handler(handler: builtin_logging.Handler) -> None:
+    root = builtin_logging.getLogger()
+    root.addHandler(handler)
+
+
+def clear_handlers() -> None:
+    root = builtin_logging.getLogger()
+    for h in root.handlers[:]:
+        try:
+            h.flush()
+            h.close()
+        except Exception:  # nosec B110
+            pass
+        root.removeHandler(h)
 
 
 def level_color(levelno: int) -> str:

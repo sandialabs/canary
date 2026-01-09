@@ -275,14 +275,11 @@ class BatchExecutor:
 
     def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
-        backend = hpc_connect.get_backend(kwargs["backend"])
-        self.setup_logging()
-        batch.setup()
-        batch.run(backend=backend)
-        logger.debug(f"Done running {batch}")
-
-    def setup_logging(self) -> None:
         hpc = logging.getLogger("hpc_connect")
         hpc.handlers.clear()
         hpc.propagate = True
         hpc.setLevel(logging.NOTSET)
+        batch.setup()
+        backend = hpc_connect.get_backend(kwargs["backend"])
+        batch.run(backend=backend)
+        logger.debug(f"Done running {batch}")

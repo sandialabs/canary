@@ -185,6 +185,10 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
+    import multiprocessing
+
+    start_method = os.getenv("CANARY_MULTIPROCESSING_START_METHOD") or "spawn"
+    multiprocessing.set_start_method(start_method, force=True)
 
     # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
     # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them

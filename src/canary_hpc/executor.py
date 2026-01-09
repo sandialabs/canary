@@ -47,6 +47,9 @@ class CanaryHPCExecutor:
         n = len(self.cases)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
+        f = workspace.logs_dir / f"canary.{self.batch[:7]}.log"
+        h = canary.logging.json_file_handler(f)
+        canary.logging.add_handler(h)
         upstream = workspace.db.get_upstream_ids(seeds=self.cases)
         loadspecs = upstream.union(self.cases)
         specs = workspace.db.load_specs(ids=list(loadspecs))

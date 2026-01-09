@@ -5,14 +5,12 @@ import dataclasses
 import datetime
 import io
 import math
-import multiprocessing as mp
 import os
 import signal
 import sys
 import time
 from functools import cached_property
 from pathlib import Path
-from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable
 from uuid import uuid4
@@ -30,8 +28,8 @@ from .queue import Empty
 from .queue import ResourceQueue
 from .util import cpu_count
 from .util import logging
+from .util import multiprocessing as mp
 from .util.misc import digits
-from .util.procutils import MeasuredProcess
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
@@ -43,32 +41,47 @@ class ExecutionSlot:
     qrank: int
     qsize: int
     start_time: float
-    proc: MeasuredProcess
+    proc: mp.MeasuredProcess
     queue: mp.SimpleQueue
+    results_seen_at: float | None = None
 
 
-def with_traceback(
-    executor: Callable, job: JobProtocol, queue: mp.SimpleQueue, **kwargs: Any
-) -> None:
-    # We are running inside a new process, make sure config and logging are setup
-    config.ensure_loaded()
-    logging.setup_logging()
-    if f := os.getenv("CANARY_WORKSPACE_LOGFILE"):
-        logging.add_file_handler(f)
-    try:
-        executor(job, **kwargs)
-    except BaseException as e:  # nosec B110
-        logger.exception("Child process failed")
-        job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
-        raise
-    else:
-        logger.debug(f"Job {job} process finished successfully")
-    finally:
+class JobFunctor:
+    def __call__(
+        self,
+        executor: Callable,
+        job: JobProtocol,
+        result_queue: mp.SimpleQueue,
+        logging_queue: mp.Queue,
+        **kwargs: Any,
+    ) -> None:
+        """Process entrypoint: bootstraps environment and executes a single job."""
+        self.startup(logging_queue)
         try:
-            queue.put(job.getstate())
-        except Exception:
-            logger.exception("Failed to put job state into queue")
-            raise
+            executor(job, **kwargs)
+        except BaseException as e:
+            logger.exception(f"Job {job}: exception occurred during execution of job functor")
+            job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
+            sys.exit(1)
+        else:
+            logger.debug(f"Job {job}: job functor exited normally")
+        finally:
+            try:
+                result_queue.put(job.getstate())
+            except Exception:
+                logger.exception("Failed to put job state into queue")
+                raise
+            finally:
+                self.teardown()
+
+    def startup(self, logging_queue: mp.Queue) -> None:
+        config.ensure_loaded()
+        logging.clear_handlers()
+        h = logging.QueueHandler(logging_queue)
+        logging.add_handler(h)
+
+    def teardown(self) -> None:
+        logging.clear_handlers()
 
 
 class ResourceQueueExecutor:
@@ -103,6 +116,8 @@ class ResourceQueueExecutor:
         self.finished: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
         self.started_on: float = -1.0
+        self._store: dict[str, Any] = {}
+        self.alogger = logging.AdaptiveDebugLogger(logger.name)
 
         self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
         if os.getenv("CANARY_LEVEL") == "1":
@@ -111,17 +126,20 @@ class ResourceQueueExecutor:
     def __enter__(self) -> "ResourceQueueExecutor":
         from .workspace import Workspace
 
+        self._store.clear()
         try:
             # Since test cases run in subprocesses, we archive the config to the environment.  The
             # config object in the subprocess will read in the archive and use it to re-establish
             # the correct config
+            self._store["env"] = {}
+            self._store["env"].update(os.environ)
             ws = Workspace.load()
             f = ws.tmp_dir / f"config/{uuid4().hex[:8]}.json"
             f.parent.mkdir(parents=True, exist_ok=True)
             with open(f, "w") as fh:
                 config.dump(fh)
             os.environ[config.CONFIG_ENV_FILENAME] = str(f)
-            os.environ["CANARY_WORKSPACE_LOGFILE"] = str(ws.logfile)
+            self._start_mp_logging()
         except Exception:
             logger.exception("Unable to create configuration")
             raise
@@ -132,6 +150,38 @@ class ResourceQueueExecutor:
     def __exit__(self, *args):
         self.entered = False
         self.started_on = -1.0
+        os.environ.clear()
+        os.environ.update(self._store.pop("env"))
+        self._stop_mp_logging()
+        self._store.clear()
+
+    def _start_mp_logging(self):
+        self._store["logging_queue"] = logging_queue = mp.Queue(-1)
+        root = logging.get_logger("root")
+        handlers: list[logging.builtin_logging.Handler] = []
+        handlers.append(logging.stream_handler())
+        for h in root.handlers:
+            if isinstance(h, logging.FileHandler) and isinstance(
+                h.formatter, logging.JsonFormatter
+            ):
+                f = Path(h.baseFilename).absolute()
+                handlers.append(logging.json_file_handler(f, h.level))
+                self._store.setdefault("json_file_handlers", []).append(f)
+        listener = logging.QueueListener(logging_queue, *handlers, respect_handler_level=True)
+        listener.start()
+        self._store["logging_listener"] = listener
+        root.handlers.clear()
+        root.addHandler(logging.QueueHandler(logging_queue))
+
+    def _stop_mp_logging(self) -> None:
+        listener: logging.QueueListener | None
+        if listener := self._store.pop("logging_listener", None):
+            listener.stop()
+        logging.clear_handlers()
+        logging.add_handler(logging.stream_handler())
+        for file in self._store.pop("json_file_handlers", []):
+            h = logging.json_file_handler(file)
+            logging.add_handler(h)
 
     def run(self, **kwargs: Any) -> int:
         """Main loop: get jobs from queue and launch processes."""
@@ -145,6 +195,7 @@ class ResourceQueueExecutor:
         timeout = float(config.get("run:timeout:session", -1))
         qrank, qsize = 0, len(self.queue)
         start = time.time()
+        logging_queue: mp.Queue = self._store["logging_queue"]
 
         with CanaryLive(self._render_dashboard, enable=self.enable_live_monitoring) as live:
             while True:
@@ -171,9 +222,9 @@ class ResourceQueueExecutor:
                     result_queue: mp.SimpleQueue = mp.SimpleQueue()
 
                     # Launch a new measured process
-                    proc = MeasuredProcess(
-                        target=with_traceback,
-                        args=(self.executor, job, result_queue),
+                    proc = mp.MeasuredProcess(
+                        target=JobFunctor(),
+                        args=(self.executor, job, result_queue, logging_queue),
                         kwargs=kwargs,
                     )
                     proc.start()
@@ -272,6 +323,11 @@ class ResourceQueueExecutor:
                     logger.exception(f"Failed shutting down timed-out process {pid}")
                 try:
                     slot.job.refresh()
+                    slot.job.timekeeper.update(
+                        started_on=datetime.datetime.fromtimestamp(slot.start_time).isoformat(),
+                        finished_on=datetime.datetime.fromtimestamp(now).isoformat(),
+                        duration=now - slot.start_time,
+                    )
                     slot.job.set_status(
                         status="TIMEOUT",
                         reason=f"Job timed out after {slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
@@ -302,23 +358,22 @@ class ResourceQueueExecutor:
             Path("canary.kill").unlink()
             raise CanaryKill
 
-        finished_pids = [pid for pid, slot in self.inflight.items() if not slot.proc.is_alive()]
+        finished_pids: dict[int, Any] = {}
+        for pid, slot in self.inflight.items():
+            if not slot.queue.empty():
+                finished_pids[pid] = slot.queue.get()
+                slot.queue.close()
+        busy_pids: set[int] = set(self.inflight.keys()) - set(finished_pids.keys())
+        self.alogger.emit(
+            tuple(sorted(busy_pids)),
+            f"Finished pids: {list(finished_pids)}.  Busy pids: {list(busy_pids)}",
+        )
 
-        for pid in finished_pids:
+        for pid, result in finished_pids.items():
             slot = self.inflight.pop(pid)
             self.finished[pid] = slot
             try:
-                # Get the final result before cleaning up
-                try:
-                    result = slot.queue.get()
-                except (EmptyResultQueue, OSError):
-                    slot.job.set_status(
-                        status="ERROR", reason=f"No result found for job {slot.job} (pid {pid})"
-                    )
-                else:
-                    slot.job.setstate(result)
-
-                # Get measurements and store in job
+                slot.job.setstate(result)
                 measurements = slot.proc.get_measurements()
                 slot.job.measurements.update(measurements)
                 slot.job.save()
@@ -327,12 +382,7 @@ class ResourceQueueExecutor:
                 slot.job.set_status(status="ERROR", reason="Post-processing failure")
             finally:
                 try:
-                    slot.queue.close()
-                except Exception:  # nosec B110
-                    pass
-
-                try:
-                    slot.proc.join()  # Clean up the process
+                    slot.proc.join(timeout=0.01)  # Clean up the process
                 except Exception:  # nosec B110
                     pass
                 logger.debug(
@@ -448,21 +498,22 @@ class ResourceQueueExecutor:
             table.add_column("Job")
             table.add_column("ID")
             table.add_column("Status")
-            table.add_column("Duration")
+            table.add_column("Elapsed")
             table.add_column("Details")
-            for slot in sorted(self.finished.values(), key=lambda x: x.qrank):
-                if slot.job.status.category == "PASS":
+            cases = self.queue.cases()
+            for case in cases:
+                if case.status.category == "PASS":
                     continue
-                elapsed = slot.job.timekeeper.duration
+                elapsed = case.timekeeper.duration
                 table.add_row(
-                    slot.job.display_name(style="rich", resolve=fmt == "long"),
-                    slot.job.id[:7],
-                    slot.job.status.display_name(style="rich"),
+                    case.display_name(style="rich", resolve=fmt == "long"),
+                    case.id[:7],
+                    case.status.display_name(style="rich"),
                     f"{elapsed:5.1f}s",
-                    slot.job.status.reason or "",
+                    case.status.reason or "",
                 )
             if not table.row_count:
-                n = len(self.finished)
+                n = len(cases)
                 return Group(
                     f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]"
                 )
@@ -495,10 +546,23 @@ class ResourceQueueExecutor:
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
-                "[green]RUNNING[/green]",
+                "[green]RUNNING[/]",
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
+
+        if table.row_count < max_rows:
+            st = "[cyan]PENDING[/]"
+            na = "NA"
+            for job in self.queue.pending():
+                table.add_row(
+                    job.display_name(style="rich", resolve=fmt == "long"), job.id[:7], st, na, na
+                )
+                if table.row_count >= max_rows:
+                    break
+
+        if not table.row_count:
+            return Group("")
 
         return Group(table, footer)
 
