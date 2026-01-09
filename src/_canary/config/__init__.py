@@ -52,6 +52,12 @@ def ensure_loaded() -> None:
         _config = Config.factory()
 
 
+def load_snapshot(snapshot: dict[str, typing.Any]) -> None:
+    global _config
+    _config = None
+    _config = Config.from_snapshot(snapshot)
+
+
 def __getattr__(name: str) -> typing.Any:
     global _config
     if _config is None:

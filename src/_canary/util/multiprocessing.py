@@ -5,7 +5,9 @@
 import multiprocessing
 import multiprocessing.context
 import multiprocessing.queues
+import multiprocessing.shared_memory
 import os
+import pickle  # nosec B403
 import time
 from typing import Any
 
@@ -14,6 +16,25 @@ import psutil
 from . import logging
 
 logger = logging.get_logger(__name__)
+
+
+def put_in_shared_memory(obj: Any) -> tuple[str, int]:
+    data = pickle.dumps(obj)
+    size = len(data)
+    shared_mem = multiprocessing.shared_memory.SharedMemory(create=True, size=size)
+    shared_mem.buf[:size] = data  # type: ignore
+    return shared_mem.name, size
+
+
+def get_from_shared_memory(name: str, size: int) -> Any:
+    shared_mem = multiprocessing.shared_memory.SharedMemory(name=name)
+    data = bytes(shared_mem.buf[:size])  # type: ignore
+    return pickle.loads(data)  # nosec B301
+
+
+def unlink_shared_memory(name: str) -> None:
+    shared_mem = multiprocessing.shared_memory.SharedMemory(name=name)
+    shared_mem.unlink()
 
 
 class SimpleQueue(multiprocessing.queues.SimpleQueue):

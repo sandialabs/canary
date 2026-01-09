@@ -13,7 +13,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 from typing import Callable
-from uuid import uuid4
 
 from rich.console import Console
 from rich.console import Group
@@ -75,7 +74,10 @@ class JobFunctor:
                 self.teardown()
 
     def startup(self, logging_queue: mp.Queue) -> None:
-        config.ensure_loaded()
+        name = os.environ["CANARY_CONFIG_SHM"]
+        size = int(os.environ["CANARY_CONFIG_SIZE"])
+        snapshot = mp.get_from_shared_memory(name, size)
+        config.load_snapshot(snapshot)
         logging.clear_handlers()
         h = logging.QueueHandler(logging_queue)
         logging.add_handler(h)
@@ -124,21 +126,16 @@ class ResourceQueueExecutor:
             self.enable_live_monitoring = False
 
     def __enter__(self) -> "ResourceQueueExecutor":
-        from .workspace import Workspace
-
         self._store.clear()
         try:
             # Since test cases run in subprocesses, we archive the config to the environment.  The
             # config object in the subprocess will read in the archive and use it to re-establish
             # the correct config
+            name, n = mp.put_in_shared_memory(config.snapshot())
+            os.environ["CANARY_CONFIG_SHM"] = name
+            os.environ["CANARY_CONFIG_SIZE"] = str(n)
             self._store["env"] = {}
             self._store["env"].update(os.environ)
-            ws = Workspace.load()
-            f = ws.tmp_dir / f"config/{uuid4().hex[:8]}.json"
-            f.parent.mkdir(parents=True, exist_ok=True)
-            with open(f, "w") as fh:
-                config.dump(fh)
-            os.environ[config.CONFIG_ENV_FILENAME] = str(f)
             self._start_mp_logging()
         except Exception:
             logger.exception("Unable to create configuration")
@@ -150,6 +147,8 @@ class ResourceQueueExecutor:
     def __exit__(self, *args):
         self.entered = False
         self.started_on = -1.0
+        name = os.environ["CANARY_CONFIG_SHM"]
+        mp.unlink_shared_memory(name)
         os.environ.clear()
         os.environ.update(self._store.pop("env"))
         self._stop_mp_logging()

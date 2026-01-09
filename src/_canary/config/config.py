@@ -106,7 +106,8 @@ class Config:
                 snapshot = json.load(fh)
             config.invocation_dir = snapshot["invocation_dir"]
             config.options = argparse.Namespace(**snapshot["options"])
-            config.data = snapshot["data"]
+            config.data.clear()
+            config.data.update(snapshot["data"])
         else:
             config.init()
         log_level = config.get("log_level")
@@ -116,13 +117,31 @@ class Config:
             config.pluginmanager.consider_plugin(plugin)
         return config
 
+    @staticmethod
+    def from_snapshot(snapshot: dict[str, Any]) -> "Config":
+        logging.setup_logging()
+        config: Config = Config(initialize=False)
+        config.invocation_dir = snapshot["invocation_dir"]
+        config.options = argparse.Namespace(**snapshot["options"])
+        config.data.clear()
+        config.data.update(snapshot["data"])
+        log_level = config.get("log_level")
+        if logging.get_level_name(logger.level) != log_level:
+            logging.set_level(log_level)
+        for plugin in config.data["plugins"]:
+            config.pluginmanager.consider_plugin(plugin)
+        return config
+
     def dump(self, file: IO[Any]) -> None:
+        file.write(json.dumps(self.snapshot(), indent=2))
+
+    def snapshot(self) -> dict[str, Any]:
         snapshot: dict[str, Any] = {
             "invocation_dir": str(self.invocation_dir),
             "options": vars(self.options),
             "data": self.data,
         }
-        file.write(json.dumps(snapshot, indent=2))
+        return snapshot
 
     def getoption(self, name: str, default: Any = None) -> Any:
         value = getattr(self.options, name, None)

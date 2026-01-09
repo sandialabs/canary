@@ -110,6 +110,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
+        f = batch.workspace.joinpath("config.json")
+        with open(f, "w") as fh:
+            canary.config.dump(fh)
+        variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         invocation = self.canary_invocation(batch)
         proc = self.backend.submit(
             f"canary.{batch.id[:7]}",
@@ -147,6 +151,10 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
+        f = batch.workspace.joinpath("config.json")
+        with open(f, "w") as fh:
+            canary.config.dump(fh)
+        variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         timeoutx = batch.timeout_multiplier
         invocations = self.canary_invocation(batch)
         proc = self.backend.submitn(
