@@ -14,7 +14,7 @@ A junit report of a test session can be generated after the session has complete
 .. command-output:: canary run -d TestResults.junit ./basic
     :cwd: /examples
     :nocache:
-    :setup: rm -rf TestResults.junit
+    :setup: rm -rf .canary TestResults.junit
     :ellipsis: 0
 
 .. command-output:: canary -C TestResults.junit report junit create

@@ -124,7 +124,7 @@ class ProgramOutputDirective(rst.Directive):
             node["show_prompt"] = "prompt" in self.options
 
         node["silent"] = "silent" in self.options
-        node["nocache"] = "nocache" in self.options
+        node["nocache"] = "nocache" in self.options or os.getenv("CANARY_DOCS_NOCACHE") is not None
         node["anyreturncode"] = "anyreturncode" in self.options
 
         node["hide_standard_error"] = "nostderr" in self.options

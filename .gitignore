@@ -31,6 +31,7 @@ build
 .DS_Store
 
 mock-tests
+mock2
 
 *.orig
 

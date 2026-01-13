@@ -15,24 +15,22 @@ may observe or modify the generate at specific stages.
 Flow Diagram
 ------------
 
-The following diagram illustrates the full lifecycle:
+The following diagram illustrates the full lifecycle::
 
-    +------------------------------------------------------+
-    |  Generator(s)                                        |
-    |    Produces [Un]resolved test specs                  |
-    |                      ↓                               |
-    |  Generator(generators)                               |
-    |    Generate UnresolvedSpec from generator outputs    |
-    |                      ↓                               |
-    |  canary_generate(generators)                         |
-    |  • pluginmanager.hook.canary_generatestart()         |
-    |  • generator.run()                                   |
-    |    • validate(...)                                   |
-    |    • resolve(...)                                    |
-    |  • pluginmanager.hook.canary_generate_modifiyitems() |
-    |  • pluginmanager.hook.canary_generate_report()       |
-    |  → generator.resolved_specs()                        |
-    +------------------------------------------------------+
+  Generator(s)
+    Produces [Un]resolved test specs
+                      ↓
+  Generator(generators)
+    Generate UnresolvedSpec from generator outputs
+                      ↓
+  canary_generate(generators)
+  • pluginmanager.hook.canary_generatestart()
+  • generator.run()
+    • validate(...)
+    • resolve(...)
+  • pluginmanager.hook.canary_generate_modifiyitems()
+  • pluginmanager.hook.canary_generate_report()
+  → generator.resolved_specs()
 
 """
 

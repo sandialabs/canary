@@ -23,7 +23,7 @@ Run a test case only when its dependency fails:
     :cwd: /examples
     :nocache:
     :anyreturncode:
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 
 .. note::

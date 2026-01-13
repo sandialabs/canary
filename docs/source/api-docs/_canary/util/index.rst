@@ -25,9 +25,10 @@ util
    logging
    misc
    module
+   multiprocessing
+   names
    parallel
    paramview
-   procutils
    returncode
    rich
    rprobe

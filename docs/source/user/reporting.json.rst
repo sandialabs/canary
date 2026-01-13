@@ -13,7 +13,7 @@ A JSON report of a test session can be generated after the session has completed
     :nocache:
     :cwd: /examples
     :ellipsis: 0
-    :setup: rm -rf TestResults.JSON
+    :setup: rm -rf .canary TestResults.JSON
 
 .. command-output:: canary -C TestResults.JSON report json create
     :nocache:

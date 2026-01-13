@@ -14,4 +14,4 @@ Resources needed by tests can be copied and linked from their source locations t
 
 .. command-output:: canary run -d TestResults.CopyAndLink ./copy_and_link
     :cwd: /examples
-    :setup: rm -rf TestResults.CopyAndLink
+    :setup: rm -rf .canary TestResults.CopyAndLink

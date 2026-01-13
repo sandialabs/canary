@@ -12,7 +12,7 @@ A multi-page `markdown <https://en.wikipedia.org/wiki/Markdown>`_ report of a te
 .. command-output:: canary run -d TestResults.Markdown ./basic
     :cwd: /examples
     :nocache:
-    :setup: rm -rf TestResults.Markdown
+    :setup: rm -rf .canary TestResults.Markdown
     :ellipsis: 0
 
 .. command-output:: canary -C TestResults.Markdown report markdown create

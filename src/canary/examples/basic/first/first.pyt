@@ -6,7 +6,6 @@ import sys
 
 import canary
 
-canary.directives.name("FFO")
 canary.directives.keywords("basic")
 
 

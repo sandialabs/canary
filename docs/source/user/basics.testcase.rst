@@ -66,7 +66,7 @@ The test instance object defines the following attributes and methods:
   List of :ref:`baseline <directive-baseline>` assets.
 
 ``exec_root: str``:
-  The root :ref:`session <basics-session>` execution directory.
+  The root :ref:`session <basics-workspace>` execution directory.
 
 ``exec_dir: str``:
   The test case's execution directory.

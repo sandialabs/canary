@@ -75,7 +75,11 @@ def tree(
     always_exclude = ("__pycache__", ".git", ".canary")
 
     def is_results_dir(p):
-        return os.path.exists(os.path.join(p, ".canary/SESSION.TAG"))
+        if os.path.exists(os.path.join(p, "WORKSPACE.TAG")):
+            return True
+        if os.path.exists(os.path.join(p, "VIEW.TAG")):
+            return True
+        return False
 
     def inner(dir_path: Path, prefix: str = "", level=-1):
         nonlocal files, directories

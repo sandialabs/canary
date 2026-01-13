@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-procutils
-=========
+rerun
+=====
 
-.. automodule:: _canary.util.procutils
+.. automodule:: _canary.rerun
    :members:
    :undoc-members:
    :show-inheritance:

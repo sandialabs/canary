@@ -35,7 +35,7 @@ As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_a
 
 .. command-output:: canary run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
-    :setup: rm -rf TestResults.ExecuteAndAnalyze
+    :setup: rm -rf .canary TestResults.ExecuteAndAnalyze
 
 Test execution phases
 ---------------------
@@ -102,7 +102,7 @@ After the test has been run, the analysis sections can be run without rerunning 
 
 .. command-output:: canary run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
-    :setup: rm -rf TestResults.ExecuteAndAnalyze
+    :setup: rm -rf .canary TestResults.ExecuteAndAnalyze
     :ellipsis: 0
 
 

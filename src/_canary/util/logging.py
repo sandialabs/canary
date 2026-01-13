@@ -5,6 +5,7 @@ import datetime
 import json
 import logging as builtin_logging
 import logging.handlers
+import os
 import sys
 import time
 from pathlib import Path
@@ -147,13 +148,17 @@ def level_name_mapping() -> dict[int, str]:
 
 class ProgressMonitor:
     def __init__(self, logger_name: str, message: str, levelno: int = INFO) -> None:
+        self.enabled = os.getenv("CANARY_MAKE_DOCS") is None
         self.message = message
         self.logger_name = logger_name
         self.start = time.monotonic()
         self.levelno = levelno
-        get_logger(self.logger_name).log(self.levelno, self.message, extra={"end": "..."})
+        end = "..." if self.enabled else "\n"
+        get_logger(self.logger_name).log(self.levelno, self.message, extra={"end": end})
 
     def done(self, status: str = "done") -> None:
+        if not self.enabled:
+            return
         x = {"end": "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start), "rewind": True}
         get_logger(self.logger_name).log(self.levelno, self.message, extra=x)
 

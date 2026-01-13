@@ -8,7 +8,6 @@ plugins.subcommands
 .. toctree::
    :maxdepth: 1
 
-   .canary_cache/index
    autodoc
    check
    common/index

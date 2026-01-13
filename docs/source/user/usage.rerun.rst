@@ -40,7 +40,7 @@ Examples
 .. command-output:: canary run -d TestResults.Rerun ./status
     :cwd: /examples
     :returncode: 30
-    :setup: rm -rf TestResults.Rerun
+    :setup: rm -rf .canary TestResults.Rerun
 
 
 Rerun all failed tests

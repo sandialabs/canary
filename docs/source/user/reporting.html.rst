@@ -13,7 +13,7 @@ A multi-page HTML report of a test session can be generated after the session ha
     :nocache:
     :cwd: /examples
     :ellipsis: 0
-    :setup: rm -rf TestResults.HTML
+    :setup: rm -rf .canary TestResults.HTML
 
 .. command-output:: canary -C TestResults.HTML report html create
     :nocache:

@@ -14,7 +14,7 @@ The :func:`canary.directives.xdiff` and :func:`canary.directives.xfail` directiv
 
 .. command-output:: canary run ./xstatus/xdiff.pyt
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 As you can see, the test status was set to :ref:`stat-xdiff` which is considered a successful outcome.
 
@@ -26,7 +26,7 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 .. command-output:: canary run ./xstatus/xfail-fail.pyt
     :cwd: /examples
     :returncode: 4
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 Specifying a nonzero exit code
 ------------------------------
@@ -38,4 +38,4 @@ If a nonzero exit code is expected, use ``canary.directives.xfail(code)``, where
 
 .. command-output:: canary run ./xstatus/xfail-code.pyt
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults

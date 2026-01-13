@@ -4,6 +4,10 @@
 
 .. _usage-run-basic:
 
+.. command-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :silent:
+
 Running tests
 =============
 
@@ -12,13 +16,8 @@ Use :ref:`canary run<canary-run>` to run tests.
 Basic usage
 -----------
 
-.. command-output:: canary run -d TestResults.Basic ./basic
+.. command-output:: canary run ./basic
     :cwd: /examples
-    :setup: rm -rf TestResults.Basic
-
-.. note::
-
-    The ``-d`` flag specifies the name of the results directory.  The default value is ``TestResults``.
 
 Filter tests to run by keyword
 ------------------------------
@@ -29,9 +28,9 @@ Filter tests to run by keyword
 
 where ``KEYWORD_EXPR`` is a Python expression such as ``-k 'fast and regression'``.  For example
 
-.. command-output:: canary run -d TestResults.Basic -k first ./basic
+.. command-output:: canary run -k first ./basic
     :cwd: /examples
-    :setup: rm -rf TestResults.Basic
+    :setup: rm -rf .canary TestResults
 
 Limit the number of concurrent tests
 ------------------------------------
@@ -42,22 +41,22 @@ Limit the number of concurrent tests
 
 where ``N`` is a number of workers.  For example,
 
-.. command-output:: canary run -d TestResults.Basic --workers=1 ./basic
+.. command-output:: canary run --workers=1 ./basic
     :cwd: /examples
-    :setup: rm -rf TestResults.Basic
+    :setup: rm -rf .canary TestResults
 
 Set a timeout on the test session
 ---------------------------------
 
 .. code-block:: console
 
-   canary run --timeout=T PATH [PATHS...]
+   canary run --timeout session=T PATH [PATHS...]
 
 where ``T`` is a duration in Go's duration format (``40s,``, ``1h20m``, ``2h``, ``4h30m30s``, etc.)  For example,
 
-.. command-output:: canary run -d TestResults.Basic --timeout=1m ./basic
+.. command-output:: canary run --timeout session=1m ./basic
     :cwd: /examples
-    :setup: rm -rf TestResults.Basic
+    :setup: rm -rf .canary TestResults
 
 Run specific test files
 -----------------------
@@ -70,7 +69,7 @@ Test files can be run directly by passing their paths to ``canary run``
 .. command-output:: canary run ./basic/first/first.pyt
     :nocache:
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 .. command-output:: ls -F TestResults
     :nocache:
@@ -81,7 +80,7 @@ If a path separator is replaced with a colon ``:``, the path is interpreted as `
 .. command-output:: canary run .:basic/first/first.pyt
     :nocache:
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 .. command-output:: ls -F TestResults
     :nocache:
@@ -116,4 +115,9 @@ and pass it to ``canary run``:
 
 .. command-output:: canary run -f tests.json
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
+
+
+.. command-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :silent:

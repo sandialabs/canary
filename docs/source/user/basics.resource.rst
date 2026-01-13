@@ -23,7 +23,7 @@ number of slots of each type available. Tests request their resources from the p
 Defining the resource pool
 --------------------------
 
-By default, the resource pool is automatically generated based on a machine probe and consistes of a single node with ``N`` CPUs *and* 0 GPUs.  The number of CPUs ``N`` is determined by a system probe\ [3]_.  No other resource types are assumed to exist.  Users have the flexibility to define the resource pool in a variety of ways using command line flags, configuration file, or a combination of both, depending on the specific requirements of their computing environment.
+By default, the resource pool is automatically generated based on a machine probe and consists of a single node with ``N`` CPUs *and* 0 GPUs.  The number of CPUs ``N`` is determined by a system probe\ [3]_.  No other resource types are assumed to exist.  Users have the flexibility to define the resource pool in a variety of ways using command line flags, configuration file, or a combination of both, depending on the specific requirements of their computing environment.
 
 .. note::
 

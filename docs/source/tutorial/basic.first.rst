@@ -27,14 +27,14 @@ To run the test, navigate to ``examples/basic/first`` and execute ``canary run .
 .. command-output:: canary run .
    :cwd: /examples/basic/first
    :nocache:
-   :setup: rm -rf TestResults
+   :setup: rm -rf .canary TestResults
 
 A test is considered to have successfully completed if its exit code is ``0``.  See :ref:`basics-status` for more details on test statuses.
 
 Inspecting the results
 ----------------------
 
-Test execution was conducted within a "test session" - a folder created to run the tests "out of source".  The default name of the test session is ``TestResults``.  The test session tree mirrors the layout of the source tree used to generate the test session:
+Test execution was conducted within the "workspace".  The workspace is created in ``.canary``. After the tests are finished, a "view" of the workspace is created in ``TestResults``.  The test session tree mirrors the layout of the source tree used to generate the test session:
 
 .. command-output:: canary tree examples/basic/first/TestResults
    :nocache:

@@ -91,7 +91,7 @@ Examples
 
   .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 .
     :cwd: /examples
-    :setup: rm -rf TestResults.Batched
+    :setup: rm -rf .canary TestResults.Batched
     :returncode: 30
 
 
@@ -99,5 +99,5 @@ Examples
 
   .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .
     :cwd: /examples
-    :setup: rm -rf TestResults.Batched
+    :setup: rm -rf .canary TestResults.Batched
     :returncode: 30

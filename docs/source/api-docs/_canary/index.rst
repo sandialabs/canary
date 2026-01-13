@@ -11,6 +11,7 @@ _canary
    collect
    conductor
    config/index
+   database
    enums
    error
    expression
@@ -26,6 +27,7 @@ _canary
    protocols
    queue
    queue_executor
+   rerun
    resource_pool/index
    rules
    runtest

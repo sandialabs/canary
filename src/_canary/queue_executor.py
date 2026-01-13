@@ -116,6 +116,8 @@ class ResourceQueueExecutor:
         self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
         if os.getenv("CANARY_LEVEL") == "1":
             self.enable_live_monitoring = False
+        elif os.getenv("CANARY_MAKE_DOCS"):
+            self.enable_live_monitoring = False
 
     def __enter__(self) -> "ResourceQueueExecutor":
         self._store.clear()
