@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-import json
 import os
 from typing import Any
 
 from ...hookspec import hookimpl
 from ...workspace import Workspace
+from ...util import json_helper as json
 from ..types import CanaryReporter
 
 

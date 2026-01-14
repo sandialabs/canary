@@ -9,16 +9,16 @@ Multi-page HTML report
 
 A multi-page HTML report of a test session can be generated after the session has completed:
 
-.. command-output:: canary run -d TestResults.HTML ./basic
+.. command-output:: canary run ./basic
     :nocache:
     :cwd: /examples
     :ellipsis: 0
-    :setup: rm -rf .canary TestResults.HTML
+    :setup: rm -rf .canary TestResults
 
-.. command-output:: canary -C TestResults.HTML report html create
+.. command-output:: canary report html create
     :nocache:
     :cwd: /examples
 
-.. command-output:: cat TestResults.HTML/canary-report.html
+.. command-output:: cat TestResults/canary-report.html
     :nocache:
     :cwd: /examples

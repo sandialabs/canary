@@ -123,7 +123,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write("| Test | Duration | Status |\n")
         fh.write("| --- | --- | --- |\n")
         for group, cases in totals.items():
-            for case in sorted(cases, key=lambda c: c.duration):
+            for case in sorted(cases, key=lambda c: c.timekeeper.duration):
                 file = os.path.join(self.md_dir, f"{case.id}.md")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: markdown file not found")
