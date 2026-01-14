@@ -17,4 +17,3 @@ Batched execution
 
     batch.basic
     batch.args
-    batch.scheme

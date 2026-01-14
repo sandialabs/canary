@@ -11,6 +11,6 @@ The :func:`canary.directives.copy` directive copies files into the test's workin
 
 .. literalinclude:: /examples/copy_and_link/copy_and_link.pyt
     :language: python
-    :emphasize-lines: 5, 10
+    :emphasize-lines: 9, 14
 
 Relative paths are assumed relative to the test file's source directory.
