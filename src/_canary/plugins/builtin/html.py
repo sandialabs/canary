@@ -129,7 +129,7 @@ class HTMLReporter(CanaryReporter):
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
         fh.write("<tbody>")
-        for case in sorted(cases, key=lambda c: c.duration):
+        for case in sorted(cases, key=lambda c: c.timekeeper.duration):
             file = os.path.join(self.cases_dir, f"{case.id}.html")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
@@ -147,7 +147,7 @@ class HTMLReporter(CanaryReporter):
         fh.write("<body>\n<h1>Test Results</h1>\n<table>\n")
         fh.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
         for group, cases in totals.items():
-            for case in sorted(cases, key=lambda c: c.duration):
+            for case in sorted(cases, key=lambda c: c.timekeeper.duration):
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")

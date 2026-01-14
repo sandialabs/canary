@@ -18,7 +18,7 @@ from ..util.string import pluralize
 from .schemas import resource_pool_schema
 
 if TYPE_CHECKING:
-    from ..config import Config
+    from ..config import Config as CanaryConfig
 
 logger = logging.get_logger(__name__)
 
@@ -307,7 +307,7 @@ class ResourcePool:
         raise ValueError(f"Attempting to checkin a resource whose ID is unknown: {rspec!r}")
 
 
-def make_resource_pool(config: "Config"):
+def make_resource_pool(config: "CanaryConfig"):
     pool: dict[str, dict[str, Any]] = {"resources": {}, "additional_properties": {}}
     config.pluginmanager.hook.canary_resource_pool_fill(config=config, pool=pool)
     pool = resource_pool_schema.validate(pool)

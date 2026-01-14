@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary.util.dynamic_version:
+
 dynamic_version
 ===============
 

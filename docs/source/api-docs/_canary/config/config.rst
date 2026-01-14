@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary.config.config:
+
 config
 ======
 

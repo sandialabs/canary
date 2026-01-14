@@ -28,14 +28,14 @@ Rerun all failed tests
 
 .. command-output:: canary run -k 'not success'
     :cwd: /examples
-    :returncode: 14
+    :returncode: 3
 
 Rerun only the diffed tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. command-output:: canary run -k diff
     :cwd: /examples
-    :returncode: 2
+    :returncode: 3
 
 Rerun tests inside the view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

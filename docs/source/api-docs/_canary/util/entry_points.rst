@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary.util.entry_points:
+
 entry_points
 ============
 

@@ -3,6 +3,7 @@ bin/my-deploy.sh
 junit.xml
 .coverage
 coverage.xml
+canary.json
 html.cov
 *.pyc
 .canary_cache

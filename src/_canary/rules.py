@@ -39,16 +39,17 @@ logger = logging.get_logger(__name__)
 
 
 class RuleOutcome:
-    """Represents the result of evaluating a rule.
-
-    Attributes:
-        ok (bool): Whether the rule evaluation succeeded.
-        reason (str | None): Optional explanation for a failure.
-    """
+    """Represents the result of evaluating a rule."""
 
     __slots__ = ("ok", "reason")
 
     def __init__(self, ok: bool = True, reason: str | None = None) -> None:
+        """The outcome of an evaluated rule
+
+        Args:
+            ok: Whether the rule evaluation succeeded.
+            reason: Optional explanation for a failure.
+        """
         self.ok = ok
         self.reason = reason
 

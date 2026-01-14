@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary.plugins.builtin.testcase_generator:
+
 testcase_generator
 ==================
 

@@ -19,7 +19,7 @@ copyright = """\
 def module_name(name) -> str:
     if not name.endswith(".py"):
         return None
-    elif name in ("__init__.py", "_version.py", "__main__.py", "flux_api.py"):
+    elif name in ("__init__.py", "_version.py", "__main__.py", "submit_api.py"):
         return None
     return os.path.splitext(name)[0]
 
@@ -96,6 +96,9 @@ class APIDocsMaker:
                 fp = io.StringIO()
                 fp.write(f"""\
 {copyright}
+
+.. _{name.lstrip('_')}:
+
 {module}
 {"=" * len(module)}
 

@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _hpc_connect.util.dynamic_version:
+
 dynamic_version
 ===============
 

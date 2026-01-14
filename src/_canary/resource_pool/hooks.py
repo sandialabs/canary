@@ -19,7 +19,7 @@ from ..util import logging
 from .schemas import resource_pool_schema
 
 if TYPE_CHECKING:
-    from ..config import Config
+    from ..config import Config as CanaryConfig
     from ..config.argparsing import Parser
 
 
@@ -66,7 +66,9 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
-def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+def initialize_resource_pool_counts(
+    config: "CanaryConfig", pool: dict[str, dict[str, Any]]
+) -> None:
     use_hyperthreads: bool = config.getoption("resource_pool_enable_hyperthreads", False)
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
     cpus: int
@@ -82,7 +84,9 @@ def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, 
 
 
 @hookimpl(specname="canary_resource_pool_fill")
-def fill_resource_pool_gpu_counts_nvidia(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+def fill_resource_pool_gpu_counts_nvidia(
+    config: "CanaryConfig", pool: dict[str, dict[str, Any]]
+) -> None:
     if nvidia_smi := shutil.which("nvidia-smi"):
         gpu_ids: list[str] = []
         args = [nvidia_smi, "--list-gpus"]
@@ -97,7 +101,7 @@ def fill_resource_pool_gpu_counts_nvidia(config: "Config", pool: dict[str, dict[
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")
-def finalize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+def finalize_resource_pool_counts(config: "CanaryConfig", pool: dict[str, dict[str, Any]]) -> None:
     # Command line options take precedence, so they are filled last and overwrite whatever else is
     # present
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]

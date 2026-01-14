@@ -25,7 +25,7 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 
 .. command-output:: canary run ./xstatus/xfail-fail.pyt
     :cwd: /examples
-    :returncode: 4
+    :returncode: 8
     :setup: rm -rf .canary TestResults
 
 Specifying a nonzero exit code

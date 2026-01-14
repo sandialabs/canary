@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary.util._difflib:
+
 _difflib
 ========
 

@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _hpc_connect.pluginmanager:
+
 pluginmanager
 =============
 

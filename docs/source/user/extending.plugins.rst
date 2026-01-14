@@ -36,7 +36,7 @@ Plugin functions are registered with ``canary`` by decorating with ``canary.hook
     def canary_plugin_name(...):
        ...
 
-Recognized plugin hooks defined in :ref:`hookspec`.
+Recognized plugin hooks defined in :ref:`canary.hookspec`.
 
 Examples
 --------

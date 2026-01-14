@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _hpcc_slurm.submit:
+
 submit
 ======
 

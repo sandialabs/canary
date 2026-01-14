@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary_cmake.cdash.gitlab_issue_generator:
+
 gitlab_issue_generator
 ======================
 
