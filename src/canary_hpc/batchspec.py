@@ -181,16 +181,16 @@ class TestBatch:
 
     @property
     def resources(self) -> dict[str, list[dict]]:
-        """resources is of the form
+        """resources is of the form::
 
-        resources[type] = [{"id": str, "slots": int}]
+          resources[type] = [{"id": str, "slots": int}]
 
-        If the test required 2 cpus and 2 gpus, resources would look like
+        If the test required 2 cpus and 2 gpus, resources would look like::
 
-        resources = {
-            "cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
-            "gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
-        }
+          resources = {
+              "cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+              "gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+          }
 
         """
         return self._resources

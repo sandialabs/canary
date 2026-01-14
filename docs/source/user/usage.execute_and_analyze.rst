@@ -4,6 +4,11 @@
 
 .. _usage-execute-and-analyze:
 
+.. command-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :silent:
+
+
 The execute and analyze pattern
 ===============================
 
@@ -31,11 +36,11 @@ The dependency graph for this test is
 .. command-output:: canary describe execute_and_analyze/execute_and_analyze.pyt
     :cwd: /examples
 
-As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_analyze[a=1]``, ``execute_and_analyze[a=2]``, and ``execute_and_analyze[a=3]``.  When the test is run, these "children" tests are run first and then the base case:
+As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_analyze.a=1``, ``execute_and_analyze.a=2``, and ``execute_and_analyze.a=3``.  When the test is run, these "children" tests are run first and then the base case:
 
-.. command-output:: canary run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
+.. command-output:: canary run ./execute_and_analyze
     :cwd: /examples
-    :setup: rm -rf .canary TestResults.ExecuteAndAnalyze
+    :setup: rm -rf .canary TestResults
 
 Test execution phases
 ---------------------
@@ -93,18 +98,12 @@ Additionally, a full table of dependency parameters is accessible via key entry 
 Run only the analysis section of a test
 ---------------------------------------
 
-After a test is run, the composite base case can be run with the :ref:`canary run -- --stage=analyze<canary-run>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
+After the test has been run, the analysis sections can be run without rerunning the (potentially expensive) test portion, navigate the test's results directory and execute ``canary run``:
 
-.. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :language: python
-
-After the test has been run, the analysis sections can be run without rerunning the (potentially expensive) test portion:
-
-.. command-output:: canary run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
+.. command-output:: cd $(canary location execute_and_analyze); canary run .
     :cwd: /examples
-    :setup: rm -rf .canary TestResults.ExecuteAndAnalyze
-    :ellipsis: 0
+    :shell:
 
-
-.. command-output:: canary -C TestResults.ExecuteAndAnalyze run . -- --stage=analyze
+.. command-output:: rm -rf .canary TestResults
     :cwd: /examples
+    :silent:

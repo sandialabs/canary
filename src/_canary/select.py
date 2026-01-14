@@ -98,11 +98,6 @@ class SelectorSnapshot:
     selection result is still valid and, if so, to reconstruct the selected tests without fully
     re-running all rules.
 
-    Attributes:
-      spec_set_id: Stable SHA-256 hash identifying the original spec set.
-      masked: Mapping of masked spec IDs to their mask reasons.  rules: A list of serialized rules
-        that were applied.
-      created_on: ISO-8601 timestamp of snapshot creation.
     """
 
     spec_set_id: str

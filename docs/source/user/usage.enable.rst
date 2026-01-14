@@ -12,11 +12,16 @@ Tests can be enabled and/or disabled using the :ref:`enable<directive-enable>` d
 .. literalinclude:: /examples/enable/enable.pyt
     :language: python
 
-.. command-output:: canary run -d TestResults.Enable ./enable
-    :setup: rm -rf .canary TestResults.Enable
+.. command-output:: canary run ./enable
+    :setup: rm -rf .canary TestResults
     :returncode: 7
     :cwd: /examples
 
-.. command-output:: canary run -d TestResults.Enable -o enable ./enable
-    :setup: rm -rf .canary TestResults.Enable
+.. command-output:: canary run -o enable ./enable
+    :setup: rm -rf .canary TestResults
     :cwd: /examples
+
+
+.. command-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :silent:

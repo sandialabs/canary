@@ -267,6 +267,15 @@ class PathSpec(argparse.Action):
         errors: list[str] = []
         possible_specs: list[str] = []
         for item in values:
+
+            # Special cases:
+            # Use the shell's PWD in case we are inside a view symlink that we don't want resolved
+            # (Path.cwd() will resolve the path in this case)
+            if item == ".":
+                item = os.getenv("PWD") or os.getcwd()
+            elif item == "..":
+                item = (os.getenv("PWD") or os.getcwd()) + "/.."
+
             abspath = os.path.abspath(item)
 
             # --- Lock file not supported ---

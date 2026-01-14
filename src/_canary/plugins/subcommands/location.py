@@ -70,9 +70,10 @@ If no options are give, -x is assumed."""
             case: TestCase = workspace.find(case=args.testspec)
             if args.show_log:
                 f = case.workspace.joinpath(case.stdout)
-            elif args.show_working_directory:
-                f = case.workspace.dir
             else:
-                f = case.workspace.dir
+                if workspace.view and (workspace.view / case.workspace.path).exists():
+                    f = workspace.view / case.workspace.path
+                else:
+                    f = case.workspace.dir
         print(f)
         return 0

@@ -4,6 +4,11 @@
 
 .. _canary_hpc-run:
 
+.. command-output:: rm -rf TestResults .canary
+  :cwd: /examples
+  :silent:
+
+
 Running tests in a scheduler
 ============================
 
@@ -63,41 +68,25 @@ Batch concurrency can be controlled by
 * ``--workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
 * ``-b workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
-Rerunning tests
----------------
-
-Navigate to the test results directory and execute :ref:`canary run<canary-run>` to rerun tests:
-
-.. code-block:: console
-
-   canary -C TEST_RESULTS_DIR run [OPTIONS]
-
-
-or
-
-.. code-block:: console
-
-   cd TEST_RESULTS_DIR
-   canary run [OPTIONS]
-
-where ``TEST_RESULTS_DIR`` is the test results directory.
-
-When a test session is created in batched mode, the batch arguments from the test session invocation are inherited in future reruns.
-
 Examples
 --------
 
 * Run the canary example suite in 4 batches
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 .
+  .. command-output:: canary run --workers=1 -b scheduler=shell -b spec=count:4 .
     :cwd: /examples
-    :setup: rm -rf .canary TestResults.Batched
-    :returncode: 30
+    :setup: rm -rf .canary TestResults
+    :returncode: 14
 
 
 * Run the canary example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .
+  .. command-output:: canary run --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .
     :cwd: /examples
-    :setup: rm -rf .canary TestResults.Batched
-    :returncode: 30
+    :setup: rm -rf .canary TestResults
+    :returncode: 14
+
+
+.. command-output:: rm -rf TestResults .canary
+  :cwd: /examples
+  :silent:

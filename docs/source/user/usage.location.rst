@@ -16,14 +16,6 @@ For example to move to the test execution directory, simply:
 
 .. code-block:: console
 
-    cd $(canary location /ID)
+    cd $(canary location ID)
 
 where ``ID`` is the test ID that is printed by :ref:`canary status<basics-status>`.
-
-.. note::
-
-   ``ID`` must be prefixed by ``/``.
-
-.. note::
-
-    ``canary location`` should be run inside of a test session by either navigating to the session's directory or by ``canary -C PATH``.

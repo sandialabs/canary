@@ -12,6 +12,17 @@ Resources needed by tests can be copied and linked from their source locations t
 .. literalinclude:: /examples/copy_and_link/copy_and_link.pyt
     :language: python
 
-.. command-output:: canary run -d TestResults.CopyAndLink ./copy_and_link
+.. command-output:: canary run ./copy_and_link
     :cwd: /examples
-    :setup: rm -rf .canary TestResults.CopyAndLink
+    :ellipsis: 0
+    :setup: rm -rf .canary TestResults
+
+
+.. command-output:: cd $(canary location copy_and_link); ls -l *.txt
+    :cwd: /examples
+    :shell:
+
+
+.. command-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :silent:
