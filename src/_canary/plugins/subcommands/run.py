@@ -267,7 +267,6 @@ class PathSpec(argparse.Action):
         errors: list[str] = []
         possible_specs: list[str] = []
         for item in values:
-
             abspath = os.path.abspath(item)
 
             # --- Lock file not supported ---
