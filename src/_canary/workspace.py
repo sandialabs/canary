@@ -372,6 +372,10 @@ class Workspace:
             return str(p.relative_to(self.view))
         return None
 
+    def is_session_dir(self, path: str | os.PathLike[str]) -> bool:
+        p = Path(path).absolute()
+        return p.is_relative_to(self.sessions_dir)
+
     def info(self) -> dict[str, Any]:
         latest_session: str | None = None
         if (self.refs_dir / "latest").exists():

@@ -86,7 +86,6 @@ Examples
     :setup: rm -rf .canary TestResults
     :returncode: 14
 
-
 .. command-output:: rm -rf TestResults .canary
   :cwd: /examples
   :silent:

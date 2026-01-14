@@ -80,6 +80,9 @@ class CanaryMain:
         if args.debug:
             reraise = True
         if args.C:
+            if pwd := os.getenv("PWD"):
+                os.environ["PWD0"] = pwd
+            os.environ["PWD"] = args.C
             if not os.path.exists(args.C):
                 raise ValueError(f"cannot change to {args.C!r}: No such file or directory")
             os.chdir(args.C)
@@ -92,6 +95,8 @@ class CanaryMain:
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
+        if pwd := os.environ.pop("PWD0", None):
+            os.environ["PWD"] = pwd
         os.chdir(config.invocation_dir)
 
 

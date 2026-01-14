@@ -211,24 +211,33 @@ class Command(_Command):
         Return the :class:`~subprocess.Popen` object representing the running
         command.
         """
-        if self.setup:
-            with open(os.devnull, "a") as fh:
-                p = Popen(
-                    shlex.split(self.setup), stdout=fh, stderr=STDOUT, cwd=self.working_directory
-                )
-            p.wait()
+        save_env = os.environ.copy()
+        try:
+            os.environ["PWD"] = self.working_directory
+            if self.setup:
+                with open(os.devnull, "a") as fh:
+                    p = Popen(
+                        shlex.split(self.setup),
+                        stdout=fh,
+                        stderr=STDOUT,
+                        cwd=self.working_directory,
+                    )
+                p.wait()
 
-        command = self.command
-        global g_fp, g_path
-        fd, g_path = tempfile.mkstemp()
-        g_fp = os.fdopen(fd, "w")
-        proc = Popen(
-            command,
-            shell=self.shell,
-            stdout=g_fp,
-            stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
-            cwd=self.working_directory,
-        )  # nosec B602
+            command = self.command
+            global g_fp, g_path
+            fd, g_path = tempfile.mkstemp()
+            g_fp = os.fdopen(fd, "w")
+            proc = Popen(
+                command,
+                shell=self.shell,
+                stdout=g_fp,
+                stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
+                cwd=self.working_directory,
+            )  # nosec B602
+        finally:
+            os.environ.clear()
+            os.environ.update(save_env)
         return proc
 
     def get_output(self):
@@ -356,8 +365,10 @@ def run_programs(app, doctree):
         else:
             if not node["anyreturncode"] and returncode != node["returncode"]:
                 logger.warning(
-                    "Unexpected return code %s from command %r (output=%r)",
+                    "%r: unexpected return code %s!=%s from command %r (output=%s)",
+                    node,
                     returncode,
+                    node["returncode"],
                     command,
                     output,
                 )
