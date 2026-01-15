@@ -310,13 +310,16 @@ class TestCase:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
             stat = "XDIFF" if xstatus == Status.code_for_status["DIFFED"] else "DIFFED"
-            self.status.set(status=stat, reason=None if not e.args else e.args[0])
+            default_reason: str | None = None
+            if stat == "DIFFED":
+                default_reason = "Empty TestDiffed exception raised during execution"
+            self.status.set(status=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
-            stat = (
-                "XFAIL"
-                if (xstatus == Status.code_for_status["FAILED"] or xstatus < 0)
-                else "FAILED"
-            )
+            f_status = Status.code_for_status["FAILED"]
+            stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
+            default_reason: str | None = None
+            if stat == "FAILED":
+                default_reason = "Empty TestFailed exception raised during execution"
             self.status.set(status=stat, reason=None if not e.args else e.args[0])
         except TestSkipped as e:
             self.status.set(status="SKIPPED", reason=None if not e.args else e.args[0])
@@ -402,11 +405,11 @@ class TestCase:
         elif code == 0:
             self.status = Status.SUCCESS()
         elif code == Status.code_for_status["DIFFED"]:
-            self.status = Status.DIFFED()
+            self.status = Status.DIFFED(reason=f"Test exited with diff exit code = {code}")
         elif code == Status.code_for_status["SKIPPED"]:
-            self.status = Status.SKIPPED()
+            self.status = Status.SKIPPED(reason=f"Test exited with skip exit code = {code}")
         else:
-            self.status = Status.FAILED(code=code)
+            self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
 
     def refresh(self) -> None:
         try:

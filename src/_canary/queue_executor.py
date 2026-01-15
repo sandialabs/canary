@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from typing import Callable
 
+from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
 from rich.live import Live
@@ -230,8 +231,7 @@ class ResourceQueueExecutor:
 
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
-                    self._wait_all(live)
-                    live.update(final=True)
+                    self._wait_all(start, timeout, live)
                     break
 
                 except CanaryKill:
@@ -281,6 +281,8 @@ class ResourceQueueExecutor:
             logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
         except Exception:
             logger.exception(f"Failed logging finished state of {job.id[:7]}")
+        for h in logger.handlers:
+            h.flush()
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -312,10 +314,10 @@ class ResourceQueueExecutor:
                         finished_on=datetime.datetime.fromtimestamp(now).isoformat(),
                         duration=now - slot.start_time,
                     )
-                    slot.job.set_status(
-                        status="TIMEOUT",
-                        reason=f"Job timed out after {slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
-                    )
+                    reason: str = f"Job timed out after {total_timeout} s."
+                    if self.timeout_multiplier != 1.0:
+                        reason += f" (={slot.job.timeout}*{self.timeout_multiplier})"
+                    slot.job.set_status(status="TIMEOUT", reason=reason)
                     slot.job.measurements.update(measurements)
                     slot.job.save()
                 except Exception:
@@ -397,14 +399,20 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self, live: "CanaryLive") -> None:
+    def _wait_all(self, start: float, timeout: float, live: "CanaryLive") -> None:
         """Wait for all active processes to complete."""
-        while self.inflight:
-            self._check_finished_processes()
-            self._check_for_leaks()
-            if self.inflight:
+        while True:
+            if not self.inflight:
+                break
+            if timeout >= 0.0 and time.time() - start > timeout:
+                self._terminate_all(signal.SIGUSR2)
+                self._check_for_leaks()
+                raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
+            else:
+                self._check_finished_processes()
+                self._check_for_leaks()
                 time.sleep(0.075)
-            live.update()
+                live.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
@@ -569,7 +577,6 @@ class CanaryLive:
         if self.enabled:
             self.mute_stream_handlers()
             self.live = Live(
-                self.factory(),
                 refresh_per_second=1,
                 console=self.console,
                 transient=False,
@@ -589,6 +596,9 @@ class CanaryLive:
             if final or time.monotonic() - self._mark > 0.25:
                 self.live.update(self.factory(final=final) or "", refresh=True)
                 self._mark = time.monotonic()
+        elif final:
+            group = self.factory(final=True)
+            rprint(group)
 
     def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)
@@ -596,11 +606,13 @@ class CanaryLive:
             if isinstance(h, logging.builtin_logging.StreamHandler):
                 h.addFilter(self._filter)
                 self._stream_handlers.append(h)
+                h.flush()
         root = logging.builtin_logging.getLogger()
         for h in root.handlers:
             if isinstance(h, logging.builtin_logging.StreamHandler):
                 h.addFilter(self._filter)
                 self._stream_handlers.append(h)
+                h.flush()
 
     def unmute_stream_handlers(self) -> None:
         for h in self._stream_handlers:
