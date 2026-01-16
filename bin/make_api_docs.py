@@ -97,7 +97,7 @@ class APIDocsMaker:
                 fp.write(f"""\
 {copyright}
 
-.. _{name.lstrip('_')}:
+.. _{name.lstrip("_")}:
 
 {module}
 {"=" * len(module)}
