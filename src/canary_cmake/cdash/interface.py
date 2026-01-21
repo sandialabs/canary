@@ -121,10 +121,7 @@ class server:
             # Proxy settings must be turned off to submit to CDash
             curl = Executable("curl")
             curl.add_default_args("-v")
-            args = ["-X", "PUT", url]
-            args.extend(["-H", "Content-Type: text/xml"])
-            args.extend(["-H", "Accept: text/xml"])
-            args.extend(["--data-binary", f"@{file}"])
+            args = ["--upload-file", file, url]
             efile = "cdash-put-err.txt"
             try:
                 payload = {"status": "NA", "message": None, "buildid": None}
