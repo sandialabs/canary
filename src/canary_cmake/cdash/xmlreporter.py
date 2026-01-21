@@ -265,7 +265,7 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
-            if case.status.state != "COMPLETED":
+            if case.status.state != "COMPLETE":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
