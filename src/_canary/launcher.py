@@ -66,7 +66,7 @@ class SubprocessLauncher(Launcher):
                 args.extend(a)
             if a := case.get_attribute("script_args"):
                 args.extend(a)
-            case.set_attribute("command", shlex.join(args))
+            case.add_measurement("command_line", shlex.join(args))
             try:
                 stdout = open(case.stdout, "a")
                 stderr: TextIO | int
@@ -155,7 +155,7 @@ class PythonRunpyLauncher(Launcher):
 
     def run(self, case: "TestCase") -> int:
         logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
-        case.set_attribute("command", shlex.join(sys.argv))
+        case.add_measurement("command_line", shlex.join(sys.argv))
         with self.context(case):
             runpy.run_path(case.spec.file.name, run_name="__main__")
         logger.debug(f"Finished {case.display_name()}")
