@@ -228,7 +228,7 @@ class Selector:
 
     @staticmethod
     def setup_parser(parser: "Parser", tagged: str = "required") -> None:
-        group = parser.add_argument_group("test spec selection")
+        group = parser.get_group("test spec selection")
         group.add_argument(
             "-k",
             dest="keyword_exprs",

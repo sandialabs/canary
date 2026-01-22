@@ -10,6 +10,7 @@ plugins.subcommands
 
    autodoc
    check
+   collect
    common/index
    config
    describe
@@ -29,6 +30,7 @@ plugins.subcommands
    report
    rm
    run
+   select
    selection
    status
    tree

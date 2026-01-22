@@ -27,13 +27,13 @@ class Select(CanarySubcommand):
     description = "Create tagged selection of tests"
 
     def setup_parser(self, parser: "Parser") -> None:
-        Selector.setup_parser(parser)
         group = parser.get_group("test spec selection")
         group.add_argument(
             "--start-dir", action="append", help="Include test cases prefixed by start_dir"
         )
-        group.add_argument("-d", dest="delete_tag", action="store_true", help="Delete TAG")
+        group.add_argument("-d", dest="delete_tag", action="store_true", help="Delete tag")
         group.add_argument("-m", dest="move_tag", metavar="oldtag", help="Move/rename a tag")
+        Selector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()

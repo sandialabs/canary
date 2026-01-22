@@ -73,19 +73,12 @@ workspace
      view: TestResults
 
 
-selection
----------
-
-.. code-block:: yaml
-
-   selection
-     default_tag: ':all:'
-
-
 run
 ---
 
 .. code-block:: yaml
 
-   timeout:
-     str: T
+   run:
+     default_tag: ':all:'
+     timeout:
+       str: T
