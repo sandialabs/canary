@@ -4,6 +4,7 @@
 
 from . import autodoc
 from . import check
+from . import collect
 from . import config
 from . import describe
 from . import docs
@@ -22,6 +23,7 @@ from . import refresh
 from . import report
 from . import rm
 from . import run
+from . import select
 from . import selection
 from . import status
 from . import tree
@@ -29,6 +31,7 @@ from . import tree
 plugins = [
     autodoc,
     check,
+    collect,
     config,
     describe,
     docs,
@@ -47,6 +50,7 @@ plugins = [
     report,
     rm,
     run,
+    select,
     selection,
     status,
     tree,

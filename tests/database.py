@@ -61,7 +61,7 @@ def spec_ids(specs):
 def test_put_and_load_specs_roundtrip(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=5)
 
-    db.put_specs("sig-1", specs)
+    db.put_specs(specs)
     loaded = db.load_specs()
 
     assert spec_ids(loaded) == spec_ids(specs)
@@ -70,24 +70,13 @@ def test_put_and_load_specs_roundtrip(db: WorkspaceDatabase, make_random_specs: 
 def test_dependencies_roundtrip(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=6)
 
-    db.put_specs("sig-deps", specs)
+    db.put_specs(specs)
     loaded = {s.id: s for s in db.load_specs()}
 
     for spec in specs:
         orig = {d.id for d in spec.dependencies}
         new = {d.id for d in loaded[spec.id].dependencies}
         assert orig == new
-
-
-def test_load_specs_by_signature(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
-    specs_a = make_random_specs(db.path.parent, count=3)
-    specs_b = make_random_specs(db.path.parent, count=4)
-
-    db.put_specs("sig-a", specs_a)
-    db.put_specs("sig-b", specs_b)
-
-    loaded = db.load_specs_by_signature("sig-b")
-    assert spec_ids(loaded) == spec_ids(specs_b)
 
 
 # -----------------------------------------------------------------------------
@@ -97,7 +86,7 @@ def test_load_specs_by_signature(db: WorkspaceDatabase, make_random_specs: MakeR
 
 def test_resolve_unique_prefix(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=3)
-    db.put_specs("sig", specs)
+    db.put_specs(specs)
 
     full = specs[0].id
     prefix = full[:6]
@@ -119,7 +108,7 @@ def xx_test_upstream_and_downstream(db: WorkspaceDatabase, make_linear_specs):
     A -> B -> C
     """
     specs = make_linear_specs(3)
-    db.put_specs("sig", specs)
+    db.put_specs(specs)
 
     A, B, C = specs
 
@@ -134,7 +123,7 @@ def test_get_dependency_graph_includes_all_nodes(
     db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs
 ):
     specs = make_random_specs(db.path.parent, count=5)
-    db.put_specs("sig", specs)
+    db.put_specs(specs)
 
     graph = db.get_dependency_graph()
 
@@ -149,19 +138,18 @@ def test_get_dependency_graph_includes_all_nodes(
 
 def test_put_and_load_selection(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=4)
-    db.put_specs("sig", specs)
+    db.put_specs(specs)
 
     db.put_selection(
         tag="smoke",
-        signature="sig",
         specs=specs[:2],
         scanpaths={"tests": ["a", "b"]},
         owners=["me"],
     )
 
     meta = db.get_selection_metadata("smoke")
-    assert meta.tag == "smoke"
-    assert meta.scanpaths["tests"] == ["a", "b"]
+    assert meta["tag"] == "smoke"
+    assert meta["scanpaths"] == {"tests": ["a", "b"]}
 
     loaded = db.load_specs_by_tagname("smoke")
     assert {s.id for s in loaded} == {s.id for s in specs[:2]}
@@ -169,8 +157,8 @@ def test_put_and_load_selection(db: WorkspaceDatabase, make_random_specs: MakeRa
 
 def test_rename_selection(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=2)
-    db.put_specs("sig", specs)
-    db.put_selection(tag="old", signature="sig", specs=specs, scanpaths={})
+    db.put_specs(specs)
+    db.put_selection(tag="old", specs=specs, scanpaths={})
 
     db.rename_selection("old", "new")
 
@@ -223,7 +211,7 @@ def test_result_history(db: WorkspaceDatabase, make_session):
 
 def test_select_from_view_glob(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
     specs = make_random_specs(db.path.parent, count=5)
-    db.put_specs("sig", specs)
+    db.put_specs(specs)
     # assume views look like "foo/bar/test.py"
     prefix = specs[0].file.parent.parent.as_posix() + "/%"
     ids = db.select_from_view([prefix])

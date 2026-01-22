@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import rich
 import rich.console
 import rich.table
+import yaml
 
 from ...hookspec import hookimpl
 from ...workspace import Workspace
@@ -42,30 +43,14 @@ class Info(CanarySubcommand):
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        selection = workspace.db.get_selection_metadata(tag)
         specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
-        fh.write(f"Created on: {selection.created_on}\n")
-        fh.write("Scan paths:\n")
-        for root, paths in selection.scanpaths.items():
-            fh.write(f"  {root}:\n")
-            for path in paths:
-                fh.write(f"    {path}\n")
-        if selection.on_options:
-            fh.write("Generation options:\n")
-            for opt in selection.on_options:
-                fh.write(f"  -o {opt}\n")
-        if selection.keyword_exprs:
-            fh.write("Keyword expressions:\n")
-            for expr in selection.keyword_exprs:
-                fh.write(f"  -k {expr}\n")
-        if selection.parameter_expr:
-            fh.write(f"Parameter expression:\n  -p {selection.parameter_expr}\n")
-        if selection.owners:
-            fh.write("Owners:\n")
-            for o in selection.owners:
-                fh.write(f"  --owner {o}\n")
-        if selection.regex:
-            fh.write(f"Regular expression filter:\n  --regex {selection.regex}\n")
+        selection = workspace.db.get_selection_metadata(tag)
+        fh.write(f"Created on: {selection.pop('created_on')}\n")
+        for key in list(selection.keys()):
+            value = selection.pop(key)
+            if value is not None:
+                selection[key.replace("_", " ").title()] = value
+        yaml.dump(selection, fh, default_flow_style=False)
         fh.write(f"Test specs ({len(specs)}):")
         table = rich.table.Table("No.", "ID", "Name")
         for i, spec in enumerate(specs):

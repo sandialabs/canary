@@ -35,12 +35,10 @@ The following diagram illustrates the full lifecycle::
 """
 
 import fnmatch
-import hashlib
 import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -53,7 +51,6 @@ from rich.table import Table
 
 from . import config
 from .hookspec import hookimpl
-from .util import json_helper as json
 from .util import logging
 from .util.parallel import starmap
 from .util.string import pluralize
@@ -80,13 +77,6 @@ class Generator:
         self.workspace = workspace
         self.on_options = list(on_options)
         self.specs: list["ResolvedSpec"] = []
-
-    @cached_property
-    def signature(self) -> str:
-        parts = [str(generator.file) for generator in self.generators] + self.on_options
-        parts.sort()
-        signature = hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
-        return signature
 
     def run(self) -> list["ResolvedSpec"]:
         pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")

@@ -36,8 +36,6 @@ class Selection(CanarySubcommand):
         Selector.setup_parser(p)
         p = subparsers.add_parser("rm")
         p.add_argument("tag", help="Remove this selection")
-        p = subparsers.add_parser("refresh")
-        p.add_argument("tag", help="Refresh this selection")
         p = subparsers.add_parser("rename")
         p.add_argument("old", help="Current tag name")
         p.add_argument("new", help="New tag name")
@@ -66,8 +64,6 @@ class Selection(CanarySubcommand):
             logger.info(f"To run this selection execute '[bold]canary run {args.tag}[/]'")
         elif args.select_command == "rm":
             workspace.db.delete_selection(args.tag)
-        elif args.select_command == "refresh":
-            workspace.refresh_selection(args.tag)
         elif args.select_command == "rename":
             workspace.db.rename_selection(args.old, args.new)
         else:

@@ -392,6 +392,72 @@ class Workspace:
         }
         return info
 
+    def collect(
+        self,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+    ) -> list["ResolvedSpec"]:
+        """Find test case generators in scan_paths and add them to this workspace"""
+        collector = Collector()
+        collector.add_scanpaths(scanpaths)
+        generators = collector.run()
+        resolved = self.generate_testspecs(generators=generators, on_options=on_options)
+        self.db.put_specs(resolved)
+        return resolved
+
+    def select(
+        self,
+        tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["ResolvedSpec"]:
+        """Find test case generators in scan_paths and add them to this workspace"""
+        resolved = self.db.load_specs()
+        specs = self.select_from_specs(
+            resolved,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        self.db.put_selection(
+            tag,
+            specs,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        return specs
+
+    def select_from_specs(
+        self,
+        resolved: list["ResolvedSpec"],
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["ResolvedSpec"]:
+        """Find test case generators in scan_paths and add them to this workspace"""
+        selector = select.Selector(resolved, self.root)
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        if prefixes:
+            selector.add_rule(rules.PrefixRule(prefixes=prefixes))
+        specs = selector.run()
+        return specs
+
     def create_selection(
         self,
         tag: str | None,
@@ -403,24 +469,17 @@ class Workspace:
         regex: str | None = None,
     ) -> list["ResolvedSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
+        resolved = self.collect(scanpaths, on_options=on_options)
+        specs = self.select_from_specs(
+            resolved,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
         tag = tag or unique_random_name(self.db.tags)
-        collector = Collector()
-        collector.add_scanpaths(scanpaths)
-        generators = collector.run()
-        signature, resolved = self.generate_testspecs(generators=generators, on_options=on_options)
-        selector = select.Selector(resolved, self.root)
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
-        specs = selector.run()
         self.db.put_selection(
             tag,
-            signature,
             specs,
             scanpaths=scanpaths,
             on_options=on_options,
@@ -454,18 +513,6 @@ class Workspace:
             selector.add_rule(rules.IDsRule(ids))
         if selector.rules:
             selector.run()
-
-    def refresh_selection(self, tag: str) -> list["ResolvedSpec"]:
-        selection = self.db.get_selection_metadata(tag)
-        return self.create_selection(
-            tag=tag,
-            scanpaths=selection.scanpaths,
-            on_options=selection.on_options,
-            keyword_exprs=selection.keyword_exprs,
-            parameter_expr=selection.parameter_expr,
-            owners=selection.owners,
-            regex=selection.regex,
-        )
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
@@ -514,7 +561,7 @@ class Workspace:
         self,
         generators: list["AbstractTestGenerator"],
         on_options: list[str] | None = None,
-    ) -> tuple[str, list[ResolvedSpec]]:
+    ) -> list[ResolvedSpec]:
         """Generate resolved test specs
 
         Args:
@@ -526,19 +573,13 @@ class Workspace:
           Resolved specs
 
         """
-        # canary selection create -r examples -k foo-bar foo-bar
-        # canary selection create -r examples -k baz baz
-        # canary selection refresh baz
         on_options = on_options or []
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
-        if cached := self.db.load_specs_by_signature(generator.signature):
-            logger.info("[bold]Retrieved[/] %d test specs from cache" % len(cached))
-            return generator.signature, cached
         resolved = generator.run()
         pm = logger.progress_monitor("[bold]Caching[/] test specs")
-        self.db.put_specs(generator.signature, resolved)
+        self.db.put_specs(resolved)
         pm.done()
-        return generator.signature, resolved
+        return resolved
 
     def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
         lookup: dict[str, TestCase] = {}
