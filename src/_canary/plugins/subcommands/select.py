@@ -29,12 +29,21 @@ class Select(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         group = parser.get_group("test spec selection")
         group.add_argument(
-            "--start-dir", action="append", help="Include test cases prefixed by start_dir"
+            "-r",
+            "--from-root",
+            dest="from_root",
+            metavar="root",
+            action="append",
+            help="Restrict selection to tests whose source files are located under root"
         )
-        group.add_argument("-d", dest="delete_tag", action="store_true", help="Delete tag")
-        group.add_argument("-m", dest="move_tag", metavar="oldtag", help="Move/rename a tag")
         group.add_argument(
-            "--from", dest="from_tag", metavar="tag", help="Create selection from tag"
+            "-d", "--delete", dest="delete_tag", action="store_true", help="Delete tag"
+        )
+        group.add_argument(
+            "-m", "--move", dest="move_tag", metavar="oldtag", help="Move/rename oldtag to tag"
+        )
+        group.add_argument(
+            "-f", "--from", dest="from_tag", metavar="tag", help="Create selection from tag"
         )
         Selector.setup_parser(parser)
 
@@ -48,7 +57,7 @@ class Select(CanarySubcommand):
             resolved = workspace.db.load_specs_by_tagname(args.from_tag)
             specs = workspace.select_from_specs(
                 resolved,
-                prefixes=args.start_dir,
+                prefixes=args.from_root,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 owners=args.owners,
@@ -57,7 +66,7 @@ class Select(CanarySubcommand):
             workspace.db.put_selection(
                 args.tag,
                 specs,
-                prefixes=args.start_dir,
+                prefixes=args.from_root,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 owners=args.owners,
@@ -68,7 +77,7 @@ class Select(CanarySubcommand):
                 raise ValueError(logging.colorize(f"Selection {args.tag!r} already exists"))
             workspace.select(
                 args.tag,
-                prefixes=args.start_dir,
+                prefixes=args.from_root,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 owners=args.owners,

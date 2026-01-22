@@ -234,37 +234,35 @@ class Selector:
             dest="keyword_exprs",
             metavar="expression",
             action="append",
-            help="Only run tests matching given keyword expression. "
+            help="Restrict selection to tests matching expression. "
             "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
         )
         group.add_argument(
-            "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
+            "--owner",
+            dest="owners",
+            action="append",
+            help="Restrict selection to tests owned by 'owner'"
         )
         group.add_argument(
             "-p",
             dest="parameter_expr",
             metavar="expression",
-            help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
+            help="Restrict selection to tests matching the paramter expression. "
+            "For example: '-p cpus=8' or '-p cpus<8'",
         )
         group.add_argument(
             "--search",
             "--regex",
             dest="regex_filter",
             metavar="regex",
-            help="Include tests containing the regular expression regex in at least 1 of its "
-            "file assets.  regex is a python regular expression, see "
+            help="Restrict selection to tests containing the regular expression regex in at "
+            "least 1 of its file assets.  regex is a python regular expression, see "
             "https://docs.python.org/3/library/re.html",
         )
         if tagged == "required":
-            group.add_argument(
-                "tag",
-                help="Tag this test case selection for future runs [default: False]",
-            )
+            group.add_argument("tag", help="Name this selection 'tag'")
         elif tagged == "optional":
-            group.add_argument(
-                "--tag",
-                help="Tag this test case selection for future runs [default: False]",
-            )
+            group.add_argument("--tag", help="Name this selection 'tag'")
 
 
 class RuntimeSelector:
