@@ -251,7 +251,6 @@ class Selector:
             "For example: '-p cpus=8' or '-p cpus<8'",
         )
         group.add_argument(
-            "-R",
             "--regex",
             dest="regex_filter",
             metavar="regex",
