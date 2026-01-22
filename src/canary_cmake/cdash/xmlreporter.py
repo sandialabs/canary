@@ -299,34 +299,39 @@ class CDashXMLReporter:
             name_fmt = canary.config.getoption("name_format")
             name = pm.canary_cdash_name(case=case) or case.display_name()
             fullname = f"{case.workspace.path.parent}/{name}"
+            command = case.measurements.data.get("command_line", "")
             add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
             add_text_node(test_node, "Path", str(case.workspace.dir.parent))
             add_text_node(test_node, "FullName", f"./{fullname}")
-            add_text_node(test_node, "FullCommandLine", str(case.get_attribute("command")))
+            add_text_node(test_node, "FullCommandLine", str(command))
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
             duration = case.timekeeper.duration
+            add_named_measurement(results, "Command Line", command, type="cdata")
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
             add_named_measurement(results, "Completion Status", completion_status)
-            add_named_measurement(
-                results, "Command Line", str(case.get_attribute("command")), type="cdata"
-            )
             add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
                 add_named_measurement(results, "GPUs", case.gpus)
-            if url := case.get_attribute("url"):
-                add_named_measurement(results, "Test Script", url, type="text/link")
-            for name, value in case.attributes.items():
-                if isinstance(value, str) and value.startswith(("https://", "http://")):
-                    add_named_measurement(results, name.title(), value, type="text/link")
-            for name, value in case.measurements.items():
-                if isinstance(value, (str, int, float)):
-                    add_named_measurement(results, name.title(), value)
+            for name, value in pm.canary_cdash_named_measurements(case=case).items():
+                add_named_measurement(results, name.title(), value)
+            for key, value in case.measurements.items():
+                name = key.replace("_", " ").title()
+                if key == "command_line":
+                    continue
+                elif isinstance(value, (str, int, float)):
+                    add_named_measurement(results, name, value)
+                elif isinstance(value, dict):
+                    value = ", ".join(f"{k}={v}" for k, v in value.items())
+                    add_named_measurement(results, name, value)
+                elif isinstance(value, list):
+                    value = ", ".join(str(_) for _ in value)
+                    add_named_measurement(results, name, value)
                 else:
-                    add_named_measurement(results, name.title(), json.dumps(value))
+                    add_named_measurement(results, name, json.dumps(value))
             add_measurement(
                 results,
                 case.read_output(compress=True),
@@ -487,8 +492,12 @@ def add_named_measurement(
         type = "text/string"
         add_cdata_node(measurement, "Value", arg)
     else:
-        if type is None:
-            type = "numeric/double" if isinstance(arg, (float, int)) else "text/string"
+        if isinstance(arg, (float, int)):
+            type = "numeric/double"
+        elif isinstance(arg, str) and arg.startswith(("http://", "https://")):
+            type = "text/link"
+        else:
+            type = "text/string"
         add_text_node(measurement, "Value", arg)
     measurement.setAttribute("name", name)
     measurement.setAttribute("type", type)

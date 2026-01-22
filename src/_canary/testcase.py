@@ -118,6 +118,9 @@ class TestCase:
     def display_name(self, **kwargs) -> str:
         return self.spec.display_name(**kwargs)
 
+    def add_measurement(self, name: str, value: Any) -> None:
+        self.measurements.add_measurement(name, value)
+
     def set_status(
         self,
         state: str | None = None,
@@ -341,7 +344,11 @@ class TestCase:
         return
 
     def getstate(self) -> dict[str, Any]:
-        return {"status": self.status, "timekeeper": self.timekeeper}
+        return {
+            "status": self.status,
+            "timekeeper": self.timekeeper,
+            "measurements": self.measurements,
+        }
 
     def setstate(self, data: dict[str, Any]) -> None:
         """The companion of getstate, save results from the test ran in a child process in the
@@ -358,6 +365,8 @@ class TestCase:
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
+        if measurements := data.get("measurements"):
+            self.measurements.update(measurements.data)
 
     def do_baseline(self) -> None:
         if not self.spec.baseline:
@@ -693,7 +702,7 @@ class Measurements:
         return cls(data=data)
 
     def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
+        return self.data
 
     def items(self) -> Generator[tuple[str, Any], None, None]:
         for item in self.data.items():

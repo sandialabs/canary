@@ -148,6 +148,11 @@ class CDashHooks:
         """Return the name to use on CDash"""
         ...
 
+    @canary.hookspec
+    def canary_cdash_named_measurements(self, case: "canary.TestCase") -> dict[str, Any] | None:
+        """Return measurements to post to CDash"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -205,6 +210,18 @@ def canary_cdash_artifacts(
     for i, artifact in enumerate(artifacts):
         artifacts[i] = schema.validate(artifact)
     return artifacts
+
+
+@canary.hookimpl(wrapper=True)
+def canary_cdash_named_measurements(
+    case: canary.TestCase,
+) -> Generator[None, list[dict[str, Any]], dict[str, Any]]:
+    measurements: dict[str, Any] = {}
+    result = yield
+    for item in result:
+        if item:
+            measurements.update(item)
+    return measurements
 
 
 cmake_schema = Schema(
