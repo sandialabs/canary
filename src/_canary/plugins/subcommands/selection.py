@@ -27,6 +27,7 @@ def canary_addcommand(parser: "Parser") -> None:
 class Selection(CanarySubcommand):
     name = "selection"
     description = "Create selections of tests to run"
+    add_help = False
 
     def setup_parser(self, parser: "Parser") -> None:
         subparsers = parser.add_subparsers(dest="select_command")

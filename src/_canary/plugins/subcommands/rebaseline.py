@@ -27,7 +27,6 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class Rebaseline(CanarySubcommand):
     name = "rebaseline"
-    aliases = ["baseline"]
     description = "Rebaseline tests"
 
     @staticmethod
