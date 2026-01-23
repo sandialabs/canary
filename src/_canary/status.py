@@ -40,7 +40,7 @@ class Status:
         "SKIP": "yellow",
         "CANCEL": "bold magenta",
         "NONE": "bold",
-    }
+    }  # nosec B105
     html_color_for_category: dict[str, str] = {
         "PASS": "#02FE20",
         "FAIL": "#FF3333",
