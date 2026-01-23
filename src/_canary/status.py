@@ -42,12 +42,12 @@ class Status:
         "NONE": "bold",
     }
     html_color_for_category: dict[str, str] = {
-        "PASS": "#02FE20",  # nosec B105
-        "FAIL": "#FF3333",  # nosec B105
-        "SKIP": "#FEFD02",  # nosec B105
-        "CANCEL": "#F202FE",  # nosec B105
+        "PASS": "#02FE20",
+        "FAIL": "#FF3333",
+        "SKIP": "#FEFD02",
+        "CANCEL": "#F202FE",
         "NONE": "",
-    }
+    }  # nosec B105
     code_for_status: dict[str, int] = {
         "PENDING": -1,
         "READY": -1,

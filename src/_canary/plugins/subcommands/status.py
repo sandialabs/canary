@@ -8,7 +8,6 @@ import shutil
 from typing import TYPE_CHECKING
 from typing import Any
 
-import rich
 from rich.console import Console
 from rich.table import Table
 

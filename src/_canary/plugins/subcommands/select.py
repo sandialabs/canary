@@ -34,7 +34,7 @@ class Select(CanarySubcommand):
             dest="from_root",
             metavar="root",
             action="append",
-            help="Restrict selection to tests whose source files are located under root"
+            help="Restrict selection to tests whose source files are located under root",
         )
         group.add_argument(
             "-d", "--delete", dest="delete_tag", action="store_true", help="Delete tag"

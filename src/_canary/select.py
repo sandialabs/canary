@@ -241,7 +241,7 @@ class Selector:
             "--owner",
             dest="owners",
             action="append",
-            help="Restrict selection to tests owned by 'owner'"
+            help="Restrict selection to tests owned by 'owner'",
         )
         group.add_argument(
             "-p",
