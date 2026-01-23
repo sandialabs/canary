@@ -142,7 +142,7 @@ class Run(CanarySubcommand):
 
         request = getattr(args, "request", None) or {
             "kind": "tag",
-            "payload": config.get("selection:default_tag"),
+            "payload": config.get("run:default_tag"),
         }
         if request["kind"] == "scanpaths":
             specs = workspace.create_selection(

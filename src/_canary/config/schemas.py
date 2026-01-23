@@ -72,10 +72,10 @@ environment_schema = Schema(
 workspace_schema = Schema({Optional("view", default="TestResults"): Or(bool, str, None)})
 run_schema = Schema(
     {
+        Optional("default_tag", default=":all:"): str,
         Optional("timeout"): {Optional(str): Use(time_in_seconds)},
     }
 )
-selection_schema = Schema({Optional("default_tag", default=":all:"): str})
 
 config_schema = Schema(
     {
@@ -86,7 +86,6 @@ config_schema = Schema(
         Optional("environment"): environment_schema,
         Optional("scratch"): any_schema,
         Optional("run"): run_schema,
-        Optional("selection", default={"default_tag": ":all:"}): selection_schema,
     },
     ignore_extra_keys=True,
 )

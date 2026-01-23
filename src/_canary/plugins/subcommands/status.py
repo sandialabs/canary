@@ -79,15 +79,19 @@ class Status(CanarySubcommand):
             choices=("duration", "name"),
             help="Sort cases by this field [default: %(default)s]",
         )
+        parser.add_argument("--history", action="store_true", help="Print status history for specs")
         parser.add_argument(
             "specs", nargs=argparse.REMAINDER, help="Show status for these specific specs"
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = Workspace.load()
-        results = workspace.db.get_results(ids=args.specs)
+        if args.history:
+            self.print_spec_status_history(args.specs)
+            return 0
         if args.specs:
             args.report_chars = "A"
+        workspace = Workspace.load()
+        results = workspace.db.get_results(ids=args.specs)
         table = self.get_status_table(results, args)
         console = Console()
         if table.row_count > shutil.get_terminal_size().lines:
@@ -126,6 +130,26 @@ class Status(CanarySubcommand):
                 r.append(value)
             table.add_row(*r)
         return table
+
+    def print_spec_status_history(self, ids: list[str]) -> None:
+        workspace = Workspace.load()
+        table = Table(expand=False)
+        for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
+            table.add_column(col)
+        for id in ids:
+            results = workspace.db.get_result_history(id)
+            for entry in results:
+                row: list[str] = []
+                row.append(entry["spec_name"])
+                row.append(entry["id"][:7])
+                row.append(entry["session"])
+                row.append(str(entry["status"].code))
+                row.append(str(entry["timekeeper"].duration))
+                row.append(str(entry["status"].display_name(style="rich")))
+                row.append(str(entry["status"].reason))
+                table.add_row(*row)
+        console = Console()
+        console.print(table, markup=True)
 
 
 def sortkey(row: dict) -> tuple:

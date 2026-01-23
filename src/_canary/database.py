@@ -4,10 +4,8 @@
 import collections
 import dataclasses
 import datetime
-import hashlib
 import pickle  # nosec B403
 import sqlite3
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -20,7 +18,6 @@ from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
-from .version import __static_version__
 
 if TYPE_CHECKING:
     from .workspace import Session
@@ -31,22 +28,6 @@ logger = logging.get_logger(__name__)
 DB_MAX_RETRIES = 8
 DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
 SQL_CHUNK_SIZE = 900
-
-
-@dataclasses.dataclass
-class Selection:
-    id: str
-    tag: str
-    gen_signature: str
-    created_on: datetime.datetime
-    canary_version: str
-    scanpaths: dict[str, list[str]]
-    on_options: list[str] | None
-    keyword_exprs: list[str] | None
-    parameter_expr: str | None
-    owners: list[str] | None
-    regex: str | None
-    fingerprint: str
 
 
 class WorkspaceDatabase:
@@ -70,11 +51,9 @@ class WorkspaceDatabase:
             self.connection.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS specs_meta (
-              spec_id TEXT NOT NULL,
+              spec_id TEXT PRIMARY KEY,
               source TEXT NOT NULL,
-              view TEXT NOT NULL,
-              gen_signature TEXT NOT NULL,
-              PRIMARY KEY (spec_id, gen_signature)
+              view TEXT NOT NULL
             )"""
             self.connection.execute(sql)
 
@@ -100,29 +79,41 @@ class WorkspaceDatabase:
             self.connection.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS selections (
-              id TEXT PRIMARY KEY,
-              tag TEXT UNIQUE,
-              gen_signature TEXT,
-              created_on TEXT,
-              canary_version TEXT,
-              scanpaths TEXT,
-              on_options TEXT,
-              keyword_exprs TEXT,
-              parameter_expr TEXT,
-              owners TEXT,
-              regex TEXT,
-              fingerprint TEXT
-            )
-            """
-            self.connection.execute(sql)
-
-            sql = """CREATE TABLE IF NOT EXISTS selection_specs (
-              selection_id TEXT,
+              tag TEXT,
               spec_id TEXT,
-              PRIMARY KEY (selection_id, spec_id),
-              FOREIGN KEY (selection_id) REFERENCES selections(spec_id) ON DELETE CASCADE
+              PRIMARY KEY (tag, spec_id),
+              FOREIGN KEY (tag) REFERENCES selections(spec_id) ON DELETE CASCADE
             )"""
             self.connection.execute(sql)
+
+            sql = """CREATE TABLE IF NOT EXISTS selection_meta (
+              tag TEXT PRIMARY KEY,
+              data TEXT
+            )"""
+            self.connection.execute(sql)
+
+            self.connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_selection_meta_delete
+                AFTER DELETE ON selections
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM selections WHERE tag = OLD.tag
+                )
+                BEGIN
+                  DELETE FROM selection_meta WHERE tag = OLD.tag;
+                END;
+                """
+            )
+
+            self.connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_selection_meta_rename
+                AFTER UPDATE ON selections
+                BEGIN
+                  UPDATE selection_meta SET tag = NEW.tag WHERE tag = OLD.tag;
+                END;
+                """
+            )
 
             sql = """CREATE TABLE IF NOT EXISTS results (
             spec_id TEXT,
@@ -161,9 +152,9 @@ class WorkspaceDatabase:
     def close(self):
         self.connection.close()
 
-    def put_specs(self, gen_signature: str, specs: list[ResolvedSpec]) -> None:
+    def put_specs(self, specs: list[ResolvedSpec]) -> None:
         spec_rows: list[tuple[str, bytes]] = []
-        meta_rows: list[tuple[str, str, str, str]] = []
+        meta_rows: list[tuple[str, str, str]] = []
         dep_rows: list[tuple[str, str]] = []
         for spec in specs:
             try:
@@ -175,7 +166,7 @@ class WorkspaceDatabase:
             spec_rows.append((spec.id, blob))
             view = Path(spec.execpath) / spec.file.name
             source = spec.file
-            meta_rows.append((spec.id, source.as_posix(), view.as_posix(), gen_signature))
+            meta_rows.append((spec.id, source.as_posix(), view.as_posix()))
             for dep in spec.dependencies:
                 dep_rows.append((spec.id, dep.id))
 
@@ -197,23 +188,23 @@ class WorkspaceDatabase:
 
             self.connection.execute(
                 """CREATE TEMP TABLE _meta_tmp(
-                    spec_id TEXT, source TEXT, view TEXT, gen_signature TEXT
+                    spec_id TEXT, source TEXT, view TEXT
                 )
                 """
             )
 
             self.connection.executemany(
                 """
-                INSERT INTO _meta_tmp(spec_id, source, view, gen_signature)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO _meta_tmp(spec_id, source, view)
+                VALUES (?, ?, ?)
                 """,
                 meta_rows,
             )
 
             self.connection.execute(
                 """
-                INSERT OR REPLACE INTO specs_meta(spec_id, source, view, gen_signature)
-                SELECT spec_id, source, view, gen_signature
+                INSERT OR REPLACE INTO specs_meta(spec_id, source, view)
+                SELECT spec_id, source, view
                 FROM _meta_tmp
                 """
             )
@@ -298,27 +289,13 @@ class WorkspaceDatabase:
             return specs
         return [spec for spec in specs if spec.id in ids]
 
-    def load_specs_by_signature(self, signature: str) -> list[ResolvedSpec]:
-        rows = self.connection.execute(
-            """
-            SELECT s.spec_id, s.data
-            FROM specs s
-            JOIN specs_meta sm
-            ON s.spec_id = sm.spec_id
-            where sm.gen_signature = ?
-            """,
-            (signature,),
-        ).fetchall()
-        return self._reconstruct_specs(rows)
-
     def load_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
         rows = self.connection.execute(
             """
             SELECT s.spec_id, s.data
             FROM specs s
-            JOIN selection_specs ss ON ss.spec_id = s.spec_id
-            JOIN selections sel ON sel.id = ss.selection_id
-            WHERE sel.tag = ?
+            JOIN selections ss ON ss.spec_id = s.spec_id
+            WHERE ss.tag = ?
             """,
             (tag,),
         ).fetchall()
@@ -483,99 +460,49 @@ class WorkspaceDatabase:
     def put_selection(
         self,
         tag: str,
-        signature: str,
         specs: list["ResolvedSpec"],
-        scanpaths: dict[str, list[str]],
-        on_options: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
+        **meta: Any,
     ) -> None:
         if tag == ":all:":
             raise ValueError("Tag name :all: is reserved")
-        row: list[str] = []
-        id = uuid.uuid4().hex
-        row.extend((id, tag, signature, datetime.datetime.now().isoformat(), __static_version__))
-
-        hasher = hashlib.sha256()
-        row.append(json.dumps_min(scanpaths, sort_keys=True))
-        hasher.update(row[-1].encode())
-
-        row.append(json.dumps_min(on_options, sort_keys=True))
-        hasher.update(row[-1].encode())
-
-        row.append(json.dumps_min(keyword_exprs, sort_keys=True))
-        hasher.update(row[-1].encode())
-
-        row.append(json.dumps_min(parameter_expr))
-        hasher.update(row[-1].encode())
-
-        row.append(json.dumps_min(owners, sort_keys=True))
-        hasher.update(row[-1].encode())
-
-        row.append(json.dumps_min(regex))
-        hasher.update(row[-1].encode())
-
-        fingerprint = hasher.hexdigest()
-        row.append(fingerprint)
-
         with self.connection:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
+            self.connection.execute("DELETE FROM selection_meta WHERE tag = ?", (tag,))
             self.connection.executemany(
                 """
-                INSERT INTO selection_specs (selection_id, spec_id)
+                INSERT INTO selections (tag, spec_id)
                 VALUES (?, ?)
                 """,
-                ((id, spec.id) for spec in specs),
+                ((tag, spec.id) for spec in specs),
             )
+            meta["created_on"] = datetime.datetime.now().isoformat()
             self.connection.execute(
                 """
-                INSERT INTO selections (
-                  id,
-                  tag,
-                  gen_signature,
-                  created_on,
-                  canary_version,
-                  scanpaths,
-                  on_options,
-                  keyword_exprs,
-                  parameter_expr,
-                  owners,
-                  regex,
-                  fingerprint
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO selection_meta (tag, data)
+                VALUES (?, ?)
                 """,
-                row,
+                (tag, json.dumps_min(meta, sort_keys=True)),
             )
 
     def rename_selection(self, old: str, new: str) -> None:
         with self.connection:
             self.connection.execute("UPDATE selections SET tag = ? WHERE tag = ?", (new, old))
 
-    def get_selection_metadata(self, tag: str) -> "Selection":
-        row = self.connection.execute("SELECT * FROM selections WHERE tag = ?", (tag,)).fetchone()
-        if not row:
-            raise NotASelection(tag)
-        return Selection(
-            id=row[0],
-            tag=row[1],
-            gen_signature=row[2],
-            created_on=datetime.datetime.fromisoformat(row[3]),
-            canary_version=row[4],
-            scanpaths=json.loads(row[5]),
-            on_options=json.loads(row[6]),
-            keyword_exprs=json.loads(row[7]),
-            parameter_expr=json.loads(row[8]),
-            owners=json.loads(row[9]),
-            regex=json.loads(row[10]),
-            fingerprint=row[11],
-        )
+    def get_selection_metadata(self, tag: str) -> dict[str, Any]:
+        if not self.is_selection(tag):
+            raise NotASelection(f"{tag} is not a selection")
+        text = self.connection.execute(
+            "SELECT data FROM selection_meta WHERE tag = ? LIMIT 1", (tag,)
+        ).fetchone()
+        meta = json.loads(text[0])
+        meta["tag"] = tag
+        return meta
 
     @property
     def tags(self) -> list[str]:
-        rows = self.connection.execute("SELECT tag FROM selections").fetchall()
+        rows = self.connection.execute(
+            "SELECT DISTINCT tag FROM selections ORDER BY tag"
+        ).fetchall()
         return [row[0] for row in rows]
 
     def is_selection(self, tag: str) -> bool:
@@ -661,10 +588,9 @@ class WorkspaceDatabase:
         join = ""
         if tag is not None:
             join = """
-            JOIN selection_specs ss ON ss.spec_id = s.spec_id
-            JOIN selections sel ON sel.id = ss.selection_id
+            JOIN selections ss ON ss.spec_id = s.spec_id
             """
-            clauses.append("sel.tag = ?")
+            clauses.append("ss.tag = ?")
             params.append(tag)
         where = "" if not clauses else "WHERE " + " AND ".join(clauses)
         sql = f"""

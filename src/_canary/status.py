@@ -40,14 +40,14 @@ class Status:
         "SKIP": "yellow",
         "CANCEL": "bold magenta",
         "NONE": "bold",
-    }
+    }  # nosec B105
     html_color_for_category: dict[str, str] = {
         "PASS": "#02FE20",
         "FAIL": "#FF3333",
         "SKIP": "#FEFD02",
         "CANCEL": "#F202FE",
         "NONE": "",
-    }
+    }  # nosec B105
     code_for_status: dict[str, int] = {
         "PENDING": -1,
         "READY": -1,

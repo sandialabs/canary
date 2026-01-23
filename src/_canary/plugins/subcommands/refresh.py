@@ -15,14 +15,19 @@ if TYPE_CHECKING:
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
-    parser.add_command(Refresh())
+    parser.add_command(View())
 
 
-class Refresh(CanarySubcommand):
-    name = "refresh"
-    description = "Refresh the workspace's view"
+class View(CanarySubcommand):
+    name = "view"
+    description = "Manage a workspace's view"
+
+    def setup_parser(self, parser: "Parser") -> None:
+        sp = parser.add_subparsers(dest="view_subcommand")
+        sp.add_parser("refresh", help="Refresh the view")
 
     def execute(self, args: argparse.Namespace) -> int:
-        workspace = Workspace.load()
-        workspace.rebuild_view()
+        if args.view_subcommand == "refresh":
+            workspace = Workspace.load()
+            workspace.rebuild_view()
         return 0

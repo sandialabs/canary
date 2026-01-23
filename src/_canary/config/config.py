@@ -59,6 +59,7 @@ def default_config_values() -> dict[str, Any]:
             "view": "TestResults",
         },
         "run": {
+            "default_tag": ":all:",
             "timeout": {
                 "session": -1.0,
                 "multiplier": 1.0,
@@ -67,7 +68,6 @@ def default_config_values() -> dict[str, Any]:
                 "long": 900.0,
             },
         },
-        "selection": {"default_tag": ":all:"},
         "scratch": {},
         "system": system_config(),
     }

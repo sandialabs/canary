@@ -28,14 +28,12 @@ The workspace can be inspected via ``canary info``:
 .. command-output:: canary info
    :cwd: /examples
 
-At this point, the workspace is empty.  Tests are added to the workspace by creating a "selection":
+At this point, the workspace is empty.  Tests are added to the workspace by collecting test case generators and creating a "selection":
 
-.. command-output:: canary selection create -h
+.. command-output:: canary collect -r ./basic
    :cwd: /examples
 
-Let's add the basic examples to the workspace and tag the selection "basic":
-
-.. command-output:: canary selection create -r ./basic basic
+.. command-output:: canary select basic
    :cwd: /examples
 
 Running ``canary info`` now reports the addition of this tag:
