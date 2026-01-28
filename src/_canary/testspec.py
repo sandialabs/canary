@@ -60,10 +60,10 @@ T = TypeVar("T", bound="BaseSpec")
 
 @dataclasses.dataclass
 class BaseSpec(Generic[T]):
+    # The search path containing the generated spec; typically the some version-control root
     file_root: Path
-    """The search path contiaining the generated spec; typically the some version-control root"""
+    # The path to the test file relative to `file_root`
     file_path: Path
-    """The path to the test file relative to `file_root`"""
     family: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
