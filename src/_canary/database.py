@@ -6,6 +6,7 @@ import dataclasses
 import datetime
 import pickle  # nosec B403
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -153,28 +154,26 @@ class WorkspaceDatabase:
         self.connection.close()
 
     def put_specs(self, specs: list[ResolvedSpec]) -> None:
-        spec_rows: list[tuple[str, bytes]] = []
-        meta_rows: list[tuple[str, str, str]] = []
-        dep_rows: list[tuple[str, str]] = []
-        for spec in specs:
+        def process_one_spec(spec: ResolvedSpec) -> tuple[str, bytes, str, str, list[str]]:
             deps = spec.dependencies
             try:
                 spec.dependencies = []
                 blob = pickle.dumps(spec, protocol=pickle.HIGHEST_PROTOCOL)
             finally:
                 spec.dependencies = deps
-            spec_rows.append((spec.id, blob))
             view = Path(spec.execpath) / spec.file.name
             source = spec.file
-            meta_rows.append((spec.id, source.as_posix(), view.as_posix()))
-            for dep in spec.dependencies:
-                dep_rows.append((spec.id, dep.id))
+            deps = [dep.id for dep in spec.dependencies]
+            return spec.id, blob, source.as_posix(), view.as_posix(), deps
+
+        with ThreadPoolExecutor() as ex:
+            data = ex.map(process_one_spec, specs)
 
         with self.connection:
             self.connection.execute("CREATE TEMP TABLE _spec_ids(id TEXT PRIMARY KEY)")
             self.connection.executemany(
                 "INSERT INTO _spec_ids(id) VALUES (?)",
-                ((spec.id,) for spec in specs),
+                ((item[0],) for item in data),
             )
             # 2. Bulk insert/update specs
             self.connection.executemany(
@@ -183,7 +182,7 @@ class WorkspaceDatabase:
                 VALUES (?, ?)
                 ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
                 """,
-                spec_rows,
+                ((item[0], item[1]) for item in data),
             )
 
             self.connection.execute(
@@ -198,7 +197,7 @@ class WorkspaceDatabase:
                 INSERT INTO _meta_tmp(spec_id, source, view)
                 VALUES (?, ?, ?)
                 """,
-                meta_rows,
+                ((item[0], item[2], item[3]) for item in data),
             )
 
             self.connection.execute(
@@ -216,9 +215,10 @@ class WorkspaceDatabase:
             )
 
             # 4. Bulk insert new dependencies using generator (minimal memory)
-            self.connection.executemany(
-                "INSERT INTO spec_deps(spec_id, dep_id) VALUES (?, ?)", dep_rows
-            )
+            if graph := [(item[0], dep_id) for item in data for dep_id in item[-1]]:
+                self.connection.executemany(
+                    "INSERT INTO spec_deps(spec_id, dep_id) VALUES (?, ?)", graph
+                )
 
             # 5. Drop temporary table
             self.connection.execute("DROP TABLE _spec_ids")

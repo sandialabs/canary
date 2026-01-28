@@ -172,6 +172,8 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
 
         if isinstance(spec, ResolvedSpec):
             resolved_specs.append(spec)
+        elif not spec.dependencies:
+            resolved_specs.append(spec.resolve([]))
         else:
             draft_specs.append(spec)
 
@@ -210,7 +212,6 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         dep_done_criteria[spec_id] = done_criteria
 
     # Resolve dependencies using topological sort (this is fast, keep sequential)
-    errors: defaultdict[str, list[str]] = defaultdict(list)
     lookup: dict[str, ResolvedSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
@@ -373,14 +374,10 @@ def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -
     return False
 
 
-def _generate_specs(
+def generate_from_one(
     file: "AbstractTestGenerator", on_options: list[str] | None
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
-    try:
-        logging.filter_warnings(bool(getattr(file, "filter_warnings", False)))
-        return list(file.lock(on_options=on_options))
-    finally:
-        logging.filter_warnings(False)
+    return list(file.lock(on_options=on_options))
 
 
 def generate_test_specs(
@@ -395,7 +392,7 @@ def generate_test_specs_parallel(
     generators: list["AbstractTestGenerator"], on_options: list[str]
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
     # In testing
-    locked = starmap(_generate_specs, [(f, on_options) for f in generators])
+    locked = starmap(generate_from_one, [(f, on_options) for f in generators])
     return [spec for group in locked for spec in group]
 
 
@@ -404,5 +401,5 @@ def generate_test_specs_serial(
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
     specs: list["UnresolvedSpec | ResolvedSpec"] = []
     for f in generators:
-        specs.extend(_generate_specs(f, on_options))
+        specs.extend(generate_from_one(f, on_options))
     return specs
