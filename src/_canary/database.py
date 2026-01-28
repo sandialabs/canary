@@ -525,45 +525,56 @@ class WorkspaceDatabase:
         """Return dependencies in instantiation order."""
         if not seeds:
             return set()
-        values = ",".join("(?)" for _ in seeds)
-        sql = f"""
-        WITH RECURSIVE
-        seeds(id) AS (VALUES {values}),
-        downstream(id) AS (
-          SELECT spec_id
-          FROM spec_deps
-          WHERE dep_id IN (SELECT id FROM seeds)
-          UNION
-          SELECT d.spec_id
-          FROM spec_deps d
-          JOIN downstream dn ON d.dep_id = dn.id
-        )
-        SELECT DISTINCT id FROM downstream
-        """  #  nosec B608
-        rows = self.connection.execute(sql, tuple(seeds)).fetchall()
+        with self.connection:
+            self.connection.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS seed_ids (id TEXT PRIMARY KEY)"
+            )
+            self.connection.execute("DELETE FROM seed_ids")
+            self.connection.executemany(
+                "INSERT INTO seed_ids(id) VALUES (?)", ((s,) for s in seeds)
+            )
+            sql = """
+                WITH RECURSIVE
+                downstream(id) AS (
+                  SELECT spec_id
+                  FROM spec_deps
+                  WHERE dep_id IN (SELECT id FROM seed_ids)
+                  UNION
+                  SELECT d.spec_id
+                  FROM spec_deps d
+                  JOIN downstream dn ON d.dep_id = dn.id
+                )
+                SELECT DISTINCT id FROM downstream
+            """  #  nosec B608
+            rows = self.connection.execute(sql).fetchall()
         return {r[0] for r in rows}
 
     def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
         """Return dependents in reverse instantiation order."""
         if not seeds:
             return set()
-        seed_vals = tuple(seeds)
-        values = ",".join("(?)" for _ in seed_vals)
-        sql = f"""
-        WITH RECURSIVE
-        seeds(id) AS (VALUES {values}),
-        upstream(id) AS (
-          SELECT dep_id
-          FROM spec_deps
-          WHERE spec_id IN (SELECT id FROM seeds)
-          UNION
-          SELECT d.dep_id
-          FROM spec_deps d
-          JOIN upstream u ON d.spec_id = u.id
-        )
-        SELECT DISTINCT id FROM upstream
-        """  # nosec B608
-        rows = self.connection.execute(sql, seed_vals).fetchall()
+        with self.connection:
+            self.connection.execute(
+                "CREATE TEMP TABLE IF NOT EXISTS seed_ids (id TEXT PRIMARY KEY)"
+            )
+            self.connection.execute("DELETE FROM seed_ids")
+            self.connection.executemany(
+                "INSERT INTO seed_ids(id) VALUES (?)", ((s,) for s in seeds)
+            )
+            sql = """
+                WITH RECURSIVE
+                upstream(id) AS (
+                  SELECT dep_id
+                  FROM spec_deps
+                  WHERE spec_id IN (SELECT id FROM seed_ids)
+                  UNION
+                  SELECT d.dep_id
+                  FROM spec_deps d
+                  JOIN upstream u ON d.spec_id = u.id
+                )
+                SELECT DISTINCT id FROM upstream
+            """  # nosec B608
+            rows = self.connection.execute(sql).fetchall()
         return {r[0] for r in rows}
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
