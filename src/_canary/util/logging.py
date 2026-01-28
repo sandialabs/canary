@@ -7,6 +7,7 @@ import logging as builtin_logging
 import logging.handlers
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,9 @@ EMIT = builtin_logging.CRITICAL + 5
 builtin_print = print
 root_log_name = "canary"
 
+thread_opts = threading.local()
+thread_opts.filter_warnings = False
+
 
 class FileHandler(builtin_logging.FileHandler): ...
 
@@ -36,6 +40,17 @@ class MuteConsoleFilter(builtin_logging.Filter):
     def filter(self, record):
         # Returning false = block record
         return False
+
+
+class ThreadFilter(builtin_logging.Filter):
+    def filter(self, record):
+        if getattr(thread_opts, "filter_warnings", False):
+            return record.levelno >= logging.ERROR
+        return True
+
+
+def filter_warnings(arg: bool) -> None:
+    thread_opts.filter_warnings = bool(arg)
 
 
 class QueueHandler(logging.handlers.QueueHandler):
@@ -268,9 +283,12 @@ def setup_logging() -> None:
     builtin_logging.addLevelName(EMIT, "EMIT")
     for h in root.handlers:
         if isinstance(h, StreamHandler):
+            if not any(isinstance(f, ThreadFilter) for f in h.filters):
+                h.addFilter(ThreadFilter())
             break
     else:
         sh = stream_handler()
+        sh.addFilter(ThreadFilter())
         root.addHandler(sh)
     canary = builtin_logging.getLogger(root_log_name)
     canary.propagate = True

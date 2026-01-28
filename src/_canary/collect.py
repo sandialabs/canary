@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
 from pathlib import Path
 from typing import Iterable
 from typing import Iterator
@@ -119,12 +120,12 @@ class Collector:
             all_paths.extend([(self.types, root, path) for path in paths])
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(generate_one, arg) for arg in all_paths]
-            results = [f.result() for f in futures]
-        for success, result in results:
-            if not success:
-                errors += 1
-            elif result is not None:
-                generators.append(result)
+            for future in as_completed(futures):
+                success, result = future.result()
+                if not success:
+                    errors += 1
+                elif result is not None:
+                    generators.append(result)
         if errors:
             raise ValueError("Stopping due to previous errors")
         pm.done()

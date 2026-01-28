@@ -39,6 +39,7 @@ import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,7 +53,6 @@ from rich.table import Table
 from . import config
 from .hookspec import hookimpl
 from .util import logging
-from .util.parallel import starmap
 from .util.string import pluralize
 
 if TYPE_CHECKING:
@@ -81,15 +81,9 @@ class Generator:
     def run(self) -> list["ResolvedSpec"]:
         pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")
         config.pluginmanager.hook.canary_generatestart(generator=self)
-        locked: list[list["UnresolvedSpec | ResolvedSpec"]] = []
-        if config.get("debug"):
-            for f in self.generators:
-                locked.append(lock_file(f, self.on_options))
-        else:
-            locked.extend(starmap(lock_file, [(f, self.on_options) for f in self.generators]))
-        drafts: list["UnresolvedSpec | ResolvedSpec"] = [
-            draft for group in locked for draft in group
-        ]
+        drafts: list["UnresolvedSpec | ResolvedSpec"] = generate_test_specs(
+            self.generators, self.on_options
+        )
         pm.done()
         self.validate(drafts)
         pm = logger.progress_monitor("[bold]Resolving[/] test spec dependencies")
@@ -158,10 +152,6 @@ def canary_generate_report(generator: Generator) -> None:
             table.add_row(reason, str(len(reasons[key])))
         console = Console(file=sys.stderr)
         console.print(table)
-
-
-def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
-    return file.lock(on_options=on_options)
 
 
 def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedSpec"]:
@@ -381,3 +371,48 @@ def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -
         if fnmatch.fnmatchcase(name, pattern):
             return True
     return False
+
+
+def _generate_specs(
+    file: "AbstractTestGenerator", on_options: list[str] | None
+) -> list["UnresolvedSpec | ResolvedSpec"]:
+    try:
+        logging.filter_warnings(bool(getattr(file, "filter_warnings", False)))
+        return list(file.lock(on_options=on_options))
+    finally:
+        logging.filter_warnings(False)
+
+
+def generate_test_specs(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["UnresolvedSpec | ResolvedSpec"]:
+    if config.get("debug"):
+        return generate_test_specs_serial(generators, on_options)
+    return generate_test_specs_parallel(generators, on_options)
+
+
+def generate_test_specs_parallel(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["UnresolvedSpec | ResolvedSpec"]:
+    specs: list["UnresolvedSpec | ResolvedSpec"] = []
+    errors = 0
+    with ThreadPoolExecutor() as ex:
+        futures = {ex.submit(_generate_specs, f, on_options): f for f in generators}
+        for future in as_completed(futures):
+            try:
+                specs.extend(future.result())
+            except Exception:
+                errors += 1
+                logger.exception(f"Generator failed: {futures[future]}")
+    if errors:
+        raise ValueError("Failed to generate specs from one or more generators")
+    return specs
+
+
+def generate_test_specs_serial(
+    generators: list["AbstractTestGenerator"], on_options: list[str]
+) -> list["UnresolvedSpec | ResolvedSpec"]:
+    locked: list[list["UnresolvedSpec | ResolvedSpec"]] = []
+    for f in generators:
+        locked.append(_generate_specs(f, on_options))
+    return [spec for group in locked for spec in group]
