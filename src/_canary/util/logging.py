@@ -283,12 +283,12 @@ def setup_logging() -> None:
     builtin_logging.addLevelName(EMIT, "EMIT")
     for h in root.handlers:
         if isinstance(h, StreamHandler):
-            if not any(isinstance(f, ThreadFilter) for f in h.filters):
-                h.addFilter(ThreadFilter())
+            #            if not any(isinstance(f, ThreadFilter) for f in h.filters):
+            #                h.addFilter(ThreadFilter())
             break
     else:
         sh = stream_handler()
-        sh.addFilter(ThreadFilter())
+        #        sh.addFilter(ThreadFilter())
         root.addHandler(sh)
     canary = builtin_logging.getLogger(root_log_name)
     canary.propagate = True

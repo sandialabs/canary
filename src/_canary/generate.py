@@ -39,7 +39,6 @@ import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import as_completed
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -53,6 +52,7 @@ from rich.table import Table
 from . import config
 from .hookspec import hookimpl
 from .util import logging
+from .util.multiprocessing import starmap
 from .util.string import pluralize
 
 if TYPE_CHECKING:
@@ -394,25 +394,15 @@ def generate_test_specs(
 def generate_test_specs_parallel(
     generators: list["AbstractTestGenerator"], on_options: list[str]
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
-    specs: list["UnresolvedSpec | ResolvedSpec"] = []
-    errors = 0
-    with ThreadPoolExecutor() as ex:
-        futures = {ex.submit(_generate_specs, f, on_options): f for f in generators}
-        for future in as_completed(futures):
-            try:
-                specs.extend(future.result())
-            except Exception:
-                errors += 1
-                logger.exception(f"Generator failed: {futures[future]}")
-    if errors:
-        raise ValueError("Failed to generate specs from one or more generators")
-    return specs
+    # In testing
+    locked = starmap(_generate_specs, [(f, on_options) for f in generators])
+    return [spec for group in locked for spec in group]
 
 
 def generate_test_specs_serial(
     generators: list["AbstractTestGenerator"], on_options: list[str]
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
-    locked: list[list["UnresolvedSpec | ResolvedSpec"]] = []
+    specs: list["UnresolvedSpec | ResolvedSpec"] = []
     for f in generators:
-        locked.append(_generate_specs(f, on_options))
-    return [spec for group in locked for spec in group]
+        specs.extend(_generate_specs(f, on_options))
+    return specs

@@ -157,8 +157,8 @@ class WorkspaceDatabase:
         meta_rows: list[tuple[str, str, str]] = []
         dep_rows: list[tuple[str, str]] = []
         for spec in specs:
+            deps = spec.dependencies
             try:
-                deps = spec.dependencies
                 spec.dependencies = []
                 blob = pickle.dumps(spec, protocol=pickle.HIGHEST_PROTOCOL)
             finally:

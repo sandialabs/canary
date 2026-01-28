@@ -167,13 +167,19 @@ class PYTTestGenerator(AbstractTestGenerator):
         return list(option_expressions)
 
     def lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
+        previous_level: int | None = None
         try:
+            if self.filter_warnings:
+                previous_level = logging.set_level(logging.ERROR, only="stream")
             specs = self._lock(on_options=on_options)
             return specs
         except Exception as e:
             if config.get("debug"):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
+        finally:
+            if previous_level is not None:
+                logging.set_level(previous_level, only="stream")
 
     def _lock(self, on_options: list[str] | None = None) -> list["UnresolvedSpec"]:
         from ...testspec import DependencyPatterns

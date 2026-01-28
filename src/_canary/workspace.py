@@ -402,8 +402,13 @@ class Workspace:
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
         resolved = self.generate_testspecs(generators=generators, on_options=on_options)
-        self.db.put_specs(resolved)
+        self.store_specs(resolved)
         return resolved
+
+    def store_specs(self, specs: list[ResolvedSpec]) -> None:
+        pm = logger.progress_monitor("[bold]Caching[/] test specs")
+        self.db.put_specs(specs)
+        pm.done()
 
     def select(
         self,
@@ -576,9 +581,6 @@ class Workspace:
         on_options = on_options or []
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
         resolved = generator.run()
-        pm = logger.progress_monitor("[bold]Caching[/] test specs")
-        self.db.put_specs(resolved)
-        pm.done()
         return resolved
 
     def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
