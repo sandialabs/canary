@@ -307,7 +307,7 @@ class CDashXMLReporter:
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = case.timekeeper.duration
+            duration = max(0.0, case.timekeeper.duration)
             add_named_measurement(results, "Command Line", command, type="cdata")
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
