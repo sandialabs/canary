@@ -315,7 +315,7 @@ def pool(*args, **kwargs):
         p.join()
 
 
-def num_processes(max_processes: int | None = None, _cache: dict = {}) -> int:
+def num_processes(max_processes: int | None = None, allow_oversubscription: bool = False) -> int:
     """Return the number of processes in a pool.
 
     Currently the function return the minimum between the maximum number
@@ -327,11 +327,9 @@ def num_processes(max_processes: int | None = None, _cache: dict = {}) -> int:
         max_processes (int or None): maximum number of processes allowed
 
     """
-    if max_processes in _cache:
-        return _cache[max_processes]
-    n = min(cpu_count(), max_processes or cpu_count())
-    _cache[max_processes] = n
-    return n
+    if allow_oversubscription:
+        return max(cpu_count(), max_processes or cpu_count())
+    return min(cpu_count(), max_processes or cpu_count())
 
 
 def map(

@@ -75,7 +75,7 @@ class Collector:
         self.scanpaths: dict[str, list[str]] = {}
         self.files: dict[str, list[str]] = {}  # root: paths
         self.generators: list["AbstractTestGenerator"] = []
-        self.types: set[Type[AbstractTestGenerator]] = set()
+        self.types: set[Type["AbstractTestGenerator"]] = set()
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
@@ -115,11 +115,9 @@ class Collector:
         pm = logger.progress_monitor("[bold]Instantiating[/] generators from collected files")
         errors = 0
         generators: list["AbstractTestGenerator"] = []
-        all_paths: list[tuple[set[Type[AbstractTestGenerator]], str, str]] = []
-        for root, paths in self.files.items():
-            all_paths.extend([(self.types, root, path) for path in paths])
+        allpaths = ((self.types, root, p) for root, paths in self.files.items() for p in paths)
         with ProcessPoolExecutor() as ex:
-            futures = [ex.submit(generate_one, arg) for arg in all_paths]
+            futures = [ex.submit(generate_one, arg) for arg in allpaths]
             for future in as_completed(futures):
                 success, result = future.result()
                 if not success:
