@@ -7,6 +7,7 @@ import datetime
 import pickle  # nosec B403
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -24,11 +25,6 @@ if TYPE_CHECKING:
     from .workspace import Session
 
 logger = logging.get_logger(__name__)
-
-
-DB_MAX_RETRIES = 8
-DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
-SQL_CHUNK_SIZE = 900
 
 
 class WorkspaceDatabase:
@@ -166,15 +162,15 @@ class WorkspaceDatabase:
             deps = [dep.id for dep in spec.dependencies]
             return spec.id, blob, source.as_posix(), view.as_posix(), deps
 
+        data = []
         with ThreadPoolExecutor() as ex:
-            data = ex.map(process_one_spec, specs)
+            futures = [ex.submit(process_one_spec, spec) for spec in specs]
+            for future in as_completed(futures):
+                data.append(future.result())
 
         with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _spec_ids(id TEXT PRIMARY KEY)")
-            self.connection.executemany(
-                "INSERT INTO _spec_ids(id) VALUES (?)",
-                ((item[0],) for item in data),
-            )
+            self.connection.execute("CREATE TEMP TABLE _ids(id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_[0],) for _ in data))
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
@@ -182,46 +178,39 @@ class WorkspaceDatabase:
                 VALUES (?, ?)
                 ON CONFLICT(spec_id) DO UPDATE SET data=excluded.data
                 """,
-                ((item[0], item[1]) for item in data),
+                ((row[0], row[1]) for row in data),
             )
 
-            self.connection.execute(
-                """CREATE TEMP TABLE _meta_tmp(
-                    spec_id TEXT, source TEXT, view TEXT
-                )
-                """
-            )
+            self.connection.execute("CREATE TEMP TABLE _meta(spec_id TEXT, source TEXT, view TEXT)")
 
             self.connection.executemany(
                 """
-                INSERT INTO _meta_tmp(spec_id, source, view)
+                INSERT INTO _meta(spec_id, source, view)
                 VALUES (?, ?, ?)
                 """,
-                ((item[0], item[2], item[3]) for item in data),
+                ((row[0], row[2], row[3]) for row in data),
             )
 
             self.connection.execute(
                 """
                 INSERT OR REPLACE INTO specs_meta(spec_id, source, view)
                 SELECT spec_id, source, view
-                FROM _meta_tmp
+                FROM _meta
                 """
             )
-            self.connection.execute("DROP TABLE _meta_tmp")
+            self.connection.execute("DROP TABLE _meta")
 
             # 3. Bulk delete old dependencies for these specs
-            self.connection.execute(
-                "DELETE FROM spec_deps WHERE spec_id IN (SELECT id FROM _spec_ids)"
-            )
+            self.connection.execute("DELETE FROM spec_deps WHERE spec_id IN (SELECT id FROM _ids)")
 
             # 4. Bulk insert new dependencies using generator (minimal memory)
-            if graph := [(item[0], dep_id) for item in data for dep_id in item[-1]]:
+            if graph := [(row[0], dep_id) for row in data for dep_id in row[-1]]:
                 self.connection.executemany(
                     "INSERT INTO spec_deps(spec_id, dep_id) VALUES (?, ?)", graph
                 )
 
             # 5. Drop temporary table
-            self.connection.execute("DROP TABLE _spec_ids")
+            self.connection.execute("DROP TABLE _ids")
 
     def resolve_spec_id(self, id: str) -> str | None:
         if id.startswith(testspec.select_sygil):
@@ -269,21 +258,19 @@ class WorkspaceDatabase:
     def load_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[ResolvedSpec]:
-        rows: list[tuple[str, bytes]]
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
         self.resolve_spec_ids(ids)
         upstream = self.get_upstream_ids(ids)
-        load_ids = list(upstream.union(ids))
-        rows = []
-        base_sql = "SELECT * FROM specs WHERE spec_id IN"
-        for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
-            chunk = load_ids[i : i + SQL_CHUNK_SIZE]
-            placeholders = ",".join("?" for _ in chunk)
-            sql = f"{base_sql} ({placeholders})"
-            cursor = self.connection.execute(sql, chunk)
-            rows.extend(cursor.fetchall())
+        load_ids = upstream.union(ids)
+        with self.connection:
+            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in load_ids))
+            rows = self.connection.execute(
+                "SELECT * FROM specs where spec_id IN (SELECT id FROM _ids)"
+            ).fetchall()
+            self.connection.execute("DROP TABLE _ids")
         specs = self._reconstruct_specs(rows)
         if include_upstreams:
             return specs
@@ -318,14 +305,14 @@ class WorkspaceDatabase:
     def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
         if not ids:
             return self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
-        rows: list[tuple[str, str]] = []
-        base_sql = "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN"
-        for i in range(0, len(ids), SQL_CHUNK_SIZE):
-            chunk = ids[i : i + SQL_CHUNK_SIZE]
-            placeholders = ",".join("?" for _ in chunk)
-            sql = f"{base_sql} ({placeholders})"
-            cursor = self.connection.execute(sql, chunk)
-            rows.extend(cursor.fetchall())
+        rows: list[tuple[str, str]]
+        with self.connection:
+            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in ids))
+            rows = self.connection.execute(
+                "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN (SELECT id FROM _ids)"
+            ).fetchall()
+            rows = self.connection.execute("DROP TABLE _ids").fetchall()
         return rows
 
     def put_results(self, session: "Session") -> None:
@@ -387,36 +374,37 @@ class WorkspaceDatabase:
     ) -> dict[str, dict[str, Any]]:
         rows: list[tuple[str, ...]]
         if not ids:
+            with self.connection:
+                rows = self.connection.execute(
+                    """SELECT *
+                    FROM results AS r
+                    WHERE r.session = (
+                      SELECT MAX(session)
+                      FROM results AS r2
+                      WHERE r2.spec_id = r.spec_id
+                    )
+                    """
+                ).fetchall()
+            return {row[0]: self._reconstruct_results(row) for row in rows}
+        self.resolve_spec_ids(ids)
+        upstream = self.get_upstream_ids(ids) if include_upstreams else set()
+        load_ids = list(upstream.union(ids))
+        with self.connection:
+            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in load_ids))
             rows = self.connection.execute(
-                """SELECT *
+                """
+                SELECT r.*
                 FROM results AS r
-                WHERE r.session = (
+                WHERE r.spec_id IN (SELECT id FROM _ids)
+                AND r.session = (
                   SELECT MAX(session)
                   FROM results AS r2
                   WHERE r2.spec_id = r.spec_id
                 )
                 """
             ).fetchall()
-            return {row[0]: self._reconstruct_results(row) for row in rows}
-        rows = []
-        self.resolve_spec_ids(ids)
-        upstream = self.get_upstream_ids(ids) if include_upstreams else set()
-        load_ids = list(upstream.union(ids))
-        for i in range(0, len(load_ids), SQL_CHUNK_SIZE):
-            chunk = load_ids[i : i + SQL_CHUNK_SIZE]
-            placeholders = ", ".join("?" for _ in chunk)
-            sql = f"""\
-              SELECT r.*
-                FROM results AS r
-                WHERE r.spec_id in ({placeholders})
-                AND r.session = (
-                  SELECT MAX(session)
-                  FROM results AS r2
-                  WHERE r2.spec_id = r.spec_id
-                )
-            """  # nosec B608
-            cur = self.connection.execute(sql, chunk)  # nosec B608
-            rows.extend(cur.fetchall())
+            self.connection.execute("DROP TABLE _ids")
         return {row[0]: self._reconstruct_results(row) for row in rows}
 
     def get_result_history(self, id: str) -> list:
@@ -526,19 +514,14 @@ class WorkspaceDatabase:
         if not seeds:
             return set()
         with self.connection:
-            self.connection.execute(
-                "CREATE TEMP TABLE IF NOT EXISTS seed_ids (id TEXT PRIMARY KEY)"
-            )
-            self.connection.execute("DELETE FROM seed_ids")
-            self.connection.executemany(
-                "INSERT INTO seed_ids(id) VALUES (?)", ((s,) for s in seeds)
-            )
+            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((s,) for s in seeds))
             sql = """
                 WITH RECURSIVE
                 downstream(id) AS (
                   SELECT spec_id
                   FROM spec_deps
-                  WHERE dep_id IN (SELECT id FROM seed_ids)
+                  WHERE dep_id IN (SELECT id FROM _ids)
                   UNION
                   SELECT d.spec_id
                   FROM spec_deps d
@@ -547,6 +530,7 @@ class WorkspaceDatabase:
                 SELECT DISTINCT id FROM downstream
             """  #  nosec B608
             rows = self.connection.execute(sql).fetchall()
+            self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
 
     def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
@@ -554,19 +538,14 @@ class WorkspaceDatabase:
         if not seeds:
             return set()
         with self.connection:
-            self.connection.execute(
-                "CREATE TEMP TABLE IF NOT EXISTS seed_ids (id TEXT PRIMARY KEY)"
-            )
-            self.connection.execute("DELETE FROM seed_ids")
-            self.connection.executemany(
-                "INSERT INTO seed_ids(id) VALUES (?)", ((s,) for s in seeds)
-            )
+            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((s,) for s in seeds))
             sql = """
                 WITH RECURSIVE
                 upstream(id) AS (
                   SELECT dep_id
                   FROM spec_deps
-                  WHERE spec_id IN (SELECT id FROM seed_ids)
+                  WHERE spec_id IN (SELECT id FROM _ids)
                   UNION
                   SELECT d.dep_id
                   FROM spec_deps d
@@ -575,6 +554,7 @@ class WorkspaceDatabase:
                 SELECT DISTINCT id FROM upstream
             """  # nosec B608
             rows = self.connection.execute(sql).fetchall()
+            self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
 
     def get_dependency_graph(self) -> dict[str, list[str]]:

@@ -39,6 +39,7 @@ import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -285,7 +286,9 @@ def _resolve_dependencies_parallel(
                     )
                 )
 
-        results = [future.result() for future in futures]
+        results = []
+        for future in as_completed(futures):
+            results.append(future.result())
 
     return results
 

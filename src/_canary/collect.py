@@ -114,7 +114,7 @@ class Collector:
     def finalize(self) -> None:
         pm = logger.progress_monitor("[bold]Instantiating[/] generators from collected files")
         errors = 0
-        generators: list["AbstractTestGenerator"] = []
+        self.generators.clear()
         allpaths = ((self.types, root, p) for root, paths in self.files.items() for p in paths)
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(generate_one, arg) for arg in allpaths]
@@ -123,12 +123,10 @@ class Collector:
                 if not success:
                     errors += 1
                 elif result is not None:
-                    generators.append(result)
+                    self.generators.append(result)
         if errors:
             raise ValueError("Stopping due to previous errors")
         pm.done()
-        self.generators.clear()
-        self.generators.extend(generators)
         return
 
     def collect_from_path(self, scanpath: "ScanPath") -> None:

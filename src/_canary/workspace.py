@@ -387,6 +387,7 @@ class Workspace:
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
             "latest_session": latest_session,
             "tags": self.db.tags,
+            "specs": self.db.load_specs(),
             "version": __static_version__,
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
