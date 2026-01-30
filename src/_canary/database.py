@@ -312,7 +312,7 @@ class WorkspaceDatabase:
             rows = self.connection.execute(
                 "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN (SELECT id FROM _ids)"
             ).fetchall()
-            rows = self.connection.execute("DROP TABLE _ids").fetchall()
+            self.connection.execute("DROP TABLE _ids").fetchall()
         return rows
 
     def put_results(self, session: "Session") -> None:

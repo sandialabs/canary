@@ -232,7 +232,7 @@ class Config:
             for key, val in t.items():
                 timeouts[key] = float(val)
 
-        self.data = merge(self.data, data)
+        self.data = merge(self.data, data)  # type: ignore
         self.options = args
 
         if self.data["debug"]:
