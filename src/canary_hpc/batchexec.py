@@ -33,6 +33,21 @@ class HPCConnectRunner:
 
     def execute(self, batch: "TestBatch") -> int | None:
         raise NotImplementedError
+        
+    def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:
+        variables: dict[str, str | None] = dict(batch.variables)
+        variables.update(
+            {"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"}
+        )
+        if canary.config.get("debug"):
+            variables["CANARY_DEBUG"] = "on"
+
+        f = batch.workspace.joinpath("config.json")
+        with open(f, "w") as fh:
+            canary.config.dump(fh)
+
+        variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
+        return variables
 
     def nodes_required(self, batch: "TestBatch") -> int:
         """Nodes required to run cases in ``batch``"""
@@ -100,14 +115,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         return rc
 
     def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:
-        variables: dict[str, str | None] = dict(batch.variables)
-        variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
-        if canary.config.get("debug"):
-            variables["CANARY_DEBUG"] = "on"
-        f = batch.workspace.joinpath("config.json")
-        with open(f, "w") as fh:
-            canary.config.dump(fh)
-        variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
+        variables = self.rc_environ(batch)
         invocation = self.canary_invocation(batch)
         job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
@@ -160,14 +168,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         return rc
 
     def submit(self, batch: "TestBatch", case: "canary.TestCase") -> hpc_connect.futures.Future:
-        variables: dict[str, str | None] = dict(batch.variables)
-        variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
-        if canary.config.get("debug"):
-            variables["CANARY_DEBUG"] = "on"
-        f = batch.workspace.joinpath("config.json")
-        with open(f, "w") as fh:
-            canary.config.dump(fh)
-        variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
+        variables = self.rc_environ(batch)
         timeoutx = batch.timeout_multiplier
         invocation = self.canary_invocation(batch, case)
         job = hpc_connect.JobSpec(
@@ -177,8 +178,8 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
             gpus=case.gpus,
             time_limit=case.runtime * timeoutx,
             env=variables,
-            output=str(batch.workspace.joinpath(batch.stdout)),
-            error=str(batch.workspace.joinpath(batch.stdout)),
+            output=str(batch.workspace.joinpath(f"{case.id[:7]}-out.txt")),
+            error=str(batch.workspace.joinpath(f"{case.id[:7]}-err.txt")),
             workspace=batch.workspace.dir,
             submit_args=self.scheduler_args(),
         )
