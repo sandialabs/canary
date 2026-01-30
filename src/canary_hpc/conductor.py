@@ -37,12 +37,12 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
-        self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
         rtypes: set[str] = {"cpus", "gpus"}
-        for rtype in self.backend.config.resource_types():
+        for rtype in self.backend.resource_types():
             # canary resource pool uses the plural, whereas the hpc-connect resource set uses
             # the singular
             rtype = rtype if rtype.endswith("s") else f"{rtype}s"
@@ -72,11 +72,12 @@ class CanaryHPCConductor:
     def slots_per_resource_type(self) -> Counter[str]:
         if self._slots_per_resource_type is None:
             self._slots_per_resource_type = Counter()
-            node_count = self.backend.config.node_count
+            node_count = self.backend.node_count
             slots_per_type: int = 1
-            for type in self.backend.config.resource_types():
-                count = self.backend.config.count_per_node(type)
+            for type in self.backend.resource_types():
+                count = self.backend.count_per_node(type)
                 if not type.endswith("s"):
+                    # hpc_connect does not add an 's' to end of resource types
                     type += "s"
                 self._slots_per_resource_type[type] = slots_per_type * count * node_count
         assert self._slots_per_resource_type is not None
@@ -84,11 +85,11 @@ class CanaryHPCConductor:
 
     @canary.hookimpl
     def canary_resource_pool_count(self, type: str) -> int:
-        node_count = self.backend.config.node_count
+        node_count = self.backend.node_count
         if type in ("nodes", "node"):
             return node_count
         try:
-            type_per_node = self.backend.config.count_per_node(type)
+            type_per_node = self.backend.count_per_node(type)
         except ValueError:
             return 0
         else:

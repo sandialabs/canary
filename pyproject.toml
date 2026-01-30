@@ -35,7 +35,7 @@ classifiers = [
 
 dynamic = [ "version" ]
 dependencies = [
-    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
+    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect@futures",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",

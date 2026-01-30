@@ -20,7 +20,7 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
-        self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         config = TestBatch.loadconfig(workspace)
         self.session: str = config["session"]
         self.batch: str = config["id"]
@@ -31,10 +31,6 @@ class CanaryHPCExecutor:
             self.cases.append(case)
         else:
             self.cases.extend(config["cases"])
-        f = self.workspace / "hpc_connect.yaml"
-        if not f.exists():
-            with open(f, "w") as fh:
-                self.backend.config.dump(fh)
         if "CANARY_BATCH_ID" not in os.environ:
             os.environ["CANARY_BATCH_ID"] = self.batch
         elif self.batch != os.environ["CANARY_BATCH_ID"]:
@@ -87,12 +83,12 @@ class CanaryHPCExecutor:
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend
         resources: dict[str, list[Any]] = {}
-        node_count = self.backend.config.node_count
-        for type in self.backend.config.resource_types():
+        node_count = self.backend.node_count
+        for type in self.backend.resource_types():
+            count = self.backend.count_per_node(type)
+            slots = 1
             if not type.endswith("s"):
                 type += "s"
-            count = self.backend.config.count_per_node(type)
-            slots = 1
             resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
         pool: dict[str, Any] = {
             "resources": resources,
