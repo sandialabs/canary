@@ -33,7 +33,7 @@ class HPCConnectRunner:
 
     def execute(self, batch: "TestBatch") -> int | None:
         raise NotImplementedError
-        
+
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:
         variables: dict[str, str | None] = dict(batch.variables)
         variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
