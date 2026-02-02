@@ -13,6 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import cast
 
 from rich import print as rprint
 from rich.console import Console
@@ -114,6 +115,7 @@ class ResourceQueueExecutor:
         self.started_on: float = -1.0
         self._store: dict[str, Any] = {}
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
+        self.event_sink: JobEventSink = NULL_SINK
 
         self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
         if os.getenv("CANARY_LEVEL") == "1":
@@ -187,7 +189,9 @@ class ResourceQueueExecutor:
         logging_queue: mp.Queue = self._store["logging_queue"]
         config_snapshot = config.snapshot()
 
-        with CanaryLive(self._render_dashboard, enable=self.enable_live_monitoring) as live:
+        renderer = ConsoleRenderer.factory(self._render_dashboard, self.enable_live_monitoring)
+        with ConsoleReporter(renderer) as reporter:
+            self.event_sink = cast(JobEventSink, reporter)
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
@@ -198,11 +202,11 @@ class ResourceQueueExecutor:
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
                     self._check_for_leaks()
-                    live.update()
+                    reporter.update()
 
                     # Wait for a slot if at max capacity
                     self._wait_for_slot()
-                    live.update()
+                    reporter.update()
 
                     # Get a job from the queue
                     job = self.queue.get()
@@ -227,8 +231,8 @@ class ResourceQueueExecutor:
                         qrank=qrank,
                         qsize=qsize,
                     )
-                    live.update()
-                    self.on_job_start(job, qrank, qsize)
+                    reporter.update()
+                    self.event_sink.on_event("start", job, qrank, qsize)
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -236,58 +240,33 @@ class ResourceQueueExecutor:
 
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
-                    self._wait_all(start, timeout, live)
+                    self._wait_all(start, timeout)
                     break
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
                 except TimeoutError:
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
                 except BaseException:
                     logger.exception("Unhandled exception in process pool")
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
-            live.update(final=True)
+            self.event_sink = NULL_SINK
+            reporter.update(final=True)
         return compute_returncode(self.queue.cases())
-
-    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if self.enable_live_monitoring:
-            return
-        fmt = io.StringIO()
-        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
-        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-
-    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if self.enable_live_monitoring:
-            return
-        try:
-            fmt = io.StringIO()
-            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-            fmt.write(
-                "[bold]Finished[/] job %s: %s: %s"
-                % (job.id[:7], job.display_name(), job.status.display_name())
-            )
-            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-        except Exception:
-            logger.exception(f"Failed logging finished state of {job.id[:7]}")
-        for h in logger.handlers:
-            h.flush()
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -338,7 +317,7 @@ class ResourceQueueExecutor:
                     f"{slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
                 )
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
 
     def _check_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
@@ -399,7 +378,7 @@ class ResourceQueueExecutor:
                     f"with status {slot.job.status.status}"
                 )
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
 
     def _check_for_leaks(self) -> None:
         busy_ids = set(self.queue._busy)
@@ -422,7 +401,7 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self, start: float, timeout: float, live: "CanaryLive") -> None:
+    def _wait_all(self, start: float, timeout: float) -> None:
         """Wait for all active processes to complete."""
         while True:
             if not self.inflight:
@@ -435,7 +414,7 @@ class ResourceQueueExecutor:
                 self._check_finished_processes()
                 self._check_for_leaks()
                 time.sleep(0.075)
-                live.update()
+                self.event_sink.on_event("update")
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
@@ -473,7 +452,7 @@ class ResourceQueueExecutor:
             finally:
                 logger.debug(f"ResourceQueueExecutor._terminate_all(): {slot.job=} terminated")
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
 
         # Force kill if still alive
         for pid, slot in inflight:
@@ -594,13 +573,12 @@ class ResourceQueueExecutor:
         return Group(table, footer)
 
 
-class CanaryLive:
-    def __init__(self, factory: Callable[..., Group | str], *, enable: bool = True) -> None:
-        self.factory = factory
-        self.enabled = enable
+class ConsoleReporter:
+    def __init__(self, renderer: "ConsoleRenderer") -> None:
+        self.renderer = renderer
         self.live: Live | None = None
         self.console: Console | None = None
-        if self.enabled:
+        if self.renderer.live:
             self.console = Console(file=sys.stdout, force_terminal=True)
 
         # Logging control
@@ -609,7 +587,7 @@ class CanaryLive:
         self._mark: float = -1.0
 
     def __enter__(self):
-        if self.enabled:
+        if self.renderer.live:
             self.mute_stream_handlers()
             self.live = Live(
                 refresh_per_second=1,
@@ -629,10 +607,10 @@ class CanaryLive:
     def update(self, final: bool = False) -> None:
         if self.live:
             if final or time.monotonic() - self._mark > 0.25:
-                self.live.update(self.factory(final=final) or "", refresh=True)
+                self.live.update(self.renderer.render(final=final) or "", refresh=True)
                 self._mark = time.monotonic()
         elif final:
-            group = self.factory(final=True)
+            group = self.renderer.render(final=True)
             rprint(group)
 
     def mute_stream_handlers(self) -> None:
@@ -653,6 +631,83 @@ class CanaryLive:
         for h in self._stream_handlers:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
+
+    def on_event(self, event: str, *args, **kwargs) -> None:
+        if event == "start":
+            self.renderer.on_job_start(*args)
+        elif event == "finish":
+            self.renderer.on_job_finish(*args)
+        elif event == "update":
+            self.update(**kwargs)
+
+
+class JobEventSink:
+    def on_event(self, evant: str, *args, **kwargs) -> None:
+        pass
+
+
+NULL_SINK = JobEventSink()
+
+
+class ConsoleRenderer:
+    live: bool = False
+
+    def render(self, *, final: bool = False) -> Group | str:
+        raise NotImplementedError
+
+    @staticmethod
+    def factory(render_fn: Callable[..., Group | str], live: bool) -> "ConsoleRenderer":
+        if live:
+            return LiveRenderer(render_fn)
+        return StaticRenderer(render_fn)
+
+    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        pass
+
+    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        pass
+
+
+class LiveRenderer(ConsoleRenderer):
+    live: bool = True
+
+    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
+        self.render_fn = render_fn
+
+    def render(self, *, final: bool = False) -> Group | str:
+        return self.render_fn(final=final)
+
+
+class StaticRenderer(ConsoleRenderer):
+    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
+        self.render_fn = render_fn
+
+    def render(self, *, final: bool = False) -> Group | str:
+        if final:
+            return self.render_fn(final=True)
+        return ""
+
+    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        fmt = io.StringIO()
+        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
+        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+
+    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        try:
+            fmt = io.StringIO()
+            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
+            fmt.write(
+                "[bold]Finished[/] job %s: %s: %s"
+                % (job.id[:7], job.display_name(), job.status.display_name())
+            )
+            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+        except Exception:
+            logger.exception(f"Failed logging finished state of {job.id[:7]}")
+        for h in logger.handlers:
+            h.flush()
 
 
 class CanaryKill(Exception):
