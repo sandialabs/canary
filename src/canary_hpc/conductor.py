@@ -37,7 +37,8 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
+        config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
@@ -281,6 +282,7 @@ class BatchExecutor:
         hpc.propagate = True
         hpc.setLevel(logging.NOTSET)
         batch.setup()
-        backend = hpc_connect.get_backend(kwargs["backend"])
+        config = hpc_connect.Config.from_defaults(overrides=dict(backend=kwargs["backend"]))
+        backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
         batch.run(backend=backend)
         logger.debug(f"Done running {batch}")

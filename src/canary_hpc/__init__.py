@@ -128,6 +128,6 @@ def series_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConne
     """Default implementation"""
     from .batchexec import HPCConnectSeriesRunner
 
-    if batch.spec.layout == "flat" and backend.supports_subscheduling:
+    if batch.spec.layout == "flat" and backend.supports_subscheduling():
         return HPCConnectSeriesRunner(backend)
     return None

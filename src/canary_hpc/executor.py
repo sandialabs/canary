@@ -20,7 +20,8 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
+        config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
         config = TestBatch.loadconfig(workspace)
         self.session: str = config["session"]
         self.batch: str = config["id"]

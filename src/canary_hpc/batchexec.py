@@ -74,16 +74,16 @@ class HPCConnectRunner:
 
     @contextmanager
     def handle_signals(
-        self, cancellables: list[Cancellable], batch: "TestBatch"
+        self, targets: list[Cancellable], batch: "TestBatch"
     ) -> Generator[None, None, None]:
         def cancel(signum, frame):
             logger.warning(f"Cancelling batch {batch} due to captured signal {signum!r}")
             try:
-                for c in cancellables:
+                for target in targets:
                     try:
-                        c.cancel()
+                        target.cancel()
                     except Exception as e:
-                        logger.debug(f"Failed to cancel {c}", exc_info=e)
+                        logger.debug(f"Failed to cancel {target}", exc_info=e)
             finally:
                 signal.signal(signum, signal.SIG_DFL)
                 os.kill(os.getpid(), signum)
