@@ -40,10 +40,10 @@ class ExecutionSlot:
     job: JobProtocol
     qrank: int
     qsize: int
-    start_time: float
+    submit_time: float
     proc: mp.MeasuredProcess
     queue: mp.SimpleQueue
-    results_seen_at: float | None = None
+    start_time: float = -1.0
 
 
 class JobFunctor:
@@ -62,7 +62,7 @@ class JobFunctor:
         h = logging.QueueHandler(logging_queue)
         logging.add_handler(h)
         try:
-            executor(job, **kwargs)
+            executor(job, queue=result_queue, **kwargs)
         except BaseException as e:
             logger.exception(f"Job {job}: exception occurred during execution of job functor")
             job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
@@ -71,7 +71,7 @@ class JobFunctor:
             logger.debug(f"Job {job}: job functor exited normally")
         finally:
             try:
-                result_queue.put(job.getstate())
+                result_queue.put(("FINISHED", job.getstate()))
             except Exception:
                 logger.exception("Failed to put job state into queue")
                 raise
@@ -107,7 +107,8 @@ class ResourceQueueExecutor:
         self.executor = executor
         self.busy_wait_time = busy_wait_time
 
-        self.inflight: dict[int, ExecutionSlot] = {}
+        self.submitted: dict[int, ExecutionSlot] = {}
+        self.running: dict[int, ExecutionSlot] = {}
         self.finished: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
         self.started_on: float = -1.0
@@ -119,6 +120,10 @@ class ResourceQueueExecutor:
             self.enable_live_monitoring = False
         elif os.getenv("CANARY_MAKE_DOCS"):
             self.enable_live_monitoring = False
+
+    @property
+    def inflight(self) -> dict[int, ExecutionSlot]:
+        return self.submitted | self.running
 
     def __enter__(self) -> "ResourceQueueExecutor":
         self._store.clear()
@@ -214,11 +219,11 @@ class ResourceQueueExecutor:
                     )
                     proc.start()
                     pid: int = proc.pid  # type: ignore
-                    self.inflight[pid] = ExecutionSlot(
+                    self.submitted[pid] = ExecutionSlot(
                         proc=proc,
                         queue=result_queue,
                         job=job,
-                        start_time=time.time(),
+                        submit_time=time.time(),
                         qrank=qrank,
                         qsize=qsize,
                     )
@@ -292,10 +297,10 @@ class ResourceQueueExecutor:
             if not slot.proc.is_alive():
                 continue
             total_timeout = slot.job.timeout * self.timeout_multiplier
-            if now - slot.start_time > total_timeout:
+            if now - slot.submit_time > total_timeout:
                 timed_out.append((pid, slot))
         for pid, slot in timed_out:
-            self.inflight.pop(pid, None)
+            _ = self.running.pop(pid, None) or self.submitted.pop(pid)
             self.finished[pid] = slot
             total_timeout = slot.job.timeout * self.timeout_multiplier
             try:
@@ -310,6 +315,7 @@ class ResourceQueueExecutor:
                 try:
                     slot.job.refresh()
                     slot.job.timekeeper.update(
+                        submitted_on=datetime.datetime.fromtimestamp(slot.submit_time).isoformat(),
                         started_on=datetime.datetime.fromtimestamp(slot.start_time).isoformat(),
                         finished_on=datetime.datetime.fromtimestamp(now).isoformat(),
                         duration=now - slot.start_time,
@@ -345,18 +351,35 @@ class ResourceQueueExecutor:
             raise CanaryKill
 
         finished_pids: dict[int, Any] = {}
-        for pid, slot in self.inflight.items():
-            if not slot.queue.empty():
-                finished_pids[pid] = slot.queue.get()
-                slot.queue.close()
-        busy_pids: set[int] = set(self.inflight.keys()) - set(finished_pids.keys())
+        for pid, slot in list(self.submitted.items()):
+            if slot.queue.empty():
+                continue
+            event = slot.queue.get()
+            match event:
+                case ("STARTED", ts):
+                    slot.start_time = ts
+                    self.submitted.pop(pid)
+                    self.running[pid] = slot
+                case ("FINISHED", state):
+                    finished_pids[pid] = state
+                case _:
+                    logger.warning(f"Unexpected event from submitted job {pid}: {event}")
+        for pid, slot in list(self.running.items()):
+            if slot.queue.empty():
+                continue
+            event = slot.queue.get()
+            match event:
+                case ("FINISHED", state):
+                    finished_pids[pid] = state
+
+        busy_pids: set[int] = set(self.inflight) - set(finished_pids)
         self.alogger.emit(
             tuple(sorted(busy_pids)),
             f"Finished pids: {list(finished_pids)}.  Busy pids: {list(busy_pids)}",
         )
 
         for pid, result in finished_pids.items():
-            slot = self.inflight.pop(pid)
+            slot = self.running.pop(pid, None) or self.submitted.pop(pid)
             self.finished[pid] = slot
             try:
                 slot.job.setstate(result)
@@ -417,7 +440,8 @@ class ResourceQueueExecutor:
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
         inflight = list(self.inflight.items())
-        self.inflight.clear()
+        self.running.clear()
+        self.submitted.clear()
         for pid, slot in inflight:
             try:
                 if slot.proc.is_alive():
@@ -533,7 +557,7 @@ class ResourceQueueExecutor:
                 )
 
         now = time.time()
-        for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
+        for slot in sorted(self.running.values(), key=lambda x: x.qrank):
             elapsed = now - slot.start_time
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
@@ -543,8 +567,19 @@ class ResourceQueueExecutor:
                 f"{slot.qrank}/{slot.qsize}",
             )
 
+        now = time.time()
+        for slot in sorted(self.submitted.values(), key=lambda x: x.qrank):
+            elapsed = now - slot.submit_time
+            table.add_row(
+                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.id[:7],
+                "[cyan]SUBMITTED[/]",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
         if table.row_count < max_rows:
-            st = "[cyan]PENDING[/]"
+            st = "[magenta]PENDING[/]"
             na = "NA"
             for job in self.queue.pending():
                 table.add_row(

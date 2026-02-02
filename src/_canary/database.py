@@ -124,6 +124,7 @@ class WorkspaceDatabase:
             status_status TEXT,
             status_reason TEXT,
             status_code INTEGER,
+            submitted_on TEXT,
             started_on TEXT,
             finished_on TEXT,
             duration TEXT,
@@ -334,6 +335,7 @@ class WorkspaceDatabase:
                     case.status.status,
                     case.status.reason or "",
                     case.status.code,
+                    case.timekeeper.submitted_on,
                     case.timekeeper.started_on,
                     case.timekeeper.finished_on,
                     case.timekeeper.duration,
@@ -356,13 +358,14 @@ class WorkspaceDatabase:
                 status_status,
                 status_reason,
                 status_code,
+                submitted_on,
                 started_on,
                 finished_on,
                 duration,
                 workspace,
                 measurements
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
@@ -436,13 +439,14 @@ class WorkspaceDatabase:
         )
         d["timekeeper"] = Timekeeper.from_dict(
             {
-                "started_on": row[11],
-                "finished_on": row[12],
-                "duration": float(row[13]),
+                "submitted_on": row[11],
+                "started_on": row[12],
+                "finished_on": row[13],
+                "duration": float(row[14]),
             }
         )
-        d["workspace"] = row[14]
-        d["measurements"] = Measurements.from_dict(json.loads(row[15]))
+        d["workspace"] = row[15]
+        d["measurements"] = Measurements.from_dict(json.loads(row[16]))
         return d
 
     def put_selection(

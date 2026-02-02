@@ -12,6 +12,7 @@ from typing import Generator
 
 @dataclasses.dataclass
 class Timekeeper:
+    submitted_on: str = dataclasses.field(default="NA", init=False)
     started_on: str = dataclasses.field(default="NA", init=False)
     finished_on: str = dataclasses.field(default="NA", init=False)
     duration: float = dataclasses.field(default=-1.0, init=False)
@@ -35,18 +36,23 @@ class Timekeeper:
             self.stop()
 
     def reset(self) -> None:
+        self.submitted_on = "NA"
         self.started_on = "NA"
         self.finished_on = "NA"
         self.duration = -1.0
         self.mark = -1.0
 
-    def update(self, *, started_on: str, finished_on: str, duration: float) -> None:
+    def update(
+        self, *, started_on: str, finished_on: str, duration: float, submitted_on: str = "NA"
+    ) -> None:
+        self.submitted_on = submitted_on
         self.started_on = started_on
         self.finished_on = finished_on
         self.duration = duration
 
     def asdict(self) -> dict[str, Any]:
         return {
+            "submitted_on": self.submitted_on,
             "started_on": self.started_on,
             "finished_on": self.finished_on,
             "duration": self.duration,
@@ -60,6 +66,7 @@ class Timekeeper:
     @classmethod
     def from_dict(cls, d: dict) -> "Timekeeper":
         self = cls()
+        self.submitted_on = d["submitted_on"]
         self.started_on = d["started_on"]
         self.finished_on = d["finished_on"]
         self.duration = d["duration"]

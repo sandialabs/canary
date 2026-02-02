@@ -21,6 +21,7 @@ from _canary.testcase import Measurements
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
 from _canary.util.hash import hashit
+from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.time import time_in_seconds
 
 from .status import BatchStatus
@@ -230,7 +231,7 @@ class TestBatch:
     ) -> None:
         self.status.set(state=state, category=category, status=status, reason=reason, code=code)
 
-    def run(self, backend: hpc_connect.Backend) -> None:
+    def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
@@ -239,7 +240,7 @@ class TestBatch:
         try:
             logger.debug(f"Submitting batch {self.id[:7]}")
             with self.timekeeper.timeit():
-                rc = runner.execute(self)
+                rc = runner.execute(self, queue=queue)
         except Exception:
             rc = 1
         finally:

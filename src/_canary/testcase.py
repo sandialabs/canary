@@ -362,6 +362,7 @@ class TestCase:
                 code=status.code,
             )
         if timekeeper := data.get("timekeeper"):
+            self.timekeeper.submitted_on = timekeeper.submitted_on
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
@@ -434,6 +435,7 @@ class TestCase:
             code=status["code"],
         )
         tk = data["timekeeper"]
+        self.timekeeper.submitted_on = tk["submitted_on"]
         self.timekeeper.started_on = tk["started_on"]
         self.timekeeper.finished_on = tk["finished_on"]
         self.timekeeper.duration = tk["duration"]

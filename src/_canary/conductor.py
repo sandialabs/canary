@@ -4,6 +4,7 @@
 
 import io
 import threading
+import time
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -13,6 +14,7 @@ from .queue import ResourceQueue
 from .resource_pool import make_resource_pool
 from .resource_pool.rpool import Outcome
 from .util import logging
+from .util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
     from .resource_pool import ResourcePool
@@ -91,9 +93,10 @@ class CanaryConductor:
 class TestCaseExecutor:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, case: "TestCase", *args: str, **kwargs: Any) -> None:
+    def __call__(self, case: "TestCase", queue: SimpleQueue, **kwargs: Any) -> None:
         try:
             config.pluginmanager.hook.canary_runteststart(case=case)
+            queue.put(("STARTED", time.time()))
             config.pluginmanager.hook.canary_runtest(case=case)
         finally:
             config.pluginmanager.hook.canary_runtest_finish(case=case)

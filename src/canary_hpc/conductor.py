@@ -20,6 +20,7 @@ from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
+from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.rich import colorize
 from _canary.util.time import time_in_seconds
 
@@ -275,7 +276,7 @@ class KeyboardQuit(Exception):
 class BatchExecutor:
     """Class for running ``ResourceQueue``."""
 
-    def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
+    def __call__(self, batch: TestBatch, queue: SimpleQueue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         hpc = logging.getLogger("hpc_connect")
         hpc.handlers.clear()
@@ -284,5 +285,5 @@ class BatchExecutor:
         batch.setup()
         config = hpc_connect.Config.from_defaults(overrides=dict(backend=kwargs["backend"]))
         backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
-        batch.run(backend=backend)
+        batch.run(backend=backend, queue=queue)
         logger.debug(f"Done running {batch}")

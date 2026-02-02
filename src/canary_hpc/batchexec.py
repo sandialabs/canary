@@ -6,6 +6,7 @@ import os
 import shlex
 import signal
 import sys
+import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Generator
@@ -15,6 +16,7 @@ import hpc_connect
 import hpc_connect.futures
 
 import canary
+from _canary.util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
     from .batchspec import TestBatch
@@ -31,7 +33,7 @@ class HPCConnectRunner:
     def __init__(self, backend: hpc_connect.Backend) -> None:
         self.backend = backend
 
-    def execute(self, batch: "TestBatch") -> int | None:
+    def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
         raise NotImplementedError
 
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:
@@ -100,10 +102,18 @@ class HPCConnectRunner:
 
 
 class HPCConnectBatchRunner(HPCConnectRunner):
-    def execute(self, batch: "TestBatch") -> int | None:
+    def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
+        def set_starttime(future):
+            queue.put(("STARTED", time.time()))
+
+        def set_jobid(future):
+            batch.jobid = future.jobid
+
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         with batch.workspace.enter():
             future = self.submit(batch)
+            future.add_jobstart_callback(set_starttime)
+            future.add_jobid_callback(set_jobid)
             with self.handle_signals([future], batch):
                 rc = future.result()
         rc = future.result()
@@ -149,13 +159,18 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
 
 class HPCConnectSeriesRunner(HPCConnectRunner):
-    def execute(self, batch: "TestBatch") -> int | None:
+    def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
+        def set_starttime(future):
+            queue.put(("STARTED", time.time()))
+
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         rc: int = -1
         with batch.workspace.enter():
             futures: list[hpc_connect.futures.Future] = []
-            for case in batch.cases:
+            for i, case in enumerate(batch.cases):
                 future = self.submit(batch, case)
+                if i == 0:
+                    future.add_jobstart_callback(set_starttime)
                 futures.append(future)
             with self.handle_signals(futures, batch):
                 for future in hpc_connect.futures.as_completed(futures):
