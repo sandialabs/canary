@@ -7,6 +7,7 @@ import dataclasses
 import datetime
 import json
 import math
+import time
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -239,8 +240,12 @@ class TestBatch:
         rc: int | None = -1
         try:
             logger.debug(f"Submitting batch {self.id[:7]}")
-            with self.timekeeper.timeit():
+            queue.put(("SUBMITTED", time.time()))
+            self.timekeeper.submitted = time.time()
+            try:
                 rc = runner.execute(self, queue=queue)
+            finally:
+                self.timekeeper.finished = time.time()
         except Exception:
             rc = 1
         finally:

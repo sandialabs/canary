@@ -44,10 +44,12 @@ class ExecutionSlot:
     job: JobProtocol
     qrank: int
     qsize: int
-    submit_time: float
+    spawned: float
     proc: mp.MeasuredProcess
     queue: mp.SimpleQueue
-    start_time: float = -1.0
+    submitted: float = -1.0
+    started: float = -1.0
+    finished: float = -1.0
 
 
 class JobFunctor:
@@ -253,12 +255,11 @@ class ResourceQueueExecutor:
                         proc=proc,
                         queue=result_queue,
                         job=job,
-                        submit_time=time.time(),
+                        spawned=time.time(),
                         qrank=qrank,
                         qsize=qsize,
                     )
                     reporter.update()
-                    self.notify_listeners("job_submitted", self.submitted[pid])
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -305,10 +306,10 @@ class ResourceQueueExecutor:
         for pid, slot in list(self.inflight.items()):
             if not slot.proc.is_alive():
                 continue
-            if slot.start_time < 0:
+            if slot.started < 0:
                 continue
             total_timeout = slot.job.timeout * self.timeout_multiplier
-            if now - slot.start_time > total_timeout:
+            if now - slot.started > total_timeout:
                 timed_out.append((pid, slot))
         for pid, slot in timed_out:
             _ = self.running.pop(pid, None) or self.submitted.pop(pid)
@@ -326,8 +327,8 @@ class ResourceQueueExecutor:
                 try:
                     slot.job.refresh()
                     slot.job.timekeeper.update(
-                        submitted=slot.submit_time,
-                        started=slot.start_time,
+                        submitted=slot.submitted,
+                        started=slot.started,
                         finished=now,
                     )
                     reason: str = f"Job timed out after {total_timeout} s."
@@ -365,12 +366,16 @@ class ResourceQueueExecutor:
             while not slot.queue.empty():
                 event = slot.queue.get()
                 match event:
+                    case ("SUBMITTED", ts):
+                        slot.submitted = ts
+                        self.notify_listeners("job_submitted", slot)
                     case ("STARTED", ts):
-                        slot.start_time = ts
+                        slot.started = ts
                         self.running[pid] = slot
                         self.submitted.pop(pid, None)
                         self.notify_listeners("job_started", slot)
                     case ("FINISHED", state):
+                        slot.finished = time.time()
                         finished_pids[pid] = state
                     case _:
                         logger.warning(f"Unexpected event from submitted job {pid}: {event}")
@@ -391,7 +396,6 @@ class ResourceQueueExecutor:
                 slot.job.setstate(result)
                 measurements = slot.proc.get_measurements()
                 slot.job.measurements.update(measurements)
-                slot.job.timekeeper.submitted = slot.submit_time
                 slot.job.save()
             except Exception:
                 logger.exception(f"Post-processing failed for job {slot.job}")
@@ -463,7 +467,7 @@ class ResourceQueueExecutor:
                     slot.job.refresh()
                     stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
                     slot.job.set_status(status=stat, reason=f"Job terminated with signal {signum}")
-                    slot.job.timekeeper.submitted = slot.submit_time
+                    slot.job.timekeeper.submitted = slot.submitted
                     slot.job.timekeeper.finished = time.time()
                     slot.job.measurements.update(measurements)
                     try:
@@ -560,8 +564,8 @@ class ResourceQueueExecutor:
         if num_inflight < max_rows:
             n = max_rows - num_inflight
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
-                queued = slot.job.timekeeper.queued()
-                elapsed = slot.job.timekeeper.duration()
+                queued = slot.started - slot.spawned
+                elapsed = slot.finished - slot.spawned
                 table.add_row(
                     slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
@@ -573,8 +577,8 @@ class ResourceQueueExecutor:
 
         now = time.time()
         for slot in sorted(self.running.values(), key=lambda x: x.qrank):
-            queued = slot.start_time - slot.submit_time
-            elapsed = now - slot.submit_time
+            queued = slot.started - slot.spawned
+            elapsed = now - slot.spawned
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
@@ -586,7 +590,7 @@ class ResourceQueueExecutor:
 
         now = time.time()
         for slot in sorted(self.submitted.values(), key=lambda x: x.qrank):
-            queued = elapsed = now - slot.submit_time
+            queued = elapsed = now - slot.spawned
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
