@@ -15,6 +15,7 @@ from typing import Any
 from typing import Callable
 from typing import Literal
 
+from rich import box
 from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
@@ -521,7 +522,7 @@ class ResourceQueueExecutor:
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         fmt = config.getoption("live_name_fmt")
         if final:
             table.add_column("Job")
@@ -551,7 +552,7 @@ class ResourceQueueExecutor:
                 )
             return Group(table, footer)
 
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         table.add_column("Job")
         table.add_column("ID")
         table.add_column("Status")
