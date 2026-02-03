@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
-import datetime
 import io
 import os
 from pathlib import Path
@@ -135,12 +134,8 @@ def from_testcase(case: "TestCase") -> TestInstance:
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in case.spec.assets:
         sources.setdefault(asset.action, []).append((str(asset.src), asset.dst))
-    start = -1.0
-    if case.timekeeper.started_on != "NA":
-        start = datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp()
-    stop = -1.0
-    if case.timekeeper.finished_on != "NA":
-        stop = datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp()
+    start = case.timekeeper.started
+    stop = case.timekeeper.finished
     instance = cls(
         file_root=str(case.spec.file_root),
         file_path=str(case.spec.file_path),
@@ -198,12 +193,8 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
     resources = lock["resources"]
     timekeeper = lock["timekeeper"]
 
-    start = -1.0
-    if timekeeper["started_on"] != "NA":
-        start = datetime.datetime.fromisoformat(timekeeper["started_on"]).timestamp()
-    stop = -1.0
-    if timekeeper["finished_on"] != "NA":
-        stop = datetime.datetime.fromisoformat(timekeeper["finished_on"]).timestamp()
+    start = timekeeper["started"]
+    stop = timekeeper["finished"]
     instance = cls(
         file_root=spec["file_root"],
         file_path=spec["file_path"],

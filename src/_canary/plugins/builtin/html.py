@@ -73,7 +73,7 @@ class HTMLReporter(CanaryReporter):
         fh.write(f"<tr><td><b>Status:</b> {case.status.status}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.status.code}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
-        fh.write(f"<tr><td><b>Duration:</b> {case.timekeeper.duration}</td></tr>\n")
+        fh.write(f"<tr><td><b>Duration:</b> {case.timekeeper.duration()}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
         fh.write(case.read_output())
@@ -129,14 +129,14 @@ class HTMLReporter(CanaryReporter):
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
         fh.write("<tbody>")
-        for case in sorted(cases, key=lambda c: c.timekeeper.duration):
+        for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
             file = os.path.join(self.cases_dir, f"{case.id}.html")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
             link = f'<a href="file://{file}">{case.display_name()}</a>'
             html_name = case.status.display_name(style="html")
             fh.write(
-                f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"
+                f"<tr><td>{link}</td><td>{case.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
             )
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
@@ -147,13 +147,13 @@ class HTMLReporter(CanaryReporter):
         fh.write("<body>\n<h1>Test Results</h1>\n<table>\n")
         fh.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
         for group, cases in totals.items():
-            for case in sorted(cases, key=lambda c: c.timekeeper.duration):
+            for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
                 link = f'<a href="file://{file}">{case.display_name()}</a>'
                 html_name = case.status.display_name(style="html")
                 fh.write(
-                    f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"
+                    f"<tr><td>{link}</td><td>{case.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
                 )
         fh.write("</table>\n</body>\n</html>")

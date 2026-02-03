@@ -362,10 +362,9 @@ class TestCase:
                 code=status.code,
             )
         if timekeeper := data.get("timekeeper"):
-            self.timekeeper.submitted_on = timekeeper.submitted_on
-            self.timekeeper.started_on = timekeeper.started_on
-            self.timekeeper.finished_on = timekeeper.finished_on
-            self.timekeeper.duration = timekeeper.duration
+            self.timekeeper.submitted = timekeeper.submitted
+            self.timekeeper.started = timekeeper.started
+            self.timekeeper.finished = timekeeper.finished
         if measurements := data.get("measurements"):
             self.measurements.update(measurements.data)
 
@@ -435,10 +434,9 @@ class TestCase:
             code=status["code"],
         )
         tk = data["timekeeper"]
-        self.timekeeper.submitted_on = tk["submitted_on"]
-        self.timekeeper.started_on = tk["started_on"]
-        self.timekeeper.finished_on = tk["finished_on"]
-        self.timekeeper.duration = tk["duration"]
+        self.timekeeper.submitted = tk["submitted"]
+        self.timekeeper.started = tk["started"]
+        self.timekeeper.finished = tk["finished"]
 
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
         for key, val in self.variables.items():
@@ -633,33 +631,30 @@ class TestCase:
             else:
                 cache = json.loads(file.read_text())["cache"]
             history = cache.setdefault("history", {})
-            dt = (
-                datetime.datetime.fromisoformat(self.timekeeper.started_on)
-                if self.timekeeper.started_on != "NA"
-                else None
-            )
+            fn = datetime.datetime.fromtimestamp
+            dt = fn(self.timekeeper.started) if self.timekeeper.started > 0 else None
             if dt is not None:
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration >= 0 and self.status.category == "PASS":
+            if self.timekeeper.duration() >= 0 and self.status.category == "PASS":
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})
                 if t:
                     # Welford's single pass online algorithm to update statistics
                     count, mean, variance = t["count"], t["mean"], t["variance"]
-                    delta = self.timekeeper.duration - mean
+                    delta = self.timekeeper.duration() - mean
                     mean += delta / (count + 1)
                     M2 = variance * count
-                    delta2 = self.timekeeper.duration - mean
+                    delta2 = self.timekeeper.duration() - mean
                     M2 += delta * delta2
                     variance = M2 / (count + 1)
-                    minimum = min(t["min"], self.timekeeper.duration)
-                    maximum = max(t["max"], self.timekeeper.duration)
+                    minimum = min(t["min"], self.timekeeper.duration())
+                    maximum = max(t["max"], self.timekeeper.duration())
                 else:
                     variance = 0.0
-                    mean = minimum = maximum = self.timekeeper.duration
+                    mean = minimum = maximum = self.timekeeper.duration()
                 t["mean"] = mean
                 t["min"] = minimum
                 t["max"] = maximum

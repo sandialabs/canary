@@ -391,7 +391,7 @@ class RerunRule(RuntimeRule):
         elif self.strategy == "all":
             return RuleOutcome(ok=True)
         elif self.strategy == "changed":
-            t = case.timekeeper.start_time()
+            t = case.timekeeper.started
             if t < 0 or case.spec.file.stat().st_mtime > t:
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason="case spec has not changed since last run")

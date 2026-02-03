@@ -202,7 +202,7 @@ def print_footer(runner: "Runner", title: str) -> None:
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
-    cases.sort(key=lambda x: x.timekeeper.duration)
+    cases.sort(key=lambda x: x.timekeeper.duration())
     ix = list(range(len(cases)))
     if N > 0:
         ix = ix[-N:]
@@ -210,7 +210,7 @@ def print_durations(cases: list["TestCase"], N: int) -> None:
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = cases[i].timekeeper.duration
+        duration = cases[i].timekeeper.duration()
         if duration < 0:
             continue
         name = cases[i].display_name(style="rich")

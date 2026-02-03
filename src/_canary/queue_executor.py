@@ -324,10 +324,9 @@ class ResourceQueueExecutor:
                 try:
                     slot.job.refresh()
                     slot.job.timekeeper.update(
-                        submitted_on=datetime.datetime.fromtimestamp(slot.submit_time).isoformat(),
-                        started_on=datetime.datetime.fromtimestamp(slot.start_time).isoformat(),
-                        finished_on=datetime.datetime.fromtimestamp(now).isoformat(),
-                        duration=now - slot.start_time,
+                        submitted=slot.submit_time,
+                        started=slot.start_time,
+                        finished=now,
                     )
                     reason: str = f"Job timed out after {total_timeout} s."
                     if self.timeout_multiplier != 1.0:
@@ -390,6 +389,7 @@ class ResourceQueueExecutor:
                 slot.job.setstate(result)
                 measurements = slot.proc.get_measurements()
                 slot.job.measurements.update(measurements)
+                slot.job.timekeeper.submitted = slot.submit_time
                 slot.job.save()
             except Exception:
                 logger.exception(f"Post-processing failed for job {slot.job}")
@@ -461,6 +461,8 @@ class ResourceQueueExecutor:
                     slot.job.refresh()
                     stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
                     slot.job.set_status(status=stat, reason=f"Job terminated with signal {signum}")
+                    slot.job.timekeeper.submitted = slot.submit_time
+                    slot.job.timekeeper.finished = time.time()
                     slot.job.measurements.update(measurements)
                     try:
                         slot.job.save()
@@ -519,17 +521,20 @@ class ResourceQueueExecutor:
             table.add_column("Job")
             table.add_column("ID")
             table.add_column("Status")
+            table.add_column("Queued")
             table.add_column("Elapsed")
             table.add_column("Details")
             cases = self.queue.cases()
             for case in cases:
                 if case.status.category == "PASS":
                     continue
-                elapsed = case.timekeeper.duration
+                queued = case.timekeeper.queued()
+                elapsed = case.timekeeper.duration()
                 table.add_row(
                     case.display_name(style="rich", resolve=fmt == "long"),
                     case.id[:7],
                     case.status.display_name(style="rich"),
+                    f"{queued:5.1f}s",
                     f"{elapsed:5.1f}s",
                     case.status.reason or "",
                 )
@@ -544,6 +549,7 @@ class ResourceQueueExecutor:
         table.add_column("Job")
         table.add_column("ID")
         table.add_column("Status")
+        table.add_column("Queued")
         table.add_column("Elapsed")
         table.add_column("Rank")
 
@@ -552,33 +558,38 @@ class ResourceQueueExecutor:
         if num_inflight < max_rows:
             n = max_rows - num_inflight
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
-                elapsed = slot.job.timekeeper.duration
+                queued = slot.job.timekeeper.queued()
+                elapsed = slot.job.timekeeper.duration()
                 table.add_row(
                     slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
+                    f"{queued:5.1f}s",
                     f"{elapsed:5.1f}s",
                     f"{slot.qrank}/{slot.qsize}",
                 )
 
         now = time.time()
         for slot in sorted(self.running.values(), key=lambda x: x.qrank):
-            elapsed = now - slot.start_time
+            queued = slot.start_time - slot.submit_time
+            elapsed = now - slot.submit_time
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
                 "[green]RUNNING[/]",
+                f"{queued:5.1f}s",
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
 
         now = time.time()
         for slot in sorted(self.submitted.values(), key=lambda x: x.qrank):
-            elapsed = now - slot.submit_time
+            queued = elapsed = now - slot.submit_time
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
                 "[cyan]SUBMITTED[/]",
+                f"{queued:5.1f}s",
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )

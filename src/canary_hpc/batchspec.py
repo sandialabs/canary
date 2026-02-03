@@ -288,9 +288,9 @@ class TestBatch:
                     propagate=False,
                 )
             if timekeeper := mydata.get("timekeeper"):
-                self.timekeeper.started_on = timekeeper.started_on
-                self.timekeeper.finished_on = timekeeper.finished_on
-                self.timekeeper.duration = timekeeper.duration
+                self.timekeeper.submitted = timekeeper.submitted
+                self.timekeeper.started = timekeeper.started
+                self.timekeeper.finished = timekeeper.finished
         for case in self.cases:
             if d := data.get(case.id):
                 case.setstate(d)
@@ -321,12 +321,12 @@ class TestBatch:
         """Return total, running, and time in queue"""
 
         def started(case):
-            s = case.timekeeper.started_on
-            return None if s == "NA" else datetime.datetime.fromisoformat(s)
+            t = case.timekeeper.started
+            return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         def finished(case):
-            f = case.timekeeper.finished_on
-            return None if f == "NA" else datetime.datetime.fromisoformat(f)
+            t = case.timekeeper.finished
+            return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         total_duration = self.timekeeper.duration
         duration: float | None = total_duration if total_duration > 0 else None

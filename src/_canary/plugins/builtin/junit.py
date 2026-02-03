@@ -123,7 +123,7 @@ class JunitDocument(xdom.Document):
         testcase = self.create_element("testcase")
         testcase.setAttribute("name", case.display_name())
         testcase.setAttribute("classname", get_classname(case))
-        testcase.setAttribute("time", str(case.timekeeper.duration))
+        testcase.setAttribute("time", str(case.timekeeper.duration()))
         testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
         if case.status.category == "FAIL":
             failure = self.create_element("failure")
@@ -160,18 +160,18 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
         elif case.status.state in ("PENDING", "READY", "RUNNING"):
             stats.num_error += 1
         if case.status.state == "COMPLETE":
-            t = case.timekeeper.started_on
+            t = case.timekeeper.started
             if started_on is None:
-                if t != "NA":
-                    started_on = datetime.fromisoformat(t)
-            elif t != "NA" and datetime.fromisoformat(t) < started_on:
-                started_on = datetime.fromisoformat(t)
-            t = case.timekeeper.finished_on
+                if t > 0:
+                    started_on = datetime.fromtimestamp(t)
+            elif t > 0 and datetime.fromtimestamp(t) < started_on:
+                started_on = datetime.fromtimestamp(t)
+            t = case.timekeeper.finished
             if finished_on is None:
-                if t != "NA":
-                    finished_on = datetime.fromisoformat(t)
-            elif t != "NA" and datetime.fromisoformat(t) > finished_on:
-                finished_on = datetime.fromisoformat(t)
+                if t > 0:
+                    finished_on = datetime.fromtimestamp(t)
+            elif t > 0 and datetime.fromtimestamp(t) > finished_on:
+                finished_on = datetime.fromtimestamp(t)
     stats.started_on = started_on
     stats.finished_on = finished_on
     if started_on is not None and finished_on is not None:

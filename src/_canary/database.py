@@ -124,10 +124,9 @@ class WorkspaceDatabase:
             status_status TEXT,
             status_reason TEXT,
             status_code INTEGER,
-            submitted_on TEXT,
-            started_on TEXT,
-            finished_on TEXT,
-            duration TEXT,
+            submitted REAL,
+            started REAL,
+            finished REAL,
             workspace TEXT,
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
@@ -329,10 +328,9 @@ class WorkspaceDatabase:
             case.status.status,
             case.status.reason or "",
             case.status.code,
-            case.timekeeper.submitted_on,
-            case.timekeeper.started_on,
-            case.timekeeper.finished_on,
-            case.timekeeper.duration,
+            case.timekeeper.submitted,
+            case.timekeeper.started,
+            case.timekeeper.finished,
             str(case.workspace.path),
             json.dumps_min(case.measurements.asdict()),
         )
@@ -361,14 +359,13 @@ class WorkspaceDatabase:
                 status_status,
                 status_reason,
                 status_code,
-                submitted_on,
-                started_on,
-                finished_on,
-                duration,
+                submitted,
+                started,
+                finished,
                 workspace,
                 measurements
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
@@ -423,7 +420,7 @@ class WorkspaceDatabase:
             data.append(d)
         return data
 
-    def _reconstruct_results(self, row: tuple[str, ...]) -> dict[str, Any]:
+    def _reconstruct_results(self, row: tuple[Any, ...]) -> dict[str, Any]:
         d: dict[str, Any] = {}
         d["id"] = row[0]
         d["spec_name"] = row[1]
@@ -441,15 +438,10 @@ class WorkspaceDatabase:
             }
         )
         d["timekeeper"] = Timekeeper.from_dict(
-            {
-                "submitted_on": row[11],
-                "started_on": row[12],
-                "finished_on": row[13],
-                "duration": float(row[14]),
-            }
+            {"submitted": row[11], "started": row[12], "finished": row[13]}
         )
-        d["workspace"] = row[15]
-        d["measurements"] = Measurements.from_dict(json.loads(row[16]))
+        d["workspace"] = row[14]
+        d["measurements"] = Measurements.from_dict(json.loads(row[15]))
         return d
 
     def put_selection(
@@ -600,7 +592,7 @@ class WorkspaceDatabase:
         latest_results AS (
           SELECT
             r.spec_id,
-            r.finished_on,
+            r.finished,
             r.status_category,
             r.status_status
           FROM results r
@@ -612,7 +604,7 @@ class WorkspaceDatabase:
           s.spec_id,
           sm.source,
           sm.view,
-          lr.finished_on,
+          lr.finished,
           lr.status_category,
           lr.status_status
         FROM specs s
@@ -626,10 +618,7 @@ class WorkspaceDatabase:
         rows = self.connection.execute(sql, params).fetchall()
         candidates: list[PartialSpec] = []
         for row in rows:
-            start: float = -1
-            started_on = row[3]
-            if started_on and started_on != "NA":
-                start = datetime.datetime.fromisoformat(started_on).timestamp()
+            start: float = row[3]
             c = PartialSpec(
                 id=row[0],
                 file=Path(row[1]),

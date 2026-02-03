@@ -178,7 +178,7 @@ def test_missing_selection_raises(db: WorkspaceDatabase):
 
 def test_put_and_get_results(db: WorkspaceDatabase, make_session):
     session = make_session(db.path.parent)
-    db.put_results(session)
+    db.put_results(*session.cases)
     results = db.get_results()
     for spec_id, result in results.items():
         assert result["id"] == spec_id
@@ -188,17 +188,18 @@ def test_put_and_get_results(db: WorkspaceDatabase, make_session):
 
 
 def test_result_history(db: WorkspaceDatabase, make_session):
-    s1 = make_session(db.path.parent)
-    s1.name = "s1"
-    db.put_results(s1)
+    session = make_session(db.path.parent)
+    for case in session.cases:
+        case.workspace.session = "s1"
+    db.put_results(*session.cases)
 
-    s1.name = "s2"
-    for case in s1.cases:
+    for case in session.cases:
         with case.timekeeper.timeit():
             case.status.set(state="COMPLETE", category="PASS", status="SUCCESS")
-    db.put_results(s1)
+            case.workspace.session = "s2"
+    db.put_results(*session.cases)
 
-    spec_id = s1.cases[0].id
+    spec_id = session.cases[0].id
     history = db.get_result_history(spec_id)
     assert len(history) == 2
     assert {history[0]["session"], history[1]["session"]} == {"s1", "s2"}
