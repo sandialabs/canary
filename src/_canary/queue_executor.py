@@ -305,8 +305,10 @@ class ResourceQueueExecutor:
         for pid, slot in list(self.inflight.items()):
             if not slot.proc.is_alive():
                 continue
+            if slot.start_time < 0:
+                continue
             total_timeout = slot.job.timeout * self.timeout_multiplier
-            if now - slot.submit_time > total_timeout:
+            if now - slot.start_time > total_timeout:
                 timed_out.append((pid, slot))
         for pid, slot in timed_out:
             _ = self.running.pop(pid, None) or self.submitted.pop(pid)
