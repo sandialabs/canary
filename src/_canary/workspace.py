@@ -296,17 +296,17 @@ class Workspace:
         self.add_session_results(session, update_view=update_view)
         return session
 
-    def add_session_results(self, results: Session, update_view: bool = True) -> None:
+    def add_session_results(self, session: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        self.db.put_results(results)
+        self.db.put_results(*session.cases)
 
         if update_view:
             view_entries: dict[Path, list[Path]] = {}
-            for case in results.cases:
+            for case in session.cases:
                 if case.workspace.session is not None:
                     prefix = self.sessions_dir / case.workspace.session
                 else:
-                    prefix = results.prefix
+                    prefix = session.prefix
                 relpath = case.workspace.dir.relative_to(prefix)
                 view_entries.setdefault(prefix, []).append(relpath)
             self.update_view(view_entries)
@@ -314,7 +314,7 @@ class Workspace:
         # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"
         file.unlink(missing_ok=True)
-        link = os.path.relpath(str(results.prefix), str(file.parent))
+        link = os.path.relpath(str(session.prefix), str(file.parent))
         file.write_text(str(link))
 
         # Write meta data file HEAD -> ./sessions/{session.root}

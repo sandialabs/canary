@@ -96,9 +96,9 @@ class Status(CanarySubcommand):
         console = Console()
         if table.row_count > shutil.get_terminal_size().lines:
             with console.pager():
-                console.print(table, markup=True)
+                console.print(table)
         else:
-            console.print(table, markup=True)
+            console.print(table)
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0
@@ -146,10 +146,11 @@ class Status(CanarySubcommand):
                 row.append(str(entry["status"].code))
                 row.append(str(entry["timekeeper"].duration))
                 row.append(str(entry["status"].display_name(style="rich")))
+                print(row[-1])
                 row.append(str(entry["status"].reason))
                 table.add_row(*row)
         console = Console()
-        console.print(table, markup=True)
+        console.print(table)
 
 
 def sortkey(row: dict) -> tuple:

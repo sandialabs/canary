@@ -8,19 +8,21 @@ import time
 from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import cast
 
 from . import config
 from .hookspec import hookimpl
 from .queue import ResourceQueue
 from .resource_pool import make_resource_pool
 from .resource_pool.rpool import Outcome
+from .testcase import TestCase
 from .util import logging
 from .util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
+    from .queue_executor import EventTypes
     from .resource_pool import ResourcePool
     from .runtest import Runner
-    from .testcase import TestCase
 
 global_lock = threading.Lock()
 logger = logging.get_logger(__name__)
@@ -91,12 +93,10 @@ class CanaryConductor:
             ex.run()
         return True
 
-    def put_result(self, runner: "Runner", event: str, *args: Any) -> None:
+    def put_result(self, runner: "Runner", event: "EventTypes", *args: Any) -> None:
         if event == "job_finished":
-            case: "TestCase" = args[0].job
-            if case.workspace.session is not None:
-                database = runner.workspace.db
-                database.put_result(case, case.workspace.session)
+            case: TestCase = cast(TestCase, args[0].job)
+            runner.workspace.db.put_result(case)
 
 
 class TestCaseExecutor:

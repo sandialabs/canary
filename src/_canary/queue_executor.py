@@ -13,6 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import Literal
 
 from rich import print as rprint
 from rich.console import Console
@@ -33,6 +34,9 @@ from .util.misc import digits
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
+
+
+EventTypes = Literal["job_submitted", "job_started", "job_finished"]
 
 
 @dataclasses.dataclass
@@ -136,8 +140,9 @@ class ResourceQueueExecutor:
 
         Supported events and payloads are:
 
-            ("job_started", slot)
-            ("job_finished", slot)
+            ("job_submitted", ExectutionSlot)
+            ("job_started", ExectutionSlot)
+            ("job_finished", ExectutionSlot)
 
         """
         self.listeners.append(callback)
@@ -253,7 +258,7 @@ class ResourceQueueExecutor:
                         qsize=qsize,
                     )
                     reporter.update()
-                    self.notify_listeners("job_started", self.submitted[pid])
+                    self.notify_listeners("job_submitted", self.submitted[pid])
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -289,7 +294,7 @@ class ResourceQueueExecutor:
             self.remove_listener(reporter.on_event)
         return compute_returncode(self.queue.cases())
 
-    def notify_listeners(self, event: str, *args: Any) -> None:
+    def notify_listeners(self, event: EventTypes, *args: Any) -> None:
         for cb in self.listeners:
             cb(event, *args)
 
@@ -355,26 +360,19 @@ class ResourceQueueExecutor:
             raise CanaryKill
 
         finished_pids: dict[int, Any] = {}
-        for pid, slot in list(self.submitted.items()):
-            if slot.queue.empty():
-                continue
-            event = slot.queue.get()
-            match event:
-                case ("STARTED", ts):
-                    slot.start_time = ts
-                    self.submitted.pop(pid)
-                    self.running[pid] = slot
-                case ("FINISHED", state):
-                    finished_pids[pid] = state
-                case _:
-                    logger.warning(f"Unexpected event from submitted job {pid}: {event}")
-        for pid, slot in list(self.running.items()):
-            if slot.queue.empty():
-                continue
-            event = slot.queue.get()
-            match event:
-                case ("FINISHED", state):
-                    finished_pids[pid] = state
+        for pid, slot in list(self.inflight.items()):
+            while not slot.queue.empty():
+                event = slot.queue.get()
+                match event:
+                    case ("STARTED", ts):
+                        slot.start_time = ts
+                        self.running[pid] = slot
+                        self.submitted.pop(pid, None)
+                        self.notify_listeners("job_started", slot)
+                    case ("FINISHED", state):
+                        finished_pids[pid] = state
+                    case _:
+                        logger.warning(f"Unexpected event from submitted job {pid}: {event}")
 
         busy_pids: set[int] = set(self.inflight) - set(finished_pids)
         self.alogger.emit(
@@ -383,7 +381,10 @@ class ResourceQueueExecutor:
         )
 
         for pid, result in finished_pids.items():
+            # Slot should be in either running or submitted (not both)
             slot = self.running.pop(pid, None) or self.submitted.pop(pid)
+            assert pid not in self.running, "pid unexpectedly remains in running container"
+            assert pid not in self.submitted, "pid unexpectedly remains in submitted container"
             self.finished[pid] = slot
             try:
                 slot.job.setstate(result)
@@ -658,14 +659,15 @@ class ConsoleReporter:
         self._stream_handlers.clear()
 
     def on_event(self, event: str, *args, **kwargs) -> None:
-        if event == "job_started":
-            slot: ExecutionSlot = args[0]
-            self.renderer.on_job_start(slot.job, slot.qrank, slot.qsize)
-        elif event == "job_finished":
-            slot: ExecutionSlot = args[0]
-            self.renderer.on_job_finish(slot.job, slot.qrank, slot.qsize)
-        elif event == "update":
-            self.update(**kwargs)
+        match event:
+            case "job_submitted":
+                slot: ExecutionSlot = args[0]
+                self.renderer.on_job_start(slot.job, slot.qrank, slot.qsize)
+            case "job_finished":
+                slot: ExecutionSlot = args[0]
+                self.renderer.on_job_finish(slot.job, slot.qrank, slot.qsize)
+            case _:
+                pass
 
 
 class ConsoleRenderer:
