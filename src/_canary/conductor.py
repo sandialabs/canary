@@ -5,6 +5,7 @@
 import io
 import threading
 import time
+from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -86,8 +87,16 @@ class CanaryConductor:
         executor = TestCaseExecutor()
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+            ex.add_listener(partial(self.put_result, runner))  # type: ignore
             ex.run()
         return True
+
+    def put_result(self, runner: "Runner", event: str, *args: Any) -> None:
+        if event == "job_finished":
+            case: "TestCase" = args[0].job
+            if case.workspace.session is not None:
+                database = runner.workspace.db
+                database.put_result(case, case.workspace.session)
 
 
 class TestCaseExecutor:

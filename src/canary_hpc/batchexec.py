@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Generator
 from typing import Protocol
+from typing import Sequence
 
 import hpc_connect
 import hpc_connect.futures
@@ -26,7 +27,7 @@ logger = canary.get_logger(__name__)
 
 
 class Cancellable(Protocol):
-    def cancel(self) -> None: ...
+    def cancel(self) -> bool: ...
 
 
 class HPCConnectRunner:
@@ -76,7 +77,7 @@ class HPCConnectRunner:
 
     @contextmanager
     def handle_signals(
-        self, targets: list[Cancellable], batch: "TestBatch"
+        self, targets: Sequence[Cancellable], batch: "TestBatch"
     ) -> Generator[None, None, None]:
         def cancel(signum, frame):
             logger.warning(f"Cancelling batch {batch} due to captured signal {signum!r}")

@@ -13,7 +13,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 from typing import Callable
-from typing import cast
 
 from rich import print as rprint
 from rich.console import Console
@@ -115,7 +114,7 @@ class ResourceQueueExecutor:
         self.started_on: float = -1.0
         self._store: dict[str, Any] = {}
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
-        self.event_sink: JobEventSink = NULL_SINK
+        self.listeners: list[Callable[..., None]] = []
 
         self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
         if os.getenv("CANARY_LEVEL") == "1":
@@ -126,6 +125,28 @@ class ResourceQueueExecutor:
     @property
     def inflight(self) -> dict[int, ExecutionSlot]:
         return self.submitted | self.running
+
+    def add_listener(self, callback: Callable[..., None]) -> None:
+        """Register a listener for job lifecycle events
+
+        Listeners are called synchronously by the executor whenever a job transitions state.
+        The listener signature must be::
+
+            callback(event: str, *args: Any) -> None:
+
+        Supported events and payloads are:
+
+            ("job_started", slot)
+            ("job_finished", slot)
+
+        """
+        self.listeners.append(callback)
+
+    def remove_listener(self, callback: Callable[..., None]) -> None:
+        try:
+            self.listeners.remove(callback)
+        except ValueError:  # nosec B110
+            pass
 
     def __enter__(self) -> "ResourceQueueExecutor":
         self._store.clear()
@@ -191,7 +212,7 @@ class ResourceQueueExecutor:
 
         renderer = ConsoleRenderer.factory(self._render_dashboard, self.enable_live_monitoring)
         with ConsoleReporter(renderer) as reporter:
-            self.event_sink = cast(JobEventSink, reporter)
+            self.add_listener(reporter.on_event)
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
@@ -232,7 +253,7 @@ class ResourceQueueExecutor:
                         qsize=qsize,
                     )
                     reporter.update()
-                    self.event_sink.on_event("start", job, qrank, qsize)
+                    self.notify_listeners("job_started", self.submitted[pid])
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -240,7 +261,7 @@ class ResourceQueueExecutor:
 
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
-                    self._wait_all(start, timeout)
+                    self._wait_all(start, timeout, reporter)
                     break
 
                 except CanaryKill:
@@ -264,9 +285,13 @@ class ResourceQueueExecutor:
                     reporter.update(final=True)
                     raise
 
-            self.event_sink = NULL_SINK
             reporter.update(final=True)
+            self.remove_listener(reporter.on_event)
         return compute_returncode(self.queue.cases())
+
+    def notify_listeners(self, event: str, *args: Any) -> None:
+        for cb in self.listeners:
+            cb(event, *args)
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -317,7 +342,7 @@ class ResourceQueueExecutor:
                     f"{slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
                 )
                 self.queue.done(slot.job)
-                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
     def _check_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
@@ -378,7 +403,7 @@ class ResourceQueueExecutor:
                     f"with status {slot.job.status.status}"
                 )
                 self.queue.done(slot.job)
-                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
     def _check_for_leaks(self) -> None:
         busy_ids = set(self.queue._busy)
@@ -401,7 +426,7 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self, start: float, timeout: float) -> None:
+    def _wait_all(self, start: float, timeout: float, reporter: "ConsoleReporter") -> None:
         """Wait for all active processes to complete."""
         while True:
             if not self.inflight:
@@ -414,7 +439,7 @@ class ResourceQueueExecutor:
                 self._check_finished_processes()
                 self._check_for_leaks()
                 time.sleep(0.075)
-                self.event_sink.on_event("update")
+                reporter.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
@@ -452,7 +477,7 @@ class ResourceQueueExecutor:
             finally:
                 logger.debug(f"ResourceQueueExecutor._terminate_all(): {slot.job=} terminated")
                 self.queue.done(slot.job)
-                self.event_sink.on_event("finish", slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
         # Force kill if still alive
         for pid, slot in inflight:
@@ -633,20 +658,14 @@ class ConsoleReporter:
         self._stream_handlers.clear()
 
     def on_event(self, event: str, *args, **kwargs) -> None:
-        if event == "start":
-            self.renderer.on_job_start(*args)
-        elif event == "finish":
-            self.renderer.on_job_finish(*args)
+        if event == "job_started":
+            slot: ExecutionSlot = args[0]
+            self.renderer.on_job_start(slot.job, slot.qrank, slot.qsize)
+        elif event == "job_finished":
+            slot: ExecutionSlot = args[0]
+            self.renderer.on_job_finish(slot.job, slot.qrank, slot.qsize)
         elif event == "update":
             self.update(**kwargs)
-
-
-class JobEventSink:
-    def on_event(self, evant: str, *args, **kwargs) -> None:
-        pass
-
-
-NULL_SINK = JobEventSink()
 
 
 class ConsoleRenderer:

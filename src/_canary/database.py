@@ -22,6 +22,7 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
+    from .testcase import TestCase
     from .workspace import Session
 
 logger = logging.get_logger(__name__)
@@ -315,6 +316,56 @@ class WorkspaceDatabase:
             ).fetchall()
             self.connection.execute("DROP TABLE _ids").fetchall()
         return rows
+
+    def put_result(self, case: "TestCase", session: str) -> None:
+        """Store results in the DB.  We store status, timekeeper across columns for future
+        enhancements to use results without actually creating a testcase to hold them
+        """
+        row = (
+            case.id,
+            case.spec.name,
+            case.spec.fullname,
+            str(case.spec.file_root),
+            str(case.spec.file_path),
+            session,
+            case.status.state,
+            case.status.category,
+            case.status.status,
+            case.status.reason or "",
+            case.status.code,
+            case.timekeeper.submitted_on,
+            case.timekeeper.started_on,
+            case.timekeeper.finished_on,
+            case.timekeeper.duration,
+            str(case.workspace.path),
+            json.dumps_min(case.measurements.asdict()),
+        )
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO results (
+                spec_id,
+                spec_name,
+                spec_fullname,
+                file_root,
+                file_path,
+                session,
+                status_state,
+                status_category,
+                status_status,
+                status_reason,
+                status_code,
+                submitted_on,
+                started_on,
+                finished_on,
+                duration,
+                workspace,
+                measurements
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                row,
+            )
 
     def put_results(self, session: "Session") -> None:
         """Store results in the DB.  We store status, timekeeper across columns for future
