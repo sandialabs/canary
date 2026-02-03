@@ -8,6 +8,7 @@ import shutil
 from typing import TYPE_CHECKING
 from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.table import Table
 
@@ -108,7 +109,7 @@ class Status(CanarySubcommand):
         rows = filter_by_status(rows, args.report_chars)
         cols = args.format_cols.split(",")
 
-        table = Table(expand=True)
+        table = Table(expand=True, box=box.SQUARE)
         for col in cols:
             table.add_column(col)
 
@@ -133,7 +134,7 @@ class Status(CanarySubcommand):
 
     def print_spec_status_history(self, ids: list[str]) -> None:
         workspace = Workspace.load()
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for id in ids:
