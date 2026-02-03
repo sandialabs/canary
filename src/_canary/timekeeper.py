@@ -6,25 +6,23 @@ import dataclasses
 import datetime
 import time
 from contextlib import contextmanager
-from typing import Any
 from typing import Generator
 
 
 @dataclasses.dataclass
 class Timekeeper:
-    started_on: str = dataclasses.field(default="NA", init=False)
-    finished_on: str = dataclasses.field(default="NA", init=False)
-    duration: float = dataclasses.field(default=-1.0, init=False)
+    submitted: float = dataclasses.field(default=-1.0, init=False)
+    started: float = dataclasses.field(default=-1.0, init=False)
+    finished: float = dataclasses.field(default=-1.0, init=False)
     mark: float = dataclasses.field(default=-1.0, init=False, repr=False)
 
     def start(self) -> None:
-        self.mark = time.monotonic()
-        self.started_on = datetime.datetime.now().isoformat(timespec="microseconds")
+        self.started = time.time()
+        if self.submitted < 0:
+            self.submitted = self.started
 
     def stop(self) -> None:
-        self.duration = time.monotonic() - self.mark
-        self.finished_on = datetime.datetime.now().isoformat(timespec="microseconds")
-        self.mark = -1.0
+        self.finished = time.time()
 
     @contextmanager
     def timeit(self) -> Generator["Timekeeper", None, None]:
@@ -34,33 +32,48 @@ class Timekeeper:
         finally:
             self.stop()
 
+    def queued(self) -> float:
+        if self.started > 0:
+            if self.submitted < 0:
+                self.submitted = self.started
+            return self.started - self.submitted
+        return -1.0
+
+    def duration(self) -> float:
+        if self.finished > 0:
+            return self.finished - self.started
+        return -1.0
+
     def reset(self) -> None:
-        self.started_on = "NA"
-        self.finished_on = "NA"
-        self.duration = -1.0
-        self.mark = -1.0
+        self.submitted = -1.0
+        self.started = -1.0
+        self.finished = -1.0
 
-    def update(self, *, started_on: str, finished_on: str, duration: float) -> None:
-        self.started_on = started_on
-        self.finished_on = finished_on
-        self.duration = duration
+    def update(self, *, started: float, finished: float, submitted: float = -1.0) -> None:
+        self.submitted = submitted
+        self.started = started
+        self.finished = finished
 
-    def asdict(self) -> dict[str, Any]:
-        return {
-            "started_on": self.started_on,
-            "finished_on": self.finished_on,
-            "duration": self.duration,
-        }
+    def isoformat(self, what: str) -> str:
+        t: float = getattr(self, what)
+        return datetime.datetime.fromtimestamp(t).isoformat(timespec="microseconds")
 
-    def start_time(self) -> float:
-        if self.started_on == "NA":
-            return -1.0
-        return datetime.datetime.fromisoformat(self.started_on).timestamp()
+    def asdict(self) -> dict[str, float]:
+        return {"submitted": self.submitted, "started": self.started, "finished": self.finished}
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Timekeeper":
+    def from_dict(cls, d: dict[str, float]) -> "Timekeeper":
         self = cls()
-        self.started_on = d["started_on"]
-        self.finished_on = d["finished_on"]
-        self.duration = d["duration"]
+        self.submitted = float(d["submitted"])
+        self.started = float(d["started"])
+        self.finished = float(d["finished"])
+        return self
+
+    @classmethod
+    def from_isoformated_times(cls, d: dict[str, str]) -> "Timekeeper":
+        self = cls()
+        fn = datetime.datetime.fromisoformat
+        self.submitted = fn(d["submitted"]).timestamp()
+        self.started = fn(d["started"]).timestamp()
+        self.finished = fn(d["finished"]).timestamp()
         return self

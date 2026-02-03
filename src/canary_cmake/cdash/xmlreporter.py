@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import datetime
 import importlib.resources as ir
 import json
 import os
@@ -307,7 +306,7 @@ class CDashXMLReporter:
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = max(0.0, case.timekeeper.duration)
+            duration = max(0.0, case.timekeeper.duration())
             add_named_measurement(results, "Command Line", command, type="cdata")
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
@@ -543,9 +542,9 @@ class TestData:
             self.status |= 2**2
 
     def add_test(self, case: "canary.TestCase") -> None:
-        if case.timekeeper.started_on != "NA" and case.timekeeper.finished_on != "NA":
-            start = datetime.datetime.fromisoformat(case.timekeeper.started_on).timestamp()
-            finish = datetime.datetime.fromisoformat(case.timekeeper.finished_on).timestamp()
+        if case.timekeeper.started > 0 and case.timekeeper.finished > 0:
+            start = case.timekeeper.started
+            finish = case.timekeeper.finished
             if start < self.start:
                 self.start = start
             if finish > self.stop:

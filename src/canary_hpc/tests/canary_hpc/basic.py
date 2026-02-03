@@ -53,7 +53,7 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob_files_in_session("canary-inp.sh")
+        files = glob_files_in_session("*.sh")
         assert len(files) == 4
         files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob_files_in_session("canary-inp.sh")
+        files = glob_files_in_session("*.sh")
         assert len(files) == 4
         found = 0
         for line in open(files[0]):
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob_files_in_session("canary-inp.sh")
+        files = glob_files_in_session("*.sh")
         assert len(files) == 4
         files = glob_files_in_session("canary-out.txt")
         assert len(files) == 4
@@ -166,7 +166,7 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob_files_in_session("canary-inp.sh")
+        files = glob_files_in_session("*.sh")
         assert len(files) == 4
         found = 0
         for line in open(files[0]):

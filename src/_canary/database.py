@@ -22,7 +22,7 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
-    from .workspace import Session
+    from .testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -124,9 +124,9 @@ class WorkspaceDatabase:
             status_status TEXT,
             status_reason TEXT,
             status_code INTEGER,
-            started_on TEXT,
-            finished_on TEXT,
-            duration TEXT,
+            submitted REAL,
+            started REAL,
+            finished REAL,
             workspace TEXT,
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
@@ -315,32 +315,35 @@ class WorkspaceDatabase:
             self.connection.execute("DROP TABLE _ids").fetchall()
         return rows
 
-    def put_results(self, session: "Session") -> None:
+    def format_single_result(self, case: "TestCase") -> tuple[Any, ...]:
+        row = (
+            case.id,
+            case.spec.name,
+            case.spec.fullname,
+            str(case.spec.file_root),
+            str(case.spec.file_path),
+            str(case.workspace.session),
+            case.status.state,
+            case.status.category,
+            case.status.status,
+            case.status.reason or "",
+            case.status.code,
+            case.timekeeper.submitted,
+            case.timekeeper.started,
+            case.timekeeper.finished,
+            str(case.workspace.path),
+            json.dumps_min(case.measurements.asdict()),
+        )
+        return row
+
+    def put_result(self, case: "TestCase") -> None:
+        self.put_results(case)
+
+    def put_results(self, *cases: "TestCase") -> None:
         """Store results in the DB.  We store status, timekeeper across columns for future
         enhancements to use results without actually creating a testcase to hold them
         """
-        rows = []
-        for case in session.cases:
-            rows.append(
-                (
-                    case.id,
-                    case.spec.name,
-                    case.spec.fullname,
-                    str(case.spec.file_root),
-                    str(case.spec.file_path),
-                    session.name,
-                    case.status.state,
-                    case.status.category,
-                    case.status.status,
-                    case.status.reason or "",
-                    case.status.code,
-                    case.timekeeper.started_on,
-                    case.timekeeper.finished_on,
-                    case.timekeeper.duration,
-                    str(case.workspace.path),
-                    json.dumps_min(case.measurements.asdict()),
-                )
-            )
+        rows = [self.format_single_result(case) for case in cases]
         with self.connection:
             self.connection.executemany(
                 """
@@ -356,9 +359,9 @@ class WorkspaceDatabase:
                 status_status,
                 status_reason,
                 status_code,
-                started_on,
-                finished_on,
-                duration,
+                submitted,
+                started,
+                finished,
                 workspace,
                 measurements
                 )
@@ -417,7 +420,7 @@ class WorkspaceDatabase:
             data.append(d)
         return data
 
-    def _reconstruct_results(self, row: tuple[str, ...]) -> dict[str, Any]:
+    def _reconstruct_results(self, row: tuple[Any, ...]) -> dict[str, Any]:
         d: dict[str, Any] = {}
         d["id"] = row[0]
         d["spec_name"] = row[1]
@@ -435,11 +438,7 @@ class WorkspaceDatabase:
             }
         )
         d["timekeeper"] = Timekeeper.from_dict(
-            {
-                "started_on": row[11],
-                "finished_on": row[12],
-                "duration": float(row[13]),
-            }
+            {"submitted": row[11], "started": row[12], "finished": row[13]}
         )
         d["workspace"] = row[14]
         d["measurements"] = Measurements.from_dict(json.loads(row[15]))
@@ -593,7 +592,7 @@ class WorkspaceDatabase:
         latest_results AS (
           SELECT
             r.spec_id,
-            r.finished_on,
+            r.finished,
             r.status_category,
             r.status_status
           FROM results r
@@ -605,7 +604,7 @@ class WorkspaceDatabase:
           s.spec_id,
           sm.source,
           sm.view,
-          lr.finished_on,
+          lr.finished,
           lr.status_category,
           lr.status_status
         FROM specs s
@@ -619,10 +618,7 @@ class WorkspaceDatabase:
         rows = self.connection.execute(sql, params).fetchall()
         candidates: list[PartialSpec] = []
         for row in rows:
-            start: float = -1
-            started_on = row[3]
-            if started_on and started_on != "NA":
-                start = datetime.datetime.fromisoformat(started_on).timestamp()
+            start: float = row[3]
             c = PartialSpec(
                 id=row[0],
                 file=Path(row[1]),

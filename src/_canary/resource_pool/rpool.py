@@ -13,7 +13,6 @@ import yaml
 
 from ..util import cpu_count
 from ..util import logging
-from ..util.rich import colorize
 from ..util.string import pluralize
 from .schemas import resource_pool_schema
 
@@ -232,12 +231,8 @@ class ResourcePool:
             reason: str
             levelno: int = logging.get_level()
             if levelno <= logging.DEBUG:
-                fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (
-                    colorize(t),
-                    n,
-                    m,
-                )
-                types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
+                t = "[bold]%s[/] (requested %d, available %d)"
+                types = ", ".join(t % (k, *wanting[k]) for k in sorted(wanting))
                 reason = f"insufficient slots of {types}"
             else:
                 types = ", ".join("[bold]%s[/]" % t for t in wanting)

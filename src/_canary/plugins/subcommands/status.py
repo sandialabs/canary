@@ -8,6 +8,7 @@ import shutil
 from typing import TYPE_CHECKING
 from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.table import Table
 
@@ -96,9 +97,9 @@ class Status(CanarySubcommand):
         console = Console()
         if table.row_count > shutil.get_terminal_size().lines:
             with console.pager():
-                console.print(table, markup=True)
+                console.print(table)
         else:
-            console.print(table, markup=True)
+            console.print(table)
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0
@@ -108,7 +109,7 @@ class Status(CanarySubcommand):
         rows = filter_by_status(rows, args.report_chars)
         cols = args.format_cols.split(",")
 
-        table = Table(expand=True)
+        table = Table(expand=True, box=box.SQUARE)
         for col in cols:
             table.add_column(col)
 
@@ -133,7 +134,7 @@ class Status(CanarySubcommand):
 
     def print_spec_status_history(self, ids: list[str]) -> None:
         workspace = Workspace.load()
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for id in ids:
@@ -144,12 +145,12 @@ class Status(CanarySubcommand):
                 row.append(entry["id"][:7])
                 row.append(entry["session"])
                 row.append(str(entry["status"].code))
-                row.append(str(entry["timekeeper"].duration))
+                row.append(str(entry["timekeeper"].duration()))
                 row.append(str(entry["status"].display_name(style="rich")))
                 row.append(str(entry["status"].reason))
                 table.add_row(*row)
         console = Console()
-        console.print(table, markup=True)
+        console.print(table)
 
 
 def sortkey(row: dict) -> tuple:
@@ -158,7 +159,7 @@ def sortkey(row: dict) -> tuple:
         c = 0
     if row["status"].category == "FAIL":
         c = 2
-    return (c, row["status"].status, row["timekeeper"].duration)
+    return (c, row["status"].status, row["timekeeper"].duration())
 
 
 def get_attribute(row: dict[str, Any], attr: str) -> str:
@@ -173,7 +174,7 @@ def get_attribute(row: dict[str, Any], attr: str) -> str:
     elif attr == "returncode":
         return str(row["status"].code)
     elif attr == "duration":
-        return dformat(row["timekeeper"].duration)
+        return dformat(row["timekeeper"].duration())
     elif attr == "status_name":
         return row["status"].display_name(style="rich")
     elif attr == "status_reason":
@@ -251,7 +252,7 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
 
 
 def format_durations(results: dict[str, Any], N: int) -> str:
-    rows = sorted(results.values(), key=lambda x: x["timekeeper"].duration)
+    rows = sorted(results.values(), key=lambda x: x["timekeeper"].duration())
     ix = list(range(len(rows)))
     if N > 0:
         ix = ix[-N:]
@@ -259,7 +260,7 @@ def format_durations(results: dict[str, Any], N: int) -> str:
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = rows[i]["timekeeper"].duration
+        duration = rows[i]["timekeeper"].duration()
         if duration < 0:
             continue
         name = rows[i]["spec_name"]

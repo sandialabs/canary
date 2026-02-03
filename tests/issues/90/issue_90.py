@@ -25,11 +25,9 @@ def write_testfile(file):
 import os
 import sys
 import canary
-
 canary.directives.name("a")
 canary.directives.name("b")
 canary.directives.name("c")
-
 canary.directives.depends_on("c", when="testname=b")
 canary.directives.depends_on("b", when="testname=a")
 

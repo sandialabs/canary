@@ -13,7 +13,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import Literal
 
+from rich import box
 from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
@@ -35,15 +37,20 @@ from .util.returncode import compute_returncode
 logger = logging.get_logger(__name__)
 
 
+EventTypes = Literal["job_submitted", "job_started", "job_finished"]
+
+
 @dataclasses.dataclass
 class ExecutionSlot:
     job: JobProtocol
     qrank: int
     qsize: int
-    start_time: float
+    spawned: float
     proc: mp.MeasuredProcess
     queue: mp.SimpleQueue
-    results_seen_at: float | None = None
+    submitted: float = -1.0
+    started: float = -1.0
+    finished: float = -1.0
 
 
 class JobFunctor:
@@ -62,7 +69,7 @@ class JobFunctor:
         h = logging.QueueHandler(logging_queue)
         logging.add_handler(h)
         try:
-            executor(job, **kwargs)
+            executor(job, queue=result_queue, **kwargs)
         except BaseException as e:
             logger.exception(f"Job {job}: exception occurred during execution of job functor")
             job.set_status(status="ERROR", reason=f"{e.__class__.__name__}({e.args[0]})")
@@ -71,7 +78,7 @@ class JobFunctor:
             logger.debug(f"Job {job}: job functor exited normally")
         finally:
             try:
-                result_queue.put(job.getstate())
+                result_queue.put(("FINISHED", job.getstate()))
             except Exception:
                 logger.exception("Failed to put job state into queue")
                 raise
@@ -107,18 +114,47 @@ class ResourceQueueExecutor:
         self.executor = executor
         self.busy_wait_time = busy_wait_time
 
-        self.inflight: dict[int, ExecutionSlot] = {}
+        self.submitted: dict[int, ExecutionSlot] = {}
+        self.running: dict[int, ExecutionSlot] = {}
         self.finished: dict[int, ExecutionSlot] = {}
         self.entered: bool = False
         self.started_on: float = -1.0
         self._store: dict[str, Any] = {}
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
+        self.listeners: list[Callable[..., None]] = []
 
         self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
         if os.getenv("CANARY_LEVEL") == "1":
             self.enable_live_monitoring = False
         elif os.getenv("CANARY_MAKE_DOCS"):
             self.enable_live_monitoring = False
+
+    @property
+    def inflight(self) -> dict[int, ExecutionSlot]:
+        return self.submitted | self.running
+
+    def add_listener(self, callback: Callable[..., None]) -> None:
+        """Register a listener for job lifecycle events
+
+        Listeners are called synchronously by the executor whenever a job transitions state.
+        The listener signature must be::
+
+            callback(event: str, *args: Any) -> None:
+
+        Supported events and payloads are:
+
+            ("job_submitted", ExectutionSlot)
+            ("job_started", ExectutionSlot)
+            ("job_finished", ExectutionSlot)
+
+        """
+        self.listeners.append(callback)
+
+    def remove_listener(self, callback: Callable[..., None]) -> None:
+        try:
+            self.listeners.remove(callback)
+        except ValueError:  # nosec B110
+            pass
 
     def __enter__(self) -> "ResourceQueueExecutor":
         self._store.clear()
@@ -182,7 +218,9 @@ class ResourceQueueExecutor:
         logging_queue: mp.Queue = self._store["logging_queue"]
         config_snapshot = config.snapshot()
 
-        with CanaryLive(self._render_dashboard, enable=self.enable_live_monitoring) as live:
+        renderer = ConsoleRenderer.factory(self._render_dashboard, self.enable_live_monitoring)
+        with ConsoleReporter(renderer) as reporter:
+            self.add_listener(reporter.on_event)
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
@@ -193,11 +231,11 @@ class ResourceQueueExecutor:
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
                     self._check_for_leaks()
-                    live.update()
+                    reporter.update()
 
                     # Wait for a slot if at max capacity
                     self._wait_for_slot()
-                    live.update()
+                    reporter.update()
 
                     # Get a job from the queue
                     job = self.queue.get()
@@ -214,16 +252,15 @@ class ResourceQueueExecutor:
                     )
                     proc.start()
                     pid: int = proc.pid  # type: ignore
-                    self.inflight[pid] = ExecutionSlot(
+                    self.submitted[pid] = ExecutionSlot(
                         proc=proc,
                         queue=result_queue,
                         job=job,
-                        start_time=time.time(),
+                        spawned=time.time(),
                         qrank=qrank,
                         qsize=qsize,
                     )
-                    live.update()
-                    self.on_job_start(job, qrank, qsize)
+                    reporter.update()
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -231,58 +268,37 @@ class ResourceQueueExecutor:
 
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
-                    self._wait_all(start, timeout, live)
+                    self._wait_all(start, timeout, reporter)
                     break
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
                 except TimeoutError:
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
                 except BaseException:
                     logger.exception("Unhandled exception in process pool")
-                    live.update(final=True)
+                    reporter.update(final=True)
                     raise
 
-            live.update(final=True)
+            reporter.update(final=True)
+            self.remove_listener(reporter.on_event)
         return compute_returncode(self.queue.cases())
 
-    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if self.enable_live_monitoring:
-            return
-        fmt = io.StringIO()
-        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
-        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-
-    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        if self.enable_live_monitoring:
-            return
-        try:
-            fmt = io.StringIO()
-            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-            fmt.write(
-                "[bold]Finished[/] job %s: %s: %s"
-                % (job.id[:7], job.display_name(), job.status.display_name())
-            )
-            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-        except Exception:
-            logger.exception(f"Failed logging finished state of {job.id[:7]}")
-        for h in logger.handlers:
-            h.flush()
+    def notify_listeners(self, event: EventTypes, *args: Any) -> None:
+        for cb in self.listeners:
+            cb(event, *args)
 
     def _check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -291,11 +307,13 @@ class ResourceQueueExecutor:
         for pid, slot in list(self.inflight.items()):
             if not slot.proc.is_alive():
                 continue
+            if slot.started < 0:
+                continue
             total_timeout = slot.job.timeout * self.timeout_multiplier
-            if now - slot.start_time > total_timeout:
+            if now - slot.started > total_timeout:
                 timed_out.append((pid, slot))
         for pid, slot in timed_out:
-            self.inflight.pop(pid, None)
+            _ = self.running.pop(pid, None) or self.submitted.pop(pid)
             self.finished[pid] = slot
             total_timeout = slot.job.timeout * self.timeout_multiplier
             try:
@@ -310,9 +328,9 @@ class ResourceQueueExecutor:
                 try:
                     slot.job.refresh()
                     slot.job.timekeeper.update(
-                        started_on=datetime.datetime.fromtimestamp(slot.start_time).isoformat(),
-                        finished_on=datetime.datetime.fromtimestamp(now).isoformat(),
-                        duration=now - slot.start_time,
+                        submitted=slot.submitted,
+                        started=slot.started,
+                        finished=now,
                     )
                     reason: str = f"Job timed out after {total_timeout} s."
                     if self.timeout_multiplier != 1.0:
@@ -332,7 +350,7 @@ class ResourceQueueExecutor:
                     f"{slot.job.timeout}*{self.timeout_multiplier}={total_timeout} s.",
                 )
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
     def _check_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
@@ -345,18 +363,35 @@ class ResourceQueueExecutor:
             raise CanaryKill
 
         finished_pids: dict[int, Any] = {}
-        for pid, slot in self.inflight.items():
-            if not slot.queue.empty():
-                finished_pids[pid] = slot.queue.get()
-                slot.queue.close()
-        busy_pids: set[int] = set(self.inflight.keys()) - set(finished_pids.keys())
+        for pid, slot in list(self.inflight.items()):
+            while not slot.queue.empty():
+                event = slot.queue.get()
+                match event:
+                    case ("SUBMITTED", ts):
+                        slot.submitted = ts
+                        self.notify_listeners("job_submitted", slot)
+                    case ("STARTED", ts):
+                        slot.started = ts
+                        self.running[pid] = slot
+                        self.submitted.pop(pid, None)
+                        self.notify_listeners("job_started", slot)
+                    case ("FINISHED", state):
+                        slot.finished = time.time()
+                        finished_pids[pid] = state
+                    case _:
+                        logger.warning(f"Unexpected event from submitted job {pid}: {event}")
+
+        busy_pids: set[int] = set(self.inflight) - set(finished_pids)
         self.alogger.emit(
             tuple(sorted(busy_pids)),
             f"Finished pids: {list(finished_pids)}.  Busy pids: {list(busy_pids)}",
         )
 
         for pid, result in finished_pids.items():
-            slot = self.inflight.pop(pid)
+            # Slot should be in either running or submitted (not both)
+            slot = self.running.pop(pid, None) or self.submitted.pop(pid)
+            assert pid not in self.running, "pid unexpectedly remains in running container"
+            assert pid not in self.submitted, "pid unexpectedly remains in submitted container"
             self.finished[pid] = slot
             try:
                 slot.job.setstate(result)
@@ -376,7 +411,7 @@ class ResourceQueueExecutor:
                     f"with status {slot.job.status.status}"
                 )
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
     def _check_for_leaks(self) -> None:
         busy_ids = set(self.queue._busy)
@@ -399,7 +434,7 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self, start: float, timeout: float, live: "CanaryLive") -> None:
+    def _wait_all(self, start: float, timeout: float, reporter: "ConsoleReporter") -> None:
         """Wait for all active processes to complete."""
         while True:
             if not self.inflight:
@@ -412,12 +447,13 @@ class ResourceQueueExecutor:
                 self._check_finished_processes()
                 self._check_for_leaks()
                 time.sleep(0.075)
-                live.update()
+                reporter.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
         inflight = list(self.inflight.items())
-        self.inflight.clear()
+        self.running.clear()
+        self.submitted.clear()
         for pid, slot in inflight:
             try:
                 if slot.proc.is_alive():
@@ -432,6 +468,8 @@ class ResourceQueueExecutor:
                     slot.job.refresh()
                     stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
                     slot.job.set_status(status=stat, reason=f"Job terminated with signal {signum}")
+                    slot.job.timekeeper.submitted = slot.submitted
+                    slot.job.timekeeper.finished = time.time()
                     slot.job.measurements.update(measurements)
                     try:
                         slot.job.save()
@@ -449,7 +487,7 @@ class ResourceQueueExecutor:
             finally:
                 logger.debug(f"ResourceQueueExecutor._terminate_all(): {slot.job=} terminated")
                 self.queue.done(slot.job)
-                self.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.notify_listeners("job_finished", slot)
 
         # Force kill if still alive
         for pid, slot in inflight:
@@ -484,23 +522,26 @@ class ResourceQueueExecutor:
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         fmt = config.getoption("live_name_fmt")
         if final:
             table.add_column("Job")
             table.add_column("ID")
             table.add_column("Status")
+            table.add_column("Queued")
             table.add_column("Elapsed")
             table.add_column("Details")
             cases = self.queue.cases()
             for case in cases:
                 if case.status.category == "PASS":
                     continue
-                elapsed = case.timekeeper.duration
+                queued = case.timekeeper.queued()
+                elapsed = case.timekeeper.duration()
                 table.add_row(
                     case.display_name(style="rich", resolve=fmt == "long"),
                     case.id[:7],
                     case.status.display_name(style="rich"),
+                    f"{queued:5.1f}s",
                     f"{elapsed:5.1f}s",
                     case.status.reason or "",
                 )
@@ -511,10 +552,11 @@ class ResourceQueueExecutor:
                 )
             return Group(table, footer)
 
-        table = Table(expand=False)
+        table = Table(expand=False, box=box.SQUARE)
         table.add_column("Job")
         table.add_column("ID")
         table.add_column("Status")
+        table.add_column("Queued")
         table.add_column("Elapsed")
         table.add_column("Rank")
 
@@ -523,28 +565,44 @@ class ResourceQueueExecutor:
         if num_inflight < max_rows:
             n = max_rows - num_inflight
             for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
-                elapsed = slot.job.timekeeper.duration
+                queued = slot.started - slot.spawned
+                elapsed = slot.finished - slot.spawned
                 table.add_row(
                     slot.job.display_name(style="rich", resolve=fmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
+                    f"{queued:5.1f}s",
                     f"{elapsed:5.1f}s",
                     f"{slot.qrank}/{slot.qsize}",
                 )
 
         now = time.time()
-        for slot in sorted(self.inflight.values(), key=lambda x: x.qrank):
-            elapsed = now - slot.start_time
+        for slot in sorted(self.running.values(), key=lambda x: x.qrank):
+            queued = slot.started - slot.spawned
+            elapsed = now - slot.spawned
             table.add_row(
                 slot.job.display_name(style="rich", resolve=fmt == "long"),
                 slot.job.id[:7],
                 "[green]RUNNING[/]",
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
+        now = time.time()
+        for slot in sorted(self.submitted.values(), key=lambda x: x.qrank):
+            queued = elapsed = now - slot.spawned
+            table.add_row(
+                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.id[:7],
+                "[cyan]SUBMITTED[/]",
+                f"{queued:5.1f}s",
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
 
         if table.row_count < max_rows:
-            st = "[cyan]PENDING[/]"
+            st = "[magenta]PENDING[/]"
             na = "NA"
             for job in self.queue.pending():
                 table.add_row(
@@ -559,13 +617,12 @@ class ResourceQueueExecutor:
         return Group(table, footer)
 
 
-class CanaryLive:
-    def __init__(self, factory: Callable[..., Group | str], *, enable: bool = True) -> None:
-        self.factory = factory
-        self.enabled = enable
+class ConsoleReporter:
+    def __init__(self, renderer: "ConsoleRenderer") -> None:
+        self.renderer = renderer
         self.live: Live | None = None
         self.console: Console | None = None
-        if self.enabled:
+        if self.renderer.live:
             self.console = Console(file=sys.stdout, force_terminal=True)
 
         # Logging control
@@ -574,7 +631,7 @@ class CanaryLive:
         self._mark: float = -1.0
 
     def __enter__(self):
-        if self.enabled:
+        if self.renderer.live:
             self.mute_stream_handlers()
             self.live = Live(
                 refresh_per_second=1,
@@ -594,10 +651,10 @@ class CanaryLive:
     def update(self, final: bool = False) -> None:
         if self.live:
             if final or time.monotonic() - self._mark > 0.25:
-                self.live.update(self.factory(final=final) or "", refresh=True)
+                self.live.update(self.renderer.render(final=final) or "", refresh=True)
                 self._mark = time.monotonic()
         elif final:
-            group = self.factory(final=True)
+            group = self.renderer.render(final=True)
             rprint(group)
 
     def mute_stream_handlers(self) -> None:
@@ -618,6 +675,78 @@ class CanaryLive:
         for h in self._stream_handlers:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
+
+    def on_event(self, event: str, *args, **kwargs) -> None:
+        match event:
+            case "job_submitted":
+                slot: ExecutionSlot = args[0]
+                self.renderer.on_job_start(slot.job, slot.qrank, slot.qsize)
+            case "job_finished":
+                slot: ExecutionSlot = args[0]
+                self.renderer.on_job_finish(slot.job, slot.qrank, slot.qsize)
+            case _:
+                pass
+
+
+class ConsoleRenderer:
+    live: bool = False
+
+    def render(self, *, final: bool = False) -> Group | str:
+        raise NotImplementedError
+
+    @staticmethod
+    def factory(render_fn: Callable[..., Group | str], live: bool) -> "ConsoleRenderer":
+        if live:
+            return LiveRenderer(render_fn)
+        return StaticRenderer(render_fn)
+
+    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        pass
+
+    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        pass
+
+
+class LiveRenderer(ConsoleRenderer):
+    live: bool = True
+
+    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
+        self.render_fn = render_fn
+
+    def render(self, *, final: bool = False) -> Group | str:
+        return self.render_fn(final=final)
+
+
+class StaticRenderer(ConsoleRenderer):
+    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
+        self.render_fn = render_fn
+
+    def render(self, *, final: bool = False) -> Group | str:
+        if final:
+            return self.render_fn(final=True)
+        return ""
+
+    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        fmt = io.StringIO()
+        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
+        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
+        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+
+    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
+        try:
+            fmt = io.StringIO()
+            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
+            fmt.write(
+                "[bold]Finished[/] job %s: %s: %s"
+                % (job.id[:7], job.display_name(), job.status.display_name())
+            )
+            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+        except Exception:
+            logger.exception(f"Failed logging finished state of {job.id[:7]}")
+        for h in logger.handlers:
+            h.flush()
 
 
 class CanaryKill(Exception):

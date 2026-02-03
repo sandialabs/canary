@@ -104,7 +104,7 @@ class CanaryHPCHooks:
     @staticmethod
     @canary.hookspec(firstresult=True)
     def canary_hpc_batch_runner(
-        batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
+        batch: "TestBatch", backend: hpc_connect.Backend
     ) -> "HPCConnectRunner":
         """Return a runner for this batch"""
         raise NotImplementedError
@@ -116,9 +116,7 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 
 
 @canary.hookimpl(trylast=True, specname="canary_hpc_batch_runner")
-def default_runner(
-    batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
-) -> "HPCConnectRunner | None":
+def default_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConnectRunner | None":
     """Default implementation"""
     from .batchexec import HPCConnectBatchRunner
 
@@ -126,12 +124,10 @@ def default_runner(
 
 
 @canary.hookimpl(specname="canary_hpc_batch_runner")
-def series_runner(
-    batch: "TestBatch", backend: hpc_connect.HPCSubmissionManager
-) -> "HPCConnectRunner | None":
+def series_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConnectRunner | None":
     """Default implementation"""
     from .batchexec import HPCConnectSeriesRunner
 
-    if batch.spec.layout == "flat" and backend.supports_subscheduling:
+    if batch.spec.layout == "flat" and backend.supports_subscheduling():
         return HPCConnectSeriesRunner(backend)
     return None

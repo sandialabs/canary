@@ -20,6 +20,7 @@ from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
+from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.rich import colorize
 from _canary.util.time import time_in_seconds
 
@@ -37,12 +38,13 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
-        self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
+        config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
         rtypes: set[str] = {"cpus", "gpus"}
-        for rtype in self.backend.config.resource_types():
+        for rtype in self.backend.resource_types():
             # canary resource pool uses the plural, whereas the hpc-connect resource set uses
             # the singular
             rtype = rtype if rtype.endswith("s") else f"{rtype}s"
@@ -72,11 +74,12 @@ class CanaryHPCConductor:
     def slots_per_resource_type(self) -> Counter[str]:
         if self._slots_per_resource_type is None:
             self._slots_per_resource_type = Counter()
-            node_count = self.backend.config.node_count
+            node_count = self.backend.node_count
             slots_per_type: int = 1
-            for type in self.backend.config.resource_types():
-                count = self.backend.config.count_per_node(type)
+            for type in self.backend.resource_types():
+                count = self.backend.count_per_node(type)
                 if not type.endswith("s"):
+                    # hpc_connect does not add an 's' to end of resource types
                     type += "s"
                 self._slots_per_resource_type[type] = slots_per_type * count * node_count
         assert self._slots_per_resource_type is not None
@@ -84,11 +87,11 @@ class CanaryHPCConductor:
 
     @canary.hookimpl
     def canary_resource_pool_count(self, type: str) -> int:
-        node_count = self.backend.config.node_count
+        node_count = self.backend.node_count
         if type in ("nodes", "node"):
             return node_count
         try:
-            type_per_node = self.backend.config.count_per_node(type)
+            type_per_node = self.backend.count_per_node(type)
         except ValueError:
             return 0
         else:
@@ -273,13 +276,14 @@ class KeyboardQuit(Exception):
 class BatchExecutor:
     """Class for running ``ResourceQueue``."""
 
-    def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
+    def __call__(self, batch: TestBatch, queue: SimpleQueue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         hpc = logging.getLogger("hpc_connect")
         hpc.handlers.clear()
         hpc.propagate = True
         hpc.setLevel(logging.NOTSET)
         batch.setup()
-        backend = hpc_connect.get_backend(kwargs["backend"])
-        batch.run(backend=backend)
+        config = hpc_connect.Config.from_defaults(overrides=dict(backend=kwargs["backend"]))
+        backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+        batch.run(backend=backend, queue=queue)
         logger.debug(f"Done running {batch}")

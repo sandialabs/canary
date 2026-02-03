@@ -7,6 +7,7 @@ import dataclasses
 import datetime
 import json
 import math
+import time
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,6 +22,7 @@ from _canary.testcase import Measurements
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
 from _canary.util.hash import hashit
+from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.time import time_in_seconds
 
 from .status import BatchStatus
@@ -230,7 +232,7 @@ class TestBatch:
     ) -> None:
         self.status.set(state=state, category=category, status=status, reason=reason, code=code)
 
-    def run(self, backend: hpc_connect.HPCSubmissionManager) -> None:
+    def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
@@ -238,8 +240,12 @@ class TestBatch:
         rc: int | None = -1
         try:
             logger.debug(f"Submitting batch {self.id[:7]}")
-            with self.timekeeper.timeit():
-                rc = runner.execute(self)
+            queue.put(("SUBMITTED", time.time()))
+            self.timekeeper.submitted = time.time()
+            try:
+                rc = runner.execute(self, queue=queue)
+            finally:
+                self.timekeeper.finished = time.time()
         except Exception:
             rc = 1
         finally:
@@ -287,9 +293,9 @@ class TestBatch:
                     propagate=False,
                 )
             if timekeeper := mydata.get("timekeeper"):
-                self.timekeeper.started_on = timekeeper.started_on
-                self.timekeeper.finished_on = timekeeper.finished_on
-                self.timekeeper.duration = timekeeper.duration
+                self.timekeeper.submitted = timekeeper.submitted
+                self.timekeeper.started = timekeeper.started
+                self.timekeeper.finished = timekeeper.finished
         for case in self.cases:
             if d := data.get(case.id):
                 case.setstate(d)
@@ -320,12 +326,12 @@ class TestBatch:
         """Return total, running, and time in queue"""
 
         def started(case):
-            s = case.timekeeper.started_on
-            return None if s == "NA" else datetime.datetime.fromisoformat(s)
+            t = case.timekeeper.started
+            return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         def finished(case):
-            f = case.timekeeper.finished_on
-            return None if f == "NA" else datetime.datetime.fromisoformat(f)
+            t = case.timekeeper.finished
+            return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         total_duration = self.timekeeper.duration
         duration: float | None = total_duration if total_duration > 0 else None

@@ -69,7 +69,7 @@ class MarkdownReporter(CanaryReporter):
             "**Exit code**": str(case.status.code),
             "**ID**": str(case.id),
             "**Location**": str(case.workspace.dir),
-            "**Duration**": f"{case.timekeeper.duration:.4f}",
+            "**Duration**": f"{case.timekeeper.duration():.4f}",
         }
         fh.write("|||\n|---|---|\n")
         for key, val in info.items():
@@ -114,7 +114,7 @@ class MarkdownReporter(CanaryReporter):
             if not os.path.exists(file):
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name()}](./{os.path.basename(file)})"
-            duration = f"{case.timekeeper.duration:.2f}"
+            duration = f"{case.timekeeper.duration():.2f}"
             status = case.status.status
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
@@ -123,12 +123,12 @@ class MarkdownReporter(CanaryReporter):
         fh.write("| Test | Duration | Status |\n")
         fh.write("| --- | --- | --- |\n")
         for group, cases in totals.items():
-            for case in sorted(cases, key=lambda c: c.timekeeper.duration):
+            for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
                 file = os.path.join(self.md_dir, f"{case.id}.md")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name()}](./{os.path.basename(file)})"
-                duration = f"{case.timekeeper.duration:.2f}"
+                duration = f"{case.timekeeper.duration():.2f}"
                 status = case.status.status
                 fh.write(f"| {link} | {duration} | {status} |\n")
         fh.write("\n")
