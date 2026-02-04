@@ -678,7 +678,6 @@ class EventReporter:
 
     def __exit__(self, exc_type, exc, tb):
         self.executor.remove_listener(self.on_event)
-        pass
 
     def on_event(self, event: str, *args, **kwargs) -> None:
         match event:
