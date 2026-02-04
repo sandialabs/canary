@@ -181,7 +181,7 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         reuse = request.get("kind") == "viewpaths"
-        session = workspace.run(specs, reuse_session=reuse, only=args.only or "not_pass")
+        session = workspace.run(specs, reuse_latest_session=reuse, only=args.only or "not_pass")
         return session.returncode
 
 

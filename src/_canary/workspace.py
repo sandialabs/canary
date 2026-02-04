@@ -260,16 +260,15 @@ class Workspace:
     def run(
         self,
         specs: list["ResolvedSpec"],
-        reuse_session: bool | str = False,
+        session: str | None = None,
+        reuse_latest_session: bool = False,
         update_view: bool = True,
         only: str = "not_pass",
     ) -> Session:
+        if session is not None and not (self.sessions_dir / session).exists():
+            raise ValueError(f"Session {session} not found in {self.sessions_dir}")
         now = datetime.datetime.now()
-        session_name: str
-        if isinstance(reuse_session, str):
-            session_name = reuse_session
-        else:
-            session_name = now.isoformat(timespec="microseconds").replace(":", "-")
+        session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
         cases = self.construct_testcases(specs, session_dir)
         selector = select.RuntimeSelector(cases, workspace=self.root)
@@ -278,23 +277,31 @@ class Workspace:
         selector.run()
 
         # At this point, test cases have been reconstructed and, if previous results exist,
-        # restored to their last ran state.  If reuse_session is True, we leave the test case as
-        # is.  Otherwise, we swap out the old session for the new.
+        # restored to their last ran state.  If reuse_latest_session, we leave the test case as is.
+        # Otherwise, we swap out the old session for the new.
         ready: list["TestCase"] = []
         for case in cases:
             if case.mask:
                 continue
-            elif not reuse_session:
+            elif reuse_latest_session:
+                if not case.workspace.dir.exists():
+                    raise RuntimeError(
+                        f"{case}: requested to reuse_latest_session but results do not exist"
+                    )
+            else:
+                # Force override session dir
                 case.workspace.root = session_dir
                 case.workspace.session = session_dir.name
+                if session is not None:
+                    assert case.workspace.session == session, "{case}: unexpected workspace"
             ready.append(case)
 
-        session = Session(name=session_dir.name, prefix=session_dir, cases=ready)
-        config.pluginmanager.hook.canary_sessionstart(session=session)
-        session.run(workspace=self)
-        config.pluginmanager.hook.canary_sessionfinish(session=session)
-        self.add_session_results(session, update_view=update_view)
-        return session
+        s = Session(name=session_dir.name, prefix=session_dir, cases=ready)
+        config.pluginmanager.hook.canary_sessionstart(session=s)
+        s.run(workspace=self)
+        config.pluginmanager.hook.canary_sessionfinish(session=s)
+        self.add_session_results(s, update_view=update_view)
+        return s
 
     def add_session_results(self, session: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""

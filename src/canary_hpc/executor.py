@@ -51,7 +51,7 @@ class CanaryHPCExecutor:
         for spec in specs:
             if spec.id not in self.cases:
                 spec.mask = canary.Mask(True, reason=f"Case not in batch {self.batch}")
-        session = workspace.run(specs, reuse_session=self.session, update_view=False, only="all")
+        session = workspace.run(specs, session=self.session, update_view=False, only="all")
         return session.returncode
 
     @canary.hookimpl

@@ -119,6 +119,7 @@ class WorkspaceDatabase:
             file_root TEXT,
             file_path TEXT,
             session TEXT,
+            workspace TEXT,
             status_state TEXT,
             status_category TEXT,
             status_status TEXT,
@@ -127,7 +128,6 @@ class WorkspaceDatabase:
             submitted REAL,
             started REAL,
             finished REAL,
-            workspace TEXT,
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
             )"""
@@ -323,6 +323,7 @@ class WorkspaceDatabase:
             str(case.spec.file_root),
             str(case.spec.file_path),
             str(case.workspace.session),
+            str(case.workspace.path),
             case.status.state,
             case.status.category,
             case.status.status,
@@ -331,7 +332,6 @@ class WorkspaceDatabase:
             case.timekeeper.submitted,
             case.timekeeper.started,
             case.timekeeper.finished,
-            str(case.workspace.path),
             json.dumps_min(case.measurements.asdict()),
         )
         return row
@@ -347,13 +347,14 @@ class WorkspaceDatabase:
         with self.connection:
             self.connection.executemany(
                 """
-                INSERT OR IGNORE INTO results (
+                INSERT OR REPLACE INTO results (
                 spec_id,
                 spec_name,
                 spec_fullname,
                 file_root,
                 file_path,
                 session,
+                workspace,
                 status_state,
                 status_category,
                 status_status,
@@ -362,7 +363,6 @@ class WorkspaceDatabase:
                 submitted,
                 started,
                 finished,
-                workspace,
                 measurements
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -428,19 +428,19 @@ class WorkspaceDatabase:
         d["file_root"] = row[3]
         d["file_path"] = row[4]
         d["session"] = row[5]
+        d["workspace"] = row[6]
         d["status"] = Status.from_dict(
             {
-                "state": row[6],
-                "category": row[7],
-                "status": row[8],
-                "reason": row[9],
-                "code": row[10],
+                "state": row[7],
+                "category": row[8],
+                "status": row[9],
+                "reason": row[10],
+                "code": row[11],
             }
         )
         d["timekeeper"] = Timekeeper.from_dict(
-            {"submitted": row[11], "started": row[12], "finished": row[13]}
+            {"submitted": row[12], "started": row[13], "finished": row[14]}
         )
-        d["workspace"] = row[14]
         d["measurements"] = Measurements.from_dict(json.loads(row[15]))
         return d
 

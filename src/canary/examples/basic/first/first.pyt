@@ -14,6 +14,13 @@ def add(a: int, b: int) -> int:
 
 
 def test():
+    with open("/opt/alegranevada/team/x/macos/src/canary/fooo.txt", "w") as fh:
+        import os
+
+        self = canary.get_instance()
+        fh.write(f"{os.getcwd()}\n")
+        fh.write(str(self))
+
     assert add(3, 2) == 5
 
 

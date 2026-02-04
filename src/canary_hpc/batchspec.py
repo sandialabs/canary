@@ -21,7 +21,6 @@ from _canary.status import Status
 from _canary.testcase import Measurements
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
-from _canary.util.hash import hashit
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.time import time_in_seconds
 
@@ -43,7 +42,9 @@ class BatchSpec:
     exclusive: bool = dataclasses.field(init=False, default=False)
 
     def __post_init__(self) -> None:
-        self.id = hashit(",".join(case.id for case in self.cases), length=20)
+        import uuid
+
+        self.id = str(uuid.uuid4())  # hashit(",".join(case.id for case in self.cases), length=20)
         self.session = cast(str, self.cases[0].workspace.session)
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
         self.rparameters = {"cpus": 1, "gpus": 0}

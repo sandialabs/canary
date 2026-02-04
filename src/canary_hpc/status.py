@@ -86,7 +86,8 @@ class BatchStatus:
         if propagate:
             for child in self._children:
                 if child.status.state in ("READY", "PENDING"):
-                    child.status = Status.BROKEN()
+                    s = child.status.state
+                    child.status = Status.BROKEN(reason=f"{child}: unexpected status {s}")
                 elif child.status.state == "RUNNING":
                     child.timekeeper.stop()
                     child.status = Status.CANCELLED()

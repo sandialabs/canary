@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 import copy
 import io
-import pickle  # nosec B403
 from collections import Counter
 from typing import IO
 from typing import TYPE_CHECKING
@@ -42,6 +41,53 @@ class Outcome:
         state = "ok" if self.ok else "fail"
         reason = f": {self.reason}" if self.reason else ""
         return f"<{self.__class__.__name__} {state}{reason}>"
+
+
+class AllocationTransaction:
+    __slots__ = ("inventory", "deltas")
+
+    def __init__(self, inventory: "Inventory") -> None:
+        self.inventory = inventory
+        self.deltas: list[tuple[str, str, int]] = []
+
+    def record(self, rtype: str, rid: str, slots: int) -> None:
+        self.deltas.append((rtype, rid, slots))
+
+    def rollback(self) -> None:
+        for rtype, rid, slots in self.deltas:
+            for inst in self.inventory.resources[rtype]:
+                if inst["id"] == rid:
+                    inst["slots"] += slots  # type: ignore
+                    break
+
+    def __enter__(self) -> "AllocationTransaction":
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is not None:
+            self.rollback()
+        # propagate the exception
+        return False
+
+
+class Inventory:
+    __slots__ = ("resources",)
+
+    def __init__(self, resources: dict[str, resource_spec]) -> None:
+        self.resources = resources
+
+    def slots_available(self, rtype: str) -> int:
+        return sum(inst["slots"] for inst in self.resources.get(rtype, []))  # type: ignore
+
+
+class Allocator:
+    def acquire(self, inventory: Inventory, rtype: str, slots: int) -> dict[str, Any]:
+        instances = sorted(inventory.resources[rtype], key=lambda x: x["slots"])
+        for instance in instances:
+            if slots <= instance["slots"]:  # type: ignore[operator]
+                instance["slots"] -= slots  # type: ignore[operator]
+                return {"id": instance["id"], "slots": slots}
+        raise ResourceUnavailable
 
 
 class ResourcePool:
@@ -252,20 +298,17 @@ class ResourcePool:
             raise EmptyResourcePoolError
         totals: Counter[str] = Counter()
         acquired: dict[str, list[dict]] = {}
-        stash: bytes = pickle.dumps(self.resources)  # nosec B301
-        try:
+        inventory = Inventory(self.resources)
+        allocator = Allocator()
+        with AllocationTransaction(inventory) as transaction:
             for item in request:
-                # {type: [{id: ..., slots: ...}]}
                 rtype, slots = item["type"], item["slots"]
                 if rtype not in self.resources:
                     raise TypeError(f"Unknown resource requirement type {rtype!r}")
-                rspec = self._get_from_pool(rtype, slots)
+                rspec = allocator.acquire(inventory, rtype, slots)
                 acquired.setdefault(rtype, []).append(rspec)
+                transaction.record(rtype, rspec["id"], slots)
                 totals[rtype] += slots
-        except Exception:
-            self.resources.clear()
-            self.resources.update(pickle.loads(stash))  # nosec B301
-            raise
         if logging.get_level() <= logging.DEBUG:
             for rtype, n in totals.items():
                 N = sum([instance["slots"] for instance in self.resources[rtype]]) + n  # type: ignore[misc]
@@ -275,31 +318,19 @@ class ResourcePool:
 
     def checkin(self, resources: dict[str, list[dict]]) -> None:
         types: Counter[str] = Counter()
-        for type, rspecs in resources.items():
+        for rtype, rspecs in resources.items():
             for rspec in rspecs:
-                n = self._return_to_pool(type, rspec)
-                types[type] += n
+                for inst in self.resources[rtype]:
+                    if inst["id"] == rspec["id"]:
+                        inst["slots"] += rspec["slots"]
+                        types["rtype"] += rspec["slots"]
+                        break
+                else:
+                    raise ValueError(f"Attempting to checkin a resource with unknown ID: {rspec!r}")
         if logging.get_level() <= logging.DEBUG:
-            for type, n in types.items():
-                key = type[:-1] if n == 1 and type.endswith("s") else type
+            for rtype, n in types.items():
+                key = rtype[:-1] if n == 1 and rtype.endswith("s") else rtype
                 logger.debug(f"Checked in {n} {key}")
-
-    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
-        instances = sorted(self.resources[type], key=lambda x: x["slots"])
-        for instance in instances:
-            if slots <= instance["slots"]:  # type: ignore[operator]
-                instance["slots"] -= slots  # type: ignore[operator]
-                rspec: dict[str, Any] = {"id": instance["id"], "slots": slots}
-                return rspec
-        raise ResourceUnavailable
-
-    def _return_to_pool(self, type: str, rspec: dict[str, Any]) -> int:
-        for instance in self.resources[type]:
-            if instance["id"] == rspec["id"]:
-                slots = rspec["slots"]
-                instance["slots"] += slots
-                return slots
-        raise ValueError(f"Attempting to checkin a resource whose ID is unknown: {rspec!r}")
 
 
 def make_resource_pool(config: "CanaryConfig"):
