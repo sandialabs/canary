@@ -2,12 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 import dataclasses
-import datetime
-import io
 import math
 import os
 import signal
 import sys
+import threading
 import time
 from functools import cached_property
 from pathlib import Path
@@ -21,6 +20,7 @@ from rich.console import Console
 from rich.console import Group
 from rich.live import Live
 from rich.table import Table
+from rich.text import Text
 
 from . import config
 from .error import StopExecution
@@ -31,7 +31,6 @@ from .queue import ResourceQueue
 from .util import cpu_count
 from .util import logging
 from .util import multiprocessing as mp
-from .util.misc import digits
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
@@ -217,10 +216,8 @@ class ResourceQueueExecutor:
         start = time.time()
         logging_queue: mp.Queue = self._store["logging_queue"]
         config_snapshot = config.snapshot()
-
-        renderer = ConsoleRenderer.factory(self._render_dashboard, self.enable_live_monitoring)
-        with ConsoleReporter(renderer) as reporter:
-            self.add_listener(reporter.on_event)
+        reporter = LiveReporter(self) if self.enable_live_monitoring else EventReporter(self)
+        with reporter:
             while True:
                 try:
                     if timeout >= 0.0 and time.time() - start > timeout:
@@ -231,11 +228,9 @@ class ResourceQueueExecutor:
                     # Clean up any finished processes and collect results
                     self._check_finished_processes()
                     self._check_for_leaks()
-                    reporter.update()
 
                     # Wait for a slot if at max capacity
                     self._wait_for_slot()
-                    reporter.update()
 
                     # Get a job from the queue
                     job = self.queue.get()
@@ -260,7 +255,6 @@ class ResourceQueueExecutor:
                         qrank=qrank,
                         qsize=qsize,
                     )
-                    reporter.update()
 
                 except Busy:
                     # Queue is busy, wait and try again
@@ -268,32 +262,25 @@ class ResourceQueueExecutor:
 
                 except Empty:
                     # Queue is empty, wait for remaining jobs and exit
-                    self._wait_all(start, timeout, reporter)
+                    self._wait_all(start, timeout)
                     break
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    reporter.update(final=True)
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
                 except KeyboardInterrupt:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    reporter.update(final=True)
                     raise
 
                 except TimeoutError:
-                    reporter.update(final=True)
                     raise
 
                 except BaseException:
                     logger.exception("Unhandled exception in process pool")
-                    reporter.update(final=True)
                     raise
-
-            reporter.update(final=True)
-            self.remove_listener(reporter.on_event)
         return compute_returncode(self.queue.cases())
 
     def notify_listeners(self, event: EventTypes, *args: Any) -> None:
@@ -434,7 +421,7 @@ class ResourceQueueExecutor:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.05)  # Brief sleep before checking again
 
-    def _wait_all(self, start: float, timeout: float, reporter: "ConsoleReporter") -> None:
+    def _wait_all(self, start: float, timeout: float) -> None:
         """Wait for all active processes to complete."""
         while True:
             if not self.inflight:
@@ -447,7 +434,6 @@ class ResourceQueueExecutor:
                 self._check_finished_processes()
                 self._check_for_leaks()
                 time.sleep(0.075)
-                reporter.update()
 
     def _terminate_all(self, signum: int):
         """Terminate all active processes."""
@@ -517,145 +503,31 @@ class ResourceQueueExecutor:
             return float(t)
         return 1.0
 
-    def _render_dashboard(self, final: bool = False) -> Group | str:
-        text = self.queue.status(start=self.started_on)
-        footer = Table(expand=True, show_header=False, box=None)
-        footer.add_column("stats")
-        footer.add_row(text)
-        table = Table(expand=False, box=box.SQUARE)
-        fmt = config.getoption("live_name_fmt")
-        if final:
-            table.add_column("Job")
-            table.add_column("ID")
-            table.add_column("Status")
-            table.add_column("Queued")
-            table.add_column("Elapsed")
-            table.add_column("Details")
-            cases = self.queue.cases()
-            for case in cases:
-                if case.status.category == "PASS":
-                    continue
-                queued = case.timekeeper.queued()
-                elapsed = case.timekeeper.duration()
-                table.add_row(
-                    case.display_name(style="rich", resolve=fmt == "long"),
-                    case.id[:7],
-                    case.status.display_name(style="rich"),
-                    f"{queued:5.1f}s",
-                    f"{elapsed:5.1f}s",
-                    case.status.reason or "",
-                )
-            if not table.row_count:
-                n = len(cases)
-                return Group(
-                    f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]"
-                )
-            return Group(table, footer)
 
-        table = Table(expand=False, box=box.SQUARE)
-        table.add_column("Job")
-        table.add_column("ID")
-        table.add_column("Status")
-        table.add_column("Queued")
-        table.add_column("Elapsed")
-        table.add_column("Rank")
-
-        max_rows: int = 30
-        num_inflight = len(self.inflight)
-        if num_inflight < max_rows:
-            n = max_rows - num_inflight
-            for slot in sorted(self.finished.values(), key=lambda x: x.qrank)[-n:]:
-                queued = slot.started - slot.spawned
-                elapsed = slot.finished - slot.spawned
-                table.add_row(
-                    slot.job.display_name(style="rich", resolve=fmt == "long"),
-                    slot.job.id[:7],
-                    slot.job.status.display_name(style="rich"),
-                    f"{queued:5.1f}s",
-                    f"{elapsed:5.1f}s",
-                    f"{slot.qrank}/{slot.qsize}",
-                )
-
-        now = time.time()
-        for slot in sorted(self.running.values(), key=lambda x: x.qrank):
-            queued = slot.started - slot.spawned
-            elapsed = now - slot.spawned
-            table.add_row(
-                slot.job.display_name(style="rich", resolve=fmt == "long"),
-                slot.job.id[:7],
-                "[green]RUNNING[/]",
-                f"{queued:5.1f}s",
-                f"{elapsed:5.1f}s",
-                f"{slot.qrank}/{slot.qsize}",
-            )
-
-        now = time.time()
-        for slot in sorted(self.submitted.values(), key=lambda x: x.qrank):
-            queued = elapsed = now - slot.spawned
-            table.add_row(
-                slot.job.display_name(style="rich", resolve=fmt == "long"),
-                slot.job.id[:7],
-                "[cyan]SUBMITTED[/]",
-                f"{queued:5.1f}s",
-                f"{elapsed:5.1f}s",
-                f"{slot.qrank}/{slot.qsize}",
-            )
-
-        if table.row_count < max_rows:
-            st = "[magenta]PENDING[/]"
-            na = "NA"
-            for job in self.queue.pending():
-                table.add_row(
-                    job.display_name(style="rich", resolve=fmt == "long"), job.id[:7], st, na, na
-                )
-                if table.row_count >= max_rows:
-                    break
-
-        if not table.row_count:
-            return Group("")
-
-        return Group(table, footer)
-
-
-class ConsoleReporter:
-    def __init__(self, renderer: "ConsoleRenderer") -> None:
-        self.renderer = renderer
-        self.live: Live | None = None
-        self.console: Console | None = None
-        if self.renderer.live:
-            self.console = Console(file=sys.stdout, force_terminal=True)
-
+class LiveReporter:
+    def __init__(self, executor: ResourceQueueExecutor) -> None:
+        self.executor = executor
+        console = Console(file=sys.stdout, force_terminal=True)
+        self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
         # Logging control
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
-        self._mark: float = -1.0
+        self._stop = threading.Event()
+        self.refresh_interval = 0.25
 
     def __enter__(self):
-        if self.renderer.live:
-            self.mute_stream_handlers()
-            self.live = Live(
-                refresh_per_second=1,
-                console=self.console,
-                transient=False,
-                auto_refresh=False,
-            )
-            self.live.__enter__()
-        self._mark = time.monotonic()
+        self.mute_stream_handlers()
+        self.live.__enter__()
+        self._thread = threading.Thread(target=self._refresh, daemon=True)
+        self._thread.start()
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        if self.live:
-            self.live.__exit__(exc_type, exc, tb)
-            self.unmute_stream_handlers()
-
-    def update(self, final: bool = False) -> None:
-        if self.live:
-            if final or time.monotonic() - self._mark > 0.25:
-                self.live.update(self.renderer.render(final=final) or "", refresh=True)
-                self._mark = time.monotonic()
-        elif final:
-            group = self.renderer.render(final=True)
-            rprint(group)
+        self._stop.set()
+        self._thread.join()
+        self.live.update(self.final_table() or "", refresh=True)
+        self.live.__exit__(exc_type, exc, tb)
+        self.unmute_stream_handlers()
 
     def mute_stream_handlers(self) -> None:
         root = logging.builtin_logging.getLogger(logging.root_log_name)
@@ -676,77 +548,239 @@ class ConsoleReporter:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
 
+    def _refresh(self) -> None:
+        while not self._stop.is_set():
+            if self.executor.inflight:
+                self.live.update(self.dynamic_table(), refresh=True)
+            self._stop.wait(self.refresh_interval)
+
+    def final_table(self) -> Group:
+        xtor = self.executor
+        text = xtor.queue.status(start=xtor.started_on)
+        footer = Table(expand=True, show_header=False, box=None)
+        footer.add_column("stats")
+        footer.add_row(text)
+        table = Table(expand=False, box=box.SQUARE)
+        fmt = config.getoption("live_name_fmt")
+        table.add_column("Job")
+        table.add_column("ID")
+        table.add_column("Status")
+        table.add_column("Queued")
+        table.add_column("Elapsed")
+        table.add_column("Details")
+        cases = xtor.queue.cases()
+        for case in cases:
+            if case.status.category == "PASS":
+                continue
+            queued = case.timekeeper.queued()
+            elapsed = case.timekeeper.duration()
+            table.add_row(
+                case.display_name(style="rich", resolve=fmt == "long"),
+                case.id[:7],
+                case.status.display_name(style="rich"),
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                case.status.reason or "",
+            )
+        if not table.row_count:
+            n = len(cases)
+            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
+        return Group(table, footer)
+
+    def dynamic_table(self) -> Group:
+        xtor = self.executor
+        text = xtor.queue.status(start=xtor.started_on)
+        footer = Table(expand=True, show_header=False, box=None)
+        footer.add_column("stats")
+        footer.add_row(text)
+        table = Table(expand=False, box=box.SQUARE)
+        fmt = config.getoption("live_name_fmt")
+        table = Table(expand=False, box=box.SQUARE)
+        table.add_column("Job")
+        table.add_column("ID")
+        table.add_column("Status")
+        table.add_column("Queued")
+        table.add_column("Elapsed")
+        table.add_column("Rank")
+
+        max_rows: int = 30
+        num_inflight = len(xtor.inflight)
+        if num_inflight < max_rows:
+            n = max_rows - num_inflight
+            for slot in sorted(xtor.finished.values(), key=lambda x: x.qrank)[-n:]:
+                queued = slot.started - slot.spawned
+                elapsed = slot.finished - slot.spawned
+                table.add_row(
+                    slot.job.display_name(style="rich", resolve=fmt == "long"),
+                    slot.job.id[:7],
+                    slot.job.status.display_name(style="rich"),
+                    f"{queued:5.1f}s",
+                    f"{elapsed:5.1f}s",
+                    f"{slot.qrank}/{slot.qsize}",
+                )
+
+        now = time.time()
+        for slot in sorted(xtor.running.values(), key=lambda x: x.qrank):
+            queued = slot.started - slot.spawned
+            elapsed = now - slot.spawned
+            table.add_row(
+                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.id[:7],
+                "[green]RUNNING[/]",
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
+        now = time.time()
+        for slot in sorted(xtor.submitted.values(), key=lambda x: x.qrank):
+            queued = elapsed = now - slot.spawned
+            table.add_row(
+                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.id[:7],
+                "[cyan]SUBMITTED[/]",
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+
+        if table.row_count < max_rows:
+            st = "[magenta]PENDING[/]"
+            na = "NA"
+            for job in xtor.queue.pending():
+                table.add_row(
+                    job.display_name(style="rich", resolve=fmt == "long"), job.id[:7], st, na, na
+                )
+                if table.row_count >= max_rows:
+                    break
+
+        if not table.row_count:
+            return Group("")
+
+        return Group(table, footer)
+
+
+class EventReporter:
+    def __init__(self, executor: ResourceQueueExecutor) -> None:
+        self.executor = executor
+        self.table = StaticTable()
+        self.table.add_column("Job", 50)
+        self.table.add_column("ID", 7)
+        self.table.add_column("Status", 15)
+        self.table.add_column("Queued", 7, "right")
+        self.table.add_column("Elapsed", 7, "right")
+        self.table.add_column("Rank", 8, "right")
+
+    def __enter__(self):
+        self.executor.add_listener(self.on_event)
+        self.table.print_header_once()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.executor.remove_listener(self.on_event)
+        pass
+
     def on_event(self, event: str, *args, **kwargs) -> None:
         match event:
             case "job_submitted":
                 slot: ExecutionSlot = args[0]
-                self.renderer.on_job_start(slot.job, slot.qrank, slot.qsize)
+                self.on_job_submit(slot)
+            case "job_started":
+                slot: ExecutionSlot = args[0]
+                self.on_job_start(slot)
             case "job_finished":
                 slot: ExecutionSlot = args[0]
-                self.renderer.on_job_finish(slot.job, slot.qrank, slot.qsize)
+                self.on_job_finish(slot)
             case _:
                 pass
 
+    def on_job_submit(self, slot: ExecutionSlot) -> None:
+        fmt = config.getoption("live_name_fmt")
+        row = [
+            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.id[:7],
+            "[cyan]SUBMITTED[/]",
+            "",
+            "",
+            f"{slot.qrank}/{slot.qsize}",
+        ]
+        text = self.table.render_row(row)
+        rprint(text, file=sys.stderr)
 
-class ConsoleRenderer:
-    live: bool = False
+    def on_job_start(self, slot: ExecutionSlot) -> None:
+        now = time.time()
+        queued = now - slot.spawned
+        fmt = config.getoption("live_name_fmt")
+        row = [
+            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.id[:7],
+            "[blue]STARTED[/]",
+            f"{queued:5.1f}s",
+            "",
+            f"{slot.qrank}/{slot.qsize}",
+        ]
+        text = self.table.render_row(row)
+        rprint(text, file=sys.stderr)
 
-    def render(self, *, final: bool = False) -> Group | str:
-        raise NotImplementedError
-
-    @staticmethod
-    def factory(render_fn: Callable[..., Group | str], live: bool) -> "ConsoleRenderer":
-        if live:
-            return LiveRenderer(render_fn)
-        return StaticRenderer(render_fn)
-
-    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        pass
-
-    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        pass
-
-
-class LiveRenderer(ConsoleRenderer):
-    live: bool = True
-
-    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
-        self.render_fn = render_fn
-
-    def render(self, *, final: bool = False) -> Group | str:
-        return self.render_fn(final=final)
+    def on_job_finish(self, slot: ExecutionSlot) -> None:
+        queued = slot.started - slot.spawned
+        elapsed = slot.finished - slot.spawned
+        fmt = config.getoption("live_name_fmt")
+        row = [
+            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.id[:7],
+            slot.job.status.display_name(style="rich"),
+            f"{queued:5.1f}s",
+            f"{elapsed:5.1f}s",
+            f"{slot.qrank}/{slot.qsize}",
+        ]
+        text = self.table.render_row(row)
+        rprint(text, file=sys.stderr)
 
 
-class StaticRenderer(ConsoleRenderer):
-    def __init__(self, render_fn: Callable[..., Group | str]) -> None:
-        self.render_fn = render_fn
+@dataclasses.dataclass
+class StaticColumn:
+    header: str
+    width: int
+    align: Literal["left", "right"] = "left"
 
-    def render(self, *, final: bool = False) -> Group | str:
-        if final:
-            return self.render_fn(final=True)
-        return ""
 
-    def on_job_start(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        fmt = io.StringIO()
-        fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-        fmt.write("[bold]Starting[/] job %s: %s" % (job.id[:7], job.display_name()))
-        logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
+class StaticTable:
+    def __init__(self, columns: list[StaticColumn] | None = None) -> None:
+        self.columns = list(columns or [])
+        self._printed_header = False
 
-    def on_job_finish(self, job: JobProtocol, qrank: int, qsize: int) -> None:
-        try:
-            fmt = io.StringIO()
-            fmt.write(datetime.datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            fmt.write(r"[bold]\[%s][/] " % f"{qrank:0{digits(qsize)}}/{qsize}")
-            fmt.write(
-                "[bold]Finished[/] job %s: %s: %s"
-                % (job.id[:7], job.display_name(), job.status.display_name())
-            )
-            logger.log(logging.EMIT, fmt.getvalue().strip(), extra={"prefix": ""})
-        except Exception:
-            logger.exception(f"Failed logging finished state of {job.id[:7]}")
-        for h in logger.handlers:
-            h.flush()
+    def add_column(self, header: str, width: int, align: Literal["left", "right"] = "left") -> None:
+        self.columns.append(StaticColumn(header=header, width=width, align=align))
+
+    def _format_cell(self, value: str, col: StaticColumn) -> Text:
+        text = Text.from_markup(value)
+        if text.cell_len > col.width:
+            text.truncate(col.width, overflow="ellipsis")
+        pad = col.width - text.cell_len
+        if pad > 0:
+            if col.align == "right":
+                text = Text(" " * pad) + text
+            else:
+                text += Text(" " * pad)
+        return text
+
+    def render_header(self) -> Text:
+        return self.render_row([col.header for col in self.columns])
+
+    def render_row(self, values: list[str]) -> Text:
+        row = Text()
+        for value, col in zip(values, self.columns):
+            row.append(self._format_cell(value, col))
+            row.append("  ")
+        return row
+
+    def print_header_once(self):
+        if not self._printed_header:
+            text = self.render_header()
+            rprint(text)
+            rprint("─" * len(text))
+            self._printed_header = True
 
 
 class CanaryKill(Exception):
