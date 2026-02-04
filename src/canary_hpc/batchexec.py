@@ -202,12 +202,23 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
 
     def canary_invocation(self, batch: "TestBatch", case: "canary.TestCase") -> str:
         """Write the canary invocation used to run this test case"""
-        default_args = [sys.executable, "-m", "canary", "-C", str(batch.workspace.dir)]
+        default_args = [
+            sys.executable,
+            "-m",
+            "canary",
+            "-C",
+            str(batch.workspace.dir),
+            "-r",
+            f"cpus={case.cpus}",
+            "-r",
+            f"gpus={case.gpus}",
+        ]
         if canary.config.get("debug"):
             default_args.append("-d")
         default_args.extend(["hpc", "exec"])
         args = [
             *default_args,
+            "--workers=1",
             f"--backend={self.backend.name}",
             f"--case={case.id}",
             f"--workspace={batch.workspace.dir}",
