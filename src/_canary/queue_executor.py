@@ -674,14 +674,31 @@ class EventReporter:
         style = config.getoption("console_style") or {}
         self.namefmt = style.get("name", "short")
         self.executor = executor
-        width = shutil.get_terminal_size().columns
         self.table = StaticTable()
-        self.table.add_column("Job", width - 56)
-        self.table.add_column("ID", 7)
-        self.table.add_column("Status", 15)
-        self.table.add_column("Queued", 7, "right")
-        self.table.add_column("Elapsed", 7, "right")
-        self.table.add_column("Rank", 8, "right")
+        maxnamelen: int = -1
+        for s in executor.queue._heap:
+            name = s.job.display_name(resolve=self.namefmt == "long")
+            maxnamelen = max(maxnamelen, len(name))
+        columns: int
+        if var := os.getenv("COLUMNS"):
+            columns = int(var)
+        else:
+            columns = shutil.get_terminal_size().columns
+        n = 8
+        used = maxnamelen + 4 * 8
+        avail = columns - used
+        status_width: int
+        if avail < 0:
+            n = 4
+            status_width = 15
+        else:
+            status_width = min(max(avail, 30), 45)
+        self.table.add_column("Job", maxnamelen)
+        self.table.add_column("ID", n)
+        self.table.add_column("Status", status_width)
+        self.table.add_column("Queued", n, "right")
+        self.table.add_column("Elapsed", n, "right")
+        self.table.add_column("Rank", n, "right")
 
     def __enter__(self):
         self.executor.add_listener(self.on_event)
@@ -689,7 +706,13 @@ class EventReporter:
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        self.print_summary()
         self.executor.remove_listener(self.on_event)
+
+    def print_summary(self) -> None:
+        xtor = self.executor
+        text = xtor.queue.status(start=xtor.started_on)
+        logger.info(text, extra={"prefix": ""})
 
     def on_event(self, event: str, *args, **kwargs) -> None:
         match event:
