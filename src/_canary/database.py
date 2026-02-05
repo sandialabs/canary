@@ -6,6 +6,7 @@ import dataclasses
 import datetime
 import pickle  # nosec B403
 import sqlite3
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 from pathlib import Path
@@ -336,39 +337,50 @@ class WorkspaceDatabase:
         )
         return row
 
-    def put_result(self, case: "TestCase") -> None:
-        self.put_results(case)
+    def put_result(self, case: "TestCase") -> bool:
+        return self.put_results(case)
 
-    def put_results(self, *cases: "TestCase") -> None:
-        """Store results in the DB.  We store status, timekeeper across columns for future
-        enhancements to use results without actually creating a testcase to hold them
+    def put_results(
+        self,
+        *cases: "TestCase",
+        retries: int = 3,
+        base_delay: float = 0.25,
+        max_delay: float = 5.0,
+    ) -> bool:
+        """Store results in the DB.
+
+        Since canary uses hierarchical parallelism, this function can be called by many independent
+        processes at once, resulting in some callers hitting a locked database.  We guard against a
+        locked database by trying multiple times with an exponential backoff between attempts.  If
+        we don't succeed we return False and let the caller decide what to do.
+
+        If writing to the database results in other types of errors, we re-raise those.
+
         """
+
         rows = [self.format_single_result(case) for case in cases]
-        with self.connection:
-            self.connection.executemany(
-                """
-                INSERT OR REPLACE INTO results (
-                spec_id,
-                spec_name,
-                spec_fullname,
-                file_root,
-                file_path,
-                session,
-                workspace,
-                status_state,
-                status_category,
-                status_status,
-                status_reason,
-                status_code,
-                submitted,
-                started,
-                finished,
-                measurements
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                rows,
-            )
+        sql = """
+        INSERT OR REPLACE INTO results (
+          spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
+          status_state, status_category, status_status, status_reason, status_code,
+          submitted, started, finished, measurements
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        for attempt in range(retries + 1):
+            try:
+                with self.connection:
+                    self.connection.executemany(sql, rows)
+                return True
+            except Exception as e:
+                locked = is_operation_error(e) and "database is locked" in str(e).lower()
+                if not locked:
+                    raise
+                if attempt == retries:
+                    logger.debug(f"Unable to write to DB after {retries} + 1 attempts")
+                    return False
+                delay = min(base_delay * (2**attempt), max_delay)
+                time.sleep(delay)
+        return False
 
     def get_results(
         self,
@@ -670,6 +682,10 @@ def increment_hex_prefix(prefix: str) -> str | None:
         logger.warning("No valid upper bound - prefix overflow")
         return None
     return f"{value + 1:0{len(prefix)}x}"
+
+
+def is_operation_error(e: BaseException) -> bool:
+    return isinstance(e, sqlite3.OperationalError)
 
 
 class NotASelection(Exception):
