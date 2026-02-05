@@ -92,29 +92,20 @@ class Run(CanarySubcommand):
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
 
+        parser.add_argument(
+            "-s",
+            "--style",
+            dest="console_style",
+            action=StyleAction,
+            default={"name": "short", "live": True},
+            help="Configure live console display style.  Given as key=value pairs:\n\n"
+            "live={yes,no}[yes]: live console updating\n\n"
+            "name={short,long}[short]: print short (default) names or long\n\n",
+        )
         group = parser.add_argument_group("console reporting")
-        group.add_argument(
-            "-e",
-            choices=("separate", "merge"),
-            default="separate",
-            dest="testcase_output_strategy",
-            help="Merge a testcase's stdout and stderr or log separately [default: %(default)s]",
-        )
-        group.add_argument(
-            "--capture",
-            choices=("log", "tee"),
-            default="log",
-            help="Log test output to a file only (log) or log and print output "
-            "to the screen (tee).  Warning: this could result in a large amount of text printed "
-            "to the screen [default: log]",
-        )
-        group.add_argument(
-            "--format",
-            dest="live_name_fmt",
-            choices=("long", "short"),
-            default="short",
-            help="Print test case fullname (long) in live status bar [default: short]",
-        )
+        group.add_argument("-e", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
+        group.add_argument("--capture", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
+        group.add_argument("--format", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
         add_resource_arguments(parser)
         parser.add_argument(
             "runpaths",
@@ -191,6 +182,32 @@ def setdefault(obj, attr, default):
     elif getattr(obj, attr) is None:
         setattr(obj, attr, default)
     return getattr(obj, attr)
+
+
+class StyleAction(argparse.Action):
+    style_choices = {"name": ("long", "short"), "live": ("yes", "no")}
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        style = getattr(namespace, self.dest, None) or {}
+        key, sep, value = values.strip().partition("=")  # type: ignore
+        if sep != "=":
+            parser.error(f"Invalid format for {option_string}: {values!r}, expected key=value")
+        if choices := self.style_choices.get(key):
+            if value not in choices:
+                parser.error(f"Invalid choice {value!r} for style config {key}")
+        else:
+            parser.error(f"Invalid style config {key!r}")
+        if value in ("yes", "no"):
+            style[key] = {"yes": True, "no": False}[value]
+        else:
+            style[key] = value
+        setattr(namespace, self.dest, style)
 
 
 class DeprecatedStoreAction(argparse.Action):

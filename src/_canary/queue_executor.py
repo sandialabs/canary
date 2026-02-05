@@ -4,6 +4,7 @@
 import dataclasses
 import math
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -15,7 +16,6 @@ from typing import Callable
 from typing import Literal
 
 from rich import box
-from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
 from rich.live import Live
@@ -122,11 +122,16 @@ class ResourceQueueExecutor:
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
         self.listeners: list[Callable[..., None]] = []
 
-        self.enable_live_monitoring: bool = not config.get("debug") and sys.stdin.isatty()
+        style = config.getoption("console_style") or {}
+        self.live_reporting = style.get("live", True)
+        if config.get("debug"):
+            self.live_reporting = False
+        if not sys.stdin.isatty():
+            self.live_reporting = False
         if os.getenv("CANARY_LEVEL") == "1":
-            self.enable_live_monitoring = False
+            self.live_reporting = False
         elif os.getenv("CANARY_MAKE_DOCS"):
-            self.enable_live_monitoring = False
+            self.live_reporting = False
 
     @property
     def inflight(self) -> dict[int, ExecutionSlot]:
@@ -216,7 +221,7 @@ class ResourceQueueExecutor:
         start = time.time()
         logging_queue: mp.Queue = self._store["logging_queue"]
         config_snapshot = config.snapshot()
-        reporter = LiveReporter(self) if self.enable_live_monitoring else EventReporter(self)
+        reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
         with reporter:
             while True:
                 try:
@@ -314,6 +319,7 @@ class ResourceQueueExecutor:
                     logger.exception(f"Failed shutting down timed-out process {pid}")
                 try:
                     slot.job.refresh()
+                    slot.finished = now
                     slot.job.timekeeper.update(
                         submitted=slot.submitted,
                         started=slot.started,
@@ -456,6 +462,7 @@ class ResourceQueueExecutor:
                     slot.job.set_status(status=stat, reason=f"Job terminated with signal {signum}")
                     slot.job.timekeeper.submitted = slot.submitted
                     slot.job.timekeeper.finished = time.time()
+                    slot.finished = time.time()
                     slot.job.measurements.update(measurements)
                     try:
                         slot.job.save()
@@ -514,6 +521,8 @@ class LiveReporter:
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
         self._stop = threading.Event()
         self.refresh_interval = 0.25
+        style = config.getoption("console_style") or {}
+        self.namefmt = style.get("name", "short")
 
     def __enter__(self):
         self.mute_stream_handlers()
@@ -561,7 +570,6 @@ class LiveReporter:
         footer.add_column("stats")
         footer.add_row(text)
         table = Table(expand=False, box=box.SQUARE)
-        fmt = config.getoption("live_name_fmt")
         table.add_column("Job")
         table.add_column("ID")
         table.add_column("Status")
@@ -575,7 +583,7 @@ class LiveReporter:
             queued = case.timekeeper.queued()
             elapsed = case.timekeeper.duration()
             table.add_row(
-                case.display_name(style="rich", resolve=fmt == "long"),
+                case.display_name(style="rich", resolve=self.namefmt == "long"),
                 case.id[:7],
                 case.status.display_name(style="rich"),
                 f"{queued:5.1f}s",
@@ -594,7 +602,6 @@ class LiveReporter:
         footer.add_column("stats")
         footer.add_row(text)
         table = Table(expand=False, box=box.SQUARE)
-        fmt = config.getoption("live_name_fmt")
         table = Table(expand=False, box=box.SQUARE)
         table.add_column("Job")
         table.add_column("ID")
@@ -611,7 +618,7 @@ class LiveReporter:
                 queued = slot.started - slot.spawned
                 elapsed = slot.finished - slot.spawned
                 table.add_row(
-                    slot.job.display_name(style="rich", resolve=fmt == "long"),
+                    slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
                     slot.job.id[:7],
                     slot.job.status.display_name(style="rich"),
                     f"{queued:5.1f}s",
@@ -624,7 +631,7 @@ class LiveReporter:
             queued = slot.started - slot.spawned
             elapsed = now - slot.spawned
             table.add_row(
-                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
                 slot.job.id[:7],
                 "[green]RUNNING[/]",
                 f"{queued:5.1f}s",
@@ -636,7 +643,7 @@ class LiveReporter:
         for slot in sorted(xtor.submitted.values(), key=lambda x: x.qrank):
             queued = elapsed = now - slot.spawned
             table.add_row(
-                slot.job.display_name(style="rich", resolve=fmt == "long"),
+                slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
                 slot.job.id[:7],
                 "[cyan]SUBMITTED[/]",
                 f"{queued:5.1f}s",
@@ -645,11 +652,13 @@ class LiveReporter:
             )
 
         if table.row_count < max_rows:
-            st = "[magenta]PENDING[/]"
-            na = "NA"
             for job in xtor.queue.pending():
                 table.add_row(
-                    job.display_name(style="rich", resolve=fmt == "long"), job.id[:7], st, na, na
+                    job.display_name(style="rich", resolve=self.namefmt == "long"),
+                    job.id[:7],
+                    "[magenta]PENDING[/]",
+                    "NA",
+                    "NA",
                 )
                 if table.row_count >= max_rows:
                     break
@@ -662,9 +671,12 @@ class LiveReporter:
 
 class EventReporter:
     def __init__(self, executor: ResourceQueueExecutor) -> None:
+        style = config.getoption("console_style") or {}
+        self.namefmt = style.get("name", "short")
         self.executor = executor
+        width = shutil.get_terminal_size().columns
         self.table = StaticTable()
-        self.table.add_column("Job", 50)
+        self.table.add_column("Job", width - 56)
         self.table.add_column("ID", 7)
         self.table.add_column("Status", 15)
         self.table.add_column("Queued", 7, "right")
@@ -673,7 +685,7 @@ class EventReporter:
 
     def __enter__(self):
         self.executor.add_listener(self.on_event)
-        self.table.print_header_once()
+        self.table.print_header()
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -694,9 +706,8 @@ class EventReporter:
                 pass
 
     def on_job_submit(self, slot: ExecutionSlot) -> None:
-        fmt = config.getoption("live_name_fmt")
         row = [
-            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
             slot.job.id[:7],
             "[cyan]SUBMITTED[/]",
             "",
@@ -704,14 +715,13 @@ class EventReporter:
             f"{slot.qrank}/{slot.qsize}",
         ]
         text = self.table.render_row(row)
-        rprint(text, file=sys.stderr)
+        logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_start(self, slot: ExecutionSlot) -> None:
         now = time.time()
         queued = now - slot.spawned
-        fmt = config.getoption("live_name_fmt")
         row = [
-            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
             slot.job.id[:7],
             "[blue]STARTED[/]",
             f"{queued:5.1f}s",
@@ -719,14 +729,13 @@ class EventReporter:
             f"{slot.qrank}/{slot.qsize}",
         ]
         text = self.table.render_row(row)
-        rprint(text, file=sys.stderr)
+        logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_finish(self, slot: ExecutionSlot) -> None:
         queued = slot.started - slot.spawned
         elapsed = slot.finished - slot.spawned
-        fmt = config.getoption("live_name_fmt")
         row = [
-            slot.job.display_name(style="rich", resolve=fmt == "long"),
+            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
             slot.job.id[:7],
             slot.job.status.display_name(style="rich"),
             f"{queued:5.1f}s",
@@ -734,7 +743,7 @@ class EventReporter:
             f"{slot.qrank}/{slot.qsize}",
         ]
         text = self.table.render_row(row)
-        rprint(text, file=sys.stderr)
+        logger.info(text.markup, extra={"prefix": ""})
 
 
 @dataclasses.dataclass
@@ -747,7 +756,6 @@ class StaticColumn:
 class StaticTable:
     def __init__(self, columns: list[StaticColumn] | None = None) -> None:
         self.columns = list(columns or [])
-        self._printed_header = False
 
     def add_column(self, header: str, width: int, align: Literal["left", "right"] = "left") -> None:
         self.columns.append(StaticColumn(header=header, width=width, align=align))
@@ -774,12 +782,11 @@ class StaticTable:
             row.append("  ")
         return row
 
-    def print_header_once(self):
-        if not self._printed_header:
-            text = self.render_header()
-            rprint(text)
-            rprint("─" * len(text))
-            self._printed_header = True
+    def print_header(self):
+        text = self.render_header()
+        rule = "─" * (text.cell_len - 2)
+        logger.info(text.markup, extra={"prefix": ""})
+        logger.info(rule, extra={"prefix": ""})
 
 
 class CanaryKill(Exception):
