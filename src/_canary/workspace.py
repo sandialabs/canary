@@ -6,8 +6,13 @@ import datetime
 import fnmatch
 import os
 import shutil
+import threading
+import time
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import TYPE_CHECKING
 from typing import Any
+from typing import cast
 
 import yaml
 
@@ -34,6 +39,9 @@ from .util.filesystem import write_directory_tag
 from .util.graph import static_order
 from .util.names import unique_random_name
 from .version import __static_version__
+
+if TYPE_CHECKING:
+    from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
 
@@ -103,6 +111,7 @@ class Workspace:
 
         # Temporary data
         self.tmp_dir: Path
+        self.spool_dir: Path
 
         # Text logs
         self.logs_dir: Path
@@ -112,6 +121,8 @@ class Workspace:
 
         self.dbfile: Path
         self.db: WorkspaceDatabase
+
+        self.canary_level: int
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -125,9 +136,15 @@ class Workspace:
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
+        self.spool_dir = self.tmp_dir / "spool"
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.dbfile = self.root / "workspace.sqlite3"
+        self.canary_level = 0
+        if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
+            self.canary_level = int(var)
+        elif var := os.getenv("CANARY_LEVEL"):
+            self.canary_level = int(var)
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
@@ -205,6 +222,7 @@ class Workspace:
         self.sessions_dir.mkdir(parents=True)
         self.cache_dir.mkdir(parents=True)
         self.tmp_dir.mkdir(parents=True)
+        self.spool_dir.mkdir(parents=True)
         self.logs_dir.mkdir(parents=True)
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
@@ -298,15 +316,31 @@ class Workspace:
 
         s = Session(name=session_dir.name, prefix=session_dir, cases=ready)
         config.pluginmanager.hook.canary_sessionstart(session=s)
+
+        # We need to take great care to only write results into the database from the parent process
+        # On the parent process, create a results listener that looks for results in the spool.
+        # As test cases finish, the testcase_done_callback is called and the results put into the
+        # spool.  When the listener detects the results, it will write them to the database.  This
+        # way, the database is only receiving results from a single writer.  Otherwise, results can
+        # be written from many writers originating from many different processes (eg, a canary
+        # instance launched inside a HPC scheduler)
+        self.db.close()
+        listener: ResultListener | None = None
+        if self.canary_level == 0:
+            listener = ResultListener(self.db, spool_dir=self.spool_dir)
+            listener.start()
         s.run(workspace=self)
+        if listener is not None:
+            listener.stop_and_join()
+            processed = [f.stem for f in listener._processed]
+            not_saved = [case for case in s.cases if case.id not in processed]
+            self.db.put_results(*not_saved)
         config.pluginmanager.hook.canary_sessionfinish(session=s)
         self.add_session_results(s, update_view=update_view)
         return s
 
     def add_session_results(self, session: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        self.db.put_results(*session.cases)
-
         if update_view:
             view_entries: dict[Path, list[Path]] = {}
             for case in session.cases:
@@ -713,6 +747,114 @@ class Workspace:
             else:
                 found.append(None)
         return found
+
+    def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
+        if event == "job_finished":
+            case: TestCase = cast(TestCase, args[0].job)
+            data = self.db.format_single_result(case)
+            temp_file = None
+            final_file = self.spool_dir / f"{case.id}.json"
+            try:
+                # Write to a temporary file in the same directory
+                with NamedTemporaryFile("w", dir=self.spool_dir, delete=False) as tf:
+                    temp_file = Path(tf.name)
+                    json.dump(list(data), tf)
+                    tf.flush()
+                    os.fsync(tf.fileno())
+                # Atomically move to the final filename
+                temp_file.replace(final_file)
+            except Exception as e:
+                raise RuntimeError(f"Failed to write result for {case.id}: {e}")
+            finally:
+                # Cleanup temp file if it still exists
+                if temp_file and temp_file.exists():
+                    temp_file.unlink(missing_ok=True)
+
+
+class ResultListener(threading.Thread):
+    """
+    Watches a spool directory for JSON test results and writes them to SQLite in batches.
+    """
+
+    def __init__(
+        self,
+        db: WorkspaceDatabase,
+        spool_dir: str | Path,
+        poll_interval: float = 0.5,
+        batch_size: int = 10,
+        max_wait: float = 5.0,
+    ):
+        super().__init__(daemon=True)
+        self.db = db
+        self.spool_dir = Path(spool_dir)
+        self.poll_interval = poll_interval
+        self.batch_size = batch_size
+        self.max_wait = max_wait
+
+        self._stop_event = threading.Event()
+        self._processed: set[Path] = set()  # Track processed files
+
+        self.spool_dir.mkdir(parents=True, exist_ok=True)
+
+    def run(self):
+        """Main thread loop."""
+        self.db.connect()
+        try:
+            last_flush = time.time()
+            while not self._stop_event.is_set():
+                files = self.collect_files()
+                if files or (time.time() - last_flush > self.max_wait):
+                    self.flush(files)
+                    last_flush = time.time()
+                time.sleep(self.poll_interval)
+            # Final flush at shutdown
+            files = self.collect_files()
+            self.flush(files)
+        finally:
+            self.db.close()
+
+    def stop_and_join(self):
+        """Stop listener and wait for thread to finish."""
+        self._stop_event.set()
+        self.join()
+
+    def collect_files(self):
+        """Collect new JSON result files from spool directory, excluding already processed."""
+        all_files = set(self.spool_dir.glob("*.json"))
+        new_files = [f for f in all_files if f not in self._processed]
+        return new_files
+
+    def flush(self, files: list[Path]):
+        """Read JSON files and write them to the database."""
+        if not files:
+            return
+
+        rows: list[tuple[Any, ...]] = []
+        files_to_remove: list[Path] = []
+
+        for file in files[: self.batch_size]:  # respect batch_size
+            try:
+                with file.open("r") as f:
+                    data = json.load(f)
+                rows.append(tuple(data))
+                files_to_remove.append(file)
+            except json.JSONDecodeError:
+                # Partial write, try again later
+                continue
+            except Exception as e:
+                logger.warning("Skipping file %s due to error: %s", file, e)
+                files_to_remove.append(file)  # optional: move to failed dir instead
+
+        if rows:
+            self.db.put_raw_results(rows)
+
+        # Remove successfully processed files
+        for f in files_to_remove:
+            try:
+                f.unlink(missing_ok=True)
+                self._processed.add(f)
+            except Exception as e:
+                logger.warning("Could not remove file %s: %s", f, e)
 
 
 class WorkspaceExistsError(Exception):

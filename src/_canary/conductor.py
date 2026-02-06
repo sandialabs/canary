@@ -5,10 +5,8 @@
 import io
 import threading
 import time
-from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import cast
 
 from . import config
 from .hookspec import hookimpl
@@ -20,7 +18,6 @@ from .util import logging
 from .util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
-    from .queue_executor import EventTypes
     from .resource_pool import ResourcePool
     from .runtest import Runner
 
@@ -89,16 +86,9 @@ class CanaryConductor:
         executor = TestCaseExecutor()
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
-            # removing add_listener for now since it results in corrupted db from too many
-            # concurrent writes
-            # ex.add_listener(partial(self.put_result, runner))  # type: ignore
+            ex.add_listener(runner.workspace.testcase_done_callback)
             ex.run()
         return True
-
-    def put_result(self, runner: "Runner", event: "EventTypes", *args: Any) -> None:
-        if event == "job_finished":
-            case: TestCase = cast(TestCase, args[0].job)
-            runner.workspace.db.put_result(case)
 
 
 class TestCaseExecutor:
