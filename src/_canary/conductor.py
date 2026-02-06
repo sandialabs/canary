@@ -89,7 +89,9 @@ class CanaryConductor:
         executor = TestCaseExecutor()
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
-            ex.add_listener(partial(self.put_result, runner))  # type: ignore
+            # removing add_listener for now since it results in corrupted db from too many
+            # concurrent writes
+            # ex.add_listener(partial(self.put_result, runner))  # type: ignore
             ex.run()
         return True
 
