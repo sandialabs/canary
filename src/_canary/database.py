@@ -6,18 +6,21 @@ import dataclasses
 import datetime
 import pickle  # nosec B403
 import sqlite3
-import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 from typing import Iterable
 
 from . import testspec
 from .status import Status
 from .testcase import Measurements
 from .testspec import ResolvedSpec
+from .third_party.lock import Lock
+from .third_party.lock import WriteTransaction
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
@@ -35,6 +38,7 @@ class WorkspaceDatabase:
 
     def __init__(self, db_path: Path):
         self.path = Path(db_path)
+        self.lockfile = self.path.with_suffix(".lock")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
         self.connection.execute("PRAGMA journal_mode=MEMORY;")
@@ -337,7 +341,7 @@ class WorkspaceDatabase:
         )
         return row
 
-    def put_result(self, case: "TestCase") -> bool:
+    def put_result(self, case: "TestCase") -> None:
         return self.put_results(case)
 
     def put_results(
@@ -346,7 +350,7 @@ class WorkspaceDatabase:
         retries: int = 3,
         base_delay: float = 0.25,
         max_delay: float = 5.0,
-    ) -> bool:
+    ) -> None:
         """Store results in the DB.
 
         Since canary uses hierarchical parallelism, this function can be called by many independent
@@ -366,21 +370,9 @@ class WorkspaceDatabase:
           submitted, started, finished, measurements
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        for attempt in range(retries + 1):
-            try:
-                with self.connection:
-                    self.connection.executemany(sql, rows)
-                return True
-            except Exception as e:
-                locked = is_operation_error(e) and "database is locked" in str(e).lower()
-                if not locked:
-                    raise
-                if attempt == retries:
-                    logger.debug(f"Unable to write to DB after {retries} + 1 attempts")
-                    return False
-                delay = min(base_delay * (2**attempt), max_delay)
-                time.sleep(delay)
-        return False
+        with self.write_lock():
+            with self.connection:
+                self.connection.executemany(sql, rows)
 
     def get_results(
         self,
@@ -660,6 +652,12 @@ class WorkspaceDatabase:
         """  # nosec B608
         rows = self.connection.execute(sql, prefixes).fetchall()
         return [row[0] for row in rows]
+
+    @contextmanager
+    def write_lock(self) -> Generator[None, None, None]:
+        lock = Lock(self.lockfile.as_posix(), desc=self.lockfile.as_posix())
+        with WriteTransaction(lock):
+            yield
 
 
 @dataclasses.dataclass
