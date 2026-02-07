@@ -39,6 +39,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     :returns: An exit code.
     """
+    if "CANARY_LEVEL" not in os.environ:
+        os.environ["CANARY_LEVEL"] = "0"
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)

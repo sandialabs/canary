@@ -39,7 +39,10 @@ class HPCConnectRunner:
 
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:
         variables: dict[str, str | None] = dict(batch.variables)
-        variables.update({"CANARY_LEVEL": "1", "CANARY_DISABLE_KB": "1"})
+        level = int(os.getenv("CANARY_LEVEL", "0"))
+        variables.update(
+            {"CANARY_LEVEL": str(level + 1), "CANARY_DISABLE_KB": "1", "CANARY_LIVE": "0"}
+        )
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
         f = batch.workspace.joinpath("config.json")
