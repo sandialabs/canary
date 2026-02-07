@@ -431,6 +431,11 @@ class FSQueue:
         files = sorted(self.root.glob("*.pkl"), key=lambda f: f.stat().st_mtime)
         self._cache = files
 
+    def empty(self) -> bool:
+        if not self._cache:
+            self._refill_cache()
+        return bool(self._cache)
+
     def get(self) -> Any:
         """
         Get the oldest item from the queue.
