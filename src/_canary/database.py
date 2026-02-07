@@ -378,9 +378,6 @@ class WorkspaceDatabase:
         """
 
         rows = [self.format_single_result(case) for case in cases]
-        self.put_raw_results(rows)
-
-    def put_raw_results(self, rows: list[tuple[Any, ...]]) -> None:
         sql = """
         INSERT OR REPLACE INTO results (
           spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
