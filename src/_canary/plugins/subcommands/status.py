@@ -80,19 +80,16 @@ class Status(CanarySubcommand):
             choices=("duration", "name"),
             help="Sort cases by this field [default: %(default)s]",
         )
-        parser.add_argument("--history", action="store_true", help="Print status history for specs")
         parser.add_argument(
-            "specs", nargs=argparse.REMAINDER, help="Show status for these specific specs"
+            "specs", nargs=argparse.REMAINDER, help="Show status history for these specific specs"
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        if args.history:
+        if args.specs:
             self.print_spec_status_history(args.specs)
             return 0
-        if args.specs:
-            args.report_chars = "A"
         workspace = Workspace.load()
-        results = workspace.db.get_results(ids=args.specs)
+        results = workspace.db.get_results()
         table = self.get_status_table(results, args)
         console = Console()
         if table.row_count > shutil.get_terminal_size().lines:

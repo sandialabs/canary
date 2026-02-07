@@ -383,7 +383,7 @@ class PathSpec(argparse.Action):
         setattr(namespace, "script_args", script_args)
         setattr(namespace, self.dest, values)
         # backward compat
-        if request["kind"] == "scanpaths":
+        if request.get("kind") == "scanpaths":
             setattr(namespace, "scanpaths", request["payload"])
 
     @staticmethod

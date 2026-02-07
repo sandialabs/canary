@@ -6,6 +6,8 @@ import dataclasses
 import datetime
 import pickle  # nosec B403
 import sqlite3
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 from pathlib import Path
@@ -20,9 +22,11 @@ from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
+from .util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
     from .testcase import TestCase
+
 
 logger = logging.get_logger(__name__)
 
@@ -30,8 +34,10 @@ logger = logging.get_logger(__name__)
 class WorkspaceDatabase:
     """Database wrapper"""
 
-    def __init__(self, db_path: Path):
-        self.path = Path(db_path)
+    def __init__(self, root: Path):
+        self.root = Path(root)
+        self.queue = FSQueue(self.root / "tmp/db")
+        self.path = root / "workspace.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection: sqlite3.Connection | None = None
         self._ready: bool = False
@@ -42,6 +48,9 @@ class WorkspaceDatabase:
             self.connect()
         assert self._connection is not None
         return self._connection
+
+    def listener(self) -> "ResultListener":
+        return ResultListener(self)
 
     def close(self) -> None:
         if self._connection is not None:
@@ -660,6 +669,41 @@ class WorkspaceDatabase:
         """  # nosec B608
         rows = self.connection.execute(sql, prefixes).fetchall()
         return [row[0] for row in rows]
+
+
+class ResultListener(threading.Thread):
+    """
+    Watches a spool directory for JSON test results and writes them to SQLite in batches.
+    """
+
+    def __init__(self, db: WorkspaceDatabase, poll_interval: float = 0.05) -> None:
+        super().__init__(daemon=True)
+        self.db = db
+        self.poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._processed: set[Path] = set()  # Track processed files
+
+    def run(self):
+        """Main thread loop."""
+        self.db.connect()
+        try:
+            while not self._stop_event.is_set():
+                objs = self.db.queue.drain()
+                if objs:
+                    self.db.put_results(*objs)
+                    self._processed.update([obj.id for obj in objs])
+                time.sleep(self.poll_interval)
+            objs = self.db.queue.drain()
+            if objs:
+                self.db.put_results(*objs)
+                self._processed.update([obj.id for obj in objs])
+        finally:
+            self.db.close()
+
+    def stop_and_join(self):
+        """Stop listener and wait for thread to finish."""
+        self._stop_event.set()
+        self.join()
 
 
 @dataclasses.dataclass
