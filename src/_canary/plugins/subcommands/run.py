@@ -91,6 +91,13 @@ class Run(CanarySubcommand):
             action="store_true",
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
+        parser.add_argument(
+            "--empty-ok",
+            action="store_true",
+            default=False,
+            help="Exit normally when the test set is empty.  "
+            "By default, an empty test set is an error (exit code 7)",
+        )
 
         parser.add_argument(
             "-s",

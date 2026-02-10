@@ -5,7 +5,6 @@
 import io
 import threading
 import time
-from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast

@@ -155,5 +155,5 @@ def setup_parser(parser) -> None:
         "  failed   - run only previously failing tests\n\n"
         "  not_run  - run tests that have never been executed\n\n"
         "  changed  - run tests that whose specs have newer modification time\n\n"
-        "  not_pass - run tests that are incomplete, boken, or never run (default)",
+        "  not_pass - run tests whose status is not 'SUCCESS' (default)",
     )

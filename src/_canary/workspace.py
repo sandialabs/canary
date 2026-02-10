@@ -67,7 +67,8 @@ class Session:
         ready = [case for case in self.cases if case.status.state in ("READY", "PENDING")]
         runner = Runner(ready, self.name, workspace=workspace)
         if not ready:
-            raise StopExecution("no cases to run", exit_code=notests_exit_status)
+            exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
+            raise StopExecution("no cases to run", exit_code=exit_code)
         starting_dir = os.getcwd()
         try:
             self.started_on = datetime.datetime.now()
