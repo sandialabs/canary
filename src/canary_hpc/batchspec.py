@@ -79,7 +79,7 @@ class TestBatch:
 
         self.jobid: str | None = None
         self.id = self.spec.id
-        self.variables = {"CANARY_BATCH_ID": str(self.spec.id), "CANARY_LEVEL": "1"}
+        self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
         self.exclusive = False
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()

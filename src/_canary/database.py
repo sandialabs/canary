@@ -6,27 +6,27 @@ import dataclasses
 import datetime
 import pickle  # nosec B403
 import sqlite3
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
-from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
 from typing import Iterable
 
 from . import testspec
 from .status import Status
 from .testcase import Measurements
 from .testspec import ResolvedSpec
-from .third_party.lock import Lock
-from .third_party.lock import WriteTransaction
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
+from .util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
     from .testcase import TestCase
+
 
 logger = logging.get_logger(__name__)
 
@@ -34,36 +34,64 @@ logger = logging.get_logger(__name__)
 class WorkspaceDatabase:
     """Database wrapper"""
 
-    connection: sqlite3.Connection
-
-    def __init__(self, db_path: Path):
-        self.path = Path(db_path)
-        self.lockfile = self.path.with_suffix(".lock")
+    def __init__(self, root: Path):
+        self.root = Path(root)
+        self.queue = FSQueue(self.root / "tmp/db")
+        self.path = root / "workspace.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-        self.connection.execute("PRAGMA journal_mode=MEMORY;")
-        self.connection.execute("PRAGMA synchronous=OFF;")
-        self.connection.execute("PRAGMA foreign_key=ON;")
+        self._connection: sqlite3.Connection | None = None
+        self._ready: bool = False
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        if self._connection is None:
+            self.connect()
+        assert self._connection is not None
+        return self._connection
+
+    def listener(self) -> "ResultListener":
+        return ResultListener(self)
+
+    def close(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
 
     @classmethod
     def create(cls, path: Path) -> "WorkspaceDatabase":
         self = cls(path)
-        with self.connection:
+        self.connect()
+        return self
+
+    @classmethod
+    def load(cls, path: Path) -> "WorkspaceDatabase":
+        self = cls(path)
+        return self
+
+    def connect(self) -> None:
+        if self._connection is None:
+            self._connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
+            self._connection.execute("PRAGMA journal_mode=MEMORY;")
+            self._connection.execute("PRAGMA synchronous=OFF;")
+            self._connection.execute("PRAGMA foreign_key=ON;")
+        assert self._connection is not None
+        conn = self._connection
+        with conn:
             sql = "CREATE TABLE IF NOT EXISTS specs (spec_id TEXT PRIMARY KEY, data BLOB NOT NULL)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS specs_meta (
               spec_id TEXT PRIMARY KEY,
               source TEXT NOT NULL,
               view TEXT NOT NULL
             )"""
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_spec_meta_src ON specs_meta (source)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_spec_meta_view ON specs_meta (view)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS spec_deps (
               spec_id TEXT NOT NULL,
@@ -72,13 +100,13 @@ class WorkspaceDatabase:
               FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
               FOREIGN KEY (dep_id)  REFERENCES specs(spec_id)
             )"""
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_spec_deps_spec_id ON spec_deps (spec_id)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_spec_deps_dep_id ON spec_deps (dep_id)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS selections (
               tag TEXT,
@@ -86,15 +114,15 @@ class WorkspaceDatabase:
               PRIMARY KEY (tag, spec_id),
               FOREIGN KEY (tag) REFERENCES selections(spec_id) ON DELETE CASCADE
             )"""
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS selection_meta (
               tag TEXT PRIMARY KEY,
               data TEXT
             )"""
-            self.connection.execute(sql)
+            conn.execute(sql)
 
-            self.connection.execute(
+            conn.execute(
                 """
                 CREATE TRIGGER IF NOT EXISTS trg_selection_meta_delete
                 AFTER DELETE ON selections
@@ -107,7 +135,7 @@ class WorkspaceDatabase:
                 """
             )
 
-            self.connection.execute(
+            conn.execute(
                 """
                 CREATE TRIGGER IF NOT EXISTS trg_selection_meta_rename
                 AFTER UPDATE ON selections
@@ -136,23 +164,15 @@ class WorkspaceDatabase:
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
             )"""
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
             sql = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
-            self.connection.execute(sql)
+            conn.execute(sql)
 
-        return self
-
-    @classmethod
-    def load(cls, path: Path) -> "WorkspaceDatabase":
-        self = cls(path)
-        return self
-
-    def close(self):
-        self.connection.close()
+        return
 
     def put_specs(self, specs: list[ResolvedSpec]) -> None:
         def process_one_spec(spec: ResolvedSpec) -> tuple[str, bytes, str, str, list[str]]:
@@ -320,7 +340,8 @@ class WorkspaceDatabase:
             self.connection.execute("DROP TABLE _ids").fetchall()
         return rows
 
-    def format_single_result(self, case: "TestCase") -> tuple[Any, ...]:
+    @staticmethod
+    def format_single_result(case: "TestCase") -> tuple[Any, ...]:
         row = (
             case.id,
             case.spec.name,
@@ -344,13 +365,7 @@ class WorkspaceDatabase:
     def put_result(self, case: "TestCase") -> None:
         return self.put_results(case)
 
-    def put_results(
-        self,
-        *cases: "TestCase",
-        retries: int = 3,
-        base_delay: float = 0.25,
-        max_delay: float = 5.0,
-    ) -> None:
+    def put_results(self, *cases: "TestCase") -> None:
         """Store results in the DB.
 
         Since canary uses hierarchical parallelism, this function can be called by many independent
@@ -370,9 +385,8 @@ class WorkspaceDatabase:
           submitted, started, finished, measurements
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        with self.write_lock():
-            with self.connection:
-                self.connection.executemany(sql, rows)
+        with self.connection:
+            self.connection.executemany(sql, rows)
 
     def get_results(
         self,
@@ -653,11 +667,40 @@ class WorkspaceDatabase:
         rows = self.connection.execute(sql, prefixes).fetchall()
         return [row[0] for row in rows]
 
-    @contextmanager
-    def write_lock(self) -> Generator[None, None, None]:
-        lock = Lock(self.lockfile.as_posix(), desc=self.lockfile.as_posix())
-        with WriteTransaction(lock):
-            yield
+
+class ResultListener(threading.Thread):
+    """
+    Watches a spool directory for JSON test results and writes them to SQLite in batches.
+    """
+
+    def __init__(self, db: WorkspaceDatabase, poll_interval: float = 0.05) -> None:
+        super().__init__(daemon=True)
+        self.db = db
+        self.poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._processed: set[Path] = set()  # Track processed files
+
+    def run(self):
+        """Main thread loop."""
+        self.db.connect()
+        try:
+            while not self._stop_event.is_set():
+                objs = self.db.queue.drain()
+                if objs:
+                    self.db.put_results(*objs)
+                    self._processed.update([obj.id for obj in objs])
+                time.sleep(self.poll_interval)
+            objs = self.db.queue.drain()
+            if objs:
+                self.db.put_results(*objs)
+                self._processed.update([obj.id for obj in objs])
+        finally:
+            self.db.close()
+
+    def stop_and_join(self):
+        """Stop listener and wait for thread to finish."""
+        self._stop_event.set()
+        self.join()
 
 
 @dataclasses.dataclass

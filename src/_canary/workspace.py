@@ -7,6 +7,7 @@ import fnmatch
 import os
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 
 import yaml
@@ -34,6 +35,10 @@ from .util.filesystem import write_directory_tag
 from .util.graph import static_order
 from .util.names import unique_random_name
 from .version import __static_version__
+
+if TYPE_CHECKING:
+    from .database import ResultListener
+    from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
 
@@ -111,8 +116,9 @@ class Workspace:
         # Pointer to latest session
         self.head: Path
 
-        self.dbfile: Path
         self.db: WorkspaceDatabase
+
+        self.canary_level: int
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -128,7 +134,11 @@ class Workspace:
         self.tmp_dir = self.root / "tmp"
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
-        self.dbfile = self.root / "workspace.sqlite3"
+        self.canary_level = 0
+        if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
+            self.canary_level = int(var)
+        elif var := os.getenv("CANARY_LEVEL"):
+            self.canary_level = int(var)
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
@@ -226,7 +236,7 @@ class Workspace:
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
 
-        self.db = WorkspaceDatabase.create(self.dbfile)
+        self.db = WorkspaceDatabase.create(self.root)
         file = self.root / "config.yaml"
         cfg: dict[str, Any] = {}
         if mods := config.getoption("config_mods"):
@@ -255,7 +265,7 @@ class Workspace:
             view_file = self.view / view_tag
             if not view_file.exists():
                 write_directory_tag(view_file)
-        self.db = WorkspaceDatabase.load(self.dbfile)
+        self.db = WorkspaceDatabase.load(self.root)
         return self
 
     def run(
@@ -299,15 +309,30 @@ class Workspace:
 
         s = Session(name=session_dir.name, prefix=session_dir, cases=ready)
         config.pluginmanager.hook.canary_sessionstart(session=s)
+
+        # We need to take great care to only write results into the database from the parent process
+        # On the parent process, create a results listener that looks for results in the spool.
+        # As test cases finish, the testcase_done_callback is called and the results put into the
+        # spool.  When the listener detects the results, it will write them to the database.  This
+        # way, the database is only receiving results from a single writer.  Otherwise, results can
+        # be written from many writers originating from many different processes (eg, a canary
+        # instance launched inside a HPC scheduler)
+        self.db.close()
+        listener: "ResultListener | None" = None
+        if self.canary_level == 0:
+            listener = self.db.listener()
+            listener.start()
         s.run(workspace=self)
+        if listener is not None:
+            listener.stop_and_join()
+            not_saved = [case for case in s.cases if case.id not in listener._processed]
+            self.db.put_results(*not_saved)
         config.pluginmanager.hook.canary_sessionfinish(session=s)
         self.add_session_results(s, update_view=update_view)
         return s
 
     def add_session_results(self, session: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        self.db.put_results(*session.cases)
-
         if update_view:
             view_entries: dict[Path, list[Path]] = {}
             for case in session.cases:
@@ -714,6 +739,10 @@ class Workspace:
             else:
                 found.append(None)
         return found
+
+    def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
+        if event == "job_finished":
+            self.db.queue.put(args[0].job)
 
 
 class WorkspaceExistsError(Exception):

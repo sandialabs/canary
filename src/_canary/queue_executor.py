@@ -31,6 +31,7 @@ from .queue import ResourceQueue
 from .util import cpu_count
 from .util import logging
 from .util import multiprocessing as mp
+from .util.misc import boolean
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
@@ -128,7 +129,9 @@ class ResourceQueueExecutor:
             self.live_reporting = False
         if not sys.stdin.isatty():
             self.live_reporting = False
-        if os.getenv("CANARY_LEVEL") == "1":
+        if not boolean(os.getenv("CANARY_LIVE")):
+            self.live_reporting = False
+        elif int(os.getenv("CANARY_LEVEL", "0")) > 0:
             self.live_reporting = False
         elif os.getenv("CANARY_MAKE_DOCS"):
             self.live_reporting = False
