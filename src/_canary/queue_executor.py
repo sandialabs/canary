@@ -16,6 +16,7 @@ from typing import Callable
 from typing import Literal
 
 from rich import box
+from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
 from rich.live import Live
@@ -129,7 +130,7 @@ class ResourceQueueExecutor:
             self.live_reporting = False
         if not sys.stdin.isatty():
             self.live_reporting = False
-        if not boolean(os.getenv("CANARY_LIVE")):
+        if "CANARY_LIVE" in os.environ and not boolean(os.environ["CANARY_LIVE"]):
             self.live_reporting = False
         elif int(os.getenv("CANARY_LEVEL", "0")) > 0:
             self.live_reporting = False
@@ -514,9 +515,48 @@ class ResourceQueueExecutor:
         return 1.0
 
 
-class LiveReporter:
+class Reporter:
     def __init__(self, executor: ResourceQueueExecutor) -> None:
         self.executor = executor
+        style = config.getoption("console_style") or {}
+        self.namefmt = style.get("name", "short")
+
+    def final_table(self) -> Group:
+        xtor = self.executor
+        text = xtor.queue.status(start=xtor.started_on)
+        footer = Table(expand=True, show_header=False, box=None)
+        footer.add_column("stats")
+        footer.add_row(text)
+        table = Table(expand=False, box=box.SQUARE)
+        table.add_column("Job")
+        table.add_column("ID")
+        table.add_column("Status")
+        table.add_column("Queued")
+        table.add_column("Elapsed")
+        table.add_column("Details")
+        cases = xtor.queue.cases()
+        for case in cases:
+            if case.status.category == "PASS":
+                continue
+            queued = case.timekeeper.queued()
+            elapsed = case.timekeeper.duration()
+            table.add_row(
+                case.display_name(style="rich", resolve=self.namefmt == "long"),
+                case.id[:7],
+                case.status.display_name(style="rich"),
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                case.status.reason or "",
+            )
+        if not table.row_count:
+            n = len(cases)
+            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
+        return Group(table, footer)
+
+
+class LiveReporter(Reporter):
+    def __init__(self, executor: ResourceQueueExecutor) -> None:
+        super().__init__(executor)
         console = Console(file=sys.stdout, force_terminal=True)
         self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
         # Logging control
@@ -524,8 +564,6 @@ class LiveReporter:
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
         self._stop = threading.Event()
         self.refresh_interval = 0.25
-        style = config.getoption("console_style") or {}
-        self.namefmt = style.get("name", "short")
 
     def __enter__(self):
         self.mute_stream_handlers()
@@ -565,38 +603,6 @@ class LiveReporter:
             if self.executor.inflight:
                 self.live.update(self.dynamic_table(), refresh=True)
             self._stop.wait(self.refresh_interval)
-
-    def final_table(self) -> Group:
-        xtor = self.executor
-        text = xtor.queue.status(start=xtor.started_on)
-        footer = Table(expand=True, show_header=False, box=None)
-        footer.add_column("stats")
-        footer.add_row(text)
-        table = Table(expand=False, box=box.SQUARE)
-        table.add_column("Job")
-        table.add_column("ID")
-        table.add_column("Status")
-        table.add_column("Queued")
-        table.add_column("Elapsed")
-        table.add_column("Details")
-        cases = xtor.queue.cases()
-        for case in cases:
-            if case.status.category == "PASS":
-                continue
-            queued = case.timekeeper.queued()
-            elapsed = case.timekeeper.duration()
-            table.add_row(
-                case.display_name(style="rich", resolve=self.namefmt == "long"),
-                case.id[:7],
-                case.status.display_name(style="rich"),
-                f"{queued:5.1f}s",
-                f"{elapsed:5.1f}s",
-                case.status.reason or "",
-            )
-        if not table.row_count:
-            n = len(cases)
-            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
-        return Group(table, footer)
 
     def dynamic_table(self) -> Group:
         xtor = self.executor
@@ -672,11 +678,9 @@ class LiveReporter:
         return Group(table, footer)
 
 
-class EventReporter:
+class EventReporter(Reporter):
     def __init__(self, executor: ResourceQueueExecutor) -> None:
-        style = config.getoption("console_style") or {}
-        self.namefmt = style.get("name", "short")
-        self.executor = executor
+        super().__init__(executor)
         self.table = StaticTable()
         maxnamelen: int = -1
         for s in executor.queue._heap:
@@ -709,7 +713,7 @@ class EventReporter:
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        self.print_summary()
+        rprint(self.final_table())
         self.executor.remove_listener(self.on_event)
 
     def print_summary(self) -> None:
