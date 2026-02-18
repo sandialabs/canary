@@ -85,6 +85,7 @@ class JobFunctor:
                 raise
             finally:
                 logging.clear_handlers()
+                h.close()
 
 
 class ResourceQueueExecutor:
@@ -210,6 +211,10 @@ class ResourceQueueExecutor:
         for file in self._store.pop("json_file_handlers", []):
             h = logging.json_file_handler(file)
             logging.add_handler(h)
+        logging_queue: mp.Queue | None
+        if logging_queue := self._store.pop("logging_queue", None):
+            logging_queue.close()
+            logging_queue.join_thread()
 
     def run(self, **kwargs: Any) -> int:
         """Main loop: get jobs from queue and launch processes."""
@@ -335,6 +340,9 @@ class ResourceQueueExecutor:
                     slot.job.set_status(status="TIMEOUT", reason=reason)
                     slot.job.measurements.update(measurements)
                     slot.job.save()
+                    slot.queue.close()
+                    slot.proc.join(timeout=0.01)
+                    slot.proc.close()
                 except Exception:
                     logger.exception(f"Failed joining timed-out process {pid}")
 
@@ -400,7 +408,9 @@ class ResourceQueueExecutor:
                 slot.job.set_status(status="ERROR", reason="Post-processing failure")
             finally:
                 try:
+                    slot.queue.close()
                     slot.proc.join(timeout=0.01)  # Clean up the process
+                    slot.proc.close()
                 except Exception:  # nosec B110
                     pass
                 logger.debug(
@@ -474,7 +484,9 @@ class ResourceQueueExecutor:
                         logger.exception(f"Failed saving job {slot.job.id[:7]}")
 
                 try:
+                    slot.queue.close()
                     slot.proc.join(timeout=0.1)
+                    slot.proc.close()
                 except Exception:
                     logger.exception(f"Failed joining process {pid}")
 
@@ -494,13 +506,6 @@ class ResourceQueueExecutor:
                     slot.proc.kill()
             except Exception:
                 logger.exception(f"Failed force-killing process {pid}")
-
-        # Clean up
-        for pid, slot in inflight:
-            try:
-                slot.proc.join(timeout=0.1)
-            except Exception:  # nosec B110
-                pass
 
         self.finished.update(inflight)
         self.queue.clear("CANCELLED" if signum == signal.SIGINT else "ERROR")
