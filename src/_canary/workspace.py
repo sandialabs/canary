@@ -203,7 +203,8 @@ class Workspace:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        logger.info(f"[bold]Initializing[/] empty canary workspace at {path}")
+        wspath = path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
+        logger.info(f"[bold]Initializing[/] empty canary workspace at {wspath}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)
         if self.root.exists():

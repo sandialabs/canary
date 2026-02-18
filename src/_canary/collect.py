@@ -3,11 +3,13 @@
 # SPDX-License-Identifier: MIT
 import argparse
 import dataclasses
+import fnmatch
 import json
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 from typing import Iterator
@@ -176,8 +178,13 @@ class Collector:
             if dir not in self.skip_dirs:
                 self.skip_dirs.append(dir)
 
+    @lru_cache
     def skip(self, dirname: str) -> bool:
-        return os.path.basename(dirname) in self.skip_dirs
+        name = os.path.basename(dirname)
+        for pat in self.skip_dirs:
+            if fnmatch.fnmatchcase(name, pat):
+                return True
+        return False
 
     def add_scanpaths(self, scanpaths: dict[str, list[str]]) -> None:
         for root, paths in scanpaths.items():
@@ -245,7 +252,15 @@ class Collector:
 
 @hookimpl
 def canary_collectstart(collector: "Collector") -> None:
-    dirs = ["__pycache__", ".git", ".svn", ".hg", config.get("view") or "TestResults"]
+    dirs = [
+        "__pycache__",
+        ".git",
+        ".svn",
+        ".hg",
+        ".canary",
+        ".canary.*",
+        config.get("view") or "TestResults",
+    ]
     collector.add_skip_dirs(dirs)
 
 
