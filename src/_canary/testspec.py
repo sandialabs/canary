@@ -104,10 +104,6 @@ class BaseSpec(Generic[T]):
             self.timeout = self._default_timeout()
         if self.xstatus is None:
             self.xstatus = 0
-        if "cpus" not in self.parameters | self.meta_parameters:
-            self.meta_parameters["cpus"] = 1
-        if "gpus" not in self.parameters | self.meta_parameters:
-            self.meta_parameters["gpus"] = 0
         self.meta_parameters["runtime"] = self.timeout
         if not self.id:
             self.id = build_spec_id(self)

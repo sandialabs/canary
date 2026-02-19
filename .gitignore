@@ -19,6 +19,7 @@ __pycache__
 .mypy_cache
 partition.p.*
 canary.cfg
+.canary.*
 scripts/sbatch
 docs/source/commands.rst
 

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import MutableMapping
-from typing import cast
 
 from . import config
 from .error import TestDiffed
@@ -26,6 +25,7 @@ from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
+from .util import cpu_count
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
@@ -313,14 +313,14 @@ class TestCase:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
             stat = "XDIFF" if xstatus == Status.code_for_status["DIFFED"] else "DIFFED"
-            default_reason: str | None = None
+            default_reason = None
             if stat == "DIFFED":
                 default_reason = "Empty TestDiffed exception raised during execution"
             self.status.set(status=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
             f_status = Status.code_for_status["FAILED"]
             stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
-            default_reason: str | None = None
+            default_reason = None
             if stat == "FAILED":
                 default_reason = "Empty TestFailed exception raised during execution"
             self.status.set(status=stat, reason=None if not e.args else e.args[0])
@@ -465,46 +465,37 @@ class TestCase:
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
         """Default parameters used to set up resources required by test case"""
-        rparameters: dict[str, int] = {}
-        rparameters.update({"cpus": 1, "gpus": 0, "nodes": 1})
         resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
-        parameters = self.spec.parameters | self.spec.meta_parameters
-        assert "cpus" in parameters, "Expected cpus to be in spec.parameters or meta_parameters"
-        assert "gpus" in parameters, "Expected cpus to be in spec.parameters or meta_parameters"
-        for key, value in parameters.items():
-            if key in resource_types and not isinstance(value, int):
+        p = self.spec.parameters | self.spec.meta_parameters
+        rparameters: dict[str, int] = {}
+        for key in p.keys() & resource_types:
+            value = p[key]
+            if not isinstance(value, int):
                 raise InvalidTypeError(key, value)
+            rparameters[key] = value
+
+        # Make sure required resource parameters exist
+        cpus: int | None = rparameters.get("cpus")
+        gpus: int | None = rparameters.get("gpus")
+        nodes: int | None = rparameters.get("nodes")
         rpcount = config.pluginmanager.hook.canary_resource_pool_count
-        if "nodes" in parameters:
-            nodes = cast(int, parameters["nodes"])
-            rparameters["nodes"] = int(nodes)
-            rparameters["cpus"] = max(nodes * rpcount(type="cpu"), parameters["cpus"])
-            rparameters["gpus"] = max(nodes * rpcount(type="gpu"), parameters["gpus"])
-        if "cpus" in parameters:
-            cpus = cast(int, parameters["cpus"])
-            rparameters["cpus"] = max(int(cpus), rparameters["cpus"])
-            if "nodes" not in parameters:
-                cpu_count = rpcount(type="cpu")
-                node_count = rpcount(type="node")
-                cpus_per_node = math.ceil(cpu_count / node_count)
-                if cpus_per_node > 0:
-                    nodes = max(rparameters["nodes"], math.ceil(cpus / cpus_per_node))
-                    rparameters["nodes"] = max(nodes, rparameters["nodes"])
-        if "gpus" in parameters:
-            gpus = cast(int, parameters["gpus"])
-            rparameters["gpus"] = max(int(gpus), rparameters["gpus"])
-            if "nodes" not in parameters:
-                gpu_count = rpcount(type="gpu")
-                node_count = rpcount(type="node")
-                gpus_per_node = math.ceil(gpu_count / node_count)
-                if gpus_per_node > 0:
-                    nodes = max(rparameters["nodes"], math.ceil(gpus / gpus_per_node))
-                    rparameters["nodes"] = max(nodes, rparameters["nodes"])
-        # We have already done validation, now just fill in missing resource types
-        resource_types -= {"nodes", "cpus", "gpus"}
-        for key, value in parameters.items():
-            if key in resource_types:
-                rparameters[key] = int(value)
+        cpus_per_node: int = rpcount(type="cpu") or cpu_count()
+        gpus_per_node: int = rpcount(type="gpu") or 0
+        if nodes is not None:
+            if cpus is None:
+                cpus = nodes * cpus_per_node
+            if gpus is None:
+                gpus = nodes * gpus_per_node
+        else:
+            if cpus is None:
+                cpus = 1
+            if gpus is None:
+                gpus = 0
+            nodes = max(1, ceil_div(cpus, cpus_per_node))
+            if gpus_per_node > 0:
+                nodes = max(nodes, ceil_div(gpus, gpus_per_node))
+        assert cpus is not None and gpus is not None and nodes is not None
+        rparameters.update({"cpus": cpus, "gpus": gpus, "nodes": nodes})
         return rparameters
 
     def teardown(self) -> None:
@@ -715,6 +706,11 @@ def find_cache_dir(start: Path) -> Path | None:
             return d / "cache"
         d = d.parent
     return None
+
+
+def ceil_div(a: int, b: int) -> int:
+    assert b != 0, "denominator must not be 0"
+    return (a + b - 1) // b
 
 
 class MissingSourceError(Exception):

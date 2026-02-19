@@ -22,16 +22,16 @@ class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
         config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
-        config = TestBatch.loadconfig(workspace)
-        self.session: str = config["session"]
-        self.batch: str = config["id"]
-        assert workspace == config["workspace"]
-        self.workspace = Path(config["workspace"])
+        cfg = TestBatch.loadconfig(workspace)
+        self.session: str = cfg["session"]
+        self.batch: str = cfg["id"]
+        assert workspace == cfg["workspace"]
+        self.workspace = Path(cfg["workspace"])
         self.cases: list[str] = []
         if case is not None:
             self.cases.append(case)
         else:
-            self.cases.extend(config["cases"])
+            self.cases.extend(cfg["cases"])
         if "CANARY_BATCH_ID" not in os.environ:
             os.environ["CANARY_BATCH_ID"] = self.batch
         elif self.batch != os.environ["CANARY_BATCH_ID"]:

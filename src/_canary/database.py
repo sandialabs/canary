@@ -184,8 +184,8 @@ class WorkspaceDatabase:
                 spec.dependencies = deps
             view = Path(spec.execpath) / spec.file.name
             source = spec.file
-            deps = [dep.id for dep in spec.dependencies]
-            return spec.id, blob, source.as_posix(), view.as_posix(), deps
+            dep_ids = [dep.id for dep in spec.dependencies]
+            return spec.id, blob, source.as_posix(), view.as_posix(), dep_ids
 
         data = []
         with ThreadPoolExecutor() as ex:

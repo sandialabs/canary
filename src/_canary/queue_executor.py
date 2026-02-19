@@ -184,7 +184,7 @@ class ResourceQueueExecutor:
         self.started_on = -1.0
         self._stop_mp_logging()
 
-    def _start_mp_logging(self):
+    def _start_mp_logging(self) -> None:
         self._store["logging_queue"] = logging_queue = mp.Queue(-1)
         root = logging.get_logger("root")
         handlers: list[logging.builtin_logging.Handler] = []
@@ -394,7 +394,7 @@ class ResourceQueueExecutor:
 
         for pid, result in finished_pids.items():
             # Slot should be in either running or submitted (not both)
-            slot = self.running.pop(pid, None) or self.submitted.pop(pid)
+            slot = self.running.pop(pid, None) or self.submitted.pop(pid)  # type: ignore
             assert pid not in self.running, "pid unexpectedly remains in running container"
             assert pid not in self.submitted, "pid unexpectedly remains in submitted container"
             self.finished[pid] = slot
@@ -727,15 +727,16 @@ class EventReporter(Reporter):
         logger.info(text, extra={"prefix": ""})
 
     def on_event(self, event: str, *args, **kwargs) -> None:
+        slot: ExecutionSlot
         match event:
             case "job_submitted":
-                slot: ExecutionSlot = args[0]
+                slot = args[0]
                 self.on_job_submit(slot)
             case "job_started":
-                slot: ExecutionSlot = args[0]
+                slot = args[0]
                 self.on_job_start(slot)
             case "job_finished":
-                slot: ExecutionSlot = args[0]
+                slot = args[0]
                 self.on_job_finish(slot)
             case _:
                 pass

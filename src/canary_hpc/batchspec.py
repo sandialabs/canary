@@ -334,7 +334,7 @@ class TestBatch:
             t = case.timekeeper.finished
             return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
-        total_duration = self.timekeeper.duration
+        total_duration = self.timekeeper.duration()
         duration: float | None = total_duration if total_duration > 0 else None
         running: float | None = None
         time_in_queue: float | None = None
