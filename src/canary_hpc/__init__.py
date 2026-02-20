@@ -63,6 +63,11 @@ class HPC(canary.CanarySubcommand):
         p = subparsers.add_parser("exec", help="Execute (run) the batch")
         CanaryHPCExecutor.setup_parser(p)
 
+        p = subparsers.add_parser("info", help="Show HPC scheduler basic info")
+        p.add_argument(
+            "canary_hpc_backend", metavar="backend", help="Show information on this backend"
+        )
+
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
             "--spec",
@@ -79,6 +84,12 @@ class HPC(canary.CanarySubcommand):
             conductor = CanaryHPCConductor(backend=scheduler)
             conductor.register(canary.config.pluginmanager)
             return conductor.run(args)
+        elif args.hpc_cmd == "info":
+            name = args.canary_hpc_backend
+            config = hpc_connect.Config.from_defaults(overrides=dict(backend=name))
+            backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+            print(backend.describe())
+            return 0
         elif args.hpc_cmd == "exec":
             # Batch is being executed within an allocation
             # register the CanaryHPCExector plugin so that executor.runtests is registered
