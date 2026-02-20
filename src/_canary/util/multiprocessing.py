@@ -10,6 +10,7 @@ import multiprocessing.reduction
 import multiprocessing.shared_memory
 import os
 import pickle  # nosec B403
+import signal
 import sys
 import time
 import traceback
@@ -19,6 +20,7 @@ from queue import Empty
 from tempfile import NamedTemporaryFile
 from typing import Any
 from typing import Callable
+from typing import Literal
 from typing import Sequence
 
 import psutil
@@ -31,6 +33,47 @@ default_cpu_count = 8
 builtin_map = map
 
 logger = logging.get_logger(__name__)
+
+
+StartMethod = Literal["fork", "forkserver", "spawn"]
+
+
+def get_context(method: StartMethod | None = None) -> multiprocessing.context.BaseContext:
+    """
+    Return a multiprocessing context.
+
+    - If `method` is None: return the process-wide default context
+      (whatever was set by initialize()).
+    - If `method` is provided: return that specific context.
+
+    This is the safest way to avoid touching private symbols like
+    multiprocessing.context._default_context.
+    """
+    if method is None:
+        return multiprocessing.get_context()
+    return multiprocessing.get_context(method)
+
+
+def default_start_method() -> str:
+    """Best-effort reporting of the active default start method."""
+    try:
+        return multiprocessing.get_start_method()
+    except RuntimeError:
+        # start method not set yet (rare in your code since initialize() sets it)
+        return "unset"
+
+
+def recommended_start_method() -> StartMethod:
+    """
+    Mirror your initialize() logic but just *return* the recommendation
+    (does not mutate global state).
+    """
+    if var := os.getenv("CANARY_MULTIPROCESSING_START_METHOD"):
+        return var  # type: ignore[return-value]
+    # Prefer forkserver on Linux when send_handle is available (same as initialize()).
+    if multiprocessing.reduction.HAVE_SEND_HANDLE and sys.platform != "darwin":
+        return "forkserver"
+    return "spawn"
 
 
 def put_in_shared_memory(obj: Any) -> tuple[str, int]:
@@ -53,13 +96,7 @@ def unlink_shared_memory(name: str) -> None:
 
 
 def initialize() -> None:
-    start_method: str
-    if var := os.getenv("CANARY_MULTIPROCESSING_START_METHOD"):
-        start_method = var
-    elif multiprocessing.reduction.HAVE_SEND_HANDLE and sys.platform != "darwin":
-        start_method = "forkserver"
-    else:
-        start_method = "spawn"
+    start_method: str = recommended_start_method()
     multiprocessing.set_start_method(start_method, force=True)
     p = multiprocessing.Process(target=_noop)
     p.start()
@@ -71,35 +108,95 @@ def _noop():
 
 
 class SimpleQueue(multiprocessing.queues.SimpleQueue):
-    def __init__(self) -> None:
-        super().__init__(ctx=multiprocessing.context._default_context)
+    def __init__(self, ctx: multiprocessing.context.BaseContext | None = None) -> None:
+        super().__init__(ctx=ctx or multiprocessing.context._default_context)
 
 
 class Queue(multiprocessing.queues.Queue):
-    def __init__(self, maxsize: int = 0) -> None:
-        super().__init__(maxsize=maxsize, ctx=multiprocessing.context._default_context)
+    def __init__(
+        self, maxsize: int = 0, ctx: multiprocessing.context.BaseContext | None = None
+    ) -> None:
+        super().__init__(maxsize=maxsize, ctx=ctx or multiprocessing.context._default_context)
 
 
-class MeasuredProcess(multiprocessing.Process):
+class MeasuredProcess:
     """A Process subclass that collects resource usage metrics using psutil.
     Metrics are sampled each time is_alive() is called.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        target: Callable[..., Any],
+        ctx: multiprocessing.context.BaseContext | None = None,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+        name: str | None = None,
+        daemon: bool | None = None,
+    ):
+        self.ctx = ctx or multiprocessing.context._default_context
+        self.proc: multiprocessing.Process = self.ctx.Process(
+            target=target, args=args, kwargs=kwargs or {}, name=name
+        )
+        if daemon is not None:
+            self.proc.daemon = daemon
+
         self.samples = []
         self._psutil_process = None
         self._start_time = None
 
+    @property
+    def pid(self) -> int | None:
+        return self.proc.pid
+
+    @property
+    def name(self) -> str:
+        return self.proc.name
+
     def start(self):
         """Start the process and initialize psutil monitoring."""
-        super().start()
+        self.proc.start()
         self._start_time = time.time()
         try:
-            self._psutil_process = psutil.Process(self.pid)
+            self._psutil_process = psutil.Process(self.proc.pid)
         except Exception:
-            logger.warning(f"Could not attach psutil to process {self.pid}")
+            logger.warning(f"Could not attach psutil to process {self.proc.pid}")
             self._psutil_process = None
+
+    def join(self, timeout: float | None = None) -> None:
+        self.proc.join(timeout=timeout)
+
+    def close(self) -> None:
+        close = getattr(self.proc, "close", None)
+        if callable(close):
+            close()
+
+    def kill(self) -> None:
+        # Prefer Process.kill() if present
+        k = getattr(self.proc, "kill", None)
+        if callable(k):
+            k()
+            return
+        if self.pid is not None:
+            os.kill(self.pid, signal.SIGKILL)
+
+    def terminate(self) -> None:
+        t = getattr(self.proc, "terminate", None)
+        if callable(t):
+            t()
+            return
+        if self.pid is not None:
+            os.kill(self.pid, signal.SIGTERM)
+
+    def exitcode(self) -> int | None:
+        return self.proc.exitcode
+
+    def is_alive(self) -> bool:
+        alive = self.proc.is_alive()
+        if alive:
+            self._sample_metrics()
+        return alive
+
+    # --- measurement API --------------------------------------------------
 
     def _sample_metrics(self):
         """Sample current process metrics."""
@@ -130,49 +227,46 @@ class MeasuredProcess(multiprocessing.Process):
             # Process may have terminated
             pass
         except Exception as e:
-            logger.debug(f"Error sampling metrics: {e}")
+            logger.debug(f"Error sampling metrics for pid={self.pid}: {e}")
 
-    def is_alive(self):
-        """Check if process is alive and sample metrics."""
-        alive = super().is_alive()
-        if alive:
-            self._sample_metrics()
-        return alive
-
-    def get_measurements(self):
+    def get_measurements(self) -> dict[str, Any]:
         """Calculate statistics from collected samples.
         Returns a dict with min, max, avg for each metric.
         """
+        duration = time.time() - self._start_time if self._start_time else 0.0
+        measurements = {"duration": duration, "samples": len(self.samples)}
         if not self.samples:
-            return {
-                "duration": time.time() - self._start_time if self._start_time else 0,
-                "samples": 0,
-            }
-
-        measurements = {
-            "duration": time.time() - self._start_time if self._start_time else 0,
-            "samples": len(self.samples),
-        }
-
-        # Calculate stats for each metric
+            return measurements
         metrics = ["cpu_percent", "memory_rss_mb", "memory_vms_mb", "num_threads"]
-
         for metric in metrics:
             values = [s[metric] for s in self.samples if metric in s]
             if values:
                 measurements.setdefault(metric, {})["min"] = min(values)
                 measurements.setdefault(metric, {})["max"] = max(values)
                 measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
-
         return measurements
 
     def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
         logger.debug(f"Terminating process {self.pid}")
         self._sample_metrics()
-        if self.pid is not None:
+        if self.pid is None:
+            return
+        try:
             os.kill(self.pid, signum)
+        except Exception:
+            try:
+                self.terminate()
+            except Exception:  # nosec B110
+                pass
         time.sleep(grace_period)
-        self.kill()
+        try:
+            if self.is_alive():
+                self.kill()
+        except Exception:
+            try:
+                self.kill()
+            except Exception:  # nosec B110
+                pass
 
 
 def get_process_metrics(
