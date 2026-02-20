@@ -98,6 +98,14 @@ class CanaryHPCConductor:
             return node_count * type_per_node
 
     @canary.hookimpl
+    def canary_resource_pool_count_per_node(self, type: str) -> int:
+        try:
+            return self.backend.count_per_node(type)
+        except ValueError:
+            return 0
+        return 0
+
+    @canary.hookimpl
     def canary_resource_pool_types(self) -> list[str]:
         return self.available_resource_types
 

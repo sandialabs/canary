@@ -468,7 +468,7 @@ class TestCase:
         resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
         p = self.spec.parameters | self.spec.meta_parameters
         rparameters: dict[str, int] = {}
-        for key in p.keys() & resource_types:
+        for key in p.keys() & (resource_types | {"nodes"}):
             value = p[key]
             if not isinstance(value, int):
                 raise InvalidTypeError(key, value)
@@ -478,7 +478,7 @@ class TestCase:
         cpus: int | None = rparameters.get("cpus")
         gpus: int | None = rparameters.get("gpus")
         nodes: int | None = rparameters.get("nodes")
-        rpcount = config.pluginmanager.hook.canary_resource_pool_count
+        rpcount = config.pluginmanager.hook.canary_resource_pool_count_per_node
         cpus_per_node: int = rpcount(type="cpu") or cpu_count()
         gpus_per_node: int = rpcount(type="gpu") or 0
         if nodes is not None:

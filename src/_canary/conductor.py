@@ -51,6 +51,11 @@ class CanaryConductor:
         return rpool.count(type)
 
     @hookimpl(trylast=True)
+    def canary_resource_pool_count_per_node(self, type: "str") -> int:
+        rpool = self.get_rpool()
+        return rpool.count(type)
+
+    @hookimpl(trylast=True)
     def canary_resource_pool_types(self) -> list[str]:
         rpool = self.get_rpool()
         return rpool.types
