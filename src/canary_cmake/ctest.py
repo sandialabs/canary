@@ -10,6 +10,7 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
+from typing import TextIO
 
 import schema
 
@@ -138,6 +139,29 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         return resolved
 
 
+class CTestLauncher(canary.Launcher):
+    def run(self, case: "canary.TestCase") -> int:
+        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
+        cwd = case.spec.attributes["execution_directory"]
+        args = case.spec.attributes["command"]
+        env: dict[str, str] = {k: v for k, v in case.variables.items() if v is not None}
+        case.add_measurement("command_line", shlex.join(args))
+        stdout = open(case.stdout, "a")
+        stderr: TextIO | int
+        if case.stderr is None:
+            stderr = subprocess.STDOUT
+        else:
+            stderr = open(case.stderr, "a")
+        try:
+            cp = subprocess.run(args, env=env, cwd=cwd, stdout=stdout, stderr=stderr, check=False)
+        finally:
+            stdout.close()
+            if isinstance(stderr, io.TextIOWrapper):
+                stderr.close()
+        logger.debug(f"Finished {case.display_name()}")
+        return cp.returncode
+
+
 def create_draft_spec(
     *,
     file_root: str,
@@ -201,6 +225,8 @@ def create_draft_spec(
         kwargs.setdefault("parameters", {})["cpus"] = processors
     elif np := parse_np(command):
         kwargs.setdefault("parameters", {})["cpus"] = np
+    else:
+        kwargs.setdefault("parameters", {})["cpus"] = 1
     if depends:
         deps = kwargs.setdefault("dependencies", [])
         for d in depends:

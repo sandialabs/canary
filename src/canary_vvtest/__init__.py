@@ -11,6 +11,7 @@ import typing
 
 import canary
 
+from .generator import VVTLauncher
 from .generator import VVTTestGenerator
 
 logger = canary.get_logger(__name__)
@@ -58,7 +59,7 @@ def canary_runteststart(case: "canary.TestCase") -> None:
 @canary.hookimpl
 def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
     if case.spec.file.suffix == ".vvt":
-        return canary.PythonFileLauncher()
+        return VVTLauncher()
     return None
 
 

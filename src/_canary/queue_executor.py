@@ -245,7 +245,7 @@ class ResourceQueueExecutor:
         queue: ResourceQueue,
         executor: Callable,
         max_workers: int = -1,
-        busy_wait_time: float = 0.05,
+        busy_wait_time: float = 0.01,
     ):
         nproc = cpu_count()
         self.max_workers = max_workers if max_workers > 0 else math.ceil(0.85 * nproc)
@@ -420,7 +420,7 @@ class ResourceQueueExecutor:
                             raise TimeoutError(
                                 f"Test session exceeded time out of {session_timeout} s."
                             )
-                        time.sleep(0.01)
+                        time.sleep(self.busy_wait_time)
 
                     job = self.queue.get()
                     qrank += 1
@@ -581,7 +581,7 @@ class ResourceQueueExecutor:
                 raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
             self._check_finished_processes()
             self._check_for_leaks()
-            time.sleep(0.05)
+            time.sleep(self.busy_wait_time)
 
     def _terminate_all(self, signum: int) -> None:
         stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
@@ -715,10 +715,15 @@ class LiveReporter(Reporter):
 
     def dynamic_table(self) -> Group:
         xtor = self.executor
+        now = time.time()
+
+        # ---- Footer ----
         text = xtor.queue.status(start=xtor.started_on)
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
+
+        # ---- Main Table ----
         table = Table(expand=False, box=box.SQUARE)
         table.add_column("Job")
         table.add_column("ID")
@@ -727,26 +732,56 @@ class LiveReporter(Reporter):
         table.add_column("Elapsed")
         table.add_column("Rank")
 
-        max_rows: int = 30
-        num_inflight = len(xtor.inflight)
-        if num_inflight < max_rows:
-            n = max_rows - num_inflight
-            for slot in sorted(xtor.finished.values(), key=lambda x: x.qrank)[-n:]:
-                queued = slot.started - slot.spawned
-                elapsed = slot.finished - slot.spawned
-                table.add_row(
-                    slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-                    slot.job.id[:7],
-                    slot.job.status.display_name(style="rich"),
-                    f"{queued:5.1f}s",
-                    f"{elapsed:5.1f}s",
-                    f"{slot.qrank}/{slot.qsize}",
-                )
+        max_rows = 30
+        rows_used = 0
 
-        now = time.time()
-        for slot in sorted(xtor.running.values(), key=lambda x: x.qrank):
+        # ---------------------------------------------------------
+        # 1) FINISHED (recent only, time-decay)
+        # ---------------------------------------------------------
+        decay_window = 8.0  # seconds to keep finished visible
+        max_finished = 5   # hard cap
+
+        recent_finished = [
+            s for s in xtor.finished.values()
+            if now - s.finished < decay_window
+        ]
+
+        # Most recent first
+        recent_finished.sort(key=lambda s: s.finished, reverse=True)
+
+        for slot in recent_finished[:max_finished]:
+            if rows_used >= max_rows:
+                break
+
+            queued = slot.started - slot.spawned
+            elapsed = slot.finished - slot.spawned
+
+            table.add_row(
+                slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
+                slot.job.id[:7],
+                slot.job.status.display_name(style="rich"),
+                f"{queued:5.1f}s",
+                f"{elapsed:5.1f}s",
+                f"{slot.qrank}/{slot.qsize}",
+            )
+            rows_used += 1
+
+        # ---------------------------------------------------------
+        # 2) RUNNING (longest-running first for stability)
+        # ---------------------------------------------------------
+        running = sorted(
+            xtor.running.values(),
+            key=lambda s: now - s.spawned,
+            reverse=True,
+        )
+
+        for slot in running:
+            if rows_used >= max_rows:
+                break
+
             queued = slot.started - slot.spawned
             elapsed = now - slot.spawned
+
             table.add_row(
                 slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
                 slot.job.id[:7],
@@ -755,10 +790,23 @@ class LiveReporter(Reporter):
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
+            rows_used += 1
 
-        now = time.time()
-        for slot in sorted(xtor.submitted.values(), key=lambda x: x.qrank):
-            queued = elapsed = now - slot.spawned
+        # ---------------------------------------------------------
+        # 3) SUBMITTED
+        # ---------------------------------------------------------
+        submitted = sorted(
+            xtor.submitted.values(),
+            key=lambda s: s.qrank,
+        )
+
+        for slot in submitted:
+            if rows_used >= max_rows:
+                break
+
+            queued = now - slot.spawned
+            elapsed = queued
+
             table.add_row(
                 slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
                 slot.job.id[:7],
@@ -767,18 +815,25 @@ class LiveReporter(Reporter):
                 f"{elapsed:5.1f}s",
                 f"{slot.qrank}/{slot.qsize}",
             )
+            rows_used += 1
 
-        if table.row_count < max_rows:
+        # ---------------------------------------------------------
+        # 4) PENDING
+        # ---------------------------------------------------------
+        if rows_used < max_rows:
             for job in xtor.queue.pending():
+                if rows_used >= max_rows:
+                    break
+
                 table.add_row(
                     job.display_name(style="rich", resolve=self.namefmt == "long"),
                     job.id[:7],
                     "[magenta]PENDING[/]",
                     "NA",
                     "NA",
+                    "",
                 )
-                if table.row_count >= max_rows:
-                    break
+                rows_used += 1
 
         if not table.row_count:
             return Group("")
