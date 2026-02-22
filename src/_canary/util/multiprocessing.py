@@ -193,12 +193,12 @@ class MeasuredProcess:
     def is_alive(self) -> bool:
         alive = self.proc.is_alive()
         if alive:
-            self._sample_metrics()
+            self.sample_metrics()
         return alive
 
     # --- measurement API --------------------------------------------------
 
-    def _sample_metrics(self):
+    def sample_metrics(self):
         """Sample current process metrics."""
         if not psutil or not self._psutil_process:
             return
@@ -248,7 +248,7 @@ class MeasuredProcess:
 
     def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
         logger.debug(f"Terminating process {self.pid}")
-        self._sample_metrics()
+        self.sample_metrics()
         if self.pid is None:
             return
         try:

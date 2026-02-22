@@ -110,7 +110,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         def set_starttime(future):
             now = time.time()
             batch.timekeeper.started = now
-            queue.put(("STARTED", now))
+            queue.put({"event": "STARTED", "timestamp": now})
 
         def set_jobid(future):
             batch.jobid = future.jobid
@@ -167,7 +167,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 class HPCConnectSeriesRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
         def set_starttime(future):
-            queue.put(("STARTED", time.time()))
+            queue.put({"event": "STARTED", "timestamp": time.time()})
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         rc: int = -1

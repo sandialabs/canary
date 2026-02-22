@@ -78,7 +78,9 @@ class JobFunctor:
             logger.debug(f"Job {job}: job functor exited normally")
         finally:
             try:
-                result_queue.put(("FINISHED", job.getstate()))
+                result_queue.put(
+                    {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
+                )
             except Exception:
                 logger.exception("Failed to put job state into queue")
                 raise
@@ -172,34 +174,23 @@ def worker_main(
             now = time.time()
             if now - last_sample >= metric_sample_period:
                 try:
-                    _ = proc.is_alive()  # samples metrics in MeasuredProcess wrapper
+                    proc.sample_metrics()
                 except Exception:  # nosec B110
                     pass
                 last_sample = now
 
             # Try to read one event with a short timeout
+            payload: dict[str, Any] = {"job_id": job_id, "worker_id": worker_id}
             try:
-                tag, payload = local_q.get(timeout=0.05)
+                payload.update(local_q.get(timeout=0.05))
             except QueueEmpty:
-                tag = None
-                payload = None
-
-            if tag == "SUBMITTED":
-                event_q.put((job_id, "SUBMITTED", float(payload), worker_id))
-                continue
-
-            if tag == "STARTED":
-                event_q.put((job_id, "STARTED", float(payload), worker_id))
-                continue
-
-            if tag == "FINISHED":
-                state = payload
-                measurements = proc.get_measurements()
-                event_q.put((job_id, "FINISHED", state, measurements, worker_id))
-                break
-
-            if tag is not None:
-                event_q.put((job_id, "WARN", (tag, payload), worker_id))
+                pass
+            else:
+                if payload.get("event") == "FINISHED":
+                    payload["measurements"] = proc.get_measurements()
+                event_q.put(payload)
+                if payload.get("event") == "FINISHED":
+                    break
                 continue
 
             # No event this tick: enforce timeout / detect death
@@ -212,7 +203,8 @@ def worker_main(
                     proc.shutdown(signal.SIGTERM, grace_period=0.05)
                 except Exception:  # nosec B110
                     pass
-                event_q.put((job_id, "TIMEOUT", measurements, worker_id))
+                payload.update({"event": "TIMEOUT", "measurements": measurements})
+                event_q.put(payload)
                 break
 
             if not proc.is_alive():
@@ -221,7 +213,8 @@ def worker_main(
                     measurements = proc.get_measurements()
                 except Exception:
                     measurements = {}
-                event_q.put((job_id, "DIED", measurements, worker_id))
+                payload.update({"event": "DIED", "measurements": measurements})
+                event_q.put(payload)
                 break
 
             time.sleep(poll_sleep)
@@ -473,89 +466,90 @@ class ResourceQueueExecutor:
 
         while True:
             try:
-                job_id, tag, *rest = self.event_q.get_nowait()
+                payload = self.event_q.get_nowait()
             except QueueEmpty:
                 break
+
+            job_id: str = payload["job_id"]
+            wid: int = payload["worker_id"]
 
             slot = self.slots_by_id.get(job_id)
             if slot is None:
                 continue
 
-            if tag == "SUBMITTED":
-                ts, _wid = rest
-                slot.submitted = float(ts)
-                self.notify_listeners("job_submitted", slot)
-                continue
+            if event := payload.get("event"):
+                if event == "SUBMITTED":
+                    slot.submitted = float(payload["timestamp"])
+                    self.notify_listeners("job_submitted", slot)
+                    continue
 
-            if tag == "STARTED":
-                ts, _wid = rest
-                slot.started = float(ts)
-                self.running[job_id] = slot
-                self.submitted.pop(job_id, None)
-                self.notify_listeners("job_started", slot)
-                continue
+                if event == "STARTED":
+                    slot.started = float(payload["timestamp"])
+                    self.running[job_id] = slot
+                    self.submitted.pop(job_id, None)
+                    self.notify_listeners("job_started", slot)
+                    continue
 
-            if tag == "FINISHED":
-                state, measurements, wid = rest
-                slot.finished = time.time()
-                try:
-                    slot.job.setstate(state)
-                    slot.job.measurements.update(measurements)
-                    slot.job.save()
-                except Exception:
-                    logger.exception(f"Post-processing failed for job {slot.job}")
-                    slot.job.set_status(status="ERROR", reason="Post-processing failure")
+                if event == "FINISHED":
+                    slot.finished = time.time()
                     try:
+                        slot.job.setstate(payload["state"])
+                        slot.job.measurements.update(payload["measurements"])
                         slot.job.save()
-                    except Exception:  # nosec B110
-                        pass
-                finally:
+                    except Exception:
+                        logger.exception(f"Post-processing failed for job {slot.job}")
+                        slot.job.set_status(status="ERROR", reason="Post-processing failure")
+                        try:
+                            slot.job.save()
+                        except Exception:  # nosec B110
+                            pass
+                    finally:
+                        self.finished[job_id] = slot
+                        self.running.pop(job_id, None)
+                        self.submitted.pop(job_id, None)
+                        self.queue.done(slot.job)
+                        self.notify_listeners("job_finished", slot)
+                        self.busy_workers.pop(wid, None)
+                        self.idle_workers.append(wid)
+                    continue
+
+                if event == "TIMEOUT":
+                    slot.finished = time.time()
+                    total_timeout = slot.job.timeout * self.timeout_multiplier
+                    slot.job.set_status(
+                        status="TIMEOUT",
+                        reason=f"Job timed out after {total_timeout} s.",
+                    )
+                    slot.job.measurements.update(payload["measurements"])
+                    slot.job.save()
+
                     self.finished[job_id] = slot
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
                     self.queue.done(slot.job)
                     self.notify_listeners("job_finished", slot)
-                    self.busy_workers.pop(int(wid), None)
-                    self.idle_workers.append(int(wid))
-                continue
+                    self.busy_workers.pop(wid, None)
+                    self.idle_workers.append(wid)
+                    continue
 
-            if tag == "TIMEOUT":
-                measurements, wid = rest
-                slot.finished = time.time()
-                total_timeout = slot.job.timeout * self.timeout_multiplier
-                slot.job.set_status(
-                    status="TIMEOUT",
-                    reason=f"Job timed out after {total_timeout} s.",
-                )
-                slot.job.measurements.update(measurements)
-                slot.job.save()
+                if event == "DIED":
+                    slot.finished = time.time()
+                    slot.job.set_status(
+                        status="ERROR", reason="Worker job process died unexpectedly"
+                    )
+                    slot.job.measurements.update(payload["measurements"])
+                    slot.job.save()
 
-                self.finished[job_id] = slot
-                self.running.pop(job_id, None)
-                self.submitted.pop(job_id, None)
-                self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
-                self.busy_workers.pop(int(wid), None)
-                self.idle_workers.append(int(wid))
-                continue
+                    self.finished[job_id] = slot
+                    self.running.pop(job_id, None)
+                    self.submitted.pop(job_id, None)
+                    self.queue.done(slot.job)
+                    self.notify_listeners("job_finished", slot)
+                    self.busy_workers.pop(wid, None)
+                    self.idle_workers.append(wid)
+                    continue
 
-            if tag == "DIED":
-                measurements, wid = rest
-                slot.finished = time.time()
-                slot.job.set_status(status="ERROR", reason="Worker job process died unexpectedly")
-                slot.job.measurements.update(measurements)
-                slot.job.save()
-
-                self.finished[job_id] = slot
-                self.running.pop(job_id, None)
-                self.submitted.pop(job_id, None)
-                self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
-                self.busy_workers.pop(int(wid), None)
-                self.idle_workers.append(int(wid))
-                continue
-
-            logger.warning(f"Unexpected worker event for {job_id[:7]}: {tag} {rest}")
+            logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")
 
     def _check_for_leaks(self) -> None:
         # NOTE: still reads queue internals; ideally ResourceQueue should provide a safe accessor.
@@ -739,12 +733,9 @@ class LiveReporter(Reporter):
         # 1) FINISHED (recent only, time-decay)
         # ---------------------------------------------------------
         decay_window = 8.0  # seconds to keep finished visible
-        max_finished = 5   # hard cap
+        max_finished = 5  # hard cap
 
-        recent_finished = [
-            s for s in xtor.finished.values()
-            if now - s.finished < decay_window
-        ]
+        recent_finished = [s for s in xtor.finished.values() if now - s.finished < decay_window]
 
         # Most recent first
         recent_finished.sort(key=lambda s: s.finished, reverse=True)

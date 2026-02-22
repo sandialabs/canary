@@ -241,7 +241,7 @@ class TestBatch:
         rc: int | None = -1
         try:
             logger.debug(f"Submitting batch {self.id[:7]}")
-            queue.put(("SUBMITTED", time.time()))
+            queue.put({"event": "SUBMITTED", "timestamp": time.time()})
             self.timekeeper.submitted = time.time()
             try:
                 rc = runner.execute(self, queue=queue)
