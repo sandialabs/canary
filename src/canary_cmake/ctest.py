@@ -226,7 +226,7 @@ def create_draft_spec(
     elif np := parse_np(command):
         kwargs.setdefault("parameters", {})["cpus"] = np
     else:
-        kwargs.setdefault("parameters", {})["cpus"] = 1
+        kwargs.setdefault("meta_parameters", {})["cpus"] = 1
     if depends:
         deps = kwargs.setdefault("dependencies", [])
         for d in depends:
