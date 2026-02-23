@@ -302,7 +302,7 @@ class ResourceQueueExecutor:
         common_kwargs: dict[str, Any] = {}
 
         # Start persistent workers once (use global default context)
-        ctx = mp.get_context()
+        ctx = mp.get_context("spawn")
         for wid in range(self.max_workers):
             task_q = mp.Queue(-1)
             proc = ctx.Process(  # type: ignore
