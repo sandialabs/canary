@@ -218,8 +218,6 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         specs = file.lock()
         spec_map = {spec.name: spec for spec in specs}
-        print(specs)
-        print(spec_map)
 
         tests_done = spec_map["testsDone"]
         foo_only = spec_map["fooOnly"]
