@@ -61,7 +61,6 @@ class ResourceQueue:
         self._heap: list[HeapSlot] = []
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
-        self._dependents: dict[str, list[JobProtocol]] = {}
         self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
         self.prepared = False
@@ -91,7 +90,6 @@ class ResourceQueue:
             slot = HeapSlot(job=job)
             heapq.heappush(self._heap, slot)
             logger.debug(f"Job {job.id[:7]} added to queue with cost {-slot.cost}")
-            self._dependents[job.id] = list(job.dependencies)
 
     def get(self) -> JobProtocol:
         with self.lock:
@@ -172,20 +170,9 @@ class ResourceQueue:
                     self.exclusive_job_id = None
                     logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
                 self.rpool.checkin(job.free_resources())
-                self.update_pending(job)
                 logger.debug(f"Job {job.id[:7]} marked done")
         except Exception:
             logger.exception(f"Failed to mark {job.id[:7]} as done")
-
-    def update_pending(self, finished_job: Any) -> None:
-        """Update dependencies of jobs still in the heap."""
-        dependents = self._dependents.get(finished_job.id)
-        if not dependents:
-            return
-        for job in dependents:
-            for i, dep in enumerate(job.dependencies):
-                if dep.id == finished_job.id:
-                    job.dependencies[i] = finished_job
 
     def cases(self) -> list[JobProtocol]:
         """Return all jobs in queue, busy, and finished."""

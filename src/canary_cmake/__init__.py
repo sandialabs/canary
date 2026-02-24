@@ -17,6 +17,7 @@ from schema import Use
 import canary
 
 from .cdash import CDashReporter
+from .ctest import CTestLauncher
 from .ctest import CTestTestGenerator
 from .ctest import finish_ctest
 from .ctest import read_resource_specs
@@ -46,7 +47,7 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
 @canary.hookimpl
 def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
     if case.spec.file.suffix == ".cmake":
-        return canary.SubprocessLauncher(["./runtest.sh"])
+        return CTestLauncher()
     return None
 
 
