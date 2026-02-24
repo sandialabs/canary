@@ -45,6 +45,7 @@ class JobProtocol(Protocol):
     status: StatusProtocol
     runtime: float
     timeout: float
+    queue_timeout: float
     timekeeper: "Timekeeper"
 
     def __str__(self) -> str: ...

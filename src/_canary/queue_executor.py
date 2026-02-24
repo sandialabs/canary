@@ -153,6 +153,7 @@ def worker_main(
         if msg is None:
             return
 
+        job: JobProtocol
         job, per_job_kwargs = msg
         job_id = job.id
 
@@ -167,7 +168,7 @@ def worker_main(
         proc.start()
 
         t0 = time.time()
-        hard_deadline = t0 + job.timeout * timeout_multiplier
+        hard_deadline = t0 + job.queue_timeout + job.timeout * timeout_multiplier
 
         while True:
             # Periodic metric sampling independent of events
@@ -491,6 +492,7 @@ class ResourceQueueExecutor:
                     continue
 
                 if event == "FINISHED":
+                    # STARTED event sent by worker process
                     slot.finished = time.time()
                     try:
                         slot.job.setstate(payload["state"])
@@ -520,6 +522,9 @@ class ResourceQueueExecutor:
                         status="TIMEOUT",
                         reason=f"Job timed out after {total_timeout} s.",
                     )
+                    slot.job.timekeeper.submitted = slot.submitted
+                    slot.job.timekeeper.started = slot.started
+                    slot.job.timekeeper.finished = slot.finished
                     slot.job.measurements.update(payload["measurements"])
                     slot.job.save()
 
@@ -537,6 +542,9 @@ class ResourceQueueExecutor:
                     slot.job.set_status(
                         status="ERROR", reason="Worker job process died unexpectedly"
                     )
+                    slot.job.timekeeper.submitted = slot.submitted
+                    slot.job.timekeeper.started = slot.started
+                    slot.job.timekeeper.finished = slot.finished
                     slot.job.measurements.update(payload["measurements"])
                     slot.job.save()
 

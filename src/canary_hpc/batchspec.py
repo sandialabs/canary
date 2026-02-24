@@ -155,8 +155,11 @@ class TestBatch:
 
     @property
     def timeout(self) -> float:
-        queue_timeout = canary.config.getoption("canary_hpc_queue_timeout") or 30 * 60
-        return queue_timeout + self.estimated_runtime()
+        return self.estimated_runtime()
+
+    @property
+    def queue_timeout(self) -> float:
+        return canary.config.getoption("canary_hpc_queue_timeout") or 30 * 60
 
     def estimated_runtime(self) -> float:
         if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):

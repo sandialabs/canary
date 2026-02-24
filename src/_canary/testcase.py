@@ -91,6 +91,10 @@ class TestCase:
         return self.spec.timeout
 
     @property
+    def queue_timeout(self) -> float:
+        return 0.25
+
+    @property
     def attributes(self) -> dict[str, Any]:
         return self.spec.attributes
 

@@ -105,7 +105,10 @@ class TestCaseExecutor:
             queue.put({"event": "SUBMITTED", "timestamp": now})
             case.timekeeper.submitted = now
             config.pluginmanager.hook.canary_runteststart(case=case)
-            queue.put({"event": "STARTED", "timestamp": time.time()})
+            now = time.time()
+            queue.put({"event": "STARTED", "timestamp": now})
+            case.timekeeper.started = now
             config.pluginmanager.hook.canary_runtest(case=case)
+            case.timekeeper.finished = time.time()
         finally:
             config.pluginmanager.hook.canary_runtest_finish(case=case)
