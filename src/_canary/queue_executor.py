@@ -81,45 +81,44 @@ class JobFunctor:
         max_retries = 3
         retry_delay = [0.1, 0.5, 1.0]  # exponential backoff
 
-        for attempt in range(max_retries):
-            try:
-                executor(job, queue=result_queue, **kwargs)
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Job {job}: attempt {attempt + 1} failed, retrying in {retry_delay[attempt]}s",
-                        exc_info=e,
-                    )
-                    time.sleep(retry_delay[attempt])
-                    continue
-                # Final attempt failed
-                logger.exception(
-                    f"Job {job}: all {max_retries} attempts failed - exception occurred during execution"
-                )
-                job.set_status(
-                    status="ERROR", reason=f"Failed after {max_retries} attempts: {repr(e)}"
-                )
-                sys.exit(1)
-            finally:
+        try:
+            for attempt in range(max_retries):
                 try:
-                    result_queue.put(
-                        {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
-                    )
+                    executor(job, queue=result_queue, **kwargs)
+                    break
                 except Exception as e:
-                    logger.exception(f"Failed to put job state into queue for job {job}: {str(e)}")
-                    raise
-                finally:
-                    logging.clear_handlers()
-                    h.close()
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Job {job}: attempt {attempt + 1} failed, retrying in {retry_delay[attempt]}s - {str(e)}")
+                        time.sleep(retry_delay[attempt])
+                        continue
+                    # Final attempt failed
+                    logger.exception(f"Job {job}: all {max_retries} attempts failed - exception occurred during execution")
+                    job.set_status(status="ERROR", reason=f"Failed after {max_retries} attempts: {repr(e)}")
+                    sys.exit(1)
+            else:
+                # Success - no exception was raised in any attempt
+                pass
+
+            logger.debug(f"Job {job}: job functor exited normally")
+        finally:
+            try:
+                result_queue.put(
+                    {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
+                )
+            except Exception as e:
+                logger.exception(f"Failed to put job state into queue for job {job}: {str(e)}")
+                raise
+            finally:
+                logging.clear_handlers()
+                h.close()
 
     def _validate_job(self, job: JobProtocol) -> None:
         """Validate job data structure before processing."""
         if not job or not job.id:
-            raise ValueError("Invalid job: missing required fields")
-        if not hasattr(job, "timeout") or job.timeout <= 0:
+            raise ValueError(f"Invalid job: missing required fields")
+        if not hasattr(job, 'timeout') or job.timeout <= 0:
             raise ValueError(f"Invalid job timeout: {getattr(job, 'timeout', 'missing')}")
-        if not hasattr(job, "queue_timeout") or job.queue_timeout < 0:
+        if not hasattr(job, 'queue_timeout') or job.queue_timeout < 0:
             raise ValueError(f"Invalid queue timeout: {getattr(job, 'queue_timeout', 'missing')}")
 
 
