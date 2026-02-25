@@ -68,25 +68,59 @@ class JobFunctor:
         logging.clear_handlers()
         h = logging.QueueHandler(logging_queue)
         logging.add_handler(h)
+
+        # Validate job data before processing
         try:
-            executor(job, queue=result_queue, **kwargs)
-        except BaseException as e:
-            logger.exception(f"Job {job}: exception occurred during execution of job functor")
-            job.set_status(status="ERROR", reason=repr(e))
+            self._validate_job(job)
+        except Exception as e:
+            logger.error(f"Job {job}: validation failed - {str(e)}")
+            job.set_status(status="ERROR", reason=f"Validation failed: {str(e)}")
             sys.exit(1)
-        else:
-            logger.debug(f"Job {job}: job functor exited normally")
-        finally:
+
+        # Execute with retry mechanism for transient failures
+        max_retries = 3
+        retry_delay = [0.1, 0.5, 1.0]  # exponential backoff
+
+        for attempt in range(max_retries):
             try:
-                result_queue.put(
-                    {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
+                executor(job, queue=result_queue, **kwargs)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Job {job}: attempt {attempt + 1} failed, retrying in {retry_delay[attempt]}s",
+                        exc_info=e,
+                    )
+                    time.sleep(retry_delay[attempt])
+                    continue
+                # Final attempt failed
+                logger.exception(
+                    f"Job {job}: all {max_retries} attempts failed - exception occurred during execution"
                 )
-            except Exception:
-                logger.exception("Failed to put job state into queue")
-                raise
+                job.set_status(
+                    status="ERROR", reason=f"Failed after {max_retries} attempts: {repr(e)}"
+                )
+                sys.exit(1)
             finally:
-                logging.clear_handlers()
-                h.close()
+                try:
+                    result_queue.put(
+                        {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
+                    )
+                except Exception as e:
+                    logger.exception(f"Failed to put job state into queue for job {job}: {str(e)}")
+                    raise
+                finally:
+                    logging.clear_handlers()
+                    h.close()
+
+    def _validate_job(self, job: JobProtocol) -> None:
+        """Validate job data structure before processing."""
+        if not job or not job.id:
+            raise ValueError("Invalid job: missing required fields")
+        if not hasattr(job, "timeout") or job.timeout <= 0:
+            raise ValueError(f"Invalid job timeout: {getattr(job, 'timeout', 'missing')}")
+        if not hasattr(job, "queue_timeout") or job.queue_timeout < 0:
+            raise ValueError(f"Invalid queue timeout: {getattr(job, 'queue_timeout', 'missing')}")
 
 
 def inner_ctx() -> Any:
@@ -259,6 +293,10 @@ class ResourceQueueExecutor:
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
         self.listeners: list[Callable[..., None]] = []
 
+        # Synchronization primitives to replace busy waiting
+        self._worker_available = threading.Condition()
+        self._all_jobs_done = threading.Condition()
+
         # worker infrastructure
         self.workers: list[dict[str, Any]] = []
         self.idle_workers: list[int] = []
@@ -404,17 +442,19 @@ class ResourceQueueExecutor:
                     self._check_finished_processes()
                     self._check_for_leaks()
 
-                    # Wait for an idle worker
-                    while not self.idle_workers:
-                        self._check_finished_processes()
-                        self._check_for_leaks()
-                        if session_timeout >= 0.0 and time.time() - start > session_timeout:
-                            self._terminate_all(signal.SIGUSR2)
+                    # Wait for an idle worker using condition variable
+                    with self._worker_available:
+                        while not self.idle_workers:
+                            self._check_finished_processes()
                             self._check_for_leaks()
-                            raise TimeoutError(
-                                f"Test session exceeded time out of {session_timeout} s."
-                            )
-                        time.sleep(self.busy_wait_time)
+                            if session_timeout >= 0.0 and time.time() - start > session_timeout:
+                                self._terminate_all(signal.SIGUSR2)
+                                self._check_for_leaks()
+                                raise TimeoutError(
+                                    f"Test session exceeded time out of {session_timeout} s."
+                                )
+                            # Wait with timeout to allow periodic checks
+                            self._worker_available.wait(timeout=self.busy_wait_time)
 
                     job = self.queue.get()
                     qrank += 1
@@ -513,6 +553,15 @@ class ResourceQueueExecutor:
                         self.notify_listeners("job_finished", slot)
                         self.busy_workers.pop(wid, None)
                         self.idle_workers.append(wid)
+
+                        # Notify that a worker became available
+                        with self._worker_available:
+                            self._worker_available.notify()
+
+                        # Check if all jobs are done
+                        if not self.inflight:
+                            with self._all_jobs_done:
+                                self._all_jobs_done.notify_all()
                     continue
 
                 if event == "TIMEOUT":
@@ -535,6 +584,15 @@ class ResourceQueueExecutor:
                     self.notify_listeners("job_finished", slot)
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
+
+                    # Notify that a worker became available
+                    with self._worker_available:
+                        self._worker_available.notify()
+
+                    # Check if all jobs are done
+                    if not self.inflight:
+                        with self._all_jobs_done:
+                            self._all_jobs_done.notify_all()
                     continue
 
                 if event == "DIED":
@@ -555,6 +613,15 @@ class ResourceQueueExecutor:
                     self.notify_listeners("job_finished", slot)
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
+
+                    # Notify that a worker became available
+                    with self._worker_available:
+                        self._worker_available.notify()
+
+                    # Check if all jobs are done
+                    if not self.inflight:
+                        with self._all_jobs_done:
+                            self._all_jobs_done.notify_all()
                     continue
 
             logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")
@@ -574,16 +641,18 @@ class ResourceQueueExecutor:
             raise StuckQueueError(f"Terminal jobs still busy: {terminal_busy}")
 
     def _wait_all(self, start: float, timeout: float) -> None:
-        while True:
-            if not self.inflight:
-                break
-            if timeout >= 0.0 and time.time() - start > timeout:
-                self._terminate_all(signal.SIGUSR2)
+        with self._all_jobs_done:
+            while True:
+                if not self.inflight:
+                    break
+                if timeout >= 0.0 and time.time() - start > timeout:
+                    self._terminate_all(signal.SIGUSR2)
+                    self._check_for_leaks()
+                    raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
+                self._check_finished_processes()
                 self._check_for_leaks()
-                raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
-            self._check_finished_processes()
-            self._check_for_leaks()
-            time.sleep(self.busy_wait_time)
+                # Wait with timeout to allow periodic checks
+                self._all_jobs_done.wait(timeout=self.busy_wait_time)
 
     def _terminate_all(self, signum: int) -> None:
         stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
