@@ -465,6 +465,7 @@ def no_proxy():
     keys = ("http_proxy", "https_proxy", "ftp_proxy", "no_proxy")
     for key in keys:
         os.environ.pop(key, None)
+        os.environ.pop(key.upper(), None)
     yield
     os.environ.clear()
     os.environ.update(save_env)
