@@ -124,8 +124,14 @@ class Run(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        request = getattr(args, "request", None) or {
+            "kind": "tag",
+            "payload": config.get("run:default_tag"),
+        }
         work_tree = args.work_tree or os.getcwd()
         if args.wipe_workspace:
+            if request.get("kind") != "scanpaths":
+                raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
             Workspace.remove(work_tree)
         workspace: Workspace
         try:
@@ -138,10 +144,6 @@ class Run(CanarySubcommand):
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
 
-        request = getattr(args, "request", None) or {
-            "kind": "tag",
-            "payload": config.get("run:default_tag"),
-        }
         if request["kind"] == "scanpaths":
             specs = workspace.create_selection(
                 tag=args.tag,
