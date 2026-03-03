@@ -305,7 +305,7 @@ class Workspace:
                 case.workspace.root = session_dir
                 case.workspace.session = session_dir.name
                 if session is not None:
-                    assert case.workspace.session == session, "{case}: unexpected workspace"
+                    assert case.workspace.session == session, f"{case}: unexpected workspace"
             ready.append(case)
 
         s = Session(name=session_dir.name, prefix=session_dir, cases=ready)

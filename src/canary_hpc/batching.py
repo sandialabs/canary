@@ -50,7 +50,10 @@ def batch_testcases(
         for id in ready:
             case = lookup[id]
             assert case.id == id
-            dependencies: list[binpack.Block] = [blocks[dep.id] for dep in case.dependencies]
+            dependencies: list[binpack.Block] = []
+            for dep in case.dependencies:
+                if b := blocks.get(dep.id):
+                    dependencies.append(b)
             blocks[case.id] = binpack.Block(
                 case.id, case.cpus, math.ceil(case.runtime), dependencies=dependencies
             )
