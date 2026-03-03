@@ -88,12 +88,18 @@ class JobFunctor:
                     break
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"Job {job}: attempt {attempt + 1} failed, retrying in {retry_delay[attempt]}s - {str(e)}")
+                        logger.warning(
+                            f"Job {job}: attempt {attempt + 1} failed, retrying in {retry_delay[attempt]}s - {str(e)}"
+                        )
                         time.sleep(retry_delay[attempt])
                         continue
                     # Final attempt failed
-                    logger.exception(f"Job {job}: all {max_retries} attempts failed - exception occurred during execution")
-                    job.set_status(status="ERROR", reason=f"Failed after {max_retries} attempts: {repr(e)}")
+                    logger.exception(
+                        f"Job {job}: all {max_retries} attempts failed - exception occurred during execution"
+                    )
+                    job.set_status(
+                        status="ERROR", reason=f"Failed after {max_retries} attempts: {repr(e)}"
+                    )
                     sys.exit(1)
             else:
                 # Success - no exception was raised in any attempt
@@ -115,10 +121,10 @@ class JobFunctor:
     def _validate_job(self, job: JobProtocol) -> None:
         """Validate job data structure before processing."""
         if not job or not job.id:
-            raise ValueError(f"Invalid job: missing required fields")
-        if not hasattr(job, 'timeout') or job.timeout <= 0:
+            raise ValueError("Invalid job: missing required fields")
+        if not hasattr(job, "timeout") or job.timeout <= 0:
             raise ValueError(f"Invalid job timeout: {getattr(job, 'timeout', 'missing')}")
-        if not hasattr(job, 'queue_timeout') or job.queue_timeout < 0:
+        if not hasattr(job, "queue_timeout") or job.queue_timeout < 0:
             raise ValueError(f"Invalid queue timeout: {getattr(job, 'queue_timeout', 'missing')}")
 
 

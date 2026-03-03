@@ -68,6 +68,21 @@ class CanaryHPCExecutor:
         pool["resources"].clear()
         pool["resources"].update(mypool["resources"])
 
+    @canary.hookimpl(trylast=True)
+    def canary_select_modifyitems(self, selector: "canary.Selector") -> None:
+        # If a test requests just nodes, fill in the additional resources it would require.
+        canonical_name = lambda s: f"{s}s" if not s.endswith("s") else s
+        counts: dict[str, int] = {
+            canonical_name(rtype): self.backend.count_per_node(rtype)
+            for rtype in self.backend.resource_types()
+        }
+        for spec in selector.specs:
+            params = spec.parameters | spec.meta_parameters
+            if node_count := params.get("nodes"):
+                for rtype, count in counts.items():
+                    if rtype not in params:
+                        spec.meta_parameters[rtype] = node_count * count
+
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:
         parser.add_argument(
@@ -83,6 +98,9 @@ class CanaryHPCExecutor:
 
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend
+        # The executor is ran inside of an allocation using the standard canary resource pool.
+        # Since canary does not no about nodes, we need to tell canary that there are node_count *
+        # count_per_node resources for each resource type
         resources: dict[str, list[Any]] = {}
         node_count = self.backend.node_count
         for type in self.backend.resource_types():
