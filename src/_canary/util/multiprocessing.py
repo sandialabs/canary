@@ -31,8 +31,8 @@ from . import logging
 multiprocess_threshold = 100
 default_cpu_count = 8
 builtin_map = map
-
 logger = logging.get_logger(__name__)
+_initialized: bool = False
 
 
 StartMethod = Literal["fork", "forkserver", "spawn"]
@@ -96,11 +96,15 @@ def unlink_shared_memory(name: str) -> None:
 
 
 def initialize() -> None:
+    global _initialized
+    if _initialized:
+        return
     start_method: str = recommended_start_method()
     multiprocessing.set_start_method(start_method, force=True)
     p = multiprocessing.Process(target=_noop)
     p.start()
     p.join()
+    _initialized = True
 
 
 def _noop():

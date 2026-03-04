@@ -7,6 +7,9 @@ import os
 import pytest
 
 import _canary.config
+import _canary.util.multiprocessing as mp
+
+mp.initialize()
 
 
 @pytest.fixture(scope="function", autouse=True)
