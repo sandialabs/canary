@@ -5,9 +5,10 @@ import random
 from typing import Iterable
 
 
-def random_name():
+def random_name(seed: int | None = None):
+    rng = random.Random(seed)
     """Generate a two-part hyphenated name: <adjective>-<noun>"""
-    return f"{random.choice(adjectives)}-{random.choice(nouns)}"
+    return f"{rng.choice(adjectives)}-{rng.choice(nouns)}"
 
 
 def unique_random_name(
@@ -20,7 +21,7 @@ def unique_random_name(
     Raises `ValueError` if unable to generate a unique name
     """
     for _ in range(max_samples):
-        name = random_name()
+        name = random_name(seed)
         if name not in existing_names:
             return name
     else:
