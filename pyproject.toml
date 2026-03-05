@@ -41,7 +41,6 @@ dependencies = [
     "pyyaml",
     "schema",
     "rich",
-    "randomname",
     "typing_extensions; python_version < '3.11'",
 ]
 
