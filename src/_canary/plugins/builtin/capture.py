@@ -37,7 +37,7 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(specname="canary_session_finish", trylast=True)
+@hookimpl(specname="canary_sessionfinish", trylast=True)
 def show_capture(session: "Session") -> None:
     what = config.getoption("show_capture")
     if what in ("no", None):
