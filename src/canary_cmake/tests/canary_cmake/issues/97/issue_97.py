@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 import canary_cmake.ctest as ctg
+from _canary.database import WorkspaceDatabase
 from _canary.util.filesystem import force_remove
 from _canary.util.filesystem import which
-from _canary.database import WorkspaceDatabase
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
