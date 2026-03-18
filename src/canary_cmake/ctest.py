@@ -125,10 +125,12 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             for fixture_name in spec.attributes["fixtures"]["required"]:
                 if fixture_name in setup_fixtures:
                     for fixture in setup_fixtures[fixture_name]:
-                        spec.dependencies.append(fixture)  # type: ignore
+                        if fixture not in spec.dependencies:
+                            spec.dependencies.append(fixture)  # type: ignore
                 if fixture_name in cleanup_fixtures:
                     for fixture in cleanup_fixtures[fixture_name]:
-                        fixture.dependencies.append(spec)  # type: ignore
+                        if spec not in fixture.dependencies:
+                            fixture.dependencies.append(spec)  # type: ignore
 
     def resolve_inter_dependencies(
         self, drafts: list["canary.UnresolvedSpec"]
