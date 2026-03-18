@@ -55,6 +55,10 @@ class CanaryPluginManager(pluggy.PluginManager):
         else:
             self.import_plugin(name)
 
+    def ensure_loaded(self, name: str) -> None:
+        if not self.has_plugin(name):
+            self.import_plugin(name)
+
     def import_plugin(self, name: str) -> None:
         """Import a plugin with ``name``."""
         assert isinstance(name, str), f"module name as text required, got {name!r}"

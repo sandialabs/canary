@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import os
 import typing
 
 from schema import And
@@ -69,10 +70,24 @@ environment_schema = Schema(
         Optional("append-path"): vardict,
     }
 )
-workspace_schema = Schema({Optional("view", default="TestResults"): Or(bool, str, None)})
+
+_view_modes = {"symlink", "hardlink", "copy"}
+workspace_schema = Schema(
+    {
+        Optional("view"): Or(
+            None,  # type: ignore
+            False,  # type: ignore
+            {  # type: ignore
+                Optional("name"): And(str, lambda s: os.pathsep not in s),
+                Optional("mode"): And(str, lambda s: s in _view_modes),
+            },
+        ),
+    }
+)
+
 run_schema = Schema(
     {
-        Optional("default_tag", default=":all:"): str,
+        Optional("default_tag"): str,
         Optional("timeout"): {Optional(str): Use(time_in_seconds)},
     }
 )
@@ -81,7 +96,7 @@ config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
-        Optional("workspace", default={"view": "TestResults"}): workspace_schema,
+        Optional("workspace"): workspace_schema,
         Optional("plugins"): list_of_str,
         Optional("environment"): environment_schema,
         Optional("scratch"): any_schema,
@@ -94,7 +109,7 @@ testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 
 class EnvarSchema(Schema):
     def validate(self, data, is_root_eval=True):
-        data = super().validate(data, is_root_eval=False)
+        data = super().validate(data, is_root_eval=False)  # ty: ignore[invalid-argument-type]
         if is_root_eval:
             validated = {}
             for key, val in data.items():

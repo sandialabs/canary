@@ -430,6 +430,7 @@ class TestCase:
         except (json.JSONDecodeError, FileNotFoundError):
             return
         status = data["status"]
+        self.variables = data["variables"]
         self.status = Status(
             state=status["state"],
             category=status["category"],

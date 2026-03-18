@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import shutil
 import subprocess
-import sys
 import xml.dom.minidom as xml
 
 from _canary.util.filesystem import mkdirp
@@ -34,16 +34,20 @@ def test_cdash_subproject_label(tmpdir):
         run_the_thing_and_check()
 
 
+def find_canary() -> str:
+    f = shutil.which("canary")
+    assert f is not None
+    return f
+
+
 def run_the_thing_and_check():
     env = dict(os.environ)
     env["PYTHONPATH"] = os.getcwd()
     env.pop("CANARYCFG64", None)
     env["CANARY_DISABLE_KB"] = "1"
-    subprocess.run([f"{sys.prefix}/bin/canary", "-p", "baz", "run", "."], env=env)
-    subprocess.run(
-        [f"{sys.prefix}/bin/canary", "-d", "-p", "baz", "report", "cdash", "create"],
-        env=env,
-    )
+    exe = find_canary()
+    subprocess.run([exe, "-p", "baz", "run", "."], env=env)
+    subprocess.run([exe, "-d", "-p", "baz", "report", "cdash", "create"], env=env)
     file = "TestResults/CDASH/Test-0.xml"
     doc = xml.parse(open(file))
     names = get_subproject_labels(doc)

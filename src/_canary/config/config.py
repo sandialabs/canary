@@ -10,7 +10,6 @@ from string import Template
 from typing import IO
 from typing import Any
 from typing import Literal
-from typing import cast
 
 import yaml
 from schema import Optional
@@ -56,7 +55,7 @@ def default_config_values() -> dict[str, Any]:
             "unset": [],
         },
         "workspace": {
-            "view": "TestResults",
+            "view": {"name": "TestResults", "mode": "symlink"},
         },
         "run": {
             "default_tag": ":all:",
@@ -88,7 +87,7 @@ class Config:
         self.data = default_config_values()
         for name in ("site", "global", "local"):
             try:
-                scope = get_config_scope_data(cast(ConfigScopes, name))
+                scope = get_config_scope_data(name)
             except LocalScopeDoesNotExistError:
                 continue
             self.data = merge(self.data, scope)  # type: ignore

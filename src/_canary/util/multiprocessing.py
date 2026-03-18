@@ -22,6 +22,7 @@ from typing import Any
 from typing import Callable
 from typing import Literal
 from typing import Sequence
+from typing import cast
 
 import psutil
 
@@ -138,9 +139,8 @@ class MeasuredProcess:
         daemon: bool | None = None,
     ):
         self.ctx = ctx or multiprocessing.context._default_context
-        self.proc: multiprocessing.Process = self.ctx.Process(
-            target=target, args=args, kwargs=kwargs or {}, name=name
-        )
+        dctx = cast(multiprocessing.context.DefaultContext, self.ctx)
+        self.proc = dctx.Process(target=target, args=args, kwargs=kwargs or {}, name=name)
         if daemon is not None:
             self.proc.daemon = daemon
 
@@ -238,16 +238,17 @@ class MeasuredProcess:
         Returns a dict with min, max, avg for each metric.
         """
         duration = time.time() - self._start_time if self._start_time else 0.0
-        measurements = {"duration": duration, "samples": len(self.samples)}
+        measurements: dict[str, Any] = {"duration": duration, "samples": len(self.samples)}
         if not self.samples:
             return measurements
         metrics = ["cpu_percent", "memory_rss_mb", "memory_vms_mb", "num_threads"]
         for metric in metrics:
             values = [s[metric] for s in self.samples if metric in s]
             if values:
-                measurements.setdefault(metric, {})["min"] = min(values)
-                measurements.setdefault(metric, {})["max"] = max(values)
-                measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
+                m = measurements.setdefault(metric, {})
+                m["min"] = min(values)
+                m["max"] = max(values)
+                m["ave"] = sum(values) / len(values)
         return measurements
 
     def shutdown(self, signum: int, grace_period: float = 0.05) -> None:

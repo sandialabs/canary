@@ -18,8 +18,8 @@ class RPSchema(Schema):
     def rspec(self, count):
         return [{"id": str(j), "slots": 1} for j in range(count)]
 
-    def validate(self, data, is_root_eval=True):
-        data = super().validate(data, is_root_eval=False)
+    def validate(self, data, is_root_eval=True):  # type: ignore
+        data = super().validate(data, is_root_eval=False)  # type: ignore
         if is_root_eval:
             data.setdefault("additional_properties", {})
             for key in list(data.keys()):

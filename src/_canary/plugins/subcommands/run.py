@@ -4,8 +4,11 @@
 
 import argparse
 import os
+from dataclasses import dataclass
+from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 from typing import Optional
 from typing import Sequence
 
@@ -124,13 +127,17 @@ class Run(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        request = getattr(args, "request", None) or {
-            "kind": "tag",
-            "payload": config.get("run:default_tag"),
-        }
+        request: RequestNode
+        if req := getattr(args, "request", None):
+            request = req
+        else:
+            request = TagRequest(value=config.get("run:default_tag"))
+        if isinstance(request, TagRequest) and not request.value:
+            request = TagRequest(value=config.get("run:default_tag"))
+
         work_tree = args.work_tree or os.getcwd()
         if args.wipe_workspace:
-            if request.get("kind") != "scanpaths":
+            if not isinstance(request, ScanPathsRequest):
                 raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
             Workspace.remove(work_tree)
         workspace: Workspace
@@ -144,10 +151,10 @@ class Run(CanarySubcommand):
         # start, specids, runtag, and scanpaths are mutually exclusive
         specs: list["ResolvedSpec"]
 
-        if request["kind"] == "scanpaths":
+        if isinstance(request, ScanPathsRequest):
             specs = workspace.create_selection(
                 tag=args.tag,
-                scanpaths=request["payload"],
+                scanpaths=request.value,
                 on_options=args.on_options,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
@@ -155,8 +162,8 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         else:
-            if request["kind"] == "specids":
-                specids = request["payload"]
+            if isinstance(request, SpecIdsRequest):
+                specids = request.value
                 workspace.db.resolve_spec_ids(specids)
                 sids = [id[:7] for id in specids]
                 if len(sids) > 3:
@@ -164,13 +171,13 @@ class Run(CanarySubcommand):
                 logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
                 specs = rerun.compute_rerun_closure(workspace.db, roots=specids)
                 args.only = "all"
-            elif request["kind"] == "viewpaths":
+            elif isinstance(request, ViewPathsRequest):
                 logger.info("[bold]Running[/] tests from view paths")
-                specs = rerun.get_specs_from_view(workspace.db, prefixes=request["payload"])
+                specs = rerun.get_specs_from_view(workspace.db, prefixes=request.value)
                 args.only = "all"
             else:
-                assert request["kind"] == "tag"
-                tag = request["payload"]
+                assert isinstance(request, TagRequest)
+                tag = request.value
                 logger.info(f"[bold]Running[/] tests in tag {tag}")
                 specs = rerun.get_specs(workspace.db, strategy=args.only, tag=tag)
             workspace.apply_selection_rules(
@@ -180,7 +187,7 @@ class Run(CanarySubcommand):
                 owners=args.owners,
                 regex=args.regex_filter,
             )
-        reuse = request.get("kind") == "viewpaths"
+        reuse = isinstance(request, ViewPathsRequest)
         session = workspace.run(specs, reuse_latest_session=reuse, only=args.only or "not_pass")
         return session.returncode
 
@@ -255,6 +262,67 @@ class WipeAction(argparse.Action):
         setattr(namespace, self.dest, True)
 
 
+ScanPathPayload = dict[str, list[str]]  # root -> [files]; empty list means “scan all”
+ViewPathPayload = list[str]  # e.g. ["rel/path/%", ...]
+SpecIdPayload = list[str]  # full spec ids
+
+
+@dataclass(frozen=True, slots=True)
+class RequestNode:
+    kind: Literal["scanpaths", "viewpaths", "specids", "tag"]
+    value: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ScanPathsRequest(RequestNode):
+    kind: Literal["scanpaths"] = "scanpaths"
+    value: ScanPathPayload = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ViewPathsRequest(RequestNode):
+    kind: Literal["viewpaths"] = "viewpaths"
+    value: ViewPathPayload = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class SpecIdsRequest(RequestNode):
+    kind: Literal["specids"] = "specids"
+    value: SpecIdPayload = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class TagRequest(RequestNode):
+    kind: Literal["tag"] = "tag"
+    value: str = ""
+
+
+@dataclass
+class RequestBuilder:
+    kind: str | None = None
+    scanpaths: ScanPathPayload = field(default_factory=dict)
+    viewpaths: ViewPathPayload = field(default_factory=list)
+    specids: SpecIdPayload = field(default_factory=list)
+    tag: Optional[str] = None
+
+    def require_kind(self, k: str, errors: list[str], what: str) -> None:
+        if self.kind is None:
+            self.kind = k
+        elif self.kind != k:
+            errors.append(f"Cannot mix {self.kind} with {what}")
+
+    def finalize(self) -> RequestNode:
+        if self.kind in (None, "tag"):
+            return TagRequest(value=self.tag or "")
+        if self.kind == "scanpaths":
+            return ScanPathsRequest(value=self.scanpaths)
+        if self.kind == "viewpaths":
+            return ViewPathsRequest(value=self.viewpaths)
+        if self.kind == "specids":
+            return SpecIdsRequest(value=self.specids)
+        raise RuntimeError(f"Unknown request kind: {self.kind!r}")
+
+
 class PathSpec(argparse.Action):
     """Parse the REMAINDER pathspec argument.
 
@@ -274,7 +342,7 @@ class PathSpec(argparse.Action):
     ) -> None:
         assert isinstance(values, list)
 
-        request: dict[str, Any] = setdefault(namespace, "request", {})
+        builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
         script_args: list[str] = setdefault(namespace, "script_args", [])
 
         # Split REMAINDER into script_args (after '--') and items
@@ -302,41 +370,28 @@ class PathSpec(argparse.Action):
 
             # --- Tag ---
             if workspace and workspace.is_tag(item):
-                if request.get("kind", "tag") != "tag":
-                    errors.append(f"Cannot mix {request.get('kind')} with tag {item}")
-                    continue
-                request["kind"] = "tag"
-                request["payload"] = item
+                builder.require_kind("tag", errors, f"tag {item}")
+                builder.tag = item
                 continue
 
             # --- View path ---
             if workspace and (rel_path := workspace.relative_to_view(abspath)):
-                if request.get("kind", "viewpaths") != "viewpaths":
-                    errors.append(f"Cannot mix {request.get('kind')} with viewpaths {abspath}")
-                    continue
-                request["kind"] = "viewpaths"
+                builder.require_kind("viewpaths", errors, f"viewpaths {abspath}")
                 p = rel_path if os.path.isfile(abspath) else rel_path.rstrip("/") + "/%"
-                request.setdefault("payload", []).append(p)
+                builder.viewpaths.append(p)
                 continue
 
             # --- Directory scanpaths ---
             if os.path.isdir(abspath):
-                if request.get("kind", "scanpaths") != "scanpaths":
-                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {abspath}")
-                    continue
-                request["kind"] = "scanpaths"
-                request.setdefault("payload", {})[abspath] = []
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                builder.scanpaths.setdefault(abspath, [])
                 continue
 
             # --- File scanpaths ---
             elif os.path.isfile(abspath):
-                if request.get("kind", "scanpaths") != "scanpaths":
-                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {abspath}")
-                    continue
-                request["kind"] = "scanpaths"
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
                 root, name = os.path.split(abspath)
-                payload: dict[str, list[str]] = request.setdefault("payload", {})
-                payload.setdefault(root, []).append(name)
+                builder.scanpaths.setdefault(root, []).append(name)
                 continue
 
             # --- Version control prefix ---
@@ -345,23 +400,15 @@ class PathSpec(argparse.Action):
                 if not os.path.isdir(path_part):
                     errors.append(f"{path_part}: no such directory")
                     continue
-                if request.get("kind", "scanpaths") != "scanpaths":
-                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {item}")
-                    continue
-                request["kind"] = "scanpaths"
-                payload = request.setdefault("payload", {})
-                payload[item] = []
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                builder.scanpaths.setdefault(item, [])
                 continue
 
             # --- root:name style ---
             if os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
-                if request.get("kind", "scanpaths") != "scanpaths":
-                    errors.append(f"Cannot mix {request.get('kind')} with scanpaths {item}")
-                    continue
-                request["kind"] = "scanpaths"
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
                 root, name = item.split(os.pathsep, 1)
-                payload = request.setdefault("payload", {})
-                payload.setdefault(os.path.abspath(root), []).append(
+                builder.scanpaths.setdefault(os.path.abspath(root), []).append(
                     name.replace(os.pathsep, os.path.sep)
                 )
                 continue
@@ -371,12 +418,8 @@ class PathSpec(argparse.Action):
 
         # --- Handle possible specs ---
         if possible_specs:
-            if workspace is None:
-                errors.append("Spec IDs require an active workspace")
-            elif request.get("kind", "specids") != "specids":
-                errors.append(f"Cannot mix {request.get('kind')} with specids")
-            else:
-                request["kind"] = "specids"
+            if workspace is not None:
+                builder.require_kind("specids", errors, "specids")
                 found_ids: list[str | None] = workspace.find_specids(possible_specs)
                 valid_ids: list[str] = []
                 for i, fid in enumerate(found_ids):
@@ -384,16 +427,21 @@ class PathSpec(argparse.Action):
                         errors.append(f"{possible_specs[i]}: not a valid test identifier")
                     else:
                         valid_ids.append(fid)
-                request.setdefault("payload", []).extend(valid_ids)
+                builder.specids.extend(valid_ids)
+            else:
+                errors.append("Spec IDs require an active workspace")
+
         if errors:
             raise argparse.ArgumentError(self, "\n".join(errors))
 
+        request = builder.finalize()
         setattr(namespace, "request", request)
         setattr(namespace, "script_args", script_args)
         setattr(namespace, self.dest, values)
+
         # backward compat
-        if request.get("kind") == "scanpaths":
-            setattr(namespace, "scanpaths", request["payload"])
+        if isinstance(request, ScanPathsRequest):
+            setattr(namespace, "scanpaths", request.value)
 
     @staticmethod
     def canary_help() -> str:
@@ -433,17 +481,17 @@ class ReadPathsFromFile(argparse.Action):
         option_string: Optional[str] = None,
     ) -> None:
         assert isinstance(values, str)
-        request: dict[str, Any] = setdefault(namespace, "request", {})
-        if request.get("kind", "scanpaths") != "scanpaths":
-            raise argparse.ArgumentError(
-                self, f"Cannot mix {request.get('kind')} with file {values}"
-            )
-        request["kind"] = "scanpaths"
-        request.setdefault("payload", {}).update(self.read_paths(values))
+        builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
+        errors = []
+        builder.require_kind("scanpaths", errors, f"file {values}")
+        if errors:
+            raise argparse.ArgumentError(self, errors[0])
+        builder.scanpaths.update(self.read_paths(values))
+        request = builder.finalize()
         setattr(namespace, "request", request)
         setattr(namespace, self.dest, values)
         # backward compat
-        setattr(namespace, "scanpaths", request["payload"])
+        setattr(namespace, "scanpaths", request.value)
         return
 
     @staticmethod

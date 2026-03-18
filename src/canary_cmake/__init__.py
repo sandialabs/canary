@@ -10,9 +10,7 @@ from typing import Generator
 
 from schema import And
 from schema import Optional
-from schema import Or
 from schema import Schema
-from schema import Use
 
 import canary
 
@@ -194,6 +192,12 @@ def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, A
             pool["resources"]["cpus"] = cpu_spec
 
 
+def to_str_path(x: object) -> str:
+    if isinstance(x, (str, Path)):
+        return str(x)
+    raise TypeError("file must be str or Path")
+
+
 @canary.hookimpl(wrapper=True)
 def canary_cdash_artifacts(
     case: canary.TestCase,
@@ -201,8 +205,10 @@ def canary_cdash_artifacts(
     """Default implementation: return the test case's keywords"""
     schema = Schema(
         {
-            "file": And(Or(str, Path), Use(str)),
-            Optional("when", default="always"): Or("never", "always", "on_success", "on_failure"),
+            "file": And(to_str_path),
+            Optional("when", default="always"): And(
+                str, lambda s: s in {"never", "always", "on_success", "on_failure"}
+            ),
         }
     )
     artifacts = list(case.spec.artifacts) or []
