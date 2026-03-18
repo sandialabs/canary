@@ -69,7 +69,7 @@ environment_schema = Schema(
         Optional("append-path"): vardict,
     }
 )
-workspace_schema = Schema({Optional("view", default="TestResults"): Or(bool, str, None)})
+workspace_schema = Schema({Optional("view", default="TestResults"): Or(bool, str, None)})  # type: ignore
 run_schema = Schema(
     {
         Optional("default_tag", default=":all:"): str,

@@ -6,8 +6,10 @@ import argparse
 import importlib.resources as ir
 import os
 import shutil
+import site
 import subprocess
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -255,8 +257,14 @@ def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
     command: list[str]
-    if x := shutil.which("ty"):
-        command = [x, "check", *args]
+    if ty := shutil.which("ty"):
+        command = [ty, "check", *args]
+        d = Path(site.getusersitepackages())
+        if d.exists():
+            command.insert(2, f"--extra-search-path={d}")
+        d = Path(str(ir.files("hpc_connect"))).parent
+        if d.name == "src" and d.exists():
+            command.insert(2, f"--extra-search-path={d}")
     else:
         command = ["mypy", *args]
     cp = subprocess.run(command, **kwargs)

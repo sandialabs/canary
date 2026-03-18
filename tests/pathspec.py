@@ -37,7 +37,7 @@ def test_pathspec_parse_new(tmpdir):
         p = PathSpec("", "pathspec")
         p(None, args, values)
         d = os.getcwd()
-        assert args.request["payload"] == {
+        assert args.request.value == {
             os.getcwd(): ["bacon"],
             f"{d}/baz": [],
             f"{d}/spam": [],

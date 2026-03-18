@@ -339,7 +339,8 @@ def file_age_in_days(file: str) -> float:
 
 def sortby_mtime(files: list[str]) -> list[str]:
     """Sort the list of ``files`` by ``mtime``."""
-    return sorted(files, key=os.path.getmtime)
+    files.sort(key=os.path.getmtime)
+    return files
 
 
 def touch(path: str) -> None:

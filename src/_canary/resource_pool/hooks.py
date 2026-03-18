@@ -5,8 +5,6 @@
 import argparse
 import os
 import re
-import shutil
-import subprocess
 from collections import Counter
 from typing import TYPE_CHECKING
 from typing import Any
@@ -81,23 +79,6 @@ def initialize_resource_pool_counts(
     if var := os.getenv("CANARY_TESTING_GPUS"):
         gpus = int(var)
     resources["gpus"] = [{"id": str(j), "slots": 1} for j in range(gpus)]
-
-
-@hookimpl(specname="canary_resource_pool_fill")
-def fill_resource_pool_gpu_counts_nvidia(
-    config: "CanaryConfig", pool: dict[str, dict[str, Any]]
-) -> None:
-    if nvidia_smi := shutil.which("nvidia-smi"):
-        gpu_ids: list[str] = []
-        args = [nvidia_smi, "--list-gpus"]
-        try:
-            p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
-            for line in p.stdout.split("\n"):
-                if match := re.search(r"GPU (\d+):", line):
-                    gpu_ids.append(match.group(1))
-            pool["resources"]["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
-        except Exception:
-            logger.debug(f"Failed to determine GPU counts from {nvidia_smi} --list-gpus")
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")

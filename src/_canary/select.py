@@ -113,7 +113,7 @@ class SelectorSnapshot:
         s = Schema(
             {
                 "spec_set_id": str,
-                "masked": Or({str: str}, {}),
+                "masked": Or({str: str}, {}),  # type: ignore
                 "rules": [str],
                 "created_on": str,
             }
