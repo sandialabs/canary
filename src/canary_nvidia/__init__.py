@@ -23,3 +23,9 @@ def canary_resource_pool_fill(config: "canary.Config", pool: dict[str, dict[str,
             resources["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
         except Exception:
             logger.debug(f"Failed to determine GPU counts from '{nvidia_smi} --list-gpus'")
+
+
+@canary.hookimpl
+def canary_runteststart(case: "canary.TestCase"):
+    if case.gpu_ids:
+        case.variables["CUDA_VISIBLE_DEVICES"] = ",".join(str(gpu_id) for gpu_id in case.gpu_ids)

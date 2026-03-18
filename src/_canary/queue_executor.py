@@ -533,6 +533,7 @@ class ResourceQueueExecutor:
                 # STARTED event sent by worker process
                 slot.finished = time.time()
                 try:
+                    slot.job.refresh()
                     slot.job.setstate(payload["state"])
                     slot.job.measurements.update(payload["measurements"])
                     slot.job.save()
@@ -566,6 +567,7 @@ class ResourceQueueExecutor:
                 else:
                     t = slot.job.timeout * self.timeout_multiplier
                     reason = f"Job timed out after {t} s."
+                slot.job.refresh()
                 slot.job.set_status(status="TIMEOUT", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
@@ -584,6 +586,7 @@ class ResourceQueueExecutor:
 
             if event == "DIED":
                 slot.finished = time.time()
+                slot.job.refresh()
                 slot.job.set_status(status="ERROR", reason="Worker job process died unexpectedly")
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
