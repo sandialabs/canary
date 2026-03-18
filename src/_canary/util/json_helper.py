@@ -20,9 +20,15 @@ __all__ = ["JSONDecodeError", "dump", "dumps", "dumps_min", "load", "loads", "tr
 class PathEncoder(json.JSONEncoder):
     def default(self, o):
         from ..paramset import ParameterSet
+        from ..plugins.subcommands.run import RequestBuilder
+        from ..plugins.subcommands.run import RequestNode
 
         if isinstance(o, Path):
             return str(o)
+        elif isinstance(o, RequestBuilder):
+            return vars(o)
+        elif isinstance(o, RequestNode):
+            return {o.kind: o.value}
         elif isinstance(o, ParameterSet):
             return {"keys": o.keys, "values": o.values}
         return json.JSONEncoder.default(self, o)

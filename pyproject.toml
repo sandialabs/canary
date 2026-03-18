@@ -71,6 +71,7 @@ scripts.nvtest = "canary:console_main"
 canary_cmake = "canary_cmake"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
+canary_nvidia = "canary_nvidia"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools.dynamic]
@@ -218,6 +219,7 @@ exclude = [
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/_canary/config/schemas.py",
     "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/testspec.py",  # this file raises a bug in ty
     "src/canary_cmake/tests/*",  # just until we get them fixed
@@ -226,6 +228,10 @@ exclude = [
     "src/_canary/rerun.py",
 ]
 include = ["src", "tests"]
+[tool.ty.rules]
+unused-type-ignore-comment = "ignore"
+unused-ignore-comment = "ignore"
+invalid-method-override = "ignore"
 
 
 [tool.bandit]

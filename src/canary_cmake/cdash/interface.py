@@ -111,11 +111,11 @@ class server:
 
     @staticmethod
     def put(url, file):
-        def get_text(doc, tag):
-            try:
-                return doc.getElementsByTagName(tag)[0].firstChild.data.strip()
-            except AttributeError:
-                return None
+
+        def _get_text(doc, tag):
+            if els := doc.getElementsByTagName(tag):
+                return get_text(els[0])
+            return None
 
         with no_proxy():
             # Proxy settings must be turned off to submit to CDash
@@ -123,13 +123,13 @@ class server:
             curl.add_default_args("-v")
             args = ["--upload-file", file, url]
             efile = "cdash-put-err.txt"
+            payload = {"status": "NA", "message": None, "buildid": None}
             try:
-                payload = {"status": "NA", "message": None, "buildid": None}
                 with open(efile, "w") as fh:
                     result = curl(*args, output=str, error=fh)
                 doc = dom.parseString(result.get_output())
-                payload["status"] = get_text(doc, "status")
-                payload["buildid"] = get_text(doc, "buildId")
+                payload["status"] = _get_text(doc, "status")
+                payload["buildid"] = _get_text(doc, "buildId")
             except xml.parsers.expat.ExpatError as e:
                 payload["message"] = e.args[0]
             finally:
@@ -137,7 +137,7 @@ class server:
                     m = payload["message"]
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}")
                 elif payload["status"] != "OK":
-                    m = payload["message"] = get_text(doc, "message")
+                    m = payload["message"] = _get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
                 if not canary.config.get("debug"):
@@ -175,8 +175,8 @@ class server:
         try:
             result = curl("-k", url, output=str, error=os.devnull)
             doc = dom.parseString(result.get_output())
-            if el := doc.getElementsByTagName("buildid"):
-                buildid = el[0].firstChild.data.strip()
+            if els := doc.getElementsByTagName("buildid"):
+                buildid = get_text(els[0])
             else:
                 buildid = "not found"
         except xml.parsers.expat.ExpatError:
@@ -428,6 +428,10 @@ class server:
         test["time"] = None
         test["timefull"] = None
         return test
+
+
+def get_text(el: dom.Element) -> str:
+    return "".join(n.data for n in el.childNodes if n.nodeType == n.TEXT_NODE).strip()  # ty: ignore[unresolved-attribute]
 
 
 def clean_log_event(event):

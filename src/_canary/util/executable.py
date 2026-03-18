@@ -248,11 +248,11 @@ class _StreamHandler:
         elif fp is str:
             self.temporary = self.owned = True
             self.stream = tempfile.NamedTemporaryFile(mode="w+")
-            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
+            self.name = self.stream.name
         elif isinstance(fp, (str, Path)):
             self.owned = True
             self.stream = open(fp, "w")
-            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
+            self.name = self.stream.name
         else:
             raise TypeError(f"{fp}: unknown input argument type: {type(fp).__class__.__name__}")
 
@@ -261,9 +261,11 @@ class _StreamHandler:
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
         if self.temporary:
+            assert self.stream is not None
             self.stream.seek(0)
             self.value = self.stream.read()
         if self.owned:
+            assert self.stream is not None
             self.stream.close()
 
     def getvalue(self) -> str | None:

@@ -78,7 +78,7 @@ class CanaryConductor:
         The session returncode (0 for success)
 
         """
-        from _canary.queue_executor import ResourceQueueExecutor
+        from .queue_executor import ResourceQueueExecutor
 
         try:
             rpool = self.get_rpool()

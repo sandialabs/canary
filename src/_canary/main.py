@@ -104,6 +104,7 @@ def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int
 class Profiler:
     def __init__(self, nlines: int = -1):
         self.nlines = nlines
+        self.profiler: Any
         try:
             import pyinstrument  # ty: ignore[unresolved-import]
 

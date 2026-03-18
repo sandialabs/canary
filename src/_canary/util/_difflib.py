@@ -82,10 +82,11 @@ def encode(string_like):
 
 def img_diff(file1: str, file2: str, rtol: float = 1e-4) -> None:
     """Diff two images"""
-    # lazy import numpy so that it doesn't slow down importing diffutils if this
-    # function is not needed
-    import numpy as np
-    from imageio import imread
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+        from imageio import imread  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise RuntimeError("img_diff requires optional dependencies: numpy, imageio") from e
 
     if not os.path.exists(file1):
         raise ValueError(f"img_diff: file not found: {file1}")
@@ -106,7 +107,10 @@ def img_diff(file1: str, file2: str, rtol: float = 1e-4) -> None:
 
 def to_grayscale(arr):
     """If arr is a color image (3D array), convert it to grayscale (2D array)."""
-    import numpy as np
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise RuntimeError("to_grayscale requires optional dependencies: numpy") from e
 
     if len(arr.shape) == 3:
         # average over the last axis (color channels)

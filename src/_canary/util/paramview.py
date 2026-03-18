@@ -55,13 +55,16 @@ class Parameters:
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Parameters):
             return self._keys == other._keys and self._values == other._values
-        assert isinstance(other, dict)
+        if not isinstance(other, dict):
+            return NotImplemented
         if len(self._keys) != len(other):
             return False
         for key, value in other.items():
             if key not in self._keys:
                 return False
-            if self._keys[key] != value:
+            assert isinstance(key, str)
+            i = self._keys.index(key)
+            if self._values[i] != value:
                 return False
         return True
 

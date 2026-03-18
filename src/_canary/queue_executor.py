@@ -10,6 +10,9 @@ import sys
 import threading
 import time
 from functools import cached_property
+from multiprocessing.connection import Connection
+from multiprocessing.connection import Pipe
+from multiprocessing.connection import wait
 from pathlib import Path
 from queue import Empty as QueueEmpty
 from typing import Any
@@ -125,7 +128,7 @@ def inner_ctx() -> Any:
 def worker_main(
     worker_id: int,
     task_q: mp.Queue,
-    event_q: mp.Queue,
+    event_conn: Connection,
     logging_queue: mp.Queue,
     config_snapshot: dict[str, Any],
     timeout_multiplier: float,
@@ -169,7 +172,8 @@ def worker_main(
         proc.start()
 
         t0 = time.time()
-        hard_deadline = t0 + job.queue_timeout + job.timeout * timeout_multiplier
+        stage: Literal["STAGED", "SUBMITTED", "QUEUED", "RUNNING", "FINISHED"] = "STAGED"
+        deadline: float = t0 + 5.0 * 60.0
 
         while True:
             # Periodic metric sampling independent of events
@@ -188,15 +192,29 @@ def worker_main(
             except QueueEmpty:
                 pass
             else:
-                if payload.get("event") == "FINISHED":
+                event = payload.get("event")
+                if event == "SUBMITTED":
+                    if stage != "STAGED":
+                        logger.debug(f"Expected stage=STAGED, got {stage=}")
+                    stage = "QUEUED"
+                    deadline = time.time() + job.queue_timeout
+                elif event == "STARTED":
+                    if stage != "QUEUED":
+                        logger.debug(f"Expected stage=QUEUED, got {stage=}")
+                    stage = "RUNNING"
+                    deadline = time.time() + timeout_multiplier * job.timeout
+                elif event == "FINISHED":
+                    if stage != "RUNNING":
+                        logger.debug(f"Expected stage=RUNNING, got {stage=}")
+                    stage = "FINISHED"
                     payload["measurements"] = proc.get_measurements()
-                event_q.put(payload)
-                if payload.get("event") == "FINISHED":
+                event_conn.send(payload)
+                if event == "FINISHED":
                     break
                 continue
 
             # No event this tick: enforce timeout / detect death
-            if proc.is_alive() and time.time() > hard_deadline:
+            if proc.is_alive() and time.time() > deadline:
                 try:
                     measurements = proc.get_measurements()
                 except Exception:
@@ -205,8 +223,9 @@ def worker_main(
                     proc.shutdown(signal.SIGTERM, grace_period=0.05)
                 except Exception:  # nosec B110
                     pass
-                payload.update({"event": "TIMEOUT", "measurements": measurements})
-                event_q.put(payload)
+                event = "QUEUE_TIMEOUT" if stage == "QUEUED" else "TIMEOUT"
+                payload.update({"event": event, "measurements": measurements})
+                event_conn.send(payload)
                 break
 
             if not proc.is_alive():
@@ -216,7 +235,7 @@ def worker_main(
                 except Exception:
                     measurements = {}
                 payload.update({"event": "DIED", "measurements": measurements})
-                event_q.put(payload)
+                event_conn.send(payload)
                 break
 
             time.sleep(poll_sleep)
@@ -262,9 +281,9 @@ class ResourceQueueExecutor:
 
         # worker infrastructure
         self.workers: list[dict[str, Any]] = []
+        self.worker_connections: list[Connection] = []
         self.idle_workers: list[int] = []
         self.busy_workers: dict[int, str] = {}  # worker_id -> job_id
-        self.event_q: mp.Queue | None = None
         self.slots_by_id: dict[str, ExecutionSlot] = {}
 
         style = config.getoption("console_style") or {}
@@ -297,7 +316,6 @@ class ResourceQueueExecutor:
         self._store.clear()
         self._start_mp_logging()
 
-        self.event_q = mp.Queue(-1)
         logging_queue: mp.Queue = self._store["logging_queue"]
         config_snapshot = config.snapshot()
 
@@ -306,13 +324,14 @@ class ResourceQueueExecutor:
         # Start persistent workers once (use global default context)
         ctx = mp.get_context("spawn")
         for wid in range(self.max_workers):
+            parent_conn, child_conn = Pipe(duplex=False)
             task_q = mp.Queue(-1)
             proc = ctx.Process(  # type: ignore
                 target=worker_main,
                 args=(
                     wid,
                     task_q,
-                    self.event_q,
+                    child_conn,
                     logging_queue,
                     config_snapshot,
                     self.timeout_multiplier,
@@ -322,6 +341,7 @@ class ResourceQueueExecutor:
                 kwargs={},
             )
             proc.start()
+            self.worker_connections.append(parent_conn)
             self.workers.append({"id": wid, "task_q": task_q, "proc": proc})
             self.idle_workers.append(wid)
 
@@ -458,77 +478,72 @@ class ResourceQueueExecutor:
             cb(event, *args)
 
     def _check_finished_processes(self) -> None:
+
+        def validate(msg: Any) -> dict[str, Any] | None:
+            if not isinstance(msg, dict):
+                logger.warning("Malformed worker message: %r", msg)
+                return None
+            assert isinstance(msg, dict)
+            if "job_id" not in msg and "worker_id" not in msg:
+                logger.warning("Malformed worker message: %r", msg)
+                return None
+            return msg
+
         self._check_for_leaks()
 
         if Path("canary.kill").exists():
             Path("canary.kill").unlink()
             raise CanaryKill
 
-        assert self.event_q is not None
-
-        while True:
-            try:
-                payload = self.event_q.get_nowait()
-            except QueueEmpty:
-                break
-
-            job_id: str = payload["job_id"]
-            wid: int = payload["worker_id"]
-
-            slot = self.slots_by_id.get(job_id)
-            if slot is None:
+        ready = wait(self.worker_connections, timeout=0)
+        for conn in ready:
+            if not isinstance(conn, Connection):
                 continue
+            msg = conn.recv()
+            if payload := validate(msg):
+                self._handle_worker_payload(payload)
+            while conn.poll(0.0):
+                msg = conn.recv()
+                if payload := validate(msg):
+                    self._handle_worker_payload(payload)
 
-            if event := payload.get("event"):
-                if event == "SUBMITTED":
-                    slot.submitted = float(payload["timestamp"])
-                    self.notify_listeners("job_submitted", slot)
-                    continue
+    def _handle_worker_payload(self, payload: dict[str, Any]) -> None:
 
-                if event == "STARTED":
-                    slot.started = float(payload["timestamp"])
-                    self.running[job_id] = slot
-                    self.submitted.pop(job_id, None)
-                    self.notify_listeners("job_started", slot)
-                    continue
+        job_id: str = payload["job_id"]
+        wid: int = payload["worker_id"]
 
-                if event == "FINISHED":
-                    # STARTED event sent by worker process
-                    slot.finished = time.time()
+        slot = self.slots_by_id.get(job_id)
+        if slot is None:
+            return
+
+        if event := payload.get("event"):
+            if event == "SUBMITTED":
+                slot.submitted = float(payload["timestamp"])
+                self.notify_listeners("job_submitted", slot)
+                return
+
+            if event == "STARTED":
+                slot.started = float(payload["timestamp"])
+                self.running[job_id] = slot
+                self.submitted.pop(job_id, None)
+                self.notify_listeners("job_started", slot)
+                return
+
+            if event == "FINISHED":
+                # STARTED event sent by worker process
+                slot.finished = time.time()
+                try:
+                    slot.job.setstate(payload["state"])
+                    slot.job.measurements.update(payload["measurements"])
+                    slot.job.save()
+                except Exception:
+                    logger.exception(f"Post-processing failed for job {slot.job}")
+                    slot.job.set_status(status="ERROR", reason="Post-processing failure")
                     try:
-                        slot.job.setstate(payload["state"])
-                        slot.job.measurements.update(payload["measurements"])
                         slot.job.save()
-                    except Exception:
-                        logger.exception(f"Post-processing failed for job {slot.job}")
-                        slot.job.set_status(status="ERROR", reason="Post-processing failure")
-                        try:
-                            slot.job.save()
-                        except Exception:  # nosec B110
-                            pass
-                    finally:
-                        self.finished[job_id] = slot
-                        self.running.pop(job_id, None)
-                        self.submitted.pop(job_id, None)
-                        self.queue.done(slot.job)
-                        self.notify_listeners("job_finished", slot)
-                        self.busy_workers.pop(wid, None)
-                        self.idle_workers.append(wid)
-                    continue
-
-                if event == "TIMEOUT":
-                    slot.finished = time.time()
-                    total_timeout = slot.job.timeout * self.timeout_multiplier
-                    slot.job.set_status(
-                        status="TIMEOUT",
-                        reason=f"Job timed out after {total_timeout} s.",
-                    )
-                    slot.job.timekeeper.submitted = slot.submitted
-                    slot.job.timekeeper.started = slot.started
-                    slot.job.timekeeper.finished = slot.finished
-                    slot.job.measurements.update(payload["measurements"])
-                    slot.job.save()
-
+                    except Exception:  # nosec B110
+                        pass
+                finally:
                     self.finished[job_id] = slot
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
@@ -536,27 +551,54 @@ class ResourceQueueExecutor:
                     self.notify_listeners("job_finished", slot)
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
-                    continue
+                return
 
-                if event == "DIED":
-                    slot.finished = time.time()
-                    slot.job.set_status(
-                        status="ERROR", reason="Worker job process died unexpectedly"
-                    )
-                    slot.job.timekeeper.submitted = slot.submitted
-                    slot.job.timekeeper.started = slot.started
-                    slot.job.timekeeper.finished = slot.finished
-                    slot.job.measurements.update(payload["measurements"])
-                    slot.job.save()
+            if event in ("QUEUE_TIMEOUT", "TIMEOUT"):
+                if slot.submitted < 0.0:
+                    slot.submitted = time.time()
+                if slot.started < 0.0:
+                    slot.started = time.time()
+                slot.finished = time.time()
+                reason: str
+                if event == "QUEUE_TIMEOUT":
+                    t = slot.job.queue_timeout
+                    reason = f"Job timed out after waiting in the queue for {t} s."
+                else:
+                    t = slot.job.timeout * self.timeout_multiplier
+                    reason = f"Job timed out after {t} s."
+                slot.job.set_status(status="TIMEOUT", reason=reason)
+                slot.job.timekeeper.submitted = slot.submitted
+                slot.job.timekeeper.started = slot.started
+                slot.job.timekeeper.finished = slot.finished
+                slot.job.measurements.update(payload["measurements"])
+                slot.job.save()
 
-                    self.finished[job_id] = slot
-                    self.running.pop(job_id, None)
-                    self.submitted.pop(job_id, None)
-                    self.queue.done(slot.job)
-                    self.notify_listeners("job_finished", slot)
-                    self.busy_workers.pop(wid, None)
-                    self.idle_workers.append(wid)
-                    continue
+                self.finished[job_id] = slot
+                self.running.pop(job_id, None)
+                self.submitted.pop(job_id, None)
+                self.queue.done(slot.job)
+                self.notify_listeners("job_finished", slot)
+                self.busy_workers.pop(wid, None)
+                self.idle_workers.append(wid)
+                return
+
+            if event == "DIED":
+                slot.finished = time.time()
+                slot.job.set_status(status="ERROR", reason="Worker job process died unexpectedly")
+                slot.job.timekeeper.submitted = slot.submitted
+                slot.job.timekeeper.started = slot.started
+                slot.job.timekeeper.finished = slot.finished
+                slot.job.measurements.update(payload["measurements"])
+                slot.job.save()
+
+                self.finished[job_id] = slot
+                self.running.pop(job_id, None)
+                self.submitted.pop(job_id, None)
+                self.queue.done(slot.job)
+                self.notify_listeners("job_finished", slot)
+                self.busy_workers.pop(wid, None)
+                self.idle_workers.append(wid)
+                return
 
             logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")
 
