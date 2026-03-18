@@ -221,11 +221,9 @@ class Workspace:
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
-        if var := config.get("workspace:view"):
-            if isinstance(var, str):
-                self.view = (self.root.parent / var).resolve()
-            else:
-                self.view = (self.root.parent / "TestResults").resolve()
+        if view_config := config.get("workspace:view"):
+            name: str = view_config.get("name") or "TestResults"
+            self.view = (self.root.parent / name).resolve()
             if self.view.exists():
                 raise FileExistsError(
                     f"Canary requires ownership of existing directory {self.view}. "
@@ -360,6 +358,9 @@ class Workspace:
         """Keep only the latet results"""
         if not self.view:
             return
+        view_config = config.get("workspace:view")
+        if not view_config:
+            return
         logger.info(f"Rebuilding view at {self.root}")
         view: dict[str, tuple[str, str]] = {}
         latest = self.db.get_results()
@@ -379,17 +380,41 @@ class Workspace:
         logger.info(f"[bold]Updating[/] view at {self.view}")
         if self.view is None:
             return
+        view_mode = (config.get("workspace:view:mode") or "symlink").lower()
+        if view_mode not in {"symlink", "hardlink", "copy"}:
+            raise ValueError(
+                f"Invalid workspace:view:mode={view_mode!r} (expected symlink|hardlink|copy)"
+            )
         for root, paths in view_entries.items():
             for path in paths:
                 target = root / path
                 link = self.view / path
                 link.parent.mkdir(parents=True, exist_ok=True)
-                if link.exists():
+                if link.is_symlink() or link.is_file():
                     link.unlink()
-                try:
-                    link.symlink_to(target, target_is_directory=True)
-                except FileExistsError:
-                    pass
+                elif link.is_dir():
+                    force_remove(link)
+                if view_mode == "symlink":
+                    try:
+                        link.symlink_to(target, target_is_directory=True)
+                    except FileExistsError:
+                        pass
+                elif view_mode == "hardlink":
+                    # Mirror the directory tree with hardlinks for files.
+                    # (Hardlinks don't work across filesystems; will raise OSError in that case.)
+                    for src in target.rglob("*"):
+                        rel = src.relative_to(target)
+                        dst = link / rel
+                        if src.is_dir():
+                            dst.mkdir(parents=True, exist_ok=True)
+                            continue
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        if dst.exists() or dst.is_symlink():
+                            dst.unlink()
+                        os.link(src, dst)
+                elif view_mode == "copy":
+                    # Copy the directory tree
+                    shutil.copytree(target, link, dirs_exist_ok=True)
 
     def relative_to_view(self, path: str | os.PathLike[str]) -> str | None:
         """

@@ -55,7 +55,7 @@ def default_config_values() -> dict[str, Any]:
             "unset": [],
         },
         "workspace": {
-            "view": "TestResults",
+            "view": {"name": "TestResults", "mode": "symlink"},
         },
         "run": {
             "default_tag": ":all:",
