@@ -38,7 +38,7 @@ class JobProtocol(Protocol):
     dependencies: list["JobProtocol"]
     exclusive: bool
     gpus: int
-    gpu_ids: list[int]
+    gpu_ids: list[str]
     id: str
     mask: str
     measurements: "Measurements"
