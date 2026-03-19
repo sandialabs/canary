@@ -381,7 +381,10 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
             slots = item["slots"]
             for inst in avail[type]:
                 if inst["slots"] >= slots:
-                    spec.append(f"id:{inst['id']},slots:{inst['slots']}")
+                    id = inst["id"]
+                    if id.startswith(("NVIDIA:", "AMD:")):
+                        id = id.split(":")[1]
+                    spec.append(f"id:{id},slots:{inst['slots']}")
                     inst["slots"] = inst["slots"] - slots
                     break
             else:

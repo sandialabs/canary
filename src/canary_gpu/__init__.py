@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -15,6 +16,10 @@ logger = canary.get_logger(__name__)
 
 class CanaryGPUResourceSelector:
     backend: str | None = None
+
+    def __init__(self) -> None:
+        if "CANARY_GPU_BACKEND" in os.environ:
+            self.backend = os.environ["CANARY_GPU_BACKEND"]
 
     @canary.hookimpl
     def canary_addoption(self, parser: "canary.Parser") -> None:
@@ -30,6 +35,8 @@ class CanaryGPUResourceSelector:
     def canary_configure(self, config: "canary.Config") -> None:
         hint: str = config.getoption("gpu_backend") or "auto"
         self.backend = self.determine_backend(hint)
+        if self.backend:
+            os.environ["CANARY_GPU_BACKEND"] = self.backend
 
     def determine_backend(self, hint: str) -> str | None:
         if hint == "none":
@@ -60,8 +67,7 @@ class CanaryGPUResourceSelector:
             return
         if self.backend == "NVIDIA":
             self._fill_nvidia(resources)
-        elif self.backend == "AMD":
-            self._fill_amd(resources)
+        elif self.backend == "AMD": self._fill_amd(resources)
 
     def _fill_nvidia(self, resources: dict[str, list]) -> None:
         if nvidia_smi := shutil.which("nvidia-smi"):
