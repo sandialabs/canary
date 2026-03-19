@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import dataclasses
-import math
 import os
 import shutil
 import signal
@@ -33,7 +32,6 @@ from .protocols import JobProtocol
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
-from .util import cpu_count
 from .util import logging
 from .util import multiprocessing as mp
 from .util.misc import boolean
@@ -261,11 +259,7 @@ class ResourceQueueExecutor:
         max_workers: int = -1,
         busy_wait_time: float = 0.01,
     ):
-        nproc = cpu_count()
-        self.max_workers = max_workers if max_workers > 0 else math.ceil(0.85 * nproc)
-        if self.max_workers > nproc:
-            logger.warning(f"workers={self.max_workers} > cpu_count={nproc}")
-
+        self.max_workers = mp.max_workers(hint=max_workers)
         self.queue: ResourceQueue = queue
         self.executor = executor
         self.busy_wait_time = busy_wait_time

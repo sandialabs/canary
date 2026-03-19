@@ -39,6 +39,19 @@ _initialized: bool = False
 StartMethod = Literal["fork", "forkserver", "spawn"]
 
 
+def max_workers(hint: int = -1) -> int:
+    nproc = cpu_count()
+    max_default_workers: int
+    if var := os.getenv("CANARY_MAX_WORKERS"):
+        max_default_workers = int(var)
+    else:
+        max_default_workers = 30
+    n = min(nproc, max_default_workers) if hint <= 0 else hint
+    if n > nproc:
+        logger.warning(f"workers={n} > cpu_count={nproc}")
+    return n
+
+
 def get_context(method: StartMethod | None = None) -> multiprocessing.context.BaseContext:
     """
     Return a multiprocessing context.

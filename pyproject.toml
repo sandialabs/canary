@@ -35,7 +35,7 @@ classifiers = [
 
 dynamic = [ "version" ]
 dependencies = [
-    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
+    "hpc-connect==26.3.5",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
@@ -45,6 +45,7 @@ dependencies = [
 ]
 
 optional-dependencies.dev = [
+    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
     "coverage",
     "mypy",
     "pydata-sphinx-theme",
