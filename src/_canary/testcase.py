@@ -108,6 +108,10 @@ class TestCase:
     def mask(self, arg: "Mask") -> None:
         self._mask = arg
 
+    @property
+    def viewpath(self) -> str:
+        return self.spec.viewpath
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
             raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")

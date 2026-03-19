@@ -333,14 +333,13 @@ class Workspace:
     def add_session_results(self, session: Session, update_view: bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         if update_view:
-            view_entries: dict[Path, list[Path]] = {}
+            view_entries: list[tuple[Path, str]] = []
             for case in session.cases:
                 if case.workspace.session is not None:
                     prefix = self.sessions_dir / case.workspace.session
                 else:
                     prefix = session.prefix
-                relpath = case.workspace.dir.relative_to(prefix)
-                view_entries.setdefault(prefix, []).append(relpath)
+                view_entries.append((case.workspace.dir, case.viewpath))
             self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -362,21 +361,16 @@ class Workspace:
         if not view_config:
             return
         logger.info(f"Rebuilding view at {self.root}")
-        view: dict[str, tuple[str, str]] = {}
-        latest = self.db.get_results()
-        for id, data in latest.items():
-            dir = self.sessions_dir / data["session"] / data["workspace"]
-            relpath = dir.relative_to(self.sessions_dir / data["session"])
-            view[id] = (str(self.sessions_dir / data["session"]), str(relpath))
+        cases = self.load_testcases()
+        view_entries: list[tuple[Path, str]] = []
+        for case in cases:
+            view_entries.append((case.workspace.dir, case.viewpath))
         for path in self.view.iterdir():
             if path.is_dir():
-                shutil.rmtree(path)
-        view_entries: dict[Path, list[Path]] = {}
-        for root, p in view.values():
-            view_entries.setdefault(Path(root), []).append(Path(p))
+                force_remove(path)
         self.update_view(view_entries)
 
-    def update_view(self, view_entries: dict[Path, list[Path]]) -> None:
+    def update_view(self, view_entries: list[tuple[Path, str]]) -> None:
         logger.info(f"[bold]Updating[/] view at {self.view}")
         if self.view is None:
             return
@@ -385,36 +379,34 @@ class Workspace:
             raise ValueError(
                 f"Invalid workspace:view:mode={view_mode!r} (expected symlink|hardlink|copy)"
             )
-        for root, paths in view_entries.items():
-            for path in paths:
-                target = root / path
-                link = self.view / path
-                link.parent.mkdir(parents=True, exist_ok=True)
-                if link.is_symlink() or link.is_file():
-                    link.unlink()
-                elif link.is_dir():
-                    force_remove(link)
-                if view_mode == "symlink":
-                    try:
-                        link.symlink_to(target, target_is_directory=True)
-                    except FileExistsError:
-                        pass
-                elif view_mode == "hardlink":
-                    # Mirror the directory tree with hardlinks for files.
-                    # (Hardlinks don't work across filesystems; will raise OSError in that case.)
-                    for src in target.rglob("*"):
-                        rel = src.relative_to(target)
-                        dst = link / rel
-                        if src.is_dir():
-                            dst.mkdir(parents=True, exist_ok=True)
-                            continue
-                        dst.parent.mkdir(parents=True, exist_ok=True)
-                        if dst.exists() or dst.is_symlink():
-                            dst.unlink()
-                        os.link(src, dst)
-                elif view_mode == "copy":
-                    # Copy the directory tree
-                    shutil.copytree(target, link, dirs_exist_ok=True)
+        for target, relpath in view_entries:
+            link = self.view / relpath
+            link.parent.mkdir(parents=True, exist_ok=True)
+            if link.is_symlink() or link.is_file():
+                link.unlink()
+            elif link.is_dir():
+                force_remove(link)
+            if view_mode == "symlink":
+                try:
+                    link.symlink_to(target, target_is_directory=True)
+                except FileExistsError:
+                    pass
+            elif view_mode == "hardlink":
+                # Mirror the directory tree with hardlinks for files.
+                # (Hardlinks don't work across filesystems; will raise OSError in that case.)
+                for src in target.rglob("*"):
+                    rel = src.relative_to(target)
+                    dst = link / rel
+                    if src.is_dir():
+                        dst.mkdir(parents=True, exist_ok=True)
+                        continue
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    if dst.exists() or dst.is_symlink():
+                        dst.unlink()
+                    os.link(src, dst)
+            elif view_mode == "copy":
+                # Copy the directory tree
+                shutil.copytree(target, link, dirs_exist_ok=True)
 
     def relative_to_view(self, path: str | os.PathLike[str]) -> str | None:
         """

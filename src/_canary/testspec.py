@@ -154,6 +154,12 @@ class BaseSpec(Generic[T]):
             return p
         return str(self.file_path.parent / self.name)
 
+    @property
+    def viewpath(self) -> str:
+        if p := self.attributes.get("viewpath"):
+            return p
+        return self.execpath
+
     @execpath.setter
     def execpath(self, arg: str) -> None:
         self.attributes["execpath"] = arg
