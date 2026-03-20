@@ -31,6 +31,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import select
         from .plugins import builtin
         from .plugins import subcommands
+        from .resource_pool import gpu_select
         from .resource_pool import hooks as rp_hooks
 
         for subcommand in subcommands.plugins:
@@ -42,6 +43,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(collect, "builtin.collect")
         self.register(conductor.CanaryConductor(), "builtin.conductor")
         self.register(generate, "builtin.generate")
+        self.register(gpu_select, "builtin.gpu_select")
         self.register(filter, "builtin.filter")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
