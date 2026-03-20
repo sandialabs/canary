@@ -43,6 +43,7 @@ from concurrent.futures import as_completed
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Iterable
 from typing import Sequence
 
@@ -395,8 +396,17 @@ def generate_test_specs_parallel(
     generators: list["AbstractTestGenerator"], on_options: list[str]
 ) -> list["UnresolvedSpec | ResolvedSpec"]:
     # In testing
-    locked = starmap(generate_from_one, [(f, on_options) for f in generators])
+    locked = starmap(
+        generate_from_one,
+        [(f, on_options) for f in generators],
+        initializer=worker_init,
+        initargs=(config.snapshot(),),
+    )
     return [spec for group in locked for spec in group]
+
+
+def worker_init(snapshot: dict[str, Any]):
+    config.load_snapshot(snapshot)
 
 
 def generate_test_specs_serial(

@@ -11,6 +11,7 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from typing import Iterable
 from typing import Iterator
 from typing import Type
@@ -118,7 +119,7 @@ class Collector:
         errors = 0
         self.generators.clear()
         allpaths = ((self.types, root, p) for root, paths in self.files.items() for p in paths)
-        with ProcessPoolExecutor() as ex:
+        with ProcessPoolExecutor(initializer=worker_init, initargs=(config.snapshot(),)) as ex:
             futures = [ex.submit(generate_one, arg) for arg in allpaths]
             for future in as_completed(futures):
                 success, result = future.result()
@@ -248,6 +249,10 @@ class Collector:
             if type.matches(f):
                 return True
         return False
+
+
+def worker_init(snapshot: dict[str, Any]):
+    config.load_snapshot(snapshot)
 
 
 @hookimpl

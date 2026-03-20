@@ -20,6 +20,7 @@ from queue import Empty
 from tempfile import NamedTemporaryFile
 from typing import Any
 from typing import Callable
+from typing import Iterable
 from typing import Literal
 from typing import Sequence
 from typing import cast
@@ -452,6 +453,8 @@ def map(
     args: Sequence,
     processes: int | None = None,
     debug: bool = False,
+    initializer: Callable[..., Any] | None = None,
+    initargs: Iterable[Any] = (),
 ) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
@@ -470,7 +473,11 @@ def map(
     if len(args) < multiprocess_threshold or sys.platform == "win32":
         results = list(builtin_map(task_wrapper, args))
     else:
-        with pool(processes=num_processes(max_processes=processes)) as p:
+        with pool(
+            processes=num_processes(max_processes=processes),
+            initializer=initializer,
+            intargs=initargs,
+        ) as p:
             results = p.map(task_wrapper, args)
     raise_if_errors(*results, debug=debug)
     return results
@@ -481,6 +488,8 @@ def starmap(
     args: Sequence,
     processes: int | None = None,
     debug: bool = False,
+    initializer: Callable[..., Any] | None = None,
+    initargs: Iterable[Any] = (),
 ) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
@@ -499,7 +508,11 @@ def starmap(
     if len(args) < multiprocess_threshold or sys.platform == "win32":
         results = [task_wrapper(*arg) for arg in args]
     else:
-        with pool(processes=num_processes(max_processes=processes)) as p:
+        with pool(
+            processes=num_processes(max_processes=processes),
+            initializer=initializer,
+            initargs=initargs,
+        ) as p:
             results = p.starmap(task_wrapper, args)
     raise_if_errors(*results, debug=debug)
     return results
