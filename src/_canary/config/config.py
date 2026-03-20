@@ -283,6 +283,7 @@ def read_config_file(file: str | Path) -> dict[str, Any] | None:
     file = Path(file)
     if not file.exists():
         return None
+    fd: Any
     with open(file) as fh:
         fd = yaml.safe_load(fh)
         return fd[TOP_LEVEL_CONFIG_KEY] if TOP_LEVEL_CONFIG_KEY in fd else fd

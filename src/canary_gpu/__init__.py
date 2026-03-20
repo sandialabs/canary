@@ -28,8 +28,19 @@ def canary_addoption(parser: "canary.Parser") -> None:
 def canary_configure(config: "canary.Config") -> None:
     hint: str = config.getoption("gpu_backend") or "auto"
     backend = validate_backend(hint)
-    setattr(config.options, "gpu_backend", backend)
     config.set("scratch:gpu:backend", backend)
+
+
+@canary.hookimpl
+def canary_resource_pool_fill(config: "canary.Config", pool: dict[str, dict[str, Any]]) -> None:
+    resources: dict[str, list] = pool.setdefault("resources", {})
+    if resources.get("gpus"):
+        return
+    backend = config.get("scratch:gpu:backend")
+    if backend == "NVIDIA":
+        _fill_nvidia(resources)
+    elif backend == "AMD":
+        _fill_amd(resources)
 
 
 @canary.hookimpl
@@ -58,23 +69,11 @@ def validate_backend(hint: str) -> str | None:
         if not shutil.which("nvidia-smi"):
             raise ValueError("gpu_backend=nvidia requires nvidia-smi be on PATH")
         return "NVIDIA"
-    if hint == ("amd", "rocm"):
+    if hint in ("amd", "rocm"):
         if not (shutil.which("amd-smi") or shutil.which("rocm-smi")):
             raise ValueError("gpu_backend=amd requires amd-smi or rocm-smi be on PATH")
         return "AMD"
     raise ValueError(f"Unknown gpu backend: {hint}")
-
-
-@canary.hookimpl
-def canary_resource_pool_fill(config: "canary.Config", pool: dict[str, dict[str, Any]]) -> None:
-    resources: dict[str, list] = pool.setdefault("resources", {})
-    if resources.get("gpus"):
-        return
-    backend = config.get("scratch:gpu:backend")
-    if backend == "NVIDIA":
-        _fill_nvidia(resources)
-    elif backend == "AMD":
-        _fill_amd(resources)
 
 
 def _fill_nvidia(resources: dict[str, list]) -> None:
@@ -86,15 +85,15 @@ def _fill_nvidia(resources: dict[str, list]) -> None:
             for line in txt.splitlines():
                 id, uuid, _ = [_.strip() for _ in line.split(",", 2)]
                 gpu_ids.append(f"NVIDIA:{id}:{uuid}")
-            resources["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
+            if gpu_ids:
+                resources["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
         except Exception:
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")
 
 
 def _fill_amd(resources: dict[str, list]) -> None:
-    if _fill_amd_smi(resources):
-        return
-    _fill_rocm_smi(resources)
+    if not _fill_amd_smi(resources):
+        _fill_rocm_smi(resources)
 
 
 def _fill_amd_smi(resources: dict[str, list]) -> bool:
