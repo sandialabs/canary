@@ -15,7 +15,6 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import canary
-from _canary.third_party.color import cwrite
 from _canary.util.executable import Executable
 from _canary.util.filesystem import force_remove
 
@@ -112,28 +111,25 @@ class server:
 
     @staticmethod
     def put(url, file):
-        def get_text(doc, tag):
-            try:
-                return doc.getElementsByTagName(tag)[0].firstChild.data.strip()
-            except AttributeError:
-                return None
+
+        def _get_text(doc, tag):
+            if els := doc.getElementsByTagName(tag):
+                return get_text(els[0])
+            return None
 
         with no_proxy():
             # Proxy settings must be turned off to submit to CDash
             curl = Executable("curl")
             curl.add_default_args("-v")
-            args = ["-X", "PUT", url]
-            args.extend(["-H", "Content-Type: text/xml"])
-            args.extend(["-H", "Accept: text/xml"])
-            args.extend(["--data-binary", f"@{file}"])
+            args = ["--upload-file", file, url]
             efile = "cdash-put-err.txt"
+            payload = {"status": "NA", "message": None, "buildid": None}
             try:
-                payload = {"status": "NA", "message": None, "buildid": None}
                 with open(efile, "w") as fh:
                     result = curl(*args, output=str, error=fh)
                 doc = dom.parseString(result.get_output())
-                payload["status"] = get_text(doc, "status")
-                payload["buildid"] = get_text(doc, "buildId")
+                payload["status"] = _get_text(doc, "status")
+                payload["buildid"] = _get_text(doc, "buildId")
             except xml.parsers.expat.ExpatError as e:
                 payload["message"] = e.args[0]
             finally:
@@ -141,10 +137,10 @@ class server:
                     m = payload["message"]
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}")
                 elif payload["status"] != "OK":
-                    m = payload["message"] = get_text(doc, "message")
+                    m = payload["message"] = _get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
-                if not canary.config.get("config:debug"):
+                if not canary.config.get("debug"):
                     force_remove(efile)
             return payload
 
@@ -179,8 +175,8 @@ class server:
         try:
             result = curl("-k", url, output=str, error=os.devnull)
             doc = dom.parseString(result.get_output())
-            if el := doc.getElementsByTagName("buildid"):
-                buildid = el[0].firstChild.data.strip()
+            if els := doc.getElementsByTagName("buildid"):
+                buildid = get_text(els[0])
             else:
                 buildid = "not found"
         except xml.parsers.expat.ExpatError:
@@ -217,7 +213,7 @@ class server:
             n = len(buildgroup["builds"])
             logger.info(f"Getting build summaries for build group {buildgroup['name']}")
             for i, build in enumerate(buildgroup["builds"], start=1):
-                cwrite("\r@*b{==>} Getting build summary for build %d of %d" % (i, n))
+                logger.info("Getting build summary for build %d of %d" % (i, n))
                 if self.contains(build["site"], skip_sites):
                     continue
                 build["unixtimestamp"] = buildgroup["unixtimestamp"]
@@ -236,7 +232,6 @@ class server:
                 else:
                     build["build_type"] = "Unknown"
                 builds.append(build)
-            cwrite("\n")
         return builds
 
     def get_buildgroups(self, date, buildgroups=None):
@@ -435,6 +430,10 @@ class server:
         return test
 
 
+def get_text(el: dom.Element) -> str:
+    return "".join(n.data for n in el.childNodes if n.nodeType == n.TEXT_NODE).strip()  # ty: ignore[unresolved-attribute]
+
+
 def clean_log_event(event):
     """Convert log output from ASCII to Unicode and escape for XML"""
     event = vars(event)
@@ -467,9 +466,10 @@ def no_proxy():
 
     """
     save_env = dict(os.environ)
-    keys = ("http_proxy", "https_proxy", "ftp_proxy", "no_proxy")
+    keys = ("http_proxy", "https_proxy", "ftp_proxy", "no_proxy", "all_proxy")
     for key in keys:
         os.environ.pop(key, None)
+        os.environ.pop(key.upper(), None)
     yield
     os.environ.clear()
     os.environ.update(save_env)

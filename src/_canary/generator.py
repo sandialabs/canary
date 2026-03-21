@@ -1,16 +1,31 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import errno
+import fnmatch
+import hashlib
+import importlib
 import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import ClassVar
+from typing import Sequence
+
+try:
+    from typing import Self  # type: ignore
+except ImportError:
+    from typing_extensions import Self
+
+from schema import Schema
+from schema import Type
+
+from .util import json_helper as json
 
 if TYPE_CHECKING:
-    from .testcase import TestCase
+    from .testspec import ResolvedSpec
+    from .testspec import UnresolvedSpec
 
 
 class AbstractTestGenerator(ABC):
@@ -36,10 +51,7 @@ class AbstractTestGenerator(ABC):
        import canary
 
        class MyGenerator(canary.AbstractTestGenerator):
-
-           @classmethod
-           def matches(cls, path: str) -> bool:
-               ...
+           file_patterns = ["*.suffix"]
 
            def describe(self, on_options: list[str] | None = None) -> str:
                ...
@@ -48,6 +60,8 @@ class AbstractTestGenerator(ABC):
                ...
 
     """
+
+    file_patterns: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, root: str, path: str | None = None) -> None:
         if path is None:
@@ -59,32 +73,40 @@ class AbstractTestGenerator(ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
+        sha = hashlib.sha256()
+        with open(self.file, "rb") as fh:
+            data = fh.read()
+            sha.update(data)
+        self.sha256: str = sha.hexdigest()
+        self.id: str = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"
 
-    def stop_recursion(self) -> bool:
-        return False
+    @classmethod
+    def factory(cls, root: str, path: str | None = None) -> Self | None:
+        f = root if path is None else path
+        if cls.matches(f):
+            return cls(root, path=path)
+        return None
 
     @classmethod
-    @abstractmethod
-    def matches(cls, path: str) -> bool:
+    def matches(cls, path: str) -> str | None:
         """Is the file at ``path`` a test file?"""
-
-    @classmethod
-    def always_matches(cls, path: str) -> bool:
-        return cls.matches(path)
+        name = os.path.basename(path)
+        for pattern in cls.file_patterns:
+            if fnmatch.fnmatchcase(name, pattern):
+                return pattern
+        return None
 
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
         return repr(self)
 
-    def info(self) -> dict[str, Any]:
-        info: dict[str, Any] = {}
-        info["type"] = self.__class__.__name__
-        return info
-
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
+    def lock(
+        self, on_options: list[str] | None = None
+    ) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:
@@ -97,24 +119,44 @@ class AbstractTestGenerator(ABC):
 
         """
 
-    def getstate(self) -> dict[str, str]:
-        state: dict[str, str] = {}
-        state["type"] = self.__class__.__name__
+    def asdict(self) -> dict[str, Any]:
+        state: dict[str, Any] = {}
         state["root"] = self.root
         state["path"] = self.path
-        state["name"] = self.name
+        state["mtime"] = os.path.getmtime(self.file)
         return state
 
     @staticmethod
-    def from_state(state: dict[str, str]) -> "AbstractTestGenerator":
-        generator = AbstractTestGenerator.factory(state["root"], state["path"])
-        return generator
+    def validate(data) -> Any:
+        schema = Schema({"module": str, "classname": str, "params": {str: object}})
+        return schema.validate(data)
 
     @staticmethod
-    def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
+    def reconstruct(serialized: str) -> "AbstractTestGenerator":
+        meta = json.loads(serialized)
+        AbstractTestGenerator.validate(meta)
+        module = importlib.import_module(meta["module"])
+        cls: Type[AbstractTestGenerator] = getattr(module, meta["classname"])
+        params = meta["params"]
+        generator = cls(params["root"], params["path"])
+        return generator
+
+    def serialize(self) -> str:
+        meta = {
+            "module": self.__class__.__module__,
+            "classname": self.__class__.__name__,
+            "params": self.asdict(),
+        }
+        return json.dumps_min(meta)
+
+    @staticmethod
+    def create(root: str, path: str | None = None) -> "AbstractTestGenerator":
         from . import config
 
         if generator := config.pluginmanager.hook.canary_testcase_generator(root=root, path=path):
             return generator
         f = root if path is None else os.path.join(root, path)
-        raise TypeError(f"No test generator for {f}")
+        raise TypeError(f"{f} is not a test generator")
+
+    def info(self) -> dict[str, Any]:
+        return {}

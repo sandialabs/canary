@@ -8,8 +8,8 @@ import canary
 
 
 @canary.hookimpl
-def canary_subcommand() -> canary.CanarySubcommand:
-    return MyCommand()
+def canary_addcommand(parser: canary.Parser) -> None:
+    parser.add_command(MyCommand())
 
 
 class MyCommand(canary.CanarySubcommand):

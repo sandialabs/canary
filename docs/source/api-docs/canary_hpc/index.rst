@@ -8,9 +8,12 @@ canary_hpc
 .. toctree::
    :maxdepth: 1
 
-   batchopts
+   argparsing
+   batchexec
+   batching
+   batchspec
+   binpack
    conductor
    executor
-   partitioning
    queue
-   testbatch
+   status

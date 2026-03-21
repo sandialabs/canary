@@ -20,4 +20,4 @@ Example
 .. command-output:: canary run ./depends_on/basic
     :cwd: /examples
     :nocache:
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults

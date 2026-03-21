@@ -2,16 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-import json
 import os
-from typing import TYPE_CHECKING
 from typing import Any
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
+from ...util import json_helper as json
+from ...workspace import Workspace
 from ..types import CanaryReporter
-
-if TYPE_CHECKING:
-    from ...session import Session
 
 
 @hookimpl
@@ -24,13 +21,12 @@ class JsonReporter(CanaryReporter):
     description = "JSON reporter"
     default_output = "canary.json"
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report json: session required")
-
+    def create(self, **kwargs: Any) -> None:
+        workspace = Workspace.load()
+        cases = workspace.load_testcases()
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
-        for case in session.cases:
-            data[case.id] = case.getstate()
+        for case in cases:
+            data[case.id] = case.asdict()
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

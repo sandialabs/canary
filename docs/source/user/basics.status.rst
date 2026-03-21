@@ -12,33 +12,18 @@ Tests can receive one of the following statuses:
 .. hlist::
    :columns: 4
 
-   * :ref:`stat-created`
    * :ref:`stat-pending`
    * :ref:`stat-ready`
    * :ref:`stat-running`
-   * :ref:`stat-cancelled`
-   * :ref:`stat-skipped`
-   * :ref:`stat-diffed`
-   * :ref:`stat-failed`
-   * :ref:`stat-timeout`
    * :ref:`stat-success`
    * :ref:`stat-xfail`
    * :ref:`stat-xdiff`
-   * :ref:`stat-not_run`
-
-.. _stat-created:
-
-created
--------
-
-The test case object has been instantiated.
-
-.. _stat-ready:
-
-ready
------
-
-The test case is setup and ready to run.
+   * :ref:`stat-failed`
+   * :ref:`stat-diffed`
+   * :ref:`stat-timeout`
+   * :ref:`stat-blocked`
+   * :ref:`stat-skipped`
+   * :ref:`stat-cancelled`
 
 .. _stat-pending:
 
@@ -46,6 +31,13 @@ pending
 -------
 
 The test case is waiting for one or more dependencies.
+
+.. _stat-ready:
+
+ready
+-----
+
+The test case is ready to run.
 
 .. _stat-running:
 
@@ -122,9 +114,9 @@ xdiff
 
 The test case is marked as :ref:`expected to diff<directive-xdiff>`
 
-.. _stat-not_run:
+.. _stat-blocked:
 
-not_run
+blocked
 -------
 
-A test case that was expected to run was not run.  Common reasons for being marked ``not_run`` are the test case not being run due to a failed or skipped dependency and the test session being stopped prematurely.
+A test case that was expected to run was not run.  Common reasons for being marked ``blocked`` are the test case not being run due to a failed or skipped dependency and the test session being stopped prematurely.

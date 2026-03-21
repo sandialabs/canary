@@ -39,7 +39,7 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        cp = run("-w", ".")
+        cp = run("-w", ".", debug=True)
         if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())

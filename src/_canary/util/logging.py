@@ -1,25 +1,19 @@
-# /Formatter
-#  Copyright NTESS. See COPYRIGHT file for details.
+# Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import datetime
 import json
 import logging as builtin_logging
-import math
+import logging.handlers
 import os
 import sys
-import termios
-from contextlib import contextmanager
-from typing import IO
+import time
+from pathlib import Path
 from typing import Any
-from typing import Generator
 from typing import Literal
+from typing import cast
 
-from ..third_party.color import clen
-from ..third_party.color import colorize
-from .term import terminal_size
-from .time import hhmmss
+from .rich import colorize
 
 NOTSET = builtin_logging.NOTSET
 TRACE = builtin_logging.DEBUG - 5
@@ -38,7 +32,23 @@ root_log_name = "canary"
 class FileHandler(builtin_logging.FileHandler): ...
 
 
+class MuteConsoleFilter(builtin_logging.Filter):
+    def filter(self, record):
+        # Returning false = block record
+        return False
+
+
+class QueueHandler(logging.handlers.QueueHandler):
+    pass
+
+
+class QueueListener(logging.handlers.QueueListener):
+    pass
+
+
 class StreamHandler(builtin_logging.StreamHandler):
+    canary_stream = True
+
     def emit(self, record):
         """Emit a record.
 
@@ -72,12 +82,13 @@ class Formatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            if level_color(record.levelno):
+                prefix = "[bold %s]%s[/]: " % (
+                    level_color(record.levelno),
+                    record.levelname.upper(),
+                )
             else:
-                prefix = "@*{==>} "
+                prefix = f"{record.levelname.upper()}: "
             extra["prefix"] = prefix
 
         record.__dict__.update(extra)
@@ -95,12 +106,10 @@ class JsonFormatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (TRACE, DEBUG, INFO):
-                prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (WARNING, ERROR, CRITICAL):
-                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            if record.levelno in (NOTSET, TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
+                prefix = f"{record.levelname.upper()}: "
             else:
-                prefix = "@*{==>} "
+                prefix = ""
             extra["prefix"] = prefix
         record.__dict__.update(extra)
         record.message = record.getMessage()
@@ -137,14 +146,80 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str | None = None) -> builtin_logging.Logger:
+class ProgressMonitor:
+    def __init__(self, logger_name: str, message: str, levelno: int = INFO) -> None:
+        self.enabled = os.getenv("CANARY_MAKE_DOCS") is None
+        self.message = message
+        self.logger_name = logger_name
+        self.start = time.monotonic()
+        self.levelno = levelno
+        end = "..." if self.enabled else "\n"
+        get_logger(self.logger_name).log(self.levelno, self.message, extra={"end": end})
+
+    def done(self, status: str = "done") -> None:
+        if not self.enabled:
+            return
+        x = {"end": "... %s (%.2fs.)\n" % (status, time.monotonic() - self.start), "rewind": True}
+        get_logger(self.logger_name).log(self.levelno, self.message, extra=x)
+
+
+class CanaryLogger(builtin_logging.Logger):
+    def progress_monitor(self, message: str, levelno: int = INFO) -> ProgressMonitor:
+        return ProgressMonitor(self.name, message, levelno)
+
+
+class AdaptiveDebugLogger:
+    """
+    Dynamic debug logger that starts chatty and backs off exponentially
+    while conditions remain unchanged. Resets immediately on state change.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        min_interval: float = 10.0,
+        max_interval: float = 120.0,
+        growth: float = 1.6,
+    ) -> None:
+        self.logger_name = name
+        self.min_interval = min_interval
+        self.max_interval = max_interval
+        self.growth = growth
+
+        self._interval = min_interval
+        self._last_emit = 0.0
+        self._last_signature: tuple[Any, ...] = ()
+
+    def emit(self, signature: tuple[Any, ...], msg: str) -> None:
+        now = time.monotonic()
+
+        if signature != self._last_signature:
+            self._interval = self.min_interval
+            self._last_signature = signature
+            self._last_emit = 0.0
+
+        if now - self._last_emit >= self._interval:
+            get_logger(self.logger_name).debug(msg)
+            self._last_emit = now
+            self._interval = min(self._interval * self.growth, self.max_interval)
+
+
+builtin_logging.setLoggerClass(CanaryLogger)
+
+
+def get_logger(name: str | None = None) -> CanaryLogger:
     if name is None:
         name = root_log_name
-    parts = name.split(".")
-    if parts[0] != root_log_name:
-        parts.insert(0, root_log_name)
+    elif name == "root":
+        name = ""
+    else:
+        parts = name.split(".")
+        if parts[0] == "_canary":
+            parts[0] = root_log_name
+        elif parts[0] != root_log_name:
+            parts.insert(0, root_log_name)
         name = ".".join(parts)
-    logger = builtin_logging.getLogger(name)
+    logger = cast(CanaryLogger, builtin_logging.getLogger(name))
     return logger
 
 
@@ -169,7 +244,7 @@ def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -
         levelno = get_levelno(level)
     else:
         levelno = level
-    for handler in builtin_logging.getLogger(root_log_name).handlers:
+    for handler in builtin_logging.getLogger().handlers:
         if only == "stream":
             if isinstance(handler, StreamHandler):
                 hold = handler.level
@@ -187,187 +262,98 @@ def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -
 
 
 def setup_logging() -> None:
-    logger = builtin_logging.getLogger(root_log_name)
+    root = builtin_logging.getLogger()
+    root.setLevel(NOTSET)
     builtin_logging.addLevelName(TRACE, "TRACE")
     builtin_logging.addLevelName(EMIT, "EMIT")
-    if not logger.handlers:
-        sh = StreamHandler(sys.stderr)
-        fmt = Formatter(color=sys.stderr.isatty())
-        sh.setFormatter(fmt)
-        sh.setLevel(INFO)
-        # set the logger level higher than the streamhandler to assure that the messages of level
-        # INFO will be emmitted.
-        logger.addHandler(sh)
-        logger.setLevel(TRACE)
+    for h in root.handlers:
+        if isinstance(h, StreamHandler):
+            break
+    else:
+        sh = stream_handler()
+        root.addHandler(sh)
+    canary = builtin_logging.getLogger(root_log_name)
+    canary.propagate = True
 
 
-def add_file_handler(file: str, levelno: int) -> None:
-    logger = builtin_logging.getLogger(root_log_name)
-    for handler in logger.handlers:
-        if isinstance(handler, FileHandler) and handler.baseFilename == file:
-            return
-    os.makedirs(os.path.dirname(file), exist_ok=True)
-    fh = FileHandler(file, mode="a")
+def stream_handler(levelno: int = INFO) -> StreamHandler:
+    handler = StreamHandler(sys.stderr)
+    fmt = Formatter(color=sys.stderr.isatty())
+    handler.setFormatter(fmt)
+    handler.setLevel(levelno)
+    return handler
+
+
+def json_file_handler(file: str | Path, levelno: int = NOTSET) -> FileHandler:
+    file = Path(file)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.touch(exist_ok=True)
+    handler = FileHandler(file, mode="a")
     fmt = JsonFormatter()
-    fh.setFormatter(fmt)
-    fh.setLevel(levelno)
-    logger.addHandler(fh)
+    handler.setFormatter(fmt)
+    handler.setLevel(levelno)
+    return handler
+
+
+def add_handler(handler: builtin_logging.Handler) -> None:
+    root = builtin_logging.getLogger()
+    root.addHandler(handler)
+
+
+def clear_handlers() -> None:
+    root = builtin_logging.getLogger()
+    for h in root.handlers[:]:
+        try:
+            h.flush()
+            h.close()
+        except Exception:  # nosec B110
+            pass
+        root.removeHandler(h)
 
 
 def level_color(levelno: int) -> str:
     if levelno == NOTSET:
-        return "c"
+        return "cyan"
     elif levelno == TRACE:
-        return "m"
+        return "magenta"
     elif levelno == DEBUG:
-        return "g"
+        return "green"
     elif levelno == INFO:
-        return "b"
+        return "blue"
     elif levelno == WARNING:
-        return "Y"
+        return "bright_yellow"
     elif levelno == ERROR:
-        return "r"
+        return "red"
     elif levelno == CRITICAL:
-        return "r"
+        return "red"
     elif levelno == EMIT:
         return ""
     raise ValueError(levelno)
 
 
 def get_level() -> int:
-    logger = builtin_logging.getLogger(root_log_name)
+    logger = builtin_logging.getLogger()
     for handler in logger.handlers:
         if isinstance(handler, StreamHandler):
             return handler.level
     return logger.getEffectiveLevel()
 
 
-def progress_bar(
-    total: int,
-    complete: int,
-    elapsed: float,
-    average: float | None = None,
-    width: int | None = None,
-    level: int = 0,
-    file: IO[Any] = sys.stderr,
-) -> None:
-    """Display test session progress
-
-    Args:
-    ----------
-    case : Active test cases
-
-    """
-    blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
-    lsep, rsep = "▏", "▕"
-
-    total_width = width or (terminal_size()[1] - 3)
-
-    frac = complete / total
-    percent = frac * 100
-    eta = None if not complete else round(elapsed * (1.0 - frac) / frac)
-
-    w = len(str(total))
-    info = f"  {complete:{w}d}/{total} {percent:5.1f}% ["
-    info += f"elapsed: {hhmmss(elapsed, threshold=1)} "
-    info += f"eta: {hhmmss(eta, threshold=0)} "
-    info += f"ave: {hhmmss(average, threshold=1)}]   "
-
-    bar_width = total_width - len(info)
-    v = frac * bar_width
-    x = math.floor(v)
-    y = v - x
-    base = 0.125
-    prec = 3
-    i = int(round(base * math.floor(float(y) / base), prec) / base)
-    bar = "█" * x + blocks[i]
-    n = bar_width - len(bar)
-    pad = " " * n
-    file.write(f"\r{lsep}{bar}{pad}{rsep}{info}")
+def info(*args, **kwargs):
+    get_logger().info(*args, **kwargs)
 
 
-def hline(
-    label: str | None = None,
-    char: str = "-",
-    max_width: int = 64,
-    file: IO[Any] = sys.stdout,
-    end: str = "\n",
-) -> None:
-    """Draw a labeled horizontal line.
-
-    Keyword Arguments:
-        char (str): Char to draw the line with.  Default '-'
-        max_width (int): Maximum width of the line.  Default is 64 chars.
-    """
-    _, cols = terminal_size()
-    if max_width < 0:
-        max_width = cols
-    cols = min(max_width, cols - 2)
-
-    if label is None:
-        file.write(char * max_width)
-    else:
-        label = str(label)
-        prefix = char * 2 + " "
-        suffix = " " + (cols - len(prefix) - clen(label)) * char
-        file.write(prefix)
-        file.write(label)
-        file.write(suffix)
-        file.write(end)
+def warning(*args, **kwargs):
+    get_logger().warning(*args, **kwargs)
 
 
-def fileno(file_or_fd):
-    if not hasattr(file_or_fd, "fileno"):
-        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
-    return file_or_fd.fileno()
+def error(*args, **kwargs):
+    get_logger().error(*args, **kwargs)
 
 
-def streamify(arg: IO[Any] | str, mode: str) -> tuple[IO[Any], bool]:
-    if isinstance(arg, str):
-        return open(arg, mode), True
-    else:
-        return arg, False
+def critical(*args, **kwargs):
+    get_logger().critical(*args, **kwargs)
 
 
-@contextmanager
-def redirect_stdout(
-    to: str | IO[Any] = os.devnull, stdout: IO[Any] | None = None
-) -> Generator[IO[Any], None, None]:
-    stdout = stdout or sys.stdout
-    stdout_fd = fileno(stdout)
-    # copy stdout_fd before it is overwritten
-    # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
-    with os.fdopen(os.dup(stdout_fd), "wb") as copied:
-        stdout.flush()  # flush library buffers that dup2 knows nothing about
-        os.dup2(fileno(to), stdout_fd)  # $ exec >&file
-        try:
-            yield stdout  # allow code to be run with the redirected stdout
-        finally:
-            # restore stdout to its previous value
-            # NOTE: dup2 makes stdout_fd inheritable unconditionally
-            stdout.flush()
-            os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
-
-
-def merged_stderr_stdout():  # $ exec 2>&1
-    return redirect_stdout(to=sys.stdout, stdout=sys.stderr)
-
-
-@contextmanager
-def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, None]:
-    if file_like is None:
-        yield
-    else:
-        file, fown = streamify(file_like, mode)
-        with redirect_stdout(to=file):
-            with merged_stderr_stdout():
-                yield
-        if fown:
-            file.close()
-
-
-def reset():
-    if sys.stdin.isatty():
-        fd = sys.stdin.fileno()
-        save_tty_attr = termios.tcgetattr(fd)
-        termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+def exception(*args, **kwargs):
+    get_logger().exception(*args, **kwargs)

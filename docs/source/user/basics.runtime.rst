@@ -10,7 +10,7 @@ Time resources
 Runtime
 -------
 
-Test runtimes are written to ``<root>/.canary_cache/timing``, where ``<root>`` is the the test's project root (as determined by the presence of a ``.git`` directory) or the test's root test search directory if the project root could not be determined.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up test runs.
+Test runtimes are written to ``.canary/cache/cases``.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up test runs.
 
 Timeout
 -------
@@ -47,10 +47,10 @@ which can also be set from the command line, eg:
 Timeout multiplier
 ------------------
 
-You may also want to increase the timeout applied to tests.  Do so by specifying ``--timeout-multiplier`` option:
+You may also want to increase the timeout applied to tests.  Do so by specifying ``--timeout multiplier=X`` option:
 
 .. code-block:: console
 
-   canary run --timeout-multiplier=X ...
+   canary run --timeout multiplier=4 ...
 
-In this case, the timeout for each test will be the ``X`` times the test's default timeout.
+In this case, the timeout for each test will be the ``4`` times the test's default timeout.

@@ -8,42 +8,39 @@ import io
 import json
 import os
 from typing import TYPE_CHECKING
+from typing import Any
 
 import pluggy
 import yaml
 
-from ...util.filesystem import find_work_tree
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return ConfigCmd()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(ConfigCmd())
 
 
 class ConfigCmd(CanarySubcommand):
     name = "config"
-    description = "Print configuration variable values"
+    description = "Get and set configuration options"
 
     def setup_parser(self, parser: "Parser") -> None:
         sp = parser.add_subparsers(dest="subcommand")
-        p = sp.add_parser("show", help="Show the current configuration")
-        p.add_argument(
-            "-r",
-            action="store_true",
-            default=False,
-            help="Include resource pool in configuration that is shown",
+        p = sp.add_parser(
+            "show",
+            help="Show current configuration. To show the resource pool, let section=resource_pool",
         )
         p.add_argument(
             "-p",
             "--paths",
             action="store_true",
             default=False,
+            dest="file_paths",
             help="Show paths to canary configuration files",
         )
         p.add_argument(
@@ -53,39 +50,45 @@ class ConfigCmd(CanarySubcommand):
             help="Print configuration in this format [default: %(default)s]",
         )
         p.add_argument(
-            "--pretty",
-            action="store_true",
-            default=False,
-            help="Pretty-print the contents of the config in the given format [default: False]",
-        )
-        p.add_argument(
             "section",
             nargs="?",
             help="Show only this section.  "
             "The section 'plugin' will print the currently active plugins",
         )
-        p = sp.add_parser("add", help="Add to the current configuration")
-        p.add_argument(
-            "--scope",
-            choices=("local", "global", "session"),
+        p = sp.add_parser("set", help="Add to the current configuration")
+        g = p.add_mutually_exclusive_group()
+        g.add_argument(
+            "--local",
+            dest="scope",
             default="local",
-            help="Configuration scope",
+            const="local",
+            action="store_const",
+            help="Set the local configuration value",
+        )
+        g.add_argument(
+            "--global",
+            dest="scope",
+            const="global",
+            action="store_const",
+            help="Set the local configuration value",
         )
         p.add_argument(
-            "path",
-            help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+            "path_and_value",
+            nargs=2,
+            metavar="PATH VALUE",
+            help="colon-separated path to config to be set, e.g. 'timeout:default 10.0'",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ... import config
+        from ...util.json_helper import try_loads
 
-        if root := find_work_tree(os.getcwd()):
-            load_session(root=root)
         if args.subcommand == "show":
             show_config(args)
             return 0
-        elif args.subcommand == "add":
-            config.add(args.path, scope=args.scope)
+        elif args.subcommand == "set":
+            path, value = args.path_and_value
+            config.write_new(path, try_loads(value), args.scope)
             return 0
         elif args.subcommand is None:
             raise ValueError("canary config: missing required subcommand (choose from show, add)")
@@ -97,7 +100,7 @@ def show_config(args: "argparse.Namespace"):
     from ... import config
 
     text: str
-    if args.paths:
+    if args.file_paths:
         global_f = config.get_scope_filename("global")
         local_f = os.path.realpath(config.get_scope_filename("local") or "canary.yaml")
         with io.StringIO() as fp:
@@ -109,21 +112,21 @@ def show_config(args: "argparse.Namespace"):
     if args.section in ("plugins", "plugin"):
         print_active_plugin_descriptions()
         return
+
+    elif args.section in ("resource_pool", "resource-pool", "resources"):
+        print(config.pluginmanager.hook.canary_resource_pool_describe())
+        return
+
     else:
-        state = config.getstate(pretty=True)
+        state = config.data
         if args.section is not None:
             state = {args.section: state[args.section]}
-        elif not args.r:
-            state["resource_pool"] = "... (-r to include resource pool)"
         if args.format == "json":
-            text = json.dumps(state, indent=2)
+            text = json.dumps({"canary": state}, indent=2)
         else:
-            text = yaml.dump(state, default_flow_style=False)
+            text = yaml.dump({"canary": state}, default_flow_style=False)
     try:
-        if args.pretty:
-            pretty_print(text, args.format)
-        else:
-            print(text)
+        pretty_print(text, args.format)
     except ImportError:
         print(text)
     return 0
@@ -146,13 +149,28 @@ def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str
     plugins: list[tuple[str, str, str]] = []
 
     for name, plugin in pluginmanager.list_name_plugin():
-        file = inspect.getfile(plugin)  # type: ignore
-        namespace = plugin.__package__.split(".")[0]  # type: ignore
-        if namespace == "_canary":
-            namespace = "builtin"
-        row = (namespace, name, file)
+        file = getfile(plugin)
+        namespace = getnamespace(plugin)
+        root_namespace = namespace.split(".")[0]
+        if root_namespace == "_canary":
+            root_namespace = "builtin"
+        row = (root_namespace, name, file)
         plugins.append(row)
-    return plugins
+    return sorted(plugins, key=lambda x: (x[0], x[1]))
+
+
+def getfile(obj: Any) -> str:
+    try:
+        return inspect.getfile(obj)
+    except TypeError:
+        return inspect.getfile(type(obj))
+
+
+def getnamespace(obj: Any) -> str:
+    try:
+        return obj.__package__
+    except AttributeError:
+        return obj.__module__
 
 
 def print_active_plugin_descriptions() -> None:

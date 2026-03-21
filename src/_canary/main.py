@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import io
 import os
 import shlex
 import signal
@@ -13,15 +14,14 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
-import yaml
-
 from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
-from .third_party import color
-from .third_party.monkeypatch import monkeypatch
 from .util import logging
+from .util.banner import banner
 from .util.collections import contains_any
+from .util.rich import colorize
+from .util.rich import set_color_when
 
 if TYPE_CHECKING:
     from .plugins.types import CanarySubcommand
@@ -39,32 +39,30 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     :returns: An exit code.
     """
+    if "CANARY_LEVEL" not in os.environ:
+        os.environ["CANARY_LEVEL"] = "0"
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        for command in config.pluginmanager.hook.canary_subcommand():
-            parser.add_command(command)
-        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
-        with monkeypatch.context() as mp:
-            mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-            mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-            config.pluginmanager.hook.canary_addoption(parser=parser)
+        config.pluginmanager.hook.canary_addcommand(parser=parser)
+        config.pluginmanager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             sys.stderr.write(shlex.join(a) + "\n")
         if args.color:
-            color.set_color_when(args.color)
+            set_color_when(args.color)
         config.set_main_options(args)
+        print_banner()
         config.pluginmanager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
             return -1
         if args.canary_profile:
-            return invoke_profiled_command(command, config.options)
+            return invoke_profiled_command(command, args)
         else:
-            return invoke_command(command, config.options)
+            return invoke_command(command, args)
 
 
 class CanaryMain:
@@ -72,7 +70,6 @@ class CanaryMain:
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
         self.argv: Sequence[str] = list(argv or sys.argv[1:])
-        config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
         """Preparsing is necessary to parse out options that need to take effect before the main
@@ -85,8 +82,9 @@ class CanaryMain:
         if args.debug:
             reraise = True
         if args.C:
-            config.working_dir = args.C
-        os.chdir(config.working_dir)
+            if not os.path.exists(args.C):
+                raise ValueError(f"cannot change to {args.C!r}: No such file or directory")
+            os.chdir(args.C)
 
         # Consider plugins passed in the environment and the command line early, before parsing the
         # main command line. This allows plugins to define a subcommand (which must be registered
@@ -106,8 +104,9 @@ def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int
 class Profiler:
     def __init__(self, nlines: int = -1):
         self.nlines = nlines
+        self.profiler: Any
         try:
-            import pyinstrument
+            import pyinstrument  # ty: ignore[unresolved-import]
 
             self.profiler = pyinstrument.Profiler()  # type: ignore
             self.type = 1
@@ -156,7 +155,10 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
 
         if f := getattr(obj, "__file__", None):
             return f
-        return inspect.getfile(obj.__class__)
+        try:
+            return inspect.getfile(obj.__class__)
+        except TypeError:
+            return None
 
     for frame in tb[::-1]:
         # Check if the frame corresponds to a registered plugin
@@ -166,11 +168,19 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
     return None
 
 
+def print_banner() -> None:
+    if os.getenv("CANARY_MAKE_DOCS"):
+        return
+    print_the_banner = config.getoption("banner") and logging.get_level() <= logging.INFO
+    if print_the_banner:
+        print(colorize(banner()), file=sys.stderr)
+
+
 def print_current_config() -> None:
-    state = config.getstate(pretty=True)
-    text = yaml.dump(state, default_flow_style=False)
+    fh = io.StringIO()
+    config.dump(fh)
     print("Current canary configuration:")
-    print(text)
+    print(fh.getvalue())
 
 
 def console_main() -> int:
@@ -178,6 +188,9 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
+    from .util import multiprocessing
+
+    multiprocessing.initialize()
 
     # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
     # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
@@ -204,7 +217,7 @@ def console_main() -> int:
     except TimeoutError as e:
         if reraise:
             raise
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         logger.error(e.args[0])
         return 4
@@ -217,7 +230,7 @@ def console_main() -> int:
     except SystemExit as e:
         if e.code == 0:
             return 0
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         if reraise:
             traceback.print_exc()
@@ -225,13 +238,13 @@ def console_main() -> int:
             return e.code
         return 1
     except Exception as e:
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         if reraise:
             raise
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
-        if plugin := determine_plugin_from_tb(tb):
-            err += f" (from plugin: {plugin})"
+        # if plugin := determine_plugin_from_tb(tb):
+        #    err += f" (from plugin: {plugin})"
         logger.error(err)
         return 3

@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _canary_cmake.cdash.cdash_html_summary:
+
 cdash_html_summary
 ==================
 

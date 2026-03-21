@@ -7,7 +7,7 @@
 Getting started
 ===============
 
-``canary`` identifies and executes tests defined from multiple sources.  Each test runs in its own execution directory, with the default location being ``./TestResults/<test-name>``, and return code captured.  A return code of ``0`` indicates ``success``, while any other return code indicates a failure of some kind.  Python files having a ``.pyt`` extension are the native test format which will be used in the examples.
+``canary`` identifies and executes tests defined from multiple sources.  Each test runs in its own execution directory and return code captured.  A return code of ``0`` indicates ``success``, while any other return code indicates a failure of some kind.  Python files having a ``.pyt`` extension are the native test format which will be used in the examples.
 
 .. note::
 
@@ -39,31 +39,29 @@ The test file ``first.pyt`` defines a function that adds two numbers and verifie
 
 To run the test, navigate to the examples directory and run ``canary run -k first ./basic`` which tells ``canary`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
 
-.. command-output:: canary run -k first ./basic
+.. command-output:: canary -d run -k first ./basic/first
     :cwd: /examples
-    :setup: rm -rf TestResults
+    :setup: rm -rf .canary TestResults
 
 A test is considered to have successfully completed if its exit code is ``0``.  See :ref:`basics-status` for more details on test statuses.
 
 .. note::
 
-   This test uses an optional :ref:`keyword directive<directive-keywords>` to aid in identifying the test and is is used to :ref:`filter tests<usage-filter>` (``-k first`` on the command line).
+   This test uses an optional :ref:`keyword directive<directive-keywords>` to aid in identifying the test and is used to :ref:`filter tests<usage-filter>` (``-k first`` on the command line).
 
-Test execution was conducted within a "test session" -- a folder created to run the tests "out of source".  The default name of the test session is ``TestResults``.  Details of the session can be obtained by navigating to it and executing :ref:`canary status<canary-status>`:
+``canary`` creates an isolated workspace at the start of each run inside the ``.canary`` folder.  All inputs, intermediate files, and outputs are contained within the workspace.  Once test execution completes, a "view" of the most recent results is created in the ``TestResults`` directory.  Details of the latest results are seen by :ref:`canary status<canary-status>`:
 
 .. command-output:: canary status
-    :cwd: /examples/TestResults
+    :nocache:
+    :cwd: /examples
 
-By default, only failed tests appear in the output, which is why the output above shows only a summary of completed tests.  To see the results of each test in the session, including passed tests, pass ``-rA``:
+By default, only failed tests appear in the output.  To see the results of each test in the session, including passed tests, pass ``-rA``:
 
 .. command-output:: canary status -rA
-    :cwd: /examples/TestResults
+    :nocache:
+    :cwd: /examples
 
 .. _getting-started-second:
-
-.. note::
-
-   ``canary run`` creates and executes tests in a folder named ``TestResults``.  If this folder exists, ``canary run`` will issue an error that a test session already exists.  To start a new test session, you can either move or delete ``TestResults`` manually, or instruct ``canary`` to remove it automatically by passing ``-w`` to ``canary run``.
 
 A second test
 -------------
@@ -85,18 +83,18 @@ This test introduces two new features:
 
 To run the test, navigate to the examples folder and run:
 
-.. command-output:: canary run -k second ./basic
+.. command-output:: canary run -k second ./basic/second
     :cwd: /examples
-    :setup: rm -rf TestResults
 
 Inspecting test output
 ----------------------
 
 When a test is run, its output is captured to the file ``canary-out.txt`` in its execution directory.  The :ref:`canary log<canary-log>` command can find and print the contents of this file to the console:
 
-.. note::
+.. command-output:: canary log second
+    :cwd: /examples
 
-   ``canary log`` must be run from within a test session either by ``cd``\ ing into the directory or passing the directory name to ``canary``\ 's ``-C`` flag
 
-.. command-output:: canary -C TestResults log second
+.. command-output:: rm -rf .canary TestResults
+    :silent:
     :cwd: /examples

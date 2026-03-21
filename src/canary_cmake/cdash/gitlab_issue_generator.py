@@ -138,12 +138,13 @@ def groupby_status_and_testname(tests):
 
 def generate_test_issue(name, realizations):
     fail_reason = realizations[0]["fail_reason"]
-    script_link = realizations[0]["script"]
-    script_name = os.path.basename(script_link)
     description = io.StringIO()
     description.write(f"## {fail_reason} test\n\n")
     description.write(f"- Test name: `{name}`\n")
-    description.write(f"- Test script: [{script_name}]({script_link})\n")
+    if "script" in realizations[0]:
+        script_link = realizations[0]["script"]
+        script_name = os.path.basename(script_link)
+        description.write(f"- Test script: [{script_name}]({script_link})\n")
     description.write(
         "\n-------------\n"
         "Issue automatically generated from a corresponding failed test on CDash.\n"

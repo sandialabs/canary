@@ -239,7 +239,7 @@ class ParameterSet:
         return self
 
     @staticmethod
-    def combine(paramsets: list["ParameterSet"]) -> list[dict[str, Any]]:
+    def combine_old(paramsets: list["ParameterSet"]) -> list[dict[str, Any]]:
         """Perform a Cartesian product combination of parameter sets"""
         all_parameters: list[dict[str, Any]] = []
         if not paramsets:
@@ -264,6 +264,28 @@ class ParameterSet:
                         parameters[keys[i][j]] = x
                 append_if_unique(all_parameters, parameters)
         return all_parameters
+
+    @staticmethod
+    def combine(paramsets: list["ParameterSet"]) -> list[dict[str, Any]]:
+        if not paramsets:
+            return []
+        # Pre-flatten keys once
+        flat_keys: list[str] = []
+        for ps in paramsets:
+            flat_keys.extend(ps.keys)
+        # Build iterables of rows
+        row_iters = [ps.values for ps in paramsets]
+        seen: set[tuple[Any, ...]] = set()
+        out: list[dict[str, Any]] = []
+        for group in itertools.product(*row_iters):
+            # group = tuple of rows
+            # flatten values
+            flat_values = tuple(v for row in group for v in row)
+            if flat_values in seen:
+                continue
+            seen.add(flat_values)
+            out.append(dict(zip(flat_keys, flat_values)))
+        return out
 
 
 def random_range(a: float, b: float, n: int) -> list[float]:

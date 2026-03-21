@@ -9,5 +9,4 @@ hpcc_flux
    :maxdepth: 1
 
    discover
-   submit_api
    submit_hl

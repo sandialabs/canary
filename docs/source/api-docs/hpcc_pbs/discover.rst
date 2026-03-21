@@ -3,6 +3,9 @@
    SPDX-License-Identifier: MIT
 
 
+
+.. _hpcc_pbs.discover:
+
 discover
 ========
 

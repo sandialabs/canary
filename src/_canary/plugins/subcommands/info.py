@@ -4,13 +4,16 @@
 
 import argparse
 import io
+import shutil
 from typing import TYPE_CHECKING
 
-from ...third_party.colify import colified
-from ...third_party.color import colorize
-from ...util import logging
-from ...util.term import terminal_size
-from ..hookspec import hookimpl
+import rich
+import rich.console
+import rich.table
+import yaml
+
+from ...hookspec import hookimpl
+from ...workspace import Workspace
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -18,56 +21,58 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Info()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Info())
 
 
 class Info(CanarySubcommand):
     name = "info"
-    description = "Print information about tests in a folder"
+    description = "Print information about test session"
 
-    def setup_parser(self, parser: "Parser"):
-        parser.add_argument("-f", action="store_true", default=False, help="Show generator paths")
-        parser.add_argument("paths", nargs="*")
+    def setup_parser(self, parser: "Parser") -> None:
+        parser.add_argument("-t", "--tag", help="Show information about this tag")
 
     def execute(self, args: argparse.Namespace) -> int:
-        import _canary.finder as finder
-
-        f = finder.Finder()
-        paths = args.paths or ["."]
-        for path in paths:
-            f.add(path)
-        f.prepare()
-        files = f.discover()
-
-        info: dict[str, dict[str, set[str]]] = {}
-        for file in files:
-            myinfo = info.setdefault(file.root, {})
-            finfo = file.info()
-            myinfo.setdefault("keywords", set()).update(finfo.get("keywords", []))
-            myinfo.setdefault("options", set()).update(finfo.get("options", []))
-            type = finfo.get("type", "AbstractTestGenerator").replace("TestGenerator", "")
-            myinfo.setdefault("types", set()).add(type)
-            myinfo.setdefault("files", set()).add(file.path)
-        _, max_width = terminal_size()
-        for root, myinfo in info.items():
-            fp = io.StringIO()
-            label = colorize("@m{%s}" % root)
-            logging.hline(label, max_width=max_width, file=fp)
-            fp.write(f"Test generators: {len(files)}\n")
-            fp.write(f"Test types: {'  '.join(myinfo['types'])}\n")
-            if keywords := myinfo.get("keywords"):
-                fp.write("Keywords:\n")
-                cols = colified(sorted(keywords), indent=2, width=max_width, padding=5)
-                fp.write(cols.rstrip() + "\n")
-            if options := myinfo.get("options"):
-                fp.write("Option expressions:\n")
-                cols = colified(sorted(options), indent=2, width=max_width, padding=5)
-                fp.write(cols.rstrip() + "\n")
-            if args.f:
-                if paths := myinfo.get("files"):
-                    fp.write("Generators:\n")
-                    cols = colified(sorted(paths), indent=2, width=max_width, padding=5)
-                    fp.write(cols.rstrip() + "\n")
-            print(fp.getvalue())
+        if args.tag:
+            self.print_tag_info(args.tag)
+        else:
+            self.print_workspace_info()
         return 0
+
+    def print_tag_info(self, tag: str) -> None:
+        workspace = Workspace.load()
+        fh = io.StringIO()
+        fh.write(f"Tag: {tag}\n")
+        specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
+        selection = workspace.db.get_selection_metadata(tag)
+        fh.write(f"Created on: {selection.pop('created_on')}\n")
+        for key in list(selection.keys()):
+            value = selection.pop(key)
+            if value is not None:
+                selection[key.replace("_", " ").title()] = value
+        yaml.dump(selection, fh, default_flow_style=False)
+        fh.write(f"Test specs ({len(specs)}):")
+        table = rich.table.Table("No.", "ID", "Name")
+        for i, spec in enumerate(specs):
+            table.add_row(str(i), spec.id[:7], spec.display_name(resolve=True, style="rich"))
+        console = rich.console.Console()
+        groups = rich.console.Group(fh.getvalue(), table)
+        if len(specs) > shutil.get_terminal_size().lines:
+            with console.pager():
+                console.print(groups)
+        else:
+            console.print(groups)
+
+    def print_workspace_info(self) -> None:
+        workspace = Workspace.load()
+        info = workspace.info()
+        unique_test_roots = {spec.file_root.as_posix() for spec in info["specs"]}
+        table = rich.table.Table(show_header=False)
+        table.add_row("Workspace", info["root"])
+        table.add_row("Version", info["version"])
+        table.add_row("Specs", str(len(info["specs"])))
+        table.add_row("Test roots", ", ".join(unique_test_roots))
+        table.add_row("Sessions", str(info["session_count"]))
+        table.add_row("Latest", info["latest_session"])
+        table.add_row("Tags", ", ".join(info["tags"]))
+        rich.print(table)

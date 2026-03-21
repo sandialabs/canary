@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _usage:
+.. _reporting:
 
 Reporting test results
 ======================

@@ -19,6 +19,7 @@ def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]
         out = subprocess.check_output(
             ["git", "-C", dir, "log", "-1", "--pretty=format:%ad %h", "--date=short"],
             encoding="utf-8",
+            stderr=subprocess.DEVNULL,
         )
     except Exception as e:
         raise CannotDetermineVersionFromGitError(e.args[0]) from None

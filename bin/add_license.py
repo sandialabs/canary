@@ -15,6 +15,7 @@ def add_python_license(file):
         content = fh.read()
     if "# Copyright NTESS" in content:
         return
+    print(f"Adding license to {file}")
     with open(file, "w") as fh:
         if content.startswith("#!"):
             lines = content.splitlines(keepends=True)
@@ -37,6 +38,7 @@ def add_rst_license(file):
         content = fh.read()
     if ".. Copyright NTESS" in content:
         return
+    print(f"Adding license to {file}")
     with open(file, "w") as fh:
         fh.write(license)
         fh.write(content)

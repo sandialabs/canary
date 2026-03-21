@@ -3,6 +3,7 @@ bin/my-deploy.sh
 junit.xml
 .coverage
 coverage.xml
+canary.json
 html.cov
 *.pyc
 .canary_cache
@@ -18,6 +19,7 @@ __pycache__
 .mypy_cache
 partition.p.*
 canary.cfg
+.canary.*
 scripts/sbatch
 docs/source/commands.rst
 
@@ -31,6 +33,7 @@ build
 .DS_Store
 
 mock-tests
+mock2
 
 *.orig
 
@@ -49,3 +52,7 @@ canary.yaml
 
 testcase.lock
 testcases.lock
+
+canary_distributed.*
+pool.json
+transactions.jsons

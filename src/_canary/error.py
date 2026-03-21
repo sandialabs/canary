@@ -4,10 +4,13 @@
 
 import sys
 
-skip_exit_status = 63
-diff_exit_status = 64
-fail_exit_status = 65
-timeout_exit_status = 66
+from .status import Status
+
+skip_exit_status = Status.code_for_status["SKIPPED"]
+diff_exit_status = Status.code_for_status["DIFFED"]
+fail_exit_status = Status.code_for_status["FAILED"]
+timeout_exit_status = Status.code_for_status["TIMEOUT"]
+exception_exit_status = Status.code_for_status["ERROR"]
 notests_exit_status = 7
 
 
@@ -48,9 +51,12 @@ class TestTimedOut(MyException):
 
 
 class FailFast(Exception):
-    def __init__(self, *, failed):
-        self.failed = failed
-        super().__init__(",".join(_.name for _ in failed))
+    def __init__(self, failed):
+        try:
+            self.failed = list(failed)
+        except TypeError:
+            self.failed = [failed]
+        super().__init__(",".join(_.name for _ in self.failed))
 
 
 class StopExecution(Exception):

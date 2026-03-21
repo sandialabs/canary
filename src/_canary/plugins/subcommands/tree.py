@@ -7,7 +7,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ...hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Tree()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Tree())
 
 
 class Tree(CanarySubcommand):
@@ -44,7 +44,7 @@ class Tree(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         tree(
             args.directory,
-            limit_to_directories=args.d,
+            only_directories=args.d,
             skip_hidden=not args.a,
             exclude_results=args.exclude_results,
         )
@@ -54,7 +54,7 @@ class Tree(CanarySubcommand):
 def tree(
     directory: str,
     level: int = -1,
-    limit_to_directories: bool = False,
+    only_directories: bool = False,
     skip_hidden: bool = True,
     dont_descend=None,
     exclude_results: bool = False,
@@ -75,7 +75,11 @@ def tree(
     always_exclude = ("__pycache__", ".git", ".canary")
 
     def is_results_dir(p):
-        return os.path.exists(os.path.join(p, ".canary/SESSION.TAG"))
+        if os.path.exists(os.path.join(p, "WORKSPACE.TAG")):
+            return True
+        if os.path.exists(os.path.join(p, "VIEW.TAG")):
+            return True
+        return False
 
     def inner(dir_path: Path, prefix: str = "", level=-1):
         nonlocal files, directories
@@ -86,7 +90,7 @@ def tree(
             contents = []
         elif exclude_results and is_results_dir(dir_path):
             contents = []
-        elif limit_to_directories:
+        elif only_directories:
             contents = [d for d in dir_path.iterdir() if d.is_dir()]
         else:
             contents = sorted(dir_path.iterdir())
@@ -106,7 +110,7 @@ def tree(
                 if path.name in dont_descend:
                     break
                 yield from inner(path, prefix=prefix + extension, level=level - 1)
-            elif not limit_to_directories:
+            elif not only_directories:
                 name = path.name
                 if path.is_symlink():
                     name += "@"

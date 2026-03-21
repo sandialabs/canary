@@ -5,52 +5,62 @@
 import argparse
 import json
 import os
+import re
 import sys
 import typing
 
 import canary
 
+from .generator import VVTLauncher
 from .generator import VVTTestGenerator
 
 logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
-def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-    if VVTTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return VVTTestGenerator(root, path=path)
-    return None
+def canary_collectstart(collector) -> None:
+    collector.add_generator(VVTTestGenerator)
 
 
 @canary.hookimpl
-def canary_testcase_modify(case: "canary.TestCase") -> None:
-    if case.file_path.endswith(".vvt"):
-        case.ofile = "execute.log"
-        case.efile = "<none>"  # causes stderr to be merged into stdout
+def canary_generate_modifyitems(generator: "canary.Generator") -> None:
+    for spec in generator.specs:
+        if spec.file_path.suffix == ".vvt":
+            spec.stdout = "execute.log"
+            spec.stderr = None
+            set_vvtest_execpath(spec)
+            if "np" in spec.parameters:
+                spec.meta_parameters["cpus"] = spec.parameters["np"]
+            if "ndevice" in spec.parameters:
+                spec.meta_parameters["gpus"] = spec.parameters["ndevice"]
+            if "nnode" in spec.parameters:
+                spec.meta_parameters["nodes"] = spec.parameters["nnode"]
 
 
 @canary.hookimpl
-def canary_testcase_setup(case: "canary.TestCase") -> None:
-    if case.file_path.endswith(".vvt"):
-        with canary.filesystem.working_dir(case.working_directory):
+def canary_cdash_name(case: canary.TestCase) -> str | None:
+    if not case.spec.file_path.suffix == ".vvt":
+        return None
+    elif not case.spec.parameters:
+        return case.spec.family
+    _, _, s = os.path.basename(case.spec.execpath).partition(".")
+    pattern = re.compile(r"([^.=]+)=.*?(?=\. [^.=]+=|$)", re.VERBOSE)
+    s_params = ",".join([m.group() for m in pattern.finditer(s)])
+    return f"{case.spec.family}[{s_params}]"
+
+
+@canary.hookimpl
+def canary_runteststart(case: "canary.TestCase") -> None:
+    if case.spec.file_path.suffix == ".vvt":
+        with canary.filesystem.working_dir(case.workspace.dir):
             write_vvtest_util(case)
 
 
-class RerunAction(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        keywords = getattr(args, "keyword_exprs", None) or []
-        keywords.append(":all:")
-        args.keyword_exprs = list(keywords)
-        setattr(args, self.dest, True)
-
-
-class AnalyzeAction(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        script_args = getattr(args, "script_args", None) or []
-        script_args.append("--execute-analysis-sections")
-        args.script_args = list(script_args)
-        setattr(args, self.dest, True)
-        setattr(args, "dont_restage", True)
+@canary.hookimpl
+def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
+    if case.spec.file.suffix == ".vvt":
+        return VVTLauncher()
+    return None
 
 
 @canary.hookimpl
@@ -71,21 +81,48 @@ def canary_addoption(parser: "canary.Parser") -> None:
         nargs=0,
         command="run",
         group="vvtest options",
-        dest="vvtest_analyze",
+        dest="analyze",
         help="Only run the analysis sections of each test. Note that a test must be written to "
         "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
         "test is run.",
     )
 
 
+def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
+    """Set the execpath of the case
+
+    In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
+    ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
+    parameter is used for constructing execution path
+    """
+    getstr = lambda v: getattr(v, "string", str(v))
+    parts = [f"{p}={getstr(spec.parameters[p])}" for p in sorted(spec.parameters.keys())]
+    name = spec.family
+    if parts:
+        name = "%s.%s" % (name, ".".join(parts))
+    spec.execpath = str(spec.file_path.parent / name)  # ty: ignore [invalid-assignment]
+
+
+class RerunAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, "only", "all")
+
+
+class AnalyzeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        script_args = getattr(namespace, "script_args", None) or []
+        script_args.append("--execute-analysis-sections")
+        setattr(namespace, "script_args", list(script_args))
+        opts = getattr(namespace, "canary_vvtest", None) or {}
+        opts[self.dest] = True
+        setattr(namespace, "canary_vvtest", opts)
+
+
 def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
-    if not case.file_path.endswith(".vvt"):
+    if not case.spec.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
-    file = os.path.abspath("./vvtest_util.py")
-    if os.path.dirname(file) != case.working_directory:
-        raise ValueError("Incorrect directory for writing vvtest_util")
-    with open(file, "w") as fh:
+    with case.workspace.openfile("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
         for key, value in attrs.items():
@@ -103,22 +140,22 @@ def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
 def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs = {}
     compiler_spec = None
-    if vendor := canary.config.get("build:compiler:vendor"):
-        version = canary.config.get("build:compiler:version")
+    if vendor := canary.config.get("cmake:compiler:vendor"):
+        version = canary.config.get("cmake:compiler:version")
         compiler_spec = f"{vendor}@{version}"
-    attrs["CASEID"] = case.id
-    attrs["NAME"] = case.family
-    attrs["TESTID"] = case.fullname
+    attrs["CASEID"] = case.spec.id
+    attrs["NAME"] = case.spec.family
+    attrs["TESTID"] = case.spec.fullname
     attrs["PLATFORM"] = sys.platform.lower()
     attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
-    attrs["TESTROOT"] = case.work_tree
+    attrs["TESTROOT"] = str(case.workspace.root)
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = canary.config.getoption("on_options") or []
     attrs["OPTIONS_OFF"] = canary.config.getoption("off_options") or []
-    attrs["SRCDIR"] = case.file_dir
-    attrs["TIMEOUT"] = case.timeout
-    attrs["KEYWORDS"] = case.keywords
+    attrs["SRCDIR"] = str(case.spec.file.parent)
+    attrs["TIMEOUT"] = case.spec.timeout
+    attrs["KEYWORDS"] = case.spec.keywords
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
 
@@ -130,35 +167,35 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     # ``--execute-analysis-sections`` is a appended to a test script's command line if
     # rtconfig.getAttr("analyze") is True.  Thus, it seems that there is no differenece between
     # ``opt_analyze`` and ``is_analysis_only``.  In canary, --execute-analysis-sections is added
-    # to the command if canary_testcase_modify below
+    # in the AnalyzeAction class below
     analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
 
-    attrs["is_analyze"] = isinstance(case, canary.TestMultiCase)
+    attrs["is_analyze"] = "multicase" in case.spec.attributes
     attrs["is_baseline"] = canary.config.getoption("command") == "rebaseline"
-    attrs["PARAM_DICT"] = case.parameters or {}
-    for key, val in case.parameters.items():
+    attrs["PARAM_DICT"] = case.spec.parameters or {}
+    for key, val in case.spec.parameters.items():
         attrs[key] = val
-    if isinstance(case, canary.TestMultiCase):
-        for paramset in case.paramsets:
-            key = "_".join(paramset.keys)
+    if attrs["is_analyze"]:
+        for paramset in case.spec.attributes["paramsets"]:
+            key = "_".join(paramset["keys"])
             table = attrs.setdefault(f"PARAM_{key}", [])
-            for row in paramset.values:
-                if len(paramset.keys) == 1:
+            for row in paramset["values"]:
+                if len(paramset["keys"]) == 1:
                     table.append(row[0])
                 else:
                     table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [dep.working_directory for dep in getattr(case, "dependencies", [])]
+    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.dependencies]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
-    attrs["exec_dir"] = case.working_directory
-    attrs["exec_root"] = case.work_tree
-    attrs["exec_path"] = case.path
-    attrs["file_root"] = case.file_root
-    attrs["file_dir"] = case.file_dir
-    attrs["file_path"] = case.file_path
+    attrs["exec_dir"] = str(case.workspace.dir)
+    attrs["exec_root"] = str(case.workspace.root)
+    attrs["exec_path"] = str(case.workspace.path)
+    attrs["file_root"] = str(case.spec.file_root)
+    attrs["file_dir"] = str(case.spec.file.parent)
+    attrs["file_path"] = str(case.spec.file_path)
 
     attrs["RESOURCE_np"] = case.cpus
     attrs["RESOURCE_IDS_np"] = [int(_) for _ in case.cpu_ids]

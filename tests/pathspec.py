@@ -6,17 +6,10 @@ import argparse
 import json
 import os
 
-import _canary.plugins.subcommands.common.pathspec as ps
+from _canary.plugins.subcommands.run import PathSpec
+from _canary.plugins.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
-
-
-def test_pathspec_setdefault():
-    obj = type("a", (), {})
-    x = ps.setdefault(obj, "foo", [])
-    x.append("a")
-    y = ps.setdefault(obj, "foo", [])
-    assert y == ["a"]
 
 
 def test_pathspec_parse_new(tmpdir):
@@ -31,29 +24,26 @@ def test_pathspec_parse_new(tmpdir):
             json.dump(f, fh)
         values = [
             "./baz",
-            "+baz",
             "./spam",
             "./eggs:f.pyt",
             "./ham/f.pyt",
-            "~bacon",
             "--",
             "--foo",
             "--bar",
         ]
-        p = ps.PathSpec("", "f_pathspec")
+        p = ReadPathsFromFile("", "f_pathspec")
         args = argparse.Namespace()
-        p(None, args, "foo.json")
-        p = ps.PathSpec("", "pathspec")
+        p(None, args, "foo.json", option_string="-f")
+        p = PathSpec("", "pathspec")
         p(None, args, values)
-        assert args.paths == {
+        d = os.getcwd()
+        assert args.request.value == {
             os.getcwd(): ["bacon"],
-            "./baz": [],
-            "./spam": [],
-            "./eggs": ["f.pyt"],
+            f"{d}/baz": [],
+            f"{d}/spam": [],
+            f"{d}/eggs": ["f.pyt"],
             f"{os.getcwd()}/ham": ["f.pyt"],
         }
-        assert args.on_options == ["baz"]
-        assert args.off_options == ["bacon"]
         assert args.script_args == ["--foo", "--bar"]
 
 

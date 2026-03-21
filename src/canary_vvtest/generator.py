@@ -10,14 +10,17 @@ import json.decoder
 import os
 import re
 import shlex
+import subprocess
 import sys
 import tokenize
 from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
 from typing import Generator
+from typing import TextIO
 
 import canary
 from _canary.enums import list_parameter_space
@@ -26,10 +29,15 @@ from _canary.util import string
 
 from . import scalar
 
+if TYPE_CHECKING:
+    pass
+
 logger = canary.get_logger(__name__)
 
 
 class VVTTestGenerator(PYTTestGenerator):
+    file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
+
     def load(self, file: str | None = None) -> None:
         file = file or self.file
         for arg in p_VVT(file):
@@ -64,10 +72,6 @@ class VVTTestGenerator(PYTTestGenerator):
                     )
                 case _:
                     raise VVTParseError(f"Unknown command: {arg.command}", arg)
-
-    @classmethod
-    def matches(cls, path: str) -> bool:
-        return path.endswith(".vvt")
 
     def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
         """# VVT : keywords [:=] word1 word2 ... wordn"""
@@ -599,7 +603,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = "skipif expression @*b{%s} evaluating to @*g{True}" % expression
+        reason = f"skipif expression [bold blue]{expression}[/] evaluating to [bold green]True[/]"
     return True, reason
 
 
@@ -670,6 +674,35 @@ def to_seconds(arg: str | int | float, round: bool = False, negatives: bool = Fa
     if round:
         return int(seconds)
     return seconds
+
+
+class VVTLauncher(canary.Launcher):
+    def run(self, case: "canary.TestCase") -> int:
+        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
+        env = os.environ.copy()
+        case.set_runtime_env(env)
+        args = [sys.executable, case.spec.file.name]
+        if a := canary.config.getoption("script_args"):
+            args.extend(a)
+        if a := case.get_attribute("script_args"):
+            args.extend(a)
+        case.add_measurement("command_line", shlex.join(args))
+        stdout = open(case.stdout, "a")
+        stderr: TextIO | int
+        if case.stderr is None:
+            stderr = subprocess.STDOUT
+        else:
+            stderr = open(case.stderr, "a")
+        try:
+            cp = subprocess.run(
+                args, cwd=case.workspace.dir, env=env, stdout=stdout, stderr=stderr, check=False
+            )
+        finally:
+            stdout.close()
+            if isinstance(stderr, io.TextIOWrapper):
+                stderr.close()
+        logger.debug(f"Finished {case.display_name()}")
+        return cp.returncode
 
 
 class ParseError(Exception):

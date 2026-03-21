@@ -79,6 +79,7 @@ class repo:
 
     def remove_source_tree(self):
         if self.cloned:
+            assert self.path is not None
             shutil.rmtree(self.path)
 
     def cloned(self):
@@ -279,14 +280,14 @@ class repo:
             return None
 
         url = self.build_api_url(path=f"projects/{self.project_id}/uploads")
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         files = {"file": open(file, "rb")}
         response = requests.post(url, headers=headers, files=files)  # nosec B113
         return response.json()
 
     @api_access_required
     def release(self, *, name, tag, assets=None):
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         params = {
             "name": name,
             "tag_name": tag,
@@ -311,7 +312,7 @@ class repo:
     @api_access_required
     def link(self, *, tag, filename, fileurl):
         url = self.build_api_url(path=f"projects/{self.project_id}/releases/{tag}/assets/links")
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         data = urlencode({"name": filename, "url": fileurl}).encode("utf-8")
         request = Request(url=url, headers=headers, data=data, method="POST")
         request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
@@ -324,7 +325,7 @@ class repo:
         """Get issues for this project"""
         if state not in self._issues:
             issues = []
-            header = {"PRIVATE-TOKEN": self.access_token}
+            header = {"PRIVATE-TOKEN": str(self.access_token)}
             page = 1
             while True:
                 base_url = self.build_api_url(path=f"projects/{self.project_id}/issues")
@@ -348,7 +349,7 @@ class repo:
         """Get issues for this project"""
         if self._commits is None:
             self._commits = []
-            header = {"PRIVATE-TOKEN": self.access_token}
+            header = {"PRIVATE-TOKEN": str(self.access_token)}
             page = 1
             while True:
                 base_url = self.build_api_url(path=f"projects/{self.project_id}/repository/commits")
@@ -369,7 +370,7 @@ class repo:
         """Get merge_requests for this project"""
         if state not in self._merge_requests:
             merge_requests = []
-            header = {"PRIVATE-TOKEN": self.access_token}
+            header = {"PRIVATE-TOKEN": str(self.access_token)}
             page = 1
             pid = self.project_id
             base_url = self.build_api_url(path=f"projects/{pid}/merge_requests")
@@ -392,7 +393,7 @@ class repo:
     @api_access_required
     def issue(self, issue_no):
         url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}")
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         request = Request(url=url, headers=headers)
         return json.load(urlopen(request))  # nosec B310
 
@@ -414,9 +415,11 @@ class repo:
             raise ValueError("only one of data or notes can be defined")
         if isinstance(notes, str):
             notes = {"body": notes}
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         base_url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}")
-        encoded_params = urlencode(data or notes)
+        params = data or notes
+        assert params is not None
+        encoded_params = urlencode(params)
 
         if data is not None:
             url = f"{base_url}?{encoded_params}"
@@ -433,7 +436,7 @@ class repo:
 
     @api_access_required
     def new_issue(self, *, data):
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         base_url = self.build_api_url(path=f"projects/{self.project_id}/issues")
         encoded_params = urlencode(data)
         url = f"{base_url}?{encoded_params}"
@@ -445,7 +448,7 @@ class repo:
     @api_access_required
     def tags(self):
         url = self.build_api_url(path=f"projects/{self.project_id}/repository/tags")
-        headers = {"PRIVATE-TOKEN": self.access_token}
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
         request = Request(url=url, headers=headers)
         return json.load(urlopen(request))  # nosec B310
 

@@ -15,7 +15,8 @@ echo " "
 #yum update -y
 #yum upgrade -y
 #yum install -y curl openssl-devlel bzip2-devel libffi-devel
-curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+MINICONDA=Miniconda3-py313_25.5.1-1-Linux-x86_64.sh
+curl -sSL https://repo.anaconda.com/miniconda/$MINICONDA -o miniconda.sh
 bash miniconda.sh -bfp $HOME/miniconda
 rm -rf miniconda.sh
 export PATH="$HOME/miniconda/bin:$PATH"
@@ -51,10 +52,11 @@ echo " "
 # Test 1
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -64,10 +66,11 @@ echo " "
 # Test 2
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs -b spec=count:3 ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -75,5 +78,5 @@ echo " "
 echo " "
 echo "----------------------- Done! ----------------------"
 # Artifacts
-canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
-canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
+canary report junit create -o $CI_PROJECT_DIR/junit.xml || true
+canary report cdash create -d $CI_PROJECT_DIR/xml || true

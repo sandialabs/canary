@@ -16,10 +16,11 @@ echo " "
 # Test 1
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=slurm ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -29,10 +30,11 @@ echo " "
 # Test 2
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=slurm -b spec=count:3 ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -42,10 +44,11 @@ echo " "
 # Test 3
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=slurm -b spec=count:3,layout:atomic ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -55,9 +58,11 @@ echo " "
 # Test 4
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=slurm -b spec=count:auto,layout:flat ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
+if [ "${exit_code}" -ne 14 ]; then
+  cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
+  cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -66,5 +71,5 @@ echo " "
 echo " "
 echo "----------------------- Done! ----------------------"
 # Artifacts
-canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
-canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
+canary report junit create -o $CI_PROJECT_DIR/junit.xml || true
+canary report cdash create -d $CI_PROJECT_DIR/xml || true

@@ -7,8 +7,8 @@ import importlib.resources as ir
 import os
 from typing import TYPE_CHECKING
 
+from ...hookspec import hookimpl
 from ...util.filesystem import force_copy
-from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Fetch()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Fetch())
 
 
 class Fetch(CanarySubcommand):

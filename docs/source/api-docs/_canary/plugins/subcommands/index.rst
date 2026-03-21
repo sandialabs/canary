@@ -10,6 +10,7 @@ plugins.subcommands
 
    autodoc
    check
+   collect
    common/index
    config
    describe
@@ -17,12 +18,19 @@ plugins.subcommands
    edit
    fetch
    find
+   gc
    help
+   history
    info
+   init
    location
    log
    rebaseline
+   refresh
    report
+   rm
    run
+   select
+   selection
    status
    tree

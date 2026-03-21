@@ -13,6 +13,7 @@ import shlex
 import shutil
 import stat
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any
@@ -26,6 +27,7 @@ __all__ = [
     "movefile",
     "remove",
     "rmtree2",
+    "async_rmtree",
     "synctree",
     "getuser",
     "gethome",
@@ -34,6 +36,7 @@ __all__ = [
     "gethost",
     "getnode",
     "filesize",
+    "filesystem_root",
     "force_copy",
     "force_remove",
     "max_name_length",
@@ -62,6 +65,9 @@ def max_name_length() -> int:
     return os.pathconf("/", "PC_NAME_MAX")
 
 
+PathLike = pathlib.Path | str
+
+
 def which(
     *args: str,
     path: str | list[str] | tuple[str, ...] | None = None,
@@ -74,8 +80,8 @@ def which(
 
     Args:
       args: One or more executables to search for
-      path: The path to search. Defaults to ``PATH`` required (bool): If set to
-        True, raise an error if executable not found
+      path: The path to search. Defaults to ``PATH``
+      required (bool): If set to True, raise an error if executable not found
 
     Returns:
       exe: The first executable that is found in the path
@@ -121,6 +127,11 @@ def movefile(src: str, dst: str) -> None:
     shutil.move(src, dst)
 
 
+def filesystem_root(root: str, sigil: str = "@") -> str:
+    """Return the path after `sigil` if there is a partitioning"""
+    return root if sigil not in root else root.partition(sigil)[-1]
+
+
 def synctree(
     src: str,
     dst: str,
@@ -157,7 +168,7 @@ def synctree(
     return rsync.returncode
 
 
-def force_remove(file_or_dir: str) -> None:
+def force_remove(file_or_dir: PathLike) -> None:
     """Remove ``file_or_dir`` forcefully"""
     try:
         remove(file_or_dir)
@@ -177,18 +188,16 @@ def force_copy(src: str, dst: str) -> None:
         raise ValueError(f"force_copy: file not found: {src}")
 
 
-def remove(file_or_dir: pathlib.Path | str) -> None:
+def remove(file_or_dir: PathLike) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
-    if path.is_symlink():
-        os.unlink(path)
+    if path.is_file():
+        path.unlink()
     elif path.is_dir():
         rmtree2(path)
-    elif path.exists():
-        os.remove(path)
 
 
-def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
+def rmtree2(path: PathLike, n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
     from . import logging
@@ -206,6 +215,32 @@ def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
             logger.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
             time.sleep(0.2 * n)
         attempts += 1
+
+
+def async_rmtree(path: PathLike) -> None:
+    path = pathlib.Path(path)
+    if not path.exists():
+        return
+    tombstone = path.with_name(f"{path.name}.{int(time.time())}.{os.getpid()}")
+
+    # Fast operation: rename/move
+    path.rename(tombstone)
+
+    # Slow operation: delete in background
+    def _rm_rf(p):
+        try:
+            rmtree2(p)
+        except Exception:  # nosec B110
+            # Best-effort cleanup, same spirit as `rm -rf >/dev/null`
+            pass
+
+    t = threading.Thread(
+        target=_rm_rf,
+        args=(tombstone,),
+        name=f"wipe-{tombstone.name}",
+        daemon=True,
+    )
+    t.start()
 
 
 def getuser() -> str:
@@ -304,7 +339,8 @@ def file_age_in_days(file: str) -> float:
 
 def sortby_mtime(files: list[str]) -> list[str]:
     """Sort the list of ``files`` by ``mtime``."""
-    return sorted(files, key=os.path.getmtime)
+    files.sort(key=os.path.getmtime)
+    return files
 
 
 def touch(path: str) -> None:
@@ -326,11 +362,12 @@ def touchp(path: str) -> None:
 
 
 @contextmanager
-def working_dir(dirname: str, create: bool = False) -> Generator[None, None, None]:
+def working_dir(dirname: str | pathlib.Path, create: bool = False) -> Generator[None, None, None]:
     """Context manager that changes the working directory to ``dirname`` and returns to the calling
     directory when the context is exited"""
+    dirname = pathlib.Path(dirname)
     if create:
-        mkdirp(dirname)
+        dirname.mkdir(parents=True, exist_ok=True)
 
     orig_dir = os.getcwd()
     os.chdir(dirname)
@@ -361,7 +398,7 @@ def mkdirp(*paths: str, mode: int | None = None) -> None:
             raise OSError(errno.EEXIST, "File already exists", path)
 
 
-def set_executable(path: str) -> None:
+def set_executable(path: PathLike) -> None:
     """Set executable bits on ``path``"""
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:
@@ -437,7 +474,7 @@ def ancestor(dir: str, n: int = 1) -> str:
     return parent
 
 
-def grep(regex: str | re.Pattern, file: str) -> bool:
+def grep(regex: str | re.Pattern, file: PathLike) -> bool:
     rx: re.Pattern = re.compile(regex) if isinstance(regex, str) else regex
     try:
         for line in open(file):
@@ -467,3 +504,30 @@ def clean_out_folder(folder: str) -> None:
         with working_dir(folder):
             for f in os.listdir("."):
                 force_remove(f)
+
+
+def write_directory_tag(file: PathLike) -> None:
+    file = pathlib.Path(file)
+    file.parent.mkdir(exist_ok=True)
+    file.write_text(
+        "Signature: 8a477f597d28d172789f06886806bc55\n"
+        "# This file is a directory tag automatically created by canary.\n"
+        "# For information about cache directory tags see https://bford.info/cachedir/\n"
+    )
+
+
+def atomic_write(path: pathlib.Path, text: str) -> None:
+    dir = path.parent
+    fd, tmp_path = tempfile.mkstemp(dir=dir, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, str(path))
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise

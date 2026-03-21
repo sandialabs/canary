@@ -35,19 +35,23 @@ classifiers = [
 
 dynamic = [ "version" ]
 dependencies = [
-    "hpc-connect==25.10.7",
+    "hpc-connect==26.3.5",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
     "schema",
+    "rich",
+    "typing_extensions; python_version < '3.11'",
 ]
 
 optional-dependencies.dev = [
+    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
     "coverage",
     "mypy",
     "pydata-sphinx-theme",
     "pytest",
     "ruff",
+    "bandit",
     "sphinx",
     "sphinx-design",
     "xmlschema",
@@ -68,6 +72,8 @@ scripts.nvtest = "canary:console_main"
 canary_cmake = "canary_cmake"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
+canary_amd = "canary_amd"
+canary_nvidia = "canary_nvidia"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools.dynamic]
@@ -106,9 +112,9 @@ testpaths = [
     "src/canary_vvtest/tests",
     "src/canary_cmake/tests",
     "src/canary_hpc/tests",
-    "src/canary_junit/tests"
+    "src/canary_gitlab/tests"
 ]
-norecursedirs = "mock"
+norecursedirs = "mock data generators"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
 python_files = "*.py"
@@ -135,7 +141,12 @@ exclude = [
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/canary_gitlab/tests/*",
 ]
+
+[[tool.mypy.overrides]]
+module = "randomname.*"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "requests.*"
@@ -204,15 +215,25 @@ ignore_errors = true
 [tool.ty.src]
 exclude = [
     "src/canary/examples",
-    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/third_party/distro.py",
     "src/_canary/third_party/programoutput/*",
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
+    "src/_canary/config/schemas.py",
+    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
+    "src/_canary/testspec.py",  # this file raises a bug in ty
+    "src/canary_cmake/tests/*",  # just until we get them fixed
+    "src/canary_vvtest/tests/*",  # just until we get them fixed
+    "src/canary_hpc/tests/*",  # just until we get them fixed
+    "src/_canary/rerun.py",
 ]
-include = ["src"]
+include = ["src", "tests"]
+[tool.ty.rules]
+unused-type-ignore-comment = "ignore"
+unused-ignore-comment = "ignore"
+invalid-method-override = "ignore"
 
 
 [tool.bandit]

@@ -18,6 +18,6 @@ The output of each test is logged to ``<path>/canary-out.txt`` and can be viewed
 
 .. code-block:: console
 
-    canary log /ID
+    canary log ID
 
 where ``ID`` is the test ID that is printed by :ref:`canary status<basics-status>`.

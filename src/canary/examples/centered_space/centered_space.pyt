@@ -25,12 +25,12 @@ def test():
 def analyze():
     self = canary.get_instance()
     parameters = {}
-    for dep in self.dependencies:
+    for dep in sorted(self.dependencies, key=lambda x: x.name):
         with open(os.path.join(dep.working_directory, "output.json")) as fh:
             data = json.load(fh)
             parameters.setdefault("a", []).append(data["a"])
             parameters.setdefault("b", []).append(data["b"])
-    assert parameters == {"a": [0, -10, -5, 5, 10, 0, 0, 0, 0], "b": [0, 0, 0, 0, 0, -2, -1, 1, 2]}
+    assert parameters == {"a": [-10, -5, 0, 0, 0, 0, 0, 10, 5], "b": [0, 0, -1, -2, 0, 1, 2, 0, 0]}
 
 
 if __name__ == "__main__":

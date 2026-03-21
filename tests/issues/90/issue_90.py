@@ -9,16 +9,15 @@ def test_issue_90(tmpdir):
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             write_testfile(fh)
-        cp = run("-w", ".", check=False)
+        cp = run("-w", ".", check=False, debug=True)
         assert cp.returncode != 0
-        with fs.working_dir("TestResults"):
-            try:
-                os.environ["FIX_B"] = "1"
-                cp = run("-k", "not success", ".", check=False)
-            finally:
-                os.environ.pop("FIX_B")
-            assert cp.returncode == 0
-            assert os.path.exists("a/canary-out.txt")
+        try:
+            os.environ["FIX_B"] = "1"
+            cp = run("--only=failed", "b", debug=True)
+        finally:
+            os.environ.pop("FIX_B")
+        assert cp.returncode == 0
+        assert set(os.listdir("TestResults")) == {"VIEW.TAG", "a", "b", "c"}
 
 
 def write_testfile(file):
@@ -26,11 +25,9 @@ def write_testfile(file):
 import os
 import sys
 import canary
-
 canary.directives.name("a")
 canary.directives.name("b")
 canary.directives.name("c")
-
 canary.directives.depends_on("c", when="testname=b")
 canary.directives.depends_on("b", when="testname=a")
 

@@ -1,25 +1,70 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
+from pathlib import Path
+from typing import Any
+from typing import Generator
+
+from schema import And
+from schema import Optional
+from schema import Schema
 
 import canary
 
 from .cdash import CDashReporter
+from .ctest import CTestLauncher
 from .ctest import CTestTestGenerator
+from .ctest import finish_ctest
 from .ctest import read_resource_specs
+from .ctest import setup_ctest
 
 logger = canary.get_logger(__name__)
 
 
-@canary.hookimpl(specname="canary_testcase_generator")
-def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return CTestTestGenerator(root, path=path)
+@canary.hookimpl
+def canary_collectstart(collector: canary.Collector) -> None:
+    collector.add_generator(CTestTestGenerator)
+
+
+@canary.hookimpl
+def canary_collect_modifyitems(collector: canary.Collector) -> None:
+    ctest_files: dict[str, list[str]] = {}
+    for root, path in collector.iter_files():
+        if os.path.basename(path) == "CTestTestfile.cmake":
+            ctest_files.setdefault(root, []).append(path)
+    for root, paths in ctest_files.items():
+        if len(paths) > 1:
+            paths.sort(key=lambda p: (p.split(os.sep), p))
+            for path in paths[1:]:
+                collector.remove_file(root, path)
+
+
+@canary.hookimpl
+def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
+    if case.spec.file.suffix == ".cmake":
+        return CTestLauncher()
     return None
+
+
+@canary.hookimpl
+def canary_runteststart(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        setup_ctest(case)
+
+
+@canary.hookimpl
+def canary_runtest_finish(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        finish_ctest(case)
 
 
 @canary.hookimpl(specname="canary_configure")
 def add_default_ctest_timeout(config: canary.Config):
-    config.set("config:timeout:ctest", 1500.0, scope="defaults")
+    config.set("run:timeout:ctest", 1500.0)
+    config.add_section(name="cmake", schema=cmake_schema)
 
 
 @canary.hookimpl(specname="canary_addoption")
@@ -27,6 +72,7 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-config",
         metavar="cfg",
+        dest="canary_cmake_ctest_config",
         group="ctest options",
         command=["run", "find"],
         help="Choose configuration to test",
@@ -34,6 +80,7 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-test-timeout",
         metavar="T",
+        dest="canary_cmake_test_timeout",
         type=canary.time.time_in_seconds,
         group="ctest options",
         command="run",
@@ -42,15 +89,17 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-resource-spec-file",
         metavar="FILE",
+        dest="canary_cmake_resource_spec_file",
         group="ctest options",
         command="run",
         help="Set the resource spec file to use.",
     )
     parser.add_argument(
         "--recurse-ctest",
-        default=None,
-        action="store_true",
         group="ctest options",
+        dest="canary_cmake_recurse_ctest",
+        action="store_true",
+        default=False,
         command=["run", "find"],
         help="Recurse CMake binary directory for test files.  CTest tests can be detected "
         "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
@@ -59,7 +108,6 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--output-on-failure",
         nargs=0,
-        default=None,
         action=MapToShowCapture,
         group="ctest options",
         command="run",
@@ -89,6 +137,21 @@ class CDashHooks:
         """Return CDash labels for ``case``"""
         ...
 
+    @canary.hookspec
+    def canary_cdash_artifacts(self, case: "canary.TestCase") -> list[dict[str, str]] | None:
+        """Return artifacts to transmit to CDash"""
+        ...
+
+    @canary.hookspec(firstresult=True)
+    def canary_cdash_name(self, case: "canary.TestCase") -> str | None:
+        """Return the name to use on CDash"""
+        ...
+
+    @canary.hookspec
+    def canary_cdash_named_measurements(self, case: "canary.TestCase") -> dict[str, Any] | None:
+        """Return measurements to post to CDash"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -103,16 +166,96 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 @canary.hookimpl(trylast=True)
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
-    return list(case.keywords)
+    return list(case.spec.keywords)
+
+
+@canary.hookimpl(trylast=True)
+def canary_cdash_name(case: canary.TestCase) -> str:
+    """Default implementation: return the test case's keywords"""
+    if not case.spec.parameters:
+        return case.spec.family
+    s_params = case.spec.s_params()
+    return f"{case.spec.family}[{s_params}]"
 
 
 @canary.hookimpl
-def canary_configure(config: canary.Config) -> None:
-    if f := config.getoption("ctest_resource_spec_file"):
+def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, Any]]) -> None:
+    if f := config.getoption("canary_cmake_resource_spec_file"):
         logger.info("Setting resource pool from ctest resource spec file")
+        pool["additional_properties"].clear()
+        pool["additional_properties"]["ctest"] = {"resource_spec_file": os.path.abspath(f)}
         resource_specs = read_resource_specs(f)
-        pool = {
-            "resources": resource_specs["local"],
-            "additional_properties": {"ctest resource spec file": f},
+        cpu_spec = pool["resources"].pop("cpus")
+        pool["resources"].clear()
+        pool["resources"].update(resource_specs["local"])
+        if "cpus" not in pool["resources"]:
+            pool["resources"]["cpus"] = cpu_spec
+
+
+def to_str_path(x: object) -> str:
+    if isinstance(x, (str, Path)):
+        return str(x)
+    raise TypeError("file must be str or Path")
+
+
+@canary.hookimpl(wrapper=True)
+def canary_cdash_artifacts(
+    case: canary.TestCase,
+) -> Generator[None, list[dict[str, str]], list[dict[str, str]]]:
+    """Default implementation: return the test case's keywords"""
+    schema = Schema(
+        {
+            "file": And(to_str_path),
+            Optional("when", default="always"): And(
+                str, lambda s: s in {"never", "always", "on_success", "on_failure"}
+            ),
         }
-        config.resource_pool.fill(pool)
+    )
+    artifacts = list(case.spec.artifacts) or []
+    result = yield
+    artifacts.extend([_ for _ in result if _])
+    for i, artifact in enumerate(artifacts):
+        artifacts[i] = schema.validate(artifact)
+    return artifacts
+
+
+@canary.hookimpl(wrapper=True)
+def canary_cdash_named_measurements(
+    case: canary.TestCase,
+) -> Generator[None, list[dict[str, Any]], dict[str, Any]]:
+    measurements: dict[str, Any] = {}
+    result = yield
+    for item in result:
+        if item:
+            measurements.update(item)
+    return measurements
+
+
+cmake_schema = Schema(
+    {
+        Optional("project"): Optional(str),
+        Optional("type"): Optional(str),
+        Optional("date"): Optional(str),
+        Optional("build_directory"): Optional(str),
+        Optional("source_directory"): Optional(str),
+        Optional("compiler"): {
+            Optional("vendor"): Optional(str),
+            Optional("version"): Optional(str),
+            Optional("paths"): {
+                Optional("cc"): Optional(str),
+                Optional("cxx"): Optional(str),
+                Optional("fc"): Optional(str),
+                Optional("mpicc"): Optional(str),
+                Optional("mpicxx"): Optional(str),
+                Optional("mpifc"): Optional(str),
+            },
+            Optional("cc"): Optional(str),
+            Optional("cxx"): Optional(str),
+            Optional("fc"): Optional(str),
+            Optional("mpicc"): Optional(str),
+            Optional("mpicxx"): Optional(str),
+            Optional("mpifc"): Optional(str),
+        },
+    },
+    ignore_extra_keys=True,
+)

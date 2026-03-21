@@ -5,6 +5,7 @@
 import glob
 import os
 import sys
+from pathlib import Path
 
 from _canary.util.executable import Executable
 from _canary.util.filesystem import touch
@@ -97,35 +98,10 @@ def test_link_rename_rel_vvt(tmpdir):
 
 
 def test_link_when(tmpdir):
+    dir = Path(__file__).parent
+    f = dir / "../data/generators/link_when.pyt"
+    assert f.exists()
     with working_dir(tmpdir.strpath, create=True):
-        touch("foo.txt")
-        touch("baz.txt")
-        with open("a.pyt", "w") as fh:
-            fh.write(
-                """\
-import os
-import sys
-import canary
-canary.directives.parameterize('a', ('baz', 'foo'))
-canary.directives.parameterize('b', (1, 2))
-canary.directives.link('foo.txt', when={'parameters': 'a=foo and b=1'})
-canary.directives.link('baz.txt', when='parameters="a=baz and b=1"')
-canary.directives.link(src='foo.txt', dst='foo-b2.txt', when={'parameters': 'a=foo and b=2'})
-canary.directives.link(src='baz.txt', dst='baz-b2.txt', when='parameters="a=baz and b=2"')
-def test():
-    self = canary.get_instance()
-    if self.parameters[('a', 'b')] == ('foo', 1):
-        assert os.path.islink('foo.txt')
-    elif self.parameters[('a', 'b')] == ('baz', 1):
-        assert os.path.islink('baz.txt')
-    elif self.parameters[('a', 'b')] == ('foo', 2):
-        assert os.path.islink('foo-b2.txt')
-    elif self.parameters[('a', 'b')] == ('baz', 2):
-        assert os.path.islink('baz-b2.txt')
-if __name__ == '__main__':
-    sys.exit(test())
-"""
-            )
 
         def txtfiles(d):
             basename = os.path.basename
@@ -133,16 +109,19 @@ if __name__ == '__main__':
             return sorted([basename(f) for f in files if not basename(f).startswith("canary-")])
 
         python = Executable(sys.executable)
-        python("-m", "canary", "run", "-w", ".", fail_on_error=False)
-
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=foo.b=1", stdout=str)
-        assert txtfiles(p.out.strip()) == ["foo.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=foo.b=2", stdout=str)
-        assert txtfiles(p.out.strip()) == ["foo-b2.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=baz.b=1", stdout=str)
-        assert txtfiles(p.out.strip()) == ["baz.txt"]
-        p = python("-m", "canary", "-C", "TestResults", "location", "a.a=baz.b=2", stdout=str)
-        assert txtfiles(p.out.strip()) == ["baz-b2.txt"]
+        python("-m", "canary", "run", str(f), fail_on_error=False)
+        p = python("-m", "canary", "location", "link_when.a=link_when_1.b=1", stdout=str)
+        assert p.out is not None
+        assert txtfiles(p.out.strip()) == ["link_when_1.txt"]
+        p = python("-m", "canary", "location", "link_when.a=link_when_1.b=2", stdout=str)
+        assert p.out is not None
+        assert txtfiles(p.out.strip()) == ["link_when_1-b2.txt"]
+        p = python("-m", "canary", "location", "link_when.a=link_when_2.b=1", stdout=str)
+        assert p.out is not None
+        assert txtfiles(p.out.strip()) == ["link_when_2.txt"]
+        p = python("-m", "canary", "location", "link_when.a=link_when_2.b=2", stdout=str)
+        assert p.out is not None
+        assert txtfiles(p.out.strip()) == ["link_when_2-b2.txt"]
 
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")

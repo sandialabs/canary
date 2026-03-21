@@ -18,8 +18,8 @@ For example, to run the example suite using the ``shell`` scheduler in 4 batches
 
 .. command-output:: canary run -b scheduler=shell -b spec=count:4 .
     :cwd: /examples
-    :setup: rm -rf TestResults
-    :returncode: 30
+    :setup: rm -rf .canary TestResults
+    :returncode: 14
     :nocache:
 
 .. note::

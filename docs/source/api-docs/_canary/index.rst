@@ -8,21 +8,37 @@ _canary
 .. toctree::
    :maxdepth: 1
 
-   atc
+   collect
+   conductor
    config/index
+   database
    enums
    error
    expression
    finder
+   generate
    generator
+   hookspec
+   launcher
    main
    paramset
+   pluginmanager
    plugins/index
+   protocols
    queue
-   session
+   queue_executor
+   rerun
+   resource_pool/index
+   rules
+   runtest
+   select
    status
    testcase
-   testinstance
+   testexec
+   testinst
+   testspec
+   timekeeper
    util/index
    version
    when
+   workspace

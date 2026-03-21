@@ -3,28 +3,44 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import sys
+import os
+from dataclasses import dataclass
+from dataclasses import field
 from typing import TYPE_CHECKING
+from typing import Any
+from typing import Literal
+from typing import Optional
+from typing import Sequence
+
+import yaml
 
 from ... import config
-from ...util import graph
+from ... import rerun
+from ...collect import vc_prefixes
+from ...config.schemas import testpaths_schema
+from ...generate import Generator
+from ...hookspec import hookimpl
+from ...select import Selector
+from ...util import json_helper as json
 from ...util import logging
-from ..hookspec import hookimpl
+from ...util.filesystem import working_dir
+from ...util.rich import bold
+from ...util.string import pluralize
+from ...workspace import NotAWorkspaceError
+from ...workspace import Workspace
 from ..types import CanarySubcommand
-from .common import PathSpec
-from .common import add_filter_arguments
 from .common import add_resource_arguments
-from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testspec import ResolvedSpec
 
 logger = logging.get_logger(__name__)
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Run()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Run())
 
 
 class Run(CanarySubcommand):
@@ -33,9 +49,32 @@ class Run(CanarySubcommand):
     epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
-        add_work_tree_arguments(parser)
-        add_filter_arguments(parser)
-        parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
+        parser.set_defaults(banner=True)
+        parser.add_argument(
+            "-w",
+            dest="wipe_workspace",
+            nargs=0,
+            action=WipeAction,
+            help="Remove test execution directory, if it exists [default: %(default)s]",
+        )
+        parser.add_argument(
+            "-d",
+            "--work-tree",
+            action=DeprecatedStoreAction,
+            dest="work_tree",
+            help=argparse.SUPPRESS,
+        )
+        parser.add_argument(
+            "-f",
+            action=ReadPathsFromFile,
+            dest="f_pathspec",
+            metavar="file",
+            help="Read test paths from a json or yaml file. "
+            "See 'canary help --pathfile' for help on the file schema",
+        )
+        Generator.setup_parser(parser)
+        Selector.setup_parser(parser, tagged="optional")
+        rerun.setup_parser(parser)
         parser.add_argument(
             "--fail-fast",
             default=None,
@@ -50,119 +89,442 @@ class Run(CanarySubcommand):
             help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
         )
         parser.add_argument(
-            "--no-reset",
-            "--dont-restage",
-            dest="dont_restage",
-            default=None,
-            action="store_true",
-            help="Do not return the test execution directory "
-            "to its original stage before re-running a test",
-        )
-        parser.add_argument(
             "--copy-all-resources",
             default=None,
             action="store_true",
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
         parser.add_argument(
-            "--dont-measure",
-            default=None,
+            "--empty-ok",
             action="store_true",
-            help="Do not collect a test's process information [default: %(default)s]",
+            default=False,
+            help="Exit normally when the test set is empty.  "
+            "By default, an empty test set is an error (exit code 7)",
         )
 
+        parser.add_argument(
+            "-s",
+            "--style",
+            dest="console_style",
+            action=StyleAction,
+            default={"name": "short", "live": True},
+            help="Configure live console display style.  Given as key=value pairs:\n\n"
+            "live={yes,no}[yes]: live console updating\n\n"
+            "name={short,long}[short]: print short (default) names or long\n\n",
+        )
         group = parser.add_argument_group("console reporting")
-        group.add_argument(
-            "--format",
-            default="short",
-            action="store",
-            choices=["short", "long", "progress-bar"],
-            help="Change the format of the test case's name as printed to the screen. "
-            "Options are 'short' and 'long' [default: %(default)s]",
-        )
-        group.add_argument(
-            "-e",
-            choices=("separate", "merge"),
-            default="separate",
-            dest="testcase_output_strategy",
-            help="Merge a testcase's stdout and stderr or log separately [default: %(default)s]",
-        )
-        group.add_argument(
-            "--capture",
-            choices=("log", "tee"),
-            default="log",
-            help="Log test output to a file only (log) or log and print output "
-            "to the screen (tee).  Warning: this could result in a large amount of text printed "
-            "to the screen [default: log]",
-        )
-
-        parser.add_argument("-r", help=argparse.SUPPRESS)
+        group.add_argument("-e", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
+        group.add_argument("--capture", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
+        group.add_argument("--format", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
         add_resource_arguments(parser)
-        PathSpec.setup_parser(parser)
+        parser.add_argument(
+            "runpaths",
+            action=PathSpec,
+            nargs=argparse.REMAINDER,
+            metavar="pathspec [--] [user args...]",
+            help="Test file[s] or directories to search. "
+            "See 'canary help --pathspec' for help on the path specification",
+        )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        from ...session import Session
-
-        config.pluginmanager.hook.canary_runtests_startup()
-
-        session: Session
-        if args.mode == "w":
-            path = args.work_tree or Session.default_worktree
-            force = config.getoption("wipe") or False
-            session = Session(path, mode=args.mode, force=force)
-            if lockfile := getattr(args, "testcases_lock", None):
-                session.load_from_lockfile(lockfile)
-            else:
-                session.add_search_paths(args.paths)
-                parsing_policy = config.getoption("parsing_policy") or "pedantic"
-                session.discover(pedantic=parsing_policy == "pedantic")
-                if until := config.getoption("until"):
-                    generators = session.generators
-                    roots = set()
-                    for generator in generators:
-                        roots.add(generator.root)
-                    n, N = len(generators), len(roots)
-                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info("@*{Collected} %d file%s from %d root%s" % (n, s, N, S))
-                    if until == "discover":
-                        logger.info("Done with test discovery")
-                        return 0
-                env_mods = config.getoption("env_mods") or {}
-                session.lock(
-                    keyword_exprs=config.getoption("keyword_exprs"),
-                    parameter_expr=config.getoption("parameter_expr"),
-                    on_options=config.getoption("on_options"),
-                    env_mods=env_mods.get("test") or {},
-                    regex=config.getoption("regex_filter"),
-                )
-
-                if until := config.getoption("until"):
-                    active_cases = session.get_ready()
-                    n, N = len(active_cases), len({case.file for case in active_cases})
-                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S))
-                    graph.print(active_cases, file=sys.stdout)
-                    if until == "lock":
-                        logger.info("Done freezing test cases")
-                        return 0
-        elif args.mode == "a":
-            case_specs = getattr(args, "case_specs", None)
-            if case_specs and all([_.startswith("/") for _ in case_specs]):
-                session = Session.casespecs_view(args.work_tree, case_specs)
-            else:
-                # use args here instead of config.getoption so that in-session runs can be filtered
-                # with options not used during sesssion setup
-                session = Session.filter_view(
-                    args.work_tree,
-                    start=args.start,
-                    keyword_exprs=args.keyword_exprs,
-                    parameter_expr=args.parameter_expr,
-                    case_specs=case_specs,
-                )
+        request: RequestNode
+        if req := getattr(args, "request", None):
+            request = req
         else:
-            raise ValueError(f"Unknown session mode {args.mode!r}")
-        session.run()
-        config.pluginmanager.hook.canary_runtests_summary(
-            cases=session.active_cases(), include_pass=False, truncate=10
+            request = TagRequest(value=config.get("run:default_tag"))
+        if isinstance(request, TagRequest) and not request.value:
+            request = TagRequest(value=config.get("run:default_tag"))
+
+        work_tree = args.work_tree or os.getcwd()
+        if args.wipe_workspace:
+            if not isinstance(request, ScanPathsRequest):
+                raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
+            Workspace.remove(work_tree)
+        workspace: Workspace
+        try:
+            workspace = Workspace.load(start=work_tree)
+        except NotAWorkspaceError:
+            workspace = Workspace.create(path=work_tree)
+        f = workspace.logs_dir / "canary.0.log"
+        h = logging.json_file_handler(f)
+        logging.add_handler(h)
+        # start, specids, runtag, and scanpaths are mutually exclusive
+        specs: list["ResolvedSpec"]
+
+        if isinstance(request, ScanPathsRequest):
+            specs = workspace.create_selection(
+                tag=args.tag,
+                scanpaths=request.value,
+                on_options=args.on_options,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                owners=args.owners,
+                regex=args.regex_filter,
+            )
+        else:
+            if isinstance(request, SpecIdsRequest):
+                specids = request.value
+                workspace.db.resolve_spec_ids(specids)
+                sids = [id[:7] for id in specids]
+                if len(sids) > 3:
+                    sids = [*sids[:2], "…", sids[-1]]
+                logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
+                specs = rerun.compute_rerun_closure(workspace.db, roots=specids)
+                args.only = "all"
+            elif isinstance(request, ViewPathsRequest):
+                logger.info("[bold]Running[/] tests from view paths")
+                specs = rerun.get_specs_from_view(workspace.db, prefixes=request.value)
+                args.only = "all"
+            else:
+                assert isinstance(request, TagRequest)
+                tag = request.value
+                logger.info(f"[bold]Running[/] tests in tag {tag}")
+                specs = rerun.get_specs(workspace.db, strategy=args.only, tag=tag)
+            workspace.apply_selection_rules(
+                specs,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                owners=args.owners,
+                regex=args.regex_filter,
+            )
+        reuse = isinstance(request, ViewPathsRequest)
+        session = workspace.run(specs, reuse_latest_session=reuse, only=args.only or "not_pass")
+        return session.returncode
+
+
+def setdefault(obj, attr, default):
+    if not hasattr(obj, attr):
+        setattr(obj, attr, default)
+    elif getattr(obj, attr) is None:
+        setattr(obj, attr, default)
+    return getattr(obj, attr)
+
+
+class StyleAction(argparse.Action):
+    style_choices = {"name": ("long", "short"), "live": ("yes", "no")}
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        style = getattr(namespace, self.dest, None) or {}
+        key, sep, value = values.strip().partition("=")  # type: ignore
+        if sep != "=":
+            parser.error(f"Invalid format for {option_string}: {values!r}, expected key=value")
+        if choices := self.style_choices.get(key):
+            if value not in choices:
+                parser.error(f"Invalid choice {value!r} for style config {key}")
+        else:
+            parser.error(f"Invalid style config {key!r}")
+        if value in ("yes", "no"):
+            style[key] = {"yes": True, "no": False}[value]
+        else:
+            style[key] = value
+        setattr(namespace, self.dest, style)
+
+
+class DeprecatedStoreAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        import warnings
+
+        warnings.warn(
+            f"{option_string} is deprecated and will be removed in a future release",
+            category=UserWarning,
+            stacklevel=2,
         )
-        return session.exitstatus
+        setattr(namespace, self.dest, values)
+
+
+class WipeAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        if getattr(namespace, self.dest, False):
+            return
+        try:
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            return
+        workspace.rmf()
+        setattr(namespace, self.dest, True)
+
+
+ScanPathPayload = dict[str, list[str]]  # root -> [files]; empty list means “scan all”
+ViewPathPayload = list[str]  # e.g. ["rel/path/%", ...]
+SpecIdPayload = list[str]  # full spec ids
+
+
+@dataclass(frozen=True, slots=True)
+class RequestNode:
+    kind: Literal["scanpaths", "viewpaths", "specids", "tag"]
+    value: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ScanPathsRequest(RequestNode):
+    kind: Literal["scanpaths"] = "scanpaths"
+    value: ScanPathPayload = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ViewPathsRequest(RequestNode):
+    kind: Literal["viewpaths"] = "viewpaths"
+    value: ViewPathPayload = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class SpecIdsRequest(RequestNode):
+    kind: Literal["specids"] = "specids"
+    value: SpecIdPayload = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class TagRequest(RequestNode):
+    kind: Literal["tag"] = "tag"
+    value: str = ""
+
+
+@dataclass
+class RequestBuilder:
+    kind: str | None = None
+    scanpaths: ScanPathPayload = field(default_factory=dict)
+    viewpaths: ViewPathPayload = field(default_factory=list)
+    specids: SpecIdPayload = field(default_factory=list)
+    tag: Optional[str] = None
+
+    def require_kind(self, k: str, errors: list[str], what: str) -> None:
+        if self.kind is None:
+            self.kind = k
+        elif self.kind != k:
+            errors.append(f"Cannot mix {self.kind} with {what}")
+
+    def finalize(self) -> RequestNode:
+        if self.kind in (None, "tag"):
+            return TagRequest(value=self.tag or "")
+        if self.kind == "scanpaths":
+            return ScanPathsRequest(value=self.scanpaths)
+        if self.kind == "viewpaths":
+            return ViewPathsRequest(value=self.viewpaths)
+        if self.kind == "specids":
+            return SpecIdsRequest(value=self.specids)
+        raise RuntimeError(f"Unknown request kind: {self.kind!r}")
+
+
+class PathSpec(argparse.Action):
+    """Parse the REMAINDER pathspec argument.
+
+    Each entry can be one of:
+    - scanpaths (file or directory to scan, or YAML/JSON testpaths file)
+    - viewpaths (path inside a previous session view)
+    - specids (test IDs)
+    - runtag (test selection tag)
+    """
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        assert isinstance(values, list)
+
+        builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
+        script_args: list[str] = setdefault(namespace, "script_args", [])
+
+        # Split REMAINDER into script_args (after '--') and items
+        for i, val in enumerate(values):
+            if val == "--":
+                script_args.extend(values[i + 1 :])
+                values = values[:i]
+                break
+
+        workspace: Workspace | None = None
+        try:
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            pass
+
+        errors: list[str] = []
+        possible_specs: list[str] = []
+        for item in values:
+            abspath = os.path.abspath(item)
+
+            # --- Lock file not supported ---
+            if os.path.isfile(item) and item.endswith("testcases.lock"):
+                errors.append(f"{item}: lock file scanning not implemented")
+                continue
+
+            # --- Tag ---
+            if workspace and workspace.is_tag(item):
+                builder.require_kind("tag", errors, f"tag {item}")
+                builder.tag = item
+                continue
+
+            # --- View path ---
+            if workspace and (rel_path := workspace.relative_to_view(abspath)):
+                builder.require_kind("viewpaths", errors, f"viewpaths {abspath}")
+                p = rel_path if os.path.isfile(abspath) else rel_path.rstrip("/") + "/%"
+                builder.viewpaths.append(p)
+                continue
+
+            # --- Directory scanpaths ---
+            if os.path.isdir(abspath):
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                builder.scanpaths.setdefault(abspath, [])
+                continue
+
+            # --- File scanpaths ---
+            elif os.path.isfile(abspath):
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                root, name = os.path.split(abspath)
+                builder.scanpaths.setdefault(root, []).append(name)
+                continue
+
+            # --- Version control prefix ---
+            if item.startswith(vc_prefixes):
+                path_part = item.partition("@")[2]
+                if not os.path.isdir(path_part):
+                    errors.append(f"{path_part}: no such directory")
+                    continue
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                builder.scanpaths.setdefault(item, [])
+                continue
+
+            # --- root:name style ---
+            if os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
+                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
+                root, name = item.split(os.pathsep, 1)
+                builder.scanpaths.setdefault(os.path.abspath(root), []).append(
+                    name.replace(os.pathsep, os.path.sep)
+                )
+                continue
+
+            # --- Treat as possible test ID ---
+            possible_specs.append(item)
+
+        # --- Handle possible specs ---
+        if possible_specs:
+            if workspace is not None:
+                builder.require_kind("specids", errors, "specids")
+                found_ids: list[str | None] = workspace.find_specids(possible_specs)
+                valid_ids: list[str] = []
+                for i, fid in enumerate(found_ids):
+                    if fid is None:
+                        errors.append(f"{possible_specs[i]}: not a valid test identifier")
+                    else:
+                        valid_ids.append(fid)
+                builder.specids.extend(valid_ids)
+            else:
+                errors.append("Spec IDs require an active workspace")
+
+        if errors:
+            raise argparse.ArgumentError(self, "\n".join(errors))
+
+        request = builder.finalize()
+        setattr(namespace, "request", request)
+        setattr(namespace, "script_args", script_args)
+        setattr(namespace, self.dest, values)
+
+        # backward compat
+        if isinstance(request, ScanPathsRequest):
+            setattr(namespace, "scanpaths", request.value)
+
+    @staticmethod
+    def canary_help() -> str:
+        pathspec_help = """\
+pathspec syntax:
+
+  pathspec [-- ...]
+
+  new test sessions:
+    %(path)s                                   scan path recursively for test generators
+    %(file)s                                   use this test generator
+    %(git)s@path                               find tests under git version control at path
+    %(repo)s@path                              find tests under repo version control at path
+
+  examples:
+    canary run path                        scan path for tests to run
+    canary run 7yral9i                     rerun test case with hash 7yral9i
+
+  script arguments:
+    Any argument following the %(sep)s separator is passed directly to each test script's command line.
+""" % {
+            "file": bold("file"),
+            "path": bold("path"),
+            "git": bold("git"),
+            "repo": bold("repo"),
+            "sep": bold("--"),
+        }
+        return pathspec_help
+
+
+class ReadPathsFromFile(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        assert isinstance(values, str)
+        builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
+        errors = []
+        builder.require_kind("scanpaths", errors, f"file {values}")
+        if errors:
+            raise argparse.ArgumentError(self, errors[0])
+        builder.scanpaths.update(self.read_paths(values))
+        request = builder.finalize()
+        setattr(namespace, "request", request)
+        setattr(namespace, self.dest, values)
+        # backward compat
+        setattr(namespace, "scanpaths", request.value)
+        return
+
+    @staticmethod
+    def read_paths(file: str) -> dict[str, list[str]]:
+        data: dict
+        if file.endswith(".json"):
+            with open(file, "r") as fh:
+                data = json.load(fh)
+        else:
+            with open(file, "r") as fh:
+                data = yaml.safe_load(fh)
+        testpaths_schema.validate(data)
+        file_dir = os.path.abspath(os.path.dirname(file) or ".")
+        paths: dict[str, list[str]] = {}
+        with working_dir(file_dir):
+            for p in data["testpaths"]:
+                if isinstance(p, str):
+                    paths.setdefault(os.path.abspath(p), [])
+                else:
+                    paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
+        return paths
+
+    @staticmethod
+    def canary_help() -> str:
+        text = """\
+pathspec file schema syntax:
+
+  {
+    "testpaths": [
+      {
+        "root": str,
+        "paths": [str]
+      }
+    ]
+  }"""
+        return text

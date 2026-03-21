@@ -4,6 +4,10 @@
 
 import random
 from itertools import cycle
+from typing import IO
+from typing import Any
+
+import rich
 
 from .. import version
 from . import logging
@@ -34,20 +38,25 @@ bird = """\
 logger = logging.get_logger(__name__)
 
 
+def print_banner(file: IO[Any] | None = None) -> None:
+    rich.print(banner(), file=file)
+
+
 def banner(color: bool = True) -> str:
     info = random.choice(banners)
     banner = bird + "\n" + info["banner"]
     # banner = info["banner"]
-    logger.debug(f"banner font: {info['font']}")
     if not color:
         return banner + f"\nversion: {version.version}"
-    colors = cycle(["c", "c", "b", "b", "m", "m", "G", "G"])
+    colors = cycle(
+        ["cyan", "cyan", "blue", "blue", "magenta", "magenta", "bright_green", "bright_green"]
+    )
     lines: list[str] = []
     for line in banner.splitlines():
         if not line.split() and not lines:
             continue
         elif line.split():
-            line = "@*%s{%s}" % (next(colors), line)
+            line = "[bold %s]%s[/]" % (next(colors), line)
         lines.append(line)
     banner = "\n".join(lines).rstrip()
     return banner + f"\nversion: {version.version}"
