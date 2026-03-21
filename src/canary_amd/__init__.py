@@ -8,8 +8,6 @@ import subprocess
 
 import canary
 
-logger = canary.get_logger(__name__)
-
 
 @canary.hookimpl
 def canary_gpu_backend_detect(config: canary.Config) -> str | None:
@@ -49,6 +47,7 @@ def _amd_smi_list_gpus(config: canary.Config) -> list[dict] | None:
                 gpu_specs.append({"vendor": "amd", "id": id, "uuid": uuid, "slots": 1})
             return gpu_specs
         except Exception:
+            logger = canary.get_logger(__name__)
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")
         return None
 
@@ -75,5 +74,6 @@ def _rocm_smi_list_gpus(config: canary.Config) -> list[dict] | None:
                 gpu_specs = [{"vendor": "amd", "id": i, "uuid": i, "slots": 1} for i in idxs]
                 return gpu_specs
         except Exception:
+            logger = canary.get_logger(__name__)
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")
     return None

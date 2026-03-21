@@ -47,7 +47,8 @@ def detect_gpu_backend(config: "canary.Config") -> None:
         plugin_name = (
             getattr(impl, "plugin_name", None) or getattr(impl, "pluginname", None) or "<unknown>"
         )
-        backend = getattr(plugin, "canary_gpu_backend_detect")(config=config)
+        fun = getattr(plugin, "canary_gpu_backend_detect")
+        backend = fun(config=config)
         if backend:
             candidates.append((str(backend).lower(), str(plugin_name)))
     selected = _select_backend(requested, candidates)
@@ -83,29 +84,21 @@ def canary_fill_gpu(config: Config, pool: dict[str, dict[str, Any]]) -> None:
 
 def _select_backend(requested: str, candidates: list[tuple[str, str]]) -> tuple[str, str] | None:
     requested = (requested or "auto").lower()
-
     if requested == "none":
         return None
-
     if requested == "auto":
         if len(candidates) == 0:
             return None
         if len(candidates) == 1:
             return candidates[0]
         # ambiguous: force user to choose
-        keys = sorted({k for (k, _) in candidates})
-        names = sorted({n for (_, n) in candidates})
+        keys = sorted({k[0] for k in candidates})
         raise ValueError(
-            f"Multiple GPU backends detected: keys={keys}, plugins={names}. Use --gpu-backend=<key>."
+            f"Multiple GPU backends detected: {', '.join(keys)}. Choose one with --gpu-backend=BACKEND."
         )
-
     # allow selecting by backend key OR by plugin registered name
     for key, plugin_name in candidates:
         if requested == key or requested == plugin_name.lower():
             return (key, plugin_name)
-
     keys = sorted({k for (k, _) in candidates})
-    names = sorted({n for (_, n) in candidates})
-    raise ValueError(
-        f"Requested GPU backend '{requested}' not found. Detected keys={keys}, plugins={names}."
-    )
+    raise ValueError(f"GPU backend '{requested}' not detected. Choose from {', '.join(keys)}.")
