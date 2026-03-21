@@ -168,7 +168,7 @@ class Config:
         data = value
         for key in reversed(parts):
             data = {key: data}
-        config_schema.validate(data)
+        data = config_schema.validate(data)
         if parts[0] == "environment":
             self.apply_environment_mods(data["environment"])
         self.data = merge(self.data, data)
@@ -178,7 +178,7 @@ class Config:
         data = value
         for key in reversed(parts):
             data = {key: data}
-        config_schema.validate(data)
+        data = config_schema.validate(data)
         file = get_scope_filename(scope)
         if fd := read_config_file(file):
             data = merge(fd, data)
@@ -198,7 +198,7 @@ class Config:
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
-                config_schema.validate(fd)
+                fd = config_schema.validate(fd)
 
         logging.set_level(logging.INFO)
         if args.color is not None:
@@ -260,7 +260,7 @@ class Config:
 
     def create_scope(self, name: str, file: str | None, data: dict[str, Any]) -> None:
         # Deprecated method still used by some applications
-        config_schema.validate(data)
+        data = config_schema.validate(data)
         self.data = merge(self.data, data)
 
 
@@ -274,7 +274,7 @@ def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     file = get_scope_filename(scope)
     if file is not None and (fd := read_config_file(file)):
         data.update(fd)
-    config_schema.validate(data)
+    data = config_schema.validate(data)
     return data
 
 
