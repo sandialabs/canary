@@ -448,6 +448,7 @@ class TestCase:
         self.timekeeper.finished = tk["finished"]
 
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
+        env[config.CONFIG_ENV_CFG64] = config.serialize()
         for key, val in self.variables.items():
             if val is None:
                 env.pop(key, None)
