@@ -17,8 +17,8 @@ def test_repo_bfilter(tmpdir):
     examples = root / "examples"
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
-            config.options.canary_hpc_scheduler = "shell"
-            # config.ioptions.canary_hpc_scheduler = "shell"
+            config.options.canary_hpc_backend = "shell"
+            # config.ioptions.canary_hpc_backend = "shell"
             spec = {"count": 2, "duration": None, "layout": "flat", "nodes": "any"}
             config.options.canary_hpc_batchspec = spec
             # config.ioptions.canary_hpc_batchspec = spec

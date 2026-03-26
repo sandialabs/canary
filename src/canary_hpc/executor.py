@@ -20,8 +20,7 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
-        config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         cfg = TestBatch.loadconfig(workspace)
         self.session: str = cfg["session"]
         self.batch: str = cfg["id"]
@@ -48,40 +47,39 @@ class CanaryHPCExecutor:
         h = canary.logging.json_file_handler(f)
         canary.logging.add_handler(h)
         specs = workspace.db.load_specs(ids=self.cases, include_upstreams=True)
-        for spec in specs:
-            if spec.id not in self.cases:
-                spec.mask = canary.Mask(True, reason=f"Case not in batch {self.batch}")
+        self.modify_specs(specs)
         session = workspace.run(specs, session=self.session, update_view=False, only="all")
         return session.returncode
+
+    def load_resource_pool(self) -> dict:
+        f = self.workspace / "resource_pool.json"
+        fd = json.loads(f.read_text())
+        return fd["resource_pool"]
 
     @canary.hookimpl
     def canary_resource_pool_fill(
         self, config: canary.Config, pool: dict[str, dict[str, Any]]
     ) -> None:
-        mypool = self.generate_resource_pool()
-        f = self.workspace / "resource_pool.json"
-        if not f.exists():
-            f.write_text(json.dumps({"resource_pool": mypool}, indent=2))
+        mypool = self.load_resource_pool()
         # require full control of resource pool
         pool["additional_properties"].clear()
         pool["additional_properties"].update(mypool["additional_properties"])
         pool["resources"].clear()
         pool["resources"].update(mypool["resources"])
 
-    @canary.hookimpl(trylast=True)
-    def canary_select_modifyitems(self, selector: "canary.Selector") -> None:
+    def modify_specs(self, specs: list[canary.ResolvedSpec]) -> None:
         # If a test requests just nodes, fill in the additional resources it would require.
         canonical_name = lambda s: f"{s}s" if not s.endswith("s") else s
-        counts: dict[str, int] = {
-            canonical_name(rtype): self.backend.count_per_node(rtype)
-            for rtype in self.backend.resource_types()
-        }
-        for spec in selector.specs:
+        cpn = self.backend.count_per_node
+        resource_types = self.backend.resource_types()
+        counts: dict[str, int] = {canonical_name(rtype): cpn(rtype) for rtype in resource_types}
+        for spec in specs:
+            if spec.id not in self.cases:
+                spec.mask = canary.Mask(True, reason=f"Case not in batch {self.batch}")
             params = spec.parameters | spec.meta_parameters
             if node_count := params.get("nodes"):
                 for rtype, count in counts.items():
-                    if rtype not in params:
-                        spec.meta_parameters[rtype] = node_count * count
+                    spec.meta_parameters[rtype] = node_count * count
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:
@@ -95,22 +93,3 @@ class CanaryHPCExecutor:
         parser.add_argument(
             "--workspace", dest="canary_hpc_workspace", help="The batch's workspace", required=True
         )
-
-    def generate_resource_pool(self) -> dict[str, Any]:
-        # set the resource pool for this backend
-        # The executor is ran inside of an allocation using the standard canary resource pool.
-        # Since canary does not no about nodes, we need to tell canary that there are node_count *
-        # count_per_node resources for each resource type
-        resources: dict[str, list[Any]] = {}
-        node_count = self.backend.node_count
-        for type in self.backend.resource_types():
-            count = self.backend.count_per_node(type)
-            slots = 1
-            if not type.endswith("s"):
-                type += "s"
-            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
-        pool: dict[str, Any] = {
-            "resources": resources,
-            "additional_properties": {"nodes": {"count": node_count}, "backend": self.backend.name},
-        }
-        return pool

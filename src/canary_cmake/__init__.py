@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 from typing import Generator
 
-from schema import And
 from schema import Optional
 from schema import Schema
 
@@ -201,22 +200,20 @@ def to_str_path(x: object) -> str:
 @canary.hookimpl(wrapper=True)
 def canary_cdash_artifacts(
     case: canary.TestCase,
-) -> Generator[None, list[dict[str, str]], list[dict[str, str]]]:
-    """Default implementation: return the test case's keywords"""
-    schema = Schema(
-        {
-            "file": And(to_str_path),
-            Optional("when", default="always"): And(
-                str, lambda s: s in {"never", "always", "on_success", "on_failure"}
-            ),
-        }
-    )
-    artifacts = list(case.spec.artifacts) or []
+) -> Generator[None, list[str], list[str]]:
     result = yield
-    artifacts.extend([_ for _ in result if _])
-    for i, artifact in enumerate(artifacts):
-        artifacts[i] = schema.validate(artifact)
-    return artifacts
+    artifacts: set[str] = set()
+    # Result looks like: [[f1, f2, f3], [f4, f5, f6], ..., [fn]]
+    # with n entries for n plugin implementations
+    artifacts.update([b for a in result for b in a if b])
+    blah: list[str] = []
+    for artifact in artifacts:
+        f = Path(artifact)
+        if f.exists():
+            blah.append(f.absolute().as_posix())
+        elif case.workspace.joinpath(f).exists():
+            blah.append(case.workspace.joinpath(f).as_posix())
+    return blah
 
 
 @canary.hookimpl(wrapper=True)

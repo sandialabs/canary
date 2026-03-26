@@ -243,6 +243,7 @@ class TestBatch:
         )
         rc: int | None = -1
         try:
+            hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
             queue.put({"event": "SUBMITTED", "timestamp": time.time()})
             self.timekeeper.submitted = time.time()
@@ -368,6 +369,7 @@ class TestBatch:
             "measurements": self.measurements.asdict(),
         }
         self.lockfile.write_text(json.dumps(config, indent=2))
+        return
 
     def save(self):
         cfg = json.loads(self.lockfile.read_text())

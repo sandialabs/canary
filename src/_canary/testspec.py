@@ -15,6 +15,7 @@ from functools import cached_property
 from functools import lru_cache
 from pathlib import Path
 from typing import IO
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generic
 from typing import Literal
@@ -28,8 +29,28 @@ from .util import json_helper as json
 from .util import logging
 from .util.string import stringify
 
+if TYPE_CHECKING:
+    from .status import Status
+
 logger = logging.get_logger(__name__)
 select_sygil = "/"
+
+
+@dataclasses.dataclass(frozen=True)
+class Artifact:
+    pattern: str
+    when: Literal["always", "never", "on_failure", "on_success"] = "always"
+
+    def active(self, status: "Status") -> bool:
+        if self.when == "never":
+            return False
+        elif self.when == "always":
+            return True
+        elif self.when == "on_failure" and status != "FAILED":
+            return False
+        elif self.when == "on_success" and status != "PASS":
+            return False
+        return True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,7 +95,7 @@ class BaseSpec(Generic[T]):
     keywords: list[str] = dataclasses.field(default_factory=list)
     assets: list["Asset"] = dataclasses.field(default_factory=list)
     baseline: list[Any] = dataclasses.field(default_factory=list)
-    artifacts: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
     exclusive: bool = False
     timeout: float = -1.0
     xstatus: int = 0
@@ -117,6 +138,11 @@ class BaseSpec(Generic[T]):
     def dumps(self, **kwargs: Any) -> Any:
         return json.dumps(self.asdict(), **kwargs)
 
+    def add_artifact(
+        self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
+    ) -> None:
+        self.artifacts.append(Artifact(pattern=pattern, when=when))
+
     @classmethod
     def from_dict(cls: Type[T], d: dict, lookup: dict[str, T]) -> T:
         d["file_root"] = Path(d.pop("file_root"))
@@ -125,6 +151,7 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
+        d["artifacts"] = [Artifact(*x) for x in d["artifacts"]]
         self = cls(**d)  # ty: ignore[missing-argument]
         return self
 

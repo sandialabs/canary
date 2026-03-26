@@ -38,8 +38,8 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
-        config = hpc_connect.Config.from_defaults(overrides=dict(backend=backend))
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+        hpc_connect.config.export()
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
@@ -103,7 +103,6 @@ class CanaryHPCConductor:
             return self.backend.count_per_node(type)
         except ValueError:
             return 0
-        return 0
 
     @canary.hookimpl
     def canary_resource_pool_types(self) -> list[str]:
@@ -206,10 +205,11 @@ class CanaryHPCConductor:
     ) -> None:
         """Exists to accomodate ``canary hpc run`` and ``canary run -b ...``"""
         parser.add_argument(
+            "--backend",
             "--scheduler",
-            dest="canary_hpc_scheduler",
-            metavar="SCHEDULER",
-            help="Submit batches to this HPC scheduler [alias: -b scheduler=SCHEDULER] [default: None]",
+            dest="canary_hpc_backend",
+            metavar="BACKEND",
+            help="Submit batches to this HPC scheduler [alias: -b backend=BACKEND] [default: None]",
         )
         parser.add_argument(
             "--scheduler-args",
@@ -291,7 +291,6 @@ class BatchExecutor:
         hpc.propagate = True
         hpc.setLevel(logging.NOTSET)
         batch.setup()
-        config = hpc_connect.Config.from_defaults(overrides=dict(backend=kwargs["backend"]))
-        backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+        backend: hpc_connect.Backend = hpc_connect.get_backend(kwargs["backend"])
         batch.run(backend=backend, queue=queue)
         logger.debug(f"Done running {batch}")

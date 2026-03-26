@@ -70,6 +70,14 @@ class TestCase:
     def exclusive(self) -> bool:
         return self.spec.exclusive
 
+    def get_artifacts(self) -> list[str]:
+        artifacts: list[str] = []
+        for artifact in self.spec.artifacts:
+            if artifact.active(self.status):
+                matches = self.workspace.dir.rglob(artifact.pattern)
+                artifacts.extend([str(match.relative_to(self.workspace.dir)) for match in matches])
+        return artifacts
+
     @property
     def stdout(self) -> str:
         return self.spec.stdout
