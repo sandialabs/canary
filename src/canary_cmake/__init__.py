@@ -202,18 +202,15 @@ def canary_cdash_artifacts(
     case: canary.TestCase,
 ) -> Generator[None, list[str], list[str]]:
     result = yield
-    artifacts: set[str] = set()
-    # Result looks like: [[f1, f2, f3], [f4, f5, f6], ..., [fn]]
-    # with n entries for n plugin implementations
-    artifacts.update([b for a in result for b in a if b])
-    blah: list[str] = []
-    for artifact in artifacts:
-        f = Path(artifact)
+    candidates: set[str] = {a for b in result for a in b if b}
+    artifacts: list[str] = []
+    for candidate in candidates:
+        f = Path(candidate)
         if f.exists():
-            blah.append(f.absolute().as_posix())
+            artifacts.append(f.absolute().as_posix())
         elif case.workspace.joinpath(f).exists():
-            blah.append(case.workspace.joinpath(f).as_posix())
-    return blah
+            artifacts.append(case.workspace.joinpath(f).as_posix())
+    return artifacts
 
 
 @canary.hookimpl(wrapper=True)

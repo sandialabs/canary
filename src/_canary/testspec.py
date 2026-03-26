@@ -151,7 +151,7 @@ class BaseSpec(Generic[T]):
         d["dependencies"] = dependencies
         assets = [Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in d["assets"]]
         d["assets"] = assets
-        d["artifacts"] = [Artifact(*x) for x in d["artifacts"]]
+        d["artifacts"] = [Artifact(**x) for x in d["artifacts"]]
         self = cls(**d)  # ty: ignore[missing-argument]
         return self
 
