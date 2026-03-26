@@ -179,9 +179,9 @@ class CanaryHPCResourceSetter(argparse.Action):
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
             setattr(namespace, "canary_hpc_batch_workers", workers)
-        elif match := re.search(r"^(backend|scheduler|type)[:=](\w+)$", value):
+        elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", value):
             raw = match.group(2)
-            setattr(namespace, "canary_hpc_scheduler", raw)
+            setattr(namespace, "canary_hpc_backend", raw)
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
             if raw not in ("conservative", "agressive"):

@@ -339,23 +339,7 @@ class CDashXMLReporter:
             )
             test_node.appendChild(results)
 
-            artifacts = []
-            for artifact in canary.config.pluginmanager.hook.canary_cdash_artifacts(case=case):
-                when = artifact["when"]
-                if when == "never":
-                    continue
-                elif when == "on_success" and case.status.category != "PASS":
-                    continue
-                elif when == "on_failure" and case.status.category == "PASS":
-                    continue
-                file = artifact["file"]
-                if not os.path.exists(file) and not os.path.isabs(file):
-                    if os.path.exists(os.path.join(case.workspace.dir, file)):
-                        file = os.path.join(case.workspace.dir, file)
-                    elif os.path.exists(os.path.join(case.file.parent, file)):
-                        file = os.path.join(case.file.parent, file)
-                if os.path.exists(file):
-                    artifacts.append(file)
+            artifacts = canary.config.pluginmanager.hook.canary_cdash_artifacts(case=case)
             if artifacts:
                 payload = targz_compress(*artifacts, path="artifacts")
                 add_named_measurement(

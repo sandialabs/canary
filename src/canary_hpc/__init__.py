@@ -26,9 +26,9 @@ logger = canary.get_logger(__name__)
 @canary.hookimpl
 def canary_configure(config: "canary.Config") -> None:
     """Do some post configuration checks"""
-    scheduler = config.getoption("canary_hpc_scheduler")
+    backend = config.getoption("canary_hpc_backend")
     command = config.getoption("command")
-    if scheduler is not None and command == "run":
+    if backend is not None and command == "run":
         # Run with the HPC conductor
         config.options.command = "hpc"
         config.options.hpc_cmd = "run"
@@ -78,24 +78,22 @@ class HPC(canary.CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.hpc_cmd == "run":
-            scheduler = args.canary_hpc_scheduler
-            if scheduler is None:
-                raise ValueError("canary hpc run requires --scheduler")
-            conductor = CanaryHPCConductor(backend=scheduler)
+            hpc_backend = args.canary_hpc_backend
+            if hpc_backend is None:
+                raise ValueError("canary hpc run requires --backend")
+            conductor = CanaryHPCConductor(backend=hpc_backend)
             conductor.register(canary.config.pluginmanager)
             return conductor.run(args)
         elif args.hpc_cmd == "info":
-            name = args.canary_hpc_backend
-            config = hpc_connect.Config.from_defaults(overrides=dict(backend=name))
-            backend: hpc_connect.Backend = hpc_connect.get_backend(config=config)
+            backend: hpc_connect.Backend = hpc_connect.get_backend(args.canary_hpc_backend)
             print(backend.describe())
             return 0
         elif args.hpc_cmd == "exec":
             # Batch is being executed within an allocation
             # register the CanaryHPCExector plugin so that executor.runtests is registered
-            backend = args.canary_hpc_backend or canary.config.getoption("canary_hpc_scheduler")
+            backend_name = args.canary_hpc_backend or canary.config.getoption("canary_hpc_backend")
             executor = CanaryHPCExecutor(
-                workspace=args.canary_hpc_workspace, backend=backend, case=args.canary_hpc_case
+                workspace=args.canary_hpc_workspace, backend=backend_name, case=args.canary_hpc_case
             )
             executor.register(canary.config.pluginmanager)
             return executor.run(args)
