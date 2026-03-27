@@ -100,7 +100,7 @@ class TestCase:
 
     @property
     def queue_timeout(self) -> float:
-        return 0.25
+        return 60 * 30
 
     @property
     def attributes(self) -> dict[str, Any]:
