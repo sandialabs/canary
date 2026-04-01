@@ -159,7 +159,8 @@ class TestBatch:
 
     @property
     def queue_timeout(self) -> float:
-        return canary.config.getoption("canary_hpc_queue_timeout") or 30 * 60
+        four_hours = 4.0 * 60.0 * 60.0
+        return canary.config.getoption("canary_hpc_queue_timeout") or four_hours
 
     def estimated_runtime(self) -> float:
         if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):
@@ -243,6 +244,7 @@ class TestBatch:
         )
         rc: int | None = -1
         try:
+            hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
             queue.put({"event": "SUBMITTED", "timestamp": time.time()})
             self.timekeeper.submitted = time.time()
@@ -368,6 +370,7 @@ class TestBatch:
             "measurements": self.measurements.asdict(),
         }
         self.lockfile.write_text(json.dumps(config, indent=2))
+        return
 
     def save(self):
         cfg = json.loads(self.lockfile.read_text())

@@ -5,6 +5,7 @@
 import typing
 from contextlib import contextmanager
 
+from .config import CONFIG_ENV_CFG64  # noqa: F401
 from .config import CONFIG_ENV_FILENAME  # noqa: F401
 from .config import Config
 from .config import get_scope_filename  # noqa: F401

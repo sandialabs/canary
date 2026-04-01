@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import json
 import math
 import os
 import shlex
@@ -9,6 +10,7 @@ import sys
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Generator
 from typing import Protocol
 from typing import Sequence
@@ -51,27 +53,6 @@ class HPCConnectRunner:
         variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         return variables
 
-    def nodes_required(self, batch: "TestBatch") -> int:
-        """Nodes required to run cases in ``batch``"""
-        max_count_per_type: dict[str, int] = {}
-        for case in batch.cases:
-            reqd_resources = case.required_resources()
-            total_slots_per_type: dict[str, int] = {}
-            for member in reqd_resources:
-                type = member["type"]
-                total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
-            for type, count in total_slots_per_type.items():
-                max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
-        node_count: int = 1
-        for type, count in max_count_per_type.items():
-            try:
-                count_per_node: int = self.backend.count_per_node(type)
-            except ValueError:
-                continue
-            if count_per_node > 0:
-                node_count = max(node_count, int(math.ceil(count / count_per_node)))
-        return node_count
-
     def scheduler_args(self) -> list[str]:
         options: list[str] = []
         if args := canary.config.getoption("canary_hpc_scheduler_args"):
@@ -104,6 +85,45 @@ class HPCConnectRunner:
             for signum, handler in current.items():
                 signal.signal(signum, handler)
 
+    def generate_resource_pool(self, batch: "TestBatch") -> None:
+        node_count = self.nodes_required(batch)
+        resources: dict[str, list[Any]] = {}
+        additional_properties = {"node_count": node_count, "backend": self.backend.name}
+        for type in self.backend.resource_types():
+            count = self.backend.count_per_node(type)
+            slots = 1
+            if not type.endswith("s"):
+                type += "s"
+            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
+            additional_properties[f"{type}_per_node"] = count
+        pool: dict[str, Any] = {
+            "resources": resources,
+            "additional_properties": additional_properties,
+        }
+        f = batch.workspace.joinpath("resource_pool.json")
+        f.write_text(json.dumps({"resource_pool": pool}, indent=2))
+
+    def nodes_required(self, batch: "TestBatch") -> int:
+        """Nodes required to run cases in ``batch``"""
+        max_count_per_type: dict[str, int] = {}
+        for case in batch.cases:
+            reqd_resources = case.required_resources()
+            total_slots_per_type: dict[str, int] = {}
+            for member in reqd_resources:
+                type = member["type"]
+                total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
+            for type, count in total_slots_per_type.items():
+                max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
+        node_count: int = 1
+        for type, count in max_count_per_type.items():
+            try:
+                count_per_node: int = self.backend.count_per_node(type)
+            except ValueError:
+                continue
+            if count_per_node > 0:
+                node_count = max(node_count, int(math.ceil(count / count_per_node)))
+        return node_count
+
 
 class HPCConnectBatchRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
@@ -116,6 +136,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             batch.jobid = future.jobid
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
+        self.generate_resource_pool(batch)
         with batch.workspace.enter():
             future = self.submit(batch)
             future.add_jobstart_callback(set_starttime)
@@ -171,6 +192,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         rc: int = -1
+        self.generate_resource_pool(batch)
         with batch.workspace.enter():
             futures: list[hpc_connect.futures.Future] = []
             for i, case in enumerate(batch.cases):

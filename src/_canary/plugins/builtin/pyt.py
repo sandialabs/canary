@@ -31,6 +31,7 @@ from ...launcher import Launcher
 from ...launcher import SubprocessLauncher
 from ...paramset import ParameterSet
 from ...testcase import TestCase
+from ...testspec import Artifact
 from ...testspec import Mask
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
@@ -400,14 +401,14 @@ class PYTTestGenerator(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> list[dict[str, str]]:
-        artifacts: list[dict[str, str]] = []
+    ) -> list[Artifact]:
+        artifacts: list[Artifact] = []
         for ns in self._artifacts:
             result = ns.when.evaluate(
                 testname=testname, parameters=parameters, on_options=on_options
             )
             if result.value:
-                artifacts.append({"file": ns.value, "when": getattr(ns, "upon", "always")})
+                artifacts.append(Artifact(pattern=ns.value, when=getattr(ns, "upon", "always")))
         return artifacts
 
     def exclusive(

@@ -59,11 +59,11 @@ def test_parsing_0():
     args = parser.parse_args(["--hpc-batch-spec=count:max"])
     assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
 
-    args = parser.parse_args(["--hpc-scheduler=shell"])
+    args = parser.parse_args(["--hpc-backend=local"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
     setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_scheduler == "shell"
+    assert args.canary_hpc_backend == "local"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
     assert args.canary_hpc_batchspec["nodes"] == "any"
@@ -107,11 +107,11 @@ def test_parsing_1():
     args = parser.parse_args(["--batch-spec=count:max"])
     assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
 
-    args = parser.parse_args(["--scheduler=shell"])
+    args = parser.parse_args(["--backend=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
     setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_scheduler == "shell"
+    assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
     assert args.canary_hpc_batchspec["nodes"] == "any"
@@ -161,11 +161,11 @@ def test_parsing_legacy():
     args = parser.parse_args(["-b", "spec=count:max"])
     assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
 
-    args = parser.parse_args(["-b", "scheduler=shell"])
+    args = parser.parse_args(["-b", "backend=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
     setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_scheduler == "shell"
+    assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
     assert args.canary_hpc_batchspec["nodes"] == "any"
@@ -174,7 +174,7 @@ def test_parsing_legacy():
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
     setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_scheduler == "shell"
+    assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
     assert args.canary_hpc_batchspec["nodes"] == "any"

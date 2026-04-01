@@ -18,7 +18,6 @@ from . import init
 from . import location
 from . import log
 from . import rebaseline
-from . import refresh
 from . import report
 from . import rm
 from . import run
@@ -26,6 +25,7 @@ from . import select
 from . import selection
 from . import status
 from . import tree
+from . import view
 
 plugins = [
     autodoc,
@@ -44,7 +44,6 @@ plugins = [
     location,
     log,
     rebaseline,
-    refresh,
     report,
     rm,
     run,
@@ -52,4 +51,5 @@ plugins = [
     selection,
     status,
     tree,
+    view,
 ]

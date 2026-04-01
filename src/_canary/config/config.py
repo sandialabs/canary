@@ -19,6 +19,8 @@ from ..pluginmanager import CanaryPluginManager
 from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge
+from ..util.compression import deserialize
+from ..util.compression import serialize
 from ..util.rich import set_color_when
 from ._machine import system_config
 from .schemas import config_schema
@@ -38,6 +40,7 @@ log_levels: tuple[int, ...] = (
 
 TOP_LEVEL_CONFIG_KEY = "canary"
 CONFIG_ENV_FILENAME = "CANARYCFGFILE"
+CONFIG_ENV_CFG64 = "CANARYCFG64"
 ConfigScopes = Literal["site", "global", "local"]
 
 logger = logging.get_logger(__name__)
@@ -107,6 +110,12 @@ class Config:
             config.options = argparse.Namespace(**snapshot["options"])
             config.data.clear()
             config.data.update(snapshot["data"])
+        elif envcfg := os.getenv(CONFIG_ENV_CFG64):
+            snapshot: dict[str, Any] = deserialize(envcfg)
+            config.invocation_dir = snapshot["invocation_dir"]
+            config.options = argparse.Namespace(**snapshot["options"])
+            config.data.clear()
+            config.data.update(snapshot["data"])
         else:
             config.init()
         log_level = config.get("log_level")
@@ -141,6 +150,9 @@ class Config:
             "data": self.data,
         }
         return snapshot
+
+    def serialize(self) -> str:
+        return serialize(self.snapshot())
 
     def getoption(self, name: str, default: Any = None) -> Any:
         value = getattr(self.options, name, None)

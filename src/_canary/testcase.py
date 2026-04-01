@@ -70,6 +70,14 @@ class TestCase:
     def exclusive(self) -> bool:
         return self.spec.exclusive
 
+    def get_artifacts(self) -> list[str]:
+        artifacts: list[str] = []
+        for artifact in self.spec.artifacts:
+            if artifact.active(self.status):
+                matches = self.workspace.dir.rglob(artifact.pattern)
+                artifacts.extend([str(match.relative_to(self.workspace.dir)) for match in matches])
+        return artifacts
+
     @property
     def stdout(self) -> str:
         return self.spec.stdout
@@ -92,7 +100,7 @@ class TestCase:
 
     @property
     def queue_timeout(self) -> float:
-        return 0.25
+        return 60 * 30
 
     @property
     def attributes(self) -> dict[str, Any]:
@@ -448,6 +456,7 @@ class TestCase:
         self.timekeeper.finished = tk["finished"]
 
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
+        env[config.CONFIG_ENV_CFG64] = config.serialize()
         for key, val in self.variables.items():
             if val is None:
                 env.pop(key, None)

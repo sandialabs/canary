@@ -35,7 +35,7 @@ classifiers = [
 
 dynamic = [ "version" ]
 dependencies = [
-    "hpc-connect==26.3.5",
+    "hpc-connect==26.3.26",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
