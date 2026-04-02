@@ -60,7 +60,7 @@ positive_int = And(int, lambda x: x > 0)  # type: ignore
 nonnegative_int = And(int, lambda x: x >= 0)  # type: ignore
 optional_str = Or(str, None)  # type: ignore
 
-any_schema = Schema({}, ignore_extra_keys=True)
+any_schema = Schema({object: object}, ignore_extra_keys=True)
 
 environment_schema = Schema(
     {
