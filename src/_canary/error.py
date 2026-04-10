@@ -6,11 +6,11 @@ import sys
 
 from .status import Status
 
-skip_exit_status = Status.code_for_status["SKIPPED"]
-diff_exit_status = Status.code_for_status["DIFFED"]
-fail_exit_status = Status.code_for_status["FAILED"]
-timeout_exit_status = Status.code_for_status["TIMEOUT"]
-exception_exit_status = Status.code_for_status["ERROR"]
+skip_exit_status = Status.CODE_FOR_OUTCOME["SKIPPED"]
+diff_exit_status = Status.CODE_FOR_OUTCOME["DIFFED"]
+fail_exit_status = Status.CODE_FOR_OUTCOME["FAILED"]
+timeout_exit_status = Status.CODE_FOR_OUTCOME["TIMEOUT"]
+exception_exit_status = Status.CODE_FOR_OUTCOME["ERROR"]
 notests_exit_status = 7
 
 

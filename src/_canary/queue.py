@@ -196,7 +196,7 @@ class ResourceQueue:
             total = done + busy + pending
             totals: Counter[tuple[str, str]] = Counter()
             for job in self._finished.values():
-                if job.status.state in Status.terminal_states:
+                if job.status.is_terminal():
                     key = (job.status.category, job.status.status)
                     totals[key] += 1
             row: list[str] = []
@@ -205,7 +205,7 @@ class ResourceQueue:
             else:
                 row.append(f"{total}/{total} [blue]COMPLETE[/]")
             for key in sorted(totals, key=sortkey):
-                color = Status.color_for_category[key[0]]
+                color = Status.COLOR_FOR_CATEGORY[key[0]]
                 row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)

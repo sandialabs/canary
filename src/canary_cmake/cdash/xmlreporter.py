@@ -233,8 +233,7 @@ class CDashXMLReporter:
             if not os.path.exists(filename):
                 break
             i += 1
-        f = os.path.relpath(filename, canary.config.invocation_dir)
-        logger.info(f"Writing {f} ({len(cases)} test cases)")
+        logger.info(f"Writing {os.path.basename(filename)} ({len(cases)} test cases)")
 
         doc = self.create_document()
         root = doc.firstChild
@@ -407,7 +406,7 @@ class CDashXMLReporter:
 
     @staticmethod
     def dump_xml(document: xdom.Document, stream: IO[Any]):
-        stream.write(document.toprettyxml(indent="", newl=""))
+        stream.write(document.toprettyxml(indent="  ", newl="\n"))
 
     @staticmethod
     def validate_xml(file: str, *, schema: str) -> None:

@@ -186,7 +186,7 @@ def print_footer(runner: "Runner", title: str) -> None:
     for category, status in sorted(totals, key=sortkey):
         n = len(totals[(category, status)])
         if n:
-            color = Status.color_for_category[category]
+            color = Status.COLOR_FOR_CATEGORY[category]
             t = category if not status else status
             summary.append(f"[{color}]{n} {t.lower()}[/{color}]")
     kwds = {

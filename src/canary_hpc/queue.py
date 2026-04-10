@@ -54,7 +54,7 @@ class ResourceQueue(queue.ResourceQueue):
             else:
                 row.append(f"{total}/{total} [blue]COMPLETE[/]")
             for key in sorted(totals, key=sortkey):
-                color = Status.color_for_category[key[0]]
+                color = Status.COLOR_FOR_CATEGORY[key[0]]
                 row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)

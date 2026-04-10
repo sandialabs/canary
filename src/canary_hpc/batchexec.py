@@ -173,6 +173,9 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         default_args = ["-C", str(batch.workspace.dir)]
         if canary.config.get("debug"):
             default_args.append("-d")
+        gpu_backend = canary.config.getoption("gpu_backend")
+        if gpu_backend not in (None, "auto"):
+            default_args.append(f"--gpu-backend={gpu_backend}")
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "hpc", "exec"]
         n = canary.config.getoption("canary_hpc_batch_workers") or -1
         args.extend(
@@ -240,6 +243,9 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         ]
         if canary.config.get("debug"):
             default_args.append("-d")
+        gpu_backend = canary.config.getoption("gpu_backend")
+        if gpu_backend not in (None, "auto"):
+            default_args.append(f"--gpu-backend={gpu_backend}")
         default_args.extend(["hpc", "exec"])
         args = [
             *default_args,

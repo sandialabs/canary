@@ -55,10 +55,10 @@ class BatchStatus:
         for cat, stat in sorted(counts, key=sortkey):
             count = counts[(cat, stat)]
             if style == "rich":
-                color = self.base_status.color_for_category[cat]
+                color = self.base_status.COLOR_FOR_CATEGORY[cat]
                 parts.append(f"{count} [{color}]{stat}[/{color}]")
             elif style == "rich":
-                color = self.base_status.color_for_category[cat][0]
+                color = self.base_status.COLOR_FOR_CATEGORY[cat][0]
                 parts.append("%d @%s{%s}" % (count, color, stat))
             else:
                 parts.append(f"{count} {stat}")

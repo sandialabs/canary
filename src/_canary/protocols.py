@@ -31,6 +31,8 @@ class StatusProtocol(Protocol):
 
     def display_name(self, **kwargs: Any) -> str: ...
 
+    def is_terminal(self) -> bool: ...
+
 
 class JobProtocol(Protocol):
     cpus: int

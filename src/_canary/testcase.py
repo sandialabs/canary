@@ -328,13 +328,13 @@ class TestCase:
         except SystemExit as e:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
-            stat = "XDIFF" if xstatus == Status.code_for_status["DIFFED"] else "DIFFED"
+            stat = "XDIFF" if xstatus == Status.CODE_FOR_OUTCOME["DIFFED"] else "DIFFED"
             default_reason = None
             if stat == "DIFFED":
                 default_reason = "Empty TestDiffed exception raised during execution"
             self.status.set(status=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
-            f_status = Status.code_for_status["FAILED"]
+            f_status = Status.CODE_FOR_OUTCOME["FAILED"]
             stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
             default_reason = None
             if stat == "FAILED":
@@ -405,8 +405,8 @@ class TestCase:
             code = 1
         xcode = self.spec.xstatus
 
-        if xcode == Status.code_for_status["DIFFED"]:
-            if code != Status.code_for_status["DIFFED"]:
+        if xcode == Status.CODE_FOR_OUTCOME["DIFFED"]:
+            if code != Status.CODE_FOR_OUTCOME["DIFFED"]:
                 self.status = Status.FAILED(
                     reason=f"{self.spec.display_name()}: expected test to diff",
                     code=code,
@@ -429,9 +429,9 @@ class TestCase:
                 self.status = Status.XFAIL()
         elif code == 0:
             self.status = Status.SUCCESS()
-        elif code == Status.code_for_status["DIFFED"]:
+        elif code == Status.CODE_FOR_OUTCOME["DIFFED"]:
             self.status = Status.DIFFED(reason=f"Test exited with diff exit code = {code}")
-        elif code == Status.code_for_status["SKIPPED"]:
+        elif code == Status.CODE_FOR_OUTCOME["SKIPPED"]:
             self.status = Status.SKIPPED(reason=f"Test exited with skip exit code = {code}")
         else:
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
