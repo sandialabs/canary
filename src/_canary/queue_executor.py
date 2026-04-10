@@ -179,8 +179,8 @@ def worker_main(
             if now - last_sample >= metric_sample_period:
                 try:
                     proc.sample_metrics()
-                except Exception:  # nosec B110
-                    pass
+                except Exception as e:
+                    logger.debug("proc.sample_metrics failed: %s", e)
                 last_sample = now
 
             # Try to read one event with a short timeout
@@ -215,12 +215,12 @@ def worker_main(
             if proc.is_alive() and time.time() > deadline:
                 try:
                     measurements = proc.get_measurements()
-                except Exception:
+                except Exception as e:
                     measurements = {}
                 try:
                     proc.shutdown(signal.SIGTERM, grace_period=0.05)
-                except Exception:  # nosec B110
-                    pass
+                except Exception as e:
+                    logger.debug("proc.shutdown failed: %s", e)
                 event = "QUEUE_TIMEOUT" if stage == "QUEUED" else "TIMEOUT"
                 payload.update({"event": event, "measurements": measurements})
                 event_conn.send(payload)
@@ -232,7 +232,9 @@ def worker_main(
                     measurements = proc.get_measurements()
                 except Exception:
                     measurements = {}
-                payload.update({"event": "DIED", "measurements": measurements})
+                payload.update(
+                    {"event": "DIED", "exitcode": proc.exitcode, "measurements": measurements}
+                )
                 event_conn.send(payload)
                 break
 
@@ -240,12 +242,13 @@ def worker_main(
 
         try:
             local_q.close()
-        except Exception:  # nosec B110
-            pass
+        except Exception as e:  # nosec B110
+            logger.debug("local_q.close failed: %s", e)
         try:
             proc.join(timeout=0.1)
             proc.close()
-        except Exception:  # nosec B110
+        except Exception as e:
+            logger.debug("proc.close failed: %s", e)
             pass
 
 
@@ -353,14 +356,14 @@ class ResourceQueueExecutor:
         for w in self.workers:
             try:
                 w["task_q"].put(None)
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:
+                logger.debug("task_q.put failed: %s", e)
         for w in self.workers:
             try:
                 w["proc"].join(timeout=0.2)
                 w["proc"].close()
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:
+                logger.debug("proc.close failed: %s", e)
         self.workers.clear()
         self.idle_workers.clear()
         self.busy_workers.clear()
@@ -493,13 +496,22 @@ class ResourceQueueExecutor:
         for conn in ready:
             if not isinstance(conn, Connection):
                 continue
-            msg = conn.recv()
-            if payload := validate(msg):
-                self._handle_worker_payload(payload)
-            while conn.poll(0.0):
+            try:
                 msg = conn.recv()
+            except (EOFError, OSError) as e:
+                self._handle_dead_worker_conn(conn, e)
+            else:
                 if payload := validate(msg):
                     self._handle_worker_payload(payload)
+            while conn.poll(0.0):
+                try:
+                    msg = conn.recv()
+                except (EOFError, OSError) as e:
+                    self._handle_dead_worker_conn(conn, e)
+                    break
+                else:
+                    if payload := validate(msg):
+                        self._handle_worker_payload(payload)
 
     def _handle_worker_payload(self, payload: dict[str, Any]) -> None:
 
@@ -536,8 +548,8 @@ class ResourceQueueExecutor:
                     slot.job.set_status(status="ERROR", reason="Post-processing failure")
                     try:
                         slot.job.save()
-                    except Exception:  # nosec B110
-                        pass
+                    except Exception as e:
+                        logger.debug("job.save failed: %s", e)
                 finally:
                     self.finished[job_id] = slot
                     self.running.pop(job_id, None)
@@ -581,7 +593,14 @@ class ResourceQueueExecutor:
             if event == "DIED":
                 slot.finished = time.time()
                 slot.job.refresh()
-                slot.job.set_status(status="ERROR", reason="Worker job process died unexpectedly")
+                exitcode = payload.get("exitcode", None)
+                reason = "Worker job process died unexpectedly"
+                if isinstance(exitcode, int):
+                    if exitcode < 0:
+                        reason += f" (signal {-exitcode})"
+                    else:
+                        reason += f" (exitcode {exitcode})"
+                slot.job.set_status(status="ERROR", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
                 slot.job.timekeeper.finished = slot.finished
@@ -598,6 +617,81 @@ class ResourceQueueExecutor:
                 return
 
             logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")
+
+    def _handle_dead_worker_conn(self, conn: Connection, exc: BaseException) -> None:
+        # map conn -> wid
+        try:
+            wid = self.worker_connections.index(conn)
+        except ValueError:
+            logger.critical("Lost unknown worker connection: %r (%s)", conn, exc)
+            return
+
+        job_id = self.busy_workers.get(wid)
+
+        logger.critical(
+            "Worker %d IPC channel closed (%s). job_id=%s. "
+            "This usually means the worker or inner job process crashed (e.g., SIGBUS).",
+            wid,
+            repr(exc),
+            job_id,
+        )
+
+        p = self.workers[wid]["proc"]
+        exitcode = getattr(p, "exitcode", None)
+        if exitcode is not None and exitcode < 0:
+            signum = -exitcode
+            logger.critical("Worker %d exited due to signal %d", wid, signum)
+
+        # If a job was in flight, mark it as died so the queue can continue
+        if job_id:
+            self._handle_worker_payload({"job_id": job_id, "worker_id": wid, "event": "DIED"})
+
+        # Make the executor robust: retire the worker and optionally restart it
+        self._retire_and_restart_worker(wid)
+
+    def _retire_and_restart_worker(self, wid: int) -> None:
+        # remove old conn from wait list by replacing it
+        old = self.workers[wid]
+        try:
+            old["task_q"].close()
+        except Exception as e:
+            logger.debug("task_q.close failed: %s", e)
+        try:
+            old["proc"].join(timeout=0.1)
+            old["proc"].close()
+        except Exception as e:
+            logger.debug("proc.close failed: %s", e)
+
+        # start new worker
+        logging_queue: mp.Queue = self._store["logging_queue"]
+        config_snapshot = config.snapshot()
+        common_kwargs: dict[str, Any] = {}
+
+        ctx = mp.get_context("spawn")
+        parent_conn, child_conn = Pipe(duplex=False)
+        task_q = mp.Queue(-1)
+        proc = ctx.Process(  # type: ignore
+            target=worker_main,
+            args=(
+                wid,
+                task_q,
+                child_conn,
+                logging_queue,
+                config_snapshot,
+                self.timeout_multiplier,
+                self.executor,
+                common_kwargs,
+            ),
+        )
+        proc.start()
+
+        self.worker_connections[wid] = parent_conn
+        self.workers[wid] = {"id": wid, "task_q": task_q, "proc": proc}
+
+        # ensure wid is available again
+        self.busy_workers.pop(wid, None)
+        if wid not in self.idle_workers:
+            self.idle_workers.append(wid)
 
     def _check_for_leaks(self) -> None:
         # NOTE: still reads queue internals; ideally ResourceQueue should provide a safe accessor.
@@ -636,8 +730,8 @@ class ResourceQueueExecutor:
         for slot in inflight_slots:
             try:
                 slot.job.refresh()
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:
+                logger.debug("job.refresh failed: %s", e)
             try:
                 slot.job.set_status(status=stat, reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
@@ -650,8 +744,8 @@ class ResourceQueueExecutor:
                 self.finished[slot.job.id] = slot
                 try:
                     self.queue.done(slot.job)
-                except Exception:  # nosec B110
-                    pass
+                except Exception as e:
+                    logger.debug("queue.done failed: %s", e)
                 self.notify_listeners("job_finished", slot)
 
         self._shutdown_workers()

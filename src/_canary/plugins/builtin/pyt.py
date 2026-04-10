@@ -269,8 +269,9 @@ class PYTTestGenerator(AbstractTestGenerator):
                         "Generation of composite base case requires at least one parameter"
                     )
                 modules = self.modules(testname=name, on_options=on_options)
+                result_match = getattr(ns, "requires", None) or "success"
                 dependencies: list[str | DependencyPatterns] = [
-                    DependencyPatterns(pattern=d.id, expects=1, result_match="success")
+                    DependencyPatterns(pattern=d.id, expects=1, result_match=result_match)
                     for d in my_drafts
                 ]
                 psets = []
@@ -777,6 +778,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         flag: str | None = None,
         script: str | None = None,
         when: WhenType | None = None,
+        requires: str = "success",
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
@@ -788,7 +790,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             arg = script
         elif flag is not None:
             arg = flag
-        ns = FilterNamespace(arg, when=when)
+        ns = FilterNamespace(arg, when=when, requires=requires)
         self._generate_composite_base_case.append(ns)
 
     def m_name(self, arg: str) -> None:
@@ -884,8 +886,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         when: WhenType | None = None,
         flag: str | None = None,
         script: str | None = None,
+        requires: str = "success",
     ):
-        self.m_generate_composite_base_case(when=when, flag=flag, script=script)
+        self.m_generate_composite_base_case(when=when, flag=flag, script=script, requires=requires)
 
     def f_analyze(
         self,
@@ -893,11 +896,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         when: WhenType | None = None,
         flag: str | None = None,
         script: str | None = None,
+        requires: str = "success",
     ):
         # vvtest compatibility
         if script is None and flag is None:
             flag = "--analyze"
-        self.m_generate_composite_base_case(when=when, flag=flag, script=script)
+        self.m_generate_composite_base_case(when=when, flag=flag, script=script, requires=requires)
 
     def f_copy(
         self,
