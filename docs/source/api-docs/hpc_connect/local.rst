@@ -4,12 +4,12 @@
 
 
 
-.. _canary.finder:
+.. _hpc_connect.local:
 
-finder
-======
+local
+=====
 
-.. automodule:: _canary.finder
+.. automodule:: hpc_connect.local
    :members:
    :undoc-members:
    :show-inheritance:

@@ -98,9 +98,14 @@ class TestCase:
     def timeout(self) -> float:
         return self.spec.timeout
 
-    @property
-    def queue_timeout(self) -> float:
-        return 60 * 30
+    def total_timeout(self) -> float:
+        fac: float = 1.0
+        if cli_timeouts := config.getoption("timeout"):
+            if t := cli_timeouts.get("multiplier"):
+                fac = float(t)
+        elif t := config.get("run:timeout:multiplier"):
+            fac = float(t)
+        return fac * self.timeout
 
     @property
     def attributes(self) -> dict[str, Any]:

@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.subcommands.history:
+.. _hpc_connect.util.serialize:
 
-history
-=======
+serialize
+=========
 
-.. automodule:: _canary.plugins.subcommands.history
+.. automodule:: hpc_connect.util.serialize
    :members:
    :undoc-members:
    :show-inheritance:

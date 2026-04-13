@@ -4,12 +4,12 @@
 
 
 
-.. _hpc_connect.util.string:
+.. _hpc_connect.backend:
 
-string
-======
+backend
+=======
 
-.. automodule:: hpc_connect.util.string
+.. automodule:: hpc_connect.backend
    :members:
    :undoc-members:
    :show-inheritance:

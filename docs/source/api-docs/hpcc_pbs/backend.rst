@@ -4,12 +4,12 @@
 
 
 
-.. _hpcc_subprocess.submit:
+.. _hpcc_pbs.backend:
 
-submit
-======
+backend
+=======
 
-.. automodule:: hpcc_subprocess.submit
+.. automodule:: hpcc_pbs.backend
    :members:
    :undoc-members:
    :show-inheritance:

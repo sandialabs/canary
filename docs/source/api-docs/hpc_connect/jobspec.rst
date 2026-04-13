@@ -4,12 +4,12 @@
 
 
 
-.. _canary.util.parallel:
+.. _hpc_connect.jobspec:
 
-parallel
-========
+jobspec
+=======
 
-.. automodule:: _canary.util.parallel
+.. automodule:: hpc_connect.jobspec
    :members:
    :undoc-members:
    :show-inheritance:

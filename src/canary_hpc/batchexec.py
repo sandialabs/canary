@@ -11,7 +11,6 @@ import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
 from typing import Protocol
 from typing import Sequence
 
@@ -60,9 +59,7 @@ class HPCConnectRunner:
         return options
 
     @contextmanager
-    def handle_signals(
-        self, targets: Sequence[Cancellable], batch: "TestBatch"
-    ) -> Generator[None, None, None]:
+    def handle_signals(self, targets: Sequence[Cancellable], batch: "TestBatch"):
         def cancel(signum, frame):
             logger.warning(f"Cancelling batch {batch} due to captured signal {signum!r}")
             try:
@@ -81,9 +78,17 @@ class HPCConnectRunner:
             signal.signal(signum, cancel)
         try:
             yield
-        except:
+        finally:
             for signum, handler in current.items():
                 signal.signal(signum, handler)
+
+    def _cancel_future(self, future: Cancellable, why: str) -> None:
+        try:
+            ok = future.cancel()
+        except Exception as e:
+            logger.debug("Future cancel failed (%s): %s", why, e)
+        else:
+            logger.warning("Cancelled future (%s). cancel() returned %s", why, ok)
 
     def generate_resource_pool(self, batch: "TestBatch") -> None:
         node_count = self.nodes_required(batch)
@@ -127,25 +132,69 @@ class HPCConnectRunner:
 
 class HPCConnectBatchRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
-        def set_starttime(future):
-            now = time.time()
-            batch.timekeeper.started = now
-            queue.put({"event": "STARTED", "timestamp": now})
+        started_at: float = -1.0
 
-        def set_jobid(future):
+        def set_starttime(future: hpc_connect.futures.Future):
+            nonlocal started_at
+            started_at = time.time()
+            batch.timekeeper.started = started_at
+            queue.put({"event": "STARTED", "timestamp": started_at})
+
+        def set_jobid(future: hpc_connect.futures.Future):
             batch.jobid = future.jobid
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)
+
+        submitted_at = batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
+        queue_deadline = submitted_at + batch.queue_timeout
+
+        run_timeout = float(batch.timeout * batch.timeout_multiplier)
+
         with batch.workspace.enter():
             future = self.submit(batch)
             future.add_jobstart_callback(set_starttime)
             future.add_jobid_callback(set_jobid)
+
             with self.handle_signals([future], batch):
-                rc = future.result()
-        rc = future.result()
-        logger.debug(f"Finished {batch} with exit code {rc}")
-        return rc
+                poll = max(1.0, getattr(future, "_polling_interval", 1.0))
+
+                while True:
+                    # Done?
+                    if future.done():
+                        rc = future.result()
+                        logger.debug(f"Finished {batch} with exit code {rc}")
+                        return rc
+
+                    now = time.time()
+
+                    # Queue timeout (waiting for scheduler start)
+                    if started_at < 0.0:
+                        if now >= queue_deadline:
+                            future.cancel()
+                            raise TimeoutError(
+                                f"Batch {batch.id[:7]} exceeded queue timeout "
+                                f"{batch.queue_timeout:.1f}s"
+                            )
+                        time.sleep(poll)
+                        continue
+
+                    # Run timeout (after job start)
+                    remaining = (started_at + run_timeout) - now
+                    if remaining <= 0:
+                        future.cancel()
+                        raise TimeoutError(
+                            f"Batch {batch.id[:7]} exceeded run timeout {run_timeout:.1f}s"
+                        )
+
+                    # Block up to remaining time (or poll interval), whichever is smaller
+                    try:
+                        rc = future.result(timeout=min(poll, remaining))
+                    except TimeoutError:
+                        continue
+                    else:
+                        logger.debug(f"Finished {batch} with exit code {rc}")
+                        return rc
 
     def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:
         variables = self.rc_environ(batch)
@@ -190,12 +239,25 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
 class HPCConnectSeriesRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
-        def set_starttime(future):
-            queue.put({"event": "STARTED", "timestamp": time.time()})
+        started_at: float = -1.0
+
+        def set_starttime(future: hpc_connect.futures.Future):
+            nonlocal started_at
+            started_at = time.time()
+            batch.timekeeper.started = started_at
+            queue.put({"event": "STARTED", "timestamp": started_at})
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
-        rc: int = -1
         self.generate_resource_pool(batch)
+
+        # TestBatch.run() already set submitted and emitted SUBMITTED
+        submitted_at = batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
+        queue_deadline = submitted_at + batch.queue_timeout
+
+        # Overall run timeout once the first job actually starts
+        run_timeout = float(batch.timeout * batch.timeout_multiplier)
+
+        rc: int = -1
         with batch.workspace.enter():
             futures: list[hpc_connect.futures.Future] = []
             for i, case in enumerate(batch.cases):
@@ -203,9 +265,48 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
                 if i == 0:
                     future.add_jobstart_callback(set_starttime)
                 futures.append(future)
+
             with self.handle_signals(futures, batch):
-                for future in hpc_connect.futures.as_completed(futures):
-                    rc = max(rc, future.result())
+                poll = max(1.0, max(getattr(f, "_polling_interval", 1.0) for f in futures))
+
+                # --- queue timeout: wait for first scheduler start ---
+                while started_at < 0.0:
+                    if time.time() >= queue_deadline:
+                        for f in futures:
+                            try:
+                                f.cancel()
+                            except Exception:  # nosec B110
+                                pass
+                        raise TimeoutError(
+                            f"Batch {batch.id[:7]} exceeded queue timeout "
+                            f"{batch.queue_timeout:.1f}s"
+                        )
+                    # If everything finishes without ever "starting", treat as done
+                    if all(f.done() for f in futures):
+                        for f in futures:
+                            try:
+                                rc = max(rc, f.result())
+                            except Exception:
+                                rc = max(rc, 1)
+                        logger.debug(f"Finished {batch} with exit code {rc}")
+                        return rc
+                    time.sleep(poll)
+
+                # --- run timeout: from first STARTED until all complete ---
+                try:
+                    for f in hpc_connect.futures.as_completed(
+                        futures,
+                        timeout=run_timeout,
+                        polling_interval=poll,
+                        cancel_on_exception=True,
+                    ):
+                        rc = max(rc, f.result())
+                except TimeoutError:
+                    # as_completed already cancels remaining futures on timeout
+                    raise TimeoutError(
+                        f"Batch {batch.id[:7]} exceeded run timeout {run_timeout:.1f}s"
+                    )
+
         logger.debug(f"Finished {batch} with exit code {rc}")
         return rc
 

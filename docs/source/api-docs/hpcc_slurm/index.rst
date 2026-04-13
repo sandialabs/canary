@@ -8,6 +8,7 @@ hpcc_slurm
 .. toctree::
    :maxdepth: 1
 
+   backend
    discover
    launch
-   submit
+   process

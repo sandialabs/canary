@@ -10,4 +10,3 @@ command
 
    config
    launch
-   submit

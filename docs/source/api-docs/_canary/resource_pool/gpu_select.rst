@@ -4,12 +4,12 @@
 
 
 
-.. _hpcc_pbs.submit:
+.. _canary.resource_pool.gpu_select:
 
-submit
-======
+gpu_select
+==========
 
-.. automodule:: hpcc_pbs.submit
+.. automodule:: _canary.resource_pool.gpu_select
    :members:
    :undoc-members:
    :show-inheritance:

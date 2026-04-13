@@ -4,12 +4,12 @@
 
 
 
-.. _hpcc_slurm.submit:
+.. _hpc_connect.mpi:
 
-submit
-======
+mpi
+===
 
-.. automodule:: hpcc_slurm.submit
+.. automodule:: hpc_connect.mpi
    :members:
    :undoc-members:
    :show-inheritance:
