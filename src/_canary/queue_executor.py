@@ -212,7 +212,7 @@ class _MainWorker:
             raise RuntimeError("monitor_job called without active proc/local_q")
 
         job_id = job.id
-        deadline: float = time.time() + job.total_timeout()
+        deadline: float = time.time() + 1.05 * job.total_timeout()
 
         while True:
             payload: dict[str, Any] = {"job_id": job_id, "worker_id": self.worker_id}
