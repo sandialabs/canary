@@ -8,5 +8,6 @@ hpcc_pbs
 .. toctree::
    :maxdepth: 1
 
+   backend
    discover
-   submit
+   process

@@ -10,6 +10,6 @@ util
 
    collections
    dynamic_version
-   string
+   serialize
    tengine
    time

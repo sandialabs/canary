@@ -20,13 +20,11 @@ plugins.subcommands
    find
    gc
    help
-   history
    info
    init
    location
    log
    rebaseline
-   refresh
    report
    rm
    run
@@ -34,3 +32,4 @@ plugins.subcommands
    selection
    status
    tree
+   view

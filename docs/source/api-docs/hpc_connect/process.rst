@@ -4,12 +4,12 @@
 
 
 
-.. _hpcc_flux.submit_hl:
+.. _hpc_connect.process:
 
-submit_hl
-=========
+process
+=======
 
-.. automodule:: hpcc_flux.submit_hl
+.. automodule:: hpc_connect.process
    :members:
    :undoc-members:
    :show-inheritance:

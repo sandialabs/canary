@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.subcommands.refresh:
+.. _hpcc_slurm.backend:
 
-refresh
+backend
 =======
 
-.. automodule:: _canary.plugins.subcommands.refresh
+.. automodule:: hpcc_slurm.backend
    :members:
    :undoc-members:
    :show-inheritance:

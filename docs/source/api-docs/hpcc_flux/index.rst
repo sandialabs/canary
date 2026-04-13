@@ -8,5 +8,6 @@ hpcc_flux
 .. toctree::
    :maxdepth: 1
 
+   backend
    discover
-   submit_hl
+   process

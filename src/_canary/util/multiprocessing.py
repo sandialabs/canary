@@ -7,12 +7,9 @@ import multiprocessing
 import multiprocessing.context
 import multiprocessing.queues
 import multiprocessing.reduction
-import multiprocessing.shared_memory
 import os
 import pickle  # nosec B403
-import signal
 import sys
-import time
 import traceback
 from multiprocessing.process import BaseProcess
 from pathlib import Path
@@ -23,9 +20,6 @@ from typing import Callable
 from typing import Iterable
 from typing import Literal
 from typing import Sequence
-from typing import cast
-
-import psutil
 
 from . import cpu_count
 from . import logging
@@ -91,25 +85,6 @@ def recommended_start_method() -> StartMethod:
     return "spawn"
 
 
-def put_in_shared_memory(obj: Any) -> tuple[str, int]:
-    data = pickle.dumps(obj)
-    size = len(data)
-    shared_mem = multiprocessing.shared_memory.SharedMemory(create=True, size=size)
-    shared_mem.buf[:size] = data  # type: ignore
-    return shared_mem.name, size
-
-
-def get_from_shared_memory(name: str, size: int) -> Any:
-    shared_mem = multiprocessing.shared_memory.SharedMemory(name=name)
-    data = bytes(shared_mem.buf[:size])  # type: ignore
-    return pickle.loads(data)  # nosec B301
-
-
-def unlink_shared_memory(name: str) -> None:
-    shared_mem = multiprocessing.shared_memory.SharedMemory(name=name)
-    shared_mem.unlink()
-
-
 def initialize() -> None:
     global _initialized
     if _initialized:
@@ -136,216 +111,6 @@ class Queue(multiprocessing.queues.Queue):
         self, maxsize: int = 0, ctx: multiprocessing.context.BaseContext | None = None
     ) -> None:
         super().__init__(maxsize=maxsize, ctx=ctx or multiprocessing.context._default_context)
-
-
-class MeasuredProcess:
-    """A Process subclass that collects resource usage metrics using psutil.
-    Metrics are sampled each time is_alive() is called.
-    """
-
-    def __init__(
-        self,
-        target: Callable[..., Any],
-        ctx: multiprocessing.context.BaseContext | None = None,
-        args: tuple[Any, ...] = (),
-        kwargs: dict[str, Any] | None = None,
-        name: str | None = None,
-        daemon: bool | None = None,
-    ):
-        self.ctx = ctx or multiprocessing.context._default_context
-        dctx = cast(multiprocessing.context.DefaultContext, self.ctx)
-        self.proc = dctx.Process(target=target, args=args, kwargs=kwargs or {}, name=name)
-        if daemon is not None:
-            self.proc.daemon = daemon
-
-        self.samples = []
-        self._psutil_process = None
-        self._start_time = None
-
-    @property
-    def pid(self) -> int | None:
-        return self.proc.pid
-
-    @property
-    def name(self) -> str:
-        return self.proc.name
-
-    def start(self):
-        """Start the process and initialize psutil monitoring."""
-        self.proc.start()
-        self._start_time = time.time()
-        try:
-            self._psutil_process = psutil.Process(self.proc.pid)
-        except Exception:
-            logger.warning(f"Could not attach psutil to process {self.proc.pid}")
-            self._psutil_process = None
-
-    def join(self, timeout: float | None = None) -> None:
-        self.proc.join(timeout=timeout)
-
-    def close(self) -> None:
-        close = getattr(self.proc, "close", None)
-        if callable(close):
-            close()
-
-    def kill(self) -> None:
-        # Prefer Process.kill() if present
-        k = getattr(self.proc, "kill", None)
-        if callable(k):
-            k()
-            return
-        if self.pid is not None:
-            os.kill(self.pid, signal.SIGKILL)
-
-    def terminate(self) -> None:
-        t = getattr(self.proc, "terminate", None)
-        if callable(t):
-            t()
-            return
-        if self.pid is not None:
-            os.kill(self.pid, signal.SIGTERM)
-
-    def exitcode(self) -> int | None:
-        return self.proc.exitcode
-
-    def is_alive(self) -> bool:
-        alive = self.proc.is_alive()
-        if alive:
-            self.sample_metrics()
-        return alive
-
-    # --- measurement API --------------------------------------------------
-
-    def sample_metrics(self):
-        """Sample current process metrics."""
-        if not psutil or not self._psutil_process:
-            return
-
-        try:
-            # Get process info
-            with self._psutil_process.oneshot():
-                cpu_percent = self._psutil_process.cpu_percent()
-                mem_info = self._psutil_process.memory_info()
-
-                sample = {
-                    "timestamp": time.time(),
-                    "cpu_percent": cpu_percent,
-                    "memory_rss_mb": mem_info.rss / (1024 * 1024),  # RSS in MB
-                    "memory_vms_mb": mem_info.vms / (1024 * 1024),  # VMS in MB
-                }
-
-                # Add number of threads if available
-                try:
-                    sample["num_threads"] = self._psutil_process.num_threads()
-                except Exception:
-                    pass  # nosec B110
-
-                self.samples.append(sample)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            # Process may have terminated
-            pass
-        except Exception as e:
-            logger.debug(f"Error sampling metrics for pid={self.pid}: {e}")
-
-    def get_measurements(self) -> dict[str, Any]:
-        """Calculate statistics from collected samples.
-        Returns a dict with min, max, avg for each metric.
-        """
-        duration = time.time() - self._start_time if self._start_time else 0.0
-        measurements: dict[str, Any] = {"duration": duration, "samples": len(self.samples)}
-        if not self.samples:
-            return measurements
-        metrics = ["cpu_percent", "memory_rss_mb", "memory_vms_mb", "num_threads"]
-        for metric in metrics:
-            values = [s[metric] for s in self.samples if metric in s]
-            if values:
-                m = measurements.setdefault(metric, {})
-                m["min"] = min(values)
-                m["max"] = max(values)
-                m["ave"] = sum(values) / len(values)
-        return measurements
-
-    def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
-        logger.debug(f"Terminating process {self.pid}")
-        self.sample_metrics()
-        if self.pid is None:
-            return
-        try:
-            os.kill(self.pid, signum)
-        except Exception:
-            try:
-                self.terminate()
-            except Exception:  # nosec B110
-                pass
-        time.sleep(grace_period)
-        try:
-            if self.is_alive():
-                self.kill()
-        except Exception:
-            try:
-                self.kill()
-            except Exception:  # nosec B110
-                pass
-
-
-def get_process_metrics(
-    proc: psutil.Popen, metrics: dict[str, Any] | None = None
-) -> dict[str, Any] | None:
-    # Collect process information
-    metrics = metrics or {}
-    try:
-        valid_names = set(getattr(psutil, "_as_dict_attrnames", []))
-        skip_names = {
-            "cmdline",
-            "cpu_affinity",
-            "net_connections",
-            "cwd",
-            "environ",
-            "exe",
-            "gids",
-            "ionice",
-            "memory_full_info",
-            "memory_maps",
-            "threads",
-            "name",
-            "nice",
-            "pid",
-            "ppid",
-            "status",
-            "terminal",
-            "uids",
-            "username",
-        }
-        names = valid_names - skip_names
-        new_metrics = proc.as_dict(names)
-    except psutil.NoSuchProcess:
-        logger.debug(f"Process with PID {proc.pid} does not exist.")
-    except psutil.AccessDenied:
-        logger.debug(f"Access denied to process with PID {proc.pid}.")
-    except psutil.ZombieProcess:
-        logger.debug(f"Process with PID {proc.pid} is a Zombie process.")
-    else:
-        for name, metric in new_metrics.items():
-            if name == "open_files":
-                files = metrics.setdefault("open_files", [])
-                for f in metric:
-                    if f[0] not in files:
-                        files.append(f[0])
-            elif name == "cpu_times":
-                metrics["cpu_times"] = {"user": metric.user, "system": metric.system}
-            elif name in ("num_threads", "cpu_percent", "num_fds", "memory_percent"):
-                n = metrics.setdefault(name, 0)
-                metrics[name] = max(n, metric)
-            elif name == "memory_info":
-                for key, val in metric._asdict().items():
-                    n = metrics.setdefault(name, {}).setdefault(key, 0)
-                    metrics[name][key] = max(n, val)
-            elif hasattr(metric, "_asdict"):
-                metrics[name] = dict(metric._asdict())
-            else:
-                metrics[name] = metric
-    finally:
-        return metrics
 
 
 class ErrorFromWorker:
@@ -559,7 +324,7 @@ class FSQueue:
     def empty(self) -> bool:
         if not self._cache:
             self._refill_cache()
-        return bool(self._cache)
+        return not bool(self._cache)
 
     def get(self) -> Any:
         """

@@ -8,10 +8,10 @@ import signal
 import sys
 import threading
 import time
-from functools import cached_property
 from multiprocessing.connection import Connection
 from multiprocessing.connection import Pipe
 from multiprocessing.connection import wait
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from queue import Empty as QueueEmpty
 from typing import Any
@@ -79,9 +79,7 @@ class JobFunctor:
             logger.debug(f"Job {job}: job functor exited normally")
         finally:
             try:
-                result_queue.put(
-                    {"event": "FINISHED", "state": job.getstate(), "timestamp": time.time()}
-                )
+                result_queue.put({"event": "FINISHED", "timestamp": time.time()})
             except Exception:
                 logger.exception("Failed to put job state into queue")
                 raise
@@ -123,133 +121,170 @@ def inner_ctx() -> Any:
         return mp.get_context()
 
 
-def worker_main(
-    worker_id: int,
-    task_q: mp.Queue,
-    event_conn: Connection,
-    logging_queue: mp.Queue,
-    config_snapshot: dict[str, Any],
-    timeout_multiplier: float,
-    executor: Callable,
-    common_kwargs: dict[str, Any],
-) -> None:
-    """
-    Long-lived worker process. For each job, spawn an inner measured process to keep per-job
-    measurements and strong isolation.
+class _MainWorker:
+    def __init__(
+        self,
+        *,
+        worker_id: int,
+        task_q: mp.Queue,
+        event_conn: Connection,
+        logging_queue: mp.Queue,
+        config_snapshot: dict[str, Any],
+        executor: Callable,
+        common_kwargs: dict[str, Any],
+    ) -> None:
+        self.worker_id = worker_id
+        self.task_q = task_q
+        self.event_conn = event_conn
+        self.logging_queue = logging_queue
+        self.config_snapshot = config_snapshot
+        self.executor = executor
+        self.common_kwargs = common_kwargs
 
-    Notes:
-      - `local_q` MUST support timeout/nonblocking operations so we can enforce timeouts even when
-        the child stops emitting events.
-      - We call proc.is_alive() periodically even when events are flowing to sample metrics.
-    """
-    config.load_snapshot(config_snapshot)
-    ctx = inner_ctx()
+        self.ctx = inner_ctx()
 
-    # Sampling / polling controls
-    poll_sleep = 0.01
-    metric_sample_period = 0.10  # seconds
-    last_sample = 0.0
+        # Sampling / polling controls
+        self.poll_sleep = 0.01
 
-    while True:
-        msg = task_q.get()
-        if msg is None:
+        # Per-job state (set during run_one_job)
+        self.local_q: mp.Queue | None = None
+        self._proc: BaseProcess | None = None
+
+    @property
+    def proc(self) -> BaseProcess:
+        if self._proc is None:
+            raise RuntimeError("proc is None")
+        return self._proc
+
+    @proc.setter
+    def proc(self, arg: BaseProcess) -> None:
+        self._proc = arg
+
+    def send(self, payload: dict[str, Any]) -> None:
+        try:
+            self.event_conn.send(payload)
+        except (BrokenPipeError, EOFError, OSError) as e:
+            raise ParentGone from e
+
+    def __call__(self) -> None:
+        config.load_snapshot(self.config_snapshot)
+        try:
+            self.run()
+        except ParentGone:
             return
+        finally:
+            self.cleanup_all()
 
-        job: JobProtocol
-        job, per_job_kwargs = msg
-        job_id = job.id
+    def run(self) -> None:
+        while True:
+            msg = self.task_q.get()
+            if msg is None:
+                return
+            job, per_job_kwargs = msg
+            self.run_one_job(job, per_job_kwargs or {})
 
+    def run_one_job(self, job: JobProtocol, per_job_kwargs: dict[str, Any]) -> None:
         # IMPORTANT: use mp.Queue (not SimpleQueue) so we can do get(timeout=...)
-        local_q: mp.Queue = mp.Queue()
-        proc = mp.MeasuredProcess(
-            ctx=ctx,
+        self.local_q = mp.Queue()
+        proc: BaseProcess = self.ctx.Process(
             target=JobFunctor(),
-            args=(executor, job, local_q, logging_queue, config_snapshot),
-            kwargs={**common_kwargs, **(per_job_kwargs or {})},
+            args=(
+                self.executor,
+                job,
+                self.local_q,
+                self.logging_queue,
+                self.config_snapshot,
+            ),
+            kwargs={**self.common_kwargs, **per_job_kwargs},
         )
+        self.proc = proc
         proc.start()
 
-        t0 = time.time()
-        stage: Literal["STAGED", "SUBMITTED", "QUEUED", "RUNNING", "FINISHED"] = "STAGED"
-        deadline: float = t0 + 5.0 * 60.0
+        try:
+            self.monitor_job(job)
+        finally:
+            self.cleanup_job()
+
+    def monitor_job(self, job: JobProtocol) -> None:
+        proc = self.proc
+        local_q = self.local_q
+        if local_q is None:
+            raise RuntimeError("monitor_job called without active proc/local_q")
+
+        job_id = job.id
+        deadline: float = time.time() + 1.05 * job.total_timeout()
 
         while True:
-            # Periodic metric sampling independent of events
-            now = time.time()
-            if now - last_sample >= metric_sample_period:
-                try:
-                    proc.sample_metrics()
-                except Exception as e:
-                    logger.debug("proc.sample_metrics failed: %s", e)
-                last_sample = now
+            payload: dict[str, Any] = {"job_id": job_id, "worker_id": self.worker_id}
 
             # Try to read one event with a short timeout
-            payload: dict[str, Any] = {"job_id": job_id, "worker_id": worker_id}
             try:
                 payload.update(local_q.get(timeout=0.05))
             except QueueEmpty:
                 pass
             else:
                 event = payload.get("event")
-                if event == "SUBMITTED":
-                    if stage != "STAGED":
-                        logger.debug(f"Expected stage=STAGED, got {stage=}")
-                    stage = "QUEUED"
-                    deadline = time.time() + job.queue_timeout
-                elif event == "STARTED":
-                    if stage != "QUEUED":
-                        logger.debug(f"Expected stage=QUEUED, got {stage=}")
-                    stage = "RUNNING"
-                    deadline = time.time() + timeout_multiplier * job.timeout
-                elif event == "FINISHED":
-                    if stage != "RUNNING":
-                        logger.debug(f"Expected stage=RUNNING, got {stage=}")
-                    stage = "FINISHED"
-                    payload["measurements"] = proc.get_measurements()
-                event_conn.send(payload)
+                self.send(payload)
                 if event == "FINISHED":
-                    break
+                    return
                 continue
 
             # No event this tick: enforce timeout / detect death
-            if proc.is_alive() and time.time() > deadline:
-                try:
-                    measurements = proc.get_measurements()
-                except Exception as e:
-                    measurements = {}
-                try:
-                    proc.shutdown(signal.SIGTERM, grace_period=0.05)
-                except Exception as e:
-                    logger.debug("proc.shutdown failed: %s", e)
-                event = "QUEUE_TIMEOUT" if stage == "QUEUED" else "TIMEOUT"
-                payload.update({"event": event, "measurements": measurements})
-                event_conn.send(payload)
-                break
+            now = time.time()
+
+            if proc.is_alive() and now > deadline:
+                # best-effort terminate the per-job Python process (launcher should also be killing
+                # the spawned subprocess group if needed; this is a hard stop at this layer)
+                pid = getattr(proc, "pid", None)
+                if isinstance(pid, int):
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except Exception as e:
+                        logger.debug("os.kill(SIGTERM) failed pid=%s: %s", pid, e)
+
+                    time.sleep(0.05)
+
+                    try:
+                        if proc.is_alive():
+                            os.kill(pid, signal.SIGKILL)
+                    except Exception as e:
+                        logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
+
+                payload.update({"event": "TIMEOUT"})
+                self.send(payload)
+                return
 
             if not proc.is_alive():
                 # Process exited but FINISHED was never observed
-                try:
-                    measurements = proc.get_measurements()
-                except Exception:
-                    measurements = {}
-                payload.update(
-                    {"event": "DIED", "exitcode": proc.exitcode, "measurements": measurements}
-                )
-                event_conn.send(payload)
-                break
+                payload.update({"event": "DIED", "exitcode": getattr(proc, "exitcode", None)})
+                self.send(payload)
+                return
 
-            time.sleep(poll_sleep)
+            time.sleep(self.poll_sleep)
 
+    def cleanup_job(self) -> None:
+        if self.local_q is not None:
+            try:
+                self.local_q.close()
+            except Exception as e:
+                logger.debug("local_q.close failed: %s", e)
+            self.local_q = None
+
+        if self._proc is not None:
+            try:
+                self._proc.join(timeout=0.1)
+                self._proc.close()
+            except Exception as e:
+                logger.debug("proc.close failed: %s", e)
+            self._proc = None
+
+    def cleanup_all(self) -> None:
+        # If we are exiting mid-job, still release job resources.
+        self.cleanup_job()
         try:
-            local_q.close()
-        except Exception as e:  # nosec B110
-            logger.debug("local_q.close failed: %s", e)
-        try:
-            proc.join(timeout=0.1)
-            proc.close()
+            self.event_conn.close()
         except Exception as e:
-            logger.debug("proc.close failed: %s", e)
-            pass
+            logger.debug("event_conn.close failed: %s", e)
 
 
 class ResourceQueueExecutor:
@@ -324,18 +359,15 @@ class ResourceQueueExecutor:
             parent_conn, child_conn = Pipe(duplex=False)
             task_q = mp.Queue(-1)
             proc = ctx.Process(  # type: ignore
-                target=worker_main,
-                args=(
-                    wid,
-                    task_q,
-                    child_conn,
-                    logging_queue,
-                    config_snapshot,
-                    self.timeout_multiplier,
-                    self.executor,
-                    common_kwargs,
-                ),
-                kwargs={},
+                target=_MainWorker(
+                    worker_id=wid,
+                    task_q=task_q,
+                    event_conn=child_conn,
+                    logging_queue=logging_queue,
+                    config_snapshot=config_snapshot,
+                    executor=self.executor,
+                    common_kwargs=common_kwargs,
+                )
             )
             proc.start()
             self.worker_connections.append(parent_conn)
@@ -351,6 +383,12 @@ class ResourceQueueExecutor:
         self.started_on = -1.0
         self._shutdown_workers()
         self._stop_mp_logging()
+        for c in self.worker_connections:
+            try:
+                c.close()
+            except Exception:
+                logger.exception("Error closing worker connection")
+        self.worker_connections.clear()
 
     def _shutdown_workers(self) -> None:
         for w in self.workers:
@@ -481,7 +519,7 @@ class ResourceQueueExecutor:
                 logger.warning("Malformed worker message: %r", msg)
                 return None
             assert isinstance(msg, dict)
-            if "job_id" not in msg and "worker_id" not in msg:
+            if "job_id" not in msg or "worker_id" not in msg:
                 logger.warning("Malformed worker message: %r", msg)
                 return None
             return msg
@@ -540,9 +578,6 @@ class ResourceQueueExecutor:
                 slot.finished = time.time()
                 try:
                     slot.job.refresh()
-                    slot.job.setstate(payload["state"])
-                    slot.job.measurements.update(payload["measurements"])
-                    slot.job.save()
                 except Exception:
                     logger.exception(f"Post-processing failed for job {slot.job}")
                     slot.job.set_status(status="ERROR", reason="Post-processing failure")
@@ -560,25 +595,23 @@ class ResourceQueueExecutor:
                     self.idle_workers.append(wid)
                 return
 
-            if event in ("QUEUE_TIMEOUT", "TIMEOUT"):
+            if event == "TIMEOUT":
                 if slot.submitted < 0.0:
                     slot.submitted = time.time()
                 if slot.started < 0.0:
                     slot.started = time.time()
                 slot.finished = time.time()
                 reason: str
-                if event == "QUEUE_TIMEOUT":
-                    t = slot.job.queue_timeout
-                    reason = f"Job timed out after waiting in the queue for {t} s."
-                else:
-                    t = slot.job.timeout * self.timeout_multiplier
-                    reason = f"Job timed out after {t} s."
-                slot.job.refresh()
+                t = slot.job.total_timeout()
+                reason = f"Job timed out after {t} s."
+                try:
+                    slot.job.refresh()
+                except Exception as e:
+                    logger.debug("job.refresh failed during TIMEOUT: %s", e)
                 slot.job.set_status(status="TIMEOUT", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
                 slot.job.timekeeper.finished = slot.finished
-                slot.job.measurements.update(payload["measurements"])
                 slot.job.save()
 
                 self.finished[job_id] = slot
@@ -592,7 +625,10 @@ class ResourceQueueExecutor:
 
             if event == "DIED":
                 slot.finished = time.time()
-                slot.job.refresh()
+                try:
+                    slot.job.refresh()
+                except Exception as e:
+                    logger.debug("job.refresh failed during DIED: %s", e)
                 exitcode = payload.get("exitcode", None)
                 reason = "Worker job process died unexpectedly"
                 if isinstance(exitcode, int):
@@ -604,7 +640,6 @@ class ResourceQueueExecutor:
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
                 slot.job.timekeeper.finished = slot.finished
-                slot.job.measurements.update(payload["measurements"])
                 slot.job.save()
 
                 self.finished[job_id] = slot
@@ -661,6 +696,10 @@ class ResourceQueueExecutor:
             old["proc"].close()
         except Exception as e:
             logger.debug("proc.close failed: %s", e)
+        try:
+            self.worker_connections[wid].close()
+        except Exception as e:
+            logger.debug("worker_connection.close failed: %s", e)
 
         # start new worker
         logging_queue: mp.Queue = self._store["logging_queue"]
@@ -671,17 +710,15 @@ class ResourceQueueExecutor:
         parent_conn, child_conn = Pipe(duplex=False)
         task_q = mp.Queue(-1)
         proc = ctx.Process(  # type: ignore
-            target=worker_main,
-            args=(
-                wid,
-                task_q,
-                child_conn,
-                logging_queue,
-                config_snapshot,
-                self.timeout_multiplier,
-                self.executor,
-                common_kwargs,
-            ),
+            target=_MainWorker(
+                worker_id=wid,
+                task_q=task_q,
+                event_conn=child_conn,
+                logging_queue=logging_queue,
+                config_snapshot=config_snapshot,
+                executor=self.executor,
+                common_kwargs=common_kwargs,
+            )
         )
         proc.start()
 
@@ -751,15 +788,6 @@ class ResourceQueueExecutor:
         self._shutdown_workers()
         self.queue.clear(stat)
 
-    @cached_property
-    def timeout_multiplier(self) -> float:
-        if cli_timeouts := config.getoption("timeout"):
-            if t := cli_timeouts.get("multiplier"):
-                return float(t)
-        elif t := config.get("run:timeout:multiplier"):
-            return float(t)
-        return 1.0
-
 
 class Reporter:
     def __init__(self, executor: ResourceQueueExecutor) -> None:
@@ -773,13 +801,13 @@ class Reporter:
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
-        table = Table(expand=False, box=box.SQUARE)
-        table.add_column("Job")
-        table.add_column("ID")
-        table.add_column("Status")
-        table.add_column("Queued")
-        table.add_column("Elapsed")
-        table.add_column("Details")
+        table = Table(expand=True, box=box.SQUARE)
+        table.add_column("Job", overflow="fold")  # fold wraps long names instead of truncating
+        table.add_column("ID", width=8, no_wrap=True)
+        table.add_column("Status", width=12, overflow="ellipsis")
+        table.add_column("Queued", width=8, justify="right", no_wrap=True)
+        table.add_column("Elapsed", width=8, justify="right", no_wrap=True)
+        table.add_column("Details", overflow="ellipsis")  # this will squeeze first
         cases = xtor.queue.cases()
         for case in cases:
             if case.status.category == "PASS":
@@ -1110,4 +1138,8 @@ class CanaryKill(Exception):
 
 
 class StuckQueueError(Exception):
+    pass
+
+
+class ParentGone(Exception):
     pass

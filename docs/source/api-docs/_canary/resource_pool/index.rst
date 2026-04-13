@@ -9,6 +9,7 @@ resource_pool
    :maxdepth: 1
 
    adapter
+   gpu_select
    hooks
    rpool
    schemas

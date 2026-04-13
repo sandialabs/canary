@@ -4,12 +4,12 @@
 
 
 
-.. _hpc_connect.command.submit:
+.. _hpcc_flux.backend:
 
-submit
-======
+backend
+=======
 
-.. automodule:: hpc_connect.command.submit
+.. automodule:: hpcc_flux.backend
    :members:
    :undoc-members:
    :show-inheritance:

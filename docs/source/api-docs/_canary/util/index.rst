@@ -27,7 +27,6 @@ util
    module
    multiprocessing
    names
-   parallel
    paramview
    returncode
    rich

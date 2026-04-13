@@ -15,7 +15,6 @@ _canary
    enums
    error
    expression
-   finder
    generate
    generator
    hookspec
