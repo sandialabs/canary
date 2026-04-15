@@ -37,11 +37,11 @@ def deserialize(raw: str) -> Any:
 
 def compress64(string: str) -> str:
     compressed = zlib.compress(string.encode("utf-8"), level=zlib.Z_BEST_COMPRESSION)
-    return base64.urlsafe_b64encode(compressed).decode("utf-8")
+    return base64.b64encode(compressed).decode("utf-8")
 
 
 def expand64(raw: str) -> str:
-    bytes_str = base64.urlsafe_b64decode(raw.encode("utf-8"))
+    bytes_str = base64.b64decode(raw.encode("utf-8"))
     return zlib.decompress(bytes_str).decode("utf-8")
 
 
