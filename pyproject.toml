@@ -34,7 +34,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "hpc-connect==26.3.26",
+    "hpc-connect>=26.3.26",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
@@ -44,7 +44,6 @@ dependencies = [
 ]
 
 optional-dependencies.dev = [
-    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
     "coverage",
     "mypy",
     "pydata-sphinx-theme",
