@@ -22,10 +22,10 @@ import psutil
 
 from . import config
 from .error import TestTimedOut
+from .hookspec import hookimpl
 from .util import logging
 from .util.module import load as load_module
 from .util.shell import source_rcfile
-from .hookspec import hookimpl
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -69,6 +69,8 @@ class SubprocessLauncher(Launcher):
                 args.extend(a)
             if a := case.get_attribute("script_args"):
                 args.extend(a)
+            if not args:
+                raise RuntimeError(f"{case}: not command defined")
             case.add_measurement("command_line", shlex.join(args))
             stdout: TextIO = open(case.stdout, "a")
             stderr: StdErrorT = subprocess.STDOUT if case.stderr is None else open(case.stderr, "a")
@@ -332,7 +334,6 @@ class MeasuredProcess:
                 "ave": sum(vals) / len(vals),
             }
         return measurements
-
 
 
 @hookimpl(trylast=True, specname="canary_runtest_launcher")

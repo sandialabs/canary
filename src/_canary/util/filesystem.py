@@ -18,6 +18,8 @@ import time
 from contextlib import contextmanager
 from typing import Any
 from typing import Generator
+from typing import Literal
+from typing import overload
 
 __all__ = [
     "ancestor",
@@ -66,6 +68,22 @@ def max_name_length() -> int:
 
 
 PathLike = pathlib.Path | str
+
+
+@overload
+def which(
+    *args: str,
+    path: str | list[str] | tuple[str, ...] | None = None,
+    required: Literal[True],
+) -> str: ...
+
+
+@overload
+def which(
+    *args: str,
+    path: str | list[str] | tuple[str, ...] | None = None,
+    required: Literal[False] = False,
+) -> str | None: ...
 
 
 def which(
