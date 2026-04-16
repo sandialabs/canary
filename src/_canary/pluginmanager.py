@@ -27,6 +27,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import collect
         from . import conductor
         from . import generate
+        from . import launcher
         from . import runtest
         from . import select
         from .plugins import builtin
@@ -45,6 +46,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(generate, "builtin.generate")
         self.register(gpu_select, "builtin.gpu_select")
         self.register(filter, "builtin.filter")
+        self.register(launcher, "builtin.launcher")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
         self.register(select, "builtin.select")

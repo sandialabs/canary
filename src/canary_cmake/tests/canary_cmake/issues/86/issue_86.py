@@ -17,6 +17,6 @@ def test_issue_86():
     generator = ctg.CTestTestGenerator(file)
     specs = generator.lock()
     for spec in specs:
-        assert os.path.basename(spec.attributes["command"][0]) == "echo"
-        assert spec.attributes["command"][-1] == "yaml"
+        assert os.path.basename(spec.attributes["ctest_command"][0]) == "echo"
+        assert spec.attributes["ctest_command"][-1] == "yaml"
     force_remove(os.path.join(os.path.dirname(__file__), "Testing"))

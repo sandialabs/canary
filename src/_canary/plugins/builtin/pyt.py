@@ -4,21 +4,16 @@
 import glob
 import io
 import os
-import shlex
-import subprocess
 import sys
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from string import Template
 from types import ModuleType
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
-from typing import Generator
 from typing import Literal
 from typing import Sequence
-from typing import TextIO
 from typing import cast
 
 from ... import config
@@ -27,17 +22,13 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...hookspec import hookimpl
-from ...launcher import Launcher
-from ...launcher import SubprocessLauncher
 from ...paramset import ParameterSet
-from ...testcase import TestCase
 from ...testspec import Artifact
+from ...testspec import Asset
 from ...testspec import Mask
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
-from ...util.module import load as load_module
-from ...util.shell import source_rcfile
 from ...util.string import pluralize
 from ...util.string import stringify
 from ...util.time import time_in_seconds
@@ -241,6 +232,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     dependencies=self.depends_on(
                         testname=name, parameters=parameters, on_options=on_options
                     ),
+                    command=[sys.executable, os.path.basename(self.path)],
                 )
                 enabled, reason = self.enable(
                     testname=name, on_options=on_options, parameters=parameters
@@ -292,11 +284,32 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     artifacts=self.artifacts(testname=name, on_options=on_options),
                     exclusive=self.exclusive(testname=name, on_options=on_options),
-                    attributes={"multicase": True, "analyze": ns.value, "paramsets": psets},
+                    attributes={"multicase": True, "paramsets": psets},
                     dependencies=dependencies,
                 )
                 if test_mask is not None:
                     parent.mask = Mask.masked(test_mask)
+                command: list[str]
+                if flag := getattr(ns, "flag", None):
+                    command = [sys.executable, os.path.basename(self.path), flag]
+                elif script := getattr(ns, "script", None):
+                    f: Path
+                    if os.path.exists(script):
+                        f = Path(script).absolute()
+                    else:
+                        f = Path(os.path.join(self.root, os.path.dirname(self.path), script))
+                    if not f.exists():
+                        logger.warning(f"{self}: analyze script {f} not found")
+                    for asset in parent.assets:
+                        if asset.action in ("link", "copy") and f.name == asset.src.name:
+                            break
+                    else:
+                        asset = Asset(f, f.name, action="link")
+                        parent.assets.append(asset)
+                    command = [f.as_posix()]
+                else:
+                    command = [sys.executable, os.path.basename(self.path)]
+                parent.command = command
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
@@ -785,12 +798,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 "PYTTestGenerator.generate_composite_base_case: "
                 "'script' and 'flag' keyword arguments are mutually exclusive"
             )
-        arg: str | None = None
-        if script is not None:
-            arg = script
-        elif flag is not None:
-            arg = flag
-        ns = FilterNamespace(arg, when=when, requires=requires)
+        ns = FilterNamespace(None, when=when, requires=requires, flag=flag, script=script)
         self._generate_composite_base_case.append(ns)
 
     def m_name(self, arg: str) -> None:
@@ -1012,57 +1020,6 @@ class PYTTestGenerator(AbstractTestGenerator):
         self.m_baseline(src, dst, when=when, flag=flag)
 
 
-class PYTLauncher(Launcher):
-    @contextmanager
-    def context(self, case: "TestCase") -> Generator[None, None, None]:
-        old_env = os.environ.copy()
-        try:
-            case.set_runtime_env(os.environ)
-            for module in case.spec.modules or []:
-                load_module(module)
-            for rcfile in case.spec.rcfiles or []:
-                source_rcfile(rcfile)
-            yield
-        finally:
-            os.environ.clear()
-            os.environ.update(old_env)
-
-    def run(self, case: "TestCase") -> int:
-        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
-        with self.context(case):
-            args = [sys.executable, case.spec.file.name]
-            if a := config.getoption("script_args"):
-                args.extend(a)
-            if a := case.get_attribute("script_args"):
-                args.extend(a)
-            case.add_measurement("command_line", shlex.join(args))
-            stdout = open(case.stdout, "a")
-            stderr: TextIO | int
-            if case.stderr is None:
-                stderr = subprocess.STDOUT
-            else:
-                stderr = open(case.stderr, "a")
-            try:
-                cp = subprocess.run(
-                    args, cwd=case.workspace.dir, stdout=stdout, stderr=stderr, check=False
-                )
-            finally:
-                stdout.close()
-                if isinstance(stderr, io.TextIOWrapper):
-                    stderr.close()
-        logger.debug(f"Finished {case.display_name()}")
-        return cp.returncode
-
-
 @hookimpl
 def canary_collectstart(collector) -> None:
     collector.add_generator(PYTTestGenerator)
-
-
-@hookimpl
-def canary_runtest_launcher(case: TestCase) -> Launcher | None:
-    if case.spec.file.suffix in (".pyt", ".py"):
-        if script := case.get_attribute("alt_script"):
-            return SubprocessLauncher([f"./{script}"])
-        return PYTLauncher()
-    return None

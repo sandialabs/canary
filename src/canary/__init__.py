@@ -24,7 +24,6 @@ from _canary.generator import AbstractTestGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
 from _canary.launcher import Launcher
-from _canary.launcher import PythonFileLauncher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
