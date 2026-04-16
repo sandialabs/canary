@@ -328,6 +328,12 @@ def _prompt_template_as_unicode(app):
     return tmpl
 
 
+def traverse(node, arg):
+    if hasattr(node, "findall"):
+        return node.findall(arg)
+    return node.traverse(arg)
+
+
 def run_programs(app, doctree):
     """
     Execute all programs represented by ``program_output`` nodes in
@@ -345,7 +351,7 @@ def run_programs(app, doctree):
 
     cache = app.env.programoutput_cache
     cache_d = os.path.join(app.env.srcdir, ".cache")
-    for node in doctree.traverse(program_output):
+    for node in traverse(doctree, program_output):
         command = Command.from_program_output_node(node)
         f = os.path.join(cache_d, command.id())
         try:

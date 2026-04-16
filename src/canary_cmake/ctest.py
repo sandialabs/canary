@@ -10,7 +10,6 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
-from typing import TextIO
 
 import schema
 
@@ -141,29 +140,6 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         return resolved
 
 
-class CTestLauncher(canary.Launcher):
-    def run(self, case: "canary.TestCase") -> int:
-        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
-        cwd = case.spec.attributes["execution_directory"]
-        args = case.spec.attributes["command"]
-        env: dict[str, str] = {k: v for k, v in case.variables.items() if v is not None}
-        case.add_measurement("command_line", shlex.join(args))
-        stdout = open(case.stdout, "a")
-        stderr: TextIO | int
-        if case.stderr is None:
-            stderr = subprocess.STDOUT
-        else:
-            stderr = open(case.stderr, "a")
-        try:
-            cp = subprocess.run(args, env=env, cwd=cwd, stdout=stdout, stderr=stderr, check=False)
-        finally:
-            stdout.close()
-            if isinstance(stderr, io.TextIOWrapper):
-                stderr.close()
-        logger.debug(f"Finished {case.display_name()}")
-        return cp.returncode
-
-
 def create_draft_spec(
     *,
     file_root: str,
@@ -212,16 +188,18 @@ def create_draft_spec(
 
     attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
 
-    attributes["command"] = command
     attributes["will_fail"] = will_fail or False
 
     attributes["ctestfile"] = str(ctestfile)
     attributes["ctest_working_directory"] = working_directory
     attributes["binary_dir"] = os.path.dirname(str(ctestfile))
-    if working_directory is not None:
-        attributes["execution_directory"] = working_directory
-    else:
-        attributes["execution_directory"] = attributes["binary_dir"]
+
+    sh = canary.filesystem.which("sh", required=True)
+    exec_dir = attributes["binary_dir"] if working_directory is None else working_directory
+    exec_dir = os.path.abspath(exec_dir)
+    kwargs["command"] = [sh, "-c", f"cd {shlex.quote(exec_dir)} && exec {shlex.join(command)}"]
+    attributes["ctest_command"] = command
+    attributes["ctest_exec_dir"] = exec_dir
 
     if processors is not None:
         kwargs.setdefault("parameters", {})["cpus"] = processors
@@ -236,7 +214,7 @@ def create_draft_spec(
     if environment is not None:
         kwargs.setdefault("environment", {}).update(environment)
     if disabled:
-        kwargs["mask"] = f"Explicitly disabled in {file_root}/{file_path}"
+        kwargs["mask"] = canary.Mask.masked(f"Explicitly disabled in {file_root}/{file_path}")
 
     attributes.setdefault("resource_groups", [])
     if resource_groups is not None:
@@ -249,10 +227,12 @@ def create_draft_spec(
 
     if attached_files is not None:
         artifacts = kwargs.setdefault("artifacts", [])
-        artifacts.extend([{"file": f, "when": "always"} for f in attached_files])
+        artifacts.extend([canary.Artifact(pattern=f, when="always") for f in attached_files])
     if attached_files_on_fail is not None:
         artifacts = kwargs.setdefault("artifacts", [])
-        artifacts.extend([{"file": f, "when": "on_failure"} for f in attached_files_on_fail])
+        artifacts.extend(
+            [canary.Artifact(pattern=f, when="on_failure") for f in attached_files_on_fail]
+        )
     if run_serial is True:
         kwargs["exclusive"] = True
     if required_files:
@@ -331,18 +311,8 @@ def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def setup_ctest(case: canary.TestCase):
-    sh = canary.filesystem.which("sh")
-    exec_dir = case.spec.attributes["execution_directory"]
-    args = case.spec.attributes["command"]
     variables = resource_groups_vars(case)
     case.add_variables(**variables)
-    with case.workspace.openfile("runtest.sh", "w") as fh:
-        fh.write(f"#!{sh}\n")
-        fh.write(f"cd {exec_dir}\n")
-        for name, value in variables.items():
-            fh.write(f"export {name}={value}\n")
-        fh.write(shlex.join(args))
-    canary.filesystem.set_executable(case.workspace.joinpath("runtest.sh"))
 
 
 def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
@@ -477,7 +447,7 @@ def load(file: str) -> dict[str, Any]:
     tests: dict[str, Any] = {}
     logger.debug(f"Loading ctest tests from {file}")
 
-    ctest = canary.filesystem.which("ctest")
+    ctest = canary.filesystem.which("ctest", required=True)
     assert ctest is not None
 
     with canary.filesystem.working_dir(os.path.dirname(file)):

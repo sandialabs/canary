@@ -24,7 +24,6 @@ from _canary.generator import AbstractTestGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
 from _canary.launcher import Launcher
-from _canary.launcher import PythonFileLauncher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
@@ -39,6 +38,7 @@ from _canary.select import Selector
 from _canary.testcase import TestCase
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
+from _canary.testspec import Artifact
 from _canary.testspec import Asset
 from _canary.testspec import DependencyPatterns
 from _canary.testspec import Mask
@@ -97,11 +97,11 @@ __all__ = [
     "TestCase",
     "Launcher",
     "logging",
-    "PythonFileLauncher",
     "SubprocessLauncher",
     "TestInstance",
     "TestMultiInstance",
     "DependencyPatterns",
+    "Artifact",
     "Asset",
     "ResolvedSpec",
     "UnresolvedSpec",

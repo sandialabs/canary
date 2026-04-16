@@ -62,14 +62,14 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert spec.parameters["gpus"] == 5
         assert "foo" in spec.keywords
         assert "baz" in spec.keywords
-        command = spec.attributes["command"]
+        command = spec.attributes["ctest_command"]
         command[0] = os.path.basename(command[0])
         assert command == ["script.sh", "some-exe"]
         assert spec.environment["CTEST_NUM_RANKS"] == "5"
         assert spec.environment["SPAM"] == "BAZ"
 
         spec = specs[1]
-        command = spec.attributes["command"]
+        command = spec.attributes["ctest_command"]
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
         assert spec.parameters["cpus"] == 4

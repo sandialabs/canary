@@ -3,13 +3,10 @@
 # SPDX-License-Identifier: MIT
 """Defines launchers for individual test cases"""
 
-import importlib
 import os
-import runpy
 import shlex
 import signal
 import subprocess
-import sys
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -25,6 +22,7 @@ import psutil
 
 from . import config
 from .error import TestTimedOut
+from .hookspec import hookimpl
 from .util import logging
 from .util.module import load as load_module
 from .util.shell import source_rcfile
@@ -41,21 +39,9 @@ class Launcher(ABC):
     def run(self, case: "TestCase") -> int: ...
 
 
-def timeout_multiplier() -> float:
-    if cli_timeouts := config.getoption("timeout"):
-        if t := cli_timeouts.get("multiplier"):
-            return float(t)
-    elif t := config.get("run:timeout:multiplier"):
-        return float(t)
-    return 1.0
-
-
 class SubprocessLauncher(Launcher):
-    def __init__(self, args: list[str]) -> None:
-        self._default_args = args
-
-    def default_args(self, case: "TestCase") -> list[str]:
-        return list(self._default_args)
+    def __init__(self, args: list[str] | None = None) -> None:
+        self.default_args: list[str] = list(args or [])
 
     @contextmanager
     def context(self, case: "TestCase") -> Generator[None, None, None]:
@@ -77,11 +63,14 @@ class SubprocessLauncher(Launcher):
     def run(self, case: "TestCase") -> int:
         logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
         with self.context(case):
-            args: list[str] = self.default_args(case)
+            args: list[str] = list(case.spec.command)
+            args.extend(self.default_args)
             if a := config.getoption("script_args"):
                 args.extend(a)
             if a := case.get_attribute("script_args"):
                 args.extend(a)
+            if not args:
+                raise RuntimeError(f"{case}: not command defined")
             case.add_measurement("command_line", shlex.join(args))
             stdout: TextIO = open(case.stdout, "a")
             stderr: StdErrorT = subprocess.STDOUT if case.stderr is None else open(case.stderr, "a")
@@ -95,7 +84,7 @@ class SubprocessLauncher(Launcher):
             try:
                 mp.start()
                 start = time.time()
-                deadline = start + case.timeout * timeout_multiplier()
+                deadline = start + case.total_timeout()
                 while True:
                     mp.sample_metrics()
                     rc = mp.poll()
@@ -133,94 +122,13 @@ class SubprocessLauncher(Launcher):
                             except Exception:
                                 pass  # nosec B110
 
-                        raise TestTimedOut(
-                            f"Test exceeded timeout of {timeout_multiplier() * case.timeout:.1f} s"
-                        )
+                        raise TestTimedOut(f"Test exceeded timeout of {case.total_timeout():.1f} s")
 
                     time.sleep(0.1)
             finally:
                 stdout.close()
                 if not isinstance(stderr, int):
                     stderr.close()
-
-
-class PythonFileLauncher(SubprocessLauncher):
-    def __init__(self):
-        pass
-
-    def default_args(self, case: "TestCase") -> list[str]:
-        return [sys.executable, case.file.name]
-
-
-class PythonRunpyLauncher(Launcher):
-    @contextmanager
-    def context(self, case: "TestCase") -> Generator[None, None, None]:
-        """Temporarily patch:
-        • canary.get_instance() to return `case`
-        • canary.spec (optional)
-        • sys.argv (optional)
-        """
-        from .testinst import from_testcase as test_instance_factory
-
-        canary = importlib.import_module("canary")
-        old_argv = sys.argv.copy()
-        old_env = os.environ.copy()
-        old_cwd = Path.cwd()
-        old_path = sys.path.copy()
-
-        def get_instance():
-            return test_instance_factory(case)
-
-        def get_testcase():
-            return case
-
-        try:
-            case.set_runtime_env(os.environ)
-            for module in case.spec.modules or []:
-                load_module(module)
-            for rcfile in case.spec.rcfiles or []:
-                source_rcfile(rcfile)
-            sys.path.insert(0, str(case.workspace.dir))
-            setattr(canary, "get_instance", get_instance)
-            setattr(canary, "get_testcase", get_testcase)
-            setattr(canary, "__testcase__", case)
-            sys.argv = [sys.executable, case.spec.file.name]
-            if a := config.getoption("script_args"):
-                sys.argv.extend(a)
-            if a := case.get_attribute("script_args"):
-                sys.argv.extend(a)
-            sys.stdout = open(case.stdout, "a")
-            if case.stderr is None:
-                sys.stderr = sys.stdout
-            else:
-                sys.stderr = open(case.stderr, "a")
-            for module in case.spec.modules or []:
-                load_module(module)
-            for rcfile in case.spec.rcfiles or []:
-                source_rcfile(rcfile)
-            os.chdir(case.workspace.dir)
-            yield
-        finally:
-            delattr(canary, "get_instance")
-            delattr(canary, "get_testcase")
-            delattr(canary, "__testcase__")
-            os.chdir(old_cwd)
-            sys.argv.clear()
-            sys.argv.extend(old_argv)
-            os.environ.clear()
-            os.environ.update(old_env)
-            sys.path.clear()
-            sys.path.extend(old_path)
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
-
-    def run(self, case: "TestCase") -> int:
-        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
-        case.add_measurement("command_line", shlex.join(sys.argv))
-        with self.context(case):
-            runpy.run_path(case.spec.file.name, run_name="__main__")
-        logger.debug(f"Finished {case.display_name()}")
-        return 0
 
 
 class MeasuredProcess:
@@ -426,3 +334,8 @@ class MeasuredProcess:
                 "ave": sum(vals) / len(vals),
             }
         return measurements
+
+
+@hookimpl(trylast=True, specname="canary_runtest_launcher")
+def default_testcase_launcher(case: "TestCase") -> Launcher:
+    return SubprocessLauncher()

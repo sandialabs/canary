@@ -14,7 +14,6 @@ from schema import Schema
 import canary
 
 from .cdash import CDashReporter
-from .ctest import CTestLauncher
 from .ctest import CTestTestGenerator
 from .ctest import finish_ctest
 from .ctest import read_resource_specs
@@ -39,13 +38,6 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
             paths.sort(key=lambda p: (p.split(os.sep), p))
             for path in paths[1:]:
                 collector.remove_file(root, path)
-
-
-@canary.hookimpl
-def canary_runtest_launcher(case: canary.TestCase) -> canary.Launcher | None:
-    if case.spec.file.suffix == ".cmake":
-        return CTestLauncher()
-    return None
 
 
 @canary.hookimpl

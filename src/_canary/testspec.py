@@ -106,6 +106,7 @@ class BaseSpec(Generic[T]):
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
     meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
+    command: list[str] = dataclasses.field(default_factory=list)
     id: str = ""
 
     def __str__(self) -> str:
@@ -394,7 +395,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
         self.assets = self.assets or self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
         self.dep_patterns = self._generate_dependency_patterns(self.dependencies or [])
-        self._generate_analyze_action()
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -435,6 +435,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
             stdout=self.stdout,
             stderr=self.stderr,
             id=self.id,
+            command=self.command,
         )
 
     def is_resolved(self) -> bool:
@@ -473,27 +474,6 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
                 src, dst = item
                 actions.append({"type": "copy", "src": src, "dst": dst})
         return actions
-
-    def _generate_analyze_action(self) -> None:
-        if analyze := self.attributes.get("analyze"):
-            if analyze.startswith("-"):
-                self.attributes["script_args"] = [analyze]
-            else:
-                src: Path
-                if os.path.exists(analyze):
-                    src = Path(analyze).absolute()
-                else:
-                    src = self.file.parent / analyze
-                if not src.exists():
-                    logger.warning(f"{self}: analyze script {analyze} not found")
-                self.attributes["alt_script"] = src.name
-                # flag is a script to run during analysis, check if it is going to be copied/linked
-                for asset in self.assets:
-                    if asset.action in ("link", "copy") and src.name == asset.src.name:
-                        break
-                else:
-                    asset = Asset(src, src.name, action="link")
-                    self.assets.append(asset)
 
     def _generate_dependency_patterns(
         self, args: Sequence[str | DependencyPatterns]
