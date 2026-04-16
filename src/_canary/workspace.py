@@ -16,6 +16,7 @@ from . import config
 from . import rules
 from . import select
 from . import testspec
+from . import version
 from .collect import Collector
 from .database import WorkspaceDatabase
 from .error import StopExecution
@@ -34,7 +35,6 @@ from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
 from .util.graph import static_order
 from .util.names import unique_random_name
-from .version import __static_version__
 
 if TYPE_CHECKING:
     from .database import ResultListener
@@ -439,7 +439,7 @@ class Workspace:
             "latest_session": latest_session,
             "tags": self.db.tags,
             "specs": self.db.load_specs(),
-            "version": __static_version__,
+            "version": version.__version__,
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
         return info

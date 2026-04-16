@@ -24,7 +24,6 @@ scripts/sbatch
 docs/source/commands.rst
 
 src/*.egg-info/
-src/_canary/version.py
 
 docs/build
 build

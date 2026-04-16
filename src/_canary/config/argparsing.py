@@ -318,7 +318,7 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--version",
         action="version",
-        version=version.version,
+        version=version.__version__,
         help="show version and exit",
     )
     parser.add_argument(

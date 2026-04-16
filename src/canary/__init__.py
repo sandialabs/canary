@@ -10,6 +10,7 @@ import schema
 
 import _canary.config as config
 import _canary.enums as enums
+from _canary import version as _v
 from _canary.collect import Collector
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
@@ -54,8 +55,6 @@ from _canary.util import shell
 from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
-from _canary.version import version  # noqa: I001
-from _canary.version import version_info  # noqa: I001
 from _canary.workspace import NotAWorkspaceError
 from _canary.workspace import Session
 from _canary.workspace import Workspace
@@ -64,6 +63,10 @@ from . import directives
 from . import patterns
 
 get_logger = logging.get_logger
+
+version = _v.version
+version_info = _v.version_info
+del _v
 
 
 __all__ = [

@@ -13,6 +13,7 @@ authors = [
     { name = "Tim Fuller" },
     { name = "Others (See AUTHORS)" },
 ]
+version = "26.3.5.dev0"
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 6 - Mature",
@@ -32,8 +33,6 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Topic :: Utilities",
 ]
-
-dynamic = [ "version" ]
 dependencies = [
     "hpc-connect==26.3.26",
     "pluggy>=1.5",
@@ -75,9 +74,6 @@ canary_hpc = "canary_hpc"
 canary_amd = "canary_amd"
 canary_nvidia = "canary_nvidia"
 canary_vvtest = "canary_vvtest"
-
-[tool.setuptools.dynamic]
-version = { attr = "_canary.util.dynamic_version.__generate_dynamic_version__" }
 
 [tool.ruff]
 target-version = "py311"
