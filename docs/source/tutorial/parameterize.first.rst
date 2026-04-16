@@ -29,3 +29,13 @@ When the test file is run, each case is executed in its own uniquely named direc
    :nocache:
 
 Test directories are generally named ``$family.$param_1=$value_1...$param_n=$value_n``, where ``family`` is (usually) the basename of the test file.
+
+
+.. program-output:: ls -F TestResults/
+   :cwd: /examples
+   :nocache:
+
+.. program-output:: rm -rf .canary TestResults/
+   :silent:
+   :nocache:
+   :cwd: /examples

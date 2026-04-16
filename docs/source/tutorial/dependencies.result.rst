@@ -29,3 +29,8 @@ Run a test case only when its dependency fails:
 .. note::
 
    To execute a test regardless of the results of its dependencies, use ``result="*"``.
+
+.. program-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :nocache:
+    :silent:

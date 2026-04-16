@@ -7,9 +7,9 @@
 canary: Accelerating Application Testing Across Platforms
 =========================================================
 
-A Flexible, Extensible, and Scalable Framework for Scientific Applications
+A flexible framework for testing scientific applications on diverse hardware.
 
-**Authors**: Tim Fuller, Stuart Baxley, Mario LoPrinzi, Matt Mosby, Scot Swan
+**Authors**: Tim Fuller, Matt Mosby, Mario LoPrinzi
 
 **Affiliation**: Sandia National Laboratories
 
@@ -23,3 +23,4 @@ A Flexible, Extensible, and Scalable Framework for Scientific Applications
     Test dependencies <dependencies>
     Resource allocation <resource>
     batch
+    extending

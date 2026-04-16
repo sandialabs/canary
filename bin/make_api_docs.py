@@ -124,6 +124,11 @@ if __name__ == "__main__":
         skip_dirs=["third_party"],
     )
     maker.add_package(
+        "canary",
+        os.path.join(canary_root, "src/canary"),
+        skip_dirs=["examples"],
+    )
+    maker.add_package(
         "canary_cmake",
         os.path.join(canary_root, "src/canary_cmake"),
         skip_dirs=["validators", "tests"],
