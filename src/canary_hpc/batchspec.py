@@ -227,7 +227,7 @@ class TestBatch:
                     if dep.status.state in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
-                self._status.set("READY", propagate=False)
+                self._status.set_base(state="READY")
         return self._status
 
     def set_status(
@@ -261,8 +261,15 @@ class TestBatch:
             if rc is None:
                 rc = 1
             self.refresh()
-            stat = "SUCCESS" if all(case.status.category == "PASS" for case in self) else "FAILED"
-            self.status.set(status=stat, propagate=False)
+            if all(case.status.category == "PASS" for case in self):
+                self.status.set_base(state="COMPLETE", category="PASS", status="SUCCESS")
+            else:
+                self.status.set_base(
+                    state="COMPLETE",
+                    category="FAIL",
+                    status="FAILED",
+                    reason="One or more test cases did not pass",
+                )
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
@@ -293,13 +300,12 @@ class TestBatch:
         """
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
-                self.status.set(
+                self.status.base_status.set(
                     state=stat.state,
                     category=stat.category,
                     status=stat.status,
                     reason=stat.reason,
                     code=stat.code,
-                    propagate=False,
                 )
             if timekeeper := mydata.get("timekeeper"):
                 self.timekeeper.submitted = timekeeper.submitted

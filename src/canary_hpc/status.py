@@ -45,11 +45,27 @@ class BatchStatus:
             return (n, x[1])
 
         counts: Counter[tuple[str, str]] = Counter()
+        present_cats: set[str] = set()
+
         for child in self._children:
-            if child.status.category == "PASS":
-                counts[(child.status.category, "PASS")] += 1
+            cat = child.status.category
+            present_cats.add(cat)
+            if cat == "PASS":
+                counts[(cat, "PASS")] += 1
             else:
-                counts[(child.status.category, child.status.status)] += 1
+                counts[(cat, child.status.status)] += 1
+
+        # Derive the batch category for display (don’t trust base_status.category)
+        derived_cat: str = "NONE"
+        if "FAIL" in present_cats:
+            derived_cat = "FAIL"
+        elif "CANCEL" in present_cats:
+            derived_cat = "CANCEL"
+        elif "SKIP" in present_cats:
+            derived_cat = "SKIP"
+        elif "PASS" in present_cats and len(present_cats) == 1:
+            derived_cat = "PASS"
+
         style = kwargs.get("style")
         parts: list[str] = []
         for cat, stat in sorted(counts, key=sortkey):
@@ -57,12 +73,10 @@ class BatchStatus:
             if style == "rich":
                 color = self.base_status.COLOR_FOR_CATEGORY[cat]
                 parts.append(f"{count} [{color}]{stat}[/{color}]")
-            elif style == "rich":
-                color = self.base_status.COLOR_FOR_CATEGORY[cat][0]
-                parts.append("%d @%s{%s}" % (count, color, stat))
             else:
                 parts.append(f"{count} {stat}")
-        return f"{self.base_status.category} ({', '.join(parts)})"
+
+        return f"{derived_cat} ({', '.join(parts)})"
 
     @property
     def color(self) -> str:
@@ -78,20 +92,32 @@ class BatchStatus:
         status: str | None = None,
         reason: str | None = None,
         code: int = -1,
-        propagate: bool = True,
     ) -> None:
         self.base_status.set(
             state=state, category=category, status=status, reason=reason, code=code
         )
-        if propagate:
-            for child in self._children:
-                if child.status.state in ("READY", "PENDING"):
-                    s = child.status.state
-                    child.status = Status.BROKEN(reason=f"{child}: unexpected status {s}")
-                elif child.status.state == "RUNNING":
-                    child.timekeeper.stop()
-                    child.status = Status.CANCELLED()
-                else:
-                    child.status.set(
-                        state=state, category=category, status=status, reason=reason, code=code
-                    )
+        for child in self._children:
+            if child.status.state in ("READY", "PENDING"):
+                s = child.status.state
+                child.status = Status.BROKEN(reason=f"{child}: unexpected status {s}")
+            elif child.status.state == "RUNNING":
+                child.timekeeper.stop()
+                child.status = Status.CANCELLED()
+            elif child.status.state not in ("COMPLETE", "NOTRUN"):
+                child.status.set(
+                    state=state, category=category, status=status, reason=reason, code=code
+                )
+
+    def set_base(
+        self,
+        *,
+        state: str | None = None,
+        category: str | None = None,
+        status: str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
+        """Internal: update only the batch aggregate status."""
+        self.base_status.set(
+            state=state, category=category, status=status, reason=reason, code=code
+        )
