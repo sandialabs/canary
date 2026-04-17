@@ -4,12 +4,12 @@
 
 
 
-.. _canary.util.dynamic_version:
+.. _canary.directives:
 
-dynamic_version
-===============
+directives
+==========
 
-.. automodule:: _canary.util.dynamic_version
+.. automodule:: canary.directives
    :members:
    :undoc-members:
    :show-inheritance:

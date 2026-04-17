@@ -21,3 +21,8 @@ Example
     :cwd: /examples
     :nocache:
     :setup: rm -rf .canary TestResults
+
+.. program-output:: rm -rf .canary TestResults
+    :cwd: /examples
+    :nocache:
+    :silent:

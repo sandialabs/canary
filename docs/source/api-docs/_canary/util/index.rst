@@ -12,7 +12,6 @@ util
    banner
    collections
    compression
-   dynamic_version
    editor
    entry_points
    executable

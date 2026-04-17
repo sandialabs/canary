@@ -30,3 +30,12 @@ canary usage
    usage.xstatus
    usage.modules
    usage.rcfiles
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Integrations
+
+   usage.cmake
+   usage.hpc
+   usage.vvtest
+   usage.gitlab

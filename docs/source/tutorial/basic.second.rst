@@ -2,47 +2,56 @@
 
    SPDX-License-Identifier: MIT
 
+.. _tutorial-basic-second:
+
 A second test
 =============
+
+This example introduces two common patterns:
+
+* staging an input file into the test working directory with :func:`canary.directives.link`; and
+* running an external program using :class:`~_canary.util.executable.Executable`.
 
 The test file
 -------------
 
-In this second example, the external program "``add.py``" adds two numbers and writes the result to the console's stdout:
+In this example, the external program ``add.py`` adds two numbers and prints the result to
+standard output. The test links ``add.py`` into the working directory, executes it, and checks the
+output for correctness:
 
 .. literalinclude:: /examples/basic/second/second.pyt
    :language: python
 
-In the test, ``add.py`` is linked to the execution directory, is executed, and output verified for correctness.
-
-This test introduces two new features:
-
-* :func:`canary.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
-* :class:`~_canary.util.executable.Executable`: creates a callable wrapper around executable scripts.
-
 Running the test
 ----------------
 
-To run the test, navigate to the examples folder and run:
+From the ``examples`` directory, run only tests with the ``second`` keyword:
 
 .. command-output:: canary run -k second ./basic
     :cwd: /examples
     :nocache:
     :setup: rm -rf .canary TestResults
 
-Here, the ``-k`` flag was used to select only the tests having the ``second`` keyword.
+Here, ``-k`` filters the session to tests matching the given keyword expression.
 
 Inspecting test output
 ----------------------
 
-When a test is run, its output is captured to the file ``canary-out.txt`` in its execution directory.  The :ref:`canary log<canary-log>` command can find and print the contents of this file to the console:
+When a test runs, its captured console output is written to ``canary-out.txt`` in the test’s
+working directory. The :ref:`canary log <canary-log>` command locates and prints that file:
 
 .. command-output:: canary log second
     :cwd: /examples
     :nocache:
 
-Contents of add.py
-------------------
+Contents of ``add.py``
+----------------------
 
 .. literalinclude:: /examples/basic/second/add.py
    :language: python
+
+
+.. program-output:: rm -rf .canary TestResults
+    :silent:
+    :nocache:
+    :cwd: /examples

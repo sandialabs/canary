@@ -25,11 +25,6 @@ acquires CPUs 10, 11, 12, and 13, and GPUs 0, 1, 2, and 3 from the resource pool
 * ``CANARY_CPU_IDS=10,11,12,13``
 * ``CANARY_GPU_IDS=0,1,2,3``
 
-Other environment variables
----------------------------
-
-Existing environment variables having the placeholders ``%(<name>_ids)s`` have those placeholders replaced when the test is run.  If, in the previous example, the environment had defined ``CUDA_VISIBLE_DEVICES="%(gpu_ids)s"``, then ``CUDA_VISIBLE_DEVICES=0,1,2,3`` would be defined in the test environment.
-
 CTest environment variables
 ---------------------------
 

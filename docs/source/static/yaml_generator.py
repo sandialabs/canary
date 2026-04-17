@@ -1,40 +1,18 @@
 import io
-import os
-import re
 from itertools import product
 from pathlib import Path
-
-import yaml
+from string import Template
+from typing import ClassVar
+from typing import Any
 
 import canary
+import schema
+import yaml
 
 
 @canary.hookimpl
-def canary_testcase_generator(root: str, path: str | None) -> "YAMLTestGenerator":
-    if YAMLTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return YAMLTestGenerator(root, path)
-
-
-@canary.hookimpl
-def canary_runtest_setup(case: canary.TestCase) -> None:
-    if not YAMLTestGenerator.matches(case.spec.file):
-        return
-    sh = canary.filesystem.which("sh")
-    if script := case.attributes.get("script"):
-        with case.workspace.openfile("runtest.sh", "w") as fh:
-            fh.write(f"#!{sh}\n")
-            fh.write(f"cd {case.workspace.dir}\n")
-            fh.write("\n".join(script))
-        canary.filesystem.set_executable(case.workspace.joinpath("runtest.sh"))
-    else:
-        raise ValueError(f"{case}: script attribute not found")
-
-
-@canary.hookimpl
-def canary_runtest_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
-    if YAMLTestGenerator.matches(case.spec.file):
-        return canary.SubprocessExecutionPolicy(["./runtest.sh"])
-    return None
+def canary_collectstart(collector) -> None:
+    collector.add_generator(YAMLTestGenerator)
 
 
 class YAMLTestGenerator(canary.AbstractTestGenerator):
@@ -51,37 +29,37 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
            parameters: dict[str, list[float | int | str | None]]
 
     """
+    file_patterns: ClassVar[tuple[str, ...]] = ("test_*.yaml",)
 
-    @classmethod
-    def matches(cls, path: str | Path) -> bool:
-        """Is ``path`` a YAMLTestGenerator?"""
-        path = Path(path)
-        return re.match("test_.*\.yaml", path.name) is not None
-
-    def lock(self, on_options: list[str] | None = None) -> list[canary.UnresolvedSpec]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
         """Take the cartesian product of parameters and from each combination create a test case."""
 
         with open(self.file, "r") as fh:
             fd = yaml.safe_load(fh)
+        fd = yaml_schema.validate(fd)
 
-        specs: list[canary.UnresolvedSpec] = []
+        specs: list[canary.ResolvedSpec] = []
         for name, details in fd["tests"].items():
-            kwds = dict(
+            kwds: dict[str, Any] = dict(
                 file_root=Path(self.root),
                 file_path=Path(self.path),
                 family=name,
                 keywords=details.get("keywords", []),
-                attributes={"details": details.get("description"), "script": details["script"]},
+                attributes={"description": details.get("description")},
             )
-
+            script = details["script"]
+            sh = canary.filesystem.which("sh", required=True)
             if parameters := details.get("parameters"):
                 keys = list(parameters.keys())
                 for values in product(*parameters.values()):
-                    params = dict(zip(keys, values))
-                    spec = canary.UnresolvedSpec(parameters=params, **kwds)
+                    p = kwds["parameters"] = dict(zip(keys, values))
+                    shell_cmds: list[str] = [Template(_).safe_substitute(**p) for _ in script]
+                    kwds["command"] = [sh, "-c", "set -e\n" + "\n".join(shell_cmds)]
+                    spec = canary.ResolvedSpec(**kwds)
                     specs.append(spec)
             else:
-                spec = canary.UnresolvedSpec(**kwds)
+                kwds["command"] = [sh, "-c", "set -e\n" + "\n".join(script)]
+                spec = canary.ResolvedSpec(**kwds)
                 specs.append(spec)
 
         return specs
@@ -94,3 +72,17 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
         file.write(f"{len(cases)} test cases:\n")
         canary.graph.print(cases, file=file)
         return file.getvalue()
+
+
+yaml_schema = schema.Schema(
+    {
+        "tests": {
+            str: {
+                schema.Optional("description", default="Yaml test instance"): str,
+                "script": [str],
+                schema.Optional("keywords"): [str],
+                schema.Optional("parameters"): {str: [schema.Or(int, float, str, type(None))]},
+            }
+        }
+    }
+)

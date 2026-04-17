@@ -7,7 +7,8 @@
 Sending options to the batch scheduler
 ======================================
 
-Options passed to ``canary`` by the ``-b option=OPTION`` flag are forwarded directly to the scheduler.  For example,
+Options passed to ``canary`` with ``-b option=OPTION`` are forwarded directly to the scheduler. For
+example,
 
 .. code-block:: console
 
@@ -15,7 +16,11 @@ Options passed to ``canary`` by the ``-b option=OPTION`` flag are forwarded dire
 
 will pass ``--account=ABC123`` to ``sbatch``.
 
-If ``OPTION`` contains commas, it is split into multiple options at the commas.  E.g.,
+Comma splitting
+---------------
+
+If ``OPTION`` contains commas, it is split into multiple scheduler options at the commas. For
+example,
 
 .. code-block:: console
 
@@ -23,10 +28,21 @@ If ``OPTION`` contains commas, it is split into multiple options at the commas. 
 
 will pass ``--account=ABC123`` and ``--queue=debug`` to ``sbatch``.
 
-``OPTION``\ s can be passed separately, e.g.:
+You can also pass multiple ``option=...`` entries explicitly:
 
 .. code-block:: console
 
     canary run -b scheduler=slurm -b option=--account=ABC123 -b option=--queue=debug PATH
 
-will also pass ``--account=ABC123`` and ``--queue=debug`` to ``sbatch``.
+Quoting options that contain commas
+-----------------------------------
+
+If the *scheduler option itself* contains commas, quote it so the shell treats it as a single
+argument. For example:
+
+.. code-block:: console
+
+    canary run -b scheduler=slurm -b option=--queue='debug,short' PATH
+
+Without quotes, the comma would be interpreted as an option separator and would be split into
+multiple scheduler options.

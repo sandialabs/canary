@@ -10,6 +10,7 @@ API reference
     :maxdepth: 1
 
     _canary/index
+    canary/index
     canary_cmake/index
     canary_gitlab/index
     canary_hpc/index
