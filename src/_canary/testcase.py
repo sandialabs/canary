@@ -171,11 +171,15 @@ class TestCase:
 
     @property
     def cpus(self) -> int:
-        return self.rparameters["cpus"]
+        return self.rparameters.get("cpus") or 1
 
     @property
     def gpus(self) -> int:
-        return self.rparameters["gpus"]
+        return self.rparameters.get("gpus") or 0
+
+    @property
+    def nodes(self) -> int:
+        return self.rparameters.get("nodes") or 1
 
     @property
     def cpu_ids(self) -> list[str]:
@@ -202,7 +206,9 @@ class TestCase:
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
-        for value in self.rparameters.values():
+        for name, value in self.rparameters.items():
+            if name == "nodes":
+                continue
             vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
 
