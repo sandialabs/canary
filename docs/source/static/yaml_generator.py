@@ -2,12 +2,13 @@ import io
 from itertools import product
 from pathlib import Path
 from string import Template
-from typing import ClassVar
 from typing import Any
+from typing import ClassVar
 
-import canary
 import schema
 import yaml
+
+import canary
 
 
 @canary.hookimpl
@@ -29,6 +30,7 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
            parameters: dict[str, list[float | int | str | None]]
 
     """
+
     file_patterns: ClassVar[tuple[str, ...]] = ("test_*.yaml",)
 
     def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
