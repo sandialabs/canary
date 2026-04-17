@@ -134,6 +134,16 @@ if __name__ == "__main__":
         skip_dirs=["validators", "tests"],
     )
     maker.add_package(
+        "canary_amd",
+        os.path.join(canary_root, "src/canary_amd"),
+        skip_dirs=["tests"],
+    )
+    maker.add_package(
+        "canary_nvidia",
+        os.path.join(canary_root, "src/canary_nvidia"),
+        skip_dirs=["tests"],
+    )
+    maker.add_package(
         "canary_hpc",
         os.path.join(canary_root, "src/canary_hpc"),
         skip_dirs=["tests"],
@@ -174,8 +184,8 @@ if __name__ == "__main__":
             skip_dirs=["tests", "templates"],
         )
         maker.add_package(
-            "hpcc_subprocess",
-            os.path.join(hpcc_root, "src/hpcc_subprocess"),
+            "hpcc_remote",
+            os.path.join(hpcc_root, "src/hpcc_remote"),
             skip_dirs=["tests", "templates"],
         )
     else:

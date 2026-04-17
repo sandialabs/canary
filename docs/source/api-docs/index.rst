@@ -11,12 +11,14 @@ API reference
 
     _canary/index
     canary/index
+    canary_amd/index
     canary_cmake/index
     canary_gitlab/index
     canary_hpc/index
+    canary_nvidia/index
     canary_vvtest/index
     hpc_connect/index
     hpcc_flux/index
     hpcc_pbs/index
+    hpcc_remote/index
     hpcc_slurm/index
-    hpcc_subprocess/index
