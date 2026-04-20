@@ -7,6 +7,7 @@ from graphlib import TopologicalSorter
 from typing import Callable
 from typing import Generator
 from typing import Sequence
+from typing import cast
 
 import canary
 
@@ -169,12 +170,14 @@ def pack_by_count(
     sizes: list[float] = []
     groups: list[list[Block]] = []
     while ts.is_active():
-        ready = ts.get_ready()
-        if grouper is not None:
-            groups.extend(grouper(ready))
-        else:
-            groups.append(list(ready))
-        sizes.append(sum(b.norm() for b in groups[-1]))
+        ready = cast(list[Block], list(ts.get_ready()))
+        new_groups: list[list[Block]] = [ready] if grouper is None else list(grouper(ready))
+        if canary.config.get("config:debug"):
+            flat = [b for g in new_groups for b in g]
+            if sorted(flat, key=id) != sorted(ready, key=id):
+                raise ValueError("grouper must partition 'ready' exactly (no drops/dups)")
+        groups.extend(new_groups)
+        sizes.extend(sum(b.norm() for b in g) for g in new_groups)
         ts.done(*ready)
     if count == AUTO:
         return [Bin(group) for group in groups]
