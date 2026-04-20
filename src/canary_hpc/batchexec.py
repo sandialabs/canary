@@ -42,7 +42,12 @@ class HPCConnectRunner:
         variables: dict[str, str | None] = dict(batch.variables)
         level = int(os.getenv("CANARY_LEVEL", "0"))
         variables.update(
-            {"CANARY_LEVEL": str(level + 1), "CANARY_DISABLE_KB": "1", "CANARY_LIVE": "0"}
+            {
+                "CANARY_LEVEL": str(level + 1),
+                "CANARY_DISABLE_KB": "1",
+                "CANARY_LIVE": "0",
+                "CANARY_HPC_BATCH": str(batch.spec.id),
+            }
         )
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
@@ -199,10 +204,12 @@ class HPCConnectBatchRunner(HPCConnectRunner):
     def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:
         variables = self.rc_environ(batch)
         invocation = self.canary_invocation(batch)
+        node_count = self.nodes_required(batch)
+        variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
         job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
-            nodes=self.nodes_required(batch),
+            nodes=node_count,
             time_limit=batch.estimated_runtime() * batch.timeout_multiplier,
             env=variables,
             output=str(batch.workspace.joinpath(batch.stdout)),

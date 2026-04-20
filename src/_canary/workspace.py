@@ -113,9 +113,6 @@ class Workspace:
         # Text logs
         self.logs_dir: Path
 
-        # Pointer to latest session
-        self.head: Path
-
         self.db: WorkspaceDatabase
 
         self.canary_level: int
@@ -133,7 +130,6 @@ class Workspace:
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
         self.logs_dir = self.root / "logs"
-        self.head = self.root / "HEAD"
         self.canary_level = 0
         if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
             self.canary_level = int(var)
@@ -347,11 +343,6 @@ class Workspace:
         file.unlink(missing_ok=True)
         link = os.path.relpath(str(session.prefix), str(file.parent))
         file.write_text(str(link))
-
-        # Write meta data file HEAD -> ./sessions/{session.root}
-        self.head.unlink(missing_ok=True)
-        link = os.path.relpath(str(file), str(self.head.parent))
-        self.head.write_text(str(link))
 
     def rebuild_view(self) -> None:
         """Keep only the latet results"""
