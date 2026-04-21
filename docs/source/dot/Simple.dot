@@ -1,0 +1,35 @@
+digraph G {
+  rankdir=TB;
+  bgcolor="white";
+  pad="0.25";
+  nodesep="0.45";
+  ranksep="0.55";
+  fontname="Helvetica";
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#F7FAFF",
+    color="#2B4C7E",
+    penwidth=1.2,
+    fontname="Helvetica",
+    fontsize=10,
+    margin="0.12,0.08"
+  ];
+
+  edge [
+    color="#4B5563",
+    penwidth=1.1,
+    arrowsize=0.8,
+    fontname="Helvetica",
+    fontsize=9
+  ];
+
+  F [label="parameterize('a', (1, 2))", shape=component, fillcolor="#EEF2FF", color="#3730A3"];
+
+  Case1 [label="TestCase\na=1"];
+  Case2 [label="TestCase\na=2"];
+
+  F -> Case1 [label="a=1", color="#2563EB", fontcolor="#2563EB"];
+  F -> Case2 [label="a=2", color="#2563EB", fontcolor="#2563EB"];
+}

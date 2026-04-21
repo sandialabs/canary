@@ -1,0 +1,49 @@
+digraph G {
+  rankdir=TB;
+  bgcolor="white";
+  pad="0.25";
+  nodesep="0.50";
+  ranksep="0.65";
+  fontname="Helvetica";
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#F7FAFF",
+    color="#2B4C7E",
+    penwidth=1.2,
+    fontname="Helvetica",
+    fontsize=10,
+    margin="0.14,0.10"
+  ];
+
+  edge [
+    color="#4B5563",
+    penwidth=1.1,
+    arrowsize=0.85,
+    fontname="Helvetica",
+    fontsize=9
+  ];
+
+  P [
+  label="parameterize('a,b', ((1, 2), (3, 4), ...))\lparameterize('c', ('u', 'v', ...))\l",
+  shape=component,
+  fillcolor="#EEF2FF",
+  color="#3730A3",
+  style="filled"
+];
+
+  C1  [label="TestCase\n(a=1, b=2, c='u')"];
+  C2  [label="TestCase\n(a=1, b=2, c='v')"];
+  C3  [label="TestCase\n(a=3, b=4, c='u')"];
+  C4  [label="TestCase\n(a=3, b=4, c='v')"];
+  CN  [label="TestCase\n(...)", style="rounded,filled,dashed", fillcolor="#F7FAFF"];
+
+  P -> C1 [label="  realization", color="#2563EB", fontcolor="#2563EB"];
+  P -> C2 [label="  realization", color="#2563EB", fontcolor="#2563EB"];
+  P -> C3 [label="  realization", color="#2563EB", fontcolor="#2563EB"];
+  P -> C4 [label="  realization", color="#2563EB", fontcolor="#2563EB"];
+  P -> CN [label="  ...", style=dotted, color="#2563EB", fontcolor="#2563EB"];
+
+  { rank=same; C1; C2; C3; C4; CN; }
+}

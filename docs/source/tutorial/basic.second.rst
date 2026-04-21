@@ -37,7 +37,7 @@ Here, ``-k`` filters the session to tests matching the given keyword expression.
 Inspecting test output
 ----------------------
 
-When a test runs, its captured console output is written to ``canary-out.txt`` in the test’s
+When a test runs, its captured console output is written to ``canary-out.txt`` in the test's
 working directory. The :ref:`canary log <canary-log>` command locates and prints that file:
 
 .. command-output:: canary log second

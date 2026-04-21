@@ -67,7 +67,7 @@ Test files define one or more :ref:`test cases <basics-testcase>`.  In the simpl
 
 would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4`` as shown.
 
-.. image:: /dot/TestFile1.png
+.. image:: /dot/Simple.png
     :align: center
 
 Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
@@ -76,9 +76,10 @@ Each test case would execute in its own directory and the test script should que
     :language: python
     :lines: 11-13
 
-More generally, test files can define an arbitrary number of cases:
+When multiple ``parameterize`` directives are used in a test file, Canary expands them by taking the Cartesian product of all parameter values—each unique combination becomes a separate TestCase.
 
-.. image:: /dot/TestFile.png
+
+.. image:: /dot/General.png
     :align: center
 
 A complete example
