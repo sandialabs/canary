@@ -20,7 +20,7 @@ logger = canary.get_logger(__name__)
 def batch_testcases(
     *,
     cases: list["canary.TestCase"],
-    nodes: Literal["any", "same"] = "any",
+    nodes: Literal["any", "same"] = "same",
     layout: Literal["flat", "atomic"] = "flat",
     count: int | None = None,
     duration: float | None = None,

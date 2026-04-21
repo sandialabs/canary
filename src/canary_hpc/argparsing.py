@@ -103,37 +103,85 @@ class CanaryHPCBatchSpec(argparse.Action):
     @staticmethod
     def helppage() -> str:
         description = """\
-Batch specification syntax:
+    Batch specification syntax
 
-  option=value[,option=value...]
+    A batch spec controls how Canary HPC groups test cases into batches.
 
-option=value pairs:
+    Syntax:
+        option=value[,option=value...]
 
-    count: Partition test cases into this many batches
-        auto: partition tests into batches taking approximately duration:T seconds
-        max: partition test cases one test per batch.
-        [0-9]+: partition test cases into at most this many batches.
+    Notes:
+    - Comma-separated option=value pairs
+    - Order does not matter
+    - Unknown options/values are invalid
 
-    duration: Approximate total runtime of batches (implies count=auto)
-        [0-9]+: approximate runtime in seconds.
-          also accepts Go's duration format: 40s, 2h, 4h30m30s, etc.
-    layout:
-        flat: no test cases within a batch depend on test cases in the same batch
-            Batches may depend on other batches.
-        atomic: Test cases within a batch may depend on other test cases in the same batch
-            Batches do not depend on other batches
+    Options:
 
-    nodes:
-        any: ignore node counts when batching.
-        same: all tests in batch require same node count.
+      count
+          Controls how many batches are created.
 
-Examples:
-    layout=flat,count=auto,nodes=same,duration=1800
-        Partition test cases into batches with approximate runtime of 1800 seconds.
+          count=auto
+              Partition tests into batches targeting duration=T per batch.
+              (Setting duration implies count=auto.)
 
-    layout=atomic,count=2
-        Partition test cases into 2 batches.  Each batch will be independent.
-"""
+          count=max
+              One test case per batch (maximum number of batches).
+
+          count=N
+              N is [0-9]+. Partition test cases into at most N batches.
+
+      duration
+          Target approximate runtime per batch. Implies count=auto.
+
+          duration=N
+              N is [0-9]+ seconds.
+
+          duration=<go-duration>
+              Go duration syntax such as: 40s, 2h, 4h30m30s, 45m
+
+      layout
+          Controls dependency rules within and between batches.
+
+          layout=flat (default)
+              Test cases within a batch do NOT depend on each other.
+              Batches MAY depend on other batches.
+
+          layout=atomic
+              Test cases within a batch MAY depend on each other.
+              Batches do NOT depend on other batches (each batch is independent).
+
+      nodes
+          Controls whether tests in a batch must request the same node count.
+
+          nodes=same (default)
+              All test cases in a batch require the same number of nodes.
+
+          nodes=any
+              Test cases within a batch may require different numbers of nodes.
+
+    Examples:
+
+      1) Time-targeted batching (typical)
+          layout=flat,nodes=same,duration=1800
+              Create batches of approximately 1800 seconds each.
+              (duration implies count=auto)
+
+      2) Independent batches (no cross-batch dependencies)
+          layout=atomic,count=2
+              Partition into 2 independent batches.
+
+      3) One test per batch
+          count=max
+              Run each test case in its own batch.
+
+      4) Limit the number of batches
+          count=4
+              Partition test cases into at most 4 batches.
+
+      5) Allow mixed node counts within a batch
+          nodes=any,duration=30m
+              Create ~30-minute batches, allowing tests with different node counts
+              in the same batch."""
         return description
 
     @staticmethod
@@ -146,9 +194,9 @@ Examples:
         if "count" not in spec:
             spec["count"] = None
         if "nodes" not in spec:
-            spec["nodes"] = "any"
+            spec["nodes"] = "same"
         if spec["nodes"] is None:
-            spec["nodes"] = "any"
+            spec["nodes"] = "same"
         if "layout" not in spec:
             spec["layout"] = "flat"
         if spec["layout"] is None:
