@@ -66,7 +66,7 @@ def test_parsing_0():
     assert args.canary_hpc_backend == "local"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "any"
+    assert args.canary_hpc_batchspec["nodes"] == "same"
 
 
 def test_parsing_1():
@@ -114,7 +114,7 @@ def test_parsing_1():
     assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "any"
+    assert args.canary_hpc_batchspec["nodes"] == "same"
 
 
 def test_parsing_legacy():
@@ -168,7 +168,7 @@ def test_parsing_legacy():
     assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "any"
+    assert args.canary_hpc_batchspec["nodes"] == "same"
 
     args = parser.parse_args(["-b", "backend=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
@@ -177,4 +177,4 @@ def test_parsing_legacy():
     assert args.canary_hpc_backend == "shell"
     assert args.canary_hpc_batchspec["layout"] == "flat"
     assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "any"
+    assert args.canary_hpc_batchspec["nodes"] == "same"
