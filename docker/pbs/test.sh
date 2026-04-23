@@ -65,7 +65,7 @@ echo "------------------------Test 2----------------------"
 echo " "
 # Test 2
 exit_code=0
-canary -d run --show-excluded-tests -w -b scheduler=pbs -b spec=count:3 ./examples || exit_code=$?
+canary -d run --show-excluded-tests -w -b scheduler=pbs -b spec=count:3,nodes:any ./examples || exit_code=$?
 if [ "${exit_code}" -ne 14 ]; then
   cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
   cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
