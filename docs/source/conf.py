@@ -82,6 +82,7 @@ exclude_patterns = [
     "tutorial/intro.why.rst",
     "tutorial/resource.spec.rst",
     "presentation",
+    "presentation2",
 ]
 
 
