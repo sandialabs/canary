@@ -1,0 +1,78 @@
+.reveal .clutter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 5px;
+  justify-items: center;
+  align-items: center;
+}
+
+.reveal .clutter-grid figure {
+  margin: 0 !important;
+}
+
+.reveal .clutter-grid figure img {
+  width: 150px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.reveal .two-up {
+  display: flex;
+  gap: 0.1%;
+  justify-content: center;
+  align-items: center;
+}
+
+.reveal .two-up > * {
+  margin: 0 !important;   /* prevent <p> margins from stacking */
+}
+
+
+.reveal .nobullet ul li::marker {
+  color: transparent;
+}
+
+
+.reveal table.smalltable {
+  font-size: 0.5em;
+  line-height: 1.05;
+  border-collapse: collapse;
+}
+
+.reveal table.smalltable code {
+  font-size: 0.65em;
+}
+
+/* reduce cell padding */
+.reveal table.smalltable th,
+.reveal table.smalltable td {
+  padding: 0.15em 0.35em;
+  vertical-align: top;
+}
+
+.reveal table.smalltable p {
+  margin: 0 !important;
+}
+
+.reveal .no-title h1,
+.reveal .no-title h2,
+.reveal .no-title h3 {
+  display: none;
+}
+
+/* Sphinx/Pygments emphasized lines */
+.reveal .highlight .hll {
+  display: block;                 /* ensure full-width highlight */
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* If your theme uses <span class="hll"> inside <pre> */
+.reveal pre .hll {
+  display: block;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Optional: keep line numbers readable if you use :linenos: */
+.reveal td.linenos, .reveal span.linenos {
+  opacity: 0.6;
+}
