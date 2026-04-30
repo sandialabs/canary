@@ -1,9 +1,9 @@
 But isn't Canary for running tests from many sources?
 -----------------------------------------------------
 
-.. container:: fragment
+.. container:: fragment big
 
-    Yes!
+    **Yes!**
 
 .. revealjs-fragments::
 

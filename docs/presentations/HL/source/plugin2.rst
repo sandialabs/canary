@@ -41,8 +41,7 @@ Really, everything is a plugin
             """Run test cases in batches on HPC systems"""
             batches = []
             for batched in batch_testcases(cases=cases, ...):
-                batch = TestBatch(batched, ...)
-                batches.append(batch)
+                batches.append(TestBatch(batched, ...))
             queue = ResourceQueue(...)
             queue.put(*batches)
             queue.prepare()

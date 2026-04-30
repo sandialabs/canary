@@ -118,3 +118,11 @@
   font-weight: 700;   /* bold for classes */
   font-size: 0.85em;  /* optional */
 }
+
+.reveal .big{
+  font-size: 2.2em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #E6DB74;
+  text-shadow: 0 0 14px rgba(166,226,46,0.35);
+}
