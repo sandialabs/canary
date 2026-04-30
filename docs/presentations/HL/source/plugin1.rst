@@ -19,7 +19,7 @@ Canary defines a plugin *specification*:
 
 .. container:: fragment
 
-  And plugin authors provide the *implementation*:
+  And plugins provide the *implementation*:
 
   .. code-block:: python
 
@@ -163,4 +163,4 @@ Real world case study:
 
    * Sandia's Sierra Mechanics suite of codes has ~30,000 test cases
    * Test cases are defined in a derivative XML language
-   * We wrote the SierraTestCaseGenerator and were able to run ~90% of tests in Canary in a matter of weeks
+   * We wrote the SierraTestCaseGenerator and were able to run ~90% of Sierra's tests in Canary in a matter of weeks

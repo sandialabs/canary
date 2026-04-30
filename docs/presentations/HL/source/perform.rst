@@ -95,5 +95,5 @@ What if I want to run tests across a build/test farm?
 Performance comparison
 ^^^^^^^^^^^^^^^^^^^^^^
 
-.. image:: _static/compvvtest.png
+.. image:: _static/compvvtest.pdf
    :width: 60%
