@@ -19,23 +19,22 @@ Consider the test
         mpi = canary.Executable("mpiexec")
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = ",".join(job.gpu_ids)
-        mpi("-n", str(job.parameters.cpus), ..., env=env)
+        mpi("-n", str(job.cpus), "my-program", env=env)
 
 .. revealjs-fragments::
 
-    * Every GPU enabled test must define ``os.environ["CUDA_VISIBLE_DEVICES"]``
+    * Every test must define CUDA_VISIBLE_DEVICES
     * Is there a better way?
 
 
-.. revealjs-break::
-   :data-transition: none
+canary_runteststart
+^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: python
 
     @canary.hookimpl
     def canary_runteststart(case: canary.TestCase):
-        if case.gpu_ids:
-            case.variables["CUDA_VISIBLE_DEVICES"] = ",".join(case.gpu_ids)
+        case.variables["CUDA_VISIBLE_DEVICES"] = ",".join(case.gpu_ids)
 
 .. container:: fragment
 
@@ -48,7 +47,7 @@ Consider the test
       def test():
           job = canary.get_instance()
           mpi = canary.Executable("mpiexec")
-          mpi("-n", str(job.parameters.cpus), ...)
+          mpi("-n", str(job.cpus), "my-program")
 
 
 .. container:: fragment
@@ -75,7 +74,7 @@ Consider the test
     def test():
         job = canary.get_instance()
         mpi = canary.Executable("mpiexec")
-        mpi("-n", str(job.parameters.cpus), ...)
+        mpi("-n", str(job.cpus), "my-program")
 
 .. container:: fragment
 

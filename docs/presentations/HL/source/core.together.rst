@@ -10,10 +10,10 @@ Pulling it together
      participant Exec as ResourceQueueExecutor
      participant Q as ResourceQueue
      participant Pool as ResourcePool
-     participant W as Worker threads
+     participant W as Worker processes
      participant P as Job process
 
-     Exec->>W: start N worker threads
+     Exec->>W: start N worker processes
      loop until queue empty
        Exec->>Q: get next job
        Q->>Pool: checkout resources

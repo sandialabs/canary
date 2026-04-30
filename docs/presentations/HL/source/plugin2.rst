@@ -1,10 +1,12 @@
 Really, everything is a plugin
 ------------------------------
 
-.. code-block:: python
+.. container:: fragment
 
-   @canary.hookspec(first_result=True)
-   def canary_runtests(cases: list[TestCase]) -> bool: ...
+   .. code-block:: python
+
+      @canary.hookspec(first_result=True)
+      def canary_runtests(cases: list[TestCase]) -> bool: ...
 
 .. container:: fragment
 
