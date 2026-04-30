@@ -223,6 +223,16 @@ class CDashXMLReporter:
             el.setAttribute(key, str("" if value is None else value))
         doc.appendChild(el)
         return doc
+    
+    def truncate_middle(self, text: str ):
+        max_length = 254
+        if len(text) < max_length:
+            return text
+
+        excess = len(text) - max_length
+        #Removing an extra character from each side for the addition of the elipsis 
+        split_point = (len(text) - excess + 2) // 2
+        return text[:split_point] + "..." + text[-split_point:]
 
     def write_test_xml(
         self, cases: list[canary.TestCase], subproject_labels: list[str] | None = None
@@ -298,10 +308,10 @@ class CDashXMLReporter:
             name = pm.canary_cdash_name(case=case) or case.display_name()
             fullname = f"{case.workspace.path.parent}/{name}"
             command = case.measurements.data.get("command_line", "")
-            add_text_node(test_node, "Name", fullname if name_fmt == "long" else name)
-            add_text_node(test_node, "Path", str(case.workspace.dir.parent))
-            add_text_node(test_node, "FullName", f"./{fullname}")
-            add_text_node(test_node, "FullCommandLine", str(command))
+            add_text_node(test_node, "Name", self.truncate_middle( fullname if name_fmt == "long" else name))
+            add_text_node(test_node, "Path", self.truncate_middle(str(case.workspace.dir.parent)))
+            add_text_node(test_node, "FullName", self.truncate_middle(f"./{fullname}"))
+            add_text_node(test_node, "FullCommandLine", self.truncate_middle(str(command)))
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
@@ -436,7 +446,10 @@ def add_text_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> 
     for key, val in attrs.items():
         child.setAttribute(key, str(val))
     text = xdom.Text()
-    text.data = str(value)
+    if name == "Path":
+        text.data = str(value)[:250]
+    else:
+        text.data = str(value)
     child.appendChild(text)
     parent.appendChild(child)
     return
