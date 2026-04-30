@@ -1,8 +1,6 @@
 Core components
 ---------------
 
-Pulling it together
-
 .. mermaid::
 
    %%{init: {'theme': 'dark'} }%%

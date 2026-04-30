@@ -37,7 +37,7 @@ To run the test:
 .. revealjs-fragments::
 
    * Canary scans ``PATH`` for ``.pyt`` files; and
-   * For each ``.pyt``, Canary file executes [2]_
+   * For each ``.pyt`` file, Canary executes [2]_
 
      .. code-block:: console
 

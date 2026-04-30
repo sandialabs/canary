@@ -24,22 +24,40 @@ How does Canary perform?
 
     .. code-block:: console
 
-        $ canary run -w --workers=16 .
+        $ canary run --workers=16 .
         ...
         INFO: 1250/1250 tests finished with status PASS
         INFO: Finished session in 125.73 s. with returncode 0
+
+.. container:: fragment
+
+   .. raw:: html
+
+       <div class="callout-box style="position: absolute; bottom: -2rem; left: 0rem; font-size: 18px; opacity: 0.8;">
+        Canary filtered 5 additional cases due to resource constraints
+       </div>
+
+.. revealjs-break::
+   :data-transition: none
+
+.. code-block:: console
+
+    $ ctest -j16
+    100% tests passed, 0 tests failed out of 1255
+    ...
+    Total Test time (real) = 164.17 sec
+
+.. code-block:: console
+
+    $ canary run --workers=16 .
+    ...
+    INFO: 1250/1250 tests finished with status PASS
+    INFO: Finished session in 125.73 s. with returncode 0
 
 .. revealjs-fragments::
 
    * ``ctest`` and ``canary`` performance is comparable
    * Runtime is dominated by test execution
-   * Canary's edge: one framework running many test formats across many machines
-
-.. raw:: html
-
-   <div style="position: absolute; bottom: -2rem; left: 0rem; font-size: 18px; opacity: 0.8;">
-     Canary filtered 5 additional cases due to resource constraints
-   </div>
 
 What if I want to run tests in a slurm queue?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -58,7 +76,8 @@ What if I want to run tests in a slurm queue?
 
     .. code-block:: console
 
-        $ canary hpc run -w --scheduler slurm .
+        $ canary hpc run \
+          -b backend=slurm -b options=... -b workers=16
 
 .. revealjs-fragments::
 
@@ -72,11 +91,13 @@ What if I want to run tests on many compute nodes?
 
     .. code-block:: console
 
-        $ canary hpc run -w --scheduler slurm --batch-count=40 --workers=40 .
+        $ canary hpc run \
+          -b backend=slurm -b options=... -b workers=16 \
+          -b spec=count:40 --workers=40
 
 .. revealjs-fragments::
 
-   * canary-hpc: batch test cases and fan them across multiple compute nodes
+   * ``canary-hpc``: batch test cases and fan them across multiple **compute nodes**
 
 
 What if I want to run tests across a build/test farm?
@@ -86,14 +107,30 @@ What if I want to run tests across a build/test farm?
 
     .. code-block:: console
 
-        $ canary dist run -w --server HOST:PATH --batch-count=40 --workers=40 .
+        $ canary dist run \
+          -b spec=count:40 --workers=40 \
+          --server HOST:PATH
 
 .. revealjs-fragments::
 
-   * canary-dist: batch test cases and fan them across multiple machines
+   * ``canary-dist``: batch test cases and fan them across multiple **machines**
 
 Performance comparison
 ^^^^^^^^^^^^^^^^^^^^^^
 
 .. image:: _static/compvvtest.pdf
    :width: 60%
+
+How does Canary perform?
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. revealjs-fragments::
+
+  * Overall runtime is driven primarily by test execution, not runner overhead.
+  * Canary adds value by enabling:
+
+    .. revealjs-fragments::
+
+      * Flexible execution across multiple test formats
+      * Extension via a plugin framework
+      * Less boilerplate when building complex, multi-machine workflows

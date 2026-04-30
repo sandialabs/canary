@@ -34,13 +34,30 @@ As an analysis tool
            f2 = job.dependencies[1]
            compare_responses(f1, f2)
 
-.. container:: fragment
 
-   .. code-block:: python
+.. revealjs-break::
+    :data-transition: none
 
-       if __name__ == "__main__":
-           job = canary.get_instance()
-           if isinstance(job, canary.TestMultiInstance):
-               analyze(job)
-           else:
-               run(job)
+.. code-block:: python
+
+    def run(job: canary.TestInstance):
+        preprocess(f"{job.family}.inp.in", PARAM=job.parameters.PARAM)
+        mpi = canary.Executable("mpiexec")
+        mpi("-n", str(job.cpus), "my-program", f"{job.family}.inp")
+        plot_something_cool(job)
+
+.. code-block:: python
+
+    def analyze(job: canary.TestMultiInstance):
+        f1 = job.dependencies[0]
+        f2 = job.dependencies[1]
+        compare_responses(f1, f2)
+
+.. code-block:: python
+
+    if __name__ == "__main__":
+        job = canary.get_instance()
+        if isinstance(job, canary.TestMultiInstance):
+            analyze(job)
+        else:
+            run(job)
