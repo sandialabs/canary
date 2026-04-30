@@ -3,12 +3,22 @@
 
 The execution engine
 
-.. code-block:: text
+.. code-block:: python
 
-   start N persistent workers
-
-   while ResourceQueue not empty:
-       (job, resources) = ResourceQueue.checkout()
-       worker = next idle worker
-       worker.run_in_new_process(job)
-       ResourceQueue.checkin(job, resources)
+   workers = start_persistent_workers(N)
+   while True:
+       poll_worker_events()
+       for (worker, job) in completed_jobs():
+           queue.done(job)
+           workers.append(worker)
+       if queue.empty() and not inflight_jobs():
+           break
+       if not workers:
+           continue
+       try:
+           job = queue.get()
+       except Empty:
+           continue
+       worker = workers.pop()
+       worker.submit(job)
+       mark_inflight(worker, job)

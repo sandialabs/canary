@@ -76,3 +76,12 @@
 .reveal td.linenos, .reveal span.linenos {
   opacity: 0.6;
 }
+
+.reveal .tight-slide > * { margin-top: 0 !important; }
+.reveal .tight-slide > * + * { margin-top: 0.3rem !important; } /* small controlled gap */
+
+.reveal .tight-slide ul { margin: 0.2rem 0 0 0 !important; }
+.reveal .tight-slide li { margin: 0.15rem 0 !important; }
+
+/* also remove paragraph margins if any appear */
+.reveal .tight-slide p { margin: 0.2rem 0 !important; }

@@ -78,7 +78,7 @@ Setting the stage
      ">nvtest</div>
    </div>
 
-``nvtest`` was chosen due to being built on top of pluggy - a plugin framework that allows us to dynamically alter runtime behavior.
+``nvtest`` was chosen due to being built on top of `pluggy <https://github.com/pytest-dev/pluggy>`_ - a plugin framework that allows us to dynamically alter runtime behavior.
 
 .. revealjs-break::
    :notitle:
