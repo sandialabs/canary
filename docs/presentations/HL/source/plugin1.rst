@@ -1,21 +1,14 @@
-"Everything is a plugin"
-------------------------
+Everything is a plugin
+----------------------
 
-Outside of a few core classes, all functionality is provided by plugin "hooks"
+.. container:: fragment
 
-.. revealjs-fragments::
+   Canary defines a plugin *specification*:
 
-    **Including test file formats**
+   .. code-block:: python
 
-.. revealjs-break::
-    :data-transition: none
-
-Canary defines a plugin *specification*:
-
-.. code-block:: python
-
-   @canary.hookspec
-   def canary_function_name() -> ReturnType: ...
+      @canary.hookspec
+      def canary_function_name() -> ReturnType: ...
 
 .. container:: fragment
 
@@ -30,7 +23,7 @@ Canary defines a plugin *specification*:
 .. revealjs-break::
     :data-transition: none
 
-When Canary needs the functionality provided by ``canary_function_name``, it calls:
+Canary calls :py:`canary_function_name` as
 
 .. container:: fragment
 
@@ -38,25 +31,26 @@ When Canary needs the functionality provided by ``canary_function_name``, it cal
 
       response = pluginmanager.hook.canary_function_name()
 
-.. container:: fragment
+.. revealjs-fragments::
 
-   where ``response`` is a **list** of responses, one entry for each ``canary_function_name`` hookimpl
+   * :py:`response` is a **list** of responses
+   * one entry for each :py:`canary_function_name` hookimpl
 
 Test case generator
 ^^^^^^^^^^^^^^^^^^^
 
 .. revealjs-fragments::
 
-   * Canary does not define a test file format, only a ``TestSpec``
-   * ``TestSpec`` \ s are returned by a ``TestCaseGenerator``
-   * ``TestCaseGenerator`` \ s are collected from the ``canary_testcase_generator`` hook:
+   * Canary does not define a test file format, only a :pyc:`TestSpec`
+   * :pyc:`TestSpec` objects are returned by a :pyc:`TestCaseGenerator`
+   * :pyc:`TestCaseGenerator` are collected from the :py:`canary_testcase_generator` hook:
 
      .. code-block:: python
 
         @canary.hookspec
         def canary_testcase_generator() -> Type[TestCaseGenerator]: ...
 
-   * Plugins provide the ``canary_testcase_generator`` hookimpls
+   * Plugins provide the :py:`canary_testcase_generator` hookimpls
 
 .. revealjs-break::
     :data-transition: none
@@ -69,7 +63,7 @@ For example
     def canary_testcase_generator() -> Type[TestCaseGenerator]:
         return PYTTestGenerator
 
-``PYTTestGenerator`` is responsible for parsing ``.pyt`` files and creating ``TestSpec`` objects.
+:pyc:`PYTTestGenerator` is responsible for parsing ``.pyt`` files and creating :pyc:`TestSpec` objects.
 
 .. revealjs-break::
     :data-transition: none
@@ -136,7 +130,7 @@ A simple generator might be
 
    class YAMLTestGenerator(canary.TestCaseGenerator):
 
-       file_patterns = ("*.yaml", )
+       file_patterns = ("test_*.yaml", )
 
        def __init__(self, file):
            self.file = file

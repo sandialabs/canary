@@ -142,31 +142,31 @@ Plugin specs
    :widths: 35 65
    :class: smalltable
 
-   * - ``canary_addhooks``
+   * - :py:`canary_addhooks`
      - Add/extend hook specifications at plugin registration.
-   * - ``canary_addoption``
+   * - :py:`canary_addoption`
      - Register command-line options.
-   * - ``canary_addcommand``
+   * - :py:`canary_addcommand`
      - Register a Canary subcommand.
-   * - ``canary_configure``
+   * - :py:`canary_configure`
      - Plugin configuration after option parsing.
-   * - ``canary_sessionstart``
+   * - :py:`canary_sessionstart`
      - Session start callback.
-   * - ``canary_sessionfinish``
+   * - :py:`canary_sessionfinish`
      - Session finish callback.
-   * - ``canary_collectstart``
+   * - :py:`canary_collectstart`
      - Start collection; add generators/skip dirs.
-   * - ``canary_collect_modifyitems``
+   * - :py:`canary_collect_modifyitems`
      - Filter/reorder collected items.
-   * - ``canary_collect_report``
+   * - :py:`canary_collect_report`
      - Report collection results.
-   * - ``canary_testcase_generator``
+   * - :py:`canary_testcase_generator`
      - Select a testcase generator implementation.
-   * - ``canary_generatestart``
+   * - :py:`canary_generatestart`
      - Start test generation.
-   * - ``canary_generate_modifyitems``
+   * - :py:`canary_generate_modifyitems`
      - Modify generated items.
-   * - ``canary_generate_report``
+   * - :py:`canary_generate_report`
      - Report generation results.
 
 .. revealjs-break::
@@ -176,31 +176,31 @@ Plugin specs
    :widths: 35 65
    :class: smalltable
 
-   * - ``canary_selectstart``
+   * - :py:`canary_selectstart`
      - Start selection.
-   * - ``canary_select_modifyitems``
+   * - :py:`canary_select_modifyitems`
      - Modify selected items.
-   * - ``canary_select_report``
+   * - :py:`canary_select_report`
      - Report selection results.
-   * - ``canary_rtselectstart``
+   * - :py:`canary_rtselectstart`
      - Start runtime selection.
-   * - ``canary_rtselect_modifyitems``
+   * - :py:`canary_rtselect_modifyitems`
      - Modify runtime-selected items.
-   * - ``canary_rtselect_report``
+   * - :py:`canary_rtselect_report`
      - Report runtime selection results.
-   * - ``canary_runtests_start``
-     - Begin ``canary run`` (pre-run hook).
-   * - ``canary_runtests``
+   * - :py:`canary_runtests_start`
+     - Begin :py:`canary run` (pre-run hook).
+   * - :py:`canary_runtests`
      - Run tests (main run hook).
-   * - ``canary_runtests_report``
+   * - :py:`canary_runtests_report`
      - Report run results.
-   * - ``canary_runtest_launcher``
+   * - :py:`canary_runtest_launcher`
      - Provide the launcher for a testcase.
-   * - ``canary_runteststart``
+   * - :py:`canary_runteststart`
      - Setup phase for a testcase.
-   * - ``canary_runtest``
+   * - :py:`canary_runtest`
      - Execute a testcase.
-   * - ``canary_runtest_finish``
+   * - :py:`canary_runtest_finish`
      - Finish/postprocess a testcase.
 
 .. revealjs-break::
@@ -210,15 +210,15 @@ Plugin specs
    :widths: 35 65
    :class: smalltable
 
-   * - ``canary_resource_pool_fill``
+   * - :py:`canary_resource_pool_fill`
      - Populate the resource pool.
-   * - ``canary_resource_pool_accommodates``
+   * - :py:`canary_resource_pool_accommodates`
      - Decide if a testcase can run (resource check).
-   * - ``canary_resource_pool_count``
+   * - :py:`canary_resource_pool_count`
      - Count available resources of a type.
-   * - ``canary_resource_pool_count_per_node``
+   * - :py:`canary_resource_pool_count_per_node`
      - Count available resources per node.
-   * - ``canary_resource_pool_types``
+   * - :py:`canary_resource_pool_types`
      - List available resource types.
-   * - ``canary_resource_pool_describe``
+   * - :py:`canary_resource_pool_describe`
      - Describe the resource pool (human-readable).

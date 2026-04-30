@@ -3,6 +3,6 @@ Core components
 
 .. revealjs-fragments::
 
-   * ``ResourcePool``: model of machine resources
-   * ``ResourceQueue``: job priority queue
-   * ``ResourceQueueExecutor``: execution engine
+   * :py:`ResourcePool`: model of machine resources
+   * :py:`ResourceQueue`: job priority queue
+   * :py:`ResourceQueueExecutor`: execution engine

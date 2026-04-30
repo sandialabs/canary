@@ -85,3 +85,36 @@
 
 /* also remove paragraph margins if any appear */
 .reveal .tight-slide p { margin: 0.2rem 0 !important; }
+
+.callout-box{
+  border: 2px solid #4c78a8;
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  background: rgba(76,120,168,0.10);
+
+  /* narrower */
+  max-width: 80%;
+  margin: 0.5rem auto;   /* center it */
+
+  /* smaller font */
+  font-size: 0.70em;
+  line-height: 1.0;
+}
+
+/* Keep inline code smaller if you want */
+.reveal :not(pre) > code{
+  font-size: 0.85em;
+}
+
+/* Inline code only (not code blocks) */
+.reveal :not(pre) > code.py,
+.reveal :not(pre) > code.pyf{
+  color: #A6E22E;     /* Monokai Green */
+  font-size: 0.85em;  /* optional */
+}
+
+.reveal :not(pre) > code.pyc{
+  color: #A6E22E;     /* Monokai Green */
+  font-weight: 700;   /* bold for classes */
+  font-size: 0.85em;  /* optional */
+}
