@@ -50,6 +50,17 @@ Really, everything is a plugin
                 ex.run(backend=self.backend.name)
             return True
 
+.. container:: fragment
+
+   .. raw:: html
+
+      <div class="callout-box">
+        <strong>Not covered today:</strong>
+        <a href="https://github.com/sandialabs/hpc-connect">hpc_connect</a>
+        provides a modular interface to HPC schedulers.
+      </div>
+
+
 .. revealjs-break::
     :data-transition: none
 

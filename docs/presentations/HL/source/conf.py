@@ -6,9 +6,9 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Canary SWING Presentation'
-copyright = '2026, Tim Fuller'
-author = 'Tim Fuller'
+project = "Canary SWING Presentation"
+copyright = "2026, Tim Fuller"
+author = "Tim Fuller"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -17,9 +17,9 @@ extensions = [
     "sphinx_revealjs",
     "sphinx_revealjs.ext.footnotes",
     "sphinx_revealjs.ext.oembed",
-    "sphinxmermaid"
+    "sphinxmermaid",
 ]
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
 mermaid_params = ["--theme", "dark"]
@@ -29,7 +29,7 @@ html_static_path = ["_static"]
 
 revealjs_html_theme = "revealjs-simple"
 revealjs_static_path = ["_static"]
-#revealjs_style_theme = "dark"
+# revealjs_style_theme = "dark"
 revealjs_script_conf = {
     "controls": True,
     "progress": True,
@@ -63,3 +63,14 @@ revealjs_script_plugins = [
 
 pygments_style = "monokai"
 highlight_language = "python"
+
+rst_prolog = r"""
+.. role:: pyc(code)
+   :class: pyc
+
+.. role:: pyf(code)
+   :class: pyf
+
+.. role:: py(code)
+   :class: py
+"""

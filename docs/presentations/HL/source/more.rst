@@ -37,3 +37,35 @@ But wait, there's more!
       describe              Print information about a test file, test case
       config                Get and set configuration options
       collect               Find and generate test cases
+
+
+.. revealjs-break::
+    :data-transition: none
+
+.. code-block:: console
+
+   $ canary location -h
+   usage: canary location [-h] [-i | -l | -x | -s] testspec
+
+   Print locations of test files and directories
+
+   positional arguments:
+     testspec    Test name or test id
+
+   options:
+     -i          Show the location of the test's input file
+     -l          Show the location of the test's log file
+     -x          Show the location of the test's working directory
+     -s          Show the location of the test's source directory
+     -h, --help  Show this help message and exit.
+
+   If no options are give, -x is assumed.
+
+.. revealjs-break::
+    :data-transition: none
+
+.. code-block:: console
+
+    $ canary docs
+
+Will open the `canary documentation <https://canary-wm.readthedocs.io/en/latest/>`_ in the default browser
