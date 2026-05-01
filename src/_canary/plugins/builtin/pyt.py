@@ -2,15 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 import glob
+import inspect
 import io
 import os
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from types import ModuleType
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Callable
 from typing import ClassVar
 from typing import Literal
 from typing import Sequence
@@ -85,6 +87,8 @@ class PYTTestGenerator(AbstractTestGenerator):
         self.owners: list[str] = []
         self._keywords: list[FilterNamespace] = []
         self._paramsets: list[FilterNamespace] = []
+        self._cpu_req: FilterNamespace | None = None
+        self._gpu_req: FilterNamespace | None = None
         self._attributes: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
@@ -101,6 +105,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         self._skipif_reason: str | None = None
         self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
+        self._directive_recorder: DirectiveRecorder | None = None
         self.load()
 
     def __repr__(self) -> str:
@@ -450,6 +455,24 @@ class PYTTestGenerator(AbstractTestGenerator):
             paramsets.append(ns.value)
         return paramsets
 
+    def cpu_req(
+        self, testname: str | None = None, on_options: list[str] | None = None
+    ) -> int | None:
+        if self._cpu_req is not None:
+            result = self._cpu_req.when.evaluate(testname=testname, on_options=on_options)
+            if result.value:
+                return self._cpu_req.value
+        return None
+
+    def gpu_req(
+        self, testname: str | None = None, on_options: list[str] | None = None
+    ) -> int | None:
+        if self._gpu_req is not None:
+            result = self._gpu_req.when.evaluate(testname=testname, on_options=on_options)
+            if result.value:
+                return self._gpu_req.value
+        return None
+
     def attributes(
         self,
         testname: str | None = None,
@@ -729,6 +752,20 @@ class PYTTestGenerator(AbstractTestGenerator):
         ns = FilterNamespace(pset, when=when)
         self._paramsets.append(ns)
 
+    def m_cpus(self, arg: int, when: WhenType | None = None) -> None:
+        if not isinstance(arg, int):
+            raise ValueError(f"{self.path}: cpus: expected {arg} to be an int")
+        elif arg < 1:
+            raise ValueError(f"{self.path}: cpus: expected {arg} >= 1")
+        self._cpu_req = FilterNamespace(arg, when=when)
+
+    def m_gpus(self, arg: int, when: WhenType | None = None) -> None:
+        if not isinstance(arg, int):
+            raise ValueError(f"{self.path}: gpus: expected {arg} to be an int")
+        elif arg < 0:
+            raise ValueError(f"{self.path}: cpus: expected {arg} >= 0")
+        self._gpu_req = FilterNamespace(arg, when=when)
+
     def m_set_attribute(self, when: WhenType | None = None, **kwargs: Any) -> None:
         ns = FilterNamespace(kwargs, when=when)
         self._attributes.append(ns)
@@ -868,17 +905,11 @@ class PYTTestGenerator(AbstractTestGenerator):
         from _canary import set_file_scanning
 
         try:
-            # Replace functions in the dummy canary.directives module with
-            # instance methods of this test file so that calls to the directives
-            # are passed to this test
-            m = ModuleType("directives")
-            m.__file__ = f"{m.__name__}.py"
-            for item in dir(self):
-                if item.startswith("f_"):
-                    setattr(m, item[2:], getattr(self, item))
             set_file_scanning(True)
+            recorder = DirectiveRecorder(target=self, record_location=True)
+            self._directive_recorder = recorder
             with monkeypatch.context() as mp:
-                mp.setattr(canary, "directives", m)
+                mp.setattr(canary, "directives", recorder)
                 code = compile(open(self.file).read(), self.file, "exec")
                 safe_globals = {"__name__": "__load__", "__file__": self.file}
                 try:
@@ -962,6 +993,12 @@ class PYTTestGenerator(AbstractTestGenerator):
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type, samples=samples)
 
+    def f_cpus(self, value: int, *, when: WhenType | None = None) -> None:
+        self.m_cpus(value, when=when)
+
+    def f_gpus(self, value: int, *, when: WhenType | None = None) -> None:
+        self.m_gpus(value, when=when)
+
     def f_preload(self, arg: str, *, when: WhenType | None = None) -> None:
         self.m_preload(arg, when=when)
 
@@ -1018,6 +1055,82 @@ class PYTTestGenerator(AbstractTestGenerator):
         flag: str | None = None,
     ) -> None:
         self.m_baseline(src, dst, when=when, flag=flag)
+
+
+@dataclass(frozen=True)
+class RecordedDirectiveCall:
+    name: str
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
+    file: str | None = None
+    line: int | None = None
+
+
+class DirectiveRecorder:
+    __slots__ = ("_target", "_record_location", "_calls")
+
+    # Anything in here will NOT be treated as a directive name
+    _reserved = {
+        "calls",
+        "recorded_calls",
+        "__dict__",
+        "__class__",
+        "__getattr__",
+        "__getattribute__",
+        "__setattr__",
+        "__slots__",
+    }
+
+    _target: Any | None
+    _record_location: bool
+    _calls: list[RecordedDirectiveCall]
+
+    def __init__(self, target: Any | None = None, *, record_location: bool = True) -> None:
+        self._target = target
+        self._record_location = record_location
+        self._calls = []
+
+    @property
+    def recorded_calls(self) -> list[RecordedDirectiveCall]:
+        # expose a safe name; avoids conflict with a directive named "calls"
+        return self._calls  # type: ignore[return-value]
+
+    def __getattr__(self, name: str) -> Callable[..., Any]:
+        if name in self._reserved or name.startswith("_"):
+            raise AttributeError(name)
+
+        def _directive(*args: Any, **kwargs: Any) -> Any:
+            file: str | None = None
+            line: int | None = None
+            if self._record_location:
+                frame = inspect.currentframe()
+                caller = frame.f_back if frame else None
+                if caller is not None:
+                    file = caller.f_code.co_filename
+                    line = caller.f_lineno
+
+            self._calls.append(
+                RecordedDirectiveCall(
+                    name=name,
+                    args=tuple(args),
+                    kwargs=dict(kwargs),
+                    file=file,
+                    line=line,
+                )
+            )
+
+            tgt = self._target
+            if tgt is not None:
+                fn = getattr(tgt, f"f_{name}", None)
+                if fn is None:
+                    raise AttributeError(
+                        f"Unknown directive {name!r} (no method f_{name} on {type(tgt).__name__})"
+                    )
+                return fn(*args, **kwargs)
+
+            return None
+
+        return _directive
 
 
 @hookimpl
