@@ -14,7 +14,6 @@ import sys
 import tokenize
 from itertools import repeat
 from pathlib import Path
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
@@ -22,7 +21,8 @@ from typing import Generator
 
 import canary
 from _canary.enums import list_parameter_space
-from _canary.plugins.builtin.pyt import PYTTestGenerator
+from _canary.generator import TestGenerator
+from _canary.paramset import ParameterSet
 from _canary.util import string
 
 from . import scalar
@@ -33,13 +33,17 @@ if TYPE_CHECKING:
 logger = canary.get_logger(__name__)
 
 
-class VVTTestGenerator(PYTTestGenerator):
+class VVTestAdapter(TestGenerator):
     file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
+
+    def __init__(self, root: str, path: str | None = None) -> None:
+        super().__init__(root, path=path)
+        self.load()
 
     def load(self, file: str | None = None) -> None:
         file = file or self.file
         for arg in p_VVT(file):
-            match arg.command:
+            match arg.name:
                 case "keywords":
                     self.f_KEYWORDS(arg)
                 case "copy" | "link" | "sources":
@@ -66,22 +70,84 @@ class VVTTestGenerator(PYTTestGenerator):
                     self.f_DEPENDS_ON(arg)
                 case "include" | "insert_directive_file":
                     raise VVTParseError(
-                        f"{arg.command}: include file should have already been included!", arg
+                        f"{arg.name}: include file should have already been included!", arg
                     )
                 case _:
-                    raise VVTParseError(f"Unknown command: {arg.command}", arg)
+                    raise VVTParseError(f"Unknown command: {arg.name}", arg)
 
-    def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
-        """# VVT : keywords [:=] word1 word2 ... wordn"""
-        assert arg.command == "keywords"
-        self.m_keywords(*arg.argument.split(), when=arg.when)
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.path})"
 
-    def f_SOURCES(self, arg: SimpleNamespace) -> None:
-        """#VVT : (link|copy|sources) ( OPTIONS ) [:=] file1 file2 ..
-        | (link|copy|sources) (rename) [:=] file1,file2 file3,file4 ...
-        """
-        assert arg.command in ("copy", "link", "sources")
-        fun = {"copy": self.m_copy, "link": self.m_link, "sources": self.m_sources}[arg.command]
+    def describe(self, on_options: list[str] | None = None) -> str:
+        from _canary.generate import resolve
+        from _canary.util import graph
+        from _canary.util.field import Field
+        from _canary.util.string import pluralize
+
+        file = io.StringIO()
+        file.write(f"--- {self.name} ------------\n")
+        file.write(f"File: {self.file}\n")
+        file.write(f"Keywords: {', '.join(self.get_keywords(on_options=on_options))}\n")
+        options = self._option_expressions()
+        if options:
+            file.write(f"Recognized options: {', '.join(options)}\n")
+
+        # Print raw (unsubstituted) source specs if present
+        if hasattr(self, "sources") and isinstance(getattr(self, "sources"), Field):
+            src_field = getattr(self, "sources")
+            if src_field.items:
+                file.write("Source files:\n")
+                grouped: dict[str, list[tuple[str, str | None]]] = {}
+                for c in src_field.items:
+                    s = c.value
+                    grouped.setdefault(s.action, []).append((s.src, s.dst))
+                for action, files in grouped.items():
+                    file.write(f"  {action.title()}:\n")
+                    for src, dst in files:
+                        file.write(f"    {src}")
+                        if dst and dst != os.path.basename(src):
+                            file.write(f" -> {dst}")
+                        file.write("\n")
+
+        try:
+            specs = self.lock(on_options=on_options)
+            resolved = resolve(specs)
+            n = len(specs)
+            opts = ", ".join(on_options or [])
+            file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
+            try:
+                graph.print(resolved, file=file)
+            except Exception:  # nosec B110
+                pass
+        except Exception:
+            logger.warning("Unable to generate dependency graph")
+        return file.getvalue()
+
+    def info(self) -> dict[str, Any]:
+        info: dict[str, Any] = super().info()
+        info["keywords"] = self.get_keywords()
+        info["options"] = self._option_expressions()
+        return info
+
+    def _option_expressions(self) -> list[str]:
+        from _canary.util.field import Field
+
+        option_expressions: set[str] = set()
+        for _, attr in vars(self).items():
+            if not isinstance(attr, Field):
+                continue
+            for c in attr.items:
+                expr = c.when.option_expr
+                if expr:
+                    option_expressions.add(expr)
+        return sorted(option_expressions)
+
+    def f_KEYWORDS(self, arg: "Directive") -> None:
+        assert arg.name == "keywords"
+        self.add_keywords(*arg.argument.split(), when=arg.when)
+
+    def f_SOURCES(self, arg: "Directive") -> None:
+        assert arg.name in ("copy", "link", "sources")
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
@@ -92,97 +158,89 @@ class VVTTestGenerator(PYTTestGenerator):
                         f"invalid rename option: {arg.line!r}.  rename requires src,dst file pairs",
                         arg,
                     )
-                fun(src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore
+                self.add_source(arg.name, src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore[arg-type]
         else:
-            files = arg.argument.split()
-            fun(*files, when=arg.when, **kwds)  # type: ignore
+            files = arg.argument.split() if arg.argument else []
+            self.add_source(arg.name, *files, when=arg.when, **kwds)  # type: ignore[arg-type]
 
-    def f_PRELOAD(self, arg: SimpleNamespace) -> None:
-        assert arg.command == "preload"
-        options = dict(arg.options)
-        self.m_preload(arg.argument, when=arg.when, **options)  # type: ignore
+    def f_PRELOAD(self, arg: "Directive") -> None:
+        assert arg.name == "preload"
+        # VVT preload options existed historically but pyt.preload has no effect; keep signature minimal
+        self.set_preload(arg.argument, when=arg.when)
 
-    def f_PARAMETERIZE(self, arg: SimpleNamespace) -> None:
+    def f_PARAMETERIZE(self, arg: "Directive") -> None:
         names, values, kwds, deps = p_PARAMETERIZE(arg)
+
         if deps:
-            # construct a dependency for each case in values
             assert len(deps) == len(values)
-            for i, dep in enumerate(deps):
+            for dep in deps:
                 if dep is None:
                     continue
-                # when expression ensures that dependencies added below are assigned to the ith
-                # test case
                 if isinstance(dep, str):
-                    self.m_depends_on(dep, when=arg.when)
+                    self.add_dependency(dep, when=arg.when)
                 else:
                     assert isinstance(dep, dict)
                     for dep_name, dep_params in dep.items():
                         p = ".".join(f"{k}={dep_params[k]}" for k in sorted(dep_params))
-                        self.m_depends_on(f"{dep_name}.{p}", when=arg.when)
-        self.m_parameterize(list(names), values, when=arg.when, **kwds)
+                        self.add_dependency(f"{dep_name}.{p}", when=arg.when)
 
-    def f_ANALYZE(self, arg: SimpleNamespace) -> None:
-        """# VVT: analyze ( OPTIONS ) [:=] --FLAG
-        | analyze ( OPTIONS ) [:=] FILE
-        """
-        options = dict(arg.options)
+        ps = ParameterSet.list_parameter_space(list(names), values, file=self.file)
+        self.add_parameter_set(ps, when=arg.when)
+
+    def f_ANALYZE(self, arg: "Directive") -> None:
+        options = dict(arg.options or {})
         if arg.argument:
             key = "flag" if arg.argument.startswith("-") else "script"
             options[key] = arg.argument
-        self.m_generate_composite_base_case(when=arg.when, **options)
+        self.set_analyze(when=arg.when, **options)
 
-    def f_TIMEOUT(self, arg: SimpleNamespace) -> None:
-        """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""
+    def f_TIMEOUT(self, arg: "Directive") -> None:
         try:
             seconds = to_seconds(arg.argument)
         except InvalidTimeFormat:
             raise VVTParseError(f"invalid time format: {arg.line!r}", arg) from None
-        self.m_timeout(seconds, when=arg.when)
+        self.add_timeout(seconds, when=arg.when)
 
-    def f_FILTER_WARNINGS(self, arg: SimpleNamespace) -> None:
-        """# VVT: filter_warnings [:=] BOOL_EXPR"""
-        filter_warnings = p_FILTER_WARNINGS(arg)
-        self.m_filter_warnings(filter_warnings)
+    def f_FILTER_WARNINGS(self, arg: "Directive") -> None:
+        fw = p_FILTER_WARNINGS(arg)
+        self.set_filter_warnings(fw)
 
-    def f_SKIPIF(self, arg: SimpleNamespace) -> None:
-        """# VVT: skipif ( reason=STRING ) [:=] BOOL_EXPR"""
+    def f_SKIPIF(self, arg: "Directive") -> None:
         skip, reason = p_SKIPIF(arg)
-        self.m_skipif(skip, reason=reason)
+        self.set_skipif(skip, reason=reason)
 
-    def f_BASELINE(self, arg: SimpleNamespace) -> None:
-        """# VVT: baseline ( OPTIONS ) [:=] --FLAG
-        | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
-        """
+    def f_BASELINE(self, arg: "Directive") -> None:
         file_pairs = make_table(arg.argument)
-        options = dict(arg.options)
+        options = dict(arg.options or {})
+        # baseline currently only supports src/dst or flag; ignore other options for now
         for file_pair in file_pairs:
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
-                self.m_baseline(when=arg.when, flag=file_pair[0], **options)
+                self.add_baseline(flag=file_pair[0], when=arg.when)
             elif len(file_pair) != 2:
                 raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
             else:
-                self.m_baseline(file_pair[0], file_pair[1], when=arg.when, **options)
+                self.add_baseline(src=file_pair[0], dst=file_pair[1], when=arg.when)
 
-    def f_ENABLE(self, arg: SimpleNamespace) -> None:
-        """# VVT: enable ( OPTIONS ) [:=] BOOL"""
+    def f_ENABLE(self, arg: "Directive") -> None:
         if arg.argument and arg.argument.lower() == "true":
-            arg.argument = True
+            value = True
         elif arg.argument and arg.argument.lower() == "false":
-            arg.argument = False
+            value = False
         elif arg.argument is None:
-            arg.argument = True
-        options = dict(arg.options)
-        # if options.get("platforms") == "":
-        #    options["platforms"] = "__"
-        self.m_enable(arg.argument, when=arg.when, **options)
+            value = True
+        else:
+            value = bool(arg.argument)
 
-    def f_NAME(self, arg: SimpleNamespace) -> None:
-        """# VVT: name ( OPTIONS ) [:=] NAME"""
-        self.m_name(arg.argument.strip())
+        self.set_enable(value, when=arg.when)
 
-    def f_DEPENDS_ON(self, arg: SimpleNamespace) -> None:
-        """# VVT: depends on ( OPTIONS ) [:=] STRING"""
-        options = dict(arg.options)
+    def f_NAME(self, arg: "Directive") -> None:
+        # VVT name/testname: create an additional family
+        name = (arg.argument or "").strip()
+        if name:
+            self.add_family(name)
+
+    def f_DEPENDS_ON(self, arg: "Directive") -> None:
+        options = dict(arg.options or {})
         if "expect" in options:
             try:
                 options["expect"] = int(options["expect"])
@@ -193,7 +251,10 @@ class VVTTestGenerator(PYTTestGenerator):
             options["result"] = re.sub(r"(?i)\bdiff\b", "diffed", options["result"])
             options["result"] = re.sub(r"(?i)\bfail\b", "failed", options["result"])
             options["result"] = re.sub(r"(?i)\bskip\b", "skipped", options["result"])
-        self.m_depends_on(arg.argument, when=arg.when, **options)
+
+        expects = options.get("expect", None)
+        result_match = options.get("result", None)
+        self.add_dependency(arg.argument, expects=expects, result_match=result_match, when=arg.when)
 
 
 def csplit(text: str) -> list[Any]:
@@ -211,6 +272,17 @@ class TableToken:
     NC: ClassVar[str] = "==NC=="
     NR: ClassVar[str] = "==NR=="
     WORD: ClassVar[str] = "==WORD=="
+
+
+@dataclasses.dataclass(slots=True)
+class Directive:
+    name: str
+    file: str
+    when: dict[str, str]
+    options: list[tuple[str, Any]]
+    argument: str
+    line: str
+    line_no: int
 
 
 def popnext(arg: list[str]) -> str:
@@ -308,7 +380,7 @@ EQUAL = "="
 SPACE = " "
 
 
-def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]:
+def p_GEN_PARAMETERIZE(arg: "Directive") -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS,generator ) [:=] script [--options]"""
     script, *opts = shlex.split(arg.argument)
     if script in ("python", "python3"):
@@ -340,7 +412,7 @@ def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | N
     return names, values, kwds, deps
 
 
-def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]:
+def p_PARAMETERIZE(arg: "Directive") -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
 
     names_spec: name1,name2,...
@@ -379,7 +451,7 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]
     return names, values, kwds, None
 
 
-def p_LINE(file: Path | str, line: str) -> SimpleNamespace | None:
+def p_LINE(file: Path | str, line: str) -> Directive | None:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
@@ -422,7 +494,7 @@ def p_LINE(file: Path | str, line: str) -> SimpleNamespace | None:
     when = make_when_expr(filter_opts)
 
     # Everything left over is the args
-    args = None
+    args = ""
     if token.type != tokenize.NEWLINE:
         if token.type != tokenize.OP and token.string not in (EQUAL, COLON):
             msg = "failed to determine start of arguments in {0} at line {1} of {2}"
@@ -430,9 +502,9 @@ def p_LINE(file: Path | str, line: str) -> SimpleNamespace | None:
         end = token.end[-1]
         args = line[end:].strip()
 
-    return SimpleNamespace(
+    return Directive(
+        name=command,
         file=filename,
-        command=command,
         when=when,
         options=options,
         argument=args,
@@ -441,20 +513,27 @@ def p_LINE(file: Path | str, line: str) -> SimpleNamespace | None:
     )
 
 
-def p_VVT(filename: Path | str) -> Generator[SimpleNamespace, None, None]:
+def p_VVT(filename: Path | str) -> Generator["Directive", None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
         ns = p_LINE(filename, line)
-        if ns and ns.command in ("include", "insert_directive_file"):
-            inc_file = ns.argument.strip()
+        if ns and ns.name in ("include", "insert_directive_file"):
+            inc_file = ns.argument.strip()  # type: ignore[union-attr]
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
                 inc_file = os.path.join(os.path.dirname(filename), inc_file)
             if not os.path.exists(inc_file):
                 raise VVTParseError(f"include file does not exist: {inc_file!r}", ns)
             for i_ns in p_VVT(inc_file):
-                i_ns.when = combine_when_exprs(i_ns.when, ns.when)
-                yield i_ns
+                yield Directive(
+                    name=i_ns.name,
+                    file=i_ns.file,
+                    when=combine_when_exprs(i_ns.when, ns.when),
+                    options=i_ns.options,
+                    argument=i_ns.argument,
+                    line=i_ns.line,
+                    line_no=i_ns.line_no,
+                )
         elif ns:
             yield ns
 
@@ -558,7 +637,7 @@ def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> list[tuple[str
     return options
 
 
-def p_FILTER_WARNINGS(arg: SimpleNamespace) -> bool:
+def p_FILTER_WARNINGS(arg: "Directive") -> bool:
     expression = arg.argument
     filter_warnings = evaluate_boolean_expression(expression)
     if filter_warnings is None:
@@ -591,7 +670,7 @@ def evaluate_boolean_expression(expression: str) -> bool | None:
     return bool(result)
 
 
-def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
+def p_SKIPIF(arg: "Directive") -> tuple[bool, str]:
     expression = arg.argument
     options = dict(arg.options)
     reason = str(options.get("reason") or "")

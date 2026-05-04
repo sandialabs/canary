@@ -11,14 +11,14 @@ import typing
 
 import canary
 
-from .generator import VVTTestGenerator
+from .generator import VVTestAdapter
 
 logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
 def canary_collectstart(collector) -> None:
-    collector.add_generator(VVTTestGenerator)
+    collector.add_generator(VVTestAdapter)
 
 
 @canary.hookimpl
