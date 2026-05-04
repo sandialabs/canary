@@ -227,27 +227,43 @@ class TestGenerator(AbstractTestGenerator):
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
 
-        self.families: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
+        self.families: Field[str, list[str]] = Field(
+            reducer=Reducer[str, list[str]]("identity", reducer.identity)
+        )
         self.parameter_sets: Field[ParameterSet, list[ParameterSet]] = Field(
-            reducer=reducer.IDENTITY
+            reducer=Reducer[ParameterSet, list[ParameterSet]]("identity", reducer.identity)
         )
         self.keywords: Field[list[str], list[str]] = Field(
             reducer=Reducer("flatten_unique", flatten_unique)
         )
         self.timeout: Field[float, float | None] = Field.make(reducer.LAST)
-        self.modules: Field[ModuleSpec, list[ModuleSpec]] = Field(reducer=reducer.IDENTITY)
-        self.rcfiles: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
-        self.artifacts: Field[Artifact, list[Artifact]] = Field(reducer=reducer.IDENTITY)
-        self.sources: Field[SourceSpec, list[SourceSpec]] = Field(reducer=reducer.IDENTITY)
-        self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(reducer=reducer.IDENTITY)
+        self.modules: Field[ModuleSpec, list[ModuleSpec]] = Field(
+            reducer=Reducer[ModuleSpec, list[ModuleSpec]]("identity", reducer.identity)
+        )
+        self.rcfiles: Field[str, list[str]] = Field(
+            reducer=Reducer[str, list[str]]("identity", reducer.identity)
+        )
+        self.artifacts: Field[Artifact, list[Artifact]] = Field(
+            reducer=Reducer[Artifact, list[Artifact]]("identity", reducer.identity)
+        )
+        self.sources: Field[SourceSpec, list[SourceSpec]] = Field(
+            reducer=Reducer[SourceSpec, list[SourceSpec]]("identity", reducer.identity)
+        )
+        self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(
+            reducer=Reducer[BaselineSpec, list[BaselineSpec]]("identity", reducer.identity)
+        )
         self.exclusive: Field[bool, bool] = Field(reducer=reducer.ANY)
         self.depends_on: Field[DependencyPatterns, list[DependencyPatterns]] = Field(
-            reducer=reducer.IDENTITY
+            reducer=Reducer[DependencyPatterns, list[DependencyPatterns]](
+                "identity", reducer.identity
+            )
         )
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
         self.analyze: Field[AnalyzeSpec, AnalyzeSpec | None] = Field.make(reducer.LAST)
         self.preload: Field[str, str | None] = Field.make(reducer.LAST)
-        self.enable: Field[bool, list[bool]] = Field(reducer=reducer.IDENTITY)
+        self.enable: Field[bool, list[bool]] = Field(
+            reducer=Reducer[bool, list[bool]]("identity", reducer.identity)
+        )
         self.skip_reason: Field[str, str | None] = Field.make(reducer.LAST)
         self.xstatus: Field[XstatusSpec, XstatusSpec | None] = Field.make(reducer.LAST)
 
