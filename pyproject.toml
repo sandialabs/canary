@@ -73,6 +73,7 @@ canary_hpc = "canary_hpc"
 canary_amd = "canary_amd"
 canary_nvidia = "canary_nvidia"
 canary_vvtest = "canary_vvtest"
+canary_pyt = "canary_pyt"
 
 [tool.ruff]
 target-version = "py311"

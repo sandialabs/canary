@@ -10,11 +10,11 @@ from typing import ClassVar
 from typing import Literal
 from typing import Sequence
 
-from ... import enums
-from ...generator import TestGenerator
-from ...hookspec import hookimpl
-from ...paramset import ParameterSet
-from ...third_party.monkeypatch import monkeypatch
+from _canary import enums
+from _canary.generator import TestGenerator
+from _canary.hookspec import hookimpl
+from _canary.paramset import ParameterSet
+from _canary.third_party.monkeypatch import monkeypatch
 
 WhenType = str | dict[str, str]
 

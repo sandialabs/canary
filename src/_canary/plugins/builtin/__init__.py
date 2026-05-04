@@ -10,7 +10,6 @@ from . import json
 from . import junit
 from . import markdown
 from . import post_clean
-from . import pyt
 from . import repeat
 from . import testcase_generator
 
@@ -23,7 +22,6 @@ plugins = [
     junit,
     markdown,
     post_clean,
-    pyt,
     repeat,
     testcase_generator,
 ]
