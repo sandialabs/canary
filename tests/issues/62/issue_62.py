@@ -5,7 +5,7 @@
 import os
 
 import canary
-from _canary.plugins.builtin.pyt import PYTAdapter
+from canary_pyt import PYTAdapter
 
 
 def test_issue_62(tmpdir):

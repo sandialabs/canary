@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 
-import _canary.plugins.builtin.pyt as pyt
+import canary_pyt
 from _canary.testspec import DependencyPatterns
 from _canary.util.filesystem import working_dir
 
@@ -29,7 +29,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
 """,
         )
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
         specs = gen.lock(on_options=["baz"])
 
         assert len(specs) == 10
@@ -50,7 +50,7 @@ canary.directives.parameterize('p', (1, 2))
 """,
         )
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
 
         specs = gen.lock(on_options=["x"])
         # two parameter cases
@@ -74,7 +74,7 @@ canary.directives.skipif(True, reason="skip")
 """,
         )
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
 
         s1 = gen.lock(on_options=["x"])[0]
         assert s1.exclusive is True
@@ -98,7 +98,7 @@ canary.directives.artifact('art_{p}.txt', upon='always')
 """,
         )
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
         s = gen.lock()[0]
 
         # copy becomes asset via file_resources; ensure substituted paths are present
@@ -122,7 +122,7 @@ canary.directives.parameterize('x', (1, 2))
 """,
         )
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
         specs = gen.lock()
 
         s1 = [s for s in specs if s.parameters["x"] == 1][0]
@@ -146,7 +146,7 @@ canary.directives.load_module('gcc', use='/m')
         )
         monkeypatch.setenv("MODULEPATH", "/a:/b")
 
-        gen = pyt.PYTAdapter(".", "test.pyt")
+        gen = canary_pyt.PYTAdapter(".", "test.pyt")
         s = gen.lock()[0]
         assert s.environment["MODULEPATH"].startswith("/m:")
         assert "gcc" in (s.modules or [])
@@ -161,7 +161,7 @@ import canary
 canary.directives.xfail(code=7)
 """,
         )
-        s = pyt.PYTAdapter(".", "test.pyt").lock()[0]
+        s = canary_pyt.PYTAdapter(".", "test.pyt").lock()[0]
         assert s.xstatus == 7
 
         write(
@@ -171,7 +171,7 @@ import canary
 canary.directives.xdiff()
 """,
         )
-        s2 = pyt.PYTAdapter(".", "test2.pyt").lock()[0]
+        s2 = canary_pyt.PYTAdapter(".", "test2.pyt").lock()[0]
         assert s2.xstatus != 0  # diff_exit_status (exact value covered elsewhere)
 
 
@@ -186,6 +186,6 @@ canary.directives.source('rc.sh')
 """,
         )
 
-        s = pyt.PYTAdapter(".", "test.pyt").lock()[0]
+        s = canary_pyt.PYTAdapter(".", "test.pyt").lock()[0]
         assert s.preload == "setup.sh"
         assert "rc.sh" in (s.rcfiles or [])
