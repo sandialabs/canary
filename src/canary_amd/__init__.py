@@ -5,8 +5,12 @@ import json
 import re
 import shutil
 import subprocess
+from typing import Iterable
+from typing import TypeVar
 
 import canary
+
+T = TypeVar("T")
 
 
 @canary.hookimpl
@@ -49,7 +53,7 @@ def _amd_smi_list_gpus(config: canary.Config) -> list[dict] | None:
         except Exception:
             logger = canary.get_logger(__name__)
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")
-        return None
+    return None
 
 
 def _rocm_smi_list_gpus(config: canary.Config) -> list[dict] | None:
@@ -65,8 +69,7 @@ def _rocm_smi_list_gpus(config: canary.Config) -> list[dict] | None:
                 if m := rx.search(line):
                     idxs.append(m.group(1))
             # de-dup while preserving order
-            seen: set[str] = set()
-            idxs = [x for x in idxs if not (x in seen or seen.add(x))]
+            idxs = dedup(idxs)
             # rocm-smi typically doesn't provide a stable UUID in this output.
             # Store the index as both ID and "uuid" position to keep formatting consistent.
             # (If you can get a UUID from your rocm-smi version, replace this.)
@@ -77,3 +80,14 @@ def _rocm_smi_list_gpus(config: canary.Config) -> list[dict] | None:
             logger = canary.get_logger(__name__)
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")
     return None
+
+
+def dedup(xs: Iterable[T]) -> list[T]:
+    seen: set[T] = set()
+    out: list[T] = []
+    for x in xs:
+        if x in seen:
+            continue
+        seen.add(x)
+        out.append(x)
+    return out

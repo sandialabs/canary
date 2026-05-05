@@ -8,8 +8,10 @@ import logging.handlers
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from typing import Generator
 from typing import Literal
 from typing import cast
 
@@ -357,3 +359,19 @@ def critical(*args, **kwargs):
 
 def exception(*args, **kwargs):
     get_logger().exception(*args, **kwargs)
+
+
+@contextmanager
+def suppress_stream_below(level: int) -> Generator[None, None, None]:
+    previous = set_level(level, only="stream")
+    try:
+        yield
+    finally:
+        if previous is not None:
+            set_level(previous, only="stream")
+
+
+@contextmanager
+def filter_warnings() -> Generator[None, None, None]:
+    with suppress_stream_below(ERROR):
+        yield

@@ -6,14 +6,14 @@ import os
 import re
 
 import canary
-from canary_vvtest import VVTTestGenerator
+from canary_vvtest import VVTestAdapter
 
 
 def test_issue_85(tmpdir):
     with canary.filesystem.working_dir(tmpdir):
         with open("test.vvt", "w") as fh:
             fh.write("# VVT: analyze : --analyze\nimport vvtest_util as vvt\nprint(vvt)")
-        generator = VVTTestGenerator(os.getcwd(), "test.vvt")
+        generator = VVTestAdapter(os.getcwd(), "test.vvt")
         try:
             generator.lock()
         except ValueError as e:

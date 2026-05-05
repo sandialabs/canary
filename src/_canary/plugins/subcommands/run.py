@@ -482,7 +482,7 @@ class ReadPathsFromFile(argparse.Action):
     ) -> None:
         assert isinstance(values, str)
         builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
-        errors = []
+        errors: list[str] = []
         builder.require_kind("scanpaths", errors, f"file {values}")
         if errors:
             raise argparse.ArgumentError(self, errors[0])

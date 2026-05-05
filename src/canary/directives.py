@@ -1066,6 +1066,94 @@ def parameterize(
     """  # noqa: E501
 
 
+def cpus(
+    arg: int,
+    *,
+    when: WhenType | None = None,
+) -> None:
+    """This test requires this many CPUs
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import canary
+       canary.directives.cpus(arg, when=...)
+
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``arg``: The number of CPUs required by this test.
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
+    Notes
+    -----
+
+    * Use ``cpus(int)`` to set a single, fixed resource requirement for a test case without
+      creating additional test instantiations.
+    * Test naming reflects only parameters introduced via `parameterize()`. Therefore,
+      when CPUs are set via ``cpus(arg)``, ``cpus=<arg>`` are not
+      appended to the generated test name. If you want distinct named variants such as
+      ``...cpus=8``, use ``parameterize("cpus", ...)`` instead.
+
+    """  # noqa: E501
+
+
+def gpus(
+    arg: int,
+    *,
+    when: WhenType | None = None,
+) -> None:
+    """This test requires this many GPUs
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import canary
+       canary.directives.gpus(arg, when=...)
+
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``arg``: The number of GPUs required by this test.
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
+    Notes
+    -----
+
+    * Use ``gpus(int)`` to set a single, fixed resource requirement for a test case without
+      creating additional test instantiations.
+    * Test naming reflects only parameters introduced via `parameterize()`. Therefore,
+      when GPUs are set via ``gpus(arg)``, ``gpus=<arg>`` are not
+      appended to the generated test name. If you want distinct named variants such as
+      ``...gpus=8``, use ``parameterize("gpus", ...)`` instead.
+
+    """  # noqa: E501
+
+
 def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> None:
     """Load shell shell script before test execution
 

@@ -27,7 +27,7 @@ def test_parse_parameterize():
 # VVT: : 7,8
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "parameterize"
+    assert commands[0].name == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
     names, values, kwds, _ = generator.p_PARAMETERIZE(commands[0])
     assert names == ["np", "n"]
@@ -41,7 +41,7 @@ def test_parse_autotype():
 # VVT: parameterize (autotype) : np,n = 1,2 3,4 5,6
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "parameterize"
+    assert commands[0].name == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6"
     assert commands[0].options == [("autotype", True)]
 
@@ -52,7 +52,7 @@ def test_parse_parameterize_1():
 # VVT: parameterize (int, float) : np, mesh_factor = 1 , 1.0    1 , 0.5    1 , 0.25
 """
     args = list(generator.p_VVT(s))
-    assert args[0].command == "parameterize"
+    assert args[0].name == "parameterize"
     names, values, _, _ = generator.p_PARAMETERIZE(args[0])
     assert names == ["np", "mesh_factor"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
@@ -66,15 +66,15 @@ def test_parse_parameterize_types():
 # VVT: parameterize (autotype) : a, b = 1 , 1.0    1 , 0.5    1 , 0.25
 """
     args = list(generator.p_VVT(s))
-    assert args[0].command == "parameterize"
+    assert args[0].name == "parameterize"
     names, values, _, _ = generator.p_PARAMETERIZE(args[0])
     assert names == ["a", "b"]
     assert values == [["1", "1.0"], ["1", "0.5"], ["1", "0.25"]]
-    assert args[1].command == "parameterize"
+    assert args[1].name == "parameterize"
     names, values, _, _ = generator.p_PARAMETERIZE(args[1])
     assert names == ["a", "b"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
-    assert args[2].command == "parameterize"
+    assert args[2].name == "parameterize"
     names, values, _, _ = generator.p_PARAMETERIZE(args[2])
     assert names == ["a", "b"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
@@ -104,7 +104,7 @@ def test_parse_copy_rename():
 # VVT: copy (rename) : foo, baz  spam   ,ham
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "copy"
+    assert commands[0].name == "copy"
     assert commands[0].options == [("rename", True)]
     file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
@@ -116,7 +116,7 @@ def test_parse_baseline():
 # VVT: baseline : foo, baz  spam   ,ham
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "baseline"
+    assert commands[0].name == "baseline"
     file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
 
@@ -127,7 +127,7 @@ def test_parse_link_rename():
 # VVT : link (rename) : 3DTmWave.g,3DTmWave.pregen.g
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "link"
+    assert commands[0].name == "link"
     assert commands[0].options == [("rename", True)]
     file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["3DTmWave.g", "3DTmWave.pregen.g"]]
@@ -139,7 +139,7 @@ def test_parse_link_rename_1():
 # VVT : link (rename) : multiblock_rectangle_pml.exo, multiblock_rectangle_pml.prebuilt.exo
 """
     commands = list(generator.p_VVT(s))
-    assert commands[0].command == "link"
+    assert commands[0].name == "link"
     assert commands[0].options == [("rename", True)]
     file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["multiblock_rectangle_pml.exo", "multiblock_rectangle_pml.prebuilt.exo"]]
