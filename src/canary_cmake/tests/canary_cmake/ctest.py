@@ -17,7 +17,7 @@ from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import which
 from _canary.util.filesystem import working_dir
-from canary_cmake.ctest import CTestTestGenerator
+from canary_cmake.ctest import CTestAdapter
 from canary_cmake.ctest import setup_ctest
 
 
@@ -53,7 +53,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         mkdirp("CMakeFiles")
         with open("CMakeCache.txt", "w") as fh:
             fh.write(f"PROJECT_SOURCE_DIR:INTERNAL={os.getcwd()}")
-        file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+        file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
         specs = file.lock()
         assert len(specs) == 2
 
@@ -96,7 +96,7 @@ def test_parse_ctesttestfile_1(tmpdir):
             cmake("..")
             make = Executable("make")
             make()
-            file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+            file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
             specs = file.lock()
             assert len(specs) == 1
             spec = specs[0]
@@ -115,7 +115,7 @@ add_test(test1 "echo" "This test should fail")
 set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test should fail$")
 """
             )
-        file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+        file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
         runner = TestCaseRunner()
@@ -140,7 +140,7 @@ add_test(test1 "./script.sh")
 set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test should be skipped$")
 """
             )
-        file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+        file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
         runner = TestCaseRunner()
@@ -164,7 +164,7 @@ add_test(test1 "./script.sh")
 set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test should pass$")
 """
             )
-        file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+        file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
         runner = TestCaseRunner()
@@ -215,7 +215,7 @@ set_tests_properties(dbWithFoo  PROPERTIES FIXTURES_REQUIRED "DB;Foo")
 set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES RESOURCE_LOCK DbAccess)
 """
             )
-        file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+        file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
         specs = file.lock()
         spec_map = {spec.name: spec for spec in specs}
 
@@ -294,7 +294,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             mkdirp("./foo")
             pool = ResourcePool({"additional_properties": {}, "resources": pool})
             canary.config.pluginmanager.register(Hook(pool), "myhook")
-            file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
+            file = CTestAdapter(os.getcwd(), "CTestTestfile.cmake")
             [spec] = file.lock()
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)

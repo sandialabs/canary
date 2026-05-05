@@ -16,7 +16,7 @@ from _canary.util.filesystem import which
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_issue_97(tmpdir):
     file = os.path.join(os.path.dirname(__file__), "CTestTestfile.cmake")
-    generator = ctg.CTestTestGenerator(file)
+    generator = ctg.CTestAdapter(file)
     specs = generator.lock()
     for spec in specs:
         print(spec)

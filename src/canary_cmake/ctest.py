@@ -14,6 +14,7 @@ from typing import Any
 import schema
 
 import canary
+from _canary.generator import TestGenerator
 from _canary.status import Status
 
 warning_cache = set()
@@ -31,11 +32,10 @@ def warn_unsupported_ctest_option(option: str) -> None:
     warning_cache.add(option)
 
 
-class CTestTestGenerator(canary.AbstractTestGenerator):
+class CTestAdapter(TestGenerator):
     file_patterns = ("CTestTestfile.cmake",)
 
     def __init__(self, root: str, path: str | None = None) -> None:
-        # CTest works with resolved paths
         super().__init__(os.path.abspath(root), path=path)
         self.owners: list[str] = []
 
@@ -44,15 +44,19 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         if cmake is None:
             logger.warning("cmake not found, test cases cannot be generated")
             return []
+
         tests = self.load()
         if not tests:
             return []
+
         drafts: list[canary.UnresolvedSpec] = []
         realpath = os.path.realpath
+
         for family, details in tests.items():
             path = os.path.relpath(details["ctestfile"], self.root)
             if not os.path.exists(os.path.join(self.root, path)):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
+
             draft = create_draft_spec(
                 file_root=self.root,
                 file_path=path,
@@ -62,6 +66,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
                 **details,
             )
             drafts.append(draft)
+
         resolved = self.resolve_inter_dependencies(drafts)
         self.resolve_fixtures(resolved)
         return resolved  # type: ignore
@@ -83,17 +88,6 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         return info
 
     def load(self) -> dict:
-        """Load and transform the tests loaded from CMake into a form understood by nvtest
-
-        ``tests`` is of the form
-
-        ``{NAME: {'command': [...], 'properties': [{'name': ..., 'value': ...}, ...]}, ...}``
-
-        and is transformed in place to the form:
-
-        ``{NAME: {'command': [...], 'prop_name': prop_value, ...}, ...}``
-
-        """
         tests = load(self.file)
         if not tests:
             return {}
@@ -101,7 +95,8 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             transformed: dict[str, Any] = {"command": defn["command"]}
             transformed["ctestfile"] = defn["ctestfile"] or self.file
             for prop in defn["properties"]:
-                prop_name, prop_value = prop["name"], prop["value"]
+                prop_name = prop["name"]
+                prop_value = prop["value"]
                 if prop_name == "ENVIRONMENT":
                     prop_value = parse_environment(prop_value)
                 elif prop_name == "ENVIRONMENT_MODIFICATION":
@@ -115,11 +110,13 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
     def resolve_fixtures(self, specs: list["canary.ResolvedSpec"]) -> None:
         setup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
         cleanup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
+
         for spec in specs:
             for fixture_name in spec.attributes["fixtures"]["setup"]:
                 setup_fixtures.setdefault(fixture_name, []).append(spec)
             for fixture_name in spec.attributes["fixtures"]["cleanup"]:
                 cleanup_fixtures.setdefault(fixture_name, []).append(spec)
+
         for spec in specs:
             for fixture_name in spec.attributes["fixtures"]["required"]:
                 if fixture_name in setup_fixtures:
