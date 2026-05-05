@@ -103,6 +103,7 @@ class Config:
     def factory() -> "Config":
         logging.setup_logging()
         config: Config = Config(initialize=False)
+        snapshot: dict[str, Any]
         if f := os.getenv(CONFIG_ENV_FILENAME):
             with open(f, "r") as fh:
                 snapshot = json.load(fh)
@@ -111,7 +112,7 @@ class Config:
             config.data.clear()
             config.data.update(snapshot["data"])
         elif envcfg := os.getenv(CONFIG_ENV_CFG64):
-            snapshot: dict[str, Any] = deserialize(envcfg)
+            snapshot = deserialize(envcfg)
             config.invocation_dir = snapshot["invocation_dir"]
             config.options = argparse.Namespace(**snapshot["options"])
             config.data.clear()

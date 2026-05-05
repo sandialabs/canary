@@ -41,9 +41,9 @@ class Status:
     }
     # Precompute fast lookup: category -> state (unambiguous with your data)
     STATE_FOR_CATEGORY: dict[str, str] = {}
-    for state in ("PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE"):
-        for cat in CATEGORY_FOR_STATE[state]:
-            STATE_FOR_CATEGORY.setdefault(cat, state)
+    for _st in ("PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE"):
+        for cat in CATEGORY_FOR_STATE[_st]:
+            STATE_FOR_CATEGORY.setdefault(cat, _st)
     DEFAULT_OUTCOME_FOR_CATEGORY = {
         cat: outcomes[0] for cat, outcomes in OUTCOMES_BY_CATEGORY.items()
     }

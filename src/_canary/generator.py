@@ -83,7 +83,7 @@ class AbstractTestGenerator(ABC):
            def describe(self, on_options: list[str] | None = None) -> str:
                ...
 
-           def lock(self, on_options: list[str] | None = None) -> list[canary.TestCase]:
+           def lock(self, on_options: list[str] | None = None) -> list[canary.UnresolvedTestSpec]:
                ...
 
     """
@@ -222,46 +222,32 @@ class XstatusSpec:
 
 
 class TestGenerator(AbstractTestGenerator):
-    file_patterns = ()
+    file_patterns: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
 
-        self.families: Field[str, list[str]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
+        self.families: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
         self.parameter_sets: Field[ParameterSet, list[ParameterSet]] = Field(
-            reducer=Reducer("identity", reducer.identity)
+            reducer=reducer.IDENTITY
         )
         self.keywords: Field[list[str], list[str]] = Field(
             reducer=Reducer("flatten_unique", flatten_unique)
         )
         self.timeout: Field[float, float | None] = Field.make(reducer.LAST)
-        self.modules: Field[ModuleSpec, list[ModuleSpec]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
-        self.rcfiles: Field[str, list[str]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
-        self.artifacts: Field[Artifact, list[Artifact]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
-        self.sources: Field[SourceSpec, list[SourceSpec]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
-        self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
+        self.modules: Field[ModuleSpec, list[ModuleSpec]] = Field(reducer=reducer.IDENTITY)
+        self.rcfiles: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
+        self.artifacts: Field[Artifact, list[Artifact]] = Field(reducer=reducer.IDENTITY)
+        self.sources: Field[SourceSpec, list[SourceSpec]] = Field(reducer=reducer.IDENTITY)
+        self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(reducer=reducer.IDENTITY)
         self.exclusive: Field[bool, bool] = Field(reducer=reducer.ANY)
         self.depends_on: Field[DependencyPatterns, list[DependencyPatterns]] = Field(
-            reducer=Reducer("identity", reducer.identity)
+            reducer=reducer.IDENTITY
         )
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
         self.analyze: Field[AnalyzeSpec, AnalyzeSpec | None] = Field.make(reducer.LAST)
         self.preload: Field[str, str | None] = Field.make(reducer.LAST)
-        self.enable: Field[bool, list[bool]] = Field(
-            reducer=Reducer("identity", reducer.identity)
-        )
+        self.enable: Field[bool, list[bool]] = Field(reducer=reducer.IDENTITY)
         self.skip_reason: Field[str, str | None] = Field.make(reducer.LAST)
         self.xstatus: Field[XstatusSpec, XstatusSpec | None] = Field.make(reducer.LAST)
 
@@ -521,7 +507,9 @@ class TestGenerator(AbstractTestGenerator):
 
     # ----------------------------- AbstractTestGenerator API -----------------------------
 
-    def lock(self, on_options: list[str] | None = None) -> list[UnresolvedSpec]:
+    def lock(
+        self, on_options: list[str] | None = None
+    ) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
         if self.filter_warnings:
             with logging.suppress_stream_below(logging.ERROR):
                 return self._lock(on_options=on_options)
@@ -536,8 +524,9 @@ class TestGenerator(AbstractTestGenerator):
             if not param_dicts:
                 param_dicts = [{}]
 
-            my_drafts: list[UnresolvedSpec] = []
             test_mask: str | None = None
+            my_drafts: list[UnresolvedSpec] = []
+            dependencies: list[str | DependencyPatterns] = []
 
             for parameters in param_dicts:
                 test_mask = self.get_skip_reason(family, parameters, on_options=on_options)
@@ -557,6 +546,8 @@ class TestGenerator(AbstractTestGenerator):
 
                 kw = self._sub_kwds(family, parameters)
 
+                src: str | None
+                dst: str | None
                 baseline: list[str | tuple[str, str]] = []
                 for b in baseline_specs:
                     if b.flag:
@@ -583,7 +574,7 @@ class TestGenerator(AbstractTestGenerator):
                         action = s.action
                     file_resources.setdefault(action, []).append((src, dst))
 
-                dependencies: list[str | DependencyPatterns] = []
+                dependencies.clear()
                 for dep in deps:
                     dependencies.append(
                         DependencyPatterns(
@@ -647,7 +638,7 @@ class TestGenerator(AbstractTestGenerator):
                     )
 
                 modules = self.get_modules(family, parameters=None, on_options=on_options)
-                dependencies: list[str | DependencyPatterns] = []
+                dependencies.clear()
                 for d in my_drafts:
                     dependencies.append(
                         DependencyPatterns(pattern=d.id, expects=1, result_match=analyze.requires)
@@ -700,9 +691,10 @@ class TestGenerator(AbstractTestGenerator):
                             mp.insert(0, m.use)
                     parent.environment["MODULEPATH"] = ":".join(mp)
 
-                enabled = self.get_enable(family, parameters=None, on_options=on_options)
+                enabled, reason = self.get_enable(family, parameters=None, on_options=on_options)
                 if test_mask is None and enabled is False:
-                    test_mask = "[bold]enable=False[/]"
+                    test_mask = reason
+
                 if test_mask is not None:
                     parent.mask = Mask.masked(test_mask)
 

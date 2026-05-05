@@ -68,9 +68,10 @@ def merge_dicts(values: list[dict[str, Any]]) -> dict[str, Any]:
 
 # --- convenient prebuilt reducers (optional) ---
 
-LAST = Reducer("last", last_or_none)
-FIRST = Reducer("first", first_or_none)
-ANY = Reducer("any", any_true)
-ALL = Reducer("all", all_true)
-IDENTITY = Reducer("identity", identity)
-MERGE_DICTS = Reducer("merge_dicts", merge_dicts)
+LAST: Reducer[Any, Any] = Reducer("last", last_or_none)
+FIRST: Reducer[Any, Any] = Reducer("first", first_or_none)
+IDENTITY: Reducer[Any, Any] = Reducer("identity", identity)
+
+ANY: Reducer[bool, bool] = Reducer("any", any_true)
+ALL: Reducer[bool, bool] = Reducer("all", all_true)
+MERGE_DICTS: Reducer[dict[str, Any], dict[str, Any]] = Reducer("merge_dicts", merge_dicts)
