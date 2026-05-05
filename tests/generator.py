@@ -128,9 +128,9 @@ canary.directives.parameterize('x', (1, 2))
         s1 = [s for s in specs if s.parameters["x"] == 1][0]
         s2 = [s for s in specs if s.parameters["x"] == 2][0]
 
-        assert len(s1.dependencies) == 1
-        assert isinstance(s1.dependencies[0], DependencyPatterns)
-        assert s1.dependencies[0].pattern == "foo_1"
+        assert len(s1.dep_patterns) == 1
+        assert isinstance(s1.dep_patterns[0], DependencyPatterns)
+        assert s1.dep_patterns[0].pattern == "foo_1"
 
         assert len(s2.dependencies) == 0
 
