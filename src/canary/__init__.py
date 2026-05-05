@@ -22,7 +22,7 @@ from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generate import Generator
 from _canary.generator import AbstractTestGenerator
-from _canary.generator import TestGenerator
+from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
 from _canary.launcher import Launcher
@@ -91,7 +91,7 @@ __all__ = [
     "TestFailed",
     "TestSkipped",
     "AbstractTestGenerator",
-    "TestGenerator",
+    "CanaryDSLSpecGenerator",
     "hookimpl",
     "hookspec",
     "console_main",

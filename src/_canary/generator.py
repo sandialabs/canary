@@ -221,7 +221,7 @@ class XstatusSpec:
     code: int = 0
 
 
-class TestGenerator(AbstractTestGenerator):
+class CanaryDSLSpecGenerator(AbstractTestGenerator):
     file_patterns: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, root: str, path: str | None = None) -> None:

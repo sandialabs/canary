@@ -14,7 +14,7 @@ from typing import Any
 import schema
 
 import canary
-from _canary.generator import TestGenerator
+from _canary.generator import AbstractTestGenerator
 from _canary.status import Status
 
 warning_cache = set()
@@ -32,7 +32,7 @@ def warn_unsupported_ctest_option(option: str) -> None:
     warning_cache.add(option)
 
 
-class CTestAdapter(TestGenerator):
+class CTestTestGenerator(AbstractTestGenerator):
     file_patterns = ("CTestTestfile.cmake",)
 
     def __init__(self, root: str, path: str | None = None) -> None:

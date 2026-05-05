@@ -21,7 +21,7 @@ from typing import Generator
 
 import canary
 from _canary.enums import list_parameter_space
-from _canary.generator import TestGenerator
+from _canary.generator import CanaryDSLSpecGenerator
 from _canary.paramset import ParameterSet
 from _canary.util import string
 
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 logger = canary.get_logger(__name__)
 
 
-class VVTestAdapter(TestGenerator):
+class VVTestAdapter(CanaryDSLSpecGenerator):
     file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
 
     def __init__(self, root: str, path: str | None = None) -> None:

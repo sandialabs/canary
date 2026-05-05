@@ -14,7 +14,7 @@ from schema import Schema
 import canary
 
 from .cdash import CDashReporter
-from .ctest import CTestAdapter
+from .ctest import CTestTestGenerator
 from .ctest import finish_ctest
 from .ctest import read_resource_specs
 from .ctest import setup_ctest
@@ -24,7 +24,7 @@ logger = canary.get_logger(__name__)
 
 @canary.hookimpl
 def canary_collectstart(collector: canary.Collector) -> None:
-    collector.add_generator(CTestAdapter)
+    collector.add_generator(CTestTestGenerator)
 
 
 @canary.hookimpl

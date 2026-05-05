@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from _canary.error import diff_exit_status
-from _canary.generator import TestGenerator as _TestGenerator
+from _canary.generator import CanaryDSLSpecGenerator
 from _canary.paramset import ParameterSet
 
 
@@ -15,9 +15,9 @@ def make_test_file(tmp_path: Path, rel: str, text: str = "# test\n") -> Path:
     return p
 
 
-def make_gen(tmp_path: Path, rel: str) -> _TestGenerator:
+def make_gen(tmp_path: Path, rel: str) -> CanaryDSLSpecGenerator:
     make_test_file(tmp_path, rel)
-    return _TestGenerator(str(tmp_path), rel)
+    return CanaryDSLSpecGenerator(str(tmp_path), rel)
 
 
 def test_lock_no_directives_produces_one_case(tmp_path: Path) -> None:

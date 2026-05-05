@@ -11,7 +11,7 @@ from typing import Literal
 from typing import Sequence
 
 from _canary import enums
-from _canary.generator import TestGenerator
+from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.paramset import ParameterSet
 from _canary.third_party.monkeypatch import monkeypatch
@@ -89,7 +89,7 @@ class DirectiveRecorder:
         return _directive
 
 
-class PYTAdapter(TestGenerator):
+class PYTAdapter(CanaryDSLSpecGenerator):
     file_patterns: ClassVar[tuple[str, ...]] = ("*.pyt", "canary_*.py")
 
     def __init__(self, root: str, path: str | None = None) -> None:
