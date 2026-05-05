@@ -86,3 +86,19 @@ def stringify(arg: Any, float_fmt: str | None = None) -> str:
     elif isinstance(arg, int):
         return f"{arg:d}"
     return str(arg)
+
+
+def truncate_middle(text: str, max_length: int = 254, sep: str = "...") -> str:
+    """Returns truncated string with ``sep`` replacing middle."""
+    if max_length < 0:
+        raise ValueError("max_length must be >= 0")
+    if not sep:
+        raise ValueError("sep must be a non-empty string")
+    if len(text) <= max_length:
+        return text
+    if max_length <= len(sep):
+        return sep[:max_length]
+    keep = max_length - len(sep)
+    left = keep // 2
+    right = keep - left
+    return f"{text[:left]}{sep}{text[-right:]}"
