@@ -6,6 +6,7 @@ import argparse
 import logging
 import threading
 from collections import Counter
+from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
 from typing import Sequence
@@ -40,6 +41,7 @@ class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
         hpc_connect.config.export()
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
+
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
@@ -178,19 +180,31 @@ class CanaryHPCConductor:
             )
         if missing := {c.id for c in runner.cases} - {c.id for b in batch_specs for c in b.cases}:
             raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
-
         key = canary.string.pluralize("batch", n=len(batch_specs))
         fmt = "[bold]Generated[/] %d test %s from %d test cases"
         logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
         root = runner.workspace.cache_dir / "canary-hpc"
-        batches: list[TestBatch] = []
+        graph: dict[str, list[str]] = {}
+        specmap: dict[str, BatchSpec] = {}
         for batch_spec in batch_specs:
+            graph[batch_spec.id] = [d.id for d in batch_spec.dependencies]
+            specmap[batch_spec.id] = batch_spec
+        batches: dict[str, TestBatch] = {}
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            batch_spec = specmap[id]
             path = f"batches/{batch_spec.id[:7]}"
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
-            batch = TestBatch(batch_spec, workspace=workspace)
-            batches.append(batch)
+            dependencies = [batches[dep.id] for dep in batch_spec.dependencies]
+            batch = TestBatch(
+                batch_spec,
+                workspace=workspace,
+                dependencies=dependencies,
+                backend_supports_dependencies=self.backend.supports_dependencies(),
+            )
+            batches[batch.id] = batch
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)
-        queue.put(*batches)  # type: ignore
+        queue.put(*batches.values())  # type: ignore
         queue.prepare()
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10

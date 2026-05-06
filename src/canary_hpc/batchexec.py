@@ -217,6 +217,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             workspace=batch.workspace.dir,
             submit_args=self.scheduler_args(),
         )
+        if all(b.jobid is not None for b in batch.dependencies):
+            job = job.with_dependencies([b.jobid for b in batch.dependencies])  # type: ignore
         try:
             future = self.backend.submission_manager().submit(job)
         except Exception:
