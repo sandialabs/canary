@@ -1,12 +1,20 @@
 Really, everything is a plugin
 ------------------------------
 
+.. revealjs-fragments::
+
+    Even the main test loop:
+
 .. container:: fragment
 
    .. code-block:: python
 
       @canary.hookspec(first_result=True)
       def canary_runtests(cases: list[TestCase]) -> bool: ...
+
+.. revealjs-fragments::
+
+    Which allows us to change how we would run tests on HPC:
 
 .. container:: fragment
 

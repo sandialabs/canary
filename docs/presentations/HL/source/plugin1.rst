@@ -42,13 +42,13 @@ Test case generator
 .. revealjs-fragments::
 
    * Canary does not define a test file format, only a :pyc:`TestSpec`
-   * :pyc:`TestSpec` objects are returned by a :pyc:`TestCaseGenerator`
-   * :pyc:`TestCaseGenerator` are collected from the :py:`canary_testcase_generator` hook:
+   * :pyc:`TestSpec` objects are returned by a :pyc:`AbstractTestGenerator`
+   * :pyc:`AbstractTestGenerator` are collected from the :py:`canary_testcase_generator` hook:
 
      .. code-block:: python
 
         @canary.hookspec
-        def canary_testcase_generator() -> Type[TestCaseGenerator]: ...
+        def canary_testcase_generator() -> Type[AbstractTestGenerator]: ...
 
    * Plugins provide the :py:`canary_testcase_generator` hookimpls
 
@@ -60,10 +60,10 @@ For example
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_testcase_generator() -> Type[TestCaseGenerator]:
-        return PYTTestGenerator
+    def canary_testcase_generator() -> Type[AbstractTestGenerator]:
+        return PYTAdapter
 
-:pyc:`PYTTestGenerator` is responsible for parsing ``.pyt`` files and creating :pyc:`TestSpec` objects.
+:pyc:`PYTAdapter` is responsible for parsing ``.pyt`` files and creating :pyc:`TestSpec` objects.
 
 .. revealjs-break::
     :data-transition: none
@@ -73,7 +73,7 @@ Plugin authors can enable other formats, like CTest: [3]_
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_testcase_generator() -> Type[TestCaseGenerator]:
+    def canary_testcase_generator() -> Type[AbstractTestGenerator]:
         return CTestTestGenerator
 
 .. [3] A CTest plugin is shipped with Canary
@@ -86,12 +86,12 @@ Plugin authors can enable other formats, like CTest:
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_testcase_generator() -> Type[TestCaseGenerator]:
+    def canary_testcase_generator() -> Type[AbstractTestGenerator]:
         return CTestTestGenerator
 
 .. code-block:: python
 
-    class CTestTestGenerator(canary.TestCaseGenerator):
+    class CTestTestGenerator(canary.AbstractTestGenerator):
 
         file_patterns = ("CTestTestfile.cmake", )
 
@@ -128,7 +128,7 @@ A simple generator might be
 
 .. code-block:: python
 
-   class YAMLTestGenerator(canary.TestCaseGenerator):
+   class YAMLTestGenerator(canary.AbstractTestGenerator):
 
        file_patterns = ("test_*.yaml", )
 
@@ -157,4 +157,4 @@ Real world case study:
 
    * Sandia's Sierra Mechanics suite of codes has ~30,000 test cases
    * Test cases are defined in a derivative XML language
-   * We wrote the SierraTestCaseGenerator and were able to run ~90% of Sierra's tests in Canary in a matter of weeks
+   * We wrote the ``SierraTestCaseGenerator`` and were able to run ~90% of Sierra's tests in Canary in a matter of weeks
