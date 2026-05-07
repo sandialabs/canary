@@ -70,6 +70,10 @@ class CanaryHPCConductor:
         batchspec = args.canary_hpc_batchspec or CanaryHPCBatchSpec.defaults()
         CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
         setattr(canary.config.options, "canary_hpc_batchspec", batchspec)
+        console_style = canary.config.getoption("console_style") or {}
+        if "live_columns" not in console_style:
+            console_style["live_columns"] = "Job,ID,Status,Queued,Elapsed,Rank"
+        setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
     @property
