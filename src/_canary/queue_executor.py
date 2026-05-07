@@ -79,7 +79,7 @@ class JobFunctor:
             logger.debug(f"Job {job}: job functor exited normally")
         finally:
             try:
-                result_queue.put({"event": "FINISHED", "timestamp": time.time()})
+                result_queue.put({"event": "job_finished", "timestamp": time.time()})
             except Exception:
                 logger.exception("Failed to put job state into queue")
                 raise
@@ -225,7 +225,7 @@ class _MainWorker:
             else:
                 event = payload.get("event")
                 self.send(payload)
-                if event == "FINISHED":
+                if event == "job_finished":
                     return
                 continue
 
@@ -250,13 +250,13 @@ class _MainWorker:
                     except Exception as e:
                         logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
 
-                payload.update({"event": "TIMEOUT"})
+                payload.update({"event": "job_timeout"})
                 self.send(payload)
                 return
 
             if not proc.is_alive():
                 # Process exited but FINISHED was never observed
-                payload.update({"event": "DIED", "exitcode": getattr(proc, "exitcode", None)})
+                payload.update({"event": "job_died", "exitcode": getattr(proc, "exitcode", None)})
                 self.send(payload)
                 return
 
@@ -561,20 +561,31 @@ class ResourceQueueExecutor:
             return
 
         if event := payload.get("event"):
-            if event == "SUBMITTED":
+            if event == "job_submitted":
                 slot.submitted = float(payload["timestamp"])
-                self.notify_listeners("job_submitted", slot)
+                self.notify_listeners(event, slot)
                 return
 
-            if event == "STARTED":
+            if event == "job_started":
                 slot.started = float(payload["timestamp"])
                 self.running[job_id] = slot
                 self.submitted.pop(job_id, None)
-                self.notify_listeners("job_started", slot)
+                self.notify_listeners(event, slot)
                 return
 
-            if event == "FINISHED":
-                # STARTED event sent by worker process
+            if event == "job_updated":
+                # This job, running in a different process, is passing updated attributes
+                attrs = payload.get("attrs", {})
+                if not isinstance(attrs, dict):
+                    logger.warning(f"Malformed job_updated payload: {payload!r}")
+                    return
+                for name, value in attrs.items():
+                    if isinstance(name, str) and not name.startswith("_"):
+                        setattr(slot.job, name, value)
+                return
+
+            if event == "job_finished":
+                # job_started event sent by worker process
                 slot.finished = time.time()
                 try:
                     slot.job.refresh()
@@ -590,12 +601,12 @@ class ResourceQueueExecutor:
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
                     self.queue.done(slot.job)
-                    self.notify_listeners("job_finished", slot)
+                    self.notify_listeners(event, slot)
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
                 return
 
-            if event == "TIMEOUT":
+            if event == "job_timeout":
                 if slot.submitted < 0.0:
                     slot.submitted = time.time()
                 if slot.started < 0.0:
@@ -607,7 +618,7 @@ class ResourceQueueExecutor:
                 try:
                     slot.job.refresh()
                 except Exception as e:
-                    logger.debug("job.refresh failed during TIMEOUT: %s", e)
+                    logger.debug("job.refresh failed during job_timeout: %s", e)
                 slot.job.set_status(status="TIMEOUT", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
@@ -623,12 +634,12 @@ class ResourceQueueExecutor:
                 self.idle_workers.append(wid)
                 return
 
-            if event == "DIED":
+            if event == "job_died":
                 slot.finished = time.time()
                 try:
                     slot.job.refresh()
                 except Exception as e:
-                    logger.debug("job.refresh failed during DIED: %s", e)
+                    logger.debug("job.refresh failed during job_died: %s", e)
                 exitcode = payload.get("exitcode", None)
                 reason = "Worker job process died unexpectedly"
                 if isinstance(exitcode, int):
@@ -679,7 +690,7 @@ class ResourceQueueExecutor:
 
         # If a job was in flight, mark it as died so the queue can continue
         if job_id:
-            self._handle_worker_payload({"job_id": job_id, "worker_id": wid, "event": "DIED"})
+            self._handle_worker_payload({"job_id": job_id, "worker_id": wid, "event": "job_died"})
 
         # Make the executor robust: retire the worker and optionally restart it
         self._retire_and_restart_worker(wid)

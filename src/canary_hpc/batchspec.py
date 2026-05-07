@@ -271,7 +271,7 @@ class TestBatch:
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
-            queue.put({"event": "SUBMITTED", "timestamp": time.time()})
+            queue.put({"event": "job_submitted", "timestamp": time.time()})
             self.timekeeper.submitted = time.time()
             try:
                 rc = runner.execute(self, queue=queue)
