@@ -36,6 +36,7 @@ logger = canary.get_logger(__name__)
 class BatchSpec:
     layout: str
     cases: list[canary.TestCase]
+    dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
     rparameters: dict[str, int] = dataclasses.field(init=False)
@@ -64,7 +65,13 @@ class TestBatch:
 
     """
 
-    def __init__(self, spec: BatchSpec, workspace: ExecutionSpace) -> None:
+    def __init__(
+        self,
+        spec: BatchSpec,
+        workspace: ExecutionSpace,
+        dependencies: list["TestBatch"] | None = None,
+        backend_supports_dependencies: bool = False,
+    ) -> None:
         super().__init__()
         self.spec = spec
         self.cases = spec.cases
@@ -75,6 +82,8 @@ class TestBatch:
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self._status: BatchStatus = BatchStatus(self.cases)
+        if not dependencies:
+            self._status.set_base(state="READY")
         self._resources: dict[str, list[dict]] = {}
 
         self.jobid: str | None = None
@@ -83,7 +92,8 @@ class TestBatch:
         self.exclusive = False
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
-        self.dependencies: list["TestBatch"] = []
+        self.dependencies: list["TestBatch"] = dependencies or []
+        self.backend_supports_dependencies = backend_supports_dependencies
 
     def __iter__(self):
         return iter(self.cases)
@@ -217,16 +227,28 @@ class TestBatch:
     def required_resources(self) -> list[dict[str, Any]]:
         return self.spec.required_resources()
 
+    def dependency_batches_submitted(self) -> bool:
+        return all(d.jobid is not None for d in self.dependencies)
+
+    def dependency_batches_complete(self) -> bool:
+        return all(all(c.status.is_terminal() for c in d.cases) for d in self.dependencies)
+
     @property
     def status(self) -> BatchStatus:
         if self._status.state == "PENDING":
-            # Determine if dependent cases have completed and, if so, flip status to 'ready'
-            pending = 0
-            for case in self.cases:
-                for dep in case.dependencies:
-                    if dep.status.state in ("PENDING", "READY", "RUNNING"):
-                        pending += 1
-            if not pending:
+            ready: bool = False
+            if not self.dependencies:
+                ready = True
+            elif self.backend_supports_dependencies:
+                if self.dependency_batches_submitted():
+                    ready = True
+                elif self.dependency_batches_complete():
+                    ready = True
+            else:
+                # no backend dependency support => must wait for deps to finish
+                if self.dependency_batches_complete():
+                    ready = True
+            if ready:
                 self._status.set_base(state="READY")
         return self._status
 
@@ -249,7 +271,7 @@ class TestBatch:
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
-            queue.put({"event": "SUBMITTED", "timestamp": time.time()})
+            queue.put({"event": "job_submitted", "timestamp": time.time()})
             self.timekeeper.submitted = time.time()
             try:
                 rc = runner.execute(self, queue=queue)

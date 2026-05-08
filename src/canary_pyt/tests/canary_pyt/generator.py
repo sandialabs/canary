@@ -104,7 +104,7 @@ def test_sources_and_baseline_substitution(tmp_path: Path) -> None:
     gen.add_baseline(src="a_{p}.exo", dst="b_{P}.exo")
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]
-    assert ("in_2.txt", "out_2.txt") in s.file_resources.get("copy", [])
+    assert ("in_2.txt", "out_2.txt") in s.file_resources.get("copy", [])  # type: ignore
     assert ("a_2.exo", "b_2.exo") in s.baseline
 
 
@@ -116,7 +116,7 @@ def test_dependencies_substitution(tmp_path: Path) -> None:
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]
     assert len(s.dependencies) == 1
-    assert s.dependencies[0].pattern == "dep_2"
+    assert s.dependencies[0].pattern == "dep_2"  # type: ignore
 
 
 def test_analyze_creates_parent_case_and_dependencies(tmp_path: Path) -> None:

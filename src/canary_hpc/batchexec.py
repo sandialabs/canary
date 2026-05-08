@@ -143,10 +143,11 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             nonlocal started_at
             started_at = time.time()
             batch.timekeeper.started = started_at
-            queue.put({"event": "STARTED", "timestamp": started_at})
+            queue.put({"event": "job_started", "timestamp": started_at})
 
         def set_jobid(future: hpc_connect.futures.Future):
-            batch.jobid = future.jobid
+            jobid = batch.jobid = future.jobid
+            queue.put({"event": "job_updated", "timestamp": time.time(), "attrs": {"jobid": jobid}})
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)
@@ -217,6 +218,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             workspace=batch.workspace.dir,
             submit_args=self.scheduler_args(),
         )
+        if all(b.jobid is not None for b in batch.dependencies):
+            job = job.with_dependencies([b.jobid for b in batch.dependencies])  # type: ignore
         try:
             future = self.backend.submission_manager().submit(job)
         except Exception:
@@ -252,7 +255,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
             nonlocal started_at
             started_at = time.time()
             batch.timekeeper.started = started_at
-            queue.put({"event": "STARTED", "timestamp": started_at})
+            queue.put({"event": "job_started", "timestamp": started_at})
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)

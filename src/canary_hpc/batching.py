@@ -72,6 +72,22 @@ def batch_testcases(
         else:
             bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
     specs = [BatchSpec(layout=layout, cases=[lookup[block.id] for block in bin]) for bin in bins]
+
+    # Build explicit batch dependencies
+    case_to_batch: dict[str, BatchSpec] = {}
+    for spec in specs:
+        for case in spec.cases:
+            case_to_batch[case.id] = spec
+
+    for spec in specs:
+        deps: list[BatchSpec] = []
+        for case in spec.cases:
+            for dep in case.dependencies:
+                dep_spec = case_to_batch.get(dep.id)
+                if dep_spec is not None and dep_spec is not spec and dep_spec not in deps:
+                    deps.append(dep_spec)
+        spec.dependencies = deps
+
     return specs
 
 

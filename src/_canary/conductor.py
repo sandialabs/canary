@@ -102,11 +102,11 @@ class TestCaseExecutor:
     def __call__(self, case: "TestCase", queue: SimpleQueue, **kwargs: Any) -> None:
         try:
             now = time.time()
-            queue.put({"event": "SUBMITTED", "timestamp": now})
+            queue.put({"event": "job_submitted", "timestamp": now})
             case.timekeeper.submitted = now
             config.pluginmanager.hook.canary_runteststart(case=case)
             now = time.time()
-            queue.put({"event": "STARTED", "timestamp": now})
+            queue.put({"event": "job_started", "timestamp": now})
             case.timekeeper.started = now
             config.pluginmanager.hook.canary_runtest(case=case)
             case.timekeeper.finished = time.time()

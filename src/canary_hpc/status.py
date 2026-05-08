@@ -12,13 +12,7 @@ from _canary.status import Status
 class BatchStatus:
     def __init__(self, children: list[canary.TestCase]) -> None:
         self._children: list[canary.TestCase] = list(children)
-        self.base_status: Status
-        for child in self._children:
-            if any(dep not in self._children for dep in child.dependencies):
-                self.base_status = Status.PENDING()
-                break
-        else:
-            self.base_status = Status.READY()
+        self.base_status: Status = Status.PENDING()
 
     @property
     def state(self) -> str:
