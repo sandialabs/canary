@@ -89,9 +89,6 @@ def git_local_label() -> str:
     return local
 
 
-_local_re = re.compile(r"^[a-z0-9]+(?:\.[a-z0-9]+)*$")
-
-
 def _parse_dist_version(v: str) -> tuple[int, int, int, str]:
     """
     Parses enough PEP 440 to support:
