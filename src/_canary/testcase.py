@@ -21,6 +21,9 @@ from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
+from .job import BaseJob
+from .job import JobPhase
+from .job import JobState
 from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class TestCase:
+class TestCase(BaseJob):
     def __init__(
         self,
         spec: "ResolvedSpec",
@@ -50,6 +53,7 @@ class TestCase:
         self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
+        self.state = JobState()
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
@@ -61,6 +65,17 @@ class TestCase:
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, TestCase):
+            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
+        return self.id == other.id
+
+    def __str__(self) -> str:
+        return self.spec.display_name()
+
+    def __repr__(self) -> str:
+        return self.spec.display_name()
 
     @property
     def id(self) -> str:
@@ -124,17 +139,6 @@ class TestCase:
     @property
     def viewpath(self) -> str:
         return self.spec.viewpath
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, TestCase):
-            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
-        return self.id == other.id
-
-    def __str__(self) -> str:
-        return self.spec.display_name()
-
-    def __repr__(self) -> str:
-        return self.spec.display_name()
 
     def display_name(self, **kwargs) -> str:
         return self.spec.display_name(**kwargs)
@@ -263,16 +267,58 @@ class TestCase:
 
     @property
     def status(self) -> Status:
-        if self._status.state == "PENDING":
-            if not self.dependencies:
-                self._status = Status.READY()
-            else:
-                self.set_dependency_based_status()
         return self._status
 
     @status.setter
     def status(self, arg: Status) -> None:
         self._status = arg
+
+    def is_done(self) -> bool:
+        return self.state.is_done()
+
+    def dropped(self) -> bool:
+        return self.status.category == "SKIP"
+
+    def is_runnable(self) -> bool:
+        """True if this case could still run in the future."""
+        if self.state.is_done():
+            return False
+        if self.status.category == "SKIP":
+            return False
+        # If any dependency finished in a way that violates criteria, this case will never run
+        if self.dependencies:
+            flags = self.dep_condition_flags()
+            if any(f == "wont_run" for f in flags):
+                return False
+        return True
+
+    def refresh_readiness(self) -> None:
+        """Apply terminal transitions if the case will never run."""
+        if self.state.is_done():
+            return
+        if not self.dependencies:
+            return
+        flags = self.dep_condition_flags()
+        for i, flag in enumerate(flags):
+            if flag == "wont_run":
+                dep = self.dependencies[i]
+                self.state.phase = JobPhase.DONE
+                self.status = Status.BLOCKED(
+                    f"Dependency {dep.name} finished with status {dep.status.status!r}, "
+                    f"not {self.spec.dep_done_criteria[i]}"
+                )
+                return
+
+    def is_ready(self) -> bool:
+        """True if this case can be dispatched now (deps satisfied)."""
+        if self.state.is_done() or self.state.is_running():
+            return False
+        if not self.is_runnable():
+            return False
+        if not self.dependencies:
+            return True
+        flags = self.dep_condition_flags()
+        return all(f == "can_run" for f in flags)
 
     @property
     def lockfile(self) -> Path:
@@ -325,12 +371,13 @@ class TestCase:
         code: int
         xstatus = self.spec.xstatus
         try:
-            if self.status == "READY":
+            if self.is_runnable():
                 with self.workspace.openfile(self.stdout, "a") as fh:
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
                 with self.workspace.enter(), self.timekeeper.timeit():
-                    self.status = Status.RUNNING()
+                    if self.state.is_pending():
+                        self.status = Status.RUNNING()
                     self.save()
                     code = self.launcher.run(case=self)
                     self.update_status_from_exit_code(code=code)
@@ -372,6 +419,7 @@ class TestCase:
 
     def getstate(self) -> dict[str, Any]:
         return {
+            "state": self.state,
             "status": self.status,
             "timekeeper": self.timekeeper,
             "measurements": self.measurements,
@@ -394,6 +442,10 @@ class TestCase:
             self.timekeeper.finished = timekeeper.finished
         if measurements := data.get("measurements"):
             self.measurements.update(measurements.data)
+        if st := data.get("state"):
+            self.state.phase = st.phase
+        elif self.status.is_terminal():
+            self.state.phase = JobPhase.DONE
 
     def do_baseline(self) -> None:
         if not self.spec.baseline:
@@ -426,7 +478,7 @@ class TestCase:
                 self.status = Status.XDIFF()
         elif xcode != 0:
             # Expected to fail
-            if xcode > 0 and code != code:
+            if xcode > 0 and code != xcode:
                 self.status = Status.FAILED(
                     f"{self.spec.display_name()}: expected to exit with code={code}",
                     code=code,
@@ -461,6 +513,9 @@ class TestCase:
             reason=status["reason"],
             code=status["code"],
         )
+        if st := data.get("state"):
+            phase = st.get("phase", "PENDING")
+            self.state.phase = JobPhase(phase)
         tk = data["timekeeper"]
         self.timekeeper.submitted = tk["submitted"]
         self.timekeeper.started = tk["started"]
@@ -543,6 +598,7 @@ class TestCase:
 
     def asdict(self) -> dict[str, Any]:
         record: dict[str, Any] = {
+            "state": {"phase": self.state.phase.value},
             "status": self.status.asdict(),
             "spec": self.spec.asdict(),
             "timekeeper": self.timekeeper.asdict(),
@@ -563,6 +619,7 @@ class TestCase:
     def serialize(self) -> str:
         record: dict[str, Any] = {
             "id": self.spec.id,
+            "state": {"phase": self.state.phase.value},
             "status": self.status.asdict(),
             "timekeeper": self.timekeeper.asdict(),
             "measurements": self.measurements.asdict(),
@@ -594,7 +651,7 @@ class TestCase:
         expected = self.spec.dep_done_criteria
         flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.status.state in ("READY", "PENDING", "RUNNING"):
+            if not dep.is_done():
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i].upper() in (None, dep.status.category, dep.status.status, "*"):

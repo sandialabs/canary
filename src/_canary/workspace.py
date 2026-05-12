@@ -69,7 +69,7 @@ class Session:
 
     def run(self, workspace: "Workspace") -> None:
         self.prefix.mkdir(parents=True, exist_ok=True)
-        ready = [case for case in self.cases if case.status.state in ("READY", "PENDING")]
+        ready = [case for case in self.cases if case.is_runnable()]
         runner = Runner(ready, self.name, workspace=workspace)
         if not ready:
             exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
@@ -579,6 +579,7 @@ class Workspace:
                 case.status = mine["status"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
+                case.state = mine["state"]
                 lookup[spec.id] = case
         if ids:
             return [case for case in lookup.values() if case.id in ids]
@@ -643,6 +644,7 @@ class Workspace:
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status = mine["status"]
+                case.state = mine["state"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
             else:

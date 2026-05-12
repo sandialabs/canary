@@ -157,9 +157,9 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
             stats.num_failed += 1
         elif case.status.category == "SKIP":
             stats.num_skipped += 1
-        elif case.status.state in ("PENDING", "READY", "RUNNING"):
+        elif not case.state.is_done():
             stats.num_error += 1
-        if case.status.state == "COMPLETE":
+        if case.state.is_done():
             t = case.timekeeper.started
             if started_on is None:
                 if t > 0:

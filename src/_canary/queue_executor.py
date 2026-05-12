@@ -28,7 +28,7 @@ from rich.text import Text
 
 from . import config
 from .error import StopExecution
-from .protocols import JobProtocol
+from .job import BaseJob
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
@@ -44,7 +44,7 @@ EventTypes = Literal["job_submitted", "job_started", "job_finished"]
 
 @dataclasses.dataclass
 class ExecutionSlot:
-    job: JobProtocol
+    job: BaseJob
     qrank: int
     qsize: int
     spawned: float
@@ -75,7 +75,7 @@ class JobFunctor:
     def __call__(
         self,
         executor: Callable,
-        job: JobProtocol,
+        job: BaseJob,
         result_queue: mp.Queue,
         logging_queue: mp.Queue,
         config_snapshot: dict[str, Any],
@@ -200,7 +200,7 @@ class _MainWorker:
             job, per_job_kwargs = msg
             self.run_one_job(job, per_job_kwargs or {})
 
-    def run_one_job(self, job: JobProtocol, per_job_kwargs: dict[str, Any]) -> None:
+    def run_one_job(self, job: BaseJob, per_job_kwargs: dict[str, Any]) -> None:
         # IMPORTANT: use mp.Queue (not SimpleQueue) so we can do get(timeout=...)
         self.local_q = mp.Queue()
         proc: BaseProcess = self.ctx.Process(
@@ -222,7 +222,7 @@ class _MainWorker:
         finally:
             self.cleanup_job()
 
-    def monitor_job(self, job: JobProtocol) -> None:
+    def monitor_job(self, job: BaseJob) -> None:
         proc = self.proc
         local_q = self.local_q
         if local_q is None:

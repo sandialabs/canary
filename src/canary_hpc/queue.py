@@ -8,7 +8,7 @@ from collections import Counter
 
 import canary
 from _canary import queue
-from _canary.protocols import JobProtocol
+from _canary.job import BaseJob
 from _canary.status import Status
 from _canary.util.time import hhmmss
 
@@ -16,18 +16,18 @@ logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.ResourceQueue):
-    def put(self, *jobs: JobProtocol) -> None:
+    def put(self, *jobs: BaseJob) -> None:
         for job in jobs:
-            if job.status.state not in ("READY", "PENDING"):
-                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.state}")
+            if not job.is_runnable():
+                raise ValueError(f"Job {job} is not runnable ({job.status.state=})")
         with self.lock:
             for batch in jobs:
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
 
-    def cases(self) -> list[JobProtocol]:
-        cases: list[JobProtocol] = [case for slot in self._heap for case in slot.job]  # type: ignore
+    def cases(self) -> list[BaseJob]:
+        cases: list[BaseJob] = [case for slot in self._heap for case in slot.job]  # type: ignore
         cases.extend([case for batch in self._busy.values() for case in batch])
         cases.extend([case for batch in self._finished.values() for case in batch])
         return cases

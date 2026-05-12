@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from .protocols import JobProtocol
+from .job import BaseJob
 from .resource_pool.rpool import ResourceUnavailable
 from .status import Status
 from .util import logging
@@ -35,7 +35,7 @@ class Busy(Exception):
 class HeapSlot:
     # Negative cost so that heapq is max-heap
     cost: float = field(init=False, repr=False)
-    job: JobProtocol = field(compare=False)
+    job: BaseJob = field(compare=False)
     resources: list[dict[str, Any]] = field(compare=False, init=False, repr=False)
 
     def __post_init__(self):
@@ -55,7 +55,7 @@ class ResourceQueue:
         self,
         lock: threading.Lock,
         resource_pool: "ResourcePool",
-        jobs: list[JobProtocol] | None = None,
+        jobs: list[BaseJob] | None = None,
     ) -> None:
         self.lock = lock
         self._heap: list[HeapSlot] = []
@@ -77,11 +77,10 @@ class ResourceQueue:
             if not self._heap:
                 raise Empty()
 
-    def put(self, *jobs: JobProtocol) -> None:
+    def put(self, *jobs: BaseJob) -> None:
         # Precompute heap
         for job in jobs:
-            if job.status.state not in ("READY", "PENDING"):
-                raise ValueError(f"Job {job} must be READY or PENDING, got {job.status.state}")
+            job.validate_enqueuable()
             required = job.required_resources()
             if not required:
                 raise ValueError(f"{job}: a test should require at least 1 cpu")
@@ -91,7 +90,7 @@ class ResourceQueue:
             heapq.heappush(self._heap, slot)
             logger.debug(f"Job {job.id[:7]} added to queue with cost {-slot.cost}")
 
-    def get(self) -> JobProtocol:
+    def get(self) -> BaseJob:
         with self.lock:
             if not self._heap:
                 logger.debug("Queue empty on get()")
@@ -106,19 +105,15 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
-                if job.status.category == "SKIP":
-                    logger.debug(f"Job {job.id[:7]} with status SKIP and removed from queue")
-                    self._finished[job.id] = job
-                    continue
+                job.refresh_readiness()
 
-                if job.status.state not in ("READY", "PENDING"):
+                if not job.is_runnable():
                     # Job will never by ready
-                    job.status = Status.ERROR(reason="State became unrunable for unknown reasons")  # type: ignore
                     logger.debug(f"Job {job.id[:7]} marked ERROR and removed from queue")
                     self._finished[job.id] = job
                     continue
 
-                if job.status.state != "READY":
+                if not job.is_ready():
                     deferred_slots.append(slot)
                     continue
 
@@ -129,6 +124,7 @@ class ResourceQueue:
                     continue
 
                 job.assign_resources(acquired)
+                job.on_scheduled()
                 self._busy[job.id] = job
                 if job.exclusive:
                     logger.debug(f"Exclusive job {job.id[:7]} started, exclusive lock obtained")
@@ -158,7 +154,7 @@ class ResourceQueue:
             slot = self._heap.pop()
             slot.job.set_status(status=status)
 
-    def done(self, job: JobProtocol) -> None:
+    def done(self, job: BaseJob) -> None:
         try:
             with self.lock:
                 job = self._busy.pop(job.id, None)
@@ -170,18 +166,19 @@ class ResourceQueue:
                     self.exclusive_job_id = None
                     logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
                 self.rpool.checkin(job.free_resources())
+                job.on_finished()
                 logger.debug(f"Job {job.id[:7]} marked done")
         except Exception:
             logger.exception(f"Failed to mark {job.id[:7]} as done")
 
-    def cases(self) -> list[JobProtocol]:
+    def cases(self) -> list[BaseJob]:
         """Return all jobs in queue, busy, and finished."""
         cases = [slot.job for slot in self._heap]
         cases.extend(self._busy.values())
         cases.extend(self._finished.values())
         return cases
 
-    def pending(self) -> list[JobProtocol]:
+    def pending(self) -> list[BaseJob]:
         return [slot.job for slot in self._heap]
 
     def status(self, start: float | None = None) -> str:

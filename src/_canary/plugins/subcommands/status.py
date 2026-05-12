@@ -18,6 +18,7 @@ from ...util import glyphs
 from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand
+from ...job import JobState
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -227,6 +228,7 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
     keep = [False] * len(rows)
     for i, row in enumerate(rows):
         status: _Status = row["status"]
+        state: JobState = row["state"]
         if "a" in chars:
             keep[i] = status.category != "PASS"
         elif status.category == "SKIP":
@@ -239,7 +241,7 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
             keep[i] = "d" in chars
         elif status.status == "TIMEOUT":
             keep[i] = "t" in chars
-        elif status.state in ("READY", "PENDING"):
+        elif not state.is_done():
             keep[i] = "n" in chars
         elif status.category == "CANCEL":
             keep[i] = "n" in chars

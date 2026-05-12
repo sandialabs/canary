@@ -73,6 +73,7 @@ from schema import Schema
 from . import config
 from .config.argparsing import Parser
 from .hookspec import hookimpl
+from .job import JobPhase
 from .rules import Rule
 from .rules import RuntimeRule
 from .status import Status
@@ -300,7 +301,7 @@ class RuntimeSelector:
         self.propagate()
         for case in self.cases:
             if not case.mask:
-                case.status = Status.PENDING()
+                case.state.phase = JobPhase.PENDING
                 case.timekeeper.reset()
                 case.measurements.reset()
         pm.done()
@@ -309,7 +310,7 @@ class RuntimeSelector:
 
     def propagate(self) -> None:
         # Propagate skipped/broken tests
-        queue = deque([c for c in self.cases if c.mask and c.status.state in ("READY", "PENDING")])
+        queue = deque([c for c in self.cases if c.mask and c.is_runnable()])
         case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
         # Precompute reverse graph
         dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}

@@ -16,6 +16,8 @@ from typing import Any
 from typing import Iterable
 
 from . import testspec
+from .job import JobPhase
+from .job import JobState
 from .status import Status
 from .testcase import Measurements
 from .testspec import ResolvedSpec
@@ -158,6 +160,7 @@ class WorkspaceDatabase:
             status_status TEXT,
             status_reason TEXT,
             status_code INTEGER,
+            job_state TEXT,
             submitted REAL,
             started REAL,
             finished REAL,
@@ -172,7 +175,14 @@ class WorkspaceDatabase:
             sql = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
             conn.execute(sql)
 
+        self._ensure_column("results", "job_state", "TEXT")
         return
+
+    def _ensure_column(self, table: str, column: str, decl: str) -> None:
+        cols = {row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            logger.info(f"DB migration: adding {table}.{column}")
+            self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     def put_specs(self, specs: list[ResolvedSpec]) -> None:
         def process_one_spec(spec: ResolvedSpec) -> tuple[str, bytes, str, str, list[str]]:
@@ -355,6 +365,7 @@ class WorkspaceDatabase:
             case.status.status,
             case.status.reason or "",
             case.status.code,
+            case.state.phase.value,
             case.timekeeper.submitted,
             case.timekeeper.started,
             case.timekeeper.finished,
@@ -382,8 +393,8 @@ class WorkspaceDatabase:
         INSERT OR REPLACE INTO results (
           spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
           status_state, status_category, status_status, status_reason, status_code,
-          submitted, started, finished, measurements
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          job_state, submitted, started, finished, measurements
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         with self.connection:
             self.connection.executemany(sql, rows)
@@ -456,10 +467,17 @@ class WorkspaceDatabase:
                 "code": row[11],
             }
         )
+        state = JobState()
+        if row[12]:
+            state.phase = JobPhase(row[12])
+        elif d["status"].is_terminal():
+            state.phase = JobPhase.DONE
+        d["state"] = state
+
         d["timekeeper"] = Timekeeper.from_dict(
-            {"submitted": row[12], "started": row[13], "finished": row[14]}
+            {"submitted": row[13], "started": row[14], "finished": row[15]}
         )
-        d["measurements"] = Measurements.from_dict(json.loads(row[15]))
+        d["measurements"] = Measurements.from_dict(json.loads(row[16]))
         return d
 
     def put_selection(
@@ -678,7 +696,7 @@ class ResultListener(threading.Thread):
         self.db = db
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
-        self._processed: set[Path] = set()  # Track processed files
+        self._processed: set[str] = set()  # Track processed files
 
     def run(self):
         """Main thread loop."""
