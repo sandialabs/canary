@@ -242,8 +242,8 @@ def console_main() -> int:
             print_current_config()
         if reraise:
             raise
-        tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
+        # tb = traceback.extract_tb(e.__traceback__)
         # if plugin := determine_plugin_from_tb(tb):
         #    err += f" (from plugin: {plugin})"
         logger.error(err)

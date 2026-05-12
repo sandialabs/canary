@@ -6,12 +6,11 @@ import dataclasses
 from abc import ABC
 from abc import abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 
-if TYPE_CHECKING:
-    from .status import Status
-    from .timekeeper import Timekeeper
+from .status import Status
+from .timekeeper import Timekeeper
 
 
 class JobPhase(str, Enum):
@@ -40,9 +39,16 @@ class JobState:
 
 class BaseJob(ABC):
     # ---- required data attributes (enforced by convention) ----
-    id: str
-    state: JobState
-    timekeeper: "Timekeeper"
+
+    def __init__(self) -> None:
+        self.status = Status()
+        self.state = JobState()
+        self.measurements = Measurements()
+        self.timekeeper = Timekeeper()
+
+    @property
+    @abstractmethod
+    def id(self) -> str: ...
 
     # ---- scheduler sizing/resources ----
     @abstractmethod
@@ -51,10 +57,6 @@ class BaseJob(ABC):
     @property
     def exclusive(self) -> bool:
         return False
-
-    @property
-    @abstractmethod
-    def status(self) -> "Status": ...
 
     @abstractmethod
     def required_resources(self) -> list[dict[str, Any]]: ...
@@ -115,3 +117,31 @@ class BaseJob(ABC):
     # ---- presentation ----
     @abstractmethod
     def display_name(self, **kwargs: Any) -> str: ...
+
+    def add_measurement(self, name: str, value: Any) -> None:
+        self.measurements.add_measurement(name, value)
+
+
+@dataclasses.dataclass
+class Measurements:
+    data: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    def add_measurement(self, name: str, value: Any) -> None:
+        self.data[name] = value
+
+    def update(self, measurements: dict) -> None:
+        self.data.update(measurements)
+
+    def reset(self) -> None:
+        self.data.clear()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
+        return cls(data=data)
+
+    def asdict(self) -> dict[str, Any]:
+        return self.data
+
+    def items(self) -> Generator[tuple[str, Any], None, None]:
+        for item in self.data.items():
+            yield item

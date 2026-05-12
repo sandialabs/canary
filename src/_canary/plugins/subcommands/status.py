@@ -153,9 +153,9 @@ class Status(CanarySubcommand):
 
 def sortkey(row: dict) -> tuple:
     c = 1
-    if row["status"].category == "PASS":
+    if row["status"].has_category("PASS"):
         c = 0
-    if row["status"].category == "FAIL":
+    if row["status"].has_category("FAIL"):
         c = 2
     return (c, row["status"].outcome, row["timekeeper"].duration())
 

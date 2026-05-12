@@ -109,7 +109,7 @@ class ResourceQueue:
 
                 if not job.is_runnable():
                     # Job will never by ready
-                    logger.debug(f"Job {job.id[:7]} marked ERROR and removed from queue")
+                    logger.debug(f"Job {job.id[:7]} not runnable and removed from queue")
                     self._finished[job.id] = job
                     continue
 

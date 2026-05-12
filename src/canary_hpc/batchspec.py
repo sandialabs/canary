@@ -21,9 +21,7 @@ from _canary.job import BaseJob
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.status import Status
-from _canary.testcase import Measurements
 from _canary.testexec import ExecutionSpace
-from _canary.timekeeper import Timekeeper
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.time import time_in_seconds
 
@@ -75,8 +73,10 @@ class TestBatch(BaseJob):
         dependencies: list["TestBatch"] | None = None,
         backend_supports_dependencies: bool = False,
     ) -> None:
+        super().__init__()
         self.spec = spec
         self.cases = spec.cases
+        self.status: BatchStatus = BatchStatus(self.cases)
         self.session = self.spec.session
         self.workspace = workspace
         self.lockfile = self.workspace.joinpath("batch.lock")
@@ -84,14 +84,9 @@ class TestBatch(BaseJob):
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self.state = JobState()
-        self._status: BatchStatus = BatchStatus(self.cases)
         self._resources: dict[str, list[dict]] = {}
-        self._exclusive = False
         self.jobid: str | None = None
-        self.id = self.spec.id
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
-        self.measurements = Measurements()
-        self.timekeeper = Timekeeper()
         self.dependencies: list["TestBatch"] = dependencies or []
         self.backend_supports_dependencies = backend_supports_dependencies
 
@@ -116,8 +111,8 @@ class TestBatch(BaseJob):
         return f"TestBatch({case_repr})"
 
     @property
-    def exclusive(self) -> bool:
-        return self._exclusive
+    def id(self) -> str:
+        return self.spec.id
 
     def display_name(self, **kwargs: Any) -> str:
         name = str(self)
@@ -259,7 +254,7 @@ class TestBatch(BaseJob):
     def is_runnable(self) -> bool:
         if self.state.is_done():
             return False
-        if self.status.category == "SKIP":
+        if self.status.has_category("SKIP"):
             return False
         # Nothing else makes a batch permanently unrunnable today
         return True
@@ -276,10 +271,6 @@ class TestBatch(BaseJob):
             return self.dependency_batches_submitted() or self.dependency_batches_complete()
         else:
             return self.dependency_batches_complete()
-
-    @property
-    def status(self) -> BatchStatus:
-        return self._status
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
@@ -316,7 +307,7 @@ class TestBatch(BaseJob):
     def getstate(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
         data[self.id] = {
-            "status": self.status.base_status,
+            "status": self.status.base,
             "timekeeper": self.timekeeper,
             "state": self.state,
         }
@@ -341,7 +332,7 @@ class TestBatch(BaseJob):
         """
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
-                self.status.base_status.set(
+                self.status.set_base(
                     category=stat.category,
                     outcome=stat.outcome,
                     reason=stat.reason,

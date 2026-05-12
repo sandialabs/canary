@@ -79,9 +79,10 @@ class Status:
         "BLOCKED": "⊘",
     }
 
-    category: str
-    outcome: str
-    reason: str | None
+    _category: str
+    _outcome: str
+    _reason: str | None
+    _code: int
 
     def __init__(
         self,
@@ -122,6 +123,22 @@ class Status:
         return self.code
 
     @property
+    def category(self) -> str:
+        return self._category
+
+    @property
+    def outcome(self) -> str:
+        return self._outcome
+
+    @property
+    def reason(self) -> str | None:
+        return self._reason
+
+    @property
+    def code(self) -> int:
+        return self._code
+
+    @property
     def glyph(self) -> str:
         return self.GLYPH_FOR_STATUS.get(self.outcome, "")
 
@@ -150,10 +167,19 @@ class Status:
     def has_outcome(self, arg: str) -> bool:
         return self.outcome == arg
 
+    def has_code(self, arg: int) -> bool:
+        return self.code == arg
+
     def outcome_in(self, arg: Sequence[str]) -> bool:
         return self.outcome in arg
 
-    def set(self, *, category=None, outcome=None, reason=None, code=-1) -> None:
+    def set(
+        self,
+        category: str | None = None,
+        outcome: str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
         category_was_provided = category is not None
         outcome_was_provided = outcome is not None
         reason_was_provided = reason is not None
@@ -175,13 +201,15 @@ class Status:
         if outcome_was_provided and not category_was_provided:
             category = "NONE"
 
+        assert outcome is not None
+        assert category is not None
+
         # 1) Infer category from a concrete outcome
         if outcome != "NONE":
             try:
                 inferred = self.OUTCOME_TO_CATEGORY[outcome]
             except KeyError as e:
                 raise ValueError(f"Invalid outcome/status: {outcome}") from e
-
             if category == "NONE":
                 category = inferred
             elif category != inferred:
@@ -194,10 +222,10 @@ class Status:
         # 3) Validate and commit
         self._validate(category=category, outcome=outcome)
 
-        self.category = category
-        self.outcome = outcome
-        self.reason = reason
-        self.code = self.CODE_FOR_OUTCOME.get(outcome, -1) if code < 0 else code
+        self._category = category
+        self._outcome = outcome
+        self._reason = reason
+        self._code = self.CODE_FOR_OUTCOME.get(outcome, -1) if code < 0 else code
 
     def asdict(self) -> dict:
         """
@@ -225,12 +253,13 @@ class Status:
         Returns:
             Status object
         """
-        self = cls(
-            category=data.get("category", "NONE"),
-            outcome=data.get("outcome", "NONE"),
-            reason=data.get("reason"),
-            code=data.get("code", -1),
-        )
+        category = data.pop("category", "NONE")
+        outcome = data.pop("outcome", None) or data.pop("status", None) or "NONE"
+        reason = data.pop("reason")
+        code = data.pop("code", -1)
+        if data:
+            raise TypeError(f"Unknown kwargs: {', '.join(data.keys())}")
+        self = cls(category=category, outcome=outcome, reason=reason, code=code)
         return self
 
     def _category_from_outcome(self, category: str) -> str:

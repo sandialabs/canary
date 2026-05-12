@@ -383,7 +383,7 @@ def finish_ctest(case: "canary.TestCase") -> None:
             )
 
     if skip_return_code := case.spec.attributes.get("skip_return_code"):
-        if case.status.code == skip_return_code:
+        if case.status.has_code(skip_return_code):
             case.status = Status.SKIPPED(f"Return code={skip_return_code!r}")
 
     if skip_regular_expression := case.attributes.get("skip_regular_expression"):

@@ -18,8 +18,8 @@ from typing import Iterable
 from . import testspec
 from .job import JobPhase
 from .job import JobState
+from .job import Measurements
 from .status import Status
-from .testcase import Measurements
 from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -452,7 +452,7 @@ class WorkspaceDatabase:
         d["workspace"] = row[6]
         d["state"] = JobState(phase=JobPhase(row[7]))
         d["status"] = Status.from_dict(
-            {"category": row[8], "status": row[9], "reason": row[10], "code": row[11]}
+            {"category": row[8], "outcome": row[9], "reason": row[10], "code": row[11]}
         )
         d["timekeeper"] = Timekeeper.from_dict(
             {"submitted": row[12], "started": row[13], "finished": row[14]}

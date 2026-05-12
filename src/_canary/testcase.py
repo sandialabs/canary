@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
-import dataclasses
 import datetime
 import io
 import math
@@ -13,7 +12,6 @@ from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
 from typing import MutableMapping
 
 from . import config
@@ -23,11 +21,9 @@ from .error import TestSkipped
 from .error import TestTimedOut
 from .job import BaseJob
 from .job import JobPhase
-from .job import JobState
 from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
-from .timekeeper import Timekeeper
 from .util import cpu_count
 from .util import json_helper as json
 from .util import logging
@@ -48,15 +44,12 @@ class TestCase(BaseJob):
         workspace: ExecutionSpace,
         dependencies: list["TestCase"] | None = None,
     ) -> None:
+        super().__init__()
         self.spec = spec
         self.workspace = workspace
         self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
-        self.state = JobState()
-        self._status = Status()
-        self.measurements = Measurements()
-        self.timekeeper = Timekeeper()
         self.dependencies = dependencies or []
         if len(self.spec.dependencies) != len(self.dependencies):
             raise ValueError("Incorrect number of dependencies")
@@ -142,9 +135,6 @@ class TestCase(BaseJob):
 
     def display_name(self, **kwargs) -> str:
         return self.spec.display_name(**kwargs)
-
-    def add_measurement(self, name: str, value: Any) -> None:
-        self.measurements.add_measurement(name, value)
 
     def set_status(
         self,
@@ -263,14 +253,6 @@ class TestCase(BaseJob):
                 continue
             reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
         return reqd
-
-    @property
-    def status(self) -> Status:
-        return self._status
-
-    @status.setter
-    def status(self, arg: Status) -> None:
-        self._status = arg
 
     def is_done(self) -> bool:
         return self.state.is_done()
@@ -737,31 +719,6 @@ def load_testcase_from_state(lock_data: dict) -> TestCase:
 
     workspace = Workspace.load()
     return workspace.find(case=lock_data["spec"]["id"])
-
-
-@dataclasses.dataclass
-class Measurements:
-    data: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def add_measurement(self, name: str, value: Any) -> None:
-        self.data[name] = value
-
-    def update(self, measurements: dict) -> None:
-        self.data.update(measurements)
-
-    def reset(self) -> None:
-        self.data.clear()
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
-        return cls(data=data)
-
-    def asdict(self) -> dict[str, Any]:
-        return self.data
-
-    def items(self) -> Generator[tuple[str, Any], None, None]:
-        for item in self.data.items():
-            yield item
 
 
 def find_cache_dir(start: Path) -> Path | None:
