@@ -2,403 +2,295 @@
 #
 # SPDX-License-Identifier: MIT
 
+from dataclasses import dataclass
+from enum import Enum
+from enum import IntEnum
+from typing import Any
+from typing import Literal
+from typing import MutableMapping
+from typing import Sequence
 
+
+class Category(str, Enum):
+    PASS = "PASS"  # nosec B105
+    FAIL = "FAIL"
+    CANCEL = "CANCEL"
+    SKIP = "SKIP"
+    NONE = "NONE"
+
+    @classmethod
+    def factory(cls, arg: "Category | str") -> "Category":
+        return arg if isinstance(arg, Category) else Category(arg)
+
+    def rich_color(self) -> str:
+        if self is Category.PASS:
+            return "bold green"
+        elif self is Category.FAIL:
+            return "bold red"
+        elif self is Category.SKIP:
+            return "bold yellow"
+        elif self is Category.CANCEL:
+            return "bold magenta"
+        else:
+            return "bold"
+
+    def hex_color(self) -> str:
+        if self is Category.PASS:
+            return "#02FE20"
+        elif self is Category.FAIL:
+            return "#FF3333"
+        elif self is Category.SKIP:
+            return "#FEFD02"
+        elif self is Category.CANCEL:
+            return "#F202FE"
+        else:
+            return ""
+
+
+class Outcome(IntEnum):
+    NONE = -1
+    SUCCESS = 0
+    XDIFF = 10
+    XFAIL = 11
+    DIFFED = 64
+    FAILED = 65
+    ERROR = 66
+    BROKEN = 67
+    TIMEOUT = 68
+    INVALID = 69
+    CANCELLED = 70
+    INTERRUPTED = 71
+    SKIPPED = 80
+    BLOCKED = 81
+
+    @property
+    def label(self) -> str:
+        return self.name
+
+    @classmethod
+    def factory(cls, arg: "Outcome | str | int") -> "Outcome":
+        if isinstance(arg, Outcome):
+            return arg
+        if isinstance(arg, int):
+            return Outcome(arg)
+        s = arg.strip()
+        if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+            return Outcome(int(s))
+        return Outcome[s]
+
+    def glyph(self) -> str:
+        return {
+            Outcome.SUCCESS: "✓",
+            Outcome.XFAIL: "✓",
+            Outcome.XDIFF: "✓",
+            Outcome.DIFFED: "✗",
+            Outcome.FAILED: "✗",
+            Outcome.ERROR: "⚠",
+            Outcome.BROKEN: "✗",
+            Outcome.TIMEOUT: "⏱",
+            Outcome.CANCELLED: "⊘",
+            Outcome.INTERRUPTED: "⊘",
+            Outcome.SKIPPED: "⊘",
+            Outcome.BLOCKED: "⊘",
+            Outcome.INVALID: "✗",
+            Outcome.NONE: "",
+        }.get(self, "")
+
+
+@dataclass(slots=True)
 class Status:
-    """Lightweight status object for test cases.
+    category: Category = Category.NONE
+    outcome: Outcome = Outcome.NONE
+    reason: str | None = None
+    code: int = -1
 
-    Examples:
-        status = Status(status='SUCCESS')
-        status = Status(status='SUCCESS', code=42)  # Custom code
-        status = Status(status='SUCCESS', reason="All tests passed")
-        status = Status.SUCCESS()
+    def __post_init__(self) -> None:
+        self.set(category=self.category, outcome=self.outcome, reason=self.reason, code=self.code)
 
-        # JSON serialization
-        json_str = json.dumps(status.to_dict())
-        status2 = Status.from_dict(json.loads(json_str))
-    """
+    def is_success(self) -> bool:
+        return self.category is Category.PASS
 
-    # Status definitions: (default_code, color, glyph, extra label)
-    STATES: tuple[str, ...] = ("PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE")
-    TERMINAL_STATES: tuple[str, str] = ("NOTRUN", "COMPLETE")
-    CATEGORIES: tuple[str, ...] = ("PASS", "FAIL", "CANCEL", "SKIP", "NONE")
-    OUTCOMES_BY_CATEGORY: dict[str, tuple[str, ...]] = {
-        "PASS": ("SUCCESS", "XDIFF", "XFAIL"),
-        "FAIL": ("DIFFED", "FAILED", "ERROR", "BROKEN", "TIMEOUT", "INVALID"),
-        "CANCEL": ("CANCELLED", "INTERRUPTED"),
-        "SKIP": ("SKIPPED", "BLOCKED"),
-        "NONE": ("NONE",),
-    }
-    # Precompute fast reverse lookup
-    OUTCOME_TO_CATEGORY: dict[str, str] = {
-        outcome: cat for cat, outcomes in OUTCOMES_BY_CATEGORY.items() for outcome in outcomes
-    }
-    CATEGORY_FOR_STATE: dict[str, set[str]] = {
-        "PENDING": {"NONE"},
-        "READY": {"NONE"},
-        "RUNNING": {"NONE"},
-        "NOTRUN": {"SKIP"},
-        "COMPLETE": {"PASS", "FAIL", "CANCEL"},
-    }
-    # Precompute fast lookup: category -> state (unambiguous with your data)
-    STATE_FOR_CATEGORY: dict[str, str] = {}
-    for _st in ("PENDING", "READY", "RUNNING", "NOTRUN", "COMPLETE"):
-        for cat in CATEGORY_FOR_STATE[_st]:
-            STATE_FOR_CATEGORY.setdefault(cat, _st)
-    DEFAULT_OUTCOME_FOR_CATEGORY = {
-        cat: outcomes[0] for cat, outcomes in OUTCOMES_BY_CATEGORY.items()
-    }
-    COLOR_FOR_CATEGORY: dict[str, str] = {
-        "PASS": "bold green",
-        "FAIL": "bold red",
-        "SKIP": "yellow",
-        "CANCEL": "bold magenta",
-        "NONE": "bold",
-    }  # nosec B105
-    HTML_COLOR_FOR_CATEGORY: dict[str, str] = {
-        "PASS": "#02FE20",
-        "FAIL": "#FF3333",
-        "SKIP": "#FEFD02",
-        "CANCEL": "#F202FE",
-        "NONE": "",
-    }  # nosec B105
-    CODE_FOR_OUTCOME: dict[str, int] = {
-        "NONE": -1,
-        "PENDING": -1,
-        "READY": -1,
-        "RUNNING": -1,
-        "SUCCESS": 0,
-        "XDIFF": 10,
-        "XFAIL": 11,
-        "DIFFED": 64,
-        "FAILED": 65,
-        "ERROR": 66,
-        "BROKEN": 67,
-        "TIMEOUT": 68,
-        "INVALID": 69,
-        "CANCELLED": 70,
-        "INTERRUPTED": 71,
-        "SKIPPED": 80,
-        "BLOCKED": 81,
-    }
-    GLYPH_FOR_STATE: dict[str, str] = {"PENDING": "○", "READY": "○", "RUNNING": "▶"}
-    GLYPH_FOR_STATUS: dict[str, str] = {
-        "SUCCESS": "✓",
-        "XFAIL": "✓",
-        "XDIFF": "✓",
-        "DIFFED": "✗",
-        "FAILED": "✗",
-        "ERROR": "⚠",
-        "BROKEN": "✗",
-        "TIMEOUT": "⏱",
-        "CANCELLED": "⊘",
-        "INTERRUPTED": "⊘",
-        "SKIPPED": "⊘",
-        "BLOCKED": "⊘",
-    }
+    def is_failure(self) -> bool:
+        return self.category is Category.FAIL
 
-    state: str
-    category: str
-    status: str
-    reason: str | None
+    def is_skipped(self) -> bool:
+        return self.category is Category.SKIP
 
-    def __init__(
+    def is_cancelled(self) -> bool:
+        return self.category is Category.CANCEL
+
+    def has_category(self, arg: Category | str) -> bool:
+        return self.category is Category.factory(arg)
+
+    def has_code(self, arg: int) -> bool:
+        return self.code == arg
+
+    def category_in(self, arg: Sequence[Category | str]) -> bool:
+        s = {Category.factory(x) for x in arg}
+        return self.category in s
+
+    def has_outcome(self, arg: Outcome | str) -> bool:
+        return self.outcome is Outcome.factory(arg)
+
+    def outcome_in(self, arg: Sequence[Outcome | str]) -> bool:
+        s = {Outcome.factory(x) for x in arg}
+        return self.outcome in s
+
+    def is_terminal(self) -> bool:
+        return self.category is not Category.NONE
+
+    @property
+    def returncode(self) -> int:
+        return self.code
+
+    def set(
         self,
         *,
-        state: str = "PENDING",
-        category: str = "NONE",
-        status: str = "NONE",
+        category: Category | str | None = None,
+        outcome: Outcome | str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        self.set(state=state, category=category, status=status, reason=reason, code=code)
-
-    def __eq__(self, o) -> bool:
-        if isinstance(o, Status):
-            return self.__hash__() == o.__hash__()
-        else:
-            if self.state in ("PENDING", "READY", "RUNNING"):
-                return self.state == o
-            return self.status == o
-
-    def __hash__(self):
-        """Allow Status to be used in sets and as dict keys."""
-        return hash((self.state, self.category, self.status, self.reason, self.code))
-
-    def __str__(self) -> str:
-        """String representation."""
-        if self.reason:
-            return f"{self.status}: {self.reason}"
-        return f"{self.category} ({self.status})"
-
-    def __repr__(self) -> str:
-        """Developer representation."""
-        parts = [f"{self.status!r}"]
-        if self.reason:
-            parts.append(f"reason={self.reason!r}")
-        # Show code if it's not the default
-        return f"Status({', '.join(parts)})"
-
-    def __int__(self) -> int:
-        """Convert to int (return code)."""
-        return self.code
-
-    def is_terminal(self) -> bool:
-        return self.state in self.TERMINAL_STATES
-
-    @property
-    def glyph(self) -> str:
-        if g := self.GLYPH_FOR_STATE.get(self.state):
-            return g
-        return self.GLYPH_FOR_STATUS[self.status]
-
-    @property
-    def color(self) -> str:
-        return self.COLOR_FOR_CATEGORY[self.category]
-
-    def set(self, *, state=None, category=None, status=None, reason=None, code=-1) -> None:
-        state_was_provided = state is not None
         category_was_provided = category is not None
-        status_was_provided = status is not None
+        outcome_was_provided = outcome is not None
         reason_was_provided = reason is not None
 
-        # Start from current values if present, otherwise defaults
-        cur_state = getattr(self, "state", "PENDING")
-        cur_category = getattr(self, "category", "NONE")
-        cur_status = getattr(self, "status", "NONE")
-        cur_reason = getattr(self, "reason", None)
+        category2 = self.category if category is None else Category.factory(category)
+        outcome2 = self.outcome if outcome is None else Outcome.factory(outcome)
+        reason2 = self.reason if (reason is None and not reason_was_provided) else reason
 
-        state = cur_state if state is None else state
-        category = cur_category if category is None else category
-        status = cur_status if status is None else status
-        reason = cur_reason if (reason is None and not reason_was_provided) else reason
+        if category_was_provided and not outcome_was_provided:
+            outcome2 = Outcome.NONE
+        if outcome_was_provided and not category_was_provided:
+            category2 = Category.NONE
+        if outcome2 is not Outcome.NONE:
+            inferred = get_category(outcome2)
+            if category2 is Category.NONE:
+                category2 = inferred
+            elif category2 is not inferred:
+                raise ValueError(
+                    f"Outcome {outcome2.name} implies category {inferred.value}, not {category2.value}"
+                )
 
-        # If caller changes category but doesn't specify status, reset status so we can default it.
-        if category_was_provided and not status_was_provided:
-            status = "NONE"
+        if category2 is not Category.NONE and outcome2 is Outcome.NONE:
+            outcome2 = get_default_outcome(category2)
 
-        # If caller changes status but doesn't specify category, reset category so we can infer it.
-        if status_was_provided and not category_was_provided:
-            category = "NONE"
+        allowed = get_possible_outcomes(category2)
+        if outcome2 not in allowed:
+            raise ValueError(f"Invalid outcome={outcome2.name} for category={category2.value}")
 
-        # 1) Explicit lifecycle states always override category/outcome
-        #    (but only if the caller actually passed state=...)
-        if state_was_provided and state in {"PENDING", "READY", "RUNNING"}:
-            category = "NONE"
-            status = "NONE"
-            self._validate(state=state, category=category, status=status)
-            self.state, self.category, self.status = state, category, status
-            self.reason = reason
-            self.code = -1 if code < 0 else code
-            return
+        self.category = category2
+        self.outcome = outcome2
+        self.reason = reason2
+        self.code = outcome2.value if code < 0 else code
 
-        # 2) Infer category from a concrete outcome
-        if status != "NONE":
-            try:
-                inferred = self.OUTCOME_TO_CATEGORY[status]
-            except KeyError as e:
-                raise ValueError(f"Invalid outcome/status: {status}") from e
-
-            if category == "NONE":
-                category = inferred
-            elif category != inferred:
-                raise ValueError(f"Status {status} implies category {inferred}, not {category}")
-
-        # 3) Default outcome if category is concrete but status is NONE
-        if category != "NONE" and status == "NONE":
-            status = self.DEFAULT_OUTCOME_FOR_CATEGORY[category]
-
-        # 4) Infer state from category unless user explicitly set a terminal state
-        #    If user gave an incompatible terminal state, treat it as an error.
-        inferred_state = self._state_from_category(category)
-
-        if state_was_provided and state in {"NOTRUN", "COMPLETE"}:
-            if state != inferred_state:
-                raise ValueError(f"Category {category} implies state {inferred_state}, not {state}")
-        else:
-            state = inferred_state
-
-        # 5) Validate and commit
-        self._validate(state=state, category=category, status=status)
-
-        self.state = state
-        self.category = category
-        self.status = status
-        self.reason = reason
-        self.code = self.CODE_FOR_OUTCOME.get(status, -1) if code < 0 else code
-
-    def asdict(self) -> dict:
-        """
-        Convert Status to a JSON-serializable dictionary.
-
-        Returns:
-            Dictionary with category, code, and reason (if present)
-        """
-        result = {
-            "state": self.state,
-            "category": self.category,
-            "status": self.status,
+    def asdict(self) -> dict[str, Any]:
+        return {
+            "category": self.category.value,
+            "outcome": self.outcome.name,
             "reason": self.reason,
             "code": self.code,
         }
-        return result
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Status":
-        """
-        Create a Status from a dictionary (e.g., from JSON).
-
-        Args:
-            data: Dictionary with 'category', 'code', and optional 'reason'
-
-        Returns:
-            Status object
-        """
-        self = cls(
-            state=data.get("state", "PENDING"),
-            category=data.get("category", "NONE"),
-            status=data.get("status", "NONE"),
-            reason=data.get("reason"),
-            code=data.get("code", -1),
-        )
+    def from_dict(cls, data: MutableMapping[str, Any]) -> "Status":
+        d = dict(data)
+        category = d.pop("category", "NONE")
+        outcome = d.pop("outcome", None) or d.pop("status", None) or "NONE"
+        reason = d.pop("reason", None)
+        code = d.pop("code", -1)
+        if d:
+            raise TypeError(f"Unknown kwargs: {', '.join(d.keys())}")
+        self = cls()
+        self.set(category=category, outcome=outcome, reason=reason, code=code)
         return self
 
-    def _category_from_outcome(self, category: str) -> str:
-        if cat := self.OUTCOME_TO_CATEGORY.get(category):
-            return cat
-        raise ValueError(f"Invalid status: {category}")
-
-    def _state_from_category(self, category: str) -> str:
-        # Deterministic: NONE -> PENDING, SKIP -> NOTRUN, PASS/FAIL/CANCEL -> COMPLETE
-        if category == "NONE":
-            return "PENDING"
-        if category == "SKIP":
-            return "NOTRUN"
-        if category in {"PASS", "FAIL", "CANCEL"}:
-            return "COMPLETE"
-        raise ValueError(f"Invalid category: {category}")
-
-    def _validate(self, *, state: str, category: str, status: str) -> None:
-        if state not in self.STATES:
-            raise ValueError(f"Invalid state: {state}")
-
-        allowed_categories = self.CATEGORY_FOR_STATE[state]
-        if category not in allowed_categories:
-            raise ValueError(
-                f"Invalid category {category} for state {state}: allowed: {', '.join(allowed_categories)}"
-            )
-
-        allowed_outcomes = self.OUTCOMES_BY_CATEGORY[category]
-        if status not in allowed_outcomes:
-            raise ValueError(
-                f"Invalid status {status} for category {category}: allowed: {', '.join(allowed_outcomes)}"
-            )
-
-    def display_name(self, **kwargs) -> str:
-        style = kwargs.get("style", "none")
-        show_glyph = kwargs.get("glyph", False)
-
-        if self.state in {"PENDING", "READY", "RUNNING"}:
-            label = self.state
-            color = self.COLOR_FOR_CATEGORY["NONE"]
-            html_color = self.HTML_COLOR_FOR_CATEGORY["NONE"]
-        else:
-            label = f"{self.category} ({self.status})"
-            color = self.COLOR_FOR_CATEGORY[self.category]
-            html_color = self.HTML_COLOR_FOR_CATEGORY[self.category]
-
-        if show_glyph:
-            label = f"{self.glyph} {label}"
-
+    def display_name(
+        self, *, style: Literal["none", "rich", "html"] = "none", glyph: bool = False
+    ) -> str:
+        label = f"{self.category.value} ({self.outcome.name})"
+        if glyph:
+            label = f"{self.glyph()} {label}"
         if style == "rich":
-            return f"[{color}]{label}[/{color}]"
+            return f"[{self.rich_color()}]{label}[/]"
         if style == "html":
-            if html_color:
-                return f'<font color="{html_color}">{label}</font>'
-            return label
+            c = self.hex_color()
+            return f'<font color="{c}">{label}</font>' if c else label
         return label
 
-    # Class-level constants for convenience
-    @classmethod
-    def PENDING(cls):
-        self = cls()
-        return self
+    def rich_color(self) -> str:
+        return self.category.rich_color()
 
-    @classmethod
-    def READY(cls):
-        self = cls()
-        self.state = "READY"
-        return self
+    def hex_color(self) -> str:
+        return self.category.hex_color()
 
-    @classmethod
-    def RUNNING(cls):
-        self = cls()
-        self.state = "RUNNING"
-        return self
+    def glyph(self) -> str:
+        return self.outcome.glyph()
 
     @classmethod
     def SUCCESS(cls):
         self = cls()
-        self.set(state="COMPLETE", category="PASS", status="SUCCESS", code=0)
+        self.set(outcome=Outcome.SUCCESS, code=0)
         return self
 
     @classmethod
     def XFAIL(cls):
         self = cls()
-        self.set(state="COMPLETE", category="PASS", status="XFAIL")
+        self.set(outcome=Outcome.XFAIL)
         return self
 
     @classmethod
     def XDIFF(cls):
         self = cls()
-        self.set(state="COMPLETE", category="PASS", status="XDIFF")
+        self.set(outcome=Outcome.XDIFF)
         return self
 
     @classmethod
     def FAILED(cls, reason: str | None = None, code: int = -1):
         self = cls()
-        self.set(state="COMPLETE", category="FAIL", status="FAILED", reason=reason, code=code)
+        self.set(outcome=Outcome.FAILED, reason=reason, code=code)
         return self
 
     @classmethod
     def DIFFED(cls, reason: str | None = None, code: int = -1):
         self = cls()
-        self.set(state="COMPLETE", category="FAIL", status="DIFFED", reason=reason, code=code)
+        self.set(outcome=Outcome.DIFFED, reason=reason, code=code)
         return self
 
     @classmethod
     def TIMEOUT(cls, code: int = -1):
         self = cls()
-        self.set(state="COMPLETE", category="FAIL", status="TIMEOUT", code=code)
+        self.set(outcome=Outcome.TIMEOUT, code=code)
         return self
 
     @classmethod
     def ERROR(cls, reason: str | None = None, code: int = -1):
         self = cls()
-        self.set(state="COMPLETE", category="FAIL", status="ERROR", code=code)
+        self.set(outcome=Outcome.ERROR, reason=reason, code=code)
         return self
 
     @classmethod
     def BROKEN(cls, reason: str | None = None, code: int = -1):
         self = cls()
-        self.set(state="COMPLETE", category="FAIL", status="BROKEN", code=code)
+        self.set(outcome=Outcome.BROKEN, reason=reason, code=code)
         return self
 
     @classmethod
     def SKIPPED(cls, reason: str | None = None):
         self = cls()
-        self.set(state="NOTRUN", category="SKIP", status="SKIPPED", reason=reason)
+        self.set(outcome=Outcome.SKIPPED, reason=reason)
         return self
 
     @classmethod
     def BLOCKED(cls, reason: str | None = None):
         self = cls()
-        self.set(state="NOTRUN", category="SKIP", status="BLOCKED", reason=reason)
+        self.set(outcome=Outcome.BLOCKED, reason=reason)
         return self
 
     @classmethod
     def CANCELLED(cls, reason: str | None = None):
         self = cls()
-        self.set(state="COMPLETE", category="CANCEL", status="CANCELLED", reason=reason)
+        self.set(outcome=Outcome.CANCELLED, reason=reason)
         return self
 
     @classmethod
@@ -407,11 +299,58 @@ class Status:
 
         self = cls()
         reason = reason or "Keyboard interrupt"
-        self.set(
-            state="COMPLETE",
-            category="CANCEL",
-            status="INTERRUPTED",
-            reason=reason,
-            code=signal.SIGINT.value,
-        )
+        self.set(outcome=Outcome.INTERRUPTED, reason=reason, code=signal.SIGINT.value)
         return self
+
+
+def get_category(arg: Outcome) -> "Category":
+    if arg in (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL):
+        return Category.PASS
+    elif arg in (
+        Outcome.DIFFED,
+        Outcome.FAILED,
+        Outcome.ERROR,
+        Outcome.BROKEN,
+        Outcome.TIMEOUT,
+        Outcome.INVALID,
+    ):
+        return Category.FAIL
+    elif arg in (Outcome.CANCELLED, Outcome.INTERRUPTED):
+        return Category.CANCEL
+    elif arg in (Outcome.SKIPPED, Outcome.BLOCKED):
+        return Category.SKIP
+    else:
+        return Category.NONE
+
+
+def get_possible_outcomes(arg: Category) -> tuple["Outcome", ...]:
+    if arg is Category.PASS:
+        return (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL)
+    elif arg is Category.FAIL:
+        return (
+            Outcome.DIFFED,
+            Outcome.FAILED,
+            Outcome.ERROR,
+            Outcome.BROKEN,
+            Outcome.TIMEOUT,
+            Outcome.INVALID,
+        )
+    elif arg is Category.CANCEL:
+        return (Outcome.CANCELLED, Outcome.INTERRUPTED)
+    elif arg is Category.SKIP:
+        return (Outcome.SKIPPED, Outcome.BLOCKED)
+    else:
+        return (Outcome.NONE,)
+
+
+def get_default_outcome(arg: Category) -> "Outcome":
+    if arg is Category.PASS:
+        return Outcome.SUCCESS
+    elif arg is Category.FAIL:
+        return Outcome.DIFFED
+    elif arg is Category.CANCEL:
+        return Outcome.CANCELLED
+    elif arg is Category.SKIP:
+        return Outcome.SKIPPED
+    else:
+        return Outcome.NONE

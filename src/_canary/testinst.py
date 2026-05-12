@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
 
+from .job import JobPhase
+from .job import JobState
 from .status import Status
 from .util import json_helper as json
 from .util.paramview import MultiParameters
@@ -36,6 +38,7 @@ class TestInstance:
     sources: dict[str, list[tuple[str, str | None]]]
     work_tree: str
     working_directory: str
+    state: JobState
     status: Status
     start: float
     stop: float
@@ -152,6 +155,7 @@ def from_testcase(case: "TestCase") -> TestInstance:
         sources=sources,
         work_tree=str(case.workspace.dir),  # type: ignore
         working_directory=str(case.workspace.dir),
+        state=case.state,
         status=case.status,
         start=start,
         stop=stop,
@@ -189,6 +193,7 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         sources.setdefault(asset["action"], []).append((asset["src"], asset["dst"]))
 
     workspace = lock["workspace"]
+    state = lock["state"]
     status = lock["status"]
     resources = lock["resources"]
     timekeeper = lock["timekeeper"]
@@ -211,10 +216,10 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
         sources=sources,
         work_tree=os.path.join(workspace["root"], workspace["path"]),
         working_directory=os.path.join(workspace["root"], workspace["path"]),
+        state=JobState(phase=JobPhase(state["phase"])),
         status=Status(
-            state=status["state"],
             category=status["category"],
-            status=status["status"],
+            outcome=status["outcome"],
             reason=status["reason"],
             code=status["code"],
         ),

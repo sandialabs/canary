@@ -264,27 +264,27 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
-            if case.status.state != "COMPLETE":
+            if not case.state.is_done() != "COMPLETE":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status.category == "SKIP":
+            elif case.status.has_category("SKIP"):
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.category == "PASS":
+            elif case.status.has_category("PASS"):
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status.status == "TIMEOUT":
+            elif case.status.has_outcome("TIMEOUT"):
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status.category == "FAIL":
+            elif case.status.has_category("FAIL"):
                 status = "failed"
-                exit_code = case.status.status.title()
+                exit_code = case.status.outcome.title()
                 completion_status = "Completed"
-                fail_reason = case.status.reason or f"Test {case.status.status.lower()}"
-            elif case.status.category == "CANCEL":
+                fail_reason = case.status.reason or f"Test {case.status.outcome.lower()}"
+            elif case.status.has_category("CANCEL"):
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
@@ -520,9 +520,9 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status.category == "PASS":
+        if case.status.has_category("PASS"):
             return
-        elif case.status.category == "FAIL":
+        elif case.status.has_category("FAIL"):
             self.status |= 2**1
         else:
             self.status |= 2**2

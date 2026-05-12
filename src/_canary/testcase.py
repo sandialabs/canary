@@ -2,18 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
-import dataclasses
 import datetime
 import io
 import math
 import os
 import traceback
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
+from typing import Literal
 from typing import MutableMapping
 
 from . import config
@@ -21,10 +21,11 @@ from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
+from .job import BaseJob
+from .job import JobPhase
 from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
-from .timekeeper import Timekeeper
 from .util import cpu_count
 from .util import json_helper as json
 from .util import logging
@@ -38,29 +39,65 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class TestCase:
+@dataclass(frozen=True, slots=True)
+class Dependency:
+    case: "TestCase"
+    condition: str | None
+
+    def is_satisfied(self) -> bool:
+        c = self.condition
+        if c is None or c == "*" or (isinstance(c, str) and c.strip() == "*"):
+            return self.case.is_done()
+        want = c.upper()
+        st = self.case.status
+        return want in (st.category.value, st.outcome.name)
+
+    def is_done(self) -> bool:
+        return self.case.is_done()
+
+
+class TestCase(BaseJob):
     def __init__(
         self,
         spec: "ResolvedSpec",
         workspace: ExecutionSpace,
         dependencies: list["TestCase"] | None = None,
     ) -> None:
+        super().__init__()
         self.spec = spec
         self.workspace = workspace
         self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
-        self._status = Status()
-        self.measurements = Measurements()
-        self.timekeeper = Timekeeper()
-        self.dependencies = dependencies or []
-        if len(self.spec.dependencies) != len(self.dependencies):
-            raise ValueError("Incorrect number of dependencies")
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
+
+        self.dependencies = dependencies or []
+        if len(self.spec.dependencies) != len(self.dependencies):
+            raise ValueError("Incorrect number of dependencies")
+
+        expected = list(self.spec.dep_done_criteria or [])
+        if expected and len(expected) != len(self.dependencies):
+            raise ValueError("Incorrect number of dependency conditions")
+
+        # new canonical list
+        self.depends_on: list[Dependency] = [
+            Dependency(case=dep, condition=expected[i]) for i, dep in enumerate(self.dependencies)
+        ]
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, TestCase):
+            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
+        return self.id == other.id
+
+    def __str__(self) -> str:
+        return self.spec.display_name()
+
+    def __repr__(self) -> str:
+        return self.spec.display_name()
 
     @property
     def id(self) -> str:
@@ -77,6 +114,10 @@ class TestCase:
                 matches = self.workspace.dir.rglob(artifact.pattern)
                 artifacts.extend([str(match.relative_to(self.workspace.dir)) for match in matches])
         return artifacts
+
+    @property
+    def upstreams(self) -> list["TestCase"]:
+        return [d.case for d in self.depends_on]
 
     @property
     def stdout(self) -> str:
@@ -125,37 +166,22 @@ class TestCase:
     def viewpath(self) -> str:
         return self.spec.viewpath
 
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, TestCase):
-            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
-        return self.id == other.id
-
-    def __str__(self) -> str:
-        return self.spec.display_name()
-
-    def __repr__(self) -> str:
-        return self.spec.display_name()
-
     def display_name(self, **kwargs) -> str:
         return self.spec.display_name(**kwargs)
 
-    def add_measurement(self, name: str, value: Any) -> None:
-        self.measurements.add_measurement(name, value)
-
     def set_status(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        self.status.set(state=state, category=category, status=status, reason=reason, code=code)
+        self.status.set(category=category, outcome=outcome, reason=reason, code=code)
 
     def add_variables(self, **kwds: str) -> None:
         self.variables.update(kwds)
 
-    def statline(self, style: str = "none") -> str:
+    def statline(self, style: Literal["none", "rich", "html"] = "none") -> str:
         status_name = self.status.display_name(style=style)
         name = self.display_name(style=style, resolve=True)
         return f"{status_name} {name}"
@@ -261,18 +287,48 @@ class TestCase:
             reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
         return reqd
 
-    @property
-    def status(self) -> Status:
-        if self._status.state == "PENDING":
-            if not self.dependencies:
-                self._status = Status.READY()
-            else:
-                self.set_dependency_based_status()
-        return self._status
+    def is_done(self) -> bool:
+        return self.state.is_done()
 
-    @status.setter
-    def status(self, arg: Status) -> None:
-        self._status = arg
+    def dropped(self) -> bool:
+        return self.status.is_skipped()
+
+    def is_runnable(self) -> bool:
+        """True if this case could still run in the future."""
+        if self.state.is_done():
+            return False
+        if self.status.is_skipped():
+            return False
+        # If any dependency finished in a way that violates criteria, this case will never run
+        if self.depends_on and any(d.is_done() and not d.is_satisfied() for d in self.depends_on):
+            return False
+        return True
+
+    def refresh_readiness(self) -> None:
+        if self.state.is_done() or not self.depends_on:
+            return
+        for dep in self.depends_on:
+            if not dep.is_done():
+                continue
+            if not dep.is_satisfied():
+                self.state.phase = JobPhase.DONE
+                self.status = Status.BLOCKED(
+                    f"Dependency {dep.case.name} finished with {dep.case.status.outcome.name!r}; "
+                    f"needed {dep.condition!r}"
+                )
+                return
+
+    def is_ready(self) -> bool:
+        if self.state.is_done() or self.state.is_running():
+            return False
+        self.refresh_readiness()
+        if not self.is_runnable():
+            return False
+        if not self.depends_on:
+            return True
+        all_satisfied = all(d.is_satisfied() for d in self.depends_on if d.is_done())
+        all_done = all(d.is_done() for d in self.depends_on)
+        return all_satisfied and all_done
 
     @property
     def lockfile(self) -> Path:
@@ -322,15 +378,17 @@ class TestCase:
             file.close()
 
     def run(self) -> None:
+        from .status import Outcome
+
         code: int
         xstatus = self.spec.xstatus
         try:
-            if self.status == "READY":
+            if self.is_runnable():
                 with self.workspace.openfile(self.stdout, "a") as fh:
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
                 with self.workspace.enter(), self.timekeeper.timeit():
-                    self.status = Status.RUNNING()
+                    self.state.phase = JobPhase.RUNNING
                     self.save()
                     code = self.launcher.run(case=self)
                     self.update_status_from_exit_code(code=code)
@@ -339,22 +397,22 @@ class TestCase:
         except SystemExit as e:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
-            stat = "XDIFF" if xstatus == Status.CODE_FOR_OUTCOME["DIFFED"] else "DIFFED"
+            stat = "XDIFF" if xstatus == Outcome.DIFFED.value else "DIFFED"
             default_reason = None
             if stat == "DIFFED":
                 default_reason = "Empty TestDiffed exception raised during execution"
-            self.status.set(status=stat, reason=default_reason if not e.args else e.args[0])
+            self.status.set(outcome=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
-            f_status = Status.CODE_FOR_OUTCOME["FAILED"]
+            f_status = Outcome.FAILED.value
             stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
             default_reason = None
             if stat == "FAILED":
                 default_reason = "Empty TestFailed exception raised during execution"
-            self.status.set(status=stat, reason=None if not e.args else e.args[0])
+            self.status.set(outcome=stat, reason=None if not e.args else e.args[0])
         except TestSkipped as e:
-            self.status.set(status="SKIPPED", reason=None if not e.args else e.args[0])
+            self.status.set(outcome="SKIPPED", reason=None if not e.args else e.args[0])
         except TestTimedOut as e:
-            self.status.set(status="TIMEOUT", reason=None if not e.args else e.args[0])
+            self.status.set(outcome="TIMEOUT", reason=None if not e.args else e.args[0])
         except BaseException as e:
             if config.get("debug"):
                 logger.exception("Exception during test case execution")
@@ -364,14 +422,16 @@ class TestCase:
             f = self.stderr or self.stdout
             with self.workspace.openfile(f, "a") as fp:
                 fp.write(reason)
-            self.status.set(status="ERROR", reason=reason)
+            self.status.set(outcome="ERROR", reason=reason)
         finally:
+            self.state.phase = JobPhase.DONE
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             self.save()
         return
 
     def getstate(self) -> dict[str, Any]:
         return {
+            "state": self.state,
             "status": self.status,
             "timekeeper": self.timekeeper,
             "measurements": self.measurements,
@@ -382,9 +442,8 @@ class TestCase:
         parent process"""
         if status := data.get("status"):
             self.status.set(
-                state=status.state,
                 category=status.category,
-                status=status.status,
+                outcome=status.outcome,
                 reason=status.reason,
                 code=status.code,
             )
@@ -394,6 +453,10 @@ class TestCase:
             self.timekeeper.finished = timekeeper.finished
         if measurements := data.get("measurements"):
             self.measurements.update(measurements.data)
+        if st := data.get("state"):
+            self.state.phase = st.phase
+        elif not self.status.has_category("NONE"):
+            self.state.phase = JobPhase.DONE
 
     def do_baseline(self) -> None:
         if not self.spec.baseline:
@@ -412,12 +475,14 @@ class TestCase:
                         copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
+        from .status import Outcome
+
         if isinstance(code, str):
             code = 1
         xcode = self.spec.xstatus
 
-        if xcode == Status.CODE_FOR_OUTCOME["DIFFED"]:
-            if code != Status.CODE_FOR_OUTCOME["DIFFED"]:
+        if xcode == Outcome.DIFFED.value:
+            if code != Outcome.DIFFED.value:
                 self.status = Status.FAILED(
                     reason=f"{self.spec.display_name()}: expected test to diff",
                     code=code,
@@ -426,7 +491,7 @@ class TestCase:
                 self.status = Status.XDIFF()
         elif xcode != 0:
             # Expected to fail
-            if xcode > 0 and code != code:
+            if xcode > 0 and code != xcode:
                 self.status = Status.FAILED(
                     f"{self.spec.display_name()}: expected to exit with code={code}",
                     code=code,
@@ -440,9 +505,9 @@ class TestCase:
                 self.status = Status.XFAIL()
         elif code == 0:
             self.status = Status.SUCCESS()
-        elif code == Status.CODE_FOR_OUTCOME["DIFFED"]:
+        elif code == Outcome.DIFFED.value:
             self.status = Status.DIFFED(reason=f"Test exited with diff exit code = {code}")
-        elif code == Status.CODE_FOR_OUTCOME["SKIPPED"]:
+        elif code == Outcome.SKIPPED.value:
             self.status = Status.SKIPPED(reason=f"Test exited with skip exit code = {code}")
         else:
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
@@ -455,12 +520,14 @@ class TestCase:
         status = data["status"]
         self.variables = data["variables"]
         self.status = Status(
-            state=status["state"],
             category=status["category"],
-            status=status["status"],
+            outcome=status["outcome"],
             reason=status["reason"],
             code=status["code"],
         )
+        if st := data.get("state"):
+            phase = st.get("phase", "PENDING")
+            self.state.phase = JobPhase(phase)
         tk = data["timekeeper"]
         self.timekeeper.submitted = tk["submitted"]
         self.timekeeper.started = tk["started"]
@@ -543,6 +610,7 @@ class TestCase:
 
     def asdict(self) -> dict[str, Any]:
         record: dict[str, Any] = {
+            "state": {"phase": self.state.phase.value},
             "status": self.status.asdict(),
             "spec": self.spec.asdict(),
             "timekeeper": self.timekeeper.asdict(),
@@ -563,6 +631,7 @@ class TestCase:
     def serialize(self) -> str:
         record: dict[str, Any] = {
             "id": self.spec.id,
+            "state": {"phase": self.state.phase.value},
             "status": self.status.asdict(),
             "timekeeper": self.timekeeper.asdict(),
             "measurements": self.measurements.asdict(),
@@ -573,38 +642,8 @@ class TestCase:
         }
         return json.dumps_min(record)
 
-    def set_dependency_based_status(self) -> None:
-        # Determine if dependent cases have completed and, if so, flip status to 'ready'
-        flags = self.dep_condition_flags()
-        if all(flag == "can_run" for flag in flags):
-            self.status = Status.READY()
-            return
-        for i, flag in enumerate(flags):
-            if flag == "wont_run":
-                # this case will never be able to run
-                dep = self.dependencies[i]
-                self.status = Status.BLOCKED(
-                    f"Dependency {dep.name} finished with status {dep.status.status!r}, "
-                    f"not {self.spec.dep_done_criteria[i]}",
-                )
-                break
-
-    def dep_condition_flags(self) -> list[str]:
-        # Determine if dependent cases have completed and, if so, flip status to 'can_run'
-        expected = self.spec.dep_done_criteria
-        flags: list[str] = ["none"] * len(self.dependencies)
-        for i, dep in enumerate(self.dependencies):
-            if dep.status.state in ("READY", "PENDING", "RUNNING"):
-                # Still pending on this case
-                flags[i] = "pending"
-            elif expected[i].upper() in (None, dep.status.category, dep.status.status, "*"):
-                flags[i] = "can_run"
-            else:
-                flags[i] = "wont_run"
-        return flags
-
     def read_output(self, compress: bool = False) -> str:
-        if self.status.category == "SKIP":
+        if self.status.is_skipped():
             return f"Test skipped.  Reason: {self.status.reason}"
         file = self.workspace.joinpath(self.stdout)
         if not file.exists():
@@ -618,7 +657,7 @@ class TestCase:
                 out.write(file.read_text(errors="ignore"))
         text = out.getvalue()
         if compress:
-            kb_to_keep = 2 if self.status.category == "PASS" else 300
+            kb_to_keep = 2 if self.status.is_success() else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
@@ -631,7 +670,7 @@ class TestCase:
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
-        if self.status.category != "PASS":
+        if not self.status.is_success():
             return
         if cache_dir := find_cache_dir(start=self.workspace.root):
             file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
@@ -657,7 +696,7 @@ class TestCase:
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration() >= 0 and self.status.category == "PASS":
+            if self.timekeeper.duration() >= 0 and self.status.is_success():
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})
@@ -699,31 +738,6 @@ def load_testcase_from_state(lock_data: dict) -> TestCase:
 
     workspace = Workspace.load()
     return workspace.find(case=lock_data["spec"]["id"])
-
-
-@dataclasses.dataclass
-class Measurements:
-    data: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def add_measurement(self, name: str, value: Any) -> None:
-        self.data[name] = value
-
-    def update(self, measurements: dict) -> None:
-        self.data.update(measurements)
-
-    def reset(self) -> None:
-        self.data.clear()
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
-        return cls(data=data)
-
-    def asdict(self) -> dict[str, Any]:
-        return self.data
-
-    def items(self) -> Generator[tuple[str, Any], None, None]:
-        for item in self.data.items():
-            yield item
 
 
 def find_cache_dir(start: Path) -> Path | None:

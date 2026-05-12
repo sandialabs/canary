@@ -110,8 +110,8 @@ class MergeRequest:
 def group_failed_tests(cases: list["canary.TestCase"]):
     failed: dict[str, list["canary.TestCase"]] = {}
     for case in cases:
-        if case.status.category != "PASS":
-            failed.setdefault(case.status.status, []).append(case)
+        if not case.status.is_success():
+            failed.setdefault(case.status.outcome.name, []).append(case)
     return failed
 
 

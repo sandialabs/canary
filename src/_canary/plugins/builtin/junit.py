@@ -125,10 +125,10 @@ class JunitDocument(xdom.Document):
         testcase.setAttribute("classname", get_classname(case))
         testcase.setAttribute("time", str(case.timekeeper.duration()))
         testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
-        if case.status.category == "FAIL":
+        if case.status.has_category("FAIL"):
             failure = self.create_element("failure")
-            failure.setAttribute("message", f"Test case status: {case.status.status}")
-            failure.setAttribute("type", case.status.status)
+            failure.setAttribute("message", f"Test case status: {case.status.outcome.name}")
+            failure.setAttribute("type", case.status.outcome.name)
             testcase.appendChild(failure)
             text = self.create_cdata_node(case.read_output())
             system_out = self.create_element("system-out")
@@ -140,9 +140,9 @@ class JunitDocument(xdom.Document):
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
                     failure.appendChild(text)
-        elif case.status.category != "COMPLETE":
+        elif case.status.has_category("SKIP"):
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", case.status.status)
+            skipped.setAttribute("message", case.status.outcome.name)
             testcase.appendChild(skipped)
         return testcase
 
@@ -153,13 +153,13 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     finished_on: datetime | None = None
     for case in cases:
         stats.num_tests += 1
-        if case.status.category == "FAIL":
+        if case.status.has_category("FAIL"):
             stats.num_failed += 1
-        elif case.status.category == "SKIP":
+        elif case.status.has_category("SKIP"):
             stats.num_skipped += 1
-        elif case.status.state in ("PENDING", "READY", "RUNNING"):
+        elif not case.state.is_done():
             stats.num_error += 1
-        if case.status.state == "COMPLETE":
+        if case.state.is_done():
             t = case.timekeeper.started
             if started_on is None:
                 if t > 0:

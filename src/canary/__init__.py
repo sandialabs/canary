@@ -10,6 +10,7 @@ import schema
 
 import _canary.config as config
 import _canary.enums as enums
+import _canary.status as status
 from _canary import version as _v
 from _canary.collect import Collector
 from _canary.config.argparsing import Parser
@@ -25,13 +26,13 @@ from _canary.generator import AbstractTestGenerator
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
+from _canary.job import BaseJob
 from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
-from _canary.protocols import JobProtocol
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule
@@ -75,6 +76,7 @@ __all__ = [
     "Generator",
     "Collector",
     "config",
+    "status",
     "enums",
     "Parser",
     "Config",
@@ -98,7 +100,7 @@ __all__ = [
     "CanaryPluginManager",
     "CanaryReporter",
     "CanarySubcommand",
-    "JobProtocol",
+    "BaseJob",
     "TestCase",
     "Launcher",
     "logging",
