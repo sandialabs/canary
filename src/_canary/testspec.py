@@ -527,7 +527,7 @@ class _GlobalSpecCache:
             pass
 
         key = path.absolute()
-        h = hashlib.blake2b(digest_size=16)
+        h = hashlib.blake2b(digest_size=16, usedforsecurity=False)
         h.update(key.read_bytes())
         root = cls._compute_repo_root(key)
         rel = key.relative_to(root)
@@ -551,7 +551,7 @@ class _GlobalSpecCache:
 
 def build_spec_id(spec: BaseSpec) -> str:
     # Hasher is used to build ID
-    hasher = hashlib.blake2b()
+    hasher = hashlib.blake2b(usedforsecurity=False)
     hasher.update(spec.name.encode())
     parameters = spec.parameters | spec.meta_parameters
     if parameters:

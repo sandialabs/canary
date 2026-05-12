@@ -480,7 +480,7 @@ def checksum(hashlib_algo, filename, **kwargs):
     algorithm from hashlib.
     """
     block_size = kwargs.get("block_size", 2**20)
-    hasher = hashlib_algo()
+    hasher = hashlib_algo(usedforsecurity=False)
     with open(filename, "rb") as file:
         while True:
             data = file.read(block_size)

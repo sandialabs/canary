@@ -6,5 +6,5 @@ import hashlib
 
 
 def hashit(string: str, length: int = 15) -> str:
-    obj = hashlib.md5(string.encode("utf-8"))
+    obj = hashlib.md5(string.encode("utf-8"), usedforsecurity=False)
     return obj.hexdigest()[:length]

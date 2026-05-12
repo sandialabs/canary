@@ -205,7 +205,7 @@ class Selector:
     @staticmethod
     def spec_set_id(specs: list["ResolvedSpec"]) -> str:
         json_str = json.dumps_min(sorted([spec.id for spec in specs]))
-        return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
+        return hashlib.sha256(json_str.encode("utf-8"), usedforsecurity=False).hexdigest()
 
     def snapshot(self) -> SelectorSnapshot:
         spec_set_id = self.spec_set_id(self.specs)

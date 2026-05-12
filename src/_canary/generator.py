@@ -100,12 +100,12 @@ class AbstractTestGenerator(ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
-        sha = hashlib.sha256()
+        sha = hashlib.sha256(usedforsecurity=False)
         with open(self.file, "rb") as fh:
             data = fh.read()
             sha.update(data)
         self.sha256: str = sha.hexdigest()
-        self.id: str = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
+        self.id: str = hashlib.sha256(self.file.encode("utf-8"), usedforsecurity=False).hexdigest()[:20]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"
