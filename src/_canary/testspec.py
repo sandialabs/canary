@@ -527,7 +527,7 @@ class _GlobalSpecCache:
             pass
 
         key = path.absolute()
-        h = hashlib.blake2b(digest_size=16, usedforsecurity=False)
+        h = hashlib.blake2b(usedforsecurity=False)
         h.update(key.read_bytes())
         root = cls._compute_repo_root(key)
         rel = key.relative_to(root)
