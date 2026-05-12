@@ -159,14 +159,14 @@ def test_cpu_count(tmpdir):
         generators = collect.find_generators_in_path(workdir)
         resolved = generate_specs(generators)
         specs = select_specs(resolved)
-        cases = []
+        cases: list[canary.TestCase] = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
             case = testcase.TestCase(spec=spec, workspace=space)
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4
-        assert len([case for case in cases if case.status.state == "READY"]) == 4
+        assert len([case for case in cases if case.is_ready()]) == 4
         canary.config.pluginmanager.unregister(name="myhook")
 
     with canary.config.override():

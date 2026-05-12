@@ -111,7 +111,7 @@ def group_failed_tests(cases: list["canary.TestCase"]):
     failed: dict[str, list["canary.TestCase"]] = {}
     for case in cases:
         if case.status.category != "PASS":
-            failed.setdefault(case.status.status, []).append(case)
+            failed.setdefault(case.status.outcome, []).append(case)
     return failed
 
 

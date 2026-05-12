@@ -11,22 +11,18 @@ if TYPE_CHECKING:
 
 
 class StatusProtocol(Protocol):
-    state: str
     category: str
-    status: str
+    outcome: str
     reason: str | None
     code: int
     color: str
 
     def set(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int | None = None,
     ) -> None: ...
 
     def display_name(self, **kwargs: Any) -> str: ...
-
-    def is_terminal(self) -> bool: ...

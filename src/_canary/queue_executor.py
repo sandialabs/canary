@@ -90,7 +90,7 @@ class JobFunctor:
             executor(job, queue=result_queue, **kwargs)
         except BaseException as e:
             logger.exception(f"Job {job}: exception occurred during execution of job functor")
-            job.set_status(status="ERROR", reason=repr(e))
+            job.set_status(outcome="ERROR", reason=repr(e))
             sys.exit(1)
         else:
             logger.debug(f"Job {job}: job functor exited normally")
@@ -579,12 +579,14 @@ class ResourceQueueExecutor:
 
         if event := payload.get("event"):
             if event == "job_submitted":
+                slot.job.on_submitted()
                 slot.job.timekeeper.submitted = slot.submitted = float(payload["timestamp"])
                 self.notify_listeners(event, slot)
                 return
 
             if event == "job_started":
                 slot.job.timekeeper.started = slot.started = float(payload["timestamp"])
+                slot.job.on_started()
                 self.running[job_id] = slot
                 self.submitted.pop(job_id, None)
                 self.notify_listeners(event, slot)
@@ -608,12 +610,13 @@ class ResourceQueueExecutor:
                     slot.job.refresh()
                 except Exception:
                     logger.exception(f"Post-processing failed for job {slot.job}")
-                    slot.job.set_status(status="ERROR", reason="Post-processing failure")
+                    slot.job.set_status(outcome="ERROR", reason="Post-processing failure")
                     try:
                         slot.job.save()
                     except Exception as e:
                         logger.debug("job.save failed: %s", e)
                 finally:
+                    slot.job.on_finished()
                     self.finished[job_id] = slot
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
@@ -636,7 +639,8 @@ class ResourceQueueExecutor:
                     slot.job.refresh()
                 except Exception as e:
                     logger.debug("job.refresh failed during job_timeout: %s", e)
-                slot.job.set_status(status="TIMEOUT", reason=reason)
+                slot.job.on_finished()
+                slot.job.set_status(outcome="TIMEOUT", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
                 slot.job.timekeeper.finished = slot.finished
@@ -664,7 +668,9 @@ class ResourceQueueExecutor:
                         reason += f" (signal {-exitcode})"
                     else:
                         reason += f" (exitcode {exitcode})"
-                slot.job.set_status(status="ERROR", reason=reason)
+
+                slot.job.on_finished()
+                slot.job.set_status(outcome="ERROR", reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.started = slot.started
                 slot.job.timekeeper.finished = slot.finished
@@ -767,7 +773,7 @@ class ResourceQueueExecutor:
             missing = inflight_ids - busy_ids
             logger.critical(f"Busy/inflight mismatch leaked={leaked}, missing={missing}")
             raise StuckQueueError("Busy/inflight mismatch")
-        terminal_busy = {job.id for job in self.queue._busy.values() if job.status.is_terminal()}
+        terminal_busy = {job.id for job in self.queue._busy.values() if job.state.is_done()}
         if terminal_busy:
             logger.critical(f"Terminal jobs still marked busy: {','.join(terminal_busy)}")
             raise StuckQueueError(f"Terminal jobs still busy: {terminal_busy}")
@@ -798,7 +804,7 @@ class ResourceQueueExecutor:
             except Exception as e:
                 logger.debug("job.refresh failed: %s", e)
             try:
-                slot.job.set_status(status=stat, reason=reason)
+                slot.job.set_status(outcome=stat, reason=reason)
                 slot.job.timekeeper.submitted = slot.submitted
                 slot.job.timekeeper.finished = time.time()
                 slot.finished = time.time()
@@ -866,7 +872,7 @@ class Reporter:
         table = Table(expand=False, box=box.SQUARE)
         self.add_table_columns(table, self.final_columns)
         for case in cases:
-            if case.status.category == "PASS":
+            if case.status.has_category("PASS"):
                 continue
             self.add_table_row(
                 table,

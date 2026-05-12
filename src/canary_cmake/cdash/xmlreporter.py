@@ -264,7 +264,7 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
-            if case.status.state != "COMPLETE":
+            if not case.state.is_done() != "COMPLETE":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
@@ -276,14 +276,14 @@ class CDashXMLReporter:
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status.status == "TIMEOUT":
+            elif case.status.outcome == "TIMEOUT":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
             elif case.status.category == "FAIL":
                 status = "failed"
-                exit_code = case.status.status.title()
+                exit_code = case.status.outcome.title()
                 completion_status = "Completed"
-                fail_reason = case.status.reason or f"Test {case.status.status.lower()}"
+                fail_reason = case.status.reason or f"Test {case.status.outcome.lower()}"
             elif case.status.category == "CANCEL":
                 status = "failed"
                 exit_code = "Cancelled"

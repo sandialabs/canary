@@ -13,12 +13,12 @@ from rich.console import Console
 from rich.table import Table
 
 from ...hookspec import hookimpl
+from ...job import JobState
 from ...status import Status as _Status
 from ...util import glyphs
 from ...util import logging
 from ...workspace import Workspace
 from ..types import CanarySubcommand
-from ...job import JobState
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -157,7 +157,7 @@ def sortkey(row: dict) -> tuple:
         c = 0
     if row["status"].category == "FAIL":
         c = 2
-    return (c, row["status"].status, row["timekeeper"].duration())
+    return (c, row["status"].outcome, row["timekeeper"].duration())
 
 
 def get_attribute(row: dict[str, Any], attr: str) -> str:
@@ -230,20 +230,20 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
         status: _Status = row["status"]
         state: JobState = row["state"]
         if "a" in chars:
-            keep[i] = status.category != "PASS"
-        elif status.category == "SKIP":
+            keep[i] = not status.has_category("PASS")
+        elif status.has_category("SKIP"):
             keep[i] = "s" in chars
-        elif status.category == "PASS":
+        elif status.has_category("PASS"):
             keep[i] = "p" in chars
-        elif status.status in ("FAILED", "ERROR", "BROKEN"):
+        elif status.outcome_in(("FAILED", "ERROR", "BROKEN")):
             keep[i] = "f" in chars
-        elif status.status == "DIFFED":
+        elif status.has_outcome("DIFFED"):
             keep[i] = "d" in chars
-        elif status.status == "TIMEOUT":
+        elif status.has_outcome("TIMEOUT"):
             keep[i] = "t" in chars
         elif not state.is_done():
             keep[i] = "n" in chars
-        elif status.category == "CANCEL":
+        elif status.has_category("CANCEL"):
             keep[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {status}")

@@ -136,7 +136,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
     else:
         totals: dict[tuple[str, str], list["TestCase"]] = {}
         for case in runner.cases:
-            key = (case.status.category, case.status.status)
+            key = (case.status.category, case.status.outcome)
             totals.setdefault(key, []).append(case)
         for key in totals:
             if not include_pass and key[0] == "PASS":
@@ -178,7 +178,7 @@ def print_footer(runner: "Runner", title: str) -> None:
     duration = runner.finish - runner.start
     totals: dict[tuple[str, str], list["TestCase"]] = {}
     for case in runner.cases:
-        status = "" if case.status.category == "PASS" else case.status.status
+        status = "" if case.status.has_category("PASS") else case.status.outcome
         key = (case.status.category, status)
         totals.setdefault(key, []).append(case)
     N = len(runner.cases)

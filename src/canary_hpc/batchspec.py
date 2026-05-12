@@ -18,6 +18,7 @@ import hpc_connect
 
 import canary
 from _canary.job import BaseJob
+from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.status import Status
 from _canary.testcase import Measurements
@@ -84,14 +85,11 @@ class TestBatch(BaseJob):
         self.runtime: float = self.find_approximate_runtime()
         self.state = JobState()
         self._status: BatchStatus = BatchStatus(self.cases)
-        if not dependencies:
-            self._status.set_base(state="READY")
         self._resources: dict[str, list[dict]] = {}
-
+        self._exclusive = False
         self.jobid: str | None = None
         self.id = self.spec.id
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
-        self.exclusive = False
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
         self.dependencies: list["TestBatch"] = dependencies or []
@@ -116,6 +114,10 @@ class TestBatch(BaseJob):
         else:
             case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
         return f"TestBatch({case_repr})"
+
+    @property
+    def exclusive(self) -> bool:
+        return self._exclusive
 
     def display_name(self, **kwargs: Any) -> str:
         name = str(self)
@@ -233,7 +235,7 @@ class TestBatch(BaseJob):
         return all(d.jobid is not None for d in self.dependencies)
 
     def dependency_batches_complete(self) -> bool:
-        return all(all(c.status.is_terminal() for c in d.cases) for d in self.dependencies)
+        return all(all(c.state.is_done() for c in d.cases) for d in self.dependencies)
 
     def refresh_readiness(self) -> None:
         # If we're already done/running, nothing to do.
@@ -300,15 +302,11 @@ class TestBatch(BaseJob):
             if rc is None:
                 rc = 1
             self.refresh()
-            if all(case.status.category == "PASS" for case in self):
-                self.status.set_base(state="COMPLETE", category="PASS", status="SUCCESS")
+            self.state.phase = JobPhase.DONE
+            if all(case.status.has_outcome("SUCCESS") for case in self):
+                self.status.set_base(outcome="SUCCESS")
             else:
-                self.status.set_base(
-                    state="COMPLETE",
-                    category="FAIL",
-                    status="FAILED",
-                    reason="One or more test cases did not pass",
-                )
+                self.status.set_base(outcome="FAILED", reason="One or more test cases did not pass")
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
@@ -317,14 +315,20 @@ class TestBatch(BaseJob):
 
     def getstate(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
-        data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
+        data[self.id] = {
+            "status": self.status.base_status,
+            "timekeeper": self.timekeeper,
+            "state": self.state,
+        }
         for case in self.cases:
             if case.state.is_pending():
                 case.status = Status.BROKEN(reason=f"{case.state=} after execution of batch")
             elif case.state.is_running():
                 case.status = Status.CANCELLED(reason=f"{case.state=} after execution of batch")
             data[case.id] = {
-                "status": case.status, "timekeeper": case.timekeeper, "state": case.state
+                "status": case.status,
+                "timekeeper": case.timekeeper,
+                "state": case.state,
             }
         return data
 
@@ -338,12 +342,13 @@ class TestBatch(BaseJob):
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
                 self.status.base_status.set(
-                    state=stat.state,
                     category=stat.category,
-                    status=stat.status,
+                    outcome=stat.outcome,
                     reason=stat.reason,
                     code=stat.code,
                 )
+            if st := mydata.get("state"):
+                self.state.phase = st.phase
             if timekeeper := mydata.get("timekeeper"):
                 self.timekeeper.submitted = timekeeper.submitted
                 self.timekeeper.started = timekeeper.started
@@ -430,13 +435,10 @@ class TestBatch(BaseJob):
 
     def set_status(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
         # apply to the batch’s base status
-        self.status.set_base(
-            state=state, category=category, status=status, reason=reason, code=code
-        )
+        self.status.set_base(category=category, outcome=outcome, reason=reason, code=code)

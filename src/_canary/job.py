@@ -10,12 +10,13 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 if TYPE_CHECKING:
-    from .protocols import StatusProtocol
+    from .status import Status
     from .timekeeper import Timekeeper
 
 
 class JobPhase(str, Enum):
     PENDING = "PENDING"
+    SUBMITTED = "SUBMITTED"
     RUNNING = "RUNNING"
     DONE = "DONE"
 
@@ -27,6 +28,9 @@ class JobState:
     def is_pending(self) -> bool:
         return self.phase is JobPhase.PENDING
 
+    def is_submitted(self) -> bool:
+        return self.phase is JobPhase.SUBMITTED
+
     def is_running(self) -> bool:
         return self.phase is JobPhase.RUNNING
 
@@ -37,14 +41,20 @@ class JobState:
 class BaseJob(ABC):
     # ---- required data attributes (enforced by convention) ----
     id: str
-    exclusive: bool
-    status: "StatusProtocol"
     state: JobState
     timekeeper: "Timekeeper"
 
     # ---- scheduler sizing/resources ----
     @abstractmethod
     def cost(self) -> float: ...
+
+    @property
+    def exclusive(self) -> bool:
+        return False
+
+    @property
+    @abstractmethod
+    def status(self) -> "Status": ...
 
     @abstractmethod
     def required_resources(self) -> list[dict[str, Any]]: ...
@@ -74,7 +84,10 @@ class BaseJob(ABC):
             raise ValueError(f"not enqueuable: phase={self.state.phase}")
 
     # ---- lifecycle hooks (called by queue) ----
-    def on_scheduled(self) -> None:
+    def on_submitted(self) -> None:
+        self.state.phase = JobPhase.SUBMITTED
+
+    def on_started(self) -> None:
         self.state.phase = JobPhase.RUNNING
 
     def on_finished(self) -> None:
@@ -92,13 +105,12 @@ class BaseJob(ABC):
 
     def set_status(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        self.status.set(state=state, category=category, status=status, reason=reason, code=code)
+        self.status.set(category=category, outcome=outcome, reason=reason, code=code)
 
     # ---- presentation ----
     @abstractmethod

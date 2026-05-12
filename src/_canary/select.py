@@ -76,7 +76,6 @@ from .hookspec import hookimpl
 from .job import JobPhase
 from .rules import Rule
 from .rules import RuntimeRule
-from .status import Status
 from .testspec import Mask
 from .util import json_helper as json
 from .util import logging

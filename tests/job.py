@@ -4,11 +4,15 @@
 
 import pytest
 
-from _canary.job import BaseJob, JobPhase, JobState
+from _canary.job import BaseJob
+from _canary.job import JobPhase
+from _canary.job import JobState
+from _canary.status import Status
 
 
 def test_jobphase_values() -> None:
     assert JobPhase.PENDING.value == "PENDING"
+    assert JobPhase.SUBMITTED.value == "SUBMITTED"
     assert JobPhase.RUNNING.value == "RUNNING"
     assert JobPhase.DONE.value == "DONE"
 
@@ -41,10 +45,10 @@ def test_basejob_is_abstract() -> None:
 
 
 def test_basejob_default_phase_transitions() -> None:
+
     class DummyJob(BaseJob):
         # Satisfy BaseJob abstract interface as loosely as possible for this test.
         id = "dummy"
-        exclusive = False
 
         def __init__(self) -> None:
             self.state = JobState()
@@ -52,11 +56,15 @@ def test_basejob_default_phase_transitions() -> None:
         def cost(self) -> float:
             return 1.0
 
+        @property
+        def status(self) -> "Status":
+            raise NotImplementedError
+
         def required_resources(self):
             return [{"type": "cpus", "slots": 1}]
 
-        def assign_resources(self, resources):
-            self._resources = resources
+        def assign_resources(self, arg):
+            self._resources = arg
 
         def free_resources(self):
             return getattr(self, "_resources", {})
@@ -85,7 +93,7 @@ def test_basejob_default_phase_transitions() -> None:
     job = DummyJob()
     assert job.state.phase is JobPhase.PENDING
 
-    job.on_scheduled()
+    job.on_started()
     assert job.state.phase is JobPhase.RUNNING
 
     job.on_finished()
@@ -95,7 +103,6 @@ def test_basejob_default_phase_transitions() -> None:
 def test_basejob_validate_enqueuable_rejects_running_or_done() -> None:
     class DummyJob(BaseJob):
         id = "dummy"
-        exclusive = False
 
         def __init__(self, phase: JobPhase) -> None:
             self.state = JobState(phase=phase)
@@ -103,11 +110,15 @@ def test_basejob_validate_enqueuable_rejects_running_or_done() -> None:
         def cost(self) -> float:
             return 1.0
 
+        @property
+        def status(self) -> "Status":
+            raise NotImplementedError
+
         def required_resources(self):
             return [{"type": "cpus", "slots": 1}]
 
-        def assign_resources(self, resources):
-            self._resources = resources
+        def assign_resources(self, arg):
+            self._resources = arg
 
         def free_resources(self):
             return getattr(self, "_resources", {})

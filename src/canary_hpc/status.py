@@ -12,26 +12,19 @@ from _canary.status import Status
 class BatchStatus:
     def __init__(self, children: list[canary.TestCase]) -> None:
         self._children: list[canary.TestCase] = list(children)
-        self.base_status: Status = Status.PENDING()
-
-    @property
-    def state(self) -> str:
-        return self.base_status.state
+        self.base_status: Status = Status()
 
     @property
     def category(self) -> str:
         return self.base_status.category
 
     @property
-    def status(self) -> str:
-        return self.base_status.status
+    def outcome(self) -> str:
+        return self.base_status.outcome
 
     @property
     def reason(self) -> str | None:
         return self.base_status.reason
-
-    def is_terminal(self) -> bool:
-        return self.base_status.is_terminal()
 
     def display_name(self, **kwargs: Any) -> str:
         def sortkey(x):
@@ -47,7 +40,7 @@ class BatchStatus:
             if cat == "PASS":
                 counts[(cat, "PASS")] += 1
             else:
-                counts[(cat, child.status.status)] += 1
+                counts[(cat, child.status.outcome)] += 1
 
         # Derive the batch category for display (don’t trust base_status.category)
         derived_cat: str = "NONE"
@@ -81,37 +74,29 @@ class BatchStatus:
 
     def set(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        self.base_status.set(
-            state=state, category=category, status=status, reason=reason, code=code
-        )
+        self.base_status.set(category=category, outcome=outcome, reason=reason, code=code)
         for child in self._children:
-            if child.status.state in ("READY", "PENDING"):
-                s = child.status.state
-                child.status = Status.BROKEN(reason=f"{child}: unexpected status {s}")
-            elif child.status.state == "RUNNING":
+            if not child.state.is_done():
+                s = child.state
+                child.status = Status.BROKEN(reason=f"{child}: unexpected state {s=}")
+            elif child.state.is_running():
                 child.timekeeper.stop()
                 child.status = Status.CANCELLED()
-            elif child.status.state not in ("COMPLETE", "NOTRUN"):
-                child.status.set(
-                    state=state, category=category, status=status, reason=reason, code=code
-                )
+            elif child.state.is_done():
+                child.status.set(category=category, outcome=outcome, reason=reason, code=code)
 
     def set_base(
         self,
         *,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
         """Internal: update only the batch aggregate status."""
-        self.base_status.set(
-            state=state, category=category, status=status, reason=reason, code=code
-        )
+        self.base_status.set(category=category, outcome=outcome, reason=reason, code=code)

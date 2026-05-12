@@ -148,13 +148,12 @@ class TestCase(BaseJob):
 
     def set_status(
         self,
-        state: str | None = None,
         category: str | None = None,
-        status: str | None = None,
+        outcome: str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        self.status.set(state=state, category=category, status=status, reason=reason, code=code)
+        self.status.set(category=category, outcome=outcome, reason=reason, code=code)
 
     def add_variables(self, **kwds: str) -> None:
         self.variables.update(kwds)
@@ -277,13 +276,13 @@ class TestCase(BaseJob):
         return self.state.is_done()
 
     def dropped(self) -> bool:
-        return self.status.category == "SKIP"
+        return self.status.has_category("SKIP")
 
     def is_runnable(self) -> bool:
         """True if this case could still run in the future."""
         if self.state.is_done():
             return False
-        if self.status.category == "SKIP":
+        if self.status.has_category("SKIP"):
             return False
         # If any dependency finished in a way that violates criteria, this case will never run
         if self.dependencies:
@@ -304,7 +303,7 @@ class TestCase(BaseJob):
                 dep = self.dependencies[i]
                 self.state.phase = JobPhase.DONE
                 self.status = Status.BLOCKED(
-                    f"Dependency {dep.name} finished with status {dep.status.status!r}, "
+                    f"Dependency {dep.name} finished with status {dep.status.outcome!r}, "
                     f"not {self.spec.dep_done_criteria[i]}"
                 )
                 return
@@ -376,8 +375,7 @@ class TestCase(BaseJob):
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
                 with self.workspace.enter(), self.timekeeper.timeit():
-                    if self.state.is_pending():
-                        self.status = Status.RUNNING()
+                    self.state.phase = JobPhase.RUNNING
                     self.save()
                     code = self.launcher.run(case=self)
                     self.update_status_from_exit_code(code=code)
@@ -390,18 +388,18 @@ class TestCase(BaseJob):
             default_reason = None
             if stat == "DIFFED":
                 default_reason = "Empty TestDiffed exception raised during execution"
-            self.status.set(status=stat, reason=default_reason if not e.args else e.args[0])
+            self.status.set(outcome=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
             f_status = Status.CODE_FOR_OUTCOME["FAILED"]
             stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
             default_reason = None
             if stat == "FAILED":
                 default_reason = "Empty TestFailed exception raised during execution"
-            self.status.set(status=stat, reason=None if not e.args else e.args[0])
+            self.status.set(outcome=stat, reason=None if not e.args else e.args[0])
         except TestSkipped as e:
-            self.status.set(status="SKIPPED", reason=None if not e.args else e.args[0])
+            self.status.set(outcome="SKIPPED", reason=None if not e.args else e.args[0])
         except TestTimedOut as e:
-            self.status.set(status="TIMEOUT", reason=None if not e.args else e.args[0])
+            self.status.set(outcome="TIMEOUT", reason=None if not e.args else e.args[0])
         except BaseException as e:
             if config.get("debug"):
                 logger.exception("Exception during test case execution")
@@ -411,8 +409,9 @@ class TestCase(BaseJob):
             f = self.stderr or self.stdout
             with self.workspace.openfile(f, "a") as fp:
                 fp.write(reason)
-            self.status.set(status="ERROR", reason=reason)
+            self.status.set(outcome="ERROR", reason=reason)
         finally:
+            self.state.phase = JobPhase.DONE
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             self.save()
         return
@@ -430,9 +429,8 @@ class TestCase(BaseJob):
         parent process"""
         if status := data.get("status"):
             self.status.set(
-                state=status.state,
                 category=status.category,
-                status=status.status,
+                outcome=status.outcome,
                 reason=status.reason,
                 code=status.code,
             )
@@ -444,7 +442,7 @@ class TestCase(BaseJob):
             self.measurements.update(measurements.data)
         if st := data.get("state"):
             self.state.phase = st.phase
-        elif self.status.is_terminal():
+        elif not self.status.has_category("NONE"):
             self.state.phase = JobPhase.DONE
 
     def do_baseline(self) -> None:
@@ -507,9 +505,8 @@ class TestCase(BaseJob):
         status = data["status"]
         self.variables = data["variables"]
         self.status = Status(
-            state=status["state"],
             category=status["category"],
-            status=status["status"],
+            outcome=status["outcome"],
             reason=status["reason"],
             code=status["code"],
         )
@@ -630,22 +627,6 @@ class TestCase(BaseJob):
         }
         return json.dumps_min(record)
 
-    def set_dependency_based_status(self) -> None:
-        # Determine if dependent cases have completed and, if so, flip status to 'ready'
-        flags = self.dep_condition_flags()
-        if all(flag == "can_run" for flag in flags):
-            self.status = Status.READY()
-            return
-        for i, flag in enumerate(flags):
-            if flag == "wont_run":
-                # this case will never be able to run
-                dep = self.dependencies[i]
-                self.status = Status.BLOCKED(
-                    f"Dependency {dep.name} finished with status {dep.status.status!r}, "
-                    f"not {self.spec.dep_done_criteria[i]}",
-                )
-                break
-
     def dep_condition_flags(self) -> list[str]:
         # Determine if dependent cases have completed and, if so, flip status to 'can_run'
         expected = self.spec.dep_done_criteria
@@ -654,14 +635,14 @@ class TestCase(BaseJob):
             if not dep.is_done():
                 # Still pending on this case
                 flags[i] = "pending"
-            elif expected[i].upper() in (None, dep.status.category, dep.status.status, "*"):
+            elif expected[i].upper() in (None, dep.status.category, dep.status.outcome, "*"):
                 flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
         return flags
 
     def read_output(self, compress: bool = False) -> str:
-        if self.status.category == "SKIP":
+        if self.status.has_category("SKIP"):
             return f"Test skipped.  Reason: {self.status.reason}"
         file = self.workspace.joinpath(self.stdout)
         if not file.exists():
@@ -675,7 +656,7 @@ class TestCase(BaseJob):
                 out.write(file.read_text(errors="ignore"))
         text = out.getvalue()
         if compress:
-            kb_to_keep = 2 if self.status.category == "PASS" else 300
+            kb_to_keep = 2 if self.status.has_category("PASS") else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
@@ -688,7 +669,7 @@ class TestCase(BaseJob):
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
-        if self.status.category != "PASS":
+        if not self.status.has_category("PASS"):
             return
         if cache_dir := find_cache_dir(start=self.workspace.root):
             file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
@@ -714,7 +695,7 @@ class TestCase(BaseJob):
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration() >= 0 and self.status.category == "PASS":
+            if self.timekeeper.duration() >= 0 and self.status.has_category("PASS"):
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})

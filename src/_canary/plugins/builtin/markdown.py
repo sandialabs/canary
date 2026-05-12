@@ -65,7 +65,7 @@ class MarkdownReporter(CanaryReporter):
 
     def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
         info: dict[str, str] = {
-            "**Status**": case.status.status,
+            "**Status**": case.status.outcome,
             "**Exit code**": str(case.status.code),
             "**ID**": str(case.id),
             "**Location**": str(case.workspace.dir),
@@ -84,7 +84,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            group = case.status.status.title()
+            group = case.status.outcome.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {os.uname().nodename} ")
         fh.write(f"| {config.get('cmake:project')} ")
@@ -105,7 +105,7 @@ class MarkdownReporter(CanaryReporter):
             self.generate_all_tests_index(totals, fp)
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        key = cases[0].status.status
+        key = cases[0].status.outcome
         fh.write(f"# {key} Summary\n\n")
         fh.write("| Test | ID | Duration | Status |\n")
         fh.write("| --- | --- | --- | --- |\n")
@@ -115,8 +115,8 @@ class MarkdownReporter(CanaryReporter):
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name()}](./{os.path.basename(file)})"
             duration = f"{case.timekeeper.duration():.2f}"
-            status = case.status.status
-            fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
+            outcome = case.status.outcome
+            fh.write(f"| {link} | {case.id} | {duration} | {outcome} |\n")
 
     def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
         fh.write("# Test Results\n")
@@ -129,6 +129,6 @@ class MarkdownReporter(CanaryReporter):
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name()}](./{os.path.basename(file)})"
                 duration = f"{case.timekeeper.duration():.2f}"
-                status = case.status.status
-                fh.write(f"| {link} | {duration} | {status} |\n")
+                outcome = case.status.outcome
+                fh.write(f"| {link} | {duration} | {outcome} |\n")
         fh.write("\n")

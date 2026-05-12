@@ -19,7 +19,7 @@ class ResourceQueue(queue.ResourceQueue):
     def put(self, *jobs: BaseJob) -> None:
         for job in jobs:
             if not job.is_runnable():
-                raise ValueError(f"Job {job} is not runnable ({job.status.state=})")
+                raise ValueError(f"Job {job} is not runnable ({job.state=})")
         with self.lock:
             for batch in jobs:
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
@@ -45,8 +45,8 @@ class ResourceQueue(queue.ResourceQueue):
             totals: Counter[tuple[str, str]] = Counter()
             for batch in self._finished.values():
                 for case in batch:
-                    if case.status.is_terminal():
-                        key = (case.status.category, case.status.status)
+                    if case.state.is_done():
+                        key = (case.status.category, case.status.outcome)
                         totals[key] += 1
             row: list[str] = []
             if busy:

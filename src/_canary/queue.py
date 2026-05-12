@@ -124,7 +124,6 @@ class ResourceQueue:
                     continue
 
                 job.assign_resources(acquired)
-                job.on_scheduled()
                 self._busy[job.id] = job
                 if job.exclusive:
                     logger.debug(f"Exclusive job {job.id[:7]} started, exclusive lock obtained")
@@ -152,7 +151,7 @@ class ResourceQueue:
     def clear(self, status: str = "CANCELLED") -> None:
         while self._heap:
             slot = self._heap.pop()
-            slot.job.set_status(status=status)
+            slot.job.set_status(outcome=status)
 
     def done(self, job: BaseJob) -> None:
         try:
@@ -166,7 +165,6 @@ class ResourceQueue:
                     self.exclusive_job_id = None
                     logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
                 self.rpool.checkin(job.free_resources())
-                job.on_finished()
                 logger.debug(f"Job {job.id[:7]} marked done")
         except Exception:
             logger.exception(f"Failed to mark {job.id[:7]} as done")
@@ -193,8 +191,8 @@ class ResourceQueue:
             total = done + busy + pending
             totals: Counter[tuple[str, str]] = Counter()
             for job in self._finished.values():
-                if job.status.is_terminal():
-                    key = (job.status.category, job.status.status)
+                if job.state.is_done():
+                    key = (job.status.category, job.status.outcome)
                     totals[key] += 1
             row: list[str] = []
             if pending:

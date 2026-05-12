@@ -366,9 +366,9 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
 def finish_ctest(case: "canary.TestCase") -> None:
     output = case.read_output()
 
-    if case.status.category in ("SKIP", "CANCEL"):
+    if case.status.category_in(("SKIP", "CANCEL")):
         return
-    elif case.status.status == "TIMEOUT":
+    elif case.status.has_outcome("TIMEOUT"):
         return
 
     if pass_regular_expression := case.spec.attributes.get("pass_regular_expression"):
@@ -404,9 +404,9 @@ def finish_ctest(case: "canary.TestCase") -> None:
 
     # invert logic
     if case.spec.attributes.get("will_fail"):
-        if case.status.category == "PASS":
+        if case.status.has_category("PASS"):
             case.status = Status.FAILED(reason="Test case marked will_fail but succeeded")
-        elif case.status.category != "SKIP":
+        elif not case.status.has_category("SKIP"):
             case.status = Status.SUCCESS()
 
 
