@@ -127,8 +127,8 @@ class JunitDocument(xdom.Document):
         testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
         if case.status.has_category("FAIL"):
             failure = self.create_element("failure")
-            failure.setAttribute("message", f"Test case status: {case.status.outcome}")
-            failure.setAttribute("type", case.status.outcome)
+            failure.setAttribute("message", f"Test case status: {case.status.outcome.name}")
+            failure.setAttribute("type", case.status.outcome.name)
             testcase.appendChild(failure)
             text = self.create_cdata_node(case.read_output())
             system_out = self.create_element("system-out")
@@ -142,7 +142,7 @@ class JunitDocument(xdom.Document):
                     failure.appendChild(text)
         elif case.status.has_category("SKIP"):
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", case.status.outcome)
+            skipped.setAttribute("message", case.status.outcome.name)
             testcase.appendChild(skipped)
         return testcase
 

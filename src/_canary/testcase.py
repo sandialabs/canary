@@ -7,11 +7,13 @@ import io
 import math
 import os
 import traceback
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 from typing import MutableMapping
 
 from . import config
@@ -37,6 +39,23 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class Dependency:
+    case: "TestCase"
+    condition: str | None
+
+    def is_satisfied(self) -> bool:
+        c = self.condition
+        if c is None or c == "*" or (isinstance(c, str) and c.strip() == "*"):
+            return self.case.is_done()
+        want = c.upper()
+        st = self.case.status
+        return want in (st.category.value, st.outcome.name)
+
+    def is_done(self) -> bool:
+        return self.case.is_done()
+
+
 class TestCase(BaseJob):
     def __init__(
         self,
@@ -50,14 +69,24 @@ class TestCase(BaseJob):
         self.rparameters = self.get_resource_parameters_from_spec()
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
-        self.dependencies = dependencies or []
-        if len(self.spec.dependencies) != len(self.dependencies):
-            raise ValueError("Incorrect number of dependencies")
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
+
+        self.dependencies = dependencies or []
+        if len(self.spec.dependencies) != len(self.dependencies):
+            raise ValueError("Incorrect number of dependencies")
+
+        expected = list(self.spec.dep_done_criteria or [])
+        if expected and len(expected) != len(self.dependencies):
+            raise ValueError("Incorrect number of dependency conditions")
+
+        # new canonical list
+        self.depends_on: list[Dependency] = [
+            Dependency(case=dep, condition=expected[i]) for i, dep in enumerate(self.dependencies)
+        ]
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
@@ -85,6 +114,10 @@ class TestCase(BaseJob):
                 matches = self.workspace.dir.rglob(artifact.pattern)
                 artifacts.extend([str(match.relative_to(self.workspace.dir)) for match in matches])
         return artifacts
+
+    @property
+    def upstreams(self) -> list["TestCase"]:
+        return [d.case for d in self.depends_on]
 
     @property
     def stdout(self) -> str:
@@ -148,7 +181,7 @@ class TestCase(BaseJob):
     def add_variables(self, **kwds: str) -> None:
         self.variables.update(kwds)
 
-    def statline(self, style: str = "none") -> str:
+    def statline(self, style: Literal["none", "rich", "html"] = "none") -> str:
         status_name = self.status.display_name(style=style)
         name = self.display_name(style=style, resolve=True)
         return f"{status_name} {name}"
@@ -258,48 +291,44 @@ class TestCase(BaseJob):
         return self.state.is_done()
 
     def dropped(self) -> bool:
-        return self.status.has_category("SKIP")
+        return self.status.is_skipped()
 
     def is_runnable(self) -> bool:
         """True if this case could still run in the future."""
         if self.state.is_done():
             return False
-        if self.status.has_category("SKIP"):
+        if self.status.is_skipped():
             return False
         # If any dependency finished in a way that violates criteria, this case will never run
-        if self.dependencies:
-            flags = self.dep_condition_flags()
-            if any(f == "wont_run" for f in flags):
-                return False
+        if self.depends_on and any(d.is_done() and not d.is_satisfied() for d in self.depends_on):
+            return False
         return True
 
     def refresh_readiness(self) -> None:
-        """Apply terminal transitions if the case will never run."""
-        if self.state.is_done():
+        if self.state.is_done() or not self.depends_on:
             return
-        if not self.dependencies:
-            return
-        flags = self.dep_condition_flags()
-        for i, flag in enumerate(flags):
-            if flag == "wont_run":
-                dep = self.dependencies[i]
+        for dep in self.depends_on:
+            if not dep.is_done():
+                continue
+            if not dep.is_satisfied():
                 self.state.phase = JobPhase.DONE
                 self.status = Status.BLOCKED(
-                    f"Dependency {dep.name} finished with status {dep.status.outcome!r}, "
-                    f"not {self.spec.dep_done_criteria[i]}"
+                    f"Dependency {dep.case.name} finished with {dep.case.status.outcome.name!r}; "
+                    f"needed {dep.condition!r}"
                 )
                 return
 
     def is_ready(self) -> bool:
-        """True if this case can be dispatched now (deps satisfied)."""
         if self.state.is_done() or self.state.is_running():
             return False
+        self.refresh_readiness()
         if not self.is_runnable():
             return False
-        if not self.dependencies:
+        if not self.depends_on:
             return True
-        flags = self.dep_condition_flags()
-        return all(f == "can_run" for f in flags)
+        all_satisfied = all(d.is_satisfied() for d in self.depends_on if d.is_done())
+        all_done = all(d.is_done() for d in self.depends_on)
+        return all_satisfied and all_done
 
     @property
     def lockfile(self) -> Path:
@@ -349,6 +378,8 @@ class TestCase(BaseJob):
             file.close()
 
     def run(self) -> None:
+        from .status import Outcome
+
         code: int
         xstatus = self.spec.xstatus
         try:
@@ -366,13 +397,13 @@ class TestCase(BaseJob):
         except SystemExit as e:
             self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
-            stat = "XDIFF" if xstatus == Status.CODE_FOR_OUTCOME["DIFFED"] else "DIFFED"
+            stat = "XDIFF" if xstatus == Outcome.DIFFED.value else "DIFFED"
             default_reason = None
             if stat == "DIFFED":
                 default_reason = "Empty TestDiffed exception raised during execution"
             self.status.set(outcome=stat, reason=default_reason if not e.args else e.args[0])
         except TestFailed as e:
-            f_status = Status.CODE_FOR_OUTCOME["FAILED"]
+            f_status = Outcome.FAILED.value
             stat = "XFAIL" if (xstatus == f_status or xstatus < 0) else "FAILED"
             default_reason = None
             if stat == "FAILED":
@@ -444,12 +475,14 @@ class TestCase(BaseJob):
                         copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
+        from .status import Outcome
+
         if isinstance(code, str):
             code = 1
         xcode = self.spec.xstatus
 
-        if xcode == Status.CODE_FOR_OUTCOME["DIFFED"]:
-            if code != Status.CODE_FOR_OUTCOME["DIFFED"]:
+        if xcode == Outcome.DIFFED.value:
+            if code != Outcome.DIFFED.value:
                 self.status = Status.FAILED(
                     reason=f"{self.spec.display_name()}: expected test to diff",
                     code=code,
@@ -472,9 +505,9 @@ class TestCase(BaseJob):
                 self.status = Status.XFAIL()
         elif code == 0:
             self.status = Status.SUCCESS()
-        elif code == Status.CODE_FOR_OUTCOME["DIFFED"]:
+        elif code == Outcome.DIFFED.value:
             self.status = Status.DIFFED(reason=f"Test exited with diff exit code = {code}")
-        elif code == Status.CODE_FOR_OUTCOME["SKIPPED"]:
+        elif code == Outcome.SKIPPED.value:
             self.status = Status.SKIPPED(reason=f"Test exited with skip exit code = {code}")
         else:
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
@@ -609,22 +642,8 @@ class TestCase(BaseJob):
         }
         return json.dumps_min(record)
 
-    def dep_condition_flags(self) -> list[str]:
-        # Determine if dependent cases have completed and, if so, flip status to 'can_run'
-        expected = self.spec.dep_done_criteria
-        flags: list[str] = ["none"] * len(self.dependencies)
-        for i, dep in enumerate(self.dependencies):
-            if not dep.is_done():
-                # Still pending on this case
-                flags[i] = "pending"
-            elif expected[i].upper() in (None, dep.status.category, dep.status.outcome, "*"):
-                flags[i] = "can_run"
-            else:
-                flags[i] = "wont_run"
-        return flags
-
     def read_output(self, compress: bool = False) -> str:
-        if self.status.has_category("SKIP"):
+        if self.status.is_skipped():
             return f"Test skipped.  Reason: {self.status.reason}"
         file = self.workspace.joinpath(self.stdout)
         if not file.exists():
@@ -638,7 +657,7 @@ class TestCase(BaseJob):
                 out.write(file.read_text(errors="ignore"))
         text = out.getvalue()
         if compress:
-            kb_to_keep = 2 if self.status.has_category("PASS") else 300
+            kb_to_keep = 2 if self.status.is_success() else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
@@ -651,7 +670,7 @@ class TestCase(BaseJob):
 
     def cache_last_run(self) -> None:
         """store relevant information for this run"""
-        if not self.status.has_category("PASS"):
+        if not self.status.is_success():
             return
         if cache_dir := find_cache_dir(start=self.workspace.root):
             file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
@@ -677,7 +696,7 @@ class TestCase(BaseJob):
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration() >= 0 and self.status.has_category("PASS"):
+            if self.timekeeper.duration() >= 0 and self.status.is_success():
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})

@@ -3,23 +3,34 @@
 # SPDX-License-Identifier: MIT
 
 from collections import Counter
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
 import canary
+from _canary.status import Category
+from _canary.status import Outcome
 from _canary.status import Status
 
 
-class BatchStatus(Status):
-    def __init__(self, children: list[canary.TestCase]) -> None:
-        self._children: list[canary.TestCase] = list(children)
-        self.base: Status = Status()
+@dataclass(slots=True)
+class BatchStatus:
+    """Aggregate status for a batch job.
 
+    - `base` is the batch job's own terminal status (submission errors, etc.).
+    - display/derived semantics are computed from child testcases.
+    """
+
+    children: list[canary.TestCase]
+    base: Status = field(default_factory=Status)
+
+    # ---- delegate common status API to base (or derived, see below) ----
     @property
-    def category(self) -> str:
+    def category(self) -> Category:
         return self.base.category
 
     @property
-    def outcome(self) -> str:
+    def outcome(self) -> Outcome:
         return self.base.outcome
 
     @property
@@ -30,77 +41,118 @@ class BatchStatus(Status):
     def code(self) -> int:
         return self.base.code
 
-    @property
-    def color(self) -> str:
-        return self.base.color
+    def is_success(self) -> bool:
+        return self.base.is_success()
 
-    def asdict(self) -> dict:
+    def is_failure(self) -> bool:
+        return self.base.is_failure()
+
+    def is_skipped(self) -> bool:
+        return self.base.is_skipped()
+
+    def is_cancelled(self) -> bool:
+        return self.base.is_cancelled()
+
+    def has_category(self, arg: Category | str) -> bool:
+        return self.base.has_category(arg)
+
+    def has_outcome(self, arg: Outcome | str) -> bool:
+        return self.base.has_outcome(arg)
+
+    def outcome_in(self, arg) -> bool:
+        return self.base.outcome_in(arg)
+
+    def category_in(self, arg) -> bool:
+        return self.base.category_in(arg)
+
+    def asdict(self) -> dict[str, Any]:
         return self.base.asdict()
 
-    def set(
-        self,
-        category: str | None = None,
-        outcome: str | None = None,
-        reason: str | None = None,
-        code: int = -1,
-    ) -> None:
-        self.base.set(category=category, outcome=outcome, reason=reason, code=code)
-        for child in self._children:
-            if not child.state.is_done():
-                s = child.state
-                child.status = Status.BROKEN(reason=f"{child}: unexpected state {s=}")
-            elif child.state.is_running():
-                child.timekeeper.stop()
-                child.status = Status.CANCELLED()
-            elif child.state.is_done():
-                child.status.set(category=category, outcome=outcome, reason=reason, code=code)
-
+    # ---- updating ----
     def set_base(
         self,
         *,
-        category: str | None = None,
-        outcome: str | None = None,
+        category: Category | str | None = None,
+        outcome: Outcome | str | None = None,
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        """Internal: update only the batch aggregate status."""
+        """Update only the batch job's own status."""
         self.base.set(category=category, outcome=outcome, reason=reason, code=code)
 
+    def set(
+        self,
+        *,
+        category: Category | str | None = None,
+        outcome: Outcome | str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
+        """Set the batch base status and propagate to children that are DONE.
+
+        NOTE: We should not mutate non-DONE children results except to mark them cancelled/broken
+        if they were unexpectedly still RUNNING at batch end.
+        """
+        self.set_base(category=category, outcome=outcome, reason=reason, code=code)
+
+        for child in self.children:
+            if child.state.is_running():
+                # Child still running while batch finalizes -> cancel it
+                child.status = Status.CANCELLED(reason="Batch finalized while child still running")
+                child.state.phase = child.state.phase.__class__.DONE  # or JobPhase.DONE if imported
+                continue
+
+            if not child.state.is_done():
+                # Child never ran / still pending -> mark broken (or blocked)
+                child.status = Status.BROKEN(
+                    reason=f"{child}: unexpected phase={child.state.phase}"
+                )
+                child.state.phase = child.state.phase.__class__.DONE
+                continue
+
+            # Child is DONE: optionally overwrite its terminal outcome to match batch
+            # (This is your old behavior; you may later decide not to do this.)
+            child.status.set(category=category, outcome=outcome, reason=reason, code=code)
+
+    # ---- aggregation for reporting ----
+    def _derived_category(self) -> Category:
+        """Derive an overall category from children."""
+        present = {c.status.category for c in self.children}
+
+        if Category.FAIL in present:
+            return Category.FAIL
+        if Category.CANCEL in present:
+            return Category.CANCEL
+        if Category.SKIP in present:
+            return Category.SKIP
+        if present == {Category.PASS}:
+            return Category.PASS
+        return Category.NONE
+
     def display_name(self, **kwargs: Any) -> str:
-        def sortkey(x):
-            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
-            return (n, x[1])
+        """Return summary string like:
+        FAIL (2 FAILED, 1 TIMEOUT, 3 SUCCESS)
+        """
+        style = kwargs.get("style", "none")
 
-        counts: Counter[tuple[str, str]] = Counter()
-        present_cats: set[str] = set()
+        def sortkey(k: tuple[Category, Outcome]) -> tuple[int, str]:
+            cat, out = k
+            n = 0 if cat is Category.PASS else 2 if cat is Category.FAIL else 1
+            return (n, out.name)
 
-        for child in self._children:
-            cat = child.status.category
-            present_cats.add(cat)
-            if cat == "PASS":
-                counts[(cat, "PASS")] += 1
-            else:
-                counts[(cat, child.status.outcome)] += 1
+        counts: Counter[tuple[Category, Outcome]] = Counter()
+        for child in self.children:
+            counts[(child.status.category, child.status.outcome)] += 1
 
-        # Derive the batch category for display (don't trust base.category)
-        derived_cat: str = "NONE"
-        if "FAIL" in present_cats:
-            derived_cat = "FAIL"
-        elif "CANCEL" in present_cats:
-            derived_cat = "CANCEL"
-        elif "SKIP" in present_cats:
-            derived_cat = "SKIP"
-        elif "PASS" in present_cats and len(present_cats) == 1:
-            derived_cat = "PASS"
-
-        style = kwargs.get("style")
         parts: list[str] = []
-        for cat, stat in sorted(counts, key=sortkey):
-            count = counts[(cat, stat)]
+        for cat, out in sorted(counts.keys(), key=sortkey):
+            n = counts[(cat, out)]
+            label = out.name
             if style == "rich":
-                color = self.base.COLOR_FOR_CATEGORY[cat]
-                parts.append(f"{count} [{color}]{stat}[/{color}]")
+                color = cat.rich_color()
+                parts.append(f"{n} [{color}]{label}[/]")
             else:
-                parts.append(f"{count} {stat}")
+                parts.append(f"{n} {label}")
 
-        return f"{derived_cat} ({', '.join(parts)})"
+        derived_cat = self._derived_category()
+        return f"{derived_cat.value} ({', '.join(parts)})"

@@ -13,7 +13,6 @@ from typing import Iterable
 
 from .job import BaseJob
 from .resource_pool.rpool import ResourceUnavailable
-from .status import Status
 from .util import logging
 from .util.time import hhmmss
 
@@ -180,8 +179,11 @@ class ResourceQueue:
         return [slot.job for slot in self._heap]
 
     def status(self, start: float | None = None) -> str:
+        from .status import Category
+        from .status import Outcome
+
         def sortkey(x):
-            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+            n = 0 if x[0] == Category.PASS else 2 if x[0] == Category.FAIL else 1
             return (n, x[1])
 
         with self.lock:
@@ -189,7 +191,7 @@ class ResourceQueue:
             busy = len(self._busy)
             pending = len(self._heap)
             total = done + busy + pending
-            totals: Counter[tuple[str, str]] = Counter()
+            totals: Counter[tuple[Category, Outcome]] = Counter()
             for job in self._finished.values():
                 if job.state.is_done():
                     key = (job.status.category, job.status.outcome)
@@ -200,8 +202,8 @@ class ResourceQueue:
             else:
                 row.append(f"{total}/{total} [blue]COMPLETE[/]")
             for key in sorted(totals, key=sortkey):
-                color = Status.COLOR_FOR_CATEGORY[key[0]]
-                row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
+                color = key[0].rich_color()
+                row.append(f"{totals[key]} [{color}]{key[1].name}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)
                 row.append(f"in {duration}")

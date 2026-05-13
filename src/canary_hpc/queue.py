@@ -5,14 +5,15 @@
 import heapq
 import time
 from collections import Counter
+from typing import TypeAlias
 
 import canary
 from _canary import queue
 from _canary.job import BaseJob
-from _canary.status import Status
 from _canary.util.time import hhmmss
 
 logger = canary.get_logger(__name__)
+key_type: TypeAlias = tuple[canary.status.Category, canary.status.Outcome]
 
 
 class ResourceQueue(queue.ResourceQueue):
@@ -33,16 +34,22 @@ class ResourceQueue(queue.ResourceQueue):
         return cases
 
     def status(self, start: float | None = None) -> str:
+
         def sortkey(x):
-            n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
-            return (n, x[1])
+            c, o = x
+            if c == canary.status.Category.PASS:
+                return 0, o
+            elif c == canary.status.Category.FAIL:
+                return 2, o
+            return 1, o
 
         with self.lock:
             done = sum([len(_) for _ in self._finished.values()])
             busy = sum([len(_) for _ in self._busy.values()])
             pending = sum([len(_.job) for _ in self._heap])  # type: ignore
             total = done + busy + pending
-            totals: Counter[tuple[str, str]] = Counter()
+            totals: Counter[key_type] = Counter()
+            case: canary.TestCase
             for batch in self._finished.values():
                 for case in batch:
                     if case.state.is_done():
@@ -54,8 +61,8 @@ class ResourceQueue(queue.ResourceQueue):
             else:
                 row.append(f"{total}/{total} [blue]COMPLETE[/]")
             for key in sorted(totals, key=sortkey):
-                color = Status.COLOR_FOR_CATEGORY[key[0]]
-                row.append(f"{totals[key]} [bold {color}]{key[1]}[/]")
+                color = key[0].rich_color()
+                row.append(f"{totals[key]} [{color}]{key[1].name}[/]")
             if start is not None:
                 duration = hhmmss(time.time() - start)
                 row.append(f"in {duration}")

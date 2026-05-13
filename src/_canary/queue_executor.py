@@ -872,7 +872,7 @@ class Reporter:
         table = Table(expand=False, box=box.SQUARE)
         self.add_table_columns(table, self.final_columns)
         for case in cases:
-            if case.status.has_category("PASS"):
+            if case.status.is_success():
                 continue
             self.add_table_row(
                 table,

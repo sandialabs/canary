@@ -65,7 +65,7 @@ class MarkdownReporter(CanaryReporter):
 
     def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
         info: dict[str, str] = {
-            "**Status**": case.status.outcome,
+            "**Status**": case.status.outcome.name,
             "**Exit code**": str(case.status.code),
             "**ID**": str(case.id),
             "**Location**": str(case.workspace.dir),
@@ -84,7 +84,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            group = case.status.outcome.title()
+            group = case.status.outcome.name.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {os.uname().nodename} ")
         fh.write(f"| {config.get('cmake:project')} ")

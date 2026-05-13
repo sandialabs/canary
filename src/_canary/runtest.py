@@ -14,7 +14,6 @@ import rich
 
 from . import config
 from .hookspec import hookimpl
-from .status import Status
 from .util import glyphs
 from .util import logging
 from .util.returncode import compute_returncode
@@ -22,6 +21,7 @@ from .util.time import hhmmss
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .status import Outcome
     from .testcase import TestCase
     from .workspace import Workspace
 
@@ -126,6 +126,8 @@ def print_short_test_status_summary(runner: Runner) -> None:
     passed tests in the summary
 
     """
+    from .status import Category
+
     if not config.get("debug") or config.getoption("no_summary"):
         return
     include_pass = False
@@ -134,12 +136,12 @@ def print_short_test_status_summary(runner: Runner) -> None:
     if not runner.cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[tuple[str, str], list["TestCase"]] = {}
+        totals: dict[tuple[Category, "Outcome"], list["TestCase"]] = {}
         for case in runner.cases:
             key = (case.status.category, case.status.outcome)
             totals.setdefault(key, []).append(case)
         for key in totals:
-            if not include_pass and key[0] == "PASS":
+            if not include_pass and key[0] == Category.PASS:
                 continue
             n: int = 0
             for case in sorted(totals[key], key=lambda t: t.name):
@@ -170,25 +172,25 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: "Runner", title: str) -> None:
     """Return a short, high-level, summary of test results"""
+    from . import status
 
-    def sortkey(x):
-        n = 0 if x[0] == "PASS" else 2 if x[0] == "FAIL" else 1
+    def sortkey(x: tuple[status.Category, status.Outcome]) -> tuple[int, status.Outcome]:
+        n = 0 if x[0] == status.Category.PASS else 2 if x[0] == status.Category.FAIL else 1
         return (n, x[1])
 
     duration = runner.finish - runner.start
-    totals: dict[tuple[str, str], list["TestCase"]] = {}
+    totals: dict[tuple[status.Category, status.Outcome], list["TestCase"]] = {}
     for case in runner.cases:
-        status = "" if case.status.has_category("PASS") else case.status.outcome
-        key = (case.status.category, status)
+        key = (case.status.category, case.status.outcome)
         totals.setdefault(key, []).append(case)
     N = len(runner.cases)
     summary = [f"[bold blue]{N} total[/bold blue]:"]
-    for category, status in sorted(totals, key=sortkey):
-        n = len(totals[(category, status)])
+    for category, outcome in sorted(totals, key=sortkey):
+        n = len(totals[(category, outcome)])
         if n:
-            color = Status.COLOR_FOR_CATEGORY[category]
-            t = category if not status else status
-            summary.append(f"[{color}]{n} {t.lower()}[/{color}]")
+            color = category.rich_color()
+            t = category if outcome == Outcome.SUCCESS else outcome
+            summary.append(f"[{color}]{n} {t.name.lower()}[/{color}]")
     kwds = {
         "s": summary[0] + " " + ", ".join(summary[1:]),
         "t": hhmmss(None if duration < 0 else duration),

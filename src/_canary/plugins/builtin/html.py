@@ -100,7 +100,7 @@ class HTMLReporter(CanaryReporter):
         fh.write("</tr>\n")
         totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            group = case.status.outcome.title()
+            group = case.status.outcome.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{os.uname().nodename}</td>")
