@@ -34,7 +34,6 @@ The following diagram illustrates the full lifecycle::
 
 """
 
-import fnmatch
 import os
 import sys
 from collections import defaultdict
@@ -60,7 +59,7 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .generator import AbstractTestGenerator
-    from .testspec import DependencyPatterns
+    from .testspec import DependencySpec
     from .testspec import ResolvedSpec
     from .testspec import UnresolvedSpec
 
@@ -245,7 +244,7 @@ def _resolve_dependencies_serial(
     """Resolve dependencies serially for debugging"""
     results = []
     for spec in specs_to_resolve:
-        if not spec.dep_patterns:
+        if not spec.dep_specs:
             results.append(_resolve_empty(spec))
         else:
             results.append(
@@ -273,7 +272,7 @@ def _resolve_dependencies_parallel(
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
         for spec in specs_to_resolve:
-            if not spec.dep_patterns:
+            if not spec.dep_specs:
                 futures.append(executor.submit(_resolve_empty, spec))
             else:
                 futures.append(
@@ -310,20 +309,20 @@ def _resolve_spec_dependencies(
     matches: list[str] = []
     done_criteria: list[str] = []
 
-    for dp in spec.dep_patterns:
+    for dp in spec.dep_specs:
         deps = _find_matching_specs(
             dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )
         dep_ids = [d.id for d in deps]
         dp.update(*dep_ids)
         matches.extend(dep_ids)
-        done_criteria.extend([dp.result_match] * len(deps))
+        done_criteria.extend([dp.when] * len(deps))
 
     return (spec.id, matches, done_criteria)
 
 
 def _find_matching_specs(
-    dp: "DependencyPatterns",
+    dp: "DependencySpec",
     source_spec: "UnresolvedSpec",
     matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
     unique_name_idx: dict[str, str],
@@ -334,48 +333,30 @@ def _find_matching_specs(
     matches: set[str] = set()
     matched_specs: list["UnresolvedSpec | ResolvedSpec"] = []
 
-    for pattern in dp.patterns:
-        # Check exact matches first before resorting to glob matching
-        candidates: list["UnresolvedSpec | ResolvedSpec"] = []
-        if pattern in unique_name_idx:
-            spec_id = unique_name_idx[pattern]
-            candidates.append(spec_map[spec_id])
-        elif pattern in non_unique_idx:
-            spec_ids = non_unique_idx[pattern]
-            candidates.extend([spec_map[spec_id] for spec_id in spec_ids])
+    # Check exact matches first before resorting to glob matching
+    candidates: list["UnresolvedSpec | ResolvedSpec"] = []
+    if dp.pattern in unique_name_idx:
+        spec_id = unique_name_idx[dp.pattern]
+        candidates.append(spec_map[spec_id])
+    elif dp.pattern in non_unique_idx:
+        spec_ids = non_unique_idx[dp.pattern]
+        candidates.extend([spec_map[spec_id] for spec_id in spec_ids])
 
-        for spec in candidates:
-            if spec.id != source_spec.id and spec.id not in matches:
+    for spec in candidates:
+        if spec.id != source_spec.id and spec.id not in matches:
+            matches.add(spec.id)
+            matched_specs.append(spec)
+
+    if not matched_specs:
+        # Glob pattern - check all matchable specs (draft AND resolved)
+        for spec in matchable_specs:
+            if spec.id == source_spec.id or spec.id in matches:
+                continue
+            if dp.matches(spec):
                 matches.add(spec.id)
                 matched_specs.append(spec)
 
-        if not matched_specs:
-            # Glob pattern - check all matchable specs (draft AND resolved)
-            for spec in matchable_specs:
-                if spec.id == source_spec.id or spec.id in matches:
-                    continue
-
-                if _pattern_matches_spec(pattern, spec):
-                    matches.add(spec.id)
-                    matched_specs.append(spec)
-
     return matched_specs
-
-
-def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -> bool:
-    """Check if pattern matches any of the spec's names"""
-    names = (
-        spec.id,
-        spec.name,
-        spec.family,
-        spec.fullname,
-        str(spec.file_path),
-    )
-
-    for name in names:
-        if fnmatch.fnmatchcase(name, pattern):
-            return True
-    return False
 
 
 def generate_from_one(

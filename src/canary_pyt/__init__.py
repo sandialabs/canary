@@ -14,9 +14,14 @@ from _canary import enums
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.paramset import ParameterSet
+from _canary.status import Outcome
+from _canary.testspec import DependencySpec
 from _canary.third_party.monkeypatch import monkeypatch
+from _canary.util import logging
 
 WhenType = str | dict[str, str]
+DependencyType = str | dict[str, Any] | DependencySpec
+logger = logging.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -189,13 +194,13 @@ class PYTAdapter(CanaryDSLSpecGenerator):
 
     def f_depends_on(
         self,
-        *args: str,
+        arg: DependencyType | list[DependencyType],
         when: WhenType | None = None,
-        expect: int | str | None = None,
-        result: str | None = None,
+        **kwargs: Any,
     ) -> None:
-        pattern = " ".join(args)
-        self.add_dependency(pattern, expects=expect, result_match=result, when=when)
+        dependencies = parse_dependencies(arg, **kwargs)
+        for dep in dependencies:
+            self.add_dependency(dep, when=when)
 
     def f_set_attribute(self, *, when: WhenType | None = None, **attributes: Any) -> None:
         self.set_attributes(when=when, **attributes)
@@ -263,6 +268,96 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         if script is None and flag is None:
             flag = "--analyze"
         self.set_analyze(when=when, flag=flag, script=script, requires=requires)
+
+
+def parse_dependencies(
+    arg: DependencyType | list[DependencyType], **kwargs: Any
+) -> list[DependencySpec]:
+    if not isinstance(arg, (str, list, dict, DependencySpec)):
+        raise TypeError(f"expected string, dict, or list, got {type(arg).__name__}: {arg!r}")
+
+    legacy_expect = kwargs.pop("expect", None)
+    legacy_result = kwargs.pop("result", None)
+    if kwargs:
+        # unknown kwargs should be an error; otherwise typos silently pass
+        raise TypeError(f"depends_on(): unexpected keyword(s): {', '.join(sorted(kwargs))}")
+
+    if isinstance(arg, DependencySpec):
+        return [arg]
+
+    if isinstance(arg, str):
+        when: str = legacy_result or "on_success"
+        if legacy_result is not None:
+            s = "DEPRECATED: depends_on(%r, result=%r, ...); use depends_on({'job': %r, when=%r, ...})"
+            logger.warning(s, arg, legacy_result, arg, legacy_result)
+        expects: str | int = legacy_expect or "+"
+        if legacy_expect is not None:
+            s = "DEPRECATED: depends_on(%r, expect=%r, ...); use depends_on({'job': %r, expects=%r, ...})"
+            logger.warning(s, arg, legacy_expect, arg, legacy_expect)
+        return [parse_dependency({"job": arg, "when": when, "expects": expects}, 0)]
+
+    if legacy_expect is not None or legacy_result is not None:
+        bad: list[str] = []
+        if legacy_expect is not None:
+            bad.append(f"expect={legacy_expect!r}")
+        if legacy_result is not None:
+            bad.append(f"result={legacy_result!r}")
+        s = f"depends_on(arg, {', '.join(bad)}, ...) is only supported when 'arg' is a single string"
+        raise TypeError(s)
+
+    if isinstance(arg, dict):
+        return [parse_dependency(arg, 0)]
+
+    return [parse_dependency(a, i) for i, a in enumerate(arg)]
+
+
+def parse_dependency(arg: DependencyType, index: int) -> DependencySpec:
+    prefix = "depends_on" if index is None else f"depends_on[{index}]"
+    if not isinstance(arg, (str, dict)):
+        raise TypeError(f"{prefix}: expected string or dict, got {type(arg).__name__}: {arg!r}")
+
+    if isinstance(arg, str):
+        if not arg.strip():
+            raise ValueError(f"{prefix}: job must be a non-empty string")
+        return DependencySpec(pattern=arg, expects="+", when="on_success")
+
+    if isinstance(arg, DependencySpec):
+        return arg
+
+    assert isinstance(arg, dict)
+
+    choices = {"job", "when", "expects"}
+    extra = set(arg) - choices
+    if extra:
+        x = ", ".join(sorted(extra))
+        s = ", ".join(sorted(choices))
+        raise TypeError(f"{prefix}: invalid keys: {x}.  (choose from {s})")
+
+    when: str = arg.get("when") or "on_success"
+    choices = {name.lower() for name in Outcome._member_names_ if name != "NONE"}
+    choices.update({"on_success", "on_failure", "always", "*"})
+    if when.lower() not in choices:
+        s = ", ".join(sorted(choices))
+        raise TypeError(f"{prefix}['when']: invalid choice: {when!r} (choose from {s})")
+    if when == "*":
+        when = "always"
+
+    if "job" not in arg:
+        raise TypeError(f"{prefix}: missing required keyword 'job'") from None
+    job = arg["job"]
+
+    expects = arg.get("expects", "+")
+    if not isinstance(expects, (str, int)):
+        raise TypeError(f"{prefix}['expects']: invalid type {type(expects).__name__!r}")
+    if isinstance(expects, str):
+        choices = {"+", "?", "*"}
+        if expects not in choices:
+            s = ", ".join(sorted(choices))
+            raise TypeError(f"{prefix}['expects']: invalid choice: {expects!r} (choose from {s})")
+    elif expects <= 0:
+        raise ValueError(f"{prefix}['expects']: invalid value: {expects!r} (must be > 0)")
+
+    return DependencySpec(pattern=job, expects=expects, when=when)
 
 
 @hookimpl

@@ -102,8 +102,10 @@ from typing import Any
 from typing import Sequence
 
 from _canary import enums
+from _canary.testspec import DependencySpec
 
 WhenType = str | dict[str, str]
+DependencyType = str | dict[str, Any] | DependencySpec
 
 
 def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
@@ -318,10 +320,9 @@ def copy(
 
 
 def depends_on(
-    arg: str,
+    *arg: DependencyType,
     when: WhenType | None = None,
-    expect: int | None = None,
-    result: str | None = None,
+    **kwargs,
 ) -> None:
     """
     Require that test ``arg`` run before this test.
@@ -334,7 +335,9 @@ def depends_on(
     .. code:: python
 
        import canary
-       canary.directives.depends_on(name, when=..., expect=None, result=None)
+       canary.directives.depends_on(name, when=...)
+       canary.directives.depends_on({"job": name, "when": ..., "expects": ...}, when=...)
+       canary.directives.depends_on([{"job": name, "when": ..., "expects": ...}], when=...)
 
     ``.vvt``:
 
@@ -347,6 +350,10 @@ def depends_on(
 
     * ``arg``: The test that should run before this test.  Wildcards are allowed.
     * ``when``: Restrict processing of the directive to this condition
+
+    VVT Parameters
+    --------------
+
     * ``result``: Control whether or not this test runs based on the result of the
       dependent test.  By default, a test will run if its dependencies pass or diff.
     * ``expect``: How many dependencies to expect.
@@ -400,7 +407,7 @@ def depends_on(
 
        # spam.pyt
        import canary
-       canary.directives.depends_on("baz", result="*")
+       canary.directives.depends_on({"job": "baz", "when": "always"})
 
        def test():
            self = canary.testinstance

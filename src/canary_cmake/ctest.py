@@ -207,7 +207,7 @@ def create_draft_spec(
     if depends:
         deps = kwargs.setdefault("dependencies", [])
         for d in depends:
-            deps.append(canary.DependencyPatterns(pattern=d, expects="+", result_match="success"))
+            deps.append(canary.DependencySpec(pattern=d, expects="+", when="on_success"))
     if environment is not None:
         kwargs.setdefault("environment", {}).update(environment)
     if disabled:

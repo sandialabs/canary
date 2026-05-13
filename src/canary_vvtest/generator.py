@@ -177,12 +177,16 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                 if dep is None:
                     continue
                 if isinstance(dep, str):
-                    self.add_dependency(dep, when=arg.when)
+                    d = canary.DependencySpec(pattern=dep, when="on_success", expects="+")
+                    self.add_dependency(d, when=arg.when)
                 else:
                     assert isinstance(dep, dict)
                     for dep_name, dep_params in dep.items():
                         p = ".".join(f"{k}={dep_params[k]}" for k in sorted(dep_params))
-                        self.add_dependency(f"{dep_name}.{p}", when=arg.when)
+                        d = canary.DependencySpec(
+                            pattern=f"{dep_name}.{p}", when="on_success", expects="+"
+                        )
+                        self.add_dependency(d, when=arg.when)
 
         ps = ParameterSet.list_parameter_space(list(names), values, file=self.file)
         self.add_parameter_set(ps, when=arg.when)
@@ -241,20 +245,22 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
 
     def f_DEPENDS_ON(self, arg: "Directive") -> None:
         options = dict(arg.options or {})
-        if "expect" in options:
+        expects = "+"
+        if expect := options.get("expect"):
             try:
-                options["expect"] = int(options["expect"])
+                expect = int(expect)
             except ValueError:
                 pass
-        if "result" in options:
-            options["result"] = re.sub(r"(?i)\bpass\b", "success", options["result"])
-            options["result"] = re.sub(r"(?i)\bdiff\b", "diffed", options["result"])
-            options["result"] = re.sub(r"(?i)\bfail\b", "failed", options["result"])
-            options["result"] = re.sub(r"(?i)\bskip\b", "skipped", options["result"])
-
-        expects = options.get("expect", None)
-        result_match = options.get("result", None)
-        self.add_dependency(arg.argument, expects=expects, result_match=result_match, when=arg.when)
+            expects = expect
+        when: str = "on_success"
+        if result := options.get("result"):
+            result = re.sub(r"(?i)\bpass\b", "success", result)
+            result = re.sub(r"(?i)\bdiff\b", "diffed", result)
+            result = re.sub(r"(?i)\bfail\b", "failed", result)
+            result = re.sub(r"(?i)\bskip\b", "skipped", result)
+            when = result
+        d = canary.DependencySpec(pattern=arg.argument, expects=expects, when=when.lower())
+        self.add_dependency(d, when=arg.when)
 
 
 def csplit(text: str) -> list[Any]:

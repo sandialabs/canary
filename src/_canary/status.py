@@ -52,7 +52,8 @@ class Outcome(IntEnum):
     SUCCESS = 0
     XDIFF = 10
     XFAIL = 11
-    DIFFED = 64
+    SKIPPED = 63  # vvtest compatibility
+    DIFFED = 64  # vvtest compatibility
     FAILED = 65
     ERROR = 66
     BROKEN = 67
@@ -60,7 +61,6 @@ class Outcome(IntEnum):
     INVALID = 69
     CANCELLED = 70
     INTERRUPTED = 71
-    SKIPPED = 80
     BLOCKED = 81
 
     @property

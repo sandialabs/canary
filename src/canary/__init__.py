@@ -43,7 +43,7 @@ from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.testspec import Artifact
 from _canary.testspec import Asset
-from _canary.testspec import DependencyPatterns
+from _canary.testspec import DependencySpec
 from _canary.testspec import Mask
 from _canary.testspec import ResolvedSpec
 from _canary.testspec import UnresolvedSpec
@@ -107,7 +107,7 @@ __all__ = [
     "SubprocessLauncher",
     "TestInstance",
     "TestMultiInstance",
-    "DependencyPatterns",
+    "DependencySpec",
     "Artifact",
     "Asset",
     "ResolvedSpec",

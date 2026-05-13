@@ -6,14 +6,13 @@ import sys
 
 import canary
 
-canary.directives.depends_on("willfail", result="failed")
+canary.directives.depends_on({"job": "willfail", "when": "on_failure"})
 
 
 def depends_on_willfail() -> int:
     instance = canary.get_instance()
     assert instance.dependencies[0].name == "willfail"
-    assert instance.dependencies[0].status.category == "FAIL"
-    print("test passed")
+    assert instance.dependencies[0].status.category.name == "FAIL"
     return 0
 
 

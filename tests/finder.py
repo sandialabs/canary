@@ -185,7 +185,7 @@ def test_cpu_count(tmpdir):
         canary.config.pluginmanager.unregister(name="myhook")
 
 
-def test_dep_patterns(tmpdir):
+def test_dep_specs(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         mkdirp("a")

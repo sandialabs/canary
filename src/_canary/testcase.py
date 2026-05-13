@@ -21,6 +21,7 @@ from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
+from .expression import Expression
 from .job import BaseJob
 from .job import JobPhase
 from .launcher import Launcher
@@ -39,18 +40,41 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@dataclass
+class AnyMatcher:
+    __slots__ = ("choices",)
+    choices: set[str]
+
+    def __post_init__(self) -> None:
+        self.choices = {choice.lower() for choice in self.choices}
+
+    def __call__(self, name: str) -> bool:
+        return name.lower() in self.choices
+
+
 @dataclass(frozen=True, slots=True)
 class Dependency:
     case: "TestCase"
-    condition: str | None
+    when: str | None
 
     def is_satisfied(self) -> bool:
-        c = self.condition
-        if c is None or c == "*" or (isinstance(c, str) and c.strip() == "*"):
+        from .status import Category
+
+        if not self.case.is_done():
+            return False
+        when = self.when
+        if when is None:
+            return True
+        assert isinstance(when, str)
+        if when in ("*", "always"):
             return self.case.is_done()
-        want = c.upper()
-        st = self.case.status
-        return want in (st.category.value, st.outcome.name)
+        if when == "on_success":
+            return self.case.status.category is Category.PASS
+        elif when == "on_failure":
+            return self.case.status.category is Category.FAIL
+        expr = Expression.compile(when)
+        choices = (self.case.status.category.name, self.case.status.outcome.name)
+        return expr.evaluate(AnyMatcher(set(choices)))
 
     def is_done(self) -> bool:
         return self.case.is_done()
@@ -85,7 +109,7 @@ class TestCase(BaseJob):
 
         # new canonical list
         self.depends_on: list[Dependency] = [
-            Dependency(case=dep, condition=expected[i]) for i, dep in enumerate(self.dependencies)
+            Dependency(case=dep, when=expected[i]) for i, dep in enumerate(self.dependencies)
         ]
 
     def __eq__(self, other) -> bool:
@@ -314,7 +338,7 @@ class TestCase(BaseJob):
                 self.state.phase = JobPhase.DONE
                 self.status = Status.BLOCKED(
                     f"Dependency {dep.case.name} finished with {dep.case.status.outcome.name!r}; "
-                    f"needed {dep.condition!r}"
+                    f"needed {dep.when!r}"
                 )
                 return
 
