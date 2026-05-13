@@ -34,8 +34,8 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-#    "hpc-connect>=26.3.26",
-    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git",
+    "hpc-connect>=26.5.10",
+    # "hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
