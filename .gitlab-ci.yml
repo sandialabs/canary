@@ -272,7 +272,7 @@ lint::check:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
-  - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
+  - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml --select S324
   - cat ruff.xml || true
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")

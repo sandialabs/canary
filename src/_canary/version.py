@@ -4,7 +4,6 @@
 
 import json
 import os
-import re
 import subprocess
 from importlib import metadata as im
 
