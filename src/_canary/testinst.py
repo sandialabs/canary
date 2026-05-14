@@ -161,7 +161,7 @@ def from_testcase(case: "TestCase") -> TestInstance:
         stop=stop,
         id=case.spec.id,
         returncode=case.status.code,
-        variables=case.spec.environment,
+        variables={key: var for key, var in case.variables.items() if var is not None},
         dependencies=dependencies,
         ofile=case.stdout,
         efile=case.stderr,

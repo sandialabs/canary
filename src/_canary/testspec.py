@@ -104,7 +104,7 @@ class BaseSpec(Generic[T]):
     modules: list[str] | None = None
     rcfiles: list[str] | None = None
     owners: list[str] | None = None
-    environment: dict[str, str] = dataclasses.field(default_factory=dict)
+    environment: dict[str, str | None] = dataclasses.field(default_factory=dict)
     environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
     meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     command: list[str] = dataclasses.field(default_factory=list)
@@ -248,7 +248,7 @@ class BaseSpec(Generic[T]):
     def matches(self, arg: str) -> bool:
         if arg.startswith(select_sygil) and not Path(arg).exists():
             arg = arg[1:]
-        if self.display_name == arg:
+        if self.display_name() == arg:
             return True
         if self.name == arg:
             return True
@@ -280,6 +280,8 @@ class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
     dependencies: MutableSequence["SpecDependency"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
+    exec_path: str | None = None
+    view_path: str | None = None
 
     def __hash__(self) -> int:
         return hash(self.id)

@@ -13,9 +13,9 @@ from typing import Sequence
 from _canary import enums
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
+from _canary.ir import DependencySpec
 from _canary.paramset import ParameterSet
 from _canary.status import Outcome
-from _canary.testspec import DependencySpec
 from _canary.third_party.monkeypatch import monkeypatch
 from _canary.util import logging
 

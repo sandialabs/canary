@@ -26,6 +26,8 @@ from _canary.generator import AbstractTestGenerator
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
+from _canary.ir import DependencySpec
+from _canary.ir import JobSpecIR
 from _canary.job import BaseJob
 from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
@@ -43,7 +45,6 @@ from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.testspec import Artifact
 from _canary.testspec import Asset
-from _canary.testspec import DependencySpec
 from _canary.testspec import Mask
 from _canary.testspec import ResolvedSpec
 from _canary.testspec import UnresolvedSpec
@@ -111,6 +112,7 @@ __all__ = [
     "Artifact",
     "Asset",
     "ResolvedSpec",
+    "JobSpecIR",
     "UnresolvedSpec",
     "color",
     "difflib",

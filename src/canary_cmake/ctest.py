@@ -49,7 +49,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         if not tests:
             return []
 
-        drafts: list[canary.UnresolvedSpec] = []
+        irs: list[canary.JobSpecIR] = []
         realpath = os.path.realpath
 
         for family, details in tests.items():
@@ -57,7 +57,7 @@ class CTestTestGenerator(AbstractTestGenerator):
             if not os.path.exists(os.path.join(self.root, path)):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
 
-            draft = create_draft_spec(
+            ir = create_ir(
                 file_root=self.root,
                 file_path=path,
                 family=family,
@@ -65,9 +65,9 @@ class CTestTestGenerator(AbstractTestGenerator):
                 command=details.pop("command"),
                 **details,
             )
-            drafts.append(draft)
+            irs.append(ir)
 
-        resolved = self.resolve_inter_dependencies(drafts)
+        resolved = self.resolve_inter_dependencies(irs)
         self.resolve_fixtures(resolved)
         return resolved  # type: ignore
 
@@ -133,15 +133,15 @@ class CTestTestGenerator(AbstractTestGenerator):
                             fixture.dependencies.append(dep)
 
     def resolve_inter_dependencies(
-        self, drafts: list["canary.UnresolvedSpec"]
+        self, irs: list["canary.JobSpecIR"]
     ) -> list["canary.ResolvedSpec"]:
         from _canary.generate import resolve
 
-        resolved = resolve(drafts)
+        resolved = resolve(irs)
         return resolved
 
 
-def create_draft_spec(
+def create_ir(
     *,
     file_root: str,
     file_path: str,
@@ -179,7 +179,7 @@ def create_draft_spec(
     working_directory: str | None = None,
     backtrace_triples: list[str] | None = None,
     **kwds,
-) -> canary.UnresolvedSpec:
+) -> canary.JobSpecIR:
     kwargs: dict[str, Any] = {}
     kwargs["file_root"] = Path(file_root)
     kwargs["file_path"] = Path(file_path)
@@ -239,7 +239,7 @@ def create_draft_spec(
     if required_files:
         attributes["required_files"] = required_files
     if environment_modification is not None:
-        kwargs["environment_modifications"] = env_mods(environment_modification)
+        kwargs["variables"] = apply_env_mods(environment_modification)
 
     if timeout is not None:
         kwargs["timeout"] = float(timeout)
@@ -284,31 +284,31 @@ def create_draft_spec(
     if timeout_signal_name is not None:
         warn_unsupported_ctest_option("timeout_signal_name")
 
-    return canary.UnresolvedSpec(**kwargs)  # ty: ignore[missing-argument]
+    return canary.JobSpecIR(**kwargs)  # ty: ignore[missing-argument]
 
 
-def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:
-    my_mods: list[dict[str, str]] = []
+def apply_env_mods(mods: list[dict[str, str]]) -> dict[str, str | None]:
+    variables: dict[str, str | None] = {}
     for em in mods:
         op, name, value = em["op"], em["name"], em["value"]
-        entry: dict[str, str] = dict(name=name)
         match op:
-            case "set" | "unset":
-                entry.update({"value": value, "action": op})
+            case "set":
+                variables[name] = value
+            case "unset":
+                variables[name] = None
             case "string_append":
-                entry.update({"value": f"{os.getenv(name, '')}{value}", "action": "set"})
+                variables[name] = f"{os.getenv(name, '')}{value}"
             case "string_prepend":
-                entry.update({"value": f"{value}{os.getenv(name, '')}", "action": "set"})
+                variables[name] = f"{value}{os.getenv(name, '')}"
             case "path_list_append":
-                entry.update({"value": value, "action": "append-path", "sep": ":"})
+                variables[name] = f"${name}:{value}"
             case "path_list_prepend":
-                entry.update({"value": value, "action": "prepend-path", "sep": ":"})
+                variables[name] = f"{value}:${name}"
             case "cmake_list_append":
-                entry.update({"value": value, "action": "append-path", "sep": ";"})
+                variables[name] = f"${name};{value}"
             case "cmake_list_prepend":
-                entry.update({"value": value, "action": "prepend-path", "sep": ";"})
-        my_mods.append(entry)
-    return my_mods
+                variables[name] = f"{value};${name}"
+    return variables
 
 
 def setup_ctest(case: canary.TestCase):

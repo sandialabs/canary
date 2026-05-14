@@ -5,8 +5,8 @@ import pytest
 
 from _canary.error import diff_exit_status
 from _canary.generator import CanaryDSLSpecGenerator
+from _canary.ir import DependencySpec
 from _canary.paramset import ParameterSet
-from _canary.testspec import DependencySpec
 
 
 def make_test_file(tmp_path: Path, rel: str, text: str = "# test\n") -> Path:

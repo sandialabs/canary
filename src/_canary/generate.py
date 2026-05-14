@@ -21,7 +21,7 @@ The following diagram illustrates the full lifecycle::
     Produces [Un]resolved test specs
                       ↓
   Generator(generators)
-    Generate UnresolvedSpec from generator outputs
+    Generate JobSpecIR from generator outputs
                       ↓
   canary_generate(generators)
   • pluginmanager.hook.canary_generatestart()
@@ -60,9 +60,9 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .generator import AbstractTestGenerator
-    from .testspec import DependencySpec
+    from .ir import DependencySpec
+    from .ir import JobSpecIR
     from .testspec import ResolvedSpec
-    from .testspec import UnresolvedSpec
 
 
 logger = logging.get_logger(__name__)
@@ -83,27 +83,25 @@ class Generator:
     def run(self) -> list["ResolvedSpec"]:
         pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")
         config.pluginmanager.hook.canary_generatestart(generator=self)
-        drafts: list["UnresolvedSpec | ResolvedSpec"] = generate_test_specs(
-            self.generators, self.on_options
-        )
+        irs: list["JobSpecIR | ResolvedSpec"] = generate_jobspecs(self.generators, self.on_options)
         pm.done()
-        self.validate(drafts)
+        self.validate(irs)
         pm = logger.progress_monitor("[bold]Resolving[/] test spec dependencies")
-        self.specs = resolve(drafts)
+        self.specs = resolve(irs)
         self.ready = True
         pm.done()
         config.pluginmanager.hook.canary_generate_modifyitems(generator=self)
         config.pluginmanager.hook.canary_generate_report(generator=self)
         return self.specs
 
-    def validate(self, specs: list["UnresolvedSpec | ResolvedSpec"]) -> None:
+    def validate(self, specs: list["JobSpecIR | ResolvedSpec"]) -> None:
         pm = logger.progress_monitor("[bold]Searching[/] for duplicated tests")
         ids = [spec.id for spec in specs]
         counts: dict[str, int] = {}
         for id in ids:
             counts[id] = counts.get(id, 0) + 1
         duplicate_ids = {id for id, count in counts.items() if count > 1}
-        duplicates: dict[str, list["UnresolvedSpec | ResolvedSpec"]] = {}
+        duplicates: dict[str, list["JobSpecIR | ResolvedSpec"]] = {}
         # if there are duplicates, we are in error condition and lookup cost is not important
         for id in duplicate_ids:
             duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
@@ -156,14 +154,14 @@ def canary_generate_report(generator: Generator) -> None:
         console.print(table)
 
 
-def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedSpec"]:
+def resolve(specs: Sequence["JobSpecIR | ResolvedSpec"]) -> list["ResolvedSpec"]:
+    from .ir import JobSpecIR
     from .testspec import ResolvedSpec
-    from .testspec import UnresolvedSpec
 
-    # Separate specs into resolved and draft
-    draft_specs: list["UnresolvedSpec"] = []
+    # Separate specs into resolved and IR
+    ir_specs: list["JobSpecIR"] = []
     resolved_specs: list["ResolvedSpec"] = []
-    spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"] = {}
+    spec_map: dict[str, "JobSpecIR | ResolvedSpec"] = {}
 
     # Generator indices
     unique_name_idx: dict[str, str] = {}
@@ -175,43 +173,41 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         if isinstance(spec, ResolvedSpec):
             resolved_specs.append(spec)
         elif not spec.dependencies:
-            resolved_specs.append(spec.build({}))
+            resolved_specs.append(spec.finalize({}))
         else:
-            draft_specs.append(spec)
+            ir_specs.append(spec)
 
-        # Index unique identifiers (for both draft and resolved)
+        # Index unique identifiers (for both ir and resolved)
         unique_name_idx[spec.id] = spec.id
 
-        # Index non-unique identifiers (for both draft and resolved)
+        # Index non-unique identifiers (for both ir and resolved)
         non_unique_idx[spec.name].append(spec.id)
         non_unique_idx[spec.family].append(spec.id)
-        non_unique_idx[spec.display_name()].append(spec.id)
-        non_unique_idx[spec.display_name(resolve=True)].append(spec.id)
         non_unique_idx[str(spec.file_path)].append(spec.id)
 
-    # All specs that can be matched (both draft and resolved)
-    matchable_specs = draft_specs + resolved_specs
+    # All specs that can be matched (both ir and resolved)
+    matchable_specs = ir_specs + resolved_specs
 
     # Generator dependency graph in parallel, specs will be added as they resolve
     graph: dict[str, list[str]] = {
         r.id: [d.spec.id for d in r.dependencies] for r in resolved_specs
     }
-    draft_lookup: dict[str, list[str]] = {}
+    ir_lookup: dict[str, list[str]] = {}
 
     results: list[tuple[str, list[str]]]
     if os.getenv("CANARY_SERIAL_SPEC_RESOLUTION"):
         results = _resolve_dependencies_serial(
-            draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
+            ir_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )
     else:
         results = _resolve_dependencies_parallel(
-            draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
+            ir_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )
 
     # Merge results
     for spec_id, matches in results:
         graph[spec_id] = matches
-        draft_lookup[spec_id] = matches
+        ir_lookup[spec_id] = matches
 
     # Resolve dependencies using topological sort (this is fast, keep sequential)
     lookup: dict[str, ResolvedSpec] = {}
@@ -221,12 +217,12 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
     while ts.is_active():
         ids = ts.get_ready()
         for id in ids:
-            draft = spec_map[id]
-            if isinstance(draft, ResolvedSpec):
-                lookup[id] = draft
+            ir = spec_map[id]
+            if isinstance(ir, ResolvedSpec):
+                lookup[id] = ir
             else:
-                assert isinstance(draft, UnresolvedSpec)
-                lookup[id] = draft.build(lookup)
+                assert isinstance(ir, JobSpecIR)
+                lookup[id] = ir.finalize(lookup)
 
         ts.done(*ids)
 
@@ -234,16 +230,16 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
 
 
 def _resolve_dependencies_serial(
-    specs_to_resolve: list["UnresolvedSpec"],
-    matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
+    specs_to_resolve: list["JobSpecIR"],
+    matchable_specs: list["JobSpecIR | ResolvedSpec"],
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
+    spec_map: dict[str, "JobSpecIR | ResolvedSpec"],
 ) -> list[tuple[str, list[str]]]:
     """Resolve dependencies serially for debugging"""
     results: list[tuple[str, list[str]]] = []
     for spec in specs_to_resolve:
-        if not spec.dep_specs:
+        if not spec.dependencies:
             results.append(_resolve_empty(spec))
         else:
             results.append(
@@ -255,11 +251,11 @@ def _resolve_dependencies_serial(
 
 
 def _resolve_dependencies_parallel(
-    specs_to_resolve: list["UnresolvedSpec"],
-    matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
+    specs_to_resolve: list["JobSpecIR"],
+    matchable_specs: list["JobSpecIR | ResolvedSpec"],
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
+    spec_map: dict[str, "JobSpecIR | ResolvedSpec"],
 ) -> list[tuple[str, list[str]]]:
     """Resolve dependencies in parallel, returning (spec_id, match_ids, done_criteria)"""
 
@@ -271,7 +267,7 @@ def _resolve_dependencies_parallel(
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
         for spec in specs_to_resolve:
-            if not spec.dep_specs:
+            if not spec.dependencies:
                 futures.append(executor.submit(_resolve_empty, spec))
             else:
                 futures.append(
@@ -292,21 +288,21 @@ def _resolve_dependencies_parallel(
     return results
 
 
-def _resolve_empty(spec: "UnresolvedSpec") -> tuple[str, list[str]]:
+def _resolve_empty(spec: "JobSpecIR") -> tuple[str, list[str]]:
     """Fast path for specs with no dependencies"""
     return (spec.id, [])
 
 
 def _resolve_spec_dependencies(
-    spec: "UnresolvedSpec",
-    matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
+    spec: "JobSpecIR",
+    matchable_specs: list["JobSpecIR | ResolvedSpec"],
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
+    spec_map: dict[str, "JobSpecIR | ResolvedSpec"],
 ) -> tuple[str, list[str]]:
     """Resolve dependencies for a single spec"""
     matches: list[str] = []
-    for dp in spec.dep_specs:
+    for dp in spec.dependencies:
         deps = _find_matching_specs(
             dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )
@@ -318,19 +314,19 @@ def _resolve_spec_dependencies(
 
 def _find_matching_specs(
     dp: "DependencySpec",
-    source_spec: "UnresolvedSpec",
-    matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
+    source_spec: "JobSpecIR",
+    matchable_specs: list["JobSpecIR | ResolvedSpec"],
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
-    spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> list["UnresolvedSpec | ResolvedSpec"]:
+    spec_map: dict[str, "JobSpecIR | ResolvedSpec"],
+) -> list["JobSpecIR | ResolvedSpec"]:
     """Optimized pattern matching using indices where possible"""
     matches: set[str] = set()
-    matched_specs: list["UnresolvedSpec | ResolvedSpec"] = []
+    matched_specs: list["JobSpecIR | ResolvedSpec"] = []
 
     for pattern in shlex.split(dp.pattern):
         # Check exact matches first before resorting to glob matching
-        candidates: list["UnresolvedSpec | ResolvedSpec"] = []
+        candidates: list["JobSpecIR | ResolvedSpec"] = []
         if pattern in unique_name_idx:
             spec_id = unique_name_idx[pattern]
             candidates.append(spec_map[spec_id])
@@ -344,7 +340,7 @@ def _find_matching_specs(
                 matched_specs.append(spec)
 
         if not matched_specs:
-            # Glob pattern - check all matchable specs (draft AND resolved)
+            # Glob pattern - check all matchable specs (ir AND resolved)
             for spec in matchable_specs:
                 if spec.id == source_spec.id or spec.id in matches:
                     continue
@@ -357,21 +353,21 @@ def _find_matching_specs(
 
 def generate_from_one(
     file: "AbstractTestGenerator", on_options: list[str] | None
-) -> list["UnresolvedSpec | ResolvedSpec"]:
+) -> list["JobSpecIR | ResolvedSpec"]:
     return list(file.lock(on_options=on_options))
 
 
-def generate_test_specs(
+def generate_jobspecs(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["UnresolvedSpec | ResolvedSpec"]:
+) -> list["JobSpecIR | ResolvedSpec"]:
     if config.get("debug"):
-        return generate_test_specs_serial(generators, on_options)
-    return generate_test_specs_parallel(generators, on_options)
+        return generate_jobspecs_serial(generators, on_options)
+    return generate_jobspecs_parallel(generators, on_options)
 
 
-def generate_test_specs_parallel(
+def generate_jobspecs_parallel(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["UnresolvedSpec | ResolvedSpec"]:
+) -> list["JobSpecIR | ResolvedSpec"]:
     # In testing
     locked = starmap(
         generate_from_one,
@@ -386,10 +382,10 @@ def worker_init(snapshot: dict[str, Any]):
     config.load_snapshot(snapshot)
 
 
-def generate_test_specs_serial(
+def generate_jobspecs_serial(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["UnresolvedSpec | ResolvedSpec"]:
-    specs: list["UnresolvedSpec | ResolvedSpec"] = []
+) -> list["JobSpecIR | ResolvedSpec"]:
+    specs: list["JobSpecIR | ResolvedSpec"] = []
     for f in generators:
         specs.extend(generate_from_one(f, on_options))
     return specs

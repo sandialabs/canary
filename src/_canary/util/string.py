@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import io
+import re
 import tokenize
 from typing import Any
 from typing import Generator
+from typing import Mapping
 
 
 def get_tokens(path) -> Generator[tokenize.TokenInfo, None, None]:
@@ -102,3 +104,20 @@ def truncate_middle(text: str, max_length: int = 254, sep: str = "...") -> str:
     left = keep // 2
     right = keep - left
     return f"{text[:left]}{sep}{text[-right:]}"
+
+
+class SimpleTemplate:
+    def __init__(self, s: str) -> None:
+        self.string = s
+        self.pattern = re.compile(r"\$(\w+)|\$\{([^}]+)\}")
+
+    def substitute(self, mapping: Mapping[str, str], missing: str | None = None):
+        def repl(m: re.Match) -> str:
+            key = m.group(1) or m.group(2)
+            if key in mapping:
+                return mapping[key]
+            elif missing is None:
+                return m.group(0)
+            return missing
+
+        return self.pattern.sub(repl, self.string)

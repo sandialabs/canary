@@ -19,12 +19,12 @@ from typing import Literal
 from typing import Sequence
 
 from .error import diff_exit_status
+from .ir import DependencySpec
+from .ir import JobSpecIR
 from .paramset import ParameterSet
 from .testspec import Artifact
 from .testspec import Asset
-from .testspec import DependencySpec
 from .testspec import Mask
-from .testspec import UnresolvedSpec
 from .util import logging
 from .util import reducer
 from .util.field import Field
@@ -45,7 +45,6 @@ from .util import json_helper as json
 
 if TYPE_CHECKING:
     from .testspec import ResolvedSpec
-    from .testspec import UnresolvedSpec
 
 
 WhenType = str | dict[str, str]
@@ -83,7 +82,7 @@ class AbstractTestGenerator(ABC):
            def describe(self, on_options: list[str] | None = None) -> str:
                ...
 
-           def lock(self, on_options: list[str] | None = None) -> list[canary.UnresolvedTestSpec]:
+           def lock(self, on_options: list[str] | None = None) -> list[canary.JobSpecIR]:
                ...
 
     """
@@ -131,9 +130,7 @@ class AbstractTestGenerator(ABC):
         return repr(self)
 
     @abstractmethod
-    def lock(
-        self, on_options: list[str] | None = None
-    ) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | ResolvedSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:
@@ -498,16 +495,14 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
     # ----------------------------- AbstractTestGenerator API -----------------------------
 
-    def lock(
-        self, on_options: list[str] | None = None
-    ) -> Sequence["UnresolvedSpec | ResolvedSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | ResolvedSpec"]:
         if self.filter_warnings:
             with logging.suppress_stream_below(logging.ERROR):
                 return self._lock(on_options=on_options)
         return self._lock(on_options=on_options)
 
-    def _lock(self, on_options: list[str] | None = None) -> list[UnresolvedSpec]:
-        drafts: list[UnresolvedSpec] = []
+    def _lock(self, on_options: list[str] | None = None) -> list[JobSpecIR]:
+        irs: list[JobSpecIR] = []
         families = self.get_families(on_options=on_options)
 
         for family in families:
@@ -516,8 +511,8 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 param_dicts = [{}]
 
             test_mask: str | None = None
-            my_drafts: list[UnresolvedSpec] = []
-            dependencies: list[str | DependencySpec] = []
+            my_irs: list[JobSpecIR] = []
+            dependencies: list[DependencySpec] = []
 
             for parameters in param_dicts:
                 test_mask = self.get_skip_reason(family, parameters, on_options=on_options)
@@ -581,7 +576,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                         Artifact(pattern=self.safe_substitute(a.pattern, **kw), when=a.when)
                     )
 
-                draft = UnresolvedSpec(
+                ir = JobSpecIR(
                     file_root=Path(self.root),
                     file_path=Path(self.path),
                     family=family,
@@ -606,19 +601,19 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                     test_mask = reason
 
                 if test_mask is not None:
-                    draft.mask = Mask.masked(test_mask)
+                    ir.mask = Mask.masked(test_mask)
 
                 if any(m.use is not None for m in modules):
                     mp = [x.strip() for x in os.getenv("MODULEPATH", "").split(":") if x.strip()]
                     for m in modules:
                         if m.use:
                             mp.insert(0, m.use)
-                    draft.environment["MODULEPATH"] = ":".join(mp)
+                    ir.environment["MODULEPATH"] = ":".join(mp)
 
                 for k, v in attributes.items():
-                    draft.attributes[k] = v
+                    ir.attributes[k] = v
 
-                my_drafts.append(draft)
+                my_irs.append(ir)
 
             analyze = self.get_analyze(family, on_options=on_options)
             if analyze is not None:
@@ -630,7 +625,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
                 modules = self.get_modules(family, parameters=None, on_options=on_options)
                 dependencies.clear()
-                for d in my_drafts:
+                for d in my_irs:
                     dependencies.append(
                         DependencySpec(pattern=d.id, expects=1, when=analyze.requires)
                     )
@@ -639,7 +634,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 for ps in psets:
                     pset_meta.append({"keys": ps.keys, "values": ps.values})
 
-                parent = UnresolvedSpec(
+                parent = JobSpecIR(
                     file_root=Path(self.root),
                     file_path=Path(self.path),
                     family=family,
@@ -689,8 +684,8 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 if test_mask is not None:
                     parent.mask = Mask.masked(test_mask)
 
-                my_drafts.append(parent)
+                my_irs.append(parent)
 
-            drafts.extend(my_drafts)
+            irs.extend(my_irs)
 
-        return drafts
+        return irs
