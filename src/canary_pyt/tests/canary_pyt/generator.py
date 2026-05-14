@@ -6,6 +6,7 @@ import pytest
 from _canary.error import diff_exit_status
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.paramset import ParameterSet
+from _canary.testspec import DependencySpec
 
 
 def make_test_file(tmp_path: Path, rel: str, text: str = "# test\n") -> Path:
@@ -112,7 +113,8 @@ def test_dependencies_substitution(tmp_path: Path) -> None:
     gen = make_gen(tmp_path, "x.pyt")
     gen.add_family("a")
     gen.add_parameter_set(ParameterSet.list_parameter_space("p", [2]))
-    gen.add_dependency("dep_${P}", expects=1, result_match="success")
+    d = DependencySpec(pattern="dep_${P}", expects=1, when="on_success")
+    gen.add_dependency(d)
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]
     assert len(s.dependencies) == 1

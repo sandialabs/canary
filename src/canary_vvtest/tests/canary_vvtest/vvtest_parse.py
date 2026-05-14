@@ -290,18 +290,18 @@ if __name__ == "__main__":
         assert len(specs) == 6
         assert specs[0].name == "create_inputs.a=A.b=B.np=1"
         for spec in specs[1:]:
-            dep_names = [_.name for _ in spec.dependencies]
+            dep_names = [_.spec.name for _ in spec.dependencies]
             if spec.name == "spam.a=A.b=B.np=1":
-                assert spec.dependencies[0] == specs[0]
+                assert spec.dependencies[0].spec == specs[0]
             elif spec.name == "ham.a=A.np=1":
                 assert len(spec.dependencies) == 0
             elif spec.name == "eggs.a=A.b=B.np=1.target_np=12":
                 assert len(spec.dependencies) == 2
-                assert specs[0] in spec.dependencies
+                assert specs[0] in [_.spec for _ in spec.dependencies]
                 assert "ham.a=A.np=1" in dep_names
             elif spec.name == "baz.a=A.b=B.np=12":
                 assert len(spec.dependencies) == 4
-                assert specs[0] in spec.dependencies
+                assert specs[0] in [_.spec for _ in spec.dependencies]
                 assert "spam.a=A.b=B.np=1" in dep_names
                 assert "ham.a=A.np=1" in dep_names
                 assert "eggs.a=A.b=B.np=1.target_np=12" in dep_names

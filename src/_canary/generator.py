@@ -22,7 +22,7 @@ from .error import diff_exit_status
 from .paramset import ParameterSet
 from .testspec import Artifact
 from .testspec import Asset
-from .testspec import DependencyPatterns
+from .testspec import DependencySpec
 from .testspec import Mask
 from .testspec import UnresolvedSpec
 from .util import logging
@@ -241,7 +241,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         self.sources: Field[SourceSpec, list[SourceSpec]] = Field(reducer=reducer.IDENTITY)
         self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(reducer=reducer.IDENTITY)
         self.exclusive: Field[bool, bool] = Field(reducer=reducer.ANY)
-        self.depends_on: Field[DependencyPatterns, list[DependencyPatterns]] = Field(
+        self.depends_on: Field[DependencySpec, list[DependencySpec]] = Field(
             reducer=reducer.IDENTITY
         )
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
@@ -313,16 +313,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
     def set_exclusive(self, when: WhenType | None = None) -> None:
         self.exclusive.add(True, when=when)
 
-    def add_dependency(
-        self,
-        pattern: str,
-        expects: int | str | None = None,
-        result_match: str | None = None,
-        when: WhenType | None = None,
-    ) -> None:
-        dep = DependencyPatterns(
-            pattern=pattern, expects=expects or "+", result_match=result_match or "success"
-        )
+    def add_dependency(self, dep: DependencySpec, when: WhenType | None = None) -> None:
         self.depends_on.add(dep, when=when)
 
     def set_attributes(self, when: WhenType | None = None, **attrs: Any) -> None:
@@ -438,7 +429,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         family: str | None = None,
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
-    ) -> list[DependencyPatterns]:
+    ) -> list[DependencySpec]:
         return self.depends_on.eval(family=family, parameters=parameters, on_options=on_options)
 
     def get_attributes(
@@ -526,7 +517,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
             test_mask: str | None = None
             my_drafts: list[UnresolvedSpec] = []
-            dependencies: list[str | DependencyPatterns] = []
+            dependencies: list[str | DependencySpec] = []
 
             for parameters in param_dicts:
                 test_mask = self.get_skip_reason(family, parameters, on_options=on_options)
@@ -577,10 +568,10 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 dependencies.clear()
                 for dep in deps:
                     dependencies.append(
-                        DependencyPatterns(
+                        DependencySpec(
                             pattern=self.safe_substitute(dep.pattern, **kw),
                             expects=dep.expects,
-                            result_match=dep.result_match,
+                            when=dep.when,
                         )
                     )
 
@@ -641,7 +632,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 dependencies.clear()
                 for d in my_drafts:
                     dependencies.append(
-                        DependencyPatterns(pattern=d.id, expects=1, result_match=analyze.requires)
+                        DependencySpec(pattern=d.id, expects=1, when=analyze.requires)
                     )
 
                 pset_meta = []

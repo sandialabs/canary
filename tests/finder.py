@@ -185,7 +185,7 @@ def test_cpu_count(tmpdir):
         canary.config.pluginmanager.unregister(name="myhook")
 
 
-def test_dep_patterns(tmpdir):
+def test_dep_specs(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         mkdirp("a")
@@ -202,7 +202,7 @@ def test_dep_patterns(tmpdir):
     for spec in specs:
         if spec.name == "f":
             assert len(spec.dependencies) == 1
-            assert spec.dependencies[0].name == "g.n=1"
+            assert spec.dependencies[0].spec.name == "g.n=1"
 
 
 def test_analyze(tmpdir):
@@ -217,7 +217,8 @@ def test_analyze(tmpdir):
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 10
-    assert all(spec in specs[-1].dependencies for spec in specs[:-1])
+    deps = [d.spec for d in specs[-1].dependencies]
+    assert all(spec in deps for spec in specs[:-1])
 
 
 def test_enable(tmpdir):

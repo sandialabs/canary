@@ -166,7 +166,7 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
-canary.directives.depends_on('f1.a=1', 'f1.a=3', 'f1.a=4')
+canary.directives.depends_on(['f1.a=1', 'f1.a=3', 'f1.a=4'])
 def test():
     self = canary.get_instance()
     print(self.dependencies)

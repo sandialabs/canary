@@ -31,6 +31,8 @@ class PathEncoder(json.JSONEncoder):
             return {o.kind: o.value}
         elif isinstance(o, ParameterSet):
             return {"keys": o.keys, "values": o.values}
+        elif isinstance(o, tuple):
+            return list(o)
         return json.JSONEncoder.default(self, o)
 
 

@@ -40,13 +40,15 @@ def generate_testcases(dirname):
     import _canary.testcase
     import _canary.testexec
 
+    Dependency = _canary.testcase.Dependency
+
     generators = _canary.collect.find_generators_in_path(dirname)
     specs = generate_specs(generators)
     lookup = {}
     cases = []
     for spec in specs:
         ws = _canary.testexec.ExecutionSpace(Path.cwd(), Path("foo"))
-        deps = [lookup[d.id] for d in spec.dependencies]
+        deps = [Dependency(case=lookup[d.spec.id], when="on_success") for d in spec.dependencies]
         case = _canary.testcase.TestCase(spec=spec, workspace=ws, dependencies=deps)
         cases.append(case)
         lookup[case.id] = case

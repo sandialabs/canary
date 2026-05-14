@@ -25,6 +25,7 @@ from .generate import Generator
 from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
+from .testcase import Dependency
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import ResolvedSpec
@@ -569,13 +570,13 @@ class Workspace:
         specs = self.db.load_specs(ids, include_upstreams=True)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
-                dependencies = [lookup[dep.id] for dep in spec.dependencies]
+                deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
                 space = ExecutionSpace(
                     root=self.sessions_dir / mine["session"],
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case = TestCase(spec=spec, workspace=space, dependencies=deps)
                 case.status = mine["status"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
@@ -632,7 +633,7 @@ class Workspace:
         cases: list[TestCase] = []
         latest = self.db.get_results([spec.id for spec in specs])
         for spec in static_order(specs):
-            dependencies = [lookup[dep.id] for dep in spec.dependencies]
+            deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
             case: TestCase
             if spec.id in latest:
                 # This case won't run, but it may be needed by dependents
@@ -642,14 +643,14 @@ class Workspace:
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case = TestCase(spec=spec, workspace=space, dependencies=deps)
                 case.status = mine["status"]
                 case.state = mine["state"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
             else:
                 space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case = TestCase(spec=spec, workspace=space, dependencies=deps)
             lookup[spec.id] = case
             cases.append(case)
         return cases

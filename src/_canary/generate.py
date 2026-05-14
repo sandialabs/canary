@@ -34,8 +34,8 @@ The following diagram illustrates the full lifecycle::
 
 """
 
-import fnmatch
 import os
+import shlex
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -60,7 +60,7 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .generator import AbstractTestGenerator
-    from .testspec import DependencyPatterns
+    from .testspec import DependencySpec
     from .testspec import ResolvedSpec
     from .testspec import UnresolvedSpec
 
@@ -175,7 +175,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         if isinstance(spec, ResolvedSpec):
             resolved_specs.append(spec)
         elif not spec.dependencies:
-            resolved_specs.append(spec.resolve([]))
+            resolved_specs.append(spec.build({}))
         else:
             draft_specs.append(spec)
 
@@ -193,11 +193,12 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
     matchable_specs = draft_specs + resolved_specs
 
     # Generator dependency graph in parallel, specs will be added as they resolve
-    graph: dict[str, list[str]] = {r.id: [_.id for _ in r.dependencies] for r in resolved_specs}
+    graph: dict[str, list[str]] = {
+        r.id: [d.spec.id for d in r.dependencies] for r in resolved_specs
+    }
     draft_lookup: dict[str, list[str]] = {}
-    dep_done_criteria: dict[str, list[str]] = {}
 
-    results: list[tuple[str, list[str], list[str]]]
+    results: list[tuple[str, list[str]]]
     if os.getenv("CANARY_SERIAL_SPEC_RESOLUTION"):
         results = _resolve_dependencies_serial(
             draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
@@ -208,10 +209,9 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         )
 
     # Merge results
-    for spec_id, matches, done_criteria in results:
+    for spec_id, matches in results:
         graph[spec_id] = matches
         draft_lookup[spec_id] = matches
-        dep_done_criteria[spec_id] = done_criteria
 
     # Resolve dependencies using topological sort (this is fast, keep sequential)
     lookup: dict[str, ResolvedSpec] = {}
@@ -226,9 +226,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
                 lookup[id] = draft
             else:
                 assert isinstance(draft, UnresolvedSpec)
-                dep_ids = draft_lookup.get(id, [])
-                dependencies = [lookup[dep_id] for dep_id in dep_ids]
-                lookup[id] = draft.resolve(dependencies, dep_done_criteria.get(id, []))
+                lookup[id] = draft.build(lookup)
 
         ts.done(*ids)
 
@@ -241,11 +239,11 @@ def _resolve_dependencies_serial(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> list[tuple[str, list[str], list[str]]]:
+) -> list[tuple[str, list[str]]]:
     """Resolve dependencies serially for debugging"""
-    results = []
+    results: list[tuple[str, list[str]]] = []
     for spec in specs_to_resolve:
-        if not spec.dep_patterns:
+        if not spec.dep_specs:
             results.append(_resolve_empty(spec))
         else:
             results.append(
@@ -262,7 +260,7 @@ def _resolve_dependencies_parallel(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> list[tuple[str, list[str], list[str]]]:
+) -> list[tuple[str, list[str]]]:
     """Resolve dependencies in parallel, returning (spec_id, match_ids, done_criteria)"""
 
     if not specs_to_resolve:
@@ -273,7 +271,7 @@ def _resolve_dependencies_parallel(
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
         for spec in specs_to_resolve:
-            if not spec.dep_patterns:
+            if not spec.dep_specs:
                 futures.append(executor.submit(_resolve_empty, spec))
             else:
                 futures.append(
@@ -294,9 +292,9 @@ def _resolve_dependencies_parallel(
     return results
 
 
-def _resolve_empty(spec: "UnresolvedSpec") -> tuple[str, list[str], list[str]]:
+def _resolve_empty(spec: "UnresolvedSpec") -> tuple[str, list[str]]:
     """Fast path for specs with no dependencies"""
-    return (spec.id, [], [])
+    return (spec.id, [])
 
 
 def _resolve_spec_dependencies(
@@ -305,25 +303,21 @@ def _resolve_spec_dependencies(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str]]:
     """Resolve dependencies for a single spec"""
     matches: list[str] = []
-    done_criteria: list[str] = []
-
-    for dp in spec.dep_patterns:
+    for dp in spec.dep_specs:
         deps = _find_matching_specs(
             dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
         )
         dep_ids = [d.id for d in deps]
         dp.update(*dep_ids)
         matches.extend(dep_ids)
-        done_criteria.extend([dp.result_match] * len(deps))
-
-    return (spec.id, matches, done_criteria)
+    return (spec.id, matches)
 
 
 def _find_matching_specs(
-    dp: "DependencyPatterns",
+    dp: "DependencySpec",
     source_spec: "UnresolvedSpec",
     matchable_specs: list["UnresolvedSpec | ResolvedSpec"],
     unique_name_idx: dict[str, str],
@@ -334,7 +328,7 @@ def _find_matching_specs(
     matches: set[str] = set()
     matched_specs: list["UnresolvedSpec | ResolvedSpec"] = []
 
-    for pattern in dp.patterns:
+    for pattern in shlex.split(dp.pattern):
         # Check exact matches first before resorting to glob matching
         candidates: list["UnresolvedSpec | ResolvedSpec"] = []
         if pattern in unique_name_idx:
@@ -354,28 +348,11 @@ def _find_matching_specs(
             for spec in matchable_specs:
                 if spec.id == source_spec.id or spec.id in matches:
                     continue
-
-                if _pattern_matches_spec(pattern, spec):
+                if dp.matches(spec):
                     matches.add(spec.id)
                     matched_specs.append(spec)
 
     return matched_specs
-
-
-def _pattern_matches_spec(pattern: str, spec: "UnresolvedSpec | ResolvedSpec") -> bool:
-    """Check if pattern matches any of the spec's names"""
-    names = (
-        spec.id,
-        spec.name,
-        spec.family,
-        spec.fullname,
-        str(spec.file_path),
-    )
-
-    for name in names:
-        if fnmatch.fnmatchcase(name, pattern):
-            return True
-    return False
 
 
 def generate_from_one(

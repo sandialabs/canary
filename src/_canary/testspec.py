@@ -42,14 +42,16 @@ class Artifact:
     when: Literal["always", "never", "on_failure", "on_success"] = "always"
 
     def active(self, status: "Status") -> bool:
+        from .status import Category
+
         if self.when == "never":
             return False
         elif self.when == "always":
             return True
-        elif self.when == "on_failure" and status != "FAILED":
-            return False
-        elif self.when == "on_success" and status != "PASS":
-            return False
+        elif self.when == "on_failure":
+            return status.category is Category.FAIL
+        elif self.when == "on_success":
+            return status.category is Category.PASS
         return True
 
 
@@ -89,7 +91,6 @@ class BaseSpec(Generic[T]):
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
     dependencies: MutableSequence[Any] = dataclasses.field(default_factory=list)
-    dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     keywords: list[str] = dataclasses.field(default_factory=list)
@@ -277,7 +278,7 @@ class BaseSpec(Generic[T]):
 @dataclasses.dataclass
 class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: MutableSequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence["SpecDependency"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
 
     def __hash__(self) -> int:
@@ -305,10 +306,10 @@ class Asset:
 
 
 @dataclasses.dataclass
-class DependencyPatterns:
+class DependencySpec:
     """String representation of test dependencies
 
-    Dependency resolution is performed after test case discovery.  The ``DependencyPatterns``
+    Dependency resolution is performed after test case discovery.  The ``DependencySpec``
     object holds information needed to perform the resolution.
 
     Args:
@@ -320,25 +321,26 @@ class DependencyPatterns:
 
     pattern: str
     expects: str | int = "+"
-    result_match: str = "success"
-    patterns: list[str] = dataclasses.field(default_factory=list, init=False)
+    when: str = "on_success"
     resolves_to: list[str] = dataclasses.field(default_factory=list, init=False)
 
     def __post_init__(self):
-        if isinstance(self.pattern, list):
-            self.patterns = self.pattern
-            self.pattern = " ".join(self.pattern)
-        else:
-            self.patterns = shlex.split(self.pattern)
-        if self.expects is None:
+        expects = self.expects
+        if not isinstance(expects, (str, int)):
+            raise TypeError(f"DependencySpec.expects: invalid type {type(expects).__name__!r}")
+        if isinstance(expects, str):
+            choices = {"+", "?", "*"}
+            if expects not in choices:
+                s = ", ".join(sorted(choices))
+                msg = f"DependencySpec.expect: invalid choice: {expects!r} (choose from {s})"
+                raise TypeError(msg)
+        elif expects <= 0:
+            raise ValueError(f"DependencySpec.expect: invalid value: {expects!r} (must be > 0)")
+        elif expects is None:
             self.expects = "+"
 
-    def __str__(self) -> str:
-        return self.pattern
-
-    def matches(self, spec: "UnresolvedSpec") -> bool:
-        names = {
-            spec.name,
+    def matches(self, spec: Any) -> bool:
+        choices = {
             spec.name,
             spec.family,
             spec.fullname,
@@ -346,9 +348,11 @@ class DependencyPatterns:
             spec.display_name(resolve=True),
             str(spec.file_path),
         }
-        for pattern in self.patterns:
-            for name in names:
-                if name == pattern or fnmatch.fnmatchcase(name, pattern):
+        if self.pattern in choices:
+            return True
+        for choice in choices:
+            for pat in shlex.split(self.pattern):
+                if fnmatch.fnmatchcase(choice, pat):
                     return True
         return False
 
@@ -369,21 +373,25 @@ class DependencyPatterns:
         return errors
 
 
+@dataclasses.dataclass(slots=True)
+class SpecDependency:
+    spec: "ResolvedSpec"
+    when: str = "on_success"
+
+
 @dataclasses.dataclass
 class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
     after dependency resolution"""
 
-    dependencies: MutableSequence[str | DependencyPatterns] = dataclasses.field(
-        default_factory=list
-    )
+    dependencies: MutableSequence[str | DependencySpec] = dataclasses.field(default_factory=list)
     file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]] = (
         dataclasses.field(default_factory=dict)
     )
     baseline: list[str | tuple[str, str]] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
     baseline_actions: list[dict] = dataclasses.field(default_factory=list, init=False)
-    dep_patterns: list[DependencyPatterns] = dataclasses.field(default_factory=list, init=False)
+    dep_specs: list[DependencySpec] = dataclasses.field(default_factory=list, init=False)
     resolved_dependencies: list["UnresolvedSpec"] = dataclasses.field(
         default_factory=list, init=False
     )
@@ -394,27 +402,26 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
         # We make sure objects have the right type, in case any were passed in as name=None
         self.assets = self.assets or self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
-        self.dep_patterns = self._generate_dependency_patterns(self.dependencies or [])
+        self.dep_specs = self._generate_dependency_specs(self.dependencies or [])
 
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def resolve(
-        self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None
-    ) -> "ResolvedSpec":
+    def build(self, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
         errors: list[str] = []
-        for dp in self.dep_patterns:
-            if e := dp.verify():
-                errors.extend(e)
-        dep_done_criteria = dep_done_criteria or ["success"] * len(dependencies)
+        for dp in self.dep_specs:
+            errors.extend(dp.verify())
         if errors:
             raise UnresolvedDependenciesErrors(errors)
+        deps: list[SpecDependency] = []
+        for dp in self.dep_specs:
+            for dep_id in dp.resolves_to:
+                deps.append(SpecDependency(spec=lookup[dep_id], when=dp.when))
         return ResolvedSpec(
             file_root=self.file_root,
             file_path=self.file_path,
             family=self.family,
-            dependencies=dependencies,
-            dep_done_criteria=dep_done_criteria,
+            dependencies=deps,
             keywords=self.keywords,
             parameters=self.parameters,
             meta_parameters=self.meta_parameters,
@@ -475,25 +482,24 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
                 actions.append({"type": "copy", "src": src, "dst": dst})
         return actions
 
-    def _generate_dependency_patterns(
-        self, args: Sequence[str | DependencyPatterns]
-    ) -> list[DependencyPatterns]:
-        dependency_patterns: list[DependencyPatterns] = []
+    def _generate_dependency_specs(
+        self, args: Sequence[str | DependencySpec]
+    ) -> list[DependencySpec]:
+        dependency_specs: list[DependencySpec] = []
         parameters: dict[str, str] = {}
         for key, val in self.parameters.items():
             parameters[key] = stringify(val)
         for arg in args:
-            if isinstance(arg, DependencyPatterns):
-                for i, f in enumerate(arg.patterns):
-                    t = string.Template(f)
-                    arg.patterns[i] = t.safe_substitute(**parameters)
-                dependency_patterns.append(arg)
+            if isinstance(arg, DependencySpec):
+                t = string.Template(arg.pattern)
+                arg.pattern = t.safe_substitute(**parameters)
+                dependency_specs.append(arg)
             else:
                 t = string.Template(arg)
                 pattern = t.safe_substitute(**parameters)
-                dep_pattern = DependencyPatterns(pattern=pattern)
-                dependency_patterns.append(dep_pattern)
-        return dependency_patterns
+                dep_pattern = DependencySpec(pattern=pattern)
+                dependency_specs.append(dep_pattern)
+        return dependency_specs
 
 
 class _GlobalSpecCache:
@@ -527,16 +533,15 @@ class _GlobalSpecCache:
             pass
 
         key = path.absolute()
-        h = hashlib.sha256()
+        h = hashlib.blake2b(digest_size=16)
         h.update(key.read_bytes())
-        digest = h.digest()[:16]
         root = cls._compute_repo_root(key)
         rel = key.relative_to(root)
 
         with cls._lock:
             cls._repo_root[key] = str(root).encode()
             cls._rel_repo[key] = str(rel).encode()
-            cls._file_hash[key] = digest.hex().encode()
+            cls._file_hash[key] = h.hexdigest().encode()
             return cls._key.setdefault(path, key)
 
     @classmethod
@@ -552,7 +557,7 @@ class _GlobalSpecCache:
 
 def build_spec_id(spec: BaseSpec) -> str:
     # Hasher is used to build ID
-    hasher = hashlib.sha256()
+    hasher = hashlib.blake2b(usedforsecurity=False)
     hasher.update(spec.name.encode())
     parameters = spec.parameters | spec.meta_parameters
     if parameters:

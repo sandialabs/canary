@@ -7,6 +7,10 @@ from _canary import generate
 from _canary.util.filesystem import working_dir
 
 
+def _dep_ids(r: "spec.ResolvedSpec") -> list[str]:
+    return [d.spec.id for d in r.dependencies]
+
+
 def test_depends_on_one(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         Path("f1.pyt").touch()
@@ -17,7 +21,8 @@ def test_depends_on_one(tmpdir):
         ]
         resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
-        assert resolved[1].dependencies == [resolved[0]]
+        assert _dep_ids(resolved[1]) == [resolved[0].id]
+        assert [d.when for d in resolved[1].dependencies] == ["on_success"]
 
 
 def test_depends_on_one_to_many(tmpdir):
@@ -32,8 +37,10 @@ def test_depends_on_one_to_many(tmpdir):
         drafts = [b1, b2, b3]
         resolved = generate.resolve(drafts)
         assert resolved[0].dependencies == []
-        assert resolved[1].dependencies == [resolved[0]]
-        assert resolved[2].dependencies == [resolved[0]]
+        assert _dep_ids(resolved[1]) == [resolved[0].id]
+        assert _dep_ids(resolved[2]) == [resolved[0].id]
+        assert [d.when for d in resolved[1].dependencies] == ["on_success"]
+        assert [d.when for d in resolved[2].dependencies] == ["on_success"]
 
 
 def test_depends_on_param(tmpdir):
@@ -53,7 +60,8 @@ def test_depends_on_param(tmpdir):
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
-        assert resolved[3].dependencies == [resolved[1]]
+        assert _dep_ids(resolved[3]) == [resolved[1].id]
+        assert [d.when for d in resolved[3].dependencies] == ["on_success"]
 
 
 def test_depends_on_many_to_one(tmpdir):
@@ -77,7 +85,12 @@ def test_depends_on_many_to_one(tmpdir):
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
-        assert resolved[4].dependencies == [resolved[0], resolved[2], resolved[3]]
+        assert _dep_ids(resolved[4]) == [resolved[0].id, resolved[2].id, resolved[3].id]
+        assert [d.when for d in resolved[4].dependencies] == [
+            "on_success",
+            "on_success",
+            "on_success",
+        ]
 
 
 def test_depends_on_glob(tmpdir):
@@ -98,7 +111,12 @@ def test_depends_on_glob(tmpdir):
         assert resolved[0].dependencies == []
         assert resolved[1].dependencies == []
         assert resolved[2].dependencies == []
-        assert resolved[3].dependencies == [resolved[0], resolved[1], resolved[2]]
+        assert _dep_ids(resolved[3]) == [resolved[0].id, resolved[1].id, resolved[2].id]
+        assert [d.when for d in resolved[3].dependencies] == [
+            "on_success",
+            "on_success",
+            "on_success",
+        ]
 
 
 def test_depends_on_param_subs(tmpdir):
@@ -126,7 +144,8 @@ def test_depends_on_param_subs(tmpdir):
         )
         drafts.append(b)
         resolved = generate.resolve(drafts)
-        assert resolved[1].dependencies == [resolved[0]]
+        assert _dep_ids(resolved[1]) == [resolved[0].id]
+        assert [d.when for d in resolved[1].dependencies] == ["on_success"]
 
 
 def test_depends_on_missing(tmpdir):
@@ -155,3 +174,8 @@ def test_generate_specs(tmpdir):
         resolved = generate.resolve(specs=drafts)
         assert len(resolved) == 4
         assert len(resolved[-1].dependencies) == 3
+        assert [d.when for d in resolved[-1].dependencies] == [
+            "on_success",
+            "on_success",
+            "on_success",
+        ]

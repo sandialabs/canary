@@ -228,8 +228,8 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
         cleanup_db = spec_map["cleanupDB"]
         cleanup_foo = spec_map["cleanupFoo"]
 
-        assert set([_.id for _ in setup_users.dependencies]) == {create_db.id}
-        assert set([_.id for _ in tests_done.dependencies]) == {
+        assert set([_.spec.id for _ in setup_users.dependencies]) == {create_db.id}
+        assert set([_.spec.id for _ in tests_done.dependencies]) == {
             create_db.id,
             foo_only.id,
             db_with_foo.id,
@@ -237,15 +237,15 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
             setup_users.id,
         }
         assert foo_only.dependencies == []
-        assert set([_.id for _ in db_only.dependencies]) == {create_db.id, setup_users.id}
-        assert set([_.id for _ in db_with_foo.dependencies]) == {setup_users.id, create_db.id}
-        assert set([_.id for _ in cleanup_db.dependencies]) == {
+        assert set([_.spec.id for _ in db_only.dependencies]) == {create_db.id, setup_users.id}
+        assert set([_.spec.id for _ in db_with_foo.dependencies]) == {setup_users.id, create_db.id}
+        assert set([_.spec.id for _ in cleanup_db.dependencies]) == {
             db_only.id,
             db_with_foo.id,
             create_db.id,
             setup_users.id,
         }
-        assert set([_.id for _ in cleanup_foo.dependencies]) == {foo_only.id, db_with_foo.id}
+        assert set([_.spec.id for _ in cleanup_foo.dependencies]) == {foo_only.id, db_with_foo.id}
 
 
 class Hook:

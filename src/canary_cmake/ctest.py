@@ -108,6 +108,8 @@ class CTestTestGenerator(AbstractTestGenerator):
         return tests
 
     def resolve_fixtures(self, specs: list["canary.ResolvedSpec"]) -> None:
+        from _canary.testspec import SpecDependency
+
         setup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
         cleanup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
 
@@ -121,12 +123,14 @@ class CTestTestGenerator(AbstractTestGenerator):
             for fixture_name in spec.attributes["fixtures"]["required"]:
                 if fixture_name in setup_fixtures:
                     for fixture in setup_fixtures[fixture_name]:
-                        if fixture not in spec.dependencies:
-                            spec.dependencies.append(fixture)  # type: ignore
+                        if fixture not in [_.spec for _ in spec.dependencies]:
+                            dep = SpecDependency(spec=spec, when="on_success")
+                            spec.dependencies.append(dep)
                 if fixture_name in cleanup_fixtures:
                     for fixture in cleanup_fixtures[fixture_name]:
-                        if spec not in fixture.dependencies:
-                            fixture.dependencies.append(spec)  # type: ignore
+                        if spec not in [_.spec for _ in spec.dependencies]:
+                            dep = SpecDependency(spec=spec, when="on_success")
+                            fixture.dependencies.append(dep)
 
     def resolve_inter_dependencies(
         self, drafts: list["canary.UnresolvedSpec"]
@@ -207,7 +211,7 @@ def create_draft_spec(
     if depends:
         deps = kwargs.setdefault("dependencies", [])
         for d in depends:
-            deps.append(canary.DependencyPatterns(pattern=d, expects="+", result_match="success"))
+            deps.append(canary.DependencySpec(pattern=d, expects="+", when="on_success"))
     if environment is not None:
         kwargs.setdefault("environment", {}).update(environment)
     if disabled:

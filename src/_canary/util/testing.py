@@ -70,6 +70,7 @@ def generate_random_testcases(
     max_params: int = 3,
     max_rows: int = 5,
 ) -> list["TestCase"]:
+    from ..testcase import Dependency
     from ..testcase import TestCase
     from ..testexec import ExecutionSpace
 
@@ -80,10 +81,9 @@ def generate_random_testcases(
         root=root, count=count, max_params=max_params, max_rows=max_rows
     )
     for spec in static_order(specs):
-        dependencies = [lookup[dep.id] for dep in spec.dependencies]
-        case: TestCase
+        deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
         space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-        case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+        case: TestCase = TestCase(spec=spec, workspace=space, dependencies=deps)
         lookup[spec.id] = case
         cases.append(case)
     return cases

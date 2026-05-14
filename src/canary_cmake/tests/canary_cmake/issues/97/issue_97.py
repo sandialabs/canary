@@ -19,9 +19,8 @@ def test_issue_97(tmpdir):
     generator = ctg.CTestTestGenerator(file)
     specs = generator.lock()
     for spec in specs:
-        print(spec)
         for dep in spec.dependencies:
-            print((spec.id[:7], dep.id[:7]))
+            print((spec.id[:7], dep.spec.id[:7]))
     db = WorkspaceDatabase(Path(tmpdir.strpath))
     db.put_specs(specs)
     force_remove(os.path.join(os.path.dirname(__file__), "Testing"))

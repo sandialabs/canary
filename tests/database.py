@@ -73,9 +73,9 @@ def test_dependencies_roundtrip(db: WorkspaceDatabase, make_random_specs: MakeRa
     db.put_specs(specs)
     loaded = {s.id: s for s in db.load_specs()}
 
-    for spec in specs:
-        orig = {d.id for d in spec.dependencies}
-        new = {d.id for d in loaded[spec.id].dependencies}
+    for s in specs:
+        orig = {d.spec.id for d in s.dependencies}
+        new = {d.spec.id for d in loaded[s.id].dependencies}
         assert orig == new
 
 
@@ -127,8 +127,8 @@ def test_get_dependency_graph_includes_all_nodes(
 
     graph = db.get_dependency_graph()
 
-    for spec in specs:
-        assert spec.id in graph
+    for s in specs:
+        assert s.id in graph
 
 
 # -----------------------------------------------------------------------------
