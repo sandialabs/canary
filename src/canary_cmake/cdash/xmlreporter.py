@@ -264,27 +264,27 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.status.code
             fail_reason = None
-            if not case.state.is_done() != "COMPLETE":
+            if not case.state.is_done():
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status.has_category("SKIP"):
+            elif case.status.is_skipped():
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.has_category("PASS"):
+            elif case.status.is_success():
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status.has_outcome("TIMEOUT"):
+            elif case.status.is_timeout():
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status.has_category("FAIL"):
+            elif case.status.is_failure():
                 status = "failed"
-                exit_code = case.status.outcome.title()
+                exit_code = case.status.outcome.name.title()
                 completion_status = "Completed"
-                fail_reason = case.status.reason or f"Test {case.status.outcome.lower()}"
-            elif case.status.has_category("CANCEL"):
+                fail_reason = case.status.reason or f"Test {case.status.outcome.name.lower()}"
+            elif case.status.is_cancelled():
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
@@ -520,9 +520,9 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status.has_category("PASS"):
+        if case.status.is_success():
             return
-        elif case.status.has_category("FAIL"):
+        elif case.status.is_failure():
             self.status |= 2**1
         else:
             self.status |= 2**2

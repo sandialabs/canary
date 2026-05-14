@@ -123,7 +123,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
-            assert case.status.has_category("FAIL")
+            assert case.status.is_failure()
             assert case.status.has_code(65)
 
 
@@ -148,7 +148,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
-            assert case.status.has_category("SKIP")
+            assert case.status.is_skipped()
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -172,7 +172,7 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
             case = tc.TestCase(spec=spec, workspace=workspace)
             runner(case)
-        assert case.status.has_category("PASS")
+        assert case.status.is_success()
         assert case.status.code == 0
 
 

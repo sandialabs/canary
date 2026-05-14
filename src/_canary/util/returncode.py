@@ -17,22 +17,23 @@ def compute_returncode(jobs: Sequence["BaseJob"], permissive: bool = False) -> i
     returncode: int = 0
     warned: set[str] = set()
     for job in jobs:
-        if job.status.category_in(("PASS", "SKIP")):
+        stat = job.status
+        if stat.is_success() or stat.is_skipped():
             continue
         elif not job.state.is_done():
             returncode |= 2**5
-        elif job.status.has_outcome("DIFFED"):
+        elif stat.is_diffed():
             returncode |= 2**1
-        elif job.status.has_outcome("TIMEOUT"):
+        elif stat.is_timeout():
             returncode |= 2**2
-        elif job.status.is_failure():
+        elif stat.is_failure():
             returncode |= 2**3
-        elif job.status.is_cancelled():
+        elif stat.is_cancelled():
             returncode |= 2**4
         elif not permissive:
             # any other code is a failure
             returncode |= 2**6
-            if job.status.outcome.name not in warned:
-                logger.warning(f"unhandled status: {job.status.outcome.name}")
-                warned.add(job.status.outcome.name)
+            if stat.outcome.name not in warned:
+                logger.warning(f"unhandled status: {stat.outcome.name}")
+                warned.add(stat.outcome.name)
     return returncode

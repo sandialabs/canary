@@ -153,9 +153,9 @@ class Status(CanarySubcommand):
 
 def sortkey(row: dict) -> tuple:
     c = 1
-    if row["status"].has_category("PASS"):
+    if row["status"].is_success():
         c = 0
-    if row["status"].has_category("FAIL"):
+    if row["status"].is_failure():
         c = 2
     return (c, row["status"].outcome, row["timekeeper"].duration())
 
@@ -222,6 +222,8 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
 
 
 def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
+    from ...status import Outcome
+
     chars = chars or "dftns"
     if "A" in chars:
         return rows
@@ -230,20 +232,20 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
         status: _Status = row["status"]
         state: JobState = row["state"]
         if "a" in chars:
-            keep[i] = not status.has_category("PASS")
-        elif status.has_category("SKIP"):
+            keep[i] = not status.is_success()
+        elif status.is_skipped():
             keep[i] = "s" in chars
-        elif status.has_category("PASS"):
+        elif status.is_success():
             keep[i] = "p" in chars
-        elif status.outcome_in(("FAILED", "ERROR", "BROKEN")):
+        elif status.outcome in (Outcome.FAILED, Outcome.ERROR, Outcome.BROKEN):
             keep[i] = "f" in chars
-        elif status.has_outcome("DIFFED"):
+        elif status.is_diffed():
             keep[i] = "d" in chars
-        elif status.has_outcome("TIMEOUT"):
+        elif status.is_timeout():
             keep[i] = "t" in chars
         elif not state.is_done():
             keep[i] = "n" in chars
-        elif status.has_category("CANCEL"):
+        elif status.is_cancelled():
             keep[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {status}")

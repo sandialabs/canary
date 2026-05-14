@@ -53,18 +53,6 @@ class BatchStatus:
     def is_cancelled(self) -> bool:
         return self.base.is_cancelled()
 
-    def has_category(self, arg: Category | str) -> bool:
-        return self.base.has_category(arg)
-
-    def has_outcome(self, arg: Outcome | str) -> bool:
-        return self.base.has_outcome(arg)
-
-    def outcome_in(self, arg) -> bool:
-        return self.base.outcome_in(arg)
-
-    def category_in(self, arg) -> bool:
-        return self.base.category_in(arg)
-
     def asdict(self) -> dict[str, Any]:
         return self.base.asdict()
 

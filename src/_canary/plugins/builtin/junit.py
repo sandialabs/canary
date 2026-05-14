@@ -125,7 +125,7 @@ class JunitDocument(xdom.Document):
         testcase.setAttribute("classname", get_classname(case))
         testcase.setAttribute("time", str(case.timekeeper.duration()))
         testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
-        if case.status.has_category("FAIL"):
+        if case.status.is_failure():
             failure = self.create_element("failure")
             failure.setAttribute("message", f"Test case status: {case.status.outcome.name}")
             failure.setAttribute("type", case.status.outcome.name)
@@ -140,7 +140,7 @@ class JunitDocument(xdom.Document):
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
                     failure.appendChild(text)
-        elif case.status.has_category("SKIP"):
+        elif case.status.is_skipped():
             skipped = self.create_element("skipped")
             skipped.setAttribute("message", case.status.outcome.name)
             testcase.appendChild(skipped)
@@ -153,9 +153,9 @@ def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     finished_on: datetime | None = None
     for case in cases:
         stats.num_tests += 1
-        if case.status.has_category("FAIL"):
+        if case.status.is_failure():
             stats.num_failed += 1
-        elif case.status.has_category("SKIP"):
+        elif case.status.is_skipped():
             stats.num_skipped += 1
         elif not case.state.is_done():
             stats.num_error += 1

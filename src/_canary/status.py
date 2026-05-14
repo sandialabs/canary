@@ -8,7 +8,6 @@ from enum import IntEnum
 from typing import Any
 from typing import Literal
 from typing import MutableMapping
-from typing import Sequence
 
 
 class Category(str, Enum):
@@ -20,28 +19,28 @@ class Category(str, Enum):
 
     @classmethod
     def factory(cls, arg: "Category | str") -> "Category":
-        return arg if isinstance(arg, Category) else Category(arg)
+        return arg if isinstance(arg, Category) else Category(arg.upper())
 
     def rich_color(self) -> str:
-        if self is Category.PASS:
+        if self == Category.PASS:
             return "bold green"
-        elif self is Category.FAIL:
+        elif self == Category.FAIL:
             return "bold red"
-        elif self is Category.SKIP:
+        elif self == Category.SKIP:
             return "bold yellow"
-        elif self is Category.CANCEL:
+        elif self == Category.CANCEL:
             return "bold magenta"
         else:
             return "bold"
 
     def hex_color(self) -> str:
-        if self is Category.PASS:
+        if self == Category.PASS:
             return "#02FE20"
-        elif self is Category.FAIL:
+        elif self == Category.FAIL:
             return "#FF3333"
-        elif self is Category.SKIP:
+        elif self == Category.SKIP:
             return "#FEFD02"
-        elif self is Category.CANCEL:
+        elif self == Category.CANCEL:
             return "#F202FE"
         else:
             return ""
@@ -107,37 +106,46 @@ class Status:
     def __post_init__(self) -> None:
         self.set(category=self.category, outcome=self.outcome, reason=self.reason, code=self.code)
 
+    # --- Category query methods
     def is_success(self) -> bool:
-        return self.category is Category.PASS
+        return self.category == Category.PASS
 
     def is_failure(self) -> bool:
-        return self.category is Category.FAIL
+        return self.category == Category.FAIL
 
     def is_skipped(self) -> bool:
-        return self.category is Category.SKIP
+        return self.category == Category.SKIP
 
     def is_cancelled(self) -> bool:
-        return self.category is Category.CANCEL
+        return self.category == Category.CANCEL
 
-    def has_category(self, arg: Category | str) -> bool:
-        return self.category is Category.factory(arg)
+    def is_unset(self) -> bool:
+        return self.category == Category.NONE
+
+    def is_terminal(self) -> bool:
+        return self.category != Category.NONE
+
+    # --- Outcome query methods
+    def is_diffed(self) -> bool:
+        return self.outcome == Outcome.DIFFED
+
+    def is_failed(self) -> bool:
+        return self.outcome == Outcome.FAILED
+
+    def is_error(self) -> bool:
+        return self.outcome == Outcome.ERROR
+
+    def is_timeout(self) -> bool:
+        return self.outcome == Outcome.TIMEOUT
+
+    def is_xfail(self) -> bool:
+        return self.outcome == Outcome.XFAIL
+
+    def is_xdiff(self) -> bool:
+        return self.outcome == Outcome.XDIFF
 
     def has_code(self, arg: int) -> bool:
         return self.code == arg
-
-    def category_in(self, arg: Sequence[Category | str]) -> bool:
-        s = {Category.factory(x) for x in arg}
-        return self.category in s
-
-    def has_outcome(self, arg: Outcome | str) -> bool:
-        return self.outcome is Outcome.factory(arg)
-
-    def outcome_in(self, arg: Sequence[Outcome | str]) -> bool:
-        s = {Outcome.factory(x) for x in arg}
-        return self.outcome in s
-
-    def is_terminal(self) -> bool:
-        return self.category is not Category.NONE
 
     @property
     def returncode(self) -> int:
@@ -163,16 +171,16 @@ class Status:
             outcome2 = Outcome.NONE
         if outcome_was_provided and not category_was_provided:
             category2 = Category.NONE
-        if outcome2 is not Outcome.NONE:
+        if outcome2 != Outcome.NONE:
             inferred = get_category(outcome2)
-            if category2 is Category.NONE:
+            if category2 == Category.NONE:
                 category2 = inferred
-            elif category2 is not inferred:
+            elif category2 != inferred:
                 raise ValueError(
                     f"Outcome {outcome2.name} implies category {inferred.value}, not {category2.value}"
                 )
 
-        if category2 is not Category.NONE and outcome2 is Outcome.NONE:
+        if category2 != Category.NONE and outcome2 == Outcome.NONE:
             outcome2 = get_default_outcome(category2)
 
         allowed = get_possible_outcomes(category2)
@@ -324,9 +332,9 @@ def get_category(arg: Outcome) -> "Category":
 
 
 def get_possible_outcomes(arg: Category) -> tuple["Outcome", ...]:
-    if arg is Category.PASS:
+    if arg == Category.PASS:
         return (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL)
-    elif arg is Category.FAIL:
+    elif arg == Category.FAIL:
         return (
             Outcome.DIFFED,
             Outcome.FAILED,
@@ -335,22 +343,22 @@ def get_possible_outcomes(arg: Category) -> tuple["Outcome", ...]:
             Outcome.TIMEOUT,
             Outcome.INVALID,
         )
-    elif arg is Category.CANCEL:
+    elif arg == Category.CANCEL:
         return (Outcome.CANCELLED, Outcome.INTERRUPTED)
-    elif arg is Category.SKIP:
+    elif arg == Category.SKIP:
         return (Outcome.SKIPPED, Outcome.BLOCKED)
     else:
         return (Outcome.NONE,)
 
 
 def get_default_outcome(arg: Category) -> "Outcome":
-    if arg is Category.PASS:
+    if arg == Category.PASS:
         return Outcome.SUCCESS
-    elif arg is Category.FAIL:
+    elif arg == Category.FAIL:
         return Outcome.DIFFED
-    elif arg is Category.CANCEL:
+    elif arg == Category.CANCEL:
         return Outcome.CANCELLED
-    elif arg is Category.SKIP:
+    elif arg == Category.SKIP:
         return Outcome.SKIPPED
     else:
         return Outcome.NONE

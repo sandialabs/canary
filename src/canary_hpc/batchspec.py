@@ -254,7 +254,7 @@ class TestBatch(BaseJob):
     def is_runnable(self) -> bool:
         if self.state.is_done():
             return False
-        if self.status.has_category("SKIP"):
+        if self.status.is_skipped():
             return False
         # Nothing else makes a batch permanently unrunnable today
         return True
@@ -294,7 +294,7 @@ class TestBatch(BaseJob):
                 rc = 1
             self.refresh()
             self.state.phase = JobPhase.DONE
-            if all(case.status.has_outcome("SUCCESS") for case in self):
+            if all(case.status.is_success() for case in self):
                 self.status.set_base(outcome="SUCCESS")
             else:
                 self.status.set_base(outcome="FAILED", reason="One or more test cases did not pass")

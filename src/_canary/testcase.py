@@ -455,7 +455,7 @@ class TestCase(BaseJob):
             self.measurements.update(measurements.data)
         if st := data.get("state"):
             self.state.phase = st.phase
-        elif not self.status.has_category("NONE"):
+        elif not self.status.is_unset():
             self.state.phase = JobPhase.DONE
 
     def do_baseline(self) -> None:

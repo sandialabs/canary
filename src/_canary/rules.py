@@ -396,15 +396,15 @@ class RerunRule(RuntimeRule):
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason="case spec has not changed since last run")
         elif self.strategy == "not_pass":
-            if not case.status.has_category("PASS"):
+            if not case.status.is_success():
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason=f"previous result = {case.status.outcome}")
         elif self.strategy == "failed":
-            if case.status.has_category("FAIL"):
+            if case.status.is_failure():
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason=f"previous result = {case.status.outcome} != FAIL")
         elif self.strategy == "not_run":
-            if case.status.has_category("NONE"):
+            if case.status.is_unset():
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
         else:
