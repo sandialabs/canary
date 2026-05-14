@@ -91,7 +91,6 @@ class BaseSpec(Generic[T]):
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
     dependencies: MutableSequence[Any] = dataclasses.field(default_factory=list)
-    dep_done_criteria: list[str] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     keywords: list[str] = dataclasses.field(default_factory=list)
@@ -279,7 +278,7 @@ class BaseSpec(Generic[T]):
 @dataclasses.dataclass
 class ResolvedSpec(BaseSpec["ResolvedSpec"]):
     baseline: list[dict] = dataclasses.field(default_factory=list)
-    dependencies: MutableSequence["ResolvedSpec"] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence["SpecDependency"] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
 
     def __hash__(self) -> int:
@@ -374,6 +373,12 @@ class DependencySpec:
         return errors
 
 
+@dataclasses.dataclass(slots=True)
+class SpecDependency:
+    spec: "ResolvedSpec"
+    when: str = "on_success"
+
+
 @dataclasses.dataclass
 class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     """Temporary object used to hold test spec properties until a concrete spec can be created
@@ -402,22 +407,21 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def resolve(
-        self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None
-    ) -> "ResolvedSpec":
+    def build(self, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
         errors: list[str] = []
         for dp in self.dep_specs:
-            if e := dp.verify():
-                errors.extend(e)
-        dep_done_criteria = dep_done_criteria or ["success"] * len(dependencies)
+            errors.extend(dp.verify())
         if errors:
             raise UnresolvedDependenciesErrors(errors)
+        deps: list[SpecDependency] = []
+        for dp in self.dep_specs:
+            for dep_id in dp.resolves_to:
+                deps.append(SpecDependency(spec=lookup[dep_id], when=dp.when))
         return ResolvedSpec(
             file_root=self.file_root,
             file_path=self.file_path,
             family=self.family,
-            dependencies=dependencies,
-            dep_done_criteria=dep_done_criteria,
+            dependencies=deps,
             keywords=self.keywords,
             parameters=self.parameters,
             meta_parameters=self.meta_parameters,

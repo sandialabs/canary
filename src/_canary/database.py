@@ -21,6 +21,7 @@ from .job import JobState
 from .job import Measurements
 from .status import Status
 from .testspec import ResolvedSpec
+from .testspec import SpecDependency
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
@@ -182,12 +183,14 @@ class WorkspaceDatabase:
             deps = spec.dependencies
             try:
                 spec.dependencies = []
-                blob = pickle.dumps(spec, protocol=pickle.HIGHEST_PROTOCOL)
+                when: dict[str, str] = {}
+                when = {d.spec.id: d.when for d in deps}
+                blob = pickle.dumps([spec, when], protocol=pickle.HIGHEST_PROTOCOL)
             finally:
                 spec.dependencies = deps
             view = Path(spec.execpath) / spec.file.name
             source = spec.file
-            dep_ids = [dep.id for dep in spec.dependencies]
+            dep_ids = [dep.spec.id for dep in spec.dependencies]
             return spec.id, blob, source.as_posix(), view.as_posix(), dep_ids
 
         data = []
@@ -320,14 +323,17 @@ class WorkspaceDatabase:
 
     def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[ResolvedSpec]:
         specs: dict[str, ResolvedSpec] = {}
+        when_conditions: dict[str, dict[str, str]] = {}
         for row in rows:
-            spec = pickle.loads(row[-1])  # nosec 301
+            spec, when = pickle.loads(row[-1])  # nosec 301
             spec.dependencies = []
             specs[spec.id] = spec
+            when_conditions[spec.id] = when
         ids = [spec.id for spec in specs.values()]
         edges = self.get_edges(ids)
         for spec_id, dep_id in edges:
-            specs[spec_id].dependencies.append(specs[dep_id])
+            d = SpecDependency(spec=specs[dep_id], when=when_conditions[spec_id][dep_id])
+            specs[spec_id].dependencies.append(d)
         return list(specs.values())
 
     def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
@@ -340,7 +346,7 @@ class WorkspaceDatabase:
             rows = self.connection.execute(
                 "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN (SELECT id FROM _ids)"
             ).fetchall()
-            self.connection.execute("DROP TABLE _ids").fetchall()
+            self.connection.execute("DROP TABLE _ids")
         return rows
 
     @staticmethod

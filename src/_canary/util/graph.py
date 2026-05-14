@@ -21,7 +21,7 @@ def static_order(specs: Sequence["ResolvedSpec"]) -> list["ResolvedSpec"]:
     graph: dict[str, list[str]] = {}
     for spec in specs:
         map[spec.id] = spec
-        graph[spec.id] = [dep.id for dep in spec.dependencies]
+        graph[spec.id] = [dep.spec.id for dep in spec.dependencies]
     ts = TopologicalSorter(graph)
     return [map[id] for id in ts.static_order()]
 
@@ -30,7 +30,7 @@ def static_order_ix(specs: Sequence["ResolvedSpec"]) -> list[int]:
     map: dict[str, int] = {}
     graph: dict[str, list[str]] = {}
     for i, spec in enumerate(specs):
-        graph[spec.id] = [dep.id for dep in spec.dependencies]
+        graph[spec.id] = [dep.spec.id for dep in spec.dependencies]
         map[spec.id] = i
     ts = TopologicalSorter(graph)
     return [map[id] for id in ts.static_order()]

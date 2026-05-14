@@ -192,7 +192,7 @@ class Selector:
         dependents: dict[str, list[str]] = {s.id: [] for s in self.specs}
         for s in self.specs:
             for dep in s.dependencies:
-                dependents[dep.id].append(s.id)
+                dependents[dep.spec.id].append(s.id)
         while queue:
             masked = queue.popleft()
             for child_id in dependents[masked.id]:
@@ -315,7 +315,7 @@ class RuntimeSelector:
         dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
         for case in self.cases:
             for dep in case.spec.dependencies:
-                dependents.setdefault(dep.id, []).append(case.id)
+                dependents.setdefault(dep.spec.id, []).append(case.id)
         while queue:
             excluded = queue.popleft()
             for child_id in dependents[excluded.id]:

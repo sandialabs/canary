@@ -85,7 +85,7 @@ class TestCase(BaseJob):
         self,
         spec: "ResolvedSpec",
         workspace: ExecutionSpace,
-        dependencies: list["TestCase"] | None = None,
+        dependencies: list[Dependency] | None = None,
     ) -> None:
         super().__init__()
         self.spec = spec
@@ -99,18 +99,8 @@ class TestCase(BaseJob):
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
-        self.dependencies = dependencies or []
-        if len(self.spec.dependencies) != len(self.dependencies):
-            raise ValueError("Incorrect number of dependencies")
-
-        expected = list(self.spec.dep_done_criteria or [])
-        if expected and len(expected) != len(self.dependencies):
-            raise ValueError("Incorrect number of dependency conditions")
-
-        # new canonical list
-        self.depends_on: list[Dependency] = [
-            Dependency(case=dep, when=expected[i]) for i, dep in enumerate(self.dependencies)
-        ]
+        self.depends_on: list[Dependency] = dependencies or []
+        self.dependencies: list["TestCase"] = [d.case for d in self.depends_on]
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):

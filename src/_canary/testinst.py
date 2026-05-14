@@ -174,16 +174,16 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
     spec = lock["spec"]
     dependencies: list[TestInstance] = []
     for dep in spec["dependencies"]:
-        dependencies.append(lookup[dep["id"]])
+        dependencies.append(lookup[dep["spec"]["id"]])
     parameters: Parameters
     cls: Type[TestInstance]
     if lock["spec"]["attributes"].get("multicase"):
         cls = TestMultiInstance
         columns: dict[str, list[Any]] = {}
-        for key in spec["dependencies"][0]["parameters"].keys():
+        for key in spec["dependencies"][0]["spec"]["parameters"].keys():
             col = columns.setdefault(key, [])
             for dep in spec["dependencies"]:
-                col.append(dep["parameters"][key])
+                col.append(dep["spec"]["parameters"][key])
         parameters = MultiParameters(**columns)
     else:
         cls = TestInstance

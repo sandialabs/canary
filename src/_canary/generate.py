@@ -174,7 +174,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         if isinstance(spec, ResolvedSpec):
             resolved_specs.append(spec)
         elif not spec.dependencies:
-            resolved_specs.append(spec.resolve([]))
+            resolved_specs.append(spec.build({}))
         else:
             draft_specs.append(spec)
 
@@ -192,11 +192,12 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
     matchable_specs = draft_specs + resolved_specs
 
     # Generator dependency graph in parallel, specs will be added as they resolve
-    graph: dict[str, list[str]] = {r.id: [_.id for _ in r.dependencies] for r in resolved_specs}
+    graph: dict[str, list[str]] = {
+        r.id: [d.spec.id for d in r.dependencies] for r in resolved_specs
+    }
     draft_lookup: dict[str, list[str]] = {}
-    dep_done_criteria: dict[str, list[str]] = {}
 
-    results: list[tuple[str, list[str], list[str]]]
+    results: list[tuple[str, list[str]]]
     if os.getenv("CANARY_SERIAL_SPEC_RESOLUTION"):
         results = _resolve_dependencies_serial(
             draft_specs, matchable_specs, unique_name_idx, non_unique_idx, spec_map
@@ -207,10 +208,9 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
         )
 
     # Merge results
-    for spec_id, matches, done_criteria in results:
+    for spec_id, matches in results:
         graph[spec_id] = matches
         draft_lookup[spec_id] = matches
-        dep_done_criteria[spec_id] = done_criteria
 
     # Resolve dependencies using topological sort (this is fast, keep sequential)
     lookup: dict[str, ResolvedSpec] = {}
@@ -225,9 +225,7 @@ def resolve(specs: Sequence["UnresolvedSpec | ResolvedSpec"]) -> list["ResolvedS
                 lookup[id] = draft
             else:
                 assert isinstance(draft, UnresolvedSpec)
-                dep_ids = draft_lookup.get(id, [])
-                dependencies = [lookup[dep_id] for dep_id in dep_ids]
-                lookup[id] = draft.resolve(dependencies, dep_done_criteria.get(id, []))
+                lookup[id] = draft.build(lookup)
 
         ts.done(*ids)
 
@@ -240,9 +238,9 @@ def _resolve_dependencies_serial(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> list[tuple[str, list[str], list[str]]]:
+) -> list[tuple[str, list[str]]]:
     """Resolve dependencies serially for debugging"""
-    results = []
+    results: list[tuple[str, list[str]]] = []
     for spec in specs_to_resolve:
         if not spec.dep_specs:
             results.append(_resolve_empty(spec))
@@ -261,7 +259,7 @@ def _resolve_dependencies_parallel(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> list[tuple[str, list[str], list[str]]]:
+) -> list[tuple[str, list[str]]]:
     """Resolve dependencies in parallel, returning (spec_id, match_ids, done_criteria)"""
 
     if not specs_to_resolve:
@@ -293,9 +291,9 @@ def _resolve_dependencies_parallel(
     return results
 
 
-def _resolve_empty(spec: "UnresolvedSpec") -> tuple[str, list[str], list[str]]:
+def _resolve_empty(spec: "UnresolvedSpec") -> tuple[str, list[str]]:
     """Fast path for specs with no dependencies"""
-    return (spec.id, [], [])
+    return (spec.id, [])
 
 
 def _resolve_spec_dependencies(
@@ -304,11 +302,9 @@ def _resolve_spec_dependencies(
     unique_name_idx: dict[str, str],
     non_unique_idx: dict[str, list[str]],
     spec_map: dict[str, "UnresolvedSpec | ResolvedSpec"],
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str]]:
     """Resolve dependencies for a single spec"""
     matches: list[str] = []
-    done_criteria: list[str] = []
-
     for dp in spec.dep_specs:
         deps = _find_matching_specs(
             dp, spec, matchable_specs, unique_name_idx, non_unique_idx, spec_map
@@ -316,9 +312,7 @@ def _resolve_spec_dependencies(
         dep_ids = [d.id for d in deps]
         dp.update(*dep_ids)
         matches.extend(dep_ids)
-        done_criteria.extend([dp.when] * len(deps))
-
-    return (spec.id, matches, done_criteria)
+    return (spec.id, matches)
 
 
 def _find_matching_specs(
