@@ -107,7 +107,7 @@ jobs:
       - name: Ruff
         run: |
           ruff format --check --diff
-          ruff check --show-fixes --exclude=src/canary/__init__.py
+          ruff check --extend-select S324 --show-fixes --exclude=src/canary/__init__.py
 
       - name: MyPy type checking
         run: |

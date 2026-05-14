@@ -527,15 +527,16 @@ class _GlobalSpecCache:
             pass
 
         key = path.absolute()
-        h = hashlib.blake2b(digest_size=16)
+        h = hashlib.sha256()
         h.update(key.read_bytes())
+        digest = h.digest()[:16]
         root = cls._compute_repo_root(key)
         rel = key.relative_to(root)
 
         with cls._lock:
             cls._repo_root[key] = str(root).encode()
             cls._rel_repo[key] = str(rel).encode()
-            cls._file_hash[key] = h.hexdigest().encode()
+            cls._file_hash[key] = digest.hex().encode()
             return cls._key.setdefault(path, key)
 
     @classmethod
@@ -551,7 +552,7 @@ class _GlobalSpecCache:
 
 def build_spec_id(spec: BaseSpec) -> str:
     # Hasher is used to build ID
-    hasher = hashlib.blake2b()
+    hasher = hashlib.sha256()
     hasher.update(spec.name.encode())
     parameters = spec.parameters | spec.meta_parameters
     if parameters:

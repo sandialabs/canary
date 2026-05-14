@@ -102,8 +102,8 @@ class server:
             "stamp": buildstamp,
         }
         if mdf5:
-            md5sum = checksum(hashlib.md5, filename, block_size=8192)
-            params["MD5"] = md5sum
+            sha256sum = checksum(hashlib.sha256, filename, block_size=8192)
+            params["SHA"] = sha256sum
         encoded_params = urlencode(params)
         url = f"{self.baseurl}/submit.php?{encoded_params}"
         logger.info(f"Uploading {os.path.basename(filename)} to {url}")
