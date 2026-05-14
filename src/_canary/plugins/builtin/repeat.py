@@ -47,12 +47,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_pass(case: "TestCase") -> None:
-    if (case.status.category == "FAIL") and (count := config.getoption("repeat_until_pass")):
+    if case.status.is_failure() and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, i)
-            if case.status.category == "PASS":
+            if case.status.is_success():
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
@@ -61,12 +61,12 @@ def repeat_until_pass(case: "TestCase") -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "TestCase") -> None:
-    if (case.status.status == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
+    if case.status.is_timeout() and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, i)
-            if not case.status.status == "TIMEOUT":
+            if not case.status.is_timeout():
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
@@ -75,12 +75,12 @@ def repeat_after_timeout(case: "TestCase") -> None:
 
 @hookimpl(specname="canary_runtest")
 def repeat_until_fail(case: "TestCase") -> None:
-    if (case.status.category == "PASS") and (count := config.getoption("repeat_until_fail")):
+    if case.status.is_success() and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
             rerun_case(case, i)
-            if not case.status.category == "PASS":
+            if not case.status.is_success():
                 break
         else:
             return

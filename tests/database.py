@@ -47,7 +47,7 @@ def make_session():
         )
         for case in cases:
             with case.timekeeper.timeit():
-                case.status.set(state="COMPLETE", category="PASS", status="SUCCESS")
+                case.status.set(category="PASS", outcome="SUCCESS")
         session = SimpleNamespace(name="session", cases=cases)
         return session
 
@@ -195,7 +195,7 @@ def test_result_history(db: WorkspaceDatabase, make_session):
 
     for case in session.cases:
         with case.timekeeper.timeit():
-            case.status.set(state="COMPLETE", category="PASS", status="SUCCESS")
+            case.status.set(category="PASS", outcome="SUCCESS")
             case.workspace.session = "s2"
     db.put_results(*session.cases)
 

@@ -16,8 +16,10 @@ from typing import Any
 from typing import Iterable
 
 from . import testspec
+from .job import JobPhase
+from .job import JobState
+from .job import Measurements
 from .status import Status
-from .testcase import Measurements
 from .testspec import ResolvedSpec
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -153,9 +155,9 @@ class WorkspaceDatabase:
             file_path TEXT,
             session TEXT,
             workspace TEXT,
-            status_state TEXT,
+            job_state TEXT,
             status_category TEXT,
-            status_status TEXT,
+            status_outcome TEXT,
             status_reason TEXT,
             status_code INTEGER,
             submitted REAL,
@@ -172,6 +174,7 @@ class WorkspaceDatabase:
             sql = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
             conn.execute(sql)
 
+        _migrate_results_status_state_to_job_state(self)
         return
 
     def put_specs(self, specs: list[ResolvedSpec]) -> None:
@@ -350,9 +353,9 @@ class WorkspaceDatabase:
             str(case.spec.file_path),
             str(case.workspace.session),
             str(case.workspace.path),
-            case.status.state,
+            case.state.phase.value,
             case.status.category,
-            case.status.status,
+            case.status.outcome,
             case.status.reason or "",
             case.status.code,
             case.timekeeper.submitted,
@@ -381,7 +384,7 @@ class WorkspaceDatabase:
         sql = """
         INSERT OR REPLACE INTO results (
           spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
-          status_state, status_category, status_status, status_reason, status_code,
+          job_state, status_category, status_outcome, status_reason, status_code,
           submitted, started, finished, measurements
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
@@ -447,14 +450,9 @@ class WorkspaceDatabase:
         d["file_path"] = row[4]
         d["session"] = row[5]
         d["workspace"] = row[6]
+        d["state"] = JobState(phase=JobPhase(row[7]))
         d["status"] = Status.from_dict(
-            {
-                "state": row[7],
-                "category": row[8],
-                "status": row[9],
-                "reason": row[10],
-                "code": row[11],
-            }
+            {"category": row[8], "outcome": row[9], "reason": row[10], "code": row[11]}
         )
         d["timekeeper"] = Timekeeper.from_dict(
             {"submitted": row[12], "started": row[13], "finished": row[14]}
@@ -612,7 +610,7 @@ class WorkspaceDatabase:
             r.spec_id,
             r.finished,
             r.status_category,
-            r.status_status
+            r.status_outcome
           FROM results r
           JOIN latest_session ls
           ON r.spec_id = ls.spec_id
@@ -624,7 +622,7 @@ class WorkspaceDatabase:
           sm.view,
           lr.finished,
           lr.status_category,
-          lr.status_status
+          lr.status_outcome
         FROM specs s
         JOIN specs_meta sm
           ON sm.spec_id = s.spec_id
@@ -678,7 +676,7 @@ class ResultListener(threading.Thread):
         self.db = db
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
-        self._processed: set[Path] = set()  # Track processed files
+        self._processed: set[str] = set()  # Track processed files
 
     def run(self):
         """Main thread loop."""
@@ -732,3 +730,81 @@ def is_operation_error(e: BaseException) -> bool:
 class NotASelection(Exception):
     def __init__(self, tag):
         super().__init__(f"No selection for tag {tag!r} found")
+
+
+# Backward compatibility
+
+
+def _migrate_results_status_state_to_job_state(db: WorkspaceDatabase) -> None:
+    conn = db.connection
+    row = conn.execute("SELECT 1 FROM results").fetchone()
+    if row is None:
+        return
+    info = conn.execute("PRAGMA table_info(results)").fetchall()
+    cols = {r[1] for r in info}
+    if "status_state" not in cols:
+        return
+    if "job_state" in cols:
+        # inconsistent schema; bail or handle separately
+        logger.warning("results has both status_state and job_state; skipping migration")
+        return
+    logger.info("DB migration: results.status_state -> results.job_state")
+    with conn:
+        # 1) rename old table out of the way
+        conn.execute("ALTER TABLE results RENAME TO results_old")
+
+        # 2) create new results table with job_state
+        conn.execute(
+            """
+            CREATE TABLE results (
+              spec_id TEXT,
+              spec_name TEXT,
+              spec_fullname TEXT,
+              file_root TEXT,
+              file_path TEXT,
+              session TEXT,
+              workspace TEXT,
+
+              job_state TEXT,
+
+              status_category TEXT,
+              status_outcome TEXT,
+              status_reason TEXT,
+              status_code INTEGER,
+
+              submitted REAL,
+              started REAL,
+              finished REAL,
+              measurements TEXT,
+
+              PRIMARY KEY (spec_id, session)
+            )
+            """
+        )
+
+        # 3) copy data with transformation
+        conn.execute(
+            """
+            INSERT INTO results (
+              spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
+              job_state, status_category, status_outcome, status_reason, status_code,
+              submitted, started, finished, measurements
+            )
+            SELECT
+              spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
+              CASE status_state
+                WHEN 'COMPLETE' THEN 'DONE'
+                WHEN 'NOTRUN'   THEN 'DONE'
+                WHEN 'READY'    THEN 'PENDING'
+                WHEN 'PENDING'  THEN 'PENDING'
+                WHEN 'RUNNING'  THEN 'RUNNING'
+                ELSE 'PENDING'
+              END AS job_state,
+              status_category, status_status, status_reason, status_code,
+              submitted, started, finished, measurements
+            FROM results_old
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)")
+        conn.execute("DROP TABLE results_old")

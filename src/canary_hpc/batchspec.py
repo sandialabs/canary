@@ -17,10 +17,11 @@ from typing import cast
 import hpc_connect
 
 import canary
+from _canary.job import BaseJob
+from _canary.job import JobPhase
+from _canary.job import JobState
 from _canary.status import Status
-from _canary.testcase import Measurements
 from _canary.testexec import ExecutionSpace
-from _canary.timekeeper import Timekeeper
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.time import time_in_seconds
 
@@ -57,7 +58,7 @@ class BatchSpec:
         return [{"type": "cpus", "slots": 1}]
 
 
-class TestBatch:
+class TestBatch(BaseJob):
     """A batch of test cases
 
     Args:
@@ -75,23 +76,17 @@ class TestBatch:
         super().__init__()
         self.spec = spec
         self.cases = spec.cases
+        self.status: BatchStatus = BatchStatus(self.cases)
         self.session = self.spec.session
         self.workspace = workspace
         self.lockfile = self.workspace.joinpath("batch.lock")
         self.script = "canary-inp.sh"
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
-        self._status: BatchStatus = BatchStatus(self.cases)
-        if not dependencies:
-            self._status.set_base(state="READY")
+        self.state = JobState()
         self._resources: dict[str, list[dict]] = {}
-
         self.jobid: str | None = None
-        self.id = self.spec.id
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
-        self.exclusive = False
-        self.measurements = Measurements()
-        self.timekeeper = Timekeeper()
         self.dependencies: list["TestBatch"] = dependencies or []
         self.backend_supports_dependencies = backend_supports_dependencies
 
@@ -115,12 +110,16 @@ class TestBatch:
             case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
         return f"TestBatch({case_repr})"
 
+    @property
+    def id(self) -> str:
+        return self.spec.id
+
     def display_name(self, **kwargs: Any) -> str:
         name = str(self)
         if not kwargs.get("status"):
             return name
-        if self.status.state in ("READY", "PENDING"):
-            return f"{name} ({len(self)} {self.status.state})"
+        if self.state.is_running() or self.state.is_pending():
+            return f"{name} ({len(self)} {self.state.phase.value})"
         else:
             combined_stat = self._combined_status()
             return f"{name} ({combined_stat})"
@@ -231,36 +230,47 @@ class TestBatch:
         return all(d.jobid is not None for d in self.dependencies)
 
     def dependency_batches_complete(self) -> bool:
-        return all(all(c.status.is_terminal() for c in d.cases) for d in self.dependencies)
+        return all(all(c.state.is_done() for c in d.cases) for d in self.dependencies)
 
-    @property
-    def status(self) -> BatchStatus:
-        if self._status.state == "PENDING":
-            ready: bool = False
-            if not self.dependencies:
-                ready = True
-            elif self.backend_supports_dependencies:
-                if self.dependency_batches_submitted():
-                    ready = True
-                elif self.dependency_batches_complete():
-                    ready = True
-            else:
-                # no backend dependency support => must wait for deps to finish
-                if self.dependency_batches_complete():
-                    ready = True
-            if ready:
-                self._status.set_base(state="READY")
-        return self._status
+    def refresh_readiness(self) -> None:
+        # If we're already done/running, nothing to do.
+        if self.state.is_done() or self.state.is_running():
+            return
+        # If backend supports deps, batch becomes "ready" once deps are submitted (or complete).
+        # Otherwise must wait for deps complete.
+        if not self.dependencies:
+            return  # ready immediately
+        if self.backend_supports_dependencies:
+            # ready to submit when dependencies have jobids OR are complete
+            if self.dependency_batches_submitted() or self.dependency_batches_complete():
+                return
+        else:
+            # no backend deps => must wait for complete
+            if self.dependency_batches_complete():
+                return
+        # not ready yet; remain pending
+        return
 
-    def set_status(
-        self,
-        state: str | None = None,
-        category: str | None = None,
-        status: str | None = None,
-        reason: str | None = None,
-        code: int = -1,
-    ) -> None:
-        self.status.set(state=state, category=category, status=status, reason=reason, code=code)
+    def is_runnable(self) -> bool:
+        if self.state.is_done():
+            return False
+        if self.status.is_skipped():
+            return False
+        # Nothing else makes a batch permanently unrunnable today
+        return True
+
+    def is_ready(self) -> bool:
+        # dispatchable now (eligible to checkout resources / schedule)
+        if self.state.is_done() or self.state.is_running():
+            return False
+        if not self.is_runnable():
+            return False
+        if not self.dependencies:
+            return True
+        if self.backend_supports_dependencies:
+            return self.dependency_batches_submitted() or self.dependency_batches_complete()
+        else:
+            return self.dependency_batches_complete()
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
         logger.debug(f"Running batch {self.id[:7]}")
@@ -283,15 +293,11 @@ class TestBatch:
             if rc is None:
                 rc = 1
             self.refresh()
-            if all(case.status.category == "PASS" for case in self):
-                self.status.set_base(state="COMPLETE", category="PASS", status="SUCCESS")
+            self.state.phase = JobPhase.DONE
+            if all(case.status.is_success() for case in self):
+                self.status.set_base(outcome="SUCCESS")
             else:
-                self.status.set_base(
-                    state="COMPLETE",
-                    category="FAIL",
-                    status="FAILED",
-                    reason="One or more test cases did not pass",
-                )
+                self.status.set_base(outcome="FAILED", reason="One or more test cases did not pass")
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
@@ -300,17 +306,21 @@ class TestBatch:
 
     def getstate(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
-        data[self.id] = {"status": self.status.base_status, "timekeeper": self.timekeeper}
+        data[self.id] = {
+            "status": self.status.base,
+            "timekeeper": self.timekeeper,
+            "state": self.state,
+        }
         for case in self.cases:
-            if case.status.state in ("PENDING", "READY"):
-                case.status = Status.BROKEN(
-                    reason=f"case.status = {case.status.state} after execution of batch"
-                )
-            elif case.status.state == "RUNNING":
-                case.status = Status.CANCELLED(
-                    reason=f"case.status = {case.status.state} after execution of batch"
-                )
-            data[case.id] = {"status": case.status, "timekeeper": case.timekeeper}
+            if case.state.is_pending():
+                case.status = Status.BROKEN(reason=f"{case.state=} after execution of batch")
+            elif case.state.is_running():
+                case.status = Status.CANCELLED(reason=f"{case.state=} after execution of batch")
+            data[case.id] = {
+                "status": case.status,
+                "timekeeper": case.timekeeper,
+                "state": case.state,
+            }
         return data
 
     def setstate(self, data: dict[str, Any]):
@@ -322,13 +332,14 @@ class TestBatch:
         """
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
-                self.status.base_status.set(
-                    state=stat.state,
+                self.status.set_base(
                     category=stat.category,
-                    status=stat.status,
+                    outcome=stat.outcome,
                     reason=stat.reason,
                     code=stat.code,
                 )
+            if st := mydata.get("state"):
+                self.state.phase = st.phase
             if timekeeper := mydata.get("timekeeper"):
                 self.timekeeper.submitted = timekeeper.submitted
                 self.timekeeper.started = timekeeper.started
@@ -412,3 +423,13 @@ class TestBatch:
             json.dump(cfg, fh, indent=2)
         for case in self:
             case.save()
+
+    def set_status(
+        self,
+        category: str | None = None,
+        outcome: str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
+        # apply to the batch’s base status
+        self.status.set_base(category=category, outcome=outcome, reason=reason, code=code)

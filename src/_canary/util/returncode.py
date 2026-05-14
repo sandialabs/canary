@@ -8,32 +8,32 @@ from typing import Sequence
 from . import logging
 
 if TYPE_CHECKING:
-    from ..protocols import JobProtocol
-    from ..testcase import TestCase
+    from ..job import BaseJob
 
 logger = logging.get_logger(__name__)
 
 
-def compute_returncode(cases: Sequence["JobProtocol | TestCase"], permissive: bool = False) -> int:
+def compute_returncode(jobs: Sequence["BaseJob"], permissive: bool = False) -> int:
     returncode: int = 0
     warned: set[str] = set()
-    for case in cases:
-        if case.status.category in ("PASS", "SKIP"):
+    for job in jobs:
+        stat = job.status
+        if stat.is_success() or stat.is_skipped():
             continue
-        elif case.status.status == "DIFFED":
-            returncode |= 2**1
-        elif case.status.status == "TIMEOUT":
-            returncode |= 2**2
-        elif case.status.category == "FAIL":
-            returncode |= 2**3
-        elif case.status.category == "CANCEL":
-            returncode |= 2**4
-        elif case.status.state in ("READY", "PENDING"):
+        elif not job.state.is_done():
             returncode |= 2**5
+        elif stat.is_diffed():
+            returncode |= 2**1
+        elif stat.is_timeout():
+            returncode |= 2**2
+        elif stat.is_failure():
+            returncode |= 2**3
+        elif stat.is_cancelled():
+            returncode |= 2**4
         elif not permissive:
             # any other code is a failure
             returncode |= 2**6
-            if case.status.status not in warned:
-                logger.warning(f"unhandled status: {case.status.status}")
-                warned.add(case.status.status)
+            if stat.outcome.name not in warned:
+                logger.warning(f"unhandled status: {stat.outcome.name}")
+                warned.add(stat.outcome.name)
     return returncode

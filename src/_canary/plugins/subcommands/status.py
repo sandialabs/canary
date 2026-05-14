@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ...hookspec import hookimpl
+from ...job import JobState
 from ...status import Status as _Status
 from ...util import glyphs
 from ...util import logging
@@ -152,11 +153,11 @@ class Status(CanarySubcommand):
 
 def sortkey(row: dict) -> tuple:
     c = 1
-    if row["status"].category == "PASS":
+    if row["status"].is_success():
         c = 0
-    if row["status"].category == "FAIL":
+    if row["status"].is_failure():
         c = 2
-    return (c, row["status"].status, row["timekeeper"].duration())
+    return (c, row["status"].outcome, row["timekeeper"].duration())
 
 
 def get_attribute(row: dict[str, Any], attr: str) -> str:
@@ -221,27 +222,30 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
 
 
 def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
+    from ...status import Outcome
+
     chars = chars or "dftns"
     if "A" in chars:
         return rows
     keep = [False] * len(rows)
     for i, row in enumerate(rows):
         status: _Status = row["status"]
+        state: JobState = row["state"]
         if "a" in chars:
-            keep[i] = status.category != "PASS"
-        elif status.category == "SKIP":
+            keep[i] = not status.is_success()
+        elif status.is_skipped():
             keep[i] = "s" in chars
-        elif status.category == "PASS":
+        elif status.is_success():
             keep[i] = "p" in chars
-        elif status.status in ("FAILED", "ERROR", "BROKEN"):
+        elif status.outcome in (Outcome.FAILED, Outcome.ERROR, Outcome.BROKEN):
             keep[i] = "f" in chars
-        elif status.status == "DIFFED":
+        elif status.is_diffed():
             keep[i] = "d" in chars
-        elif status.status == "TIMEOUT":
+        elif status.is_timeout():
             keep[i] = "t" in chars
-        elif status.state in ("READY", "PENDING"):
+        elif not state.is_done():
             keep[i] = "n" in chars
-        elif status.category == "CANCEL":
+        elif status.is_cancelled():
             keep[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {status}")

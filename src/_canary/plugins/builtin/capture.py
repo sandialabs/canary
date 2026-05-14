@@ -43,7 +43,7 @@ def show_capture(session: "Session") -> None:
     if what in ("no", None):
         return
     cases = session.cases
-    failed = [case for case in cases if case.status.category == "FAIL"]
+    failed = [case for case in cases if case.status.is_failure()]
     if failed:
         _, width = terminal_size()
         string = f" {len(failed)} Test failures ".center(width, "=")
