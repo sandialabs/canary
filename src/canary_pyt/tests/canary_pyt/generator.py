@@ -106,8 +106,9 @@ def test_sources_and_baseline_substitution(tmp_path: Path) -> None:
     gen.add_baseline(src="a_{p}.exo", dst="b_{P}.exo")
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]
-    assert ("in_2.txt", "out_2.txt") in s.file_resources.get("copy", [])  # type: ignore
-    assert ("a_2.exo", "b_2.exo") in s.baseline
+    assert s.assets[0].src.name == "in_2.txt"
+    assert s.assets[0].dst == "out_2.txt"
+    assert s.baseline[0] == {"dst": "b_2.exo", "src": "a_2.exo", "type": "copy"}
 
 
 def test_dependencies_substitution(tmp_path: Path) -> None:
