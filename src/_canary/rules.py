@@ -1,9 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""Rules for selecting and filtering ResolvedSpec objects.
+"""Rules for selecting and filtering JobSpec objects.
 
-This module defines a set of Rule classes used to determine whether a ResolvedSpec should be
+This module defines a set of Rule classes used to determine whether a JobSpec should be
 included in test execution. Each rule evaluates specific attributes—such as keywords, parameters,
 owners, IDs, file prefixes, regular expressions, or resource requirements—and returns a RuleOutcome
 object indicating whether the spec passed or failed the rule.
@@ -31,8 +31,8 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
+    from .jobspec import JobSpec
     from .testcase import TestCase
-    from .testspec import ResolvedSpec
 
 
 logger = logging.get_logger(__name__)
@@ -64,14 +64,14 @@ class RuleOutcome:
 class Rule:
     """Base class for all selection rules.
 
-    Subclasses should override __call__ to evaluate whether a ResolvedSpec satisfies the rule.
+    Subclasses should override __call__ to evaluate whether a JobSpec satisfies the rule.
     Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
     """
 
     def __init__(self, priority: int = 0) -> None:
         self.priority = priority
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         raise NotImplementedError
 
     def __str__(self):
@@ -160,7 +160,7 @@ class KeywordRule(Rule):
     def default_reason(self) -> str:
         return "One or more keyword expressions did not match"
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         kwds = set(spec.keywords)
         kwds.update(spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
         kwd_all = contains_any(("__all__", ":all:"), self.keyword_exprs)
@@ -188,7 +188,7 @@ class ParameterRule(Rule):
     def default_reason(self) -> str:
         return "parameter expression [bold]%s[/] did not match" % self.parameter_expr
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         match = when.when(
             {"parameters": self.parameter_expr},
             parameters=spec.parameters | spec.meta_parameters,  # ty: ignore[unsupported-operator]
@@ -216,7 +216,7 @@ class IDsRule(Rule):
             ids = [id[:7] for id in self.ids]
         return "test ID not in [bold]%s[/]" % ", ".join(ids)
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         if not any(spec.id.startswith(id) for id in self.ids):
             return RuleOutcome.failed(self.default_reason)
         return RuleOutcome(True)
@@ -237,7 +237,7 @@ class OwnersRule(Rule):
     def default_reason(self) -> str:
         return "not owned by [bold]%s[/]" % ", ".join(self.owners)
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         if self.owners.intersection(spec.owners or []):
             return RuleOutcome(True)
         return RuleOutcome.failed(self.default_reason)
@@ -258,7 +258,7 @@ class PrefixRule(Rule):
     def default_reason(self) -> str:
         return "test file not a child of %s" % ", ".join(self.prefixes)
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         if any(str(spec.file).startswith(prefix) for prefix in self.prefixes):
             return RuleOutcome(True)
         return RuleOutcome.failed(f"test file not in any of {', '.join(self.prefixes)}")
@@ -284,7 +284,7 @@ class RegexRule(Rule):
     def asdict(self) -> dict[str, Any]:
         return {"regex": self.string}
 
-    def __call__(self, spec: "ResolvedSpec") -> RuleOutcome:
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
         if not filesystem.grep(self.rx, spec.file):
             for asset in spec.assets:
                 if os.path.isfile(asset.src) and filesystem.grep(self.rx, asset.src):

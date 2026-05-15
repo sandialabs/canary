@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .generator import AbstractTestGenerator
     from .ir import JobSpecIR
-    from .testspec import ResolvedSpec
+    from .jobspec import JobSpec
 
 
 logger = logging.get_logger(__name__)
@@ -71,13 +71,13 @@ class Generator:
         self.generators = generators
         self.workspace = workspace
         self.on_options = list(on_options)
-        self.specs: list["ResolvedSpec"] = []
+        self.specs: list["JobSpec"] = []
         self.ready: bool = False
 
-    def run(self) -> list["ResolvedSpec"]:
+    def run(self) -> list["JobSpec"]:
         pm = logger.progress_monitor("[bold]Generating[/] test specs from generators")
         config.pluginmanager.hook.canary_generatestart(generator=self)
-        irs: list["JobSpecIR | ResolvedSpec"] = generate_jobspecs(self.generators, self.on_options)
+        irs: list["JobSpecIR | JobSpec"] = generate_jobspecs(self.generators, self.on_options)
         pm.done()
         self.validate(irs)
         pm = logger.progress_monitor("[bold]Resolving[/] test spec dependencies")
@@ -88,14 +88,14 @@ class Generator:
         config.pluginmanager.hook.canary_generate_report(generator=self)
         return self.specs
 
-    def validate(self, specs: list["JobSpecIR | ResolvedSpec"]) -> None:
+    def validate(self, specs: list["JobSpecIR | JobSpec"]) -> None:
         pm = logger.progress_monitor("[bold]Searching[/] for duplicated tests")
         ids = [spec.id for spec in specs]
         counts: dict[str, int] = {}
         for id in ids:
             counts[id] = counts.get(id, 0) + 1
         duplicate_ids = {id for id, count in counts.items() if count > 1}
-        duplicates: dict[str, list["JobSpecIR | ResolvedSpec"]] = {}
+        duplicates: dict[str, list["JobSpecIR | JobSpec"]] = {}
         # if there are duplicates, we are in error condition and lookup cost is not important
         for id in duplicate_ids:
             duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
@@ -137,7 +137,7 @@ def canary_generate_report(generator: Generator) -> None:
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=True)
         table.add_column("Count", justify="right")
-        reasons: dict[str | None, list["ResolvedSpec"]] = {}
+        reasons: dict[str | None, list["JobSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
@@ -150,13 +150,13 @@ def canary_generate_report(generator: Generator) -> None:
 
 def generate_from_one(
     file: "AbstractTestGenerator", on_options: list[str] | None
-) -> list["JobSpecIR | ResolvedSpec"]:
+) -> list["JobSpecIR | JobSpec"]:
     return list(file.lock(on_options=on_options))
 
 
 def generate_jobspecs(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["JobSpecIR | ResolvedSpec"]:
+) -> list["JobSpecIR | JobSpec"]:
     if config.get("debug"):
         return generate_jobspecs_serial(generators, on_options)
     return generate_jobspecs_parallel(generators, on_options)
@@ -164,7 +164,7 @@ def generate_jobspecs(
 
 def generate_jobspecs_parallel(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["JobSpecIR | ResolvedSpec"]:
+) -> list["JobSpecIR | JobSpec"]:
     # In testing
     locked = starmap(
         generate_from_one,
@@ -181,8 +181,8 @@ def worker_init(snapshot: dict[str, Any]):
 
 def generate_jobspecs_serial(
     generators: list["AbstractTestGenerator"], on_options: list[str]
-) -> list["JobSpecIR | ResolvedSpec"]:
-    specs: list["JobSpecIR | ResolvedSpec"] = []
+) -> list["JobSpecIR | JobSpec"]:
+    specs: list["JobSpecIR | JobSpec"] = []
     for f in generators:
         specs.extend(generate_from_one(f, on_options))
     return specs

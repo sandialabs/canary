@@ -33,7 +33,7 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testspec import ResolvedSpec
+    from ...jobspec import JobSpec
 
 logger = logging.get_logger(__name__)
 
@@ -149,7 +149,7 @@ class Run(CanarySubcommand):
         h = logging.json_file_handler(f)
         logging.add_handler(h)
         # start, specids, runtag, and scanpaths are mutually exclusive
-        specs: list["ResolvedSpec"]
+        specs: list["JobSpec"]
 
         if isinstance(request, ScanPathsRequest):
             specs = workspace.create_selection(

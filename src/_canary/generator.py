@@ -21,10 +21,10 @@ from typing import Sequence
 from .error import diff_exit_status
 from .ir import DependencySpec
 from .ir import JobSpecIR
+from .jobspec import Artifact
+from .jobspec import Asset
+from .jobspec import Mask
 from .paramset import ParameterSet
-from .testspec import Artifact
-from .testspec import Asset
-from .testspec import Mask
 from .util import logging
 from .util import reducer
 from .util.field import Field
@@ -44,7 +44,7 @@ from schema import Type
 from .util import json_helper as json
 
 if TYPE_CHECKING:
-    from .testspec import ResolvedSpec
+    from .jobspec import JobSpec
 
 
 WhenType = str | dict[str, str]
@@ -130,7 +130,7 @@ class AbstractTestGenerator(ABC):
         return repr(self)
 
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | ResolvedSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | JobSpec"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:
@@ -495,7 +495,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
     # ----------------------------- AbstractTestGenerator API -----------------------------
 
-    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | ResolvedSpec"]:
+    def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | JobSpec"]:
         if self.filter_warnings:
             with logging.suppress_stream_below(logging.ERROR):
                 return self._lock(on_options=on_options)

@@ -29,6 +29,10 @@ from _canary.hookspec import hookspec
 from _canary.ir import DependencySpec
 from _canary.ir import JobSpecIR
 from _canary.job import BaseJob
+from _canary.jobspec import Artifact
+from _canary.jobspec import Asset
+from _canary.jobspec import JobSpec
+from _canary.jobspec import Mask
 from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
@@ -43,11 +47,6 @@ from _canary.select import Selector
 from _canary.testcase import TestCase
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
-from _canary.testspec import Artifact
-from _canary.testspec import Asset
-from _canary.testspec import Mask
-from _canary.testspec import ResolvedSpec
-from _canary.testspec import UnresolvedSpec
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import graph
@@ -69,6 +68,7 @@ get_logger = logging.get_logger
 
 version = _v.version
 version_info = _v.version_info
+ResolvedSpec = JobSpec
 del _v
 
 
@@ -111,9 +111,9 @@ __all__ = [
     "DependencySpec",
     "Artifact",
     "Asset",
+    "JobSpec",
     "ResolvedSpec",
     "JobSpecIR",
-    "UnresolvedSpec",
     "color",
     "difflib",
     "filesystem",

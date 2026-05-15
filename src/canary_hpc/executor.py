@@ -67,7 +67,7 @@ class CanaryHPCExecutor:
         pool["resources"].clear()
         pool["resources"].update(mypool["resources"])
 
-    def modify_specs(self, specs: list[canary.ResolvedSpec]) -> None:
+    def modify_specs(self, specs: list[canary.JobSpec]) -> None:
         # If a test requests just nodes, fill in the additional resources it would require.
         canonical_name = lambda s: f"{s}s" if not s.endswith("s") else s
         cpn = self.backend.count_per_node

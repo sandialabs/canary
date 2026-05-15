@@ -13,9 +13,9 @@ from typing import Any
 import yaml
 
 from . import config
+from . import jobspec
 from . import rules
 from . import select
-from . import testspec
 from . import version
 from .collect import Collector
 from .database import WorkspaceDatabase
@@ -28,7 +28,6 @@ from .runtest import canary_runtests
 from .testcase import Dependency
 from .testcase import TestCase
 from .testexec import ExecutionSpace
-from .testspec import ResolvedSpec
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import async_rmtree
@@ -39,6 +38,7 @@ from .util.names import unique_random_name
 
 if TYPE_CHECKING:
     from .database import ResultListener
+    from .jobspec import JobSpec
     from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
@@ -266,7 +266,7 @@ class Workspace:
 
     def run(
         self,
-        specs: list["ResolvedSpec"],
+        specs: list["JobSpec"],
         session: str | None = None,
         reuse_latest_session: bool = False,
         update_view: bool = True,
@@ -440,16 +440,16 @@ class Workspace:
         self,
         scanpaths: dict[str, list[str]],
         on_options: list[str] | None = None,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["JobSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
-        resolved = self.generate_testspecs(generators=generators, on_options=on_options)
+        resolved = self.generate_jobspecs(generators=generators, on_options=on_options)
         self.store_specs(resolved)
         return resolved
 
-    def store_specs(self, specs: list[ResolvedSpec]) -> None:
+    def store_specs(self, specs: list["JobSpec"]) -> None:
         pm = logger.progress_monitor("[bold]Caching[/] test specs")
         self.db.put_specs(specs)
         pm.done()
@@ -462,7 +462,7 @@ class Workspace:
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["JobSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
         resolved = self.db.load_specs()
         specs = self.select_from_specs(
@@ -485,13 +485,13 @@ class Workspace:
 
     def select_from_specs(
         self,
-        resolved: list["ResolvedSpec"],
+        resolved: list["JobSpec"],
         prefixes: list[str] | None = None,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["JobSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
         selector = select.Selector(resolved, self.root)
         if keyword_exprs:
@@ -516,7 +516,7 @@ class Workspace:
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["JobSpec"]:
         """Find test case generators in scan_paths and add them to this workspace"""
         resolved = self.collect(scanpaths, on_options=on_options)
         specs = self.select_from_specs(
@@ -542,7 +542,7 @@ class Workspace:
 
     def apply_selection_rules(
         self,
-        specs: list["ResolvedSpec"],
+        specs: list["JobSpec"],
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
@@ -589,7 +589,7 @@ class Workspace:
     def select_from_view(
         self,
         path: Path,
-    ) -> list["ResolvedSpec"]:
+    ) -> list["JobSpec"]:
         ids: list[str] = []
         for file in path.rglob("*/testcase.lock"):
             lock_data = json.loads(file.read_text())
@@ -607,11 +607,11 @@ class Workspace:
     def is_tag(self, tag: str) -> bool:
         return self.db.is_selection(tag)
 
-    def generate_testspecs(
+    def generate_jobspecs(
         self,
         generators: list["AbstractTestGenerator"],
         on_options: list[str] | None = None,
-    ) -> list[ResolvedSpec]:
+    ) -> list["JobSpec"]:
         """Generate resolved test specs
 
         Args:
@@ -628,7 +628,7 @@ class Workspace:
         resolved = generator.run()
         return resolved
 
-    def construct_testcases(self, specs: list["ResolvedSpec"], session: Path) -> list["TestCase"]:
+    def construct_testcases(self, specs: list["JobSpec"], session: Path) -> list["TestCase"]:
         lookup: dict[str, TestCase] = {}
         cases: list[TestCase] = []
         latest = self.db.get_results([spec.id for spec in specs])
@@ -655,7 +655,7 @@ class Workspace:
             cases.append(case)
         return cases
 
-    def get_selection(self, tag: str | None) -> list["ResolvedSpec"]:
+    def get_selection(self, tag: str | None) -> list["JobSpec"]:
         if tag is None or tag == ":all:":
             return self.db.load_specs()
         return self.db.load_specs_by_tagname(tag)
@@ -702,7 +702,7 @@ class Workspace:
         if case is not None:
             return self.find_testcase(case)
         if spec is not None:
-            return self.find_testspec(spec)
+            return self.find_jobspec(spec)
 
     def find_testcase(self, root: str) -> TestCase:
         id = self.db.resolve_spec_id(root)
@@ -718,7 +718,7 @@ class Workspace:
                 return case
         raise ValueError(f"{root}: no matching test case found in {self.root}")
 
-    def find_testspec(self, root: str) -> ResolvedSpec:
+    def find_jobspec(self, root: str) -> "JobSpec":
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
@@ -736,7 +736,7 @@ class Workspace:
         specs = self.db.load_specs()
         found: list[str | None] = []
         for id in ids:
-            if id.startswith(testspec.select_sygil):
+            if id.startswith(jobspec.select_sygil):
                 id = id[1:]
             for spec in specs:
                 if spec.id.startswith(id):

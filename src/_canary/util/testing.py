@@ -15,8 +15,8 @@ from typing import Iterable
 from .graph import static_order
 
 if TYPE_CHECKING:
+    from ..jobspec import JobSpec
     from ..testcase import TestCase
-    from ..testspec import ResolvedSpec
 
 
 class CanaryCommand:
@@ -77,7 +77,7 @@ def generate_random_testcases(
     session = root / "session"
     lookup: dict[str, TestCase] = {}
     cases: list[TestCase] = []
-    specs = generate_random_testspecs(
+    specs = generate_random_jobspecs(
         root=root, count=count, max_params=max_params, max_rows=max_rows
     )
     for spec in static_order(specs):
@@ -89,12 +89,12 @@ def generate_random_testcases(
     return cases
 
 
-def generate_random_testspecs(
+def generate_random_jobspecs(
     root: Path,
     count: int = 10,
     max_params: int = 3,
     max_rows: int = 5,
-) -> list["ResolvedSpec"]:
+) -> list["JobSpec"]:
     from ..collect import Collector
     from ..generate import Generator
 

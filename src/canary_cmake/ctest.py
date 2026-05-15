@@ -39,7 +39,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         super().__init__(os.path.abspath(root), path=path)
         self.owners: list[str] = []
 
-    def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.JobSpec]:
         cmake = find_cmake()
         if cmake is None:
             logger.warning("cmake not found, test cases cannot be generated")
@@ -107,11 +107,11 @@ class CTestTestGenerator(AbstractTestGenerator):
             tests[name] = transformed
         return tests
 
-    def resolve_fixtures(self, specs: list["canary.ResolvedSpec"]) -> None:
-        from _canary.testspec import SpecDependency
+    def resolve_fixtures(self, specs: list["canary.JobSpec"]) -> None:
+        from _canary.jobspec import SpecDependency
 
-        setup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
-        cleanup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
+        setup_fixtures: dict[str, list[canary.JobSpec]] = {}
+        cleanup_fixtures: dict[str, list[canary.JobSpec]] = {}
 
         for spec in specs:
             for fixture_name in spec.attributes["fixtures"]["setup"]:
@@ -132,9 +132,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                             dep = SpecDependency(spec=spec, when="on_success")
                             fixture.dependencies.append(dep)
 
-    def resolve_inter_dependencies(
-        self, irs: list["canary.JobSpecIR"]
-    ) -> list["canary.ResolvedSpec"]:
+    def resolve_inter_dependencies(self, irs: list["canary.JobSpecIR"]) -> list["canary.JobSpec"]:
         from _canary.generate import resolve
 
         resolved = resolve(irs)

@@ -27,7 +27,7 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testspec import ResolvedSpec
+    from ...jobspec import JobSpec
 
 logger = logging.get_logger(__name__)
 
@@ -103,7 +103,7 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
     group.add_argument(*args, **kwargs)
 
 
-def pprint_paths(specs: list["ResolvedSpec"]) -> None:
+def pprint_paths(specs: list["JobSpec"]) -> None:
     unique_generators: dict[str, set[str]] = dict()
     for spec in specs:
         unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
@@ -118,14 +118,14 @@ def pprint_paths(specs: list["ResolvedSpec"]) -> None:
         console.print(file.getvalue())
 
 
-def pprint_files(specs: list["ResolvedSpec"]) -> None:
+def pprint_files(specs: list["JobSpec"]) -> None:
     console = rich.console.Console()
     columns = Columns(sorted(set([str(spec.file) for spec in specs])))
     with console.pager():
         console.print(columns)
 
 
-def pprint_keywords(specs: list["ResolvedSpec"]) -> None:
+def pprint_keywords(specs: list["JobSpec"]) -> None:
     unique_kwds: dict[str, set[str]] = dict()
     for spec in specs:
         unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
@@ -140,7 +140,7 @@ def pprint_keywords(specs: list["ResolvedSpec"]) -> None:
         console.print(file.getvalue())
 
 
-def pprint_graph(specs: list["ResolvedSpec"]) -> None:
+def pprint_graph(specs: list["JobSpec"]) -> None:
     file = io.StringIO()
     graph.print(specs, file=file, style="rich")
     console = rich.console.Console()
@@ -148,7 +148,7 @@ def pprint_graph(specs: list["ResolvedSpec"]) -> None:
         console.print(file.getvalue())
 
 
-def pprint(specs: list["ResolvedSpec"]) -> None:
+def pprint(specs: list["JobSpec"]) -> None:
     tree: dict[str, list[str]] = {}
     for spec in specs:
         line = spec.display_name(style="rich", resolve=True)

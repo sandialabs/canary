@@ -58,13 +58,13 @@ If no options are give, -x is assumed."""
         parser.add_argument("testspec", help="Test name or test id")
 
     def execute(self, args: argparse.Namespace) -> int:
+        from ...jobspec import JobSpec
         from ...testcase import TestCase
-        from ...testspec import ResolvedSpec
 
         workspace = Workspace.load()
         f: Path | str
         if args.show_input or args.show_source_dir:
-            spec: ResolvedSpec = workspace.find(spec=args.testspec)
+            spec: JobSpec = workspace.find(spec=args.testspec)
             f = spec.file if args.show_input else spec.file.parent
         else:
             case: TestCase = workspace.find(case=args.testspec)

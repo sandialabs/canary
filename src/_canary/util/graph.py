@@ -11,13 +11,13 @@ from typing import Sequence
 from typing import TextIO
 
 if TYPE_CHECKING:
-    from ..testspec import ResolvedSpec
+    from ..jobspec import JobSpec
 
 builtin_print = print
 
 
-def static_order(specs: Sequence["ResolvedSpec"]) -> list["ResolvedSpec"]:
-    map: dict[str, "ResolvedSpec"] = {}
+def static_order(specs: Sequence["JobSpec"]) -> list["JobSpec"]:
+    map: dict[str, "JobSpec"] = {}
     graph: dict[str, list[str]] = {}
     for spec in specs:
         map[spec.id] = spec
@@ -26,7 +26,7 @@ def static_order(specs: Sequence["ResolvedSpec"]) -> list["ResolvedSpec"]:
     return [map[id] for id in ts.static_order()]
 
 
-def static_order_ix(specs: Sequence["ResolvedSpec"]) -> list[int]:
+def static_order_ix(specs: Sequence["JobSpec"]) -> list[int]:
     map: dict[str, int] = {}
     graph: dict[str, list[str]] = {}
     for i, spec in enumerate(specs):
@@ -37,7 +37,7 @@ def static_order_ix(specs: Sequence["ResolvedSpec"]) -> list[int]:
 
 
 def print_spec(
-    spec: "ResolvedSpec",
+    spec: "JobSpec",
     level: int = -1,
     file: TextIO = sys.stdout,
     indent: str = "",
@@ -50,7 +50,7 @@ def print_spec(
     tee = "├── "
     last = "└── "
 
-    def inner(spec: "ResolvedSpec", prefix: str = "", level=-1):
+    def inner(spec: "JobSpec", prefix: str = "", level=-1):
         if not level:
             return  # 0, stop iterating
         dependencies = spec.dependencies
@@ -69,7 +69,7 @@ def print_spec(
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(specs: Sequence["ResolvedSpec"], style: str = "none", file: TextIO = sys.stdout) -> None:
+def print(specs: Sequence["JobSpec"], style: str = "none", file: TextIO = sys.stdout) -> None:
     specs = static_order(specs)  # ty: ignore[invalid-argument-type]
     all_deps = [dep for spec in specs for dep in spec.dependencies]
     remove = []

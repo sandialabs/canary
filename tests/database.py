@@ -8,17 +8,17 @@ import pytest
 
 from _canary.database import NotASelection
 from _canary.database import WorkspaceDatabase
+from _canary.util.testing import generate_random_jobspecs
 from _canary.util.testing import generate_random_testcases
-from _canary.util.testing import generate_random_testspecs
 
 if TYPE_CHECKING:
-    from _canary.testspec import ResolvedSpec
+    from _canary.jobspec import JobSpec
 
 
 class MakeRandomSpecs(Protocol):
     def __call__(
         self, root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5
-    ) -> list["ResolvedSpec"]: ...
+    ) -> list["JobSpec"]: ...
 
 
 @pytest.fixture
@@ -32,9 +32,7 @@ def db(tmp_path: Path) -> Generator[WorkspaceDatabase, None, None]:
 @pytest.fixture
 def make_random_specs():
     def factory(root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5):
-        return generate_random_testspecs(
-            root, count=count, max_params=max_params, max_rows=max_rows
-        )
+        return generate_random_jobspecs(root, count=count, max_params=max_params, max_rows=max_rows)
 
     return factory
 

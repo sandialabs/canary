@@ -1,19 +1,23 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Iterable
 from typing import Literal
 
 from .database import WorkspaceDatabase
-from .testspec import Mask
-from .testspec import ResolvedSpec
+from .jobspec import Mask
+
+if TYPE_CHECKING:
+    from .jobspec import JobSpec
+
 
 StrategyType = Literal["changed"]
 STRATEGIES: dict[str, Callable[..., set[str]]] = {}
 
 
-def compute_rerun_closure(db: WorkspaceDatabase, roots: Iterable[str]) -> list["ResolvedSpec"]:
+def compute_rerun_closure(db: WorkspaceDatabase, roots: Iterable[str]) -> list["JobSpec"]:
     roots = set(roots)
     upstream, downstream = db.get_updownstream_ids(seeds=list(roots))
     runspecs = roots | downstream
@@ -29,7 +33,7 @@ def get_specs_from_view(
     db: WorkspaceDatabase,
     *,
     prefixes: list[str],
-) -> list["ResolvedSpec"]:
+) -> list["JobSpec"]:
     roots = db.select_from_view(prefixes=prefixes)
     return compute_rerun_closure(db, roots=roots)
 
@@ -39,7 +43,7 @@ def get_specs(
     *,
     strategy: StrategyType,
     tag: str | None,
-) -> list["ResolvedSpec"]:
+) -> list["JobSpec"]:
     """
     Compute the full rerun spec set using a named strategy.
 

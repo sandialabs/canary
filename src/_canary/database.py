@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from . import testspec
+from . import jobspec
 from .job import JobPhase
 from .job import JobState
 from .job import Measurements
+from .jobspec import JobSpec
+from .jobspec import SpecDependency
 from .status import Status
-from .testspec import ResolvedSpec
-from .testspec import SpecDependency
 from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
@@ -178,8 +178,8 @@ class WorkspaceDatabase:
         _migrate_results_status_state_to_job_state(self)
         return
 
-    def put_specs(self, specs: list[ResolvedSpec]) -> None:
-        def process_one_spec(spec: ResolvedSpec) -> tuple[str, bytes, str, str, list[str]]:
+    def put_specs(self, specs: list[JobSpec]) -> None:
+        def process_one_spec(spec: JobSpec) -> tuple[str, bytes, str, str, list[str]]:
             deps = spec.dependencies
             try:
                 spec.dependencies = []
@@ -244,7 +244,7 @@ class WorkspaceDatabase:
             self.connection.execute("DROP TABLE _ids")
 
     def resolve_spec_id(self, id: str) -> str | None:
-        if id.startswith(testspec.select_sygil):
+        if id.startswith(jobspec.select_sygil):
             id = id[1:]
         try:
             hi = increment_hex_prefix(id)
@@ -264,7 +264,7 @@ class WorkspaceDatabase:
     def resolve_spec_ids(self, ids: list[str]):
         """Given partial spec IDs in ``ids``, expand them to their full size"""
         for i, id in enumerate(ids):
-            if id.startswith(testspec.select_sygil):
+            if id.startswith(jobspec.select_sygil):
                 id = id[1:]
             if len(id) >= 64:
                 continue
@@ -288,7 +288,7 @@ class WorkspaceDatabase:
 
     def load_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
-    ) -> list[ResolvedSpec]:
+    ) -> list[JobSpec]:
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
@@ -307,7 +307,7 @@ class WorkspaceDatabase:
             return specs
         return [spec for spec in specs if spec.id in ids]
 
-    def load_specs_by_tagname(self, tag: str) -> list["ResolvedSpec"]:
+    def load_specs_by_tagname(self, tag: str) -> list["JobSpec"]:
         rows = self.connection.execute(
             """
             SELECT s.spec_id, s.data
@@ -321,8 +321,8 @@ class WorkspaceDatabase:
             raise NotASelection(tag)
         return self._reconstruct_specs(rows)
 
-    def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[ResolvedSpec]:
-        specs: dict[str, ResolvedSpec] = {}
+    def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[JobSpec]:
+        specs: dict[str, JobSpec] = {}
         when_conditions: dict[str, dict[str, str]] = {}
         for row in rows:
             spec, when = pickle.loads(row[-1])  # nosec 301
@@ -469,7 +469,7 @@ class WorkspaceDatabase:
     def put_selection(
         self,
         tag: str,
-        specs: list["ResolvedSpec"],
+        specs: list["JobSpec"],
         **meta: Any,
     ) -> None:
         if tag == ":all:":

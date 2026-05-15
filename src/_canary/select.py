@@ -8,7 +8,7 @@ Selection Phase for Canary Test Execution
 This module implements the election stage of the Canary test lifecycle.  Selection applies a
 sequence of rules to mask (exclude) test specifications based on resource availability,
 user-defined criteria, and dependency relationships. The result of selection is a stable, filtered
-list of ``ResolvedSpec`` instances ready for execution.
+list of ``JobSpec`` instances ready for execution.
 
 Overview
 --------
@@ -20,12 +20,12 @@ The selection flow is:
 
 Selection performs three primary actions:
 
-1. **Rule Evaluation** — Each ``ResolvedSpec`` is evaluated against each
+1. **Rule Evaluation** — Each ``JobSpec`` is evaluated against each
    ``Rule``. If any rule fails, the spec receives a ``Mask`` with the reason.
 
 2. **Mask Propagation** — If a spec is masked, all specs depending on it are also masked.
 
-``ResolvedSpec`` instances.
+``JobSpec`` instances.
 
 Caching and Snapshots
 ---------------------
@@ -74,17 +74,17 @@ from . import config
 from .config.argparsing import Parser
 from .hookspec import hookimpl
 from .job import JobPhase
+from .jobspec import Mask
 from .rules import Rule
 from .rules import RuntimeRule
-from .testspec import Mask
 from .util import json_helper as json
 from .util import logging
 from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .jobspec import JobSpec
     from .testcase import TestCase
-    from .testspec import ResolvedSpec
 
 
 logger = logging.get_logger(__name__)
@@ -126,11 +126,11 @@ class SelectorSnapshot:
         SelectorSnapshot.schema().validate(data)
         return cls(**data)
 
-    def is_compatible_with_specs(self, specs: list["ResolvedSpec"]) -> bool:
+    def is_compatible_with_specs(self, specs: list["JobSpec"]) -> bool:
         """Return True if the snapshot matches the current spec set."""
         return self.spec_set_id == Selector.spec_set_id(specs)
 
-    def apply(self, specs: list["ResolvedSpec"]) -> None:
+    def apply(self, specs: list["JobSpec"]) -> None:
         for spec in specs:
             if mask := self.masked.get(spec.id):
                 spec.mask = Mask.masked(mask)
@@ -139,11 +139,11 @@ class SelectorSnapshot:
 class Selector:
     """Apply rule-based masking to a set of resolved specifications.
 
-    ``Selector`` is responsible for evaluating rules against each ``ResolvedSpec``, propagating
+    ``Selector`` is responsible for evaluating rules against each ``JobSpec``, propagating
     masks through dependency graphs, and finalizing the resulting test specifications.
 
     Args:
-        specs: The list of ``ResolvedSpec`` objects to select from.
+        specs: The list of ``JobSpec`` objects to select from.
         rules: Optional iterable of ``Rule`` instances.
 
     Attributes:
@@ -151,7 +151,7 @@ class Selector:
         rules: The rule sequence applied during selection.
     """
 
-    def __init__(self, specs: list["ResolvedSpec"], workspace: Path, rules: Iterable[Rule] = ()):
+    def __init__(self, specs: list["JobSpec"], workspace: Path, rules: Iterable[Rule] = ()):
         self.specs = specs
         self.workspace = workspace
         self.rules: list[Rule] = list(rules)
@@ -165,7 +165,7 @@ class Selector:
         for _, rule in sorted(enumerate(self.rules), key=lambda x: (-x[1].priority, x[0])):
             yield rule
 
-    def run(self) -> list["ResolvedSpec"]:
+    def run(self) -> list["JobSpec"]:
         config.pluginmanager.hook.canary_selectstart(selector=self)
         self.masked.clear()
         if self.rules:
@@ -187,7 +187,7 @@ class Selector:
     def propagate(self) -> None:
         # Propagate masks
         queue = deque([spec for spec in self.specs if spec.mask])
-        spec_map: dict[str, "ResolvedSpec"] = {spec.id: spec for spec in self.specs}
+        spec_map: dict[str, "JobSpec"] = {spec.id: spec for spec in self.specs}
         # Precompute reverse graph
         dependents: dict[str, list[str]] = {s.id: [] for s in self.specs}
         for s in self.specs:
@@ -203,7 +203,7 @@ class Selector:
                     queue.append(child)
 
     @staticmethod
-    def spec_set_id(specs: list["ResolvedSpec"]) -> str:
+    def spec_set_id(specs: list["JobSpec"]) -> str:
         json_str = json.dumps_min(sorted([spec.id for spec in specs]))
         return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
 
@@ -218,7 +218,7 @@ class Selector:
 
     @classmethod
     def from_snapshot(
-        cls, specs: list["ResolvedSpec"], workspace: Path, snapshot: SelectorSnapshot
+        cls, specs: list["JobSpec"], workspace: Path, snapshot: SelectorSnapshot
     ) -> "Selector":
         self = cls(specs, workspace)
         for serialized_rule in snapshot.rules:
@@ -359,7 +359,7 @@ def canary_select_report(selector: "Selector") -> None:
     """
     if not selector.masked:
         return
-    excluded: list["ResolvedSpec"] = []
+    excluded: list["JobSpec"] = []
     for spec in selector.specs:
         if spec.id in selector.masked:
             excluded.append(spec)
@@ -372,7 +372,7 @@ def canary_select_report(selector: "Selector") -> None:
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=False)
         table.add_column("Count", no_wrap=True, ratio=2, justify="right")
-        reasons: dict[str | None, list["ResolvedSpec"]] = {}
+        reasons: dict[str | None, list["JobSpec"]] = {}
         for spec in excluded:
             reasons.setdefault(spec.mask.reason, []).append(spec)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))

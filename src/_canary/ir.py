@@ -16,11 +16,11 @@ from typing import Literal
 from typing import Sequence
 
 from . import config
-from .testspec import Artifact
-from .testspec import Asset
-from .testspec import Mask
-from .testspec import ResolvedSpec
-from .testspec import SpecDependency
+from .jobspec import Artifact
+from .jobspec import Asset
+from .jobspec import JobSpec
+from .jobspec import Mask
+from .jobspec import SpecDependency
 from .util import logging
 from .util.string import stringify
 
@@ -187,16 +187,16 @@ class JobSpecIR:
 
     def finalize(
         self,
-        lookup: dict[str, "ResolvedSpec"],
+        lookup: dict[str, "JobSpec"],
         resolved: Sequence[tuple[int, Sequence[str]]] = (),
-    ) -> "ResolvedSpec":
+    ) -> "JobSpec":
         deps: list[SpecDependency] = []
         for dp_index, ids in resolved:
             dp = self.dependencies[dp_index]
             for dep_id in ids:
                 deps.append(SpecDependency(spec=lookup[dep_id], when=dp.when))
 
-        return ResolvedSpec(
+        return JobSpec(
             file_root=self.file_root,
             file_path=self.file_path,
             family=self.family,

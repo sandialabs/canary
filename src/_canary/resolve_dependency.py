@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from typing import Sequence
 
 from .ir import JobSpecIR
-from .testspec import ResolvedSpec
+from .jobspec import JobSpec
 
 if TYPE_CHECKING:
     from .ir import DependencySpec
@@ -21,24 +21,24 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ResolveContext:
-    matchable_specs: list["JobSpecIR | ResolvedSpec"]
+    matchable_specs: list["JobSpecIR | JobSpec"]
     unique_name_idx: dict[str, str]
     non_unique_idx: dict[str, list[str]]
-    spec_map: dict[str, "JobSpecIR | ResolvedSpec"]
+    spec_map: dict[str, "JobSpecIR | JobSpec"]
 
 
 def _find_matching_specs(
     dp: "DependencySpec",
     source_spec: "JobSpecIR",
     ctx: ResolveContext,
-) -> list["JobSpecIR | ResolvedSpec"]:
+) -> list["JobSpecIR | JobSpec"]:
     matches: set[str] = set()
-    matched_specs: list["JobSpecIR | ResolvedSpec"] = []
+    matched_specs: list["JobSpecIR | JobSpec"] = []
 
     for pattern in shlex.split(dp.pattern):
         matched_this_pattern: bool = False
         # Check exact matches first before resorting to glob matching
-        candidates: list["JobSpecIR | ResolvedSpec"] = []
+        candidates: list["JobSpecIR | JobSpec"] = []
         if pattern in ctx.unique_name_idx:
             spec_id = ctx.unique_name_idx[pattern]
             candidates.append(ctx.spec_map[spec_id])
@@ -143,22 +143,22 @@ def _resolve_dependencies_parallel(
 
 
 class DependencyResolver:
-    def __init__(self, specs: list["JobSpecIR | ResolvedSpec"]) -> None:
+    def __init__(self, specs: list["JobSpecIR | JobSpec"]) -> None:
         self.specs = specs
         self.ctx = self._build_context(specs)
 
     @staticmethod
-    def _build_context(specs: list["JobSpecIR | ResolvedSpec"]) -> ResolveContext:
+    def _build_context(specs: list["JobSpecIR | JobSpec"]) -> ResolveContext:
         ir_specs: list[JobSpecIR] = []
-        resolved_specs: list[ResolvedSpec] = []
-        spec_map: dict[str, JobSpecIR | ResolvedSpec] = {}
+        resolved_specs: list[JobSpec] = []
+        spec_map: dict[str, JobSpecIR | JobSpec] = {}
 
         unique_name_idx: dict[str, str] = {}
         non_unique_idx: dict[str, list[str]] = defaultdict(list)
 
         for spec in specs:
             spec_map[spec.id] = spec
-            if isinstance(spec, ResolvedSpec):
+            if isinstance(spec, JobSpec):
                 resolved_specs.append(spec)
             else:
                 ir_specs.append(spec)
@@ -179,15 +179,15 @@ class DependencyResolver:
         return _resolve_dependencies_parallel(ir_specs, self.ctx)
 
 
-def resolve(specs: Sequence["JobSpecIR | ResolvedSpec"]) -> list["ResolvedSpec"]:
+def resolve(specs: Sequence["JobSpecIR | JobSpec"]) -> list["JobSpec"]:
     # Separate specs into resolved and IR, and build a spec_map
     ir_specs: list[JobSpecIR] = []
-    resolved_specs: list[ResolvedSpec] = []
-    spec_map: dict[str, JobSpecIR | ResolvedSpec] = {}
+    resolved_specs: list[JobSpec] = []
+    spec_map: dict[str, JobSpecIR | JobSpec] = {}
 
     for spec in specs:
         spec_map[spec.id] = spec
-        if isinstance(spec, ResolvedSpec):
+        if isinstance(spec, JobSpec):
             resolved_specs.append(spec)
         elif not spec.dependencies:
             # no dependencies -> can finalize immediately
@@ -214,7 +214,7 @@ def resolve(specs: Sequence["JobSpecIR | ResolvedSpec"]) -> list["ResolvedSpec"]
         raise UnresolvedDependenciesErrors(errors)
 
     # Topologically finalize IR specs
-    lookup: dict[str, ResolvedSpec] = {}
+    lookup: dict[str, JobSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
 
@@ -222,7 +222,7 @@ def resolve(specs: Sequence["JobSpecIR | ResolvedSpec"]) -> list["ResolvedSpec"]
         ids = ts.get_ready()
         for id in ids:
             node = spec_map[id]
-            if isinstance(node, ResolvedSpec):
+            if isinstance(node, JobSpec):
                 lookup[id] = node
             else:
                 assert isinstance(node, JobSpecIR)

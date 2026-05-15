@@ -32,10 +32,11 @@ from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
 from .util.executable import Executable
+from .util.string import SimpleTemplate
 
 if TYPE_CHECKING:
-    from .testspec import Mask
-    from .testspec import ResolvedSpec
+    from .jobspec import JobSpec
+    from .jobspec import Mask
 
 logger = logging.get_logger(__name__)
 
@@ -83,7 +84,7 @@ class Dependency:
 class TestCase(BaseJob):
     def __init__(
         self,
-        spec: "ResolvedSpec",
+        spec: "JobSpec",
         workspace: ExecutionSpace,
         dependencies: list[Dependency] | None = None,
     ) -> None:
@@ -559,16 +560,10 @@ class TestCase(BaseJob):
         # Environment variables needed by this test
         variables: dict[str, str | None] = {}
         variables.update(self.spec.environment)
-        for mod in self.spec.environment_modifications:
-            name, action, value, sep = mod["name"], mod["action"], mod["value"], mod["sep"]
-            if action == "set":
-                variables[name] = value
-            elif action == "unset":
-                variables[name] = None
-            elif action == "prepend-path":
-                variables[name] = f"{value}{sep}{os.getenv(name, '')}"
-            elif action == "append-path":
-                variables[name] = f"{os.getenv(name, '')}{sep}{value}"
+        for key, value in variables.items():
+            if value is not None:
+                t = SimpleTemplate(value)
+                variables[key] = t.substitute(os.environ, missing="")
         variables["PYTHONPATH"] = f"{self.workspace.dir}:{os.getenv('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.workspace.dir}:{os.environ['PATH']}"
         return variables

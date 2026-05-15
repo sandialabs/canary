@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-import _canary.testspec as spec
+import _canary.jobspec as js
 from _canary import generate
 from _canary import ir
 from _canary.util.filesystem import working_dir
 
 
-def _dep_ids(r: "spec.ResolvedSpec") -> list[str]:
+def _dep_ids(r: "js.JobSpec") -> list[str]:
     return [d.spec.id for d in r.dependencies]
 
 
@@ -158,6 +158,7 @@ def test_depends_on_param_subs(tmpdir):
 
 def test_depends_on_missing(tmpdir):
     from _canary.resolve_dependency import UnresolvedDependenciesErrors
+
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")
         Path("f1.pyt").touch()

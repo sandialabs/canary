@@ -80,7 +80,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
     )
 
 
-def set_vvtest_execpath(spec: "canary.ResolvedSpec") -> None:
+def set_vvtest_execpath(spec: "canary.JobSpec") -> None:
     """Set the execpath of the case
 
     In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
