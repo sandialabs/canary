@@ -102,10 +102,15 @@ canary.directives.artifact('art_{p}.txt', upon='always')
         s = gen.lock()[0]
 
         # copy becomes asset via file_resources; ensure substituted paths are present
-        assert ("in_2.txt", "out_2.txt") in s.file_resources.get("copy", [])
+        asset = s.assets[0]
+        assert asset.src.name == "in_2.txt"
+        assert asset.dst == "out_2.txt"
 
         # baseline substituted
-        assert ("a_2.exo", "b_2.exo") in s.baseline
+        b = s.baseline[0]
+        assert b["src"] == "a_2.exo"
+        assert b["dst"] == "b_2.exo"
+        assert b["type"] == "copy"
 
         # artifacts substituted
         assert any(a.pattern == "art_2.txt" for a in s.artifacts)

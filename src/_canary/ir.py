@@ -155,7 +155,7 @@ class JobSpecIR:
         self.environment: dict[str, str | None] = environment or {}
         self.command = command or []
         self.mask = mask
-        self.baseline_actions = self.build_baseline_actions(baseline or [])
+        self.baseline = self.build_baseline_actions(baseline or [])
         self.exec_path: str | None = exec_path
         self.view_path: str | None = view_path
 
@@ -212,7 +212,7 @@ class JobSpecIR:
             parameters=self.parameters,
             meta_parameters=self.meta_parameters,
             assets=self.assets,
-            baseline=self.baseline_actions,
+            baseline=self.baseline,
             artifacts=self.artifacts,
             exclusive=self.exclusive,
             timeout=self.timeout,

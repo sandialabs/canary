@@ -409,7 +409,7 @@ class UnresolvedSpec(BaseSpec["UnresolvedSpec"]):
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def build(self, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
+    def finalize(self, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
         errors: list[str] = []
         for dp in self.dep_specs:
             errors.extend(dp.verify())

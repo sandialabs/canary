@@ -94,7 +94,8 @@ def test_modules_modulepath_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("MODULEPATH", "/a:/b")
     gen.add_module("gcc", use="/x")
     specs = gen.lock()
-    assert specs[0].environment["MODULEPATH"].startswith("/x:")
+    mp: str = specs[0].environment.get("MODULEPATH") or ""
+    assert mp.startswith("/x:")
 
 
 def test_sources_and_baseline_substitution(tmp_path: Path) -> None:
