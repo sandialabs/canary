@@ -157,12 +157,13 @@ def test_depends_on_param_subs(tmpdir):
 
 
 def test_depends_on_missing(tmpdir):
+    from _canary.resolve_dependency import UnresolvedDependenciesErrors
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")
         Path("f1.pyt").touch()
         dep = ir.DependencySpec(pattern="f2")
         b = ir.JobSpecIR(file_root=root, file_path=Path("f1.pyt"), dependencies=[dep])
-        with pytest.raises(ir.UnresolvedDependenciesErrors):
+        with pytest.raises(UnresolvedDependenciesErrors):
             generate.resolve([b])
 
 

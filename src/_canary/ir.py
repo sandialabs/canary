@@ -10,7 +10,6 @@ import string
 import sys
 import threading
 from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from typing import Any
 from typing import Literal
@@ -46,7 +45,6 @@ class DependencySpec:
     pattern: str
     expects: str | int = "+"
     when: str = "on_success"
-    resolves_to: list[str] = field(default_factory=list, init=False)
 
     def __post_init__(self):
         expects = self.expects
@@ -60,8 +58,6 @@ class DependencySpec:
                 raise TypeError(msg)
         elif expects <= 0:
             raise ValueError(f"DependencySpec.expect: invalid value: {expects!r} (must be > 0)")
-        elif expects is None:
-            self.expects = "+"
 
     def matches(self, spec: Any) -> bool:
         choices = {
@@ -80,11 +76,7 @@ class DependencySpec:
                     return True
         return False
 
-    def update(self, *ids: str) -> None:
-        self.resolves_to.extend(ids)
-
-    def verify(self) -> list[str]:
-        n = len(self.resolves_to)
+    def verify(self, n: int) -> list[str]:
         errors: list[str] = []
         if self.expects == "+":
             if n < 1:
@@ -193,16 +185,17 @@ class JobSpecIR:
             return float(t)
         return float(config.get("run:timeout:default"))
 
-    def finalize(self, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
-        errors: list[str] = []
-        for dp in self.dependencies:
-            errors.extend(dp.verify())
-        if errors:
-            raise UnresolvedDependenciesErrors(errors)
+    def finalize(
+        self,
+        lookup: dict[str, "ResolvedSpec"],
+        resolved: Sequence[tuple[int, Sequence[str]]] = (),
+    ) -> "ResolvedSpec":
         deps: list[SpecDependency] = []
-        for dp in self.dependencies:
-            for dep_id in dp.resolves_to:
+        for dp_index, ids in resolved:
+            dp = self.dependencies[dp_index]
+            for dep_id in ids:
                 deps.append(SpecDependency(spec=lookup[dep_id], when=dp.when))
+
         return ResolvedSpec(
             file_root=self.file_root,
             file_path=self.file_path,
@@ -272,8 +265,9 @@ class JobSpecIR:
         for arg in args:
             if isinstance(arg, DependencySpec):
                 t = string.Template(arg.pattern)
-                arg.pattern = t.safe_substitute(**parameters)
-                dependency_specs.append(arg)
+                pattern = t.safe_substitute(**parameters)
+                d = DependencySpec(pattern=pattern, expects=arg.expects, when=arg.when)
+                dependency_specs.append(d)
             else:
                 t = string.Template(arg)
                 pattern = t.safe_substitute(**parameters)
@@ -364,9 +358,3 @@ def build_id(*args: Any, **kwargs: Any) -> str:
     for key in sorted(kwargs):
         hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
     return hasher.hexdigest()
-
-
-class UnresolvedDependenciesErrors(Exception):
-    def __init__(self, errors: list[str]) -> None:
-        self.errors = errors
-        super().__init__("\n".join(errors))
