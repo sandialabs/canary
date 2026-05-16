@@ -170,9 +170,9 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         when: WhenType | None = None,
     ) -> None:
         for arg in args:
-            self.add_source("copy", src=arg, when=when)
+            self.add_source(action="copy", src=arg, when=when)
         if src is not None:
-            self.add_source("copy", src=src, dst=dst, when=when)
+            self.add_source(action="copy", src=src, dst=dst, when=when)
 
     def f_link(
         self,
@@ -182,13 +182,13 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         when: WhenType | None = None,
     ) -> None:
         for arg in args:
-            self.add_source("link", src=arg, when=when)
+            self.add_source(action="link", src=arg, when=when)
         if src is not None:
-            self.add_source("link", src=src, dst=dst, when=when)
+            self.add_source(action="link", src=src, dst=dst, when=when)
 
     def f_sources(self, *args: str, when: WhenType | None = None) -> None:
         for arg in args:
-            self.add_source("none", src=arg, when=when)
+            self.add_source(action="none", src=arg, when=when)
 
     def f_baseline(
         self,

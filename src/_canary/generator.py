@@ -269,6 +269,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
     def add_source(
         self,
+        *,
         action: Literal["copy", "link", "none"],
         src: str | Path,
         dst: str | None = None,

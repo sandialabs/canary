@@ -102,7 +102,7 @@ def test_sources_and_baseline_substitution(tmp_path: Path) -> None:
     gen = make_gen(tmp_path, "x.pyt")
     gen.add_family("a")
     gen.add_parameter_set(ParameterSet.list_parameter_space("p", [2]))
-    gen.add_source("copy", src="in_${P}.txt", dst="out_{p}.txt")
+    gen.add_source(action="copy", src="in_${P}.txt", dst="out_{p}.txt")
     gen.add_baseline(src="a_{p}.exo", dst="b_{P}.exo")
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]

@@ -15,9 +15,11 @@ import tokenize
 from itertools import repeat
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import cast
 from typing import Any
 from typing import ClassVar
 from typing import Generator
+from typing import Literal
 
 import canary
 from _canary.enums import list_parameter_space
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
     pass
 
 logger = canary.get_logger(__name__)
+ActionT = Literal["copy", "link", "none"]
 
 
 class VVTestAdapter(CanaryDSLSpecGenerator):
@@ -147,10 +150,8 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
         self.add_keywords(*arg.argument.split(), when=arg.when)
 
     def f_SOURCES(self, arg: "Directive") -> None:
-        action = arg.name
-        assert action in ("copy", "link", "sources")
-        if action == "sources":
-            action = "none"
+        action = cast(ActionT, arg.name if arg.name in ("copy", "link") else "none")
+        assert action in ("copy", "link", "none")
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
@@ -161,10 +162,11 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                         f"invalid rename option: {arg.line!r}.  rename requires src,dst file pairs",
                         arg,
                     )
-                self.add_source(action, src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore[arg-type]
+                self.add_source(action=action, src=file_pair[0], dst=file_pair[1], when=arg.when)
         else:
             files = arg.argument.split() if arg.argument else []
-            self.add_source(action, *files, when=arg.when, **kwds)  # type: ignore[arg-type]
+            for f in files:
+                self.add_source(action=action, src=f, when=arg.when)
 
     def f_PRELOAD(self, arg: "Directive") -> None:
         assert arg.name == "preload"
