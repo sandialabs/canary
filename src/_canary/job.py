@@ -75,13 +75,6 @@ class Measurements:
     def reset(self) -> None:
         self.data.clear()
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
-        return cls(data=data)
-
-    def asdict(self) -> dict[str, Any]:
-        return self.data
-
     def items(self) -> Generator[tuple[str, Any], None, None]:
         for item in self.data.items():
             yield item

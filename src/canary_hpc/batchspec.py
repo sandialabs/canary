@@ -23,6 +23,7 @@ from _canary.job import JobState
 from _canary.status import Status
 from _canary.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
+from _canary.util.serialize import serialize
 from _canary.util.time import time_in_seconds
 
 from .status import BatchStatus
@@ -407,18 +408,18 @@ class TestBatch(BaseJob):
             "session": self.session,
             "workspace": str(self.workspace.dir),
             "cases": [case.id for case in self],
-            "status": self.status.asdict(),
-            "timekeeper": self.timekeeper.asdict(),
-            "measurements": self.measurements.asdict(),
+            "status": serialize(self.status),
+            "timekeeper": serialize(self.timekeeper),
+            "measurements": serialize(self.measurements),
         }
         self.lockfile.write_text(json.dumps(config, indent=2))
         return
 
     def save(self):
         cfg = json.loads(self.lockfile.read_text())
-        cfg["status"] = self.status.asdict()
-        cfg["timekeeper"] = self.timekeeper.asdict()
-        cfg["measurements"] = self.measurements.asdict()
+        cfg["status"] = serialize(self.status)
+        cfg["timekeeper"] = serialize(self.timekeeper)
+        cfg["measurements"] = serialize(self.measurements)
         with open(self.lockfile, "w") as fh:
             json.dump(cfg, fh, indent=2)
         for case in self:

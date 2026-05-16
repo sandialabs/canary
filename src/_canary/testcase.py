@@ -510,13 +510,13 @@ class TestCase(BaseJob):
             return
         logger.info(f"Rebaselining {self.spec.display_name()}")
         with self.workspace.enter():
-            for arg in self.spec.baseline:
-                if arg["type"] == "exe":
-                    exe = Executable(arg["exe"])
-                    exe(*arg["args"], fail_on_error=False)
+            for b in self.spec.baseline:
+                if script := getattr(b, "script", None):
+                    exe = Executable(script[0])
+                    exe(*script[1:], fail_on_error=False)
                 else:
-                    src = self.workspace.dir / arg["src"]
-                    dst = self.spec.file.parent / arg["dst"]
+                    src = self.workspace.dir / b.src  # type: ignore
+                    dst = self.spec.file.parent / b.dst  # type: ignore
                     if src.exists():
                         logger.debug(f"    Replacing {dst} with {src}\n")
                         copyfile(src, dst)
@@ -558,27 +558,6 @@ class TestCase(BaseJob):
             self.status = Status.SKIPPED(reason=f"Test exited with skip exit code = {code}")
         else:
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
-
-    def refresh2(self) -> None:
-        try:
-            data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
-        except (json.JSONDecodeError, FileNotFoundError):
-            return
-        status = data["status"]
-        self.variables = data["variables"]
-        self.status = Status(
-            category=status["category"],
-            outcome=status["outcome"],
-            reason=status["reason"],
-            code=status["code"],
-        )
-        if st := data.get("state"):
-            phase = st.get("phase", "PENDING")
-            self.state.phase = JobPhase(phase)
-        tk = data["timekeeper"]
-        self.timekeeper.submitted = tk["submitted"]
-        self.timekeeper.started = tk["started"]
-        self.timekeeper.finished = tk["finished"]
 
     def refresh(self) -> None:
         obj: TestCase
@@ -665,48 +644,9 @@ class TestCase(BaseJob):
         except Exception:
             logger.debug("Failed to cache last run", exc_info=True)
 
-    def save2(self) -> None:
-        record = self.asdict()
-        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        self.lockfile.write_text(json.dumps(record, indent=2))
-
     def save(self) -> None:
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         self.lockfile.write_text(json.dumps(self, indent=2))
-
-    def asdict(self) -> dict[str, Any]:
-        record: dict[str, Any] = {
-            "state": {"phase": self.state.phase.value},
-            "status": self.status.asdict(),
-            "spec": self.spec.asdict(),
-            "timekeeper": self.timekeeper.asdict(),
-            "measurements": self.measurements.asdict(),
-            "workspace": self.workspace.asdict(),
-            "variables": self.variables,
-            "resources": self.resources,
-            "stdout": self.stdout,
-            "stderr": self.stderr,
-            "runtime": self.runtime,
-            "dependencies": [dep.lockfile for dep in self.dependencies],
-            "rparameters": self.rparameters,
-        }
-        record["spec"]["name"] = self.spec.name
-
-        return record
-
-    def serialize(self) -> str:
-        record: dict[str, Any] = {
-            "id": self.spec.id,
-            "state": {"phase": self.state.phase.value},
-            "status": self.status.asdict(),
-            "timekeeper": self.timekeeper.asdict(),
-            "measurements": self.measurements.asdict(),
-            "variables": self.variables,
-            "resources": self.resources,
-            "dependencies": [dep.id for dep in self.dependencies],
-            "rparameters": self.rparameters,
-        }
-        return json.dumps_min(record)
 
     def read_output(self, compress: bool = False) -> str:
         if self.status.is_skipped():

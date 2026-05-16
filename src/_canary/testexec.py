@@ -44,9 +44,6 @@ class ExecutionSpace:
     def __deserialize__(cls, d: dict) -> "ExecutionSpace":
         return cls(**d)
 
-    def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
-
     @classmethod
     def from_dict(cls, state: dict[str, Any]) -> "ExecutionSpace":
         return cls(root=Path(state["root"]), path=Path(state["path"]), session=state["session"])

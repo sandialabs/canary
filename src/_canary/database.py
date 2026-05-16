@@ -18,7 +18,6 @@ from typing import Iterable
 from . import jobspec
 from .job import JobPhase
 from .job import JobState
-from .job import Measurements
 from .jobspec import JobSpec
 from .jobspec import SpecDependency
 from .status import Status
@@ -367,7 +366,7 @@ class WorkspaceDatabase:
             case.timekeeper.submitted,
             case.timekeeper.started,
             case.timekeeper.finished,
-            json.dumps_min(case.measurements.asdict()),
+            json.dumps_min(case.measurements),
         )
         return row
 
@@ -463,7 +462,7 @@ class WorkspaceDatabase:
         d["timekeeper"] = Timekeeper.from_dict(
             {"submitted": row[12], "started": row[13], "finished": row[14]}
         )
-        d["measurements"] = Measurements.from_dict(json.loads(row[15]))
+        d["measurements"] = json.loads(row[15])
         return d
 
     def put_selection(

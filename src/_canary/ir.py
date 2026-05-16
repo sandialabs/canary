@@ -4,10 +4,8 @@
 
 import fnmatch
 import hashlib
-import os
 import shlex
 import string
-import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +16,7 @@ from typing import Sequence
 from . import config
 from .jobspec import Artifact
 from .jobspec import Asset
+from .jobspec import BaselineAction
 from .jobspec import JobSpec
 from .jobspec import Mask
 from .jobspec import SpecDependency
@@ -114,9 +113,8 @@ class JobSpecIR:
         owners: list[str] | None = None,
         environment: dict[str, str | None] | None = None,
         command: list[str] | None = None,
-        file_resources: FileResourceT | None = None,
         mask: Mask = Mask.unmasked(),
-        baseline: list[str | tuple[str, str]] | None = None,
+        baseline: list[BaselineAction] | None = None,
         view_path: str | None = None,
         exec_path: str | None = None,
     ):
@@ -132,7 +130,7 @@ class JobSpecIR:
         self.attributes: dict[str, Any] = attributes or {}
         self.keywords: list[str] = keywords or []
         self.assets: list[Asset] = assets or []
-        self.assets = self.assets or self.build_assets(file_resources or {})
+        self.assets = self.assets or []
         self.artifacts: list[Artifact] = artifacts or []
         self.exclusive = exclusive
         if timeout < 0:
@@ -147,7 +145,7 @@ class JobSpecIR:
         self.environment: dict[str, str | None] = environment or {}
         self.command = command or []
         self.mask = mask
-        self.baseline = self.build_baseline_actions(baseline or [])
+        self.baseline = baseline or []
         self.exec_path: str | None = exec_path
         self.view_path: str | None = view_path
 
@@ -224,38 +222,6 @@ class JobSpecIR:
             exec_path=self.exec_path,
             view_path=self.view_path,
         )
-
-    def build_assets(self, file_resources: FileResourceT) -> list[Asset]:
-        assets: list[Asset] = []
-        dirname = self.file.parent
-        for action, items in file_resources.items():
-            for a, b in items:
-                src: Path = Path(a)
-                if not src.is_absolute():
-                    src = dirname / src
-                if not src.exists():
-                    logger.debug(f"{self}: {action} resource file {str(src)} not found")
-                dst: str = b if b is not None else src.name
-                assets.append(Asset(action=action, src=src, dst=dst))
-        return assets
-
-    def build_baseline_actions(self, items: list[str | tuple[str, str]]) -> list[dict]:
-        actions: list[dict] = []
-        for item in items:
-            if isinstance(item, str):
-                # Single item -> this is an executable to run to perform the baseline
-                exe: str
-                args: list[str] = []
-                if os.path.exists(item):
-                    exe = item
-                else:
-                    exe = sys.executable
-                    args.extend([self.file.name, item])
-                actions.append({"type": "exe", "exe": exe, "args": args})
-            else:
-                src, dst = item
-                actions.append({"type": "copy", "src": src, "dst": dst})
-        return actions
 
     def build_dependencies(self, args: Sequence[str | DependencySpec]) -> list[DependencySpec]:
         dependency_specs: list[DependencySpec] = []

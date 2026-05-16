@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
 
-from .job import JobPhase
 from .job import JobState
+from .jobspec import BaselineAction
 from .status import Status
 from .util import json_helper as json
 from .util.paramview import MultiParameters
@@ -34,7 +34,7 @@ class TestInstance:
     parameters: Parameters
     timeout: float | int | None
     runtime: float | int | None
-    baseline: list[dict]
+    baseline: list[BaselineAction]
     sources: dict[str, list[tuple[str, str | None]]]
     work_tree: str
     working_directory: str
@@ -169,87 +169,6 @@ def from_testcase(case: "TestCase") -> TestInstance:
         lockfile=str(case.workspace.dir / "testcase.lock"),
     )
     return instance
-
-
-def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInstance:
-    spec = lock["spec"]
-    dependencies: list[TestInstance] = []
-    for dep in spec["dependencies"]:
-        dependencies.append(lookup[dep["spec"]["id"]])
-    parameters: Parameters
-    cls: Type[TestInstance]
-    if lock["spec"]["attributes"].get("multicase"):
-        cls = TestMultiInstance
-        columns: dict[str, list[Any]] = {}
-        for key in spec["dependencies"][0]["spec"]["parameters"].keys():
-            col = columns.setdefault(key, [])
-            for dep in spec["dependencies"]:
-                col.append(dep["spec"]["parameters"][key])
-        parameters = MultiParameters(**columns)
-    else:
-        cls = TestInstance
-        parameters = Parameters(**spec["parameters"])
-    sources: dict[str, list[tuple[str, str | None]]] = {}
-    for asset in spec["assets"]:
-        sources.setdefault(asset["action"], []).append((asset["src"], asset["dst"]))
-
-    workspace = lock["workspace"]
-    state = lock["state"]
-    status = lock["status"]
-    resources = lock["resources"]
-    timekeeper = lock["timekeeper"]
-
-    start = timekeeper["started"]
-    stop = timekeeper["finished"]
-    instance = cls(
-        file_root=spec["file_root"],
-        file_path=spec["file_path"],
-        name=spec["name"],
-        file=os.path.join(spec["file_root"], spec["file_path"]),
-        cpu_ids=[str(_["id"]) for _ in resources.get("cpus", [])],
-        gpu_ids=[str(_["id"]) for _ in resources.get("gpus", [])],
-        family=spec["family"],
-        keywords=spec["keywords"],
-        parameters=parameters,
-        timeout=spec["timeout"],
-        runtime=lock["runtime"],
-        baseline=spec["baseline"],
-        sources=sources,
-        work_tree=os.path.join(workspace["root"], workspace["path"]),
-        working_directory=os.path.join(workspace["root"], workspace["path"]),
-        state=JobState(phase=JobPhase(state["phase"])),
-        status=Status(
-            category=status["category"],
-            outcome=status["outcome"],
-            reason=status["reason"],
-            code=status["code"],
-        ),
-        start=start,
-        stop=stop,
-        id=spec["id"],
-        returncode=status["code"],
-        variables=spec["environment"],
-        dependencies=dependencies,
-        ofile=lock["stdout"],
-        efile=lock["stderr"],
-        lockfile=os.path.join(
-            lock["workspace"]["root"], lock["workspace"]["path"], "testcase.lock"
-        ),
-    )
-    return instance
-
-
-def load_instance2(
-    arg: Path | str | None, lookup: dict[str, TestInstance] | None = None
-) -> TestInstance:
-    lookup = lookup or {}
-    path = Path(arg or ".").absolute()
-    file = path / "testcase.lock" if path.is_dir() else path
-    lock_data = json.loads(file.read_text())
-    for f in lock_data["dependencies"]:
-        inst = load_instance(f, lookup)
-        lookup[inst.id] = inst
-    return from_lock(lock_data, lookup)
 
 
 def load_instance(

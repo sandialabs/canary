@@ -22,6 +22,7 @@ from ...select import Selector
 from ...util import graph
 from ...util import json_helper as json
 from ...util import logging
+from ...util.serialize import serialize
 from ..types import CanarySubcommand
 from .common import add_resource_arguments
 
@@ -87,7 +88,7 @@ class Find(CanarySubcommand):
             pprint_keywords(final)
         elif args.print_lock:
             file = Path(config.invocation_dir) / "testspecs.lock"
-            states = [spec.asdict() for spec in final]
+            states = [serialize(spec) for spec in final]
             file.write_text(json.dumps({"testspecs": states}, indent=2))
             logger.info("test specs written to testspec.lock")
         else:

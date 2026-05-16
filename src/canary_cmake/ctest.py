@@ -88,12 +88,12 @@ class CTestTestGenerator(AbstractTestGenerator):
         return info
 
     def load(self) -> dict:
-        tests = load(self.file)
+        tests = load(self.file.as_posix())
         if not tests:
             return {}
         for name, defn in tests.items():
             transformed: dict[str, Any] = {"command": defn["command"]}
-            transformed["ctestfile"] = defn["ctestfile"] or self.file
+            transformed["ctestfile"] = defn["ctestfile"] or self.file.as_posix()
             for prop in defn["properties"]:
                 prop_name = prop["name"]
                 prop_value = prop["value"]

@@ -218,14 +218,6 @@ class Status:
         self.reason = reason2
         self.code = outcome2.value if code < 0 else code
 
-    def asdict(self) -> dict[str, Any]:
-        return {
-            "category": self.category.value,
-            "outcome": self.outcome.name,
-            "reason": self.reason,
-            "code": self.code,
-        }
-
     @classmethod
     def from_dict(cls, data: MutableMapping[str, Any]) -> "Status":
         d = dict(data)

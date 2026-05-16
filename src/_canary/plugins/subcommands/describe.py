@@ -13,6 +13,7 @@ from ... import config
 from ...collect import Collector
 from ...hookspec import hookimpl
 from ...util.rich import colorize
+from ...util.serialize import serialize
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 
@@ -80,7 +81,7 @@ def describe_testcase(case: Union["TestCase", "JobSpec"], indent: str = "") -> N
     )
     from pygments.lexers import get_lexer_by_name
 
-    state = case.asdict()
+    state = serialize(case)
     text = dump({"name": case.display_name(), **state})
     lexer = get_lexer_by_name("yaml")
     formatter = Formatter(bg="dark", style="monokai")

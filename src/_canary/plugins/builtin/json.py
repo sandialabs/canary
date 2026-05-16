@@ -7,6 +7,7 @@ from typing import Any
 
 from ...hookspec import hookimpl
 from ...util import json_helper as json
+from ...util.serialize import serialize
 from ...workspace import Workspace
 from ..types import CanaryReporter
 
@@ -27,6 +28,6 @@ class JsonReporter(CanaryReporter):
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in cases:
-            data[case.id] = case.asdict()
+            data[case.id] = serialize(case)
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

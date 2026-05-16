@@ -41,7 +41,7 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
         self.load()
 
     def load(self, file: str | None = None) -> None:
-        file = file or self.file
+        file = file or self.file.as_posix()
         for arg in p_VVT(file):
             match arg.name:
                 case "keywords":
@@ -147,7 +147,10 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
         self.add_keywords(*arg.argument.split(), when=arg.when)
 
     def f_SOURCES(self, arg: "Directive") -> None:
-        assert arg.name in ("copy", "link", "sources")
+        action = arg.name
+        assert action in ("copy", "link", "sources")
+        if action == "sources":
+            action = "none"
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
@@ -158,10 +161,10 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                         f"invalid rename option: {arg.line!r}.  rename requires src,dst file pairs",
                         arg,
                     )
-                self.add_source(arg.name, src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore[arg-type]
+                self.add_source(action, src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore[arg-type]
         else:
             files = arg.argument.split() if arg.argument else []
-            self.add_source(arg.name, *files, when=arg.when, **kwds)  # type: ignore[arg-type]
+            self.add_source(action, *files, when=arg.when, **kwds)  # type: ignore[arg-type]
 
     def f_PRELOAD(self, arg: "Directive") -> None:
         assert arg.name == "preload"
@@ -188,7 +191,7 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                         )
                         self.add_dependency(d, when=arg.when)
 
-        ps = ParameterSet.list_parameter_space(list(names), values, file=self.file)
+        ps = ParameterSet.list_parameter_space(list(names), values, file=self.file.as_posix())
         self.add_parameter_set(ps, when=arg.when)
 
     def f_ANALYZE(self, arg: "Directive") -> None:
@@ -214,16 +217,16 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
         self.set_skipif(skip, reason=reason)
 
     def f_BASELINE(self, arg: "Directive") -> None:
-        file_pairs = make_table(arg.argument)
+        items = make_table(arg.argument)
         options = dict(arg.options or {})
         # baseline currently only supports src/dst or flag; ignore other options for now
-        for file_pair in file_pairs:
-            if len(file_pair) == 1 and file_pair[0].startswith("--"):
-                self.add_baseline(flag=file_pair[0], when=arg.when)
-            elif len(file_pair) != 2:
-                raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
+        for item in items:
+            if len(item) == 1 and item[0].startswith("--"):
+                self.add_baseline(flag=item[0], when=arg.when)
+            elif len(item) == 2:
+                self.add_baseline(src=item[0], dst=item[1], when=arg.when)
             else:
-                self.add_baseline(src=file_pair[0], dst=file_pair[1], when=arg.when)
+                raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
 
     def f_ENABLE(self, arg: "Directive") -> None:
         if arg.argument and arg.argument.lower() == "true":

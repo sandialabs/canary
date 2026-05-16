@@ -77,9 +77,6 @@ class Timekeeper:
         t: float = getattr(self, what)
         return datetime.datetime.fromtimestamp(t).isoformat(timespec="microseconds")
 
-    def asdict(self) -> dict[str, float]:
-        return {"submitted": self.submitted, "started": self.started, "finished": self.finished}
-
     @classmethod
     def from_dict(cls, d: dict[str, float]) -> "Timekeeper":
         self = cls()

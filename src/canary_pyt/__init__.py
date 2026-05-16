@@ -112,8 +112,8 @@ class PYTAdapter(CanaryDSLSpecGenerator):
             self._directive_recorder = recorder
             with monkeypatch.context() as mp:
                 mp.setattr(canary, "directives", recorder)
-                code = compile(open(self.file).read(), self.file, "exec")
-                safe_globals = {"__name__": "__load__", "__file__": self.file}
+                code = compile(open(self.file).read(), self.file.as_posix(), "exec")
+                safe_globals = {"__name__": "__load__", "__file__": self.file.as_posix()}
                 try:
                     exec(code, safe_globals)  # nosec B102
                 except SystemExit:
@@ -153,13 +153,13 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         random_seed: float = 1234.0,
     ) -> None:
         if type is enums.centered_parameter_space:
-            pset = ParameterSet.centered_parameter_space(names, values, file=self.file)
+            pset = ParameterSet.centered_parameter_space(names, values, file=self.file.as_posix())
         elif type is enums.random_parameter_space:
             pset = ParameterSet.random_parameter_space(
-                names, values, samples=samples, random_seed=random_seed, file=self.file
+                names, values, samples=samples, random_seed=random_seed, file=self.file.as_posix()
             )
         else:
-            pset = ParameterSet.list_parameter_space(names, values, file=self.file)
+            pset = ParameterSet.list_parameter_space(names, values, file=self.file.as_posix())
         self.add_parameter_set(pset, when=when)
 
     def f_copy(
@@ -169,7 +169,10 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         dst: str | None = None,
         when: WhenType | None = None,
     ) -> None:
-        self.add_source("copy", *args, src=src, dst=dst, when=when)
+        for arg in args:
+            self.add_source("copy", src=arg, when=when)
+        if src is not None:
+            self.add_source("copy", src=src, dst=dst, when=when)
 
     def f_link(
         self,
@@ -178,10 +181,14 @@ class PYTAdapter(CanaryDSLSpecGenerator):
         dst: str | None = None,
         when: WhenType | None = None,
     ) -> None:
-        self.add_source("link", *args, src=src, dst=dst, when=when)
+        for arg in args:
+            self.add_source("link", src=arg, when=when)
+        if src is not None:
+            self.add_source("link", src=src, dst=dst, when=when)
 
     def f_sources(self, *args: str, when: WhenType | None = None) -> None:
-        self.add_source("sources", *args, when=when)
+        for arg in args:
+            self.add_source("none", src=arg, when=when)
 
     def f_baseline(
         self,

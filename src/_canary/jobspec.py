@@ -7,13 +7,11 @@ import itertools
 from functools import cached_property
 from functools import lru_cache
 from pathlib import Path
-from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import MutableSequence
 
-from .util import json_helper as json
 from .util import logging
 from .util.string import stringify
 
@@ -27,7 +25,7 @@ select_sygil = "/"
 @dataclasses.dataclass
 class Asset:
     src: Path
-    dst: str
+    dst: str | None
     action: Literal["copy", "link", "none"]
 
     def __serialize__(self) -> dict[str, Any]:
@@ -37,6 +35,40 @@ class Asset:
     def __deserialize__(cls, d: dict) -> "Asset":
         src = Path(d.pop("src"))
         return cls(src=src, **d)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BaselineCopyAction:
+    src: Path
+    dst: str
+    kind: Literal["copy"] = dataclasses.field(default="copy", init=False)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"src": self.src, "dst": self.dst}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "BaselineCopyAction":
+        return cls(src=Path(d["src"]), dst=d["dst"])
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BaselineScriptAction:
+    script: list[str] = dataclasses.field(default_factory=list)
+    kind: Literal["script"] = dataclasses.field(default="script", init=False)
+
+    def __post_init__(self) -> None:
+        if not self.script:
+            raise TypeError("BaselineScriptAction requires non-empty script")
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"script": self.script}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "BaselineScriptAction":
+        return cls(script=list(d["script"]))
+
+
+BaselineAction = BaselineCopyAction | BaselineScriptAction
 
 
 @dataclasses.dataclass(frozen=True)
@@ -118,12 +150,12 @@ class JobSpec:
     family: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
-    dependencies: MutableSequence["SpecDependency"] = dataclasses.field(default_factory=list)
+    dependencies: MutableSequence[SpecDependency] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     keywords: list[str] = dataclasses.field(default_factory=list)
-    assets: list["Asset"] = dataclasses.field(default_factory=list)
-    baseline: list[dict] = dataclasses.field(default_factory=list)
+    assets: list[Asset] = dataclasses.field(default_factory=list)
+    baseline: list[BaselineAction] = dataclasses.field(default_factory=list)
     artifacts: list[Artifact] = dataclasses.field(default_factory=list)
     exclusive: bool = False
     timeout: float = -1.0
@@ -170,7 +202,7 @@ class JobSpec:
             "environment": self.environment,
             "meta_parameters": self.meta_parameters,
             "command": self.command,
-            "mask": self.mask,  # keep as Mask object
+            "mask": self.mask,
             "exec_path": self.exec_path,
             "view_path": self.view_path,
         }
@@ -181,37 +213,10 @@ class JobSpec:
         path = Path(d.pop("file_path"))
         return cls(file_root=root, file_path=path, **d)
 
-    def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
-
-    def dump(self, file: IO[Any], **kwargs: Any) -> None:
-        json.dump(self.asdict(), file, **kwargs)
-
-    def dumps(self, **kwargs: Any) -> Any:
-        return json.dumps(self.asdict(), **kwargs)
-
     def add_artifact(
         self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
     ) -> None:
         self.artifacts.append(Artifact(pattern=pattern, when=when))
-
-    @classmethod
-    def from_dict(cls, d: dict, lookup: dict[str, "JobSpec"]) -> "JobSpec":
-        state = dict(d)
-        mask = state.pop("mask", None)
-        if mask:
-            state["mask"] = Mask(mask["value"], mask["reason"])
-        state["file_root"] = Path(state.pop("file_root"))
-        state["file_path"] = Path(state.pop("file_path"))
-        dependencies = [lookup[dep["id"]] for dep in state["dependencies"]]
-        state["dependencies"] = dependencies
-        assets = [
-            Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]) for a in state["assets"]
-        ]
-        state["assets"] = assets
-        state["artifacts"] = [Artifact(**x) for x in state["artifacts"]]
-        self = cls(**d)  # ty: ignore[missing-argument]
-        return self
 
     @cached_property
     def file(self) -> Path:

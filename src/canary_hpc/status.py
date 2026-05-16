@@ -53,9 +53,6 @@ class BatchStatus:
     def is_cancelled(self) -> bool:
         return self.base.is_cancelled()
 
-    def asdict(self) -> dict[str, Any]:
-        return self.base.asdict()
-
     # ---- updating ----
     def set_base(
         self,

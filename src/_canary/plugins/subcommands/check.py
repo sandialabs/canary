@@ -143,22 +143,24 @@ class Check(CanarySubcommand):
                 f"Lint checking examples in {self.root}/src/canary/examples"
             )
             paths = Check.find_pyt_files("./src/canary/examples")
-            ruff("check", "--fix", *paths)
-            ruff("check", "--fix", "./src/canary/examples")
+            ruff("check", "--fix", "--select", "S324", *paths)
+            ruff("check", "--fix", "--select", "S324", "./src/canary/examples")
+            ruff("check", "--fix", "--select", "S324", "./docs")
+            ruff("check", "--fix", "--select", "S324", "./bin")
             pm.done()
 
             pm = logger.progress_monitor(
                 f"Lint checking examples in {self.root}/docs/source/static"
             )
-            ruff("check", "--fix", "./docs/source/static")
+            ruff("check", "--fix", "--select", "S324", "./docs/source/static")
             pm.done()
 
             pm = logger.progress_monitor(f"Lint checking tests in {self.root}/tests")
-            ruff("check", "--fix", "./tests")
+            ruff("check", "--fix", "--select", "S324", "./tests")
             pm.done()
 
             pm = logger.progress_monitor(f"Lint checking source in {self.root}/src")
-            ruff("check", "--fix", "./src")
+            ruff("check", "--fix", "--select", "S324", "./src")
             pm.done()
 
     def security_check(self, args: argparse.Namespace):

@@ -23,11 +23,15 @@ from .ir import DependencySpec
 from .ir import JobSpecIR
 from .jobspec import Artifact
 from .jobspec import Asset
+from .jobspec import BaselineAction
+from .jobspec import BaselineCopyAction
+from .jobspec import BaselineScriptAction
 from .jobspec import Mask
 from .paramset import ParameterSet
 from .util import logging
 from .util import reducer
 from .util.field import Field
+from .util.logging import get_logger
 from .util.reducer import Reducer
 from .util.reducer import unique
 from .util.string import stringify
@@ -48,6 +52,7 @@ if TYPE_CHECKING:
 
 
 WhenType = str | dict[str, str]
+logger = get_logger(__name__)
 
 
 def flatten_unique(xss: list[list[str]]) -> list[str]:
@@ -94,20 +99,20 @@ class AbstractTestGenerator(ABC):
             root, path = os.path.split(root)
         self.root = os.path.abspath(root)
         self.path = path
-        self.file = os.path.join(self.root, self.path)
-        if not os.path.exists(self.file):
+        self.file = Path(self.root).joinpath(self.path)
+        if not self.file.exists():
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
-        self.name = os.path.splitext(os.path.basename(self.path))[0]
+        self.name = self.file.stem
 
         sha = hashlib.sha256()
         with open(self.file, "rb") as fh:
             data = fh.read()
             sha.update(data)
         self.sha256: str = sha.hexdigest()
-        self.id: str = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
+        self.id: str = hashlib.sha256(self.file.as_posix().encode("utf-8")).hexdigest()[:20]
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(file={self.file!r})"
+        return f"{self.__class__.__name__}(file={self.file.as_posix()!r})"
 
     @classmethod
     def factory(cls, root: str, path: str | None = None) -> Self | None:
@@ -147,7 +152,7 @@ class AbstractTestGenerator(ABC):
         state: dict[str, Any] = {}
         state["root"] = self.root
         state["path"] = self.path
-        state["mtime"] = os.path.getmtime(self.file)
+        state["mtime"] = self.file.stat().st_mtime
         return state
 
     @staticmethod
@@ -164,14 +169,6 @@ class AbstractTestGenerator(ABC):
         params = meta["params"]
         generator = cls(params["root"], params["path"])
         return generator
-
-    def serialize(self) -> str:
-        meta = {
-            "module": self.__class__.__module__,
-            "classname": self.__class__.__name__,
-            "params": self.asdict(),
-        }
-        return json.dumps_min(meta)
 
     @staticmethod
     def create(root: str, path: str | None = None) -> "AbstractTestGenerator":
@@ -190,20 +187,6 @@ class AbstractTestGenerator(ABC):
 class ModuleSpec:
     name: str
     use: str | None = None
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class SourceSpec:
-    action: Literal["copy", "link", "sources"]
-    src: str
-    dst: str | None = None
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class BaselineSpec:
-    src: str | None = None
-    dst: str | None = None
-    flag: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -235,8 +218,8 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         self.modules: Field[ModuleSpec, list[ModuleSpec]] = Field(reducer=reducer.IDENTITY)
         self.rcfiles: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
         self.artifacts: Field[Artifact, list[Artifact]] = Field(reducer=reducer.IDENTITY)
-        self.sources: Field[SourceSpec, list[SourceSpec]] = Field(reducer=reducer.IDENTITY)
-        self.baseline: Field[BaselineSpec, list[BaselineSpec]] = Field(reducer=reducer.IDENTITY)
+        self.sources: Field[Asset, list[Asset]] = Field(reducer=reducer.IDENTITY)
+        self.baseline: Field[BaselineAction, list[BaselineAction]] = Field(reducer=reducer.IDENTITY)
         self.exclusive: Field[bool, bool] = Field(reducer=reducer.ANY)
         self.depends_on: Field[DependencySpec, list[DependencySpec]] = Field(
             reducer=reducer.IDENTITY
@@ -286,17 +269,17 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
     def add_source(
         self,
-        action: Literal["copy", "link", "sources"],
-        *files: str,
-        src: str | None = None,
+        action: Literal["copy", "link", "none"],
+        src: str | Path,
         dst: str | None = None,
         when: WhenType | None = None,
     ) -> None:
-        if src is not None:
-            self.sources.add(SourceSpec(action=action, src=src, dst=dst), when=when)
-            return
-        for f in files:
-            self.sources.add(SourceSpec(action=action, src=f, dst=None), when=when)
+        dirname = self.file.parent
+        a = Path(src)
+        if not a.is_absolute():
+            a = dirname / a
+        asset = Asset(action=action, src=a, dst=dst)
+        self.sources.add(asset, when=when)
 
     def add_baseline(
         self,
@@ -305,7 +288,16 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         flag: str | None = None,
         when: WhenType | None = None,
     ) -> None:
-        self.baseline.add(BaselineSpec(src=src, dst=dst, flag=flag), when=when)
+        b: BaselineAction
+        if flag is not None:
+            if src is not None or dst is not None:
+                raise TypeError("'flag' and 'src/dst' or mutually exclusive")
+            b = BaselineScriptAction(script=[sys.executable, self.file.name, flag])
+        else:
+            if src is None or dst is None:
+                raise TypeError("baseline: both 'src' and 'dst' are required arguments")
+            b = BaselineCopyAction(src=Path(src), dst=dst)
+        self.baseline.add(b, when=when)
 
     def set_exclusive(self, when: WhenType | None = None) -> None:
         self.exclusive.add(True, when=when)
@@ -394,24 +386,48 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         family: str | None = None,
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
+        subs: dict[str, Any] | None = None,
     ) -> list[Artifact]:
-        return self.artifacts.eval(family=family, parameters=parameters, on_options=on_options)
+        artifacts = self.artifacts.eval(family=family, parameters=parameters, on_options=on_options)
+        if subs:
+            for i, a in enumerate(artifacts):
+                artifacts[i] = Artifact(
+                    pattern=self.safe_substitute(a.pattern, **subs), when=a.when
+                )
+        return artifacts
 
     def get_sources(
         self,
         family: str | None = None,
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
-    ) -> list[SourceSpec]:
-        return self.sources.eval(family=family, parameters=parameters, on_options=on_options)
+        subs: dict[str, Any] | None = None,
+    ) -> list[Asset]:
+        sources = self.sources.eval(family=family, parameters=parameters, on_options=on_options)
+        if subs:
+            for i, s in enumerate(sources):
+                sources[i] = Asset(
+                    src=Path(self.safe_substitute(s.src.as_posix(), **subs)),
+                    dst=None if s.dst is None else self.safe_substitute(s.dst, **subs),
+                    action=s.action,
+                )
+        return sources
 
     def get_baseline(
         self,
         family: str | None = None,
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
-    ) -> list[BaselineSpec]:
-        return self.baseline.eval(family=family, parameters=parameters, on_options=on_options)
+        subs: dict[str, Any] | None = None,
+    ) -> list[BaselineAction]:
+        actions = self.baseline.eval(family=family, parameters=parameters, on_options=on_options)
+        if subs:
+            for i, a in enumerate(actions):
+                if isinstance(a, BaselineCopyAction):
+                    src = self.safe_substitute(str(a.src), **subs)
+                    dst = self.safe_substitute(a.dst, **subs)
+                    actions[i] = BaselineCopyAction(src=Path(src), dst=dst)
+        return actions
 
     def get_exclusive(
         self,
@@ -426,8 +442,17 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         family: str | None = None,
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
+        subs: dict[str, Any] | None = None,
     ) -> list[DependencySpec]:
-        return self.depends_on.eval(family=family, parameters=parameters, on_options=on_options)
+        deps = self.depends_on.eval(family=family, parameters=parameters, on_options=on_options)
+        if subs:
+            for i, dep in enumerate(deps):
+                deps[i] = DependencySpec(
+                    pattern=self.safe_substitute(dep.pattern, **subs),
+                    expects=dep.expects,
+                    when=dep.when,
+                )
+        return deps
 
     def get_attributes(
         self,
@@ -512,11 +537,10 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
             test_mask: str | None = None
             my_irs: list[JobSpecIR] = []
-            dependencies: list[DependencySpec] = []
 
             for parameters in param_dicts:
+                kw = self._sub_kwds(family, parameters)
                 test_mask = self.get_skip_reason(family, parameters, on_options=on_options)
-
                 keywords = self.get_keywords(family, parameters, on_options=on_options)
                 modules = self.get_modules(family, parameters, on_options=on_options)
                 timeout = self.get_timeout(family, parameters, on_options=on_options)
@@ -524,57 +548,11 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 xstatus = self.get_xstatus(family, parameters, on_options=on_options)
                 exclusive = self.get_exclusive(family, parameters, on_options=on_options)
                 rcfiles = self.get_rcfiles(family, parameters, on_options=on_options)
-                artifacts = self.get_artifacts(family, parameters, on_options=on_options)
+                artifacts = self.get_artifacts(family, parameters, on_options=on_options, subs=kw)
                 attributes = self.get_attributes(family, parameters, on_options=on_options)
-                baseline_specs = self.get_baseline(family, parameters, on_options=on_options)
-                src_specs = self.get_sources(family, parameters, on_options=on_options)
-                deps = self.get_dependencies(family, parameters, on_options=on_options)
-
-                kw = self._sub_kwds(family, parameters)
-
-                src: str | None
-                dst: str | None
-                baseline: list[str | tuple[str, str]] = []
-                for b in baseline_specs:
-                    if b.flag:
-                        baseline.append(b.flag)
-                    else:
-                        if b.src is None:
-                            continue
-                        if b.dst is None:
-                            continue
-                        src = self.safe_substitute(b.src, **kw)
-                        dst = self.safe_substitute(b.dst, **kw)
-                        baseline.append((src, dst))
-
-                file_resources: dict[
-                    Literal["copy", "link", "none"], list[tuple[str, str | None]]
-                ] = {}
-                for s in src_specs:
-                    src = self.safe_substitute(s.src, **kw)
-                    dst = self.safe_substitute(s.dst, **kw) if s.dst is not None else None
-                    action: Literal["copy", "link", "none"]
-                    if s.action == "sources":
-                        action = "none"
-                    else:
-                        action = s.action
-                    file_resources.setdefault(action, []).append((src, dst))
-
-                dependencies.clear()
-                for dep in deps:
-                    dependencies.append(
-                        DependencySpec(
-                            pattern=self.safe_substitute(dep.pattern, **kw),
-                            expects=dep.expects,
-                            when=dep.when,
-                        )
-                    )
-
-                resolved_artifacts: list[Artifact] = []
-                for a in artifacts:
-                    resolved_artifacts.append(
-                        Artifact(pattern=self.safe_substitute(a.pattern, **kw), when=a.when)
-                    )
+                baseline = self.get_baseline(family, parameters, on_options=on_options, subs=kw)
+                assets = self.get_sources(family, parameters, on_options=on_options, subs=kw)
+                deps = self.get_dependencies(family, parameters, on_options=on_options, subs=kw)
 
                 ir = JobSpecIR(
                     file_root=Path(self.root),
@@ -586,13 +564,13 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     timeout=timeout or -1.0,
                     baseline=baseline,
-                    file_resources=file_resources,
+                    assets=assets,
                     xstatus=xstatus,
                     preload=preload,
                     rcfiles=rcfiles,
-                    artifacts=resolved_artifacts,
+                    artifacts=artifacts,
                     exclusive=exclusive,
-                    dependencies=dependencies,
+                    dependencies=deps,
                     command=list(self.command),
                 )
 
@@ -624,11 +602,9 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                     )
 
                 modules = self.get_modules(family, parameters=None, on_options=on_options)
-                dependencies.clear()
-                for d in my_irs:
-                    dependencies.append(
-                        DependencySpec(pattern=d.id, expects=1, when=analyze.requires)
-                    )
+                deps = [
+                    DependencySpec(pattern=d.id, expects=1, when=analyze.requires) for d in my_irs
+                ]
 
                 pset_meta = []
                 for ps in psets:
@@ -642,7 +618,6 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                     timeout=self.get_timeout(family, parameters=None, on_options=on_options)
                     or -1.0,
                     baseline=[],
-                    file_resources={},
                     xstatus=self.get_xstatus(family, parameters=None, on_options=on_options),
                     preload=self.get_preload(family, parameters=None, on_options=on_options),
                     modules=[m.name for m in modules],
@@ -651,7 +626,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                     artifacts=self.get_artifacts(family, parameters=None, on_options=on_options),
                     exclusive=self.get_exclusive(family, parameters=None, on_options=on_options),
                     attributes={"multicase": True, "paramsets": pset_meta},
-                    dependencies=dependencies,
+                    dependencies=deps,
                 )
 
                 if analyze.flag:
