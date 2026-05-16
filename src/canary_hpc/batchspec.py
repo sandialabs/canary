@@ -37,7 +37,7 @@ logger = canary.get_logger(__name__)
 @dataclasses.dataclass
 class BatchSpec:
     layout: str
-    cases: list[canary.TestCase]
+    cases: list[canary.Job]
     dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)

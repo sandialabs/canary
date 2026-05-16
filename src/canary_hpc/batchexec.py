@@ -320,7 +320,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         logger.debug(f"Finished {batch} with exit code {rc}")
         return rc
 
-    def submit(self, batch: "TestBatch", case: "canary.TestCase") -> hpc_connect.futures.Future:
+    def submit(self, batch: "TestBatch", case: "canary.Job") -> hpc_connect.futures.Future:
         variables = self.rc_environ(batch)
         timeoutx = batch.timeout_multiplier
         invocation = self.canary_invocation(batch, case)
@@ -339,7 +339,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         future = self.backend.submission_manager().submit(job, exclusive=False)
         return future
 
-    def canary_invocation(self, batch: "TestBatch", case: "canary.TestCase") -> str:
+    def canary_invocation(self, batch: "TestBatch", case: "canary.Job") -> str:
         """Write the canary invocation used to run this test case"""
         default_args = [
             sys.executable,

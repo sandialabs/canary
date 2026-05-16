@@ -309,12 +309,12 @@ def apply_env_mods(mods: list[dict[str, str]]) -> dict[str, str | None]:
     return variables
 
 
-def setup_ctest(case: canary.TestCase):
+def setup_ctest(case: canary.Job):
     variables = resource_groups_vars(case)
     case.add_variables(**variables)
 
 
-def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
+def resource_groups_vars(case: canary.Job) -> dict[str, str]:
     """Set the resource group variables as required by CTest
 
     canary does not have a notion of resource groups, like ctest does.  When a test checks out
@@ -365,7 +365,7 @@ def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
     return variables
 
 
-def finish_ctest(case: "canary.TestCase") -> None:
+def finish_ctest(case: "canary.Job") -> None:
     output = case.read_output()
 
     if case.status.is_skipped() or case.status.is_cancelled():

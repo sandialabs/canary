@@ -84,7 +84,7 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .jobspec import JobSpec
-    from .testcase import TestCase
+    from .testcase import Job
 
 
 logger = logging.get_logger(__name__)
@@ -268,7 +268,7 @@ class RuntimeSelector:
     """Apply rule-based masking to a set of test cases."""
 
     def __init__(
-        self, cases: list["TestCase"], workspace: Path, rules: Iterable[RuntimeRule] = ()
+        self, cases: list["Job"], workspace: Path, rules: Iterable[RuntimeRule] = ()
     ) -> None:
         self.cases = cases
         self.workspace = workspace
@@ -310,7 +310,7 @@ class RuntimeSelector:
     def propagate(self) -> None:
         # Propagate skipped/broken tests
         queue = deque([c for c in self.cases if c.mask and c.is_runnable()])
-        case_map: dict[str, "TestCase"] = {case.id: case for case in self.cases}
+        case_map: dict[str, "Job"] = {case.id: case for case in self.cases}
         # Precompute reverse graph
         dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
         for case in self.cases:
@@ -393,11 +393,11 @@ def canary_select_report(selector: "Selector") -> None:
 def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     if not selector.masked:
         return
-    excluded: list["TestCase"] = [case for case in selector.cases if case.id in selector.masked]
+    excluded: list["Job"] = [case for case in selector.cases if case.id in selector.masked]
     n = len(selector.masked)
     if excluded:
         n = len(excluded)
-        reasons: dict[str | None, list["TestCase"]] = {}
+        reasons: dict[str | None, list["Job"]] = {}
         for case in excluded:
             reasons.setdefault(case.mask.reason, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))

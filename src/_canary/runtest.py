@@ -22,7 +22,7 @@ from .util.time import hhmmss
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .status import Outcome
-    from .testcase import TestCase
+    from .testcase import Job
     from .workspace import Workspace
 
 
@@ -53,7 +53,7 @@ def canary_runtests(runner: "Runner") -> None:
 
 @dataclasses.dataclass
 class Runner:
-    cases: list["TestCase"]
+    cases: list["Job"]
     session: str
     workspace: "Workspace"
     _returncode: int = -20
@@ -76,7 +76,7 @@ class Runner:
 
 
 @hookimpl(wrapper=True)
-def canary_runteststart(case: "TestCase") -> Generator[None, None, bool]:
+def canary_runteststart(case: "Job") -> Generator[None, None, bool]:
     case.workspace.create(exist_ok=True)
     case.setup()
     yield
@@ -85,7 +85,7 @@ def canary_runteststart(case: "TestCase") -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_runtest(case: "TestCase") -> Generator[None, None, bool]:
+def canary_runtest(case: "Job") -> Generator[None, None, bool]:
     case.run()
     yield
     case.save()
@@ -93,7 +93,7 @@ def canary_runtest(case: "TestCase") -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_runtest_finish(case: "TestCase") -> Generator[None, None, bool]:
+def canary_runtest_finish(case: "Job") -> Generator[None, None, bool]:
     case.finish()
     yield
     case.save()
@@ -136,7 +136,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
     if not runner.cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[tuple[Category, "Outcome"], list["TestCase"]] = {}
+        totals: dict[tuple[Category, "Outcome"], list["Job"]] = {}
         for case in runner.cases:
             key = (case.status.category, case.status.outcome)
             totals.setdefault(key, []).append(case)
@@ -179,7 +179,7 @@ def print_footer(runner: "Runner", title: str) -> None:
         return (n, x[1])
 
     duration = runner.finish - runner.start
-    totals: dict[tuple[status.Category, status.Outcome], list["TestCase"]] = {}
+    totals: dict[tuple[status.Category, status.Outcome], list["Job"]] = {}
     for case in runner.cases:
         key = (case.status.category, case.status.outcome)
         totals.setdefault(key, []).append(case)
@@ -203,7 +203,7 @@ def print_footer(runner: "Runner", title: str) -> None:
     )
 
 
-def print_durations(cases: list["TestCase"], N: int) -> None:
+def print_durations(cases: list["Job"], N: int) -> None:
     cases.sort(key=lambda x: x.timekeeper.duration())
     ix = list(range(len(cases)))
     if N > 0:

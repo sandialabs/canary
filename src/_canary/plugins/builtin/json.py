@@ -24,7 +24,7 @@ class JsonReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases()
+        cases = workspace.load_jobs()
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in cases:

@@ -159,10 +159,10 @@ def test_cpu_count(tmpdir):
         generators = collect.find_generators_in_path(workdir)
         resolved = generate_specs(generators)
         specs = select_specs(resolved)
-        cases: list[canary.TestCase] = []
+        cases: list[canary.Job] = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            case = testcase.TestCase(spec=spec, workspace=space)
+            case = testcase.Job(spec=spec, workspace=space)
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4
@@ -177,7 +177,7 @@ def test_cpu_count(tmpdir):
         cases = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            case = testcase.TestCase(spec=spec, workspace=space)
+            case = testcase.Job(spec=spec, workspace=space)
             cases.append(case)
         filter_cases(cases)
         assert len(specs) == 4

@@ -12,7 +12,7 @@ from ...util import logging
 from ...util.sendmail import sendmail
 
 if TYPE_CHECKING:
-    from ...testcase import TestCase
+    from ...testcase import Job
     from ...workspace import Session
 
 logger = logging.get_logger(__name__)
@@ -48,7 +48,7 @@ def canary_sessionfinish(session: "Session") -> None:
 
 
 def generate_html_report(session: "Session") -> str:
-    totals: dict[str, list["TestCase"]] = {}
+    totals: dict[str, list["Job"]] = {}
     for case in session.cases:
         group = case.status.category.title()
         totals.setdefault(group, []).append(case)

@@ -59,7 +59,7 @@ If no options are give, -x is assumed."""
 
     def execute(self, args: argparse.Namespace) -> int:
         from ...jobspec import JobSpec
-        from ...testcase import TestCase
+        from ...testcase import Job
 
         workspace = Workspace.load()
         f: Path | str
@@ -67,7 +67,7 @@ If no options are give, -x is assumed."""
             spec: JobSpec = workspace.find(spec=args.testspec)
             f = spec.file if args.show_input else spec.file.parent
         else:
-            case: TestCase = workspace.find(case=args.testspec)
+            case: Job = workspace.find(case=args.testspec)
             if args.show_log:
                 f = case.workspace.joinpath(case.stdout)
             else:

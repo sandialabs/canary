@@ -32,7 +32,7 @@ from .util import logging
 
 if TYPE_CHECKING:
     from .jobspec import JobSpec
-    from .testcase import TestCase
+    from .testcase import Job
 
 
 logger = logging.get_logger(__name__)
@@ -297,14 +297,14 @@ class RegexRule(Rule):
 class RuntimeRule:
     """Base class for all runtime selection rules.
 
-    Subclasses should override __call__ to evaluate whether a TestCase satisfies the rule.
+    Subclasses should override __call__ to evaluate whether a Job satisfies the rule.
     Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
     """
 
     def __init__(self, priority: int = 0) -> None:
         self.priority = priority
 
-    def __call__(self, case: "TestCase") -> RuleOutcome:
+    def __call__(self, case: "Job") -> RuleOutcome:
         raise NotImplementedError
 
     @cached_property
@@ -340,7 +340,7 @@ class ResourceCapacityRule(RuntimeRule):
         frozen = [(r["type"], r["slots"]) for r in resource_set]
         return tuple(sorted(frozen))
 
-    def __call__(self, case: "TestCase") -> RuleOutcome:
+    def __call__(self, case: "Job") -> RuleOutcome:
         resource_set = case.required_resources()
         frozen = self.freeze_resource_set(resource_set)
         if frozen not in self.cache:
@@ -379,7 +379,7 @@ class RerunRule(RuntimeRule):
     def default_reason(self) -> str:
         return "previous result is not empty"
 
-    def __call__(self, case: "TestCase") -> RuleOutcome:
+    def __call__(self, case: "Job") -> RuleOutcome:
         if self.strategy == "ids":
             if case.spec.id in self._ids:
                 return RuleOutcome(ok=True)

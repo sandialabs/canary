@@ -27,7 +27,7 @@ from .util import logging
 from .util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
-    from .testcase import TestCase
+    from .testcase import Job
 
 
 logger = logging.get_logger(__name__)
@@ -341,7 +341,7 @@ class WorkspaceDatabase:
         return rows
 
     @staticmethod
-    def format_single_result(case: "TestCase") -> tuple[Any, ...]:
+    def format_single_result(case: "Job") -> tuple[Any, ...]:
         row = (
             case.id,
             case.spec.name,
@@ -362,10 +362,10 @@ class WorkspaceDatabase:
         )
         return row
 
-    def put_result(self, case: "TestCase") -> None:
+    def put_result(self, case: "Job") -> None:
         return self.put_results(case)
 
-    def put_results(self, *cases: "TestCase") -> None:
+    def put_results(self, *cases: "Job") -> None:
         """Store results in the DB.
 
         Since canary uses hierarchical parallelism, this function can be called by many independent

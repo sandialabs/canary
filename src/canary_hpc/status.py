@@ -21,7 +21,7 @@ class BatchStatus:
     - display/derived semantics are computed from child testcases.
     """
 
-    children: list[canary.TestCase]
+    children: list[canary.Job]
     base: Status = field(default_factory=Status)
 
     def __serialize__(self) -> dict[str, Any]:

@@ -15,7 +15,7 @@ from ...util.term import terminal_size
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testcase import Job
     from ...workspace import Session
 
 
@@ -52,7 +52,7 @@ def show_capture(session: "Session") -> None:
             _show_capture(case, what=what)
 
 
-def _show_capture(case: "TestCase", what="oe") -> None:
+def _show_capture(case: "Job", what="oe") -> None:
     _, width = terminal_size()
     fp = io.StringIO()
     fp.write("-" * width)

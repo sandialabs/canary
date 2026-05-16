@@ -13,7 +13,7 @@ from .hookspec import hookimpl
 from .queue import ResourceQueue
 from .resource_pool import make_resource_pool
 from .resource_pool.rpool import Outcome
-from .testcase import TestCase
+from .testcase import Job
 from .util import logging
 from .util.multiprocessing import SimpleQueue
 
@@ -41,7 +41,7 @@ class CanaryConductor:
         return self._rpool
 
     @hookimpl(trylast=True)
-    def canary_resource_pool_accommodates(self, case: "TestCase") -> Outcome:
+    def canary_resource_pool_accommodates(self, case: "Job") -> Outcome:
         rpool = self.get_rpool()
         return rpool.accommodates(case.required_resources())
 
@@ -88,7 +88,7 @@ class CanaryConductor:
         except Exception:
             logger.exception("Unable to create resource queue")
             raise
-        executor = TestCaseExecutor()
+        executor = JobExecutor()
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.add_listener(runner.workspace.testcase_done_callback)
@@ -96,10 +96,10 @@ class CanaryConductor:
         return True
 
 
-class TestCaseExecutor:
-    """Class for running ``AbstractTestCase``."""
+class JobExecutor:
+    """Class for running ``AbstractJob``."""
 
-    def __call__(self, case: "TestCase", queue: SimpleQueue, **kwargs: Any) -> None:
+    def __call__(self, case: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
         try:
             now = time.time()
             queue.put({"event": "job_submitted", "timestamp": now})

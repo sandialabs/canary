@@ -49,7 +49,7 @@ class ResourceQueue(queue.ResourceQueue):
             pending = sum([len(_.job) for _ in self._heap])  # type: ignore
             total = done + busy + pending
             totals: Counter[key_type] = Counter()
-            case: canary.TestCase
+            case: canary.Job
             for batch in self._finished.values():
                 for case in batch:
                     if case.state.is_done():

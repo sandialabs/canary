@@ -41,7 +41,7 @@ def test_instance_deps(tmpdir):
             p = Path(work_tree)
             space = ExecutionSpace(p.parent, Path(p.name))
             deps = [tc.Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            case = tc.TestCase(spec=spec, workspace=space, dependencies=deps)
+            case = tc.Job(spec=spec, workspace=space, dependencies=deps)
             lookup[case.id] = case
             case.save()
             instance = inst.from_testcase(case)

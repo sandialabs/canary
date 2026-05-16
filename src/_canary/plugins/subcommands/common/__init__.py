@@ -20,7 +20,7 @@ __all__ = [
 
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
-    from ....testcase import TestCase
+    from ....testcase import Job
 
 logger = logging.get_logger(__name__)
 
@@ -124,6 +124,6 @@ class TimeoutResource(argparse.Action):
         setattr(args, "timeout", timeouts)
 
 
-def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
+def filter_cases_by_path(cases: list["Job"], pathspec: str) -> list["Job"]:
     prefix = os.path.abspath(pathspec)
     return [c for c in cases if c.workspace.dir.relative_to(prefix)]

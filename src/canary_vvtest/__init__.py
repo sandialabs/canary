@@ -37,7 +37,7 @@ def canary_generate_modifyitems(generator: "canary.Generator") -> None:
 
 
 @canary.hookimpl
-def canary_cdash_name(case: canary.TestCase) -> str | None:
+def canary_cdash_name(case: canary.Job) -> str | None:
     if not case.spec.file_path.suffix == ".vvt":
         return None
     elif not case.spec.parameters:
@@ -49,7 +49,7 @@ def canary_cdash_name(case: canary.TestCase) -> str | None:
 
 
 @canary.hookimpl
-def canary_runteststart(case: "canary.TestCase") -> None:
+def canary_runteststart(case: "canary.Job") -> None:
     if case.spec.file_path.suffix == ".vvt":
         with canary.filesystem.working_dir(case.workspace.dir):
             write_vvtest_util(case)
@@ -110,7 +110,7 @@ class AnalyzeAction(argparse.Action):
         setattr(namespace, "canary_vvtest", opts)
 
 
-def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
+def write_vvtest_util(case: "canary.Job", stage: str = "run") -> None:
     if not case.spec.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
@@ -129,7 +129,7 @@ def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "canary.TestCase") -> dict:
+def get_vvtest_attrs(case: "canary.Job") -> dict:
     attrs = {}
     compiler_spec = None
     if vendor := canary.config.get("cmake:compiler:vendor"):

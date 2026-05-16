@@ -21,8 +21,8 @@ from canary_cmake.ctest import CTestTestGenerator
 from canary_cmake.ctest import setup_ctest
 
 
-class TestCaseRunner:
-    """Class for running ``AbstractTestCase``."""
+class JobRunner:
+    """Class for running ``BaseJob``."""
 
     def __call__(self, case):
         try:
@@ -118,10 +118,10 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = TestCaseRunner()
+        runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.TestCase(spec=spec, workspace=workspace)
+            case = tc.Job(spec=spec, workspace=workspace)
             runner(case)
             assert case.status.is_failure()
             assert case.status.has_code(65)
@@ -143,10 +143,10 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = TestCaseRunner()
+        runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.TestCase(spec=spec, workspace=workspace)
+            case = tc.Job(spec=spec, workspace=workspace)
             runner(case)
             assert case.status.is_skipped()
 
@@ -167,10 +167,10 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [spec] = file.lock()
         mkdirp("./foo")
-        runner = TestCaseRunner()
+        runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.TestCase(spec=spec, workspace=workspace)
+            case = tc.Job(spec=spec, workspace=workspace)
             runner(case)
         assert case.status.is_success()
         assert case.status.code == 0
@@ -297,7 +297,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [spec] = file.lock()
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.TestCase(spec=spec, workspace=workspace)
+            case = tc.Job(spec=spec, workspace=workspace)
             check = pool.accommodates(case.required_resources())
             if not check:
                 raise ValueError(check.reason)

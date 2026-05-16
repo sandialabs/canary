@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..testcase import TestCase
+from ..testcase import Job
 from .rpool import Outcome
 from .rpool import ResourceUnavailable
 
@@ -69,7 +69,7 @@ class ResourcePoolAdapter:
         response = self.curl("/types", method="GET")
         return response["types"]
 
-    def accommodates(self, case: TestCase) -> Outcome:
+    def accommodates(self, case: Job) -> Outcome:
         response = self.curl("/accommodates", data=case.required_resources())
         return Outcome(response["ok"], reason=response["reason"])
 

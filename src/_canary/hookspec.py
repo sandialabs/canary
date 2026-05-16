@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
-    from .testcase import TestCase
+    from .testcase import Job
     from .workspace import Session
 
 
@@ -300,7 +300,7 @@ def canary_runtests_report(runner: "Runner") -> None:
 
 
 @hookspec(firstresult=True)
-def canary_runtest_launcher(case: "TestCase") -> "Launcher":
+def canary_runtest_launcher(case: "Job") -> "Launcher":
     """Returns the launcher for a test case.
 
     Args:
@@ -316,7 +316,7 @@ def canary_runtest_launcher(case: "TestCase") -> "Launcher":
 
 
 @hookspec(firstresult=True)
-def canary_runteststart(case: "TestCase") -> bool:
+def canary_runteststart(case: "Job") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -332,7 +332,7 @@ def canary_runteststart(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_runtest(case: "TestCase") -> bool:
+def canary_runtest(case: "Job") -> bool:
     """Called to run the test case
 
     Args:
@@ -346,7 +346,7 @@ def canary_runtest(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_runtest_finish(case: "TestCase") -> bool:
+def canary_runtest_finish(case: "Job") -> bool:
     """Called to perform the finishing tasks for the test case
 
     The default implementation runs ``case.finish()``
@@ -373,7 +373,7 @@ def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, 
 
 
 @hookspec(firstresult=True)
-def canary_resource_pool_accommodates(case: "TestCase") -> "Outcome":
+def canary_resource_pool_accommodates(case: "Job") -> "Outcome":
     """Determine if there are sufficient resource to run ``case``."""
     raise NotImplementedError
 

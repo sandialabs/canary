@@ -41,13 +41,13 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
 
 
 @canary.hookimpl
-def canary_runteststart(case: canary.TestCase) -> None:
+def canary_runteststart(case: canary.Job) -> None:
     if case.spec.file.suffix == ".cmake":
         setup_ctest(case)
 
 
 @canary.hookimpl
-def canary_runtest_finish(case: canary.TestCase) -> None:
+def canary_runtest_finish(case: canary.Job) -> None:
     if case.spec.file.suffix == ".cmake":
         finish_ctest(case)
 
@@ -119,27 +119,27 @@ class CDashHooks:
         ...
 
     @canary.hookspec(firstresult=True)
-    def canary_cdash_subproject_label(self, case: "canary.TestCase") -> str | None:
+    def canary_cdash_subproject_label(self, case: "canary.Job") -> str | None:
         """Return a subproject label for ``case`` that will be added in Test.xml reports"""
         ...
 
     @canary.hookspec(firstresult=True)
-    def canary_cdash_labels(self, case: "canary.TestCase") -> list[str] | None:
+    def canary_cdash_labels(self, case: "canary.Job") -> list[str] | None:
         """Return CDash labels for ``case``"""
         ...
 
     @canary.hookspec
-    def canary_cdash_artifacts(self, case: "canary.TestCase") -> list[dict[str, str]] | None:
+    def canary_cdash_artifacts(self, case: "canary.Job") -> list[dict[str, str]] | None:
         """Return artifacts to transmit to CDash"""
         ...
 
     @canary.hookspec(firstresult=True)
-    def canary_cdash_name(self, case: "canary.TestCase") -> str | None:
+    def canary_cdash_name(self, case: "canary.Job") -> str | None:
         """Return the name to use on CDash"""
         ...
 
     @canary.hookspec
-    def canary_cdash_named_measurements(self, case: "canary.TestCase") -> dict[str, Any] | None:
+    def canary_cdash_named_measurements(self, case: "canary.Job") -> dict[str, Any] | None:
         """Return measurements to post to CDash"""
         ...
 
@@ -155,13 +155,13 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 
 
 @canary.hookimpl(trylast=True)
-def canary_cdash_labels(case: canary.TestCase) -> list[str]:
+def canary_cdash_labels(case: canary.Job) -> list[str]:
     """Default implementation: return the test case's keywords"""
     return list(case.spec.keywords)
 
 
 @canary.hookimpl(trylast=True)
-def canary_cdash_name(case: canary.TestCase) -> str:
+def canary_cdash_name(case: canary.Job) -> str:
     """Default implementation: return the test case's keywords"""
     if not case.spec.parameters:
         return case.spec.family
@@ -191,7 +191,7 @@ def to_str_path(x: object) -> str:
 
 @canary.hookimpl(wrapper=True)
 def canary_cdash_artifacts(
-    case: canary.TestCase,
+    case: canary.Job,
 ) -> Generator[None, list[str], list[str]]:
     result = yield
     candidates: set[str] = {a for b in result for a in b if b}
@@ -207,7 +207,7 @@ def canary_cdash_artifacts(
 
 @canary.hookimpl(wrapper=True)
 def canary_cdash_named_measurements(
-    case: canary.TestCase,
+    case: canary.Job,
 ) -> Generator[None, list[dict[str, Any]], dict[str, Any]]:
     measurements: dict[str, Any] = {}
     result = yield

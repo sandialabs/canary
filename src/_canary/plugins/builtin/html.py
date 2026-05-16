@@ -17,7 +17,7 @@ from ...workspace import Workspace
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 logger = logging.get_logger(__name__)
 
@@ -34,7 +34,7 @@ class HTMLReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases()
+        cases = workspace.load_jobs()
         work_tree = workspace.view or workspace.sessions_dir
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.html_dir = os.path.join(dest, "HTML")
@@ -66,7 +66,7 @@ class HTMLReporter(CanaryReporter):
     def head(self) -> str:
         return f"<head>\n{self.style}\n</head>\n"
 
-    def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
+    def generate_case_file(self, case: "Job", fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name()}</td></tr>\n")
@@ -79,7 +79,7 @@ class HTMLReporter(CanaryReporter):
         fh.write(case.read_output())
         fh.write("</pre>\n</body>\n</html>\n")
 
-    def generate_index(self, cases: list["TestCase"], fh: TextIO) -> None:
+    def generate_index(self, cases: list["Job"], fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
         fh.write("<body>\n<h1>Canary Summary</h1>\n")
@@ -98,7 +98,7 @@ class HTMLReporter(CanaryReporter):
         ):
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
-        totals: dict[str, list["TestCase"]] = {}
+        totals: dict[str, list["Job"]] = {}
         for case in cases:
             group = case.status.outcome.name.title()
             totals.setdefault(group, []).append(case)

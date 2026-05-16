@@ -63,7 +63,7 @@ class CDashXMLReporter:
     #                    dep_ids = [d["properties"]["id"] for d in dependencies]
     #                    ts.add(id, *dep_ids)
     #                    break
-    #        cases: dict[str, canary.TestCase] = {}
+    #        cases: dict[str, canary.Job] = {}
     #        for id in ts.static_order():
     #            state = data[id]
     #            case = testcase_factory(state.pop("type"))
@@ -226,7 +226,7 @@ class CDashXMLReporter:
         return doc
 
     def write_test_xml(
-        self, cases: list[canary.TestCase], subproject_labels: list[str] | None = None
+        self, cases: list[canary.Job], subproject_labels: list[str] | None = None
     ) -> str:
         i = 0
         while True:
@@ -510,7 +510,7 @@ class TestData:
         self.start: float = sys.maxsize
         self.stop: float = -1
         self.status: int = 0
-        self.cases: list["canary.TestCase"] = []
+        self.cases: list["canary.Job"] = []
 
     def __len__(self):
         return len(self.cases)
@@ -519,7 +519,7 @@ class TestData:
         for case in self.cases:
             yield case
 
-    def update_status(self, case: "canary.TestCase") -> None:
+    def update_status(self, case: "canary.Job") -> None:
         if case.status.is_success():
             return
         elif case.status.is_failure():
@@ -527,7 +527,7 @@ class TestData:
         else:
             self.status |= 2**2
 
-    def add_test(self, case: "canary.TestCase") -> None:
+    def add_test(self, case: "canary.Job") -> None:
         if case.timekeeper.started > 0 and case.timekeeper.finished > 0:
             start = case.timekeeper.started
             finish = case.timekeeper.finished

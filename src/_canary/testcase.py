@@ -55,7 +55,7 @@ class AnyMatcher:
 
 @dataclass(frozen=True, slots=True)
 class Dependency:
-    case: "TestCase"
+    case: "Job"
     when: str | None
 
     def __serialize__(self) -> dict[str, Any]:
@@ -88,7 +88,7 @@ class Dependency:
         return self.case.is_done()
 
 
-class TestCase(BaseJob):
+class Job(BaseJob):
     def __init__(
         self,
         spec: "JobSpec",
@@ -108,11 +108,11 @@ class TestCase(BaseJob):
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         self.depends_on: list[Dependency] = dependencies or []
-        self.dependencies: list["TestCase"] = [d.case for d in self.depends_on]
+        self.dependencies: list["Job"] = [d.case for d in self.depends_on]
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, TestCase):
-            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
+        if not isinstance(other, Job):
+            raise TypeError(f"Cannot compare Job with type {other.__class__.__name__}")
         return self.id == other.id
 
     def __str__(self) -> str:
@@ -133,7 +133,7 @@ class TestCase(BaseJob):
         }
 
     @classmethod
-    def __deserialize__(cls, d: dict[str, Any]) -> "TestCase":
+    def __deserialize__(cls, d: dict[str, Any]) -> "Job":
         obj = cls(spec=d["spec"], workspace=d["workspace"], dependencies=d["dependencies"])
         obj._apply_base_state(d)
         if variables := d.get("variables"):
@@ -163,7 +163,7 @@ class TestCase(BaseJob):
         return artifacts
 
     @property
-    def upstreams(self) -> list["TestCase"]:
+    def upstreams(self) -> list["Job"]:
         return [d.case for d in self.depends_on]
 
     @property
@@ -560,7 +560,7 @@ class TestCase(BaseJob):
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
 
     def refresh(self) -> None:
-        obj: TestCase
+        obj: Job
         try:
             obj = json.loads(self.workspace.joinpath("testcase.lock").read_text())
         except (json.JSONDecodeError, FileNotFoundError):
@@ -728,7 +728,10 @@ class TestCase(BaseJob):
             file.write_text(json.dumps({"cache": cache}, indent=2))
 
 
-def load_testcase_from_file(arg: Path | str | None) -> TestCase:
+TestCase = Job
+
+
+def load_testcase_from_file(arg: Path | str | None) -> Job:
     from _canary.workspace import Workspace
 
     path = Path(arg or ".").absolute()
@@ -739,7 +742,7 @@ def load_testcase_from_file(arg: Path | str | None) -> TestCase:
     return workspace.find(case=id)
 
 
-def load_testcase_from_state(lock_data: dict) -> TestCase:
+def load_testcase_from_state(lock_data: dict) -> Job:
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()

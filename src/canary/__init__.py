@@ -44,6 +44,7 @@ from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule
 from _canary.select import RuntimeSelector
 from _canary.select import Selector
+from _canary.testcase import Job
 from _canary.testcase import TestCase
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
@@ -102,6 +103,7 @@ __all__ = [
     "CanaryReporter",
     "CanarySubcommand",
     "BaseJob",
+    "Job",
     "TestCase",
     "Launcher",
     "logging",
@@ -164,7 +166,7 @@ def get_instance(arg_path: Path | str | None = None) -> TestInstance | None:
     return instance
 
 
-def get_testcase(arg_path: Path | str | None = None) -> TestCase | None:
+def get_testcase(arg_path: Path | str | None = None) -> Job | None:
     from _canary.testcase import load_testcase_from_file
 
     try:

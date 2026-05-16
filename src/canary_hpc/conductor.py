@@ -115,10 +115,10 @@ class CanaryHPCConductor:
         return self.available_resource_types
 
     @canary.hookimpl
-    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Outcome:
+    def canary_resource_pool_accommodates(self, case: canary.Job) -> Outcome:
         return self.backend_accommodates(case)
 
-    def backend_accommodates(self, case: canary.TestCase) -> Outcome:
+    def backend_accommodates(self, case: canary.Job) -> Outcome:
         """determine if the resources for this test are available"""
 
         slots_needed: Counter[str] = Counter()

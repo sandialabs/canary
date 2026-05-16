@@ -5,7 +5,6 @@
 import argparse
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Union
 
 import yaml
 
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...generator import AbstractTestGenerator
     from ...jobspec import JobSpec
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 
 @hookimpl
@@ -74,7 +73,7 @@ def dump(data: dict[str, Any]) -> str:
     return yaml.dump(data, default_flow_style=False)
 
 
-def describe_testcase(case: Union["TestCase", "JobSpec"], indent: str = "") -> None:
+def describe_testcase(case: "Job | JobSpec", indent: str = "") -> None:
     from pygments import highlight
     from pygments.formatters import (
         TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]

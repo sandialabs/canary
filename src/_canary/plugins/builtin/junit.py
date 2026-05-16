@@ -17,7 +17,7 @@ from ...workspace import Workspace
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 
 @hookimpl(specname="canary_session_reporter")
@@ -32,7 +32,7 @@ class JunitReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases()
+        cases = workspace.load_jobs()
         doc = JunitDocument()
         root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output
@@ -59,16 +59,16 @@ def get_root_name() -> str:
     return name
 
 
-def groupby_classname(cases: list["TestCase"]) -> dict[str, list["TestCase"]]:
+def groupby_classname(cases: list["Job"]) -> dict[str, list["Job"]]:
     """Group tests by status"""
-    grouped: dict[str, list["TestCase"]] = {}
+    grouped: dict[str, list["Job"]] = {}
     for case in cases:
         classname = get_classname(case)
         grouped.setdefault(classname, []).append(case)
     return grouped
 
 
-def get_classname(case: "TestCase") -> str:
+def get_classname(case: "Job") -> str:
     if "classname" in case.spec.attributes:
         return case.spec.attributes["classname"]
     return case.spec.file_path.parent.name
@@ -87,7 +87,7 @@ class JunitDocument(xdom.Document):
         return node
 
     def create_testsuite_element(
-        self, cases: list["TestCase"], tagname: str = "testsuite", **attrs: str
+        self, cases: list["Job"], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
         """Create a testcase element with the following structure
 
@@ -109,7 +109,7 @@ class JunitDocument(xdom.Document):
         element.setAttribute("timestamp", stats.timestamp)
         return element
 
-    def create_testcase_element(self, case: "TestCase") -> xdom.Element:
+    def create_testcase_element(self, case: "Job") -> xdom.Element:
         """Create a testcase element with the following structure:
 
         .. code-block: xml
@@ -147,7 +147,7 @@ class JunitDocument(xdom.Document):
         return testcase
 
 
-def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
+def gather_statistics(cases: list["Job"]) -> SimpleNamespace:
     stats = SimpleNamespace(num_skipped=0, num_failed=0, num_error=0, num_tests=0, time=0.0)
     started_on: datetime | None = None
     finished_on: datetime | None = None

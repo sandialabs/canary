@@ -16,7 +16,7 @@ from .graph import static_order
 
 if TYPE_CHECKING:
     from ..jobspec import JobSpec
-    from ..testcase import TestCase
+    from ..testcase import Job
 
 
 class CanaryCommand:
@@ -69,21 +69,21 @@ def generate_random_testcases(
     count: int = 10,
     max_params: int = 3,
     max_rows: int = 5,
-) -> list["TestCase"]:
+) -> list["Job"]:
     from ..testcase import Dependency
-    from ..testcase import TestCase
+    from ..testcase import Job
     from ..testexec import ExecutionSpace
 
     session = root / "session"
-    lookup: dict[str, TestCase] = {}
-    cases: list[TestCase] = []
+    lookup: dict[str, Job] = {}
+    cases: list[Job] = []
     specs = generate_random_jobspecs(
         root=root, count=count, max_params=max_params, max_rows=max_rows
     )
     for spec in static_order(specs):
         deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
         space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-        case: TestCase = TestCase(spec=spec, workspace=space, dependencies=deps)
+        case: Job = Job(spec=spec, workspace=space, dependencies=deps)
         lookup[spec.id] = case
         cases.append(case)
     return cases

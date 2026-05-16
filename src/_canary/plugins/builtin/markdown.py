@@ -17,7 +17,7 @@ from ...workspace import Workspace
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 logger = logging.get_logger(__name__)
 
@@ -35,7 +35,7 @@ class MarkdownReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases()
+        cases = workspace.load_jobs()
         work_tree = workspace.view or workspace.sessions_dir
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.md_dir = os.path.join(dest, self.default_output)
@@ -55,7 +55,7 @@ class MarkdownReporter(CanaryReporter):
         f = os.path.relpath(self.index, config.invocation_dir)
         logger.info(f"Markdown report written to {f}")
 
-    def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
+    def generate_case_file(self, case: "Job", fh: TextIO) -> None:
         fh.write(f"# {case.display_name()}\n\n")
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
@@ -63,7 +63,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write(case.read_output())
         fh.write("```\n\n")
 
-    def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
+    def render_test_info_table(self, case: "Job", fh: TextIO) -> None:
         info: dict[str, str] = {
             "**Status**": case.status.outcome.name,
             "**Exit code**": str(case.status.code),
@@ -76,13 +76,13 @@ class MarkdownReporter(CanaryReporter):
             fh.write(f"|{key.center(15, ' ')}| {val} |\n")
         fh.write("\n")
 
-    def generate_index(self, cases: list["TestCase"], fh: TextIO) -> None:
+    def generate_index(self, cases: list["Job"], fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
         fh.write(
             "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Invalid | Cancelled | Total |\n"
         )
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
-        totals: dict[str, list["TestCase"]] = {}
+        totals: dict[str, list["Job"]] = {}
         for case in cases:
             group = case.status.outcome.name.title()
             totals.setdefault(group, []).append(case)

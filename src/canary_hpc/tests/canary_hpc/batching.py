@@ -49,7 +49,7 @@ def generate_testcases(dirname):
     for spec in specs:
         ws = _canary.testexec.ExecutionSpace(Path.cwd(), Path("foo"))
         deps = [Dependency(case=lookup[d.spec.id], when="on_success") for d in spec.dependencies]
-        case = _canary.testcase.TestCase(spec=spec, workspace=ws, dependencies=deps)
+        case = _canary.testcase.Job(spec=spec, workspace=ws, dependencies=deps)
         cases.append(case)
         lookup[case.id] = case
     return cases

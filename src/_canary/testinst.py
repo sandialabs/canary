@@ -18,7 +18,7 @@ from .util.paramview import MultiParameters
 from .util.paramview import Parameters
 
 if TYPE_CHECKING:
-    from .testcase import TestCase
+    from .testcase import Job
 
 
 @dataclasses.dataclass(frozen=True)
@@ -89,7 +89,7 @@ class TestInstance:
         return len(self.gpu_ids)
 
     def set_attribute(self, **kwargs: Any) -> None:
-        job: TestCase
+        job: Job
         with open(self.lockfile) as fh:
             job = json.load(fh)
         self.attributes.update(kwargs)
@@ -116,7 +116,7 @@ class TestMultiInstance(TestInstance):
         return True
 
 
-def from_testcase(case: "TestCase") -> TestInstance:
+def from_testcase(case: "Job") -> TestInstance:
     dependencies: list[TestInstance] = []
     for dep in case.dependencies:
         dependencies.append(from_testcase(dep))

@@ -60,7 +60,7 @@ def flatten_unique(xss: list[list[str]]) -> list[str]:
 
 
 class AbstractTestGenerator(ABC):
-    """The AbstractTestCaseGenerator is an abstract object representing a test file that
+    """The AbstractTestGenerator is an abstract object representing a test file that
     can generate test cases
 
     Args:

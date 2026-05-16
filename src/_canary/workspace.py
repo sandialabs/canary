@@ -26,7 +26,7 @@ from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
 from .testcase import Dependency
-from .testcase import TestCase
+from .testcase import Job
 from .testexec import ExecutionSpace
 from .util import json_helper as json
 from .util import logging
@@ -57,7 +57,7 @@ SQL_CHUNK_SIZE = 900
 @dataclasses.dataclass
 class Session:
     name: str
-    cases: list[TestCase]
+    cases: list[Job]
     prefix: Path
     returncode: int = dataclasses.field(init=False, default=-1)
     started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
@@ -286,7 +286,7 @@ class Workspace:
         # At this point, test cases have been reconstructed and, if previous results exist,
         # restored to their last ran state.  If reuse_latest_session, we leave the test case as is.
         # Otherwise, we swap out the old session for the new.
-        ready: list["TestCase"] = []
+        ready: list["Job"] = []
         for case in cases:
             if case.mask:
                 continue
@@ -353,7 +353,7 @@ class Workspace:
         if not view_config:
             return
         logger.info(f"Rebuilding view at {self.root}")
-        cases = self.load_testcases()
+        cases = self.load_jobs()
         view_entries: list[tuple[Path, str]] = []
         for case in cases:
             view_entries.append((case.workspace.dir, case.viewpath))
@@ -563,9 +563,9 @@ class Workspace:
         if selector.rules:
             selector.run()
 
-    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
+    def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
         """Load cached test cases.  Dependency resolution is performed."""
-        lookup: dict[str, TestCase] = {}
+        lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
         specs = self.db.load_specs(ids, include_upstreams=True)
         for spec in static_order(specs):
@@ -576,7 +576,7 @@ class Workspace:
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = TestCase(spec=spec, workspace=space, dependencies=deps)
+                case = Job(spec=spec, workspace=space, dependencies=deps)
                 case.status = mine["status"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
@@ -628,13 +628,13 @@ class Workspace:
         resolved = generator.run()
         return resolved
 
-    def construct_testcases(self, specs: list["JobSpec"], session: Path) -> list["TestCase"]:
-        lookup: dict[str, TestCase] = {}
-        cases: list[TestCase] = []
+    def construct_testcases(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
+        lookup: dict[str, Job] = {}
+        cases: list[Job] = []
         latest = self.db.get_results([spec.id for spec in specs])
         for spec in static_order(specs):
             deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            case: TestCase
+            case: Job
             if spec.id in latest:
                 # This case won't run, but it may be needed by dependents
                 mine = latest[spec.id]
@@ -643,14 +643,14 @@ class Workspace:
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = TestCase(spec=spec, workspace=space, dependencies=deps)
+                case = Job(spec=spec, workspace=space, dependencies=deps)
                 case.status = mine["status"]
                 case.state = mine["state"]
                 case.timekeeper = mine["timekeeper"]
                 case.measurements = mine["measurements"]
             else:
                 space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-                case = TestCase(spec=spec, workspace=space, dependencies=deps)
+                case = Job(spec=spec, workspace=space, dependencies=deps)
             lookup[spec.id] = case
             cases.append(case)
         return cases
@@ -668,9 +668,9 @@ class Workspace:
             return path.stat().st_mtime
 
         logger.info(f"Garbage collecting {self.root}")
-        latest: dict[str, TestCase] = {}
+        latest: dict[str, Job] = {}
         view: dict[str, tuple[str, str]] = {}
-        to_remove: list[TestCase] = []
+        to_remove: list[Job] = []
         for session in self.sessions():
             for case in session.cases:
                 if case.id not in latest:
@@ -704,15 +704,15 @@ class Workspace:
         if spec is not None:
             return self.find_jobspec(spec)
 
-    def find_testcase(self, root: str) -> TestCase:
+    def find_testcase(self, root: str) -> Job:
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
-                return self.load_testcases([id])[0]
+                return self.load_jobs([id])[0]
             except IndexError:
                 raise ValueError(f"{id}: no matching test case found in {self.root}")
         # Do the full (slow) lookup
-        cases = self.load_testcases()
+        cases = self.load_jobs()
         for case in cases:
             if case.spec.matches(root):
                 return case

@@ -14,7 +14,7 @@ from ...util.string import pluralize
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 logger = logging.get_logger(__name__)
 
@@ -46,7 +46,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_pass(case: "TestCase") -> None:
+def repeat_until_pass(case: "Job") -> None:
     if case.status.is_failure() and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
@@ -60,7 +60,7 @@ def repeat_until_pass(case: "TestCase") -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_after_timeout(case: "TestCase") -> None:
+def repeat_after_timeout(case: "Job") -> None:
     if case.status.is_timeout() and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
@@ -74,7 +74,7 @@ def repeat_after_timeout(case: "TestCase") -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_fail(case: "TestCase") -> None:
+def repeat_until_fail(case: "Job") -> None:
     if case.status.is_success() and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
@@ -90,7 +90,7 @@ def repeat_until_fail(case: "TestCase") -> None:
         )
 
 
-def rerun_case(case: "TestCase", attempt: int) -> None:
+def rerun_case(case: "Job", attempt: int) -> None:
     try:
         case.restore_workspace()
         if summary := job_start_summary(case):
@@ -102,7 +102,7 @@ def rerun_case(case: "TestCase", attempt: int) -> None:
             logger.debug(summary)
 
 
-def job_start_summary(case: "TestCase") -> str:
+def job_start_summary(case: "Job") -> str:
     if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
@@ -112,7 +112,7 @@ def job_start_summary(case: "TestCase") -> str:
     return fmt.getvalue().strip()
 
 
-def job_finish_summary(case: "TestCase", *, attempt: int) -> str:
+def job_finish_summary(case: "Job", *, attempt: int) -> str:
     if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()

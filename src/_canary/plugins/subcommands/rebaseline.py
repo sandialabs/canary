@@ -15,7 +15,7 @@ from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 logger = logging.get_logger(__name__)
 
@@ -46,12 +46,12 @@ class Rebaseline(CanarySubcommand):
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
             raise ValueError("At least one filtering criteria required")
         workspace = Workspace.load()
-        cases: list[TestCase]
+        cases: list[Job]
         if args.start:
             specs = workspace.select_from_view(path=Path(args.start))
-            cases = workspace.load_testcases(ids=[spec.id for spec in specs])
+            cases = workspace.load_jobs(ids=[spec.id for spec in specs])
         else:
-            cases = workspace.load_testcases(args.case_specs)
+            cases = workspace.load_jobs(args.case_specs)
         if args.keyword_exprs:
             cases = filter_cases_by_keyword(cases, args.keyword_exprs)
         for case in cases:
@@ -59,7 +59,7 @@ class Rebaseline(CanarySubcommand):
         return 0
 
 
-def filter_cases_by_keyword(cases: list["TestCase"], keyword_exprs: list[str]) -> list["TestCase"]:
+def filter_cases_by_keyword(cases: list["Job"], keyword_exprs: list[str]) -> list["Job"]:
     masks: dict[str, bool] = {}
     for case in cases:
         kwds = set(case.spec.keywords)

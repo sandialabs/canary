@@ -18,7 +18,7 @@ def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
 
 
 @canary.hookimpl
-def canary_runteststart(case: "canary.TestCase"):
+def canary_runteststart(case: "canary.Job"):
     gpu_ids = [id for id in case.gpu_ids if id.startswith("NVIDIA:")]
     if gpu_ids:
         visible = ",".join(gpu_id.split(":", 2)[2] for gpu_id in gpu_ids)

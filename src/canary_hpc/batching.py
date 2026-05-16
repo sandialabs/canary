@@ -19,7 +19,7 @@ logger = canary.get_logger(__name__)
 
 def batch_testcases(
     *,
-    cases: list["canary.TestCase"],
+    cases: list["canary.Job"],
     nodes: Literal["any", "same"] = "same",
     layout: Literal["flat", "atomic"] = "flat",
     count: int | None = None,
@@ -37,9 +37,9 @@ def batch_testcases(
     grouper: binpack.GrouperType | None = None
     if nodes == "same":
         grouper = GroupByNodes(cpus_per_node=cpus_per_node)
-    # The binpacking code works with Block not TestCase.
+    # The binpacking code works with Block not Job.
     blocks: dict[str, binpack.Block] = {}
-    lookup: dict[str, canary.TestCase] = {case.id: case for case in cases}
+    lookup: dict[str, canary.Job] = {case.id: case for case in cases}
     graph: dict[str, list[str]] = {}
     for case in cases:
         graph[case.id] = [dep.id for dep in case.dependencies if dep.id in lookup]
@@ -92,7 +92,7 @@ def batch_testcases(
 
 
 def packed_perimeter(
-    cases: Iterable[canary.TestCase], cpus_per_node: int | None = None
+    cases: Iterable[canary.Job], cpus_per_node: int | None = None
 ) -> tuple[int, int]:
     cpus_per_node = cpus_per_node or cpu_count()
     cases = sorted(cases, key=lambda c: c.size(), reverse=True)

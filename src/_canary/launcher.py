@@ -28,7 +28,7 @@ from .util.module import load as load_module
 from .util.shell import source_rcfile
 
 if TYPE_CHECKING:
-    from .testcase import TestCase
+    from .testcase import Job
 
 logger = logging.get_logger(__name__)
 StdErrorT = TextIO | int
@@ -36,7 +36,7 @@ StdErrorT = TextIO | int
 
 class Launcher(ABC):
     @abstractmethod
-    def run(self, case: "TestCase") -> int: ...
+    def run(self, case: "Job") -> int: ...
 
 
 class SubprocessLauncher(Launcher):
@@ -44,7 +44,7 @@ class SubprocessLauncher(Launcher):
         self.default_args: list[str] = list(args or [])
 
     @contextmanager
-    def context(self, case: "TestCase") -> Generator[None, None, None]:
+    def context(self, case: "Job") -> Generator[None, None, None]:
         old_env = os.environ.copy()
         old_cwd = Path.cwd()
         try:
@@ -60,7 +60,7 @@ class SubprocessLauncher(Launcher):
             os.environ.clear()
             os.environ.update(old_env)
 
-    def run(self, case: "TestCase") -> int:
+    def run(self, case: "Job") -> int:
         logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
         with self.context(case):
             args: list[str] = list(case.spec.command)
@@ -337,5 +337,5 @@ class MeasuredProcess:
 
 
 @hookimpl(trylast=True, specname="canary_runtest_launcher")
-def default_testcase_launcher(case: "TestCase") -> Launcher:
+def default_testcase_launcher(case: "Job") -> Launcher:
     return SubprocessLauncher()

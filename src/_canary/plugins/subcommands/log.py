@@ -15,7 +15,7 @@ from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testcase import Job
 
 
 @hookimpl
@@ -47,7 +47,7 @@ class Log(CanarySubcommand):
             help="Test name or TEST_ID.  If not given, the session log will be shown",
         )
 
-    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> Path | None:
+    def get_logfile(self, case: "Job", args: argparse.Namespace) -> Path | None:
         if args.error:
             if case.stderr is None:
                 return None
