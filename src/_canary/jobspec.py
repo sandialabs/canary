@@ -30,6 +30,14 @@ class Asset:
     dst: str
     action: Literal["copy", "link", "none"]
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"src": self.src, "dst": self.dst, "action": self.action}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Asset":
+        src = Path(d.pop("src"))
+        return cls(src=src, **d)
+
 
 @dataclasses.dataclass(frozen=True)
 class Artifact:
@@ -49,6 +57,13 @@ class Artifact:
             return status.category is Category.PASS
         return True
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"pattern": self.pattern, "when": self.when}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Artifact":
+        return cls(**d)
+
 
 @dataclasses.dataclass(frozen=True)
 class Mask:
@@ -64,6 +79,13 @@ class Mask:
     def __bool__(self) -> bool:
         return self.value
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"value": self.value, "reason": self.reason}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Mask":
+        return cls(**d)
+
     @classmethod
     def masked(cls, reason: str) -> "Mask":
         return cls(True, reason)
@@ -77,6 +99,13 @@ class Mask:
 class SpecDependency:
     spec: "JobSpec"
     when: str = "on_success"
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"spec": self.spec, "when": self.when}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "SpecDependency":
+        return cls(**d)
 
 
 @dataclasses.dataclass
@@ -115,6 +144,42 @@ class JobSpec:
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "file_root": self.file_root,
+            "file_path": self.file_path,
+            "id": self.id,
+            "family": self.family,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "dependencies": list(self.dependencies),
+            "parameters": self.parameters,
+            "attributes": self.attributes,
+            "keywords": self.keywords,
+            "assets": self.assets,
+            "baseline": self.baseline,
+            "artifacts": self.artifacts,
+            "exclusive": self.exclusive,
+            "timeout": self.timeout,
+            "xstatus": self.xstatus,
+            "preload": self.preload,
+            "modules": self.modules,
+            "rcfiles": self.rcfiles,
+            "owners": self.owners,
+            "environment": self.environment,
+            "meta_parameters": self.meta_parameters,
+            "command": self.command,
+            "mask": self.mask,  # keep as Mask object
+            "exec_path": self.exec_path,
+            "view_path": self.view_path,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "JobSpec":
+        root = Path(d.pop("file_root"))
+        path = Path(d.pop("file_path"))
+        return cls(file_root=root, file_path=path, **d)
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

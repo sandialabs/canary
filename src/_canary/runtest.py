@@ -189,7 +189,7 @@ def print_footer(runner: "Runner", title: str) -> None:
         n = len(totals[(category, outcome)])
         if n:
             color = category.rich_color()
-            t = category if outcome == Outcome.SUCCESS else outcome
+            t = category if outcome == status.Outcome.SUCCESS else outcome
             summary.append(f"[{color}]{n} {t.name.lower()}[/{color}]")
     kwds = {
         "s": summary[0] + " " + ", ".join(summary[1:]),

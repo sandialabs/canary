@@ -89,12 +89,13 @@ class TestInstance:
         return len(self.gpu_ids)
 
     def set_attribute(self, **kwargs: Any) -> None:
+        job: TestCase
         with open(self.lockfile) as fh:
-            state = json.load(fh)
+            job = json.load(fh)
         self.attributes.update(kwargs)
-        state["spec"].setdefault("attributes").update(self.attributes)
+        job.spec.attributes.update(self.attributes)
         with open(self.lockfile, "w") as fh:
-            json.dump(state, fh, indent=2)
+            json.dump(job, fh, indent=2)
 
     def get_dependency(self, **params: Any) -> "TestInstance | None":
         for dep in self.dependencies:
@@ -238,7 +239,7 @@ def from_lock(lock: dict[str, Any], lookup: dict[str, TestInstance]) -> TestInst
     return instance
 
 
-def load_instance(
+def load_instance2(
     arg: Path | str | None, lookup: dict[str, TestInstance] | None = None
 ) -> TestInstance:
     lookup = lookup or {}
@@ -249,3 +250,13 @@ def load_instance(
         inst = load_instance(f, lookup)
         lookup[inst.id] = inst
     return from_lock(lock_data, lookup)
+
+
+def load_instance(
+    arg: Path | str | None, lookup: dict[str, TestInstance] | None = None
+) -> TestInstance:
+    lookup = lookup or {}
+    path = Path(arg or ".").absolute()
+    file = path / "testcase.lock" if path.is_dir() else path
+    case = json.loads(file.read_text())
+    return from_testcase(case)

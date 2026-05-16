@@ -592,8 +592,8 @@ class Workspace:
     ) -> list["JobSpec"]:
         ids: list[str] = []
         for file in path.rglob("*/testcase.lock"):
-            lock_data = json.loads(file.read_text())
-            ids.append(lock_data["spec"]["id"])
+            case = json.loads(file.read_text())
+            ids.append(case.spec.id)
         resolved = self.db.load_specs(ids=ids)
         return resolved
 

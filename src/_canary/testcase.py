@@ -58,6 +58,13 @@ class Dependency:
     case: "TestCase"
     when: str | None
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"case": self.case, "when": self.when}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Dependency":
+        return cls(**d)
+
     def is_satisfied(self) -> bool:
         from .status import Category
 
@@ -113,6 +120,31 @@ class TestCase(BaseJob):
 
     def __repr__(self) -> str:
         return self.spec.display_name()
+
+    def __serialize__(self) -> dict[str, Any]:
+        return super().__serialize__() | {
+            "spec": self.spec,
+            "workspace": self.workspace,
+            "dependencies": self.depends_on,
+            "variables": self.variables,
+            "resources": self._resources,
+            "rparameters": self.rparameters,
+            "mask": self._mask,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "TestCase":
+        obj = cls(spec=d["spec"], workspace=d["workspace"], dependencies=d["dependencies"])
+        obj._apply_base_state(d)
+        if variables := d.get("variables"):
+            obj.variables = variables
+        if resources := d.get("resources"):
+            obj._resources = resources
+        if rparameters := d.get("rparameters"):
+            obj.rparameters = rparameters
+        if mask := d.get("mask"):
+            obj._mask = mask
+        return obj
 
     @property
     def id(self) -> str:
@@ -527,7 +559,7 @@ class TestCase(BaseJob):
         else:
             self.status = Status.FAILED(code=code, reason=f"Test exited with exit code = {code}")
 
-    def refresh(self) -> None:
+    def refresh2(self) -> None:
         try:
             data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
         except (json.JSONDecodeError, FileNotFoundError):
@@ -548,6 +580,25 @@ class TestCase(BaseJob):
         self.timekeeper.started = tk["started"]
         self.timekeeper.finished = tk["finished"]
 
+    def refresh(self) -> None:
+        obj: TestCase
+        try:
+            obj = json.loads(self.workspace.joinpath("testcase.lock").read_text())
+        except (json.JSONDecodeError, FileNotFoundError):
+            return
+        self.measurements.update(obj.measurements)
+        self.variables = obj.variables
+        self.status = Status(
+            category=obj.status.category,
+            outcome=obj.status.outcome,
+            reason=obj.status.reason,
+            code=obj.status.code,
+        )
+        self.state.phase = obj.state.phase
+        self.timekeeper.submitted = obj.timekeeper.submitted
+        self.timekeeper.started = obj.timekeeper.started
+        self.timekeeper.finished = obj.timekeeper.finished
+
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
         env[config.CONFIG_ENV_CFG64] = config.serialize()
         for key, val in self.variables.items():
@@ -564,8 +615,10 @@ class TestCase(BaseJob):
             if value is not None:
                 t = SimpleTemplate(value)
                 variables[key] = t.substitute(os.environ, missing="")
-        variables["PYTHONPATH"] = f"{self.workspace.dir}:{os.getenv('PYTHONPATH', '')}"
-        variables["PATH"] = f"{self.workspace.dir}:{os.environ['PATH']}"
+        t = SimpleTemplate(f"{self.workspace.dir}:$PYTHONPATH")
+        variables["PYTHONPATH"] = t.substitute(os.environ, missing="")
+        t = SimpleTemplate(f"{self.workspace.dir}:$PATH")
+        variables["PATH"] = t.substitute(os.environ, missing="")
         return variables
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
@@ -612,10 +665,14 @@ class TestCase(BaseJob):
         except Exception:
             logger.debug("Failed to cache last run", exc_info=True)
 
-    def save(self) -> None:
+    def save2(self) -> None:
         record = self.asdict()
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         self.lockfile.write_text(json.dumps(record, indent=2))
+
+    def save(self) -> None:
+        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
+        self.lockfile.write_text(json.dumps(self, indent=2))
 
     def asdict(self) -> dict[str, Any]:
         record: dict[str, Any] = {

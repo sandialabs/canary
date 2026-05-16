@@ -37,6 +37,13 @@ class ExecutionSpace:
         self.root = Path(self.root)
         self.path = Path(self.path)
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"root": self.root, "path": self.path, "session": self.session}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "ExecutionSpace":
+        return cls(**d)
+
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
 

@@ -2,19 +2,38 @@
 #
 # SPDX-License-Identifier: MIT
 
-import dataclasses
 import datetime
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
 from typing import Generator
 
 
-@dataclasses.dataclass
+@dataclass
 class Timekeeper:
-    submitted: float = dataclasses.field(default=-1.0, init=False)
-    started: float = dataclasses.field(default=-1.0, init=False)
-    finished: float = dataclasses.field(default=-1.0, init=False)
-    mark: float = dataclasses.field(default=-1.0, init=False, repr=False)
+    submitted: float = field(default=-1.0, init=False)
+    started: float = field(default=-1.0, init=False)
+    finished: float = field(default=-1.0, init=False)
+    mark: float = field(default=-1.0, init=False, repr=False)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "submitted": self.submitted,
+            "started": self.started,
+            "finished": self.finished,
+            "mark": self.mark,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "Timekeeper":
+        obj = cls()
+        obj.submitted = float(d["submitted"])
+        obj.started = float(d["started"])
+        obj.finished = float(d["finished"])
+        obj.mark = float(d["mark"])
+        return obj
 
     def start(self) -> None:
         self.started = time.time()

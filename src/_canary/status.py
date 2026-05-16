@@ -17,6 +17,13 @@ class Category(str, Enum):
     SKIP = "SKIP"
     NONE = "NONE"
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"value": self.value}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Category":
+        return cls(d["value"])
+
     @classmethod
     def factory(cls, arg: "Category | str") -> "Category":
         return arg if isinstance(arg, Category) else Category(arg.upper())
@@ -62,6 +69,13 @@ class Outcome(IntEnum):
     SKIPPED = 80
     BLOCKED = 81
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"value": self.value}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Outcome":
+        return cls(d["value"])
+
     @property
     def label(self) -> str:
         return self.name
@@ -105,6 +119,18 @@ class Status:
 
     def __post_init__(self) -> None:
         self.set(category=self.category, outcome=self.outcome, reason=self.reason, code=self.code)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "outcome": self.outcome,
+            "reason": self.reason,
+            "code": self.code,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Status":
+        return cls(**d)
 
     # --- Category query methods
     def is_success(self) -> bool:

@@ -272,6 +272,13 @@ class RequestNode:
     kind: Literal["scanpaths", "viewpaths", "specids", "tag"]
     value: Any
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"kind": self.kind, "value": self.value}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "RequestNode":
+        return cls(**d)
+
 
 @dataclass(frozen=True, slots=True)
 class ScanPathsRequest(RequestNode):
@@ -304,6 +311,13 @@ class RequestBuilder:
     viewpaths: ViewPathPayload = field(default_factory=list)
     specids: SpecIdPayload = field(default_factory=list)
     tag: Optional[str] = None
+
+    def __serialize__(self) -> dict[str, Any]:
+        return vars(self)
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "RequestBuilder":
+        return cls(**d)
 
     def require_kind(self, k: str, errors: list[str], what: str) -> None:
         if self.kind is None:

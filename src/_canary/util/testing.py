@@ -104,10 +104,8 @@ def generate_random_jobspecs(
     collector = Collector()
     collector.add_scanpath((root / "tests").as_posix(), [])
     generators = collector.run()
-    print(generators)
     generator = Generator(generators, workspace=root, on_options=[])
     specs = generator.run()
-    print(specs)
     return specs
 
 

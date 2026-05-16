@@ -19,10 +19,25 @@ class JobPhase(str, Enum):
     RUNNING = "RUNNING"
     DONE = "DONE"
 
+    def __serialize__(self) -> dict[str, Any]:
+        # json_helper.Encoder will add ".type" automatically
+        return {"value": self.value}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "JobPhase":
+        return cls(d["value"])
+
 
 @dataclasses.dataclass(slots=True)
 class JobState:
     phase: JobPhase = JobPhase.PENDING
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"phase": self.phase}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "JobState":
+        return cls(**d)
 
     def is_pending(self) -> bool:
         return self.phase is JobPhase.PENDING
@@ -37,6 +52,41 @@ class JobState:
         return self.phase is JobPhase.DONE
 
 
+@dataclasses.dataclass
+class Measurements:
+    data: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"data": self.data}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Measurements":
+        return cls(**d)
+
+    def add_measurement(self, name: str, value: Any) -> None:
+        self.data[name] = value
+
+    def update(self, m: "dict | Measurements") -> None:
+        if isinstance(m, Measurements):
+            self.data.update(m.data)
+        else:
+            self.data.update(m)
+
+    def reset(self) -> None:
+        self.data.clear()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
+        return cls(data=data)
+
+    def asdict(self) -> dict[str, Any]:
+        return self.data
+
+    def items(self) -> Generator[tuple[str, Any], None, None]:
+        for item in self.data.items():
+            yield item
+
+
 class BaseJob(ABC):
     # ---- required data attributes (enforced by convention) ----
 
@@ -45,6 +95,24 @@ class BaseJob(ABC):
         self.state = JobState()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "state": self.state,
+            "measurements": self.measurements,
+            "timekeeper": self.timekeeper,
+        }
+
+    def _apply_base_state(self, d: dict[str, Any]) -> None:
+        if "status" in d:
+            self.status = d["status"]
+        if "state" in d:
+            self.state = d["state"]
+        if "measurements" in d:
+            self.measurements = d["measurements"]
+        if "timekeeper" in d:
+            self.timekeeper = d["timekeeper"]
 
     @property
     @abstractmethod
@@ -120,28 +188,3 @@ class BaseJob(ABC):
 
     def add_measurement(self, name: str, value: Any) -> None:
         self.measurements.add_measurement(name, value)
-
-
-@dataclasses.dataclass
-class Measurements:
-    data: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def add_measurement(self, name: str, value: Any) -> None:
-        self.data[name] = value
-
-    def update(self, measurements: dict) -> None:
-        self.data.update(measurements)
-
-    def reset(self) -> None:
-        self.data.clear()
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Measurements":
-        return cls(data=data)
-
-    def asdict(self) -> dict[str, Any]:
-        return self.data
-
-    def items(self) -> Generator[tuple[str, Any], None, None]:
-        for item in self.data.items():
-            yield item

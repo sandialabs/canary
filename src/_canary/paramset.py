@@ -39,6 +39,13 @@ class ParameterSet:
         for row in self.values:
             yield [(self.keys[i], value) for i, value in enumerate(row)]
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"keys": self.keys, "values": self.values}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "ParameterSet":
+        return cls(**d)
+
     def describe(self, indent=0) -> str:
         fp = StringIO()
         fp.write(f"{' ' * indent}{','.join(self.keys)} = ")
