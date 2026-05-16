@@ -261,7 +261,6 @@ class TestBatch(BaseJob):
         return True
 
     def is_ready(self) -> bool:
-        # dispatchable now (eligible to checkout resources / schedule)
         if self.state.is_done() or self.state.is_running():
             return False
         if not self.is_runnable():
@@ -408,7 +407,7 @@ class TestBatch(BaseJob):
             "session": self.session,
             "workspace": str(self.workspace.dir),
             "cases": [case.id for case in self],
-            "status": serialize(self.status),
+            "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),
         }
@@ -417,7 +416,7 @@ class TestBatch(BaseJob):
 
     def save(self):
         cfg = json.loads(self.lockfile.read_text())
-        cfg["status"] = serialize(self.status)
+        cfg["status"] = serialize(self.status)["base"]
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
         with open(self.lockfile, "w") as fh:

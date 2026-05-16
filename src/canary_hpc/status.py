@@ -24,6 +24,13 @@ class BatchStatus:
     children: list[canary.TestCase]
     base: Status = field(default_factory=Status)
 
+    def __serialize__(self) -> dict[str, Any]:
+        return {"base": self.base, "children": self.children}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "BatchStatus":
+        return cls(children=d["children"], base=d["base"])
+
     # ---- delegate common status API to base (or derived, see below) ----
     @property
     def category(self) -> Category:

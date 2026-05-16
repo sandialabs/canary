@@ -44,7 +44,7 @@ class Log(CanarySubcommand):
         parser.add_argument(
             "testspec",
             nargs="?",
-            help="Test name or /TEST_ID.  If not given, the session log will be shown",
+            help="Test name or TEST_ID.  If not given, the session log will be shown",
         )
 
     def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> Path | None:

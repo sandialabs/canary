@@ -68,6 +68,9 @@ class HPC(canary.CanarySubcommand):
             "canary_hpc_backend", metavar="backend", help="Show information on this backend"
         )
 
+        p = subparsers.add_parser("log", help="Print the batch log")
+        p.add_argument("batch_id", nargs="?", help="Batch ID")
+
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
             "--spec",
@@ -88,6 +91,8 @@ class HPC(canary.CanarySubcommand):
             backend: hpc_connect.Backend = hpc_connect.get_backend(args.canary_hpc_backend)
             print(backend.describe())
             return 0
+        elif args.hpc_cmd == "log":
+            display_batch_log(args.batch_id)
         elif args.hpc_cmd == "exec":
             # Batch is being executed within an allocation
             # register the CanaryHPCExector plugin so that executor.runtests is registered
@@ -140,3 +145,17 @@ def series_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConne
     if batch.spec.layout == "flat" and backend.supports_subscheduling():
         return HPCConnectSeriesRunner(backend)
     return None
+
+
+def display_batch_log(id: str) -> None:
+    import pydoc
+    from _canary.workspace import Workspace
+
+    workspace = Workspace.load()
+    candidates = workspace.cache_dir.joinpath("canary-hpc/batches").glob(f"{id}*")
+    d = next(candidates)
+    file = d / "canary-out.txt"
+    print(f"{file}:")
+    if not file.exists():
+        raise FileNotFoundError(file)
+    pydoc.pager(file.read_text())

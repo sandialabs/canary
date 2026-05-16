@@ -366,13 +366,13 @@ class TestCase(BaseJob):
                 return
 
     def is_ready(self) -> bool:
+        if not self.depends_on:
+            return True
         if self.state.is_done() or self.state.is_running():
             return False
         self.refresh_readiness()
         if not self.is_runnable():
             return False
-        if not self.depends_on:
-            return True
         all_satisfied = all(d.is_satisfied() for d in self.depends_on if d.is_done())
         all_done = all(d.is_done() for d in self.depends_on)
         return all_satisfied and all_done

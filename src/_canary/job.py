@@ -40,16 +40,16 @@ class JobState:
         return cls(**d)
 
     def is_pending(self) -> bool:
-        return self.phase is JobPhase.PENDING
+        return self.phase == JobPhase.PENDING
 
     def is_submitted(self) -> bool:
-        return self.phase is JobPhase.SUBMITTED
+        return self.phase == JobPhase.SUBMITTED
 
     def is_running(self) -> bool:
-        return self.phase is JobPhase.RUNNING
+        return self.phase == JobPhase.RUNNING
 
     def is_done(self) -> bool:
-        return self.phase is JobPhase.DONE
+        return self.phase == JobPhase.DONE
 
 
 @dataclasses.dataclass

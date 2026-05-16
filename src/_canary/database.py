@@ -79,7 +79,7 @@ class WorkspaceDatabase:
         assert self._connection is not None
         conn = self._connection
         with conn:
-            sql = "CREATE TABLE IF NOT EXISTS specs (spec_id TEXT PRIMARY KEY, data BLOB NOT NULL)"
+            sql = "CREATE TABLE IF NOT EXISTS specs (spec_id TEXT PRIMARY KEY, data TEXT NOT NULL)"
             conn.execute(sql)
 
             sql = """CREATE TABLE IF NOT EXISTS specs_meta (
@@ -178,15 +178,8 @@ class WorkspaceDatabase:
         return
 
     def put_specs(self, specs: list[JobSpec]) -> None:
-        def process_one_spec(spec: JobSpec) -> tuple[str, bytes, str, str, list[str]]:
-            deps = spec.dependencies
-            try:
-                spec.dependencies = []
-                when: dict[str, str] = {}
-                when = {d.spec.id: d.when for d in deps}
-                blob = pickle.dumps([spec, when], protocol=pickle.HIGHEST_PROTOCOL)
-            finally:
-                spec.dependencies = deps
+        def process_one_spec(spec: JobSpec) -> tuple[str, str, str, str, list[str]]:
+            blob = json.dumps_min(spec)
             view = Path(spec.execpath) / spec.file.name
             source = spec.file
             dep_ids = [dep.spec.id for dep in spec.dependencies]
@@ -321,18 +314,17 @@ class WorkspaceDatabase:
         return self._reconstruct_specs(rows)
 
     def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[JobSpec]:
+        spec: JobSpec
         specs: dict[str, JobSpec] = {}
-        when_conditions: dict[str, dict[str, str]] = {}
+        imap: dict[str, dict[str, int]] = {}
         for row in rows:
-            spec, when = pickle.loads(row[-1])  # nosec 301
-            spec.dependencies = []
+            spec = json.loads(row[-1])
             specs[spec.id] = spec
-            when_conditions[spec.id] = when
+            imap[spec.id] = {dep.spec.id: i for i, dep in enumerate(spec.dependencies)}
         ids = [spec.id for spec in specs.values()]
         edges = self.get_edges(ids)
         for spec_id, dep_id in edges:
-            d = SpecDependency(spec=specs[dep_id], when=when_conditions[spec_id][dep_id])
-            specs[spec_id].dependencies.append(d)
+            specs[spec_id].dependencies[imap[spec_id][dep_id]].spec = specs[dep_id]
         return list(specs.values())
 
     def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
