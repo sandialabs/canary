@@ -31,13 +31,13 @@ logger = logging.get_logger(__name__)
 class DependencySpec:
     """String representation of test dependencies
 
-    Dependency resolution is performed after test case discovery.  The ``DependencySpec``
+    Dependency resolution is performed after job discovery.  The ``DependencySpec``
     object holds information needed to perform the resolution.
 
     Args:
       value: The dependency name or glob pattern.
       expect: For glob patterns, how many dependencies are expected to be found
-      result: The test case will run if the dependency exits with this status.  Usually ``success``
+      result: The job will run if the dependency exits with this status.  Usually ``success``
 
     """
 

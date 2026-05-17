@@ -40,12 +40,12 @@ def test_instance_deps(tmpdir):
         for spec in specs:
             p = Path(work_tree)
             space = ExecutionSpace(p.parent, Path(p.name))
-            deps = [tc.Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            case = tc.Job(spec=spec, workspace=space, dependencies=deps)
-            lookup[case.id] = case
-            case.save()
-            instance = inst.from_testcase(case)
-            if case.get_attribute("multicase"):
+            deps = [tc.Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+            job = tc.Job(spec=spec, workspace=space, dependencies=deps)
+            lookup[job.id] = job
+            job.save()
+            instance = inst.from_testcase(job)
+            if job.get_attribute("multicase"):
                 assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
                 assert instance.parameters.b == (1, 3, 5, 1, 3, 5)
                 assert instance.parameters.cpus == (1, 1, 1, 2, 2, 2)

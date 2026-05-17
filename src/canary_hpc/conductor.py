@@ -28,7 +28,7 @@ from _canary.util.time import time_in_seconds
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
-from .batching import batch_testcases
+from .batching import batch_jobs
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
 from .queue import ResourceQueue
@@ -118,14 +118,14 @@ class CanaryHPCConductor:
     def canary_resource_pool_accommodates(self, case: canary.Job) -> Outcome:
         return self.backend_accommodates(case)
 
-    def backend_accommodates(self, case: canary.Job) -> Outcome:
+    def backend_accommodates(self, job: canary.Job) -> Outcome:
         """determine if the resources for this test are available"""
 
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
 
         # Step 1: Gather resource requirements and detect missing types
-        for member in case.required_resources():
+        for member in job.required_resources():
             rtype = member["type"]
             if rtype in self.slots_per_resource_type:
                 slots_needed[rtype] += member["slots"]
@@ -147,7 +147,7 @@ class CanaryHPCConductor:
             if canary.config.get("debug"):
                 fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (t, n, m)
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
-                reason = f"{case}: insufficient slots of {types}"
+                reason = f"{job}: insufficient slots of {types}"
             else:
                 types = ", ".join("[bold]%s[/]" % t for t in wanting)
                 reason = f"insufficient slots of {types}"
@@ -158,10 +158,10 @@ class CanaryHPCConductor:
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: "Runner") -> bool:
-        """Run each test case in ``cases``.
+        """Run each job in ``runner.jobs``.
 
         Args:
-        cases: test cases to run
+        job: job to run
 
         Returns:
         The session returncode (0 for success)
@@ -169,9 +169,9 @@ class CanaryHPCConductor:
         """
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         if not batchspec:
-            raise ValueError("Cannot partition test cases: missing batching options")
-        batch_specs: list[BatchSpec] = batch_testcases(
-            cases=runner.cases,
+            raise ValueError("Cannot partition jobs: missing batching options")
+        batch_specs: list[BatchSpec] = batch_jobs(
+            jobs=runner.jobs,
             layout=batchspec["layout"],
             count=batchspec["count"],
             duration=batchspec["duration"],
@@ -182,11 +182,11 @@ class CanaryHPCConductor:
                 "No test batches generated (this should never happen, "
                 "the default batching scheme should have been used)"
             )
-        if missing := {c.id for c in runner.cases} - {c.id for b in batch_specs for c in b.cases}:
-            raise ValueError(f"Test cases missing from batches: {', '.join(missing)}")
+        if missing := {c.id for c in runner.jobs} - {c.id for b in batch_specs for c in b.jobs}:
+            raise ValueError(f"Jobs missing from batches: {', '.join(missing)}")
         key = canary.string.pluralize("batch", n=len(batch_specs))
-        fmt = "[bold]Generated[/] %d test %s from %d test cases"
-        logger.info(fmt % (len(batch_specs), key, len(runner.cases)))
+        fmt = "[bold]Generated[/] %d test %s from %d jobs"
+        logger.info(fmt % (len(batch_specs), key, len(runner.jobs)))
         root = runner.workspace.cache_dir / "canary-hpc"
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}
@@ -242,7 +242,7 @@ class CanaryHPCConductor:
             dest="canary_hpc_batchspec",
             metavar="SPEC",
             action=CanaryHPCBatchSpec,
-            help="Comma separated list of options to partition test cases into batches. "
+            help="Comma separated list of options to partition jobs into batches. "
             "See canary batch help --spec for help on batch specification syntax "
             "[alias: -b spec=SPEC]",
         )
@@ -250,7 +250,7 @@ class CanaryHPCConductor:
             "--batch-workers",
             dest="canary_hpc_batch_workers",
             metavar="WORKERS",
-            help="Run test cases in batches using WORKERS workers [alias: -b workers=WORKERS]",
+            help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
         )
         parser.add_argument(
             "--batch-timeout-strategy",

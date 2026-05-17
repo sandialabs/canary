@@ -55,7 +55,7 @@ if __name__ == "__main__":
 import canary
 canary.directives.generate_composite_base_case()
 canary.directives.parameterize('a', (1, 2))
-def test(case):
+def test(job):
     pass
 if __name__ == "__main__":
     self = canary.get_instance()

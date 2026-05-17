@@ -51,8 +51,8 @@ def generate_specs(generators, on_options=None):
     return specs
 
 
-def filter_cases(cases):
-    f = select.RuntimeSelector(cases, workspace=Path.cwd())
+def filter_cases(jobs):
+    f = select.RuntimeSelector(jobs, workspace=Path.cwd())
     f.add_rule(rules.ResourceCapacityRule())
     f.run()
 
@@ -159,14 +159,14 @@ def test_cpu_count(tmpdir):
         generators = collect.find_generators_in_path(workdir)
         resolved = generate_specs(generators)
         specs = select_specs(resolved)
-        cases: list[canary.Job] = []
+        jobs: list[canary.Job] = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            case = testcase.Job(spec=spec, workspace=space)
-            cases.append(case)
-        filter_cases(cases)
+            job = testcase.Job(spec=spec, workspace=space)
+            jobs.append(job)
+        filter_cases(jobs)
         assert len(specs) == 4
-        assert len([case for case in cases if case.is_ready()]) == 4
+        assert len([job for job in jobs if job.is_ready()]) == 4
         canary.config.pluginmanager.unregister(name="myhook")
 
     with canary.config.override():
@@ -174,14 +174,14 @@ def test_cpu_count(tmpdir):
         generators = collect.find_generators_in_path(workdir)
         resolved = generate_specs(generators)
         specs = select_specs(resolved)
-        cases = []
+        jobs = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            case = testcase.Job(spec=spec, workspace=space)
-            cases.append(case)
-        filter_cases(cases)
+            job = testcase.Job(spec=spec, workspace=space)
+            jobs.append(job)
+        filter_cases(jobs)
         assert len(specs) == 4
-        assert len([case for case in cases if not case.mask]) == 1
+        assert len([job for job in jobs if not job.mask]) == 1
         canary.config.pluginmanager.unregister(name="myhook")
 
 
@@ -273,7 +273,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert len(final) == 7
 
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
-            # three test cases and one analyze.  The analyze will not be masked because the `cpus`
+            # three test jobs and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
             specs = generate_specs(generators)
             assert specs[-1].attributes.get("multicase") is not None
@@ -281,7 +281,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             final = select_specs(specs, keyword_exprs=["test and unit"], owners=["me"])
             assert len(final) == 4
 
-            # with cpus<2, some of the cases will be filtered
+            # with cpus<2, some of the jobs will be filtered
             specs = generate_specs(generators, on_options=["baz"])
             final = select_specs(
                 specs, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"]

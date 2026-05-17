@@ -53,7 +53,7 @@ def canary_runtests(runner: "Runner") -> None:
 
 @dataclasses.dataclass
 class Runner:
-    cases: list["Job"]
+    jobs: list["Job"]
     session: str
     workspace: "Workspace"
     _returncode: int = -20
@@ -63,7 +63,7 @@ class Runner:
     @property
     def returncode(self) -> int:
         if self._returncode == -20:
-            self._returncode = compute_returncode(self.cases)
+            self._returncode = compute_returncode(self.jobs)
         return self._returncode
 
     @contextmanager
@@ -122,7 +122,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(specname="canary_runtests_report", tryfirst=True)
 def print_short_test_status_summary(runner: Runner) -> None:
-    """Return a summary of the completed test cases.  if ``include_pass is True``, include
+    """Return a summary of the completed jobs.  if ``include_pass is True``, include
     passed tests in the summary
 
     """
@@ -133,19 +133,19 @@ def print_short_test_status_summary(runner: Runner) -> None:
     include_pass = False
     truncate = 10
     file = io.StringIO()
-    if not runner.cases:
+    if not runner.jobs:
         file.write("Nothing to report\n")
     else:
         totals: dict[tuple[Category, "Outcome"], list["Job"]] = {}
-        for case in runner.cases:
-            key = (case.status.category, case.status.outcome)
-            totals.setdefault(key, []).append(case)
+        for job in runner.jobs:
+            key = (job.status.category, job.status.outcome)
+            totals.setdefault(key, []).append(job)
         for key in totals:
             if not include_pass and key[0] == Category.PASS:
                 continue
             n: int = 0
-            for case in sorted(totals[key], key=lambda t: t.name):
-                file.write(case.statline(style="rich") + "\n")
+            for job in sorted(totals[key], key=lambda t: t.name):
+                file.write(job.statline(style="rich") + "\n")
                 n += 1
                 if truncate > 0 and truncate == n:
                     file.write(f"... truncating summary to the first {truncate} entries.\n")
@@ -160,7 +160,7 @@ def print_short_test_status_summary(runner: Runner) -> None:
 @hookimpl(specname="canary_runtests_report")
 def print_runtests_durations(runner: Runner) -> None:
     if N := config.getoption("durations"):
-        return print_durations(runner.cases, N)
+        return print_durations(runner.jobs, N)
 
 
 @hookimpl(specname="canary_runtests_report", trylast=True)
@@ -180,10 +180,10 @@ def print_footer(runner: "Runner", title: str) -> None:
 
     duration = runner.finish - runner.start
     totals: dict[tuple[status.Category, status.Outcome], list["Job"]] = {}
-    for case in runner.cases:
-        key = (case.status.category, case.status.outcome)
-        totals.setdefault(key, []).append(case)
-    N = len(runner.cases)
+    for job in runner.jobs:
+        key = (job.status.category, job.status.outcome)
+        totals.setdefault(key, []).append(job)
+    N = len(runner.jobs)
     summary = [f"[bold blue]{N} total[/bold blue]:"]
     for category, outcome in sorted(totals, key=sortkey):
         n = len(totals[(category, outcome)])
@@ -203,19 +203,19 @@ def print_footer(runner: "Runner", title: str) -> None:
     )
 
 
-def print_durations(cases: list["Job"], N: int) -> None:
-    cases.sort(key=lambda x: x.timekeeper.duration())
-    ix = list(range(len(cases)))
+def print_durations(jobs: list["Job"], N: int) -> None:
+    jobs.sort(key=lambda x: x.timekeeper.duration())
+    ix = list(range(len(jobs)))
     if N > 0:
         ix = ix[-N:]
     kwds = {"t": glyphs.turtle, "N": N}
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = cases[i].timekeeper.duration()
+        duration = jobs[i].timekeeper.duration()
         if duration < 0:
             continue
-        name = cases[i].display_name(style="rich")
-        id = cases[i].id[:7]
+        name = jobs[i].display_name(style="rich")
+        id = jobs[i].id[:7]
         fp.write("  %6.2f   %s %s\n" % (duration, id, name))
     rich.print(fp.getvalue().strip(), file=sys.stderr)

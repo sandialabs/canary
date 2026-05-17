@@ -1,7 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""Defines launchers for individual test cases"""
+"""Defines launchers for individual test jobs"""
 
 import os
 import shlex
@@ -36,7 +36,7 @@ StdErrorT = TextIO | int
 
 class Launcher(ABC):
     @abstractmethod
-    def run(self, case: "Job") -> int: ...
+    def run(self, job: "Job") -> int: ...
 
 
 class SubprocessLauncher(Launcher):
@@ -44,53 +44,53 @@ class SubprocessLauncher(Launcher):
         self.default_args: list[str] = list(args or [])
 
     @contextmanager
-    def context(self, case: "Job") -> Generator[None, None, None]:
+    def context(self, job: "Job") -> Generator[None, None, None]:
         old_env = os.environ.copy()
         old_cwd = Path.cwd()
         try:
-            case.set_runtime_env(os.environ)
-            for module in case.spec.modules or []:
+            job.set_runtime_env(os.environ)
+            for module in job.spec.modules or []:
                 load_module(module)
-            for rcfile in case.spec.rcfiles or []:
+            for rcfile in job.spec.rcfiles or []:
                 source_rcfile(rcfile)
-            os.chdir(case.workspace.dir)
+            os.chdir(job.workspace.dir)
             yield
         finally:
             os.chdir(old_cwd)
             os.environ.clear()
             os.environ.update(old_env)
 
-    def run(self, case: "Job") -> int:
-        logger.debug(f"Starting {case.display_name()} on pid {os.getpid()}")
-        with self.context(case):
-            args: list[str] = list(case.spec.command)
+    def run(self, job: "Job") -> int:
+        logger.debug(f"Starting {job.display_name()} on pid {os.getpid()}")
+        with self.context(job):
+            args: list[str] = list(job.spec.command)
             args.extend(self.default_args)
             if a := config.getoption("script_args"):
                 args.extend(a)
-            if a := case.get_attribute("script_args"):
+            if a := job.get_attribute("script_args"):
                 args.extend(a)
             if not args:
-                raise RuntimeError(f"{case}: not command defined")
-            case.add_measurement("command_line", shlex.join(args))
-            stdout: TextIO = open(case.stdout, "a")
-            stderr: StdErrorT = subprocess.STDOUT if case.stderr is None else open(case.stderr, "a")
+                raise RuntimeError(f"{job}: not command defined")
+            job.add_measurement("command_line", shlex.join(args))
+            stdout: TextIO = open(job.stdout, "a")
+            stderr: StdErrorT = subprocess.STDOUT if job.stderr is None else open(job.stderr, "a")
             mp = MeasuredProcess(
                 lambda: subprocess.Popen(
                     args, stdout=stdout, stderr=stderr, start_new_session=True
                 ),
-                name=f"{case.id[:7]}",
+                name=f"{job.id[:7]}",
                 sample_children=False,
             )
             try:
                 mp.start()
                 start = time.time()
-                deadline = start + case.total_timeout()
+                deadline = start + job.total_timeout()
                 while True:
                     mp.sample_metrics()
                     rc = mp.poll()
                     if rc is not None:
-                        case.measurements.update(mp.get_measurements())
-                        logger.debug(f"Finished {case.display_name()}")
+                        job.measurements.update(mp.get_measurements())
+                        logger.debug(f"Finished {job.display_name()}")
                         return rc
 
                     if time.time() > deadline:
@@ -122,7 +122,7 @@ class SubprocessLauncher(Launcher):
                             except Exception:
                                 pass  # nosec B110
 
-                        raise TestTimedOut(f"Test exceeded timeout of {case.total_timeout():.1f} s")
+                        raise TestTimedOut(f"Test exceeded timeout of {job.total_timeout():.1f} s")
 
                     time.sleep(0.1)
             finally:
@@ -337,5 +337,5 @@ class MeasuredProcess:
 
 
 @hookimpl(trylast=True, specname="canary_runtest_launcher")
-def default_testcase_launcher(case: "Job") -> Launcher:
+def default_job_launcher(case: "Job") -> Launcher:
     return SubprocessLauncher()

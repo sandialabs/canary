@@ -17,9 +17,9 @@ from .batchspec import BatchSpec
 logger = canary.get_logger(__name__)
 
 
-def batch_testcases(
+def batch_jobs(
     *,
-    cases: list["canary.Job"],
+    jobs: list["canary.Job"],
     nodes: Literal["any", "same"] = "same",
     layout: Literal["flat", "atomic"] = "flat",
     count: int | None = None,
@@ -39,51 +39,51 @@ def batch_testcases(
         grouper = GroupByNodes(cpus_per_node=cpus_per_node)
     # The binpacking code works with Block not Job.
     blocks: dict[str, binpack.Block] = {}
-    lookup: dict[str, canary.Job] = {case.id: case for case in cases}
+    lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
     graph: dict[str, list[str]] = {}
-    for case in cases:
-        graph[case.id] = [dep.id for dep in case.dependencies if dep.id in lookup]
+    for job in jobs:
+        graph[job.id] = [dep.id for dep in job.dependencies if dep.id in lookup]
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
         ready = ts.get_ready()
         for id in ready:
-            case = lookup[id]
-            assert case.id == id
+            job = lookup[id]
+            assert job.id == id
             dependencies: list[binpack.Block] = []
-            for dep in case.dependencies:
+            for dep in job.dependencies:
                 if b := blocks.get(dep.id):
                     dependencies.append(b)
-            blocks[case.id] = binpack.Block(
-                case.id, case.cpus, math.ceil(case.runtime), dependencies=dependencies
+            blocks[job.id] = binpack.Block(
+                job.id, job.cpus, math.ceil(job.runtime), dependencies=dependencies
             )
         ts.done(*ready)
     if duration is not None:
         height = math.ceil(float(duration))
-        logger.debug(f"Batching test cases using duration={height}")
+        logger.debug(f"Batching jobs using duration={height}")
         bins = binpack.pack_to_height(
             list(blocks.values()), height=height, width=width, grouper=grouper
         )
     else:
         assert isinstance(count, int)
-        logger.debug(f"Batching test cases using count={count}")
+        logger.debug(f"Batching jobs using count={count}")
         if layout == "atomic":
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
             bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
-    specs = [BatchSpec(layout=layout, cases=[lookup[block.id] for block in bin]) for bin in bins]
+    specs = [BatchSpec(layout=layout, jobs=[lookup[block.id] for block in bin]) for bin in bins]
 
     # Build explicit batch dependencies
-    case_to_batch: dict[str, BatchSpec] = {}
+    job_to_batch: dict[str, BatchSpec] = {}
     for spec in specs:
-        for case in spec.cases:
-            case_to_batch[case.id] = spec
+        for job in spec.jobs:
+            job_to_batch[job.id] = spec
 
     for spec in specs:
         deps: list[BatchSpec] = []
-        for case in spec.cases:
-            for dep in case.dependencies:
-                dep_spec = case_to_batch.get(dep.id)
+        for job in spec.jobs:
+            for dep in job.dependencies:
+                dep_spec = job_to_batch.get(dep.id)
                 if dep_spec is not None and dep_spec is not spec and dep_spec not in deps:
                     deps.append(dep_spec)
         spec.dependencies = deps
@@ -92,16 +92,16 @@ def batch_testcases(
 
 
 def packed_perimeter(
-    cases: Iterable[canary.Job], cpus_per_node: int | None = None
+    jobs: Iterable[canary.Job], cpus_per_node: int | None = None
 ) -> tuple[int, int]:
     cpus_per_node = cpus_per_node or cpu_count()
-    cases = sorted(cases, key=lambda c: c.size(), reverse=True)
-    cpus = max(case.cpus for case in cases)
+    jobs = sorted(jobs, key=lambda c: c.size(), reverse=True)
+    cpus = max(job.cpus for job in jobs)
     nodes = math.ceil(cpus / cpus_per_node)
     width = nodes * cpus_per_node
     blocks: list[binpack.Block] = []
-    for case in cases:
-        blocks.append(binpack.Block(case.id, case.cpus, math.ceil(case.runtime)))
+    for job in jobs:
+        blocks.append(binpack.Block(job.id, job.cpus, math.ceil(job.runtime)))
     packer = binpack.Packer()
     packer.pack(blocks, width=width)
     return binpack.perimeter(blocks)

@@ -34,21 +34,21 @@ class HTMLReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_jobs()
+        jobs = workspace.load_jobs()
         work_tree = workspace.view or workspace.sessions_dir
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.html_dir = os.path.join(dest, "HTML")
-        self.cases_dir = os.path.join(self.html_dir, "cases")
+        self.jobs_dir = os.path.join(self.html_dir, "jobs")
         self.index = os.path.join(dest, "canary-report.html")
 
         force_remove(self.html_dir)
-        mkdirp(self.cases_dir)
-        for case in cases:
-            file = os.path.join(self.cases_dir, f"{case.id}.html")
+        mkdirp(self.jobs_dir)
+        for job in jobs:
+            file = os.path.join(self.jobs_dir, f"{job.id}.html")
             with open(file, "w") as fh:
-                self.generate_case_file(case, fh)
+                self.generate_case_file(job, fh)
         with open(self.index, "w") as fh:
-            self.generate_index(cases, fh)
+            self.generate_index(jobs, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
         logger.info(f"HTML report written to {f}")
 
@@ -66,20 +66,20 @@ class HTMLReporter(CanaryReporter):
     def head(self) -> str:
         return f"<head>\n{self.style}\n</head>\n"
 
-    def generate_case_file(self, case: "Job", fh: TextIO) -> None:
+    def generate_case_file(self, job: "Job", fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
-        fh.write(f"<tr><td><b>Test:</b> {case.display_name()}</td></tr>\n")
-        fh.write(f"<tr><td><b>Status:</b> {case.status.outcome}</td></tr>\n")
-        fh.write(f"<tr><td><b>Exit code:</b> {case.status.code}</td></tr>\n")
-        fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
-        fh.write(f"<tr><td><b>Duration:</b> {case.timekeeper.duration()}</td></tr>\n")
+        fh.write(f"<tr><td><b>Test:</b> {job.display_name()}</td></tr>\n")
+        fh.write(f"<tr><td><b>Status:</b> {job.status.outcome}</td></tr>\n")
+        fh.write(f"<tr><td><b>Exit code:</b> {job.status.code}</td></tr>\n")
+        fh.write(f"<tr><td><b>ID:</b> {job.id}</td></tr>\n")
+        fh.write(f"<tr><td><b>Duration:</b> {job.timekeeper.duration()}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        fh.write(case.read_output())
+        fh.write(job.read_output())
         fh.write("</pre>\n</body>\n</html>\n")
 
-    def generate_index(self, cases: list["Job"], fh: TextIO) -> None:
+    def generate_index(self, jobs: list["Job"], fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
         fh.write("<body>\n<h1>Canary Summary</h1>\n")
@@ -99,9 +99,9 @@ class HTMLReporter(CanaryReporter):
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
         totals: dict[str, list["Job"]] = {}
-        for case in cases:
-            group = case.status.outcome.name.title()
-            totals.setdefault(group, []).append(case)
+        for job in jobs:
+            group = job.status.outcome.name.title()
+            totals.setdefault(group, []).append(job)
         fh.write("<tr>")
         fh.write(f"<td>{os.uname().nodename}</td>")
         fh.write(f"<td>{config.get('cmake:project')}</td>")
@@ -115,28 +115,28 @@ class HTMLReporter(CanaryReporter):
                 with open(file, "w") as fp:
                     self.generate_group_index(totals[group], fp)
         file = os.path.join(self.html_dir, "Total.html")
-        fh.write(f'<td><a href="file://{file}">{len(cases)}</a></td>')
+        fh.write(f'<td><a href="file://{file}">{len(jobs)}</a></td>')
         with open(file, "w") as fp:
             self.generate_all_tests_index(totals, fp)
         fh.write("</tr>\n")
         fh.write("</table>\n</body>\n</html>")
 
-    def generate_group_index(self, cases, fh: TextIO) -> None:
+    def generate_group_index(self, jobs, fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
-        key = cases[0].status.outcome
+        key = jobs[0].status.outcome
         fh.write(f"<body>\n<h1> {key} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
         fh.write("<tbody>")
-        for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
-            file = os.path.join(self.cases_dir, f"{case.id}.html")
+        for job in sorted(jobs, key=lambda c: c.timekeeper.duration()):
+            file = os.path.join(self.jobs_dir, f"{job.id}.html")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
-            link = f'<a href="file://{file}">{case.display_name()}</a>'
-            html_name = case.status.display_name(style="html")
+            link = f'<a href="file://{file}">{job.display_name()}</a>'
+            html_name = job.status.display_name(style="html")
             fh.write(
-                f"<tr><td>{link}</td><td>{case.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
+                f"<tr><td>{link}</td><td>{job.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
             )
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
@@ -146,14 +146,14 @@ class HTMLReporter(CanaryReporter):
         fh.write(self.head)
         fh.write("<body>\n<h1>Test Results</h1>\n<table>\n")
         fh.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
-        for group, cases in totals.items():
-            for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
-                file = os.path.join(self.cases_dir, f"{case.id}.html")
+        for group, jobs in totals.items():
+            for job in sorted(jobs, key=lambda c: c.timekeeper.duration()):
+                file = os.path.join(self.jobs_dir, f"{job.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
-                link = f'<a href="file://{file}">{case.display_name()}</a>'
-                html_name = case.status.display_name(style="html")
+                link = f'<a href="file://{file}">{job.display_name()}</a>'
+                html_name = job.status.display_name(style="html")
                 fh.write(
-                    f"<tr><td>{link}</td><td>{case.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
+                    f"<tr><td>{link}</td><td>{job.timekeeper.duration():.2f}</td><td>{html_name}</td></tr>\n"
                 )
         fh.write("</table>\n</body>\n</html>")

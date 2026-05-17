@@ -8,7 +8,9 @@ import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import cast
 from typing import Any
+from typing import Literal
 
 import yaml
 
@@ -42,6 +44,7 @@ if TYPE_CHECKING:
     from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
+ViewT = Literal["symlink", "hardlink", "copy"]
 
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
@@ -57,24 +60,24 @@ SQL_CHUNK_SIZE = 900
 @dataclasses.dataclass
 class Session:
     name: str
-    cases: list[Job]
+    jobs: list[Job]
     prefix: Path
     returncode: int = dataclasses.field(init=False, default=-1)
     started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
     finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
 
     def __post_init__(self) -> None:
-        for case in self.cases:
-            if case.mask:
-                raise ValueError(f"{case}: unexpectedly masked test case")
+        for job in self.jobs:
+            if job.mask:
+                raise ValueError(f"{job}: unexpectedly masked test job")
 
     def run(self, workspace: "Workspace") -> None:
         self.prefix.mkdir(parents=True, exist_ok=True)
-        ready = [case for case in self.cases if case.is_runnable()]
+        ready = [job for job in self.jobs if job.is_runnable()]
         runner = Runner(ready, self.name, workspace=workspace)
         if not ready:
             exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
-            raise StopExecution("no cases to run", exit_code=exit_code)
+            raise StopExecution("no jobs to run", exit_code=exit_code)
         starting_dir = os.getcwd()
         try:
             self.started_on = datetime.datetime.now()
@@ -277,38 +280,38 @@ class Workspace:
         now = datetime.datetime.now()
         session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
-        cases = self.construct_testcases(specs, session_dir)
-        selector = select.RuntimeSelector(cases, workspace=self.root)
+        jobs = self.construct_jobs(specs, session_dir)
+        selector = select.RuntimeSelector(jobs, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
         selector.run()
 
-        # At this point, test cases have been reconstructed and, if previous results exist,
-        # restored to their last ran state.  If reuse_latest_session, we leave the test case as is.
+        # At this point, test jobs have been reconstructed and, if previous results exist,
+        # restored to their last ran state.  If reuse_latest_session, we leave the test job as is.
         # Otherwise, we swap out the old session for the new.
         ready: list["Job"] = []
-        for case in cases:
-            if case.mask:
+        for job in jobs:
+            if job.mask:
                 continue
             elif reuse_latest_session:
-                if not case.workspace.dir.exists():
+                if not job.workspace.dir.exists():
                     raise RuntimeError(
-                        f"{case}: requested to reuse_latest_session but results do not exist"
+                        f"{job}: requested to reuse_latest_session but results do not exist"
                     )
             else:
                 # Force override session dir
-                case.workspace.root = session_dir
-                case.workspace.session = session_dir.name
+                job.workspace.root = session_dir
+                job.workspace.session = session_dir.name
                 if session is not None:
-                    assert case.workspace.session == session, f"{case}: unexpected workspace"
-            ready.append(case)
+                    assert job.workspace.session == session, f"{job}: unexpected workspace"
+            ready.append(job)
 
-        s = Session(name=session_dir.name, prefix=session_dir, cases=ready)
+        s = Session(name=session_dir.name, prefix=session_dir, jobs=ready)
         config.pluginmanager.hook.canary_sessionstart(session=s)
 
         # We need to take great care to only write results into the database from the parent process
         # On the parent process, create a results listener that looks for results in the spool.
-        # As test cases finish, the testcase_done_callback is called and the results put into the
+        # As test jobs finish, the testcase_done_callback is called and the results put into the
         # spool.  When the listener detects the results, it will write them to the database.  This
         # way, the database is only receiving results from a single writer.  Otherwise, results can
         # be written from many writers originating from many different processes (eg, a canary
@@ -321,7 +324,7 @@ class Workspace:
         s.run(workspace=self)
         if listener is not None:
             listener.stop_and_join()
-            not_saved = [case for case in s.cases if case.id not in listener._processed]
+            not_saved = [job for job in s.jobs if job.id not in listener._processed]
             self.db.put_results(*not_saved)
         config.pluginmanager.hook.canary_sessionfinish(session=s)
         self.add_session_results(s, update_view=update_view)
@@ -331,12 +334,12 @@ class Workspace:
         """Update latest results, view, and refs with results from ``session``"""
         if update_view:
             view_entries: list[tuple[Path, str]] = []
-            for case in session.cases:
-                if case.workspace.session is not None:
-                    prefix = self.sessions_dir / case.workspace.session
+            for job in session.jobs:
+                if job.workspace.session is not None:
+                    prefix = self.sessions_dir / job.workspace.session
                 else:
                     prefix = session.prefix
-                view_entries.append((case.workspace.dir, case.viewpath))
+                view_entries.append((job.workspace.dir, job.viewpath))
             self.update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -345,7 +348,7 @@ class Workspace:
         link = os.path.relpath(str(session.prefix), str(file.parent))
         file.write_text(str(link))
 
-    def rebuild_view(self) -> None:
+    def rebuild_view(self, mode: ViewT = "symlink") -> None:
         """Keep only the latet results"""
         if not self.view:
             return
@@ -353,24 +356,29 @@ class Workspace:
         if not view_config:
             return
         logger.info(f"Rebuilding view at {self.root}")
-        cases = self.load_jobs()
+        jobs = self.load_jobs()
         view_entries: list[tuple[Path, str]] = []
-        for case in cases:
-            view_entries.append((case.workspace.dir, case.viewpath))
+        for job in jobs:
+            view_entries.append((job.workspace.dir, job.viewpath))
         for path in self.view.iterdir():
             if path.is_dir():
                 force_remove(path)
-        self.update_view(view_entries)
+        self.update_view(view_entries, mode=mode)
 
-    def update_view(self, view_entries: list[tuple[Path, str]]) -> None:
+    def update_view(
+        self,
+        view_entries: list[tuple[Path, str]],
+        mode: ViewT | None = None,
+    ) -> None:
         logger.info(f"[bold]Updating[/] view at {self.view}")
         if self.view is None:
             return
-        view_mode = (config.get("workspace:view:mode") or "symlink").lower()
-        if view_mode not in {"symlink", "hardlink", "copy"}:
-            raise ValueError(
-                f"Invalid workspace:view:mode={view_mode!r} (expected symlink|hardlink|copy)"
-            )
+        if mode is None:
+            mode = cast(ViewT, (config.get("workspace:view:mode") or "symlink").lower())
+            if mode not in {"symlink", "hardlink", "copy"}:
+                raise ValueError(
+                    f"Invalid workspace:view:mode={mode!r} (expected symlink|hardlink|copy)"
+                )
         for target, relpath in view_entries:
             link = self.view / relpath
             link.parent.mkdir(parents=True, exist_ok=True)
@@ -378,14 +386,14 @@ class Workspace:
                 link.unlink()
             elif link.is_dir():
                 force_remove(link)
-            if view_mode == "symlink":
+            if mode == "symlink":
                 try:
                     link.symlink_to(target, target_is_directory=True)
                 except FileExistsError:
                     pass
-            elif view_mode == "hardlink":
+            elif mode == "hardlink":
                 # Mirror the directory tree with hardlinks for files.
-                # (Hardlinks don't work across filesystems; will raise OSError in that case.)
+                # (Hardlinks don't work across filesystems; will raise OSError in that job.)
                 for src in target.rglob("*"):
                     rel = src.relative_to(target)
                     dst = link / rel
@@ -396,7 +404,7 @@ class Workspace:
                     if dst.exists() or dst.is_symlink():
                         dst.unlink()
                     os.link(src, dst)
-            elif view_mode == "copy":
+            elif mode == "copy":
                 # Copy the directory tree
                 shutil.copytree(target, link, dirs_exist_ok=True)
 
@@ -441,7 +449,7 @@ class Workspace:
         scanpaths: dict[str, list[str]],
         on_options: list[str] | None = None,
     ) -> list["JobSpec"]:
-        """Find test case generators in scan_paths and add them to this workspace"""
+        """Find test job generators in scan_paths and add them to this workspace"""
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
@@ -463,7 +471,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test case generators in scan_paths and add them to this workspace"""
+        """Find test job generators in scan_paths and add them to this workspace"""
         resolved = self.db.load_specs()
         specs = self.select_from_specs(
             resolved,
@@ -492,7 +500,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test case generators in scan_paths and add them to this workspace"""
+        """Find test job generators in scan_paths and add them to this workspace"""
         selector = select.Selector(resolved, self.root)
         if keyword_exprs:
             selector.add_rule(rules.KeywordRule(keyword_exprs))
@@ -517,7 +525,7 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test case generators in scan_paths and add them to this workspace"""
+        """Find test job generators in scan_paths and add them to this workspace"""
         resolved = self.collect(scanpaths, on_options=on_options)
         specs = self.select_from_specs(
             resolved,
@@ -564,26 +572,26 @@ class Workspace:
             selector.run()
 
     def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
-        """Load cached test cases.  Dependency resolution is performed."""
+        """Load cached test jobs.  Dependency resolution is performed."""
         lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
         specs = self.db.load_specs(ids, include_upstreams=True)
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
-                deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+                deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
                 space = ExecutionSpace(
                     root=self.sessions_dir / mine["session"],
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = Job(spec=spec, workspace=space, dependencies=deps)
-                case.status = mine["status"]
-                case.timekeeper = mine["timekeeper"]
-                case.measurements = mine["measurements"]
-                case.state = mine["state"]
-                lookup[spec.id] = case
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+                job.status = mine["status"]
+                job.timekeeper = mine["timekeeper"]
+                job.measurements = mine["measurements"]
+                job.state = mine["state"]
+                lookup[spec.id] = job
         if ids:
-            return [case for case in lookup.values() if case.id in ids]
+            return [job for job in lookup.values() if job.id in ids]
         return list(lookup.values())
 
     def select_from_view(
@@ -592,8 +600,8 @@ class Workspace:
     ) -> list["JobSpec"]:
         ids: list[str] = []
         for file in path.rglob("*/testcase.lock"):
-            case = json.loads(file.read_text())
-            ids.append(case.spec.id)
+            job = json.loads(file.read_text())
+            ids.append(job.spec.id)
         resolved = self.db.load_specs(ids=ids)
         return resolved
 
@@ -615,7 +623,7 @@ class Workspace:
         """Generate resolved test specs
 
         Args:
-          on_options: Used to filter tests by option.  In the typical case, options are added to
+          on_options: Used to filter tests by option.  In the typical job, options are added to
             ``on_options`` by passing them on the command line, e.g., ``-o dbg`` would add ``dbg`` to
             ``on_options``.  Tests can define filtering criteria based on what options are on.
 
@@ -628,32 +636,32 @@ class Workspace:
         resolved = generator.run()
         return resolved
 
-    def construct_testcases(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
+    def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
         lookup: dict[str, Job] = {}
-        cases: list[Job] = []
+        jobs: list[Job] = []
         latest = self.db.get_results([spec.id for spec in specs])
         for spec in static_order(specs):
-            deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            case: Job
+            deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+            job: Job
             if spec.id in latest:
-                # This case won't run, but it may be needed by dependents
+                # This job won't run, but it may be needed by dependents
                 mine = latest[spec.id]
                 space = ExecutionSpace(
                     root=self.sessions_dir / mine["session"],
                     path=Path(mine["workspace"]),
                     session=mine["session"],
                 )
-                case = Job(spec=spec, workspace=space, dependencies=deps)
-                case.status = mine["status"]
-                case.state = mine["state"]
-                case.timekeeper = mine["timekeeper"]
-                case.measurements = mine["measurements"]
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+                job.status = mine["status"]
+                job.state = mine["state"]
+                job.timekeeper = mine["timekeeper"]
+                job.measurements = mine["measurements"]
             else:
                 space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-                case = Job(spec=spec, workspace=space, dependencies=deps)
-            lookup[spec.id] = case
-            cases.append(case)
-        return cases
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+            lookup[spec.id] = job
+            jobs.append(job)
+        return jobs
 
     def get_selection(self, tag: str | None) -> list["JobSpec"]:
         if tag is None or tag == ":all:":
@@ -672,51 +680,51 @@ class Workspace:
         view: dict[str, tuple[str, str]] = {}
         to_remove: list[Job] = []
         for session in self.sessions():
-            for case in session.cases:
-                if case.id not in latest:
-                    latest[case.id] = case
-                elif mtime(latest[case.id].workspace.dir) > mtime(case.workspace.dir):
-                    to_remove.append(latest[case.id])
-                    latest[case.id] = case
+            for job in session.jobs:
+                if job.id not in latest:
+                    latest[job.id] = job
+                elif mtime(latest[job.id].workspace.dir) > mtime(job.workspace.dir):
+                    to_remove.append(latest[job.id])
+                    latest[job.id] = job
                 else:
                     continue
-                ws_dir = latest[case.id].workspace.dir
+                ws_dir = latest[job.id].workspace.dir
                 relpath = ws_dir.relative_to(session.work_dir)
-                view[case.id] = (str(session.work_dir), str(relpath))
+                view[job.id] = (str(session.work_dir), str(relpath))
         try:
-            for case in to_remove:
-                logger.info(f"gc: removing {case}::{case.workspace.dir}")
+            for job in to_remove:
+                logger.info(f"gc: removing {job}::{job.workspace.dir}")
                 if not dryrun:
-                    case.workspace.remove()
+                    job.workspace.remove()
         finally:
-            logger.info(f"Garbage collected {len(to_remove)} test cases")
+            logger.info(f"Garbage collected {len(to_remove)} test jobs")
             if not dryrun:
                 view_entries: dict[Path, list[Path]] = {}
                 for root, path in view.values():
                     view_entries.setdefault(Path(root), []).append(Path(path))
                 self.update_view(view_entries)
 
-    def find(self, *, case: str | None = None, spec: str | None = None) -> Any:
+    def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locate something in the workspace"""
-        assert not (case and spec)
-        if case is not None:
-            return self.find_testcase(case)
+        assert not (job and spec)
+        if job is not None:
+            return self.find_job(job)
         if spec is not None:
             return self.find_jobspec(spec)
 
-    def find_testcase(self, root: str) -> Job:
+    def find_job(self, root: str) -> Job:
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
                 return self.load_jobs([id])[0]
             except IndexError:
-                raise ValueError(f"{id}: no matching test case found in {self.root}")
+                raise ValueError(f"{id}: no matching test job found in {self.root}")
         # Do the full (slow) lookup
-        cases = self.load_jobs()
-        for case in cases:
-            if case.spec.matches(root):
-                return case
-        raise ValueError(f"{root}: no matching test case found in {self.root}")
+        jobs = self.load_jobs()
+        for job in jobs:
+            if job.spec.matches(root):
+                return job
+        raise ValueError(f"{root}: no matching test job found in {self.root}")
 
     def find_jobspec(self, root: str) -> "JobSpec":
         id = self.db.resolve_spec_id(root)

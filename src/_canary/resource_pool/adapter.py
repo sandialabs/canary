@@ -69,8 +69,8 @@ class ResourcePoolAdapter:
         response = self.curl("/types", method="GET")
         return response["types"]
 
-    def accommodates(self, case: Job) -> Outcome:
-        response = self.curl("/accommodates", data=case.required_resources())
+    def accommodates(self, job: Job) -> Outcome:
+        response = self.curl("/accommodates", data=job.required_resources())
         return Outcome(response["ok"], reason=response["reason"])
 
     def checkout(self, request: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:

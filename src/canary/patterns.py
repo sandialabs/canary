@@ -15,7 +15,7 @@ class ExecuteAndAnalyze:
     Args:
       test_fn: Function that executes the test
       verify_fn: Function that analyzes the parameterized test
-      analyze_fn: Function that executes the base case
+      analyze_fn: Function that executes the base job
 
     """
 
@@ -39,7 +39,7 @@ class ExecuteAndAnalyze:
             "--base",
             dest="analyze_composite_base",
             action="store_true",
-            help="Run a final composite base case's analyze function",
+            help="Run a final composite base job's analyze function",
         )
         group.add_argument(
             "--execute-analysis-sections",

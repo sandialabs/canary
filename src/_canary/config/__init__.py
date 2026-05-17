@@ -27,7 +27,7 @@ class _resource_pool_attr_error:
             repl = f"config.pluginmanger.canary_resource_pool_{name}"
         else:
             repl = f"a plugin call that can return the pool's {name!r} attribute"
-        f.write(f"In this case, replace config.resource_pool.{name} with {repl}.")
+        f.write(f"In this job, replace config.resource_pool.{name} with {repl}.")
         raise AttributeError(f.getvalue().strip()) from None
 
 

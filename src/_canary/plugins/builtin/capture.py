@@ -42,34 +42,34 @@ def show_capture(session: "Session") -> None:
     what = config.getoption("show_capture")
     if what in ("no", None):
         return
-    cases = session.cases
-    failed = [case for case in cases if case.status.is_failure()]
+    jobs = session.jobs
+    failed = [job for job in jobs if job.status.is_failure()]
     if failed:
         _, width = terminal_size()
         string = f" {len(failed)} Test failures ".center(width, "=")
         rich.print(f"[bold red]{string}[/bold red]", end="\n\n")
-        for case in failed:
-            _show_capture(case, what=what)
+        for job in failed:
+            _show_capture(job, what=what)
 
 
-def _show_capture(case: "Job", what="oe") -> None:
+def _show_capture(job: "Job", what="oe") -> None:
     _, width = terminal_size()
     fp = io.StringIO()
     fp.write("-" * width)
-    fp.write(f"[bold]Status[/bold]: {case.status.display_name(style='rich')}\n")
-    fp.write(f"[bold]Execution directory[/bold]: {case.workspace.dir}\n")
-    command = case.get_attribute("command")
+    fp.write(f"[bold]Status[/bold]: {job.status.display_name(style='rich')}\n")
+    fp.write(f"[bold]Execution directory[/bold]: {job.workspace.dir}\n")
+    command = job.get_attribute("command")
     fp.write(f"[bold]Command[/bold]: {command}\n")
-    if what in ("o", "oe") and case.stdout:
-        file = case.workspace.joinpath(case.stdout)
+    if what in ("o", "oe") and job.stdout:
+        file = job.workspace.joinpath(job.stdout)
         if os.path.exists(file):
             with open(file) as fh:
                 stdout = fh.read().strip()
             if stdout:
                 fp.write("[bold]stdout[/bold]\n")
                 fp.write(indent(stdout, "  ") + "\n")
-    if what in ("e", "oe") and case.stderr:
-        file = case.workspace.joinpath(case.stderr)
+    if what in ("e", "oe") and job.stderr:
+        file = job.workspace.joinpath(job.stderr)
         if os.path.exists(file):
             with open(file) as fh:
                 stderr = fh.read().strip()

@@ -90,7 +90,7 @@ class monkeypatch:
 
     .. versionchanged:: 6.2
         Can now also be used directly as `monkeypatch()`, for when
-        the fixture is not available. In this case, use
+        the fixture is not available. In this job, use
         :meth:`with monkeypatch.context() as mp: <context>` or remember to call
         :meth:`undo` explicitly.
     """
@@ -322,7 +322,7 @@ class monkeypatch:
         # invalidate its import caches.
         # This is especially important when any namespace package is in use,
         # since then the mtime based FileFinder cache (that gets created in
-        # this case already) gets not invalidated when writing the new files
+        # this job already) gets not invalidated when writing the new files
         # quickly afterwards.
         from importlib import invalidate_caches
 

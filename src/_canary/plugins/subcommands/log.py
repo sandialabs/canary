@@ -25,7 +25,7 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class Log(CanarySubcommand):
     name = "log"
-    description = "Show the session or a test case's log file"
+    description = "Show the session or a job's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.add_argument(
@@ -47,13 +47,13 @@ class Log(CanarySubcommand):
             help="Test name or TEST_ID.  If not given, the session log will be shown",
         )
 
-    def get_logfile(self, case: "Job", args: argparse.Namespace) -> Path | None:
+    def get_logfile(self, job: "Job", args: argparse.Namespace) -> Path | None:
         if args.error:
-            if case.stderr is None:
+            if job.stderr is None:
                 return None
-            return case.workspace.joinpath(case.stderr)
+            return job.workspace.joinpath(job.stderr)
         else:
-            return case.workspace.joinpath(case.stdout)
+            return job.workspace.joinpath(job.stdout)
 
     def execute(self, args: argparse.Namespace) -> int:
         workspace = Workspace.load()
@@ -70,8 +70,8 @@ class Log(CanarySubcommand):
                 return 0
             raise ValueError(f"no log file found in {workspace.root}")
 
-        case = workspace.find(case=args.testspec)
-        f = self.get_logfile(case, args)
+        job = workspace.find(job=args.testspec)
+        f = self.get_logfile(job, args)
         if f:
             display_file(f)
         return 0

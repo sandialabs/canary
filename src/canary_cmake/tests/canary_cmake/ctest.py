@@ -24,12 +24,12 @@ from canary_cmake.ctest import setup_ctest
 class JobRunner:
     """Class for running ``BaseJob``."""
 
-    def __call__(self, case):
+    def __call__(self, job):
         try:
-            canary.config.pluginmanager.hook.canary_runteststart(case=case)
-            canary.config.pluginmanager.hook.canary_runtest(case=case)
+            canary.config.pluginmanager.hook.canary_runteststart(case=job)
+            canary.config.pluginmanager.hook.canary_runtest(case=job)
         finally:
-            canary.config.pluginmanager.hook.canary_runtest_finish(case=case)
+            canary.config.pluginmanager.hook.canary_runtest_finish(case=job)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -121,10 +121,10 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.Job(spec=spec, workspace=workspace)
-            runner(case)
-            assert case.status.is_failure()
-            assert case.status.has_code(65)
+            job = tc.Job(spec=spec, workspace=workspace)
+            runner(job)
+            assert job.status.is_failure()
+            assert job.status.has_code(65)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -146,9 +146,9 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.Job(spec=spec, workspace=workspace)
-            runner(case)
-            assert case.status.is_skipped()
+            job = tc.Job(spec=spec, workspace=workspace)
+            runner(job)
+            assert job.status.is_skipped()
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -170,10 +170,10 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.Job(spec=spec, workspace=workspace)
-            runner(case)
-        assert case.status.is_success()
-        assert case.status.code == 0
+            job = tc.Job(spec=spec, workspace=workspace)
+            runner(job)
+        assert job.status.is_success()
+        assert job.status.code == 0
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -297,18 +297,18 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [spec] = file.lock()
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            case = tc.Job(spec=spec, workspace=workspace)
-            check = pool.accommodates(case.required_resources())
+            job = tc.Job(spec=spec, workspace=workspace)
+            check = pool.accommodates(job.required_resources())
             if not check:
                 raise ValueError(check.reason)
-            resources = pool.checkout(case.required_resources())
-            case.assign_resources(resources)
-            setup_ctest(case)
-            assert case.variables["CTEST_RESOURCE_GROUP_COUNT"] == "3"
-            assert case.variables["CTEST_RESOURCE_GROUP_0"] == "gpus"
-            assert case.variables["CTEST_RESOURCE_GROUP_1"] == "gpus"
-            assert case.variables["CTEST_RESOURCE_GROUP_2"] == "crypto_chips,gpus"
-            assert case.variables["CTEST_RESOURCE_GROUP_0_GPUS"] == "id:0,slots:2"
-            assert case.variables["CTEST_RESOURCE_GROUP_1_GPUS"] == "id:2,slots:2"
-            assert case.variables["CTEST_RESOURCE_GROUP_2_GPUS"] == "id:1,slots:4;id:3,slots:1"
-            assert case.variables["CTEST_RESOURCE_GROUP_2_CRYPTO_CHIPS"] == "id:card0,slots:2"
+            resources = pool.checkout(job.required_resources())
+            job.assign_resources(resources)
+            setup_ctest(job)
+            assert job.variables["CTEST_RESOURCE_GROUP_COUNT"] == "3"
+            assert job.variables["CTEST_RESOURCE_GROUP_0"] == "gpus"
+            assert job.variables["CTEST_RESOURCE_GROUP_1"] == "gpus"
+            assert job.variables["CTEST_RESOURCE_GROUP_2"] == "crypto_chips,gpus"
+            assert job.variables["CTEST_RESOURCE_GROUP_0_GPUS"] == "id:0,slots:2"
+            assert job.variables["CTEST_RESOURCE_GROUP_1_GPUS"] == "id:2,slots:2"
+            assert job.variables["CTEST_RESOURCE_GROUP_2_GPUS"] == "id:1,slots:4;id:3,slots:1"
+            assert job.variables["CTEST_RESOURCE_GROUP_2_CRYPTO_CHIPS"] == "id:card0,slots:2"

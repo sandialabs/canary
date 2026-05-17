@@ -10,7 +10,7 @@ index_type = tuple[int, ...] | int
 
 
 class Parameters:
-    """Store parameters for a single test instance (case)
+    """Store parameters for a single test instance (job)
 
     Examples:
 
@@ -114,7 +114,7 @@ class Parameters:
 
 
 class MultiParameters(Parameters):
-    """Store parameters for a single test instance (case)
+    """Store parameters for a single test instance (job)
 
     Examples:
 

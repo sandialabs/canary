@@ -51,11 +51,11 @@ def test_keywords_filters_and_flatten_unique(tmp_path: Path) -> None:
     gen.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
 
     specs = gen.lock(on_options=["opt"])
-    case = [s for s in specs if s.family == "a" and s.parameters.get("p") == 2][0]
-    assert case.keywords == ["fast", "regression", "nightly", "only_a", "p2", "opt"]
+    job = [s for s in specs if s.family == "a" and s.parameters.get("p") == 2][0]
+    assert job.keywords == ["fast", "regression", "nightly", "only_a", "p2", "opt"]
 
-    case2 = [s for s in specs if s.family == "a" and s.parameters.get("p") == 1][0]
-    assert case2.keywords == ["fast", "regression", "nightly", "only_a", "opt"]
+    job2 = [s for s in specs if s.family == "a" and s.parameters.get("p") == 1][0]
+    assert job2.keywords == ["fast", "regression", "nightly", "only_a", "opt"]
 
 
 def test_timeout_last_wins(tmp_path: Path) -> None:

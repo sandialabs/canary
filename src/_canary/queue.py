@@ -168,12 +168,12 @@ class ResourceQueue:
         except Exception:
             logger.exception(f"Failed to mark {job.id[:7]} as done")
 
-    def cases(self) -> list[BaseJob]:
+    def jobs(self) -> list[BaseJob]:
         """Return all jobs in queue, busy, and finished."""
-        cases = [slot.job for slot in self._heap]
-        cases.extend(self._busy.values())
-        cases.extend(self._finished.values())
-        return cases
+        jobs = [slot.job for slot in self._heap]
+        jobs.extend(self._busy.values())
+        jobs.extend(self._finished.values())
+        return jobs
 
     def pending(self) -> list[BaseJob]:
         return [slot.job for slot in self._heap]

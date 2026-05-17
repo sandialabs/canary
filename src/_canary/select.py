@@ -265,12 +265,12 @@ class Selector:
 
 
 class RuntimeSelector:
-    """Apply rule-based masking to a set of test cases."""
+    """Apply rule-based masking to a set of test jobs."""
 
     def __init__(
-        self, cases: list["Job"], workspace: Path, rules: Iterable[RuntimeRule] = ()
+        self, jobs: list["Job"], workspace: Path, rules: Iterable[RuntimeRule] = ()
     ) -> None:
-        self.cases = cases
+        self.jobs = jobs
         self.workspace = workspace
         self.rules: list[RuntimeRule] = list(rules)
         self.masked: set[str] = set()
@@ -285,41 +285,41 @@ class RuntimeSelector:
 
     def run(self) -> None:
         self.masked.clear()
-        pm = logger.progress_monitor("[bold]Selecting[/] test cases based on runtime environment")
+        pm = logger.progress_monitor("[bold]Selecting[/] test jobs based on runtime environment")
         config.pluginmanager.hook.canary_rtselectstart(selector=self)
-        for case in self.cases:
-            if case.mask:
+        for job in self.jobs:
+            if job.mask:
                 continue
             for rule in self.iter_rules():
-                outcome = rule(case)
+                outcome = rule(job)
                 if not outcome:
-                    case.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
-                    self.masked.add(case.id)
+                    job.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
+                    self.masked.add(job.id)
                     break
         config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
         self.propagate()
-        for case in self.cases:
-            if not case.mask:
-                case.state.phase = JobPhase.PENDING
-                case.timekeeper.reset()
-                case.measurements.reset()
+        for job in self.jobs:
+            if not job.mask:
+                job.state.phase = JobPhase.PENDING
+                job.timekeeper.reset()
+                job.measurements.reset()
         pm.done()
         config.pluginmanager.hook.canary_rtselect_report(selector=self)
         return
 
     def propagate(self) -> None:
         # Propagate skipped/broken tests
-        queue = deque([c for c in self.cases if c.mask and c.is_runnable()])
-        case_map: dict[str, "Job"] = {case.id: case for case in self.cases}
+        queue = deque([c for c in self.jobs if c.mask and c.is_runnable()])
+        job_map: dict[str, "Job"] = {job.id: job for job in self.jobs}
         # Precompute reverse graph
-        dependents: dict[str, list[str]] = {case.id: [] for case in self.cases}
-        for case in self.cases:
-            for dep in case.spec.dependencies:
-                dependents.setdefault(dep.spec.id, []).append(case.id)
+        dependents: dict[str, list[str]] = {job.id: [] for job in self.jobs}
+        for job in self.jobs:
+            for dep in job.spec.dependencies:
+                dependents.setdefault(dep.spec.id, []).append(job.id)
         while queue:
             excluded = queue.popleft()
             for child_id in dependents[excluded.id]:
-                child = case_map[child_id]
+                child = job_map[child_id]
                 if not child.mask:
                     child.mask = Mask.masked(reason="One or more dependencies do not have results")
                     queue.append(child)
@@ -393,15 +393,15 @@ def canary_select_report(selector: "Selector") -> None:
 def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     if not selector.masked:
         return
-    excluded: list["Job"] = [case for case in selector.cases if case.id in selector.masked]
+    excluded: list["Job"] = [job for job in selector.jobs if job.id in selector.masked]
     n = len(selector.masked)
     if excluded:
         n = len(excluded)
         reasons: dict[str | None, list["Job"]] = {}
-        for case in excluded:
-            reasons.setdefault(case.mask.reason, []).append(case)
+        for job in excluded:
+            reasons.setdefault(job.mask.reason, []).append(job)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
-        logger.info("[bold]Excluded[/] %d test cases" % n)
+        logger.info("[bold]Excluded[/] %d test jobs" % n)
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)
         table.add_column("Reason", no_wrap=False)
         table.add_column("Count", no_wrap=True, ratio=2, justify="right")

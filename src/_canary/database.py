@@ -341,31 +341,31 @@ class WorkspaceDatabase:
         return rows
 
     @staticmethod
-    def format_single_result(case: "Job") -> tuple[Any, ...]:
+    def format_single_result(job: "Job") -> tuple[Any, ...]:
         row = (
-            case.id,
-            case.spec.name,
-            case.spec.fullname,
-            str(case.spec.file_root),
-            str(case.spec.file_path),
-            str(case.workspace.session),
-            str(case.workspace.path),
-            case.state.phase.value,
-            case.status.category,
-            case.status.outcome,
-            case.status.reason or "",
-            case.status.code,
-            case.timekeeper.submitted,
-            case.timekeeper.started,
-            case.timekeeper.finished,
-            json.dumps_min(case.measurements),
+            job.id,
+            job.spec.name,
+            job.spec.fullname,
+            str(job.spec.file_root),
+            str(job.spec.file_path),
+            str(job.workspace.session),
+            str(job.workspace.path),
+            job.state.phase.value,
+            job.status.category,
+            job.status.outcome,
+            job.status.reason or "",
+            job.status.code,
+            job.timekeeper.submitted,
+            job.timekeeper.started,
+            job.timekeeper.finished,
+            json.dumps_min(job.measurements),
         )
         return row
 
-    def put_result(self, case: "Job") -> None:
-        return self.put_results(case)
+    def put_result(self, job: "Job") -> None:
+        return self.put_results(job)
 
-    def put_results(self, *cases: "Job") -> None:
+    def put_results(self, *jobs: "Job") -> None:
         """Store results in the DB.
 
         Since canary uses hierarchical parallelism, this function can be called by many independent
@@ -377,7 +377,7 @@ class WorkspaceDatabase:
 
         """
 
-        rows = [self.format_single_result(case) for case in cases]
+        rows = [self.format_single_result(job) for job in jobs]
         sql = """
         INSERT OR REPLACE INTO results (
           spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,

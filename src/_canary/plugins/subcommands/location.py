@@ -67,13 +67,13 @@ If no options are give, -x is assumed."""
             spec: JobSpec = workspace.find(spec=args.testspec)
             f = spec.file if args.show_input else spec.file.parent
         else:
-            case: Job = workspace.find(case=args.testspec)
+            job: Job = workspace.find(job=args.testspec)
             if args.show_log:
-                f = case.workspace.joinpath(case.stdout)
+                f = job.workspace.joinpath(job.stdout)
             else:
-                if workspace.view and (workspace.view / case.workspace.path).exists():
-                    f = workspace.view / case.workspace.path
+                if workspace.view and (workspace.view / job.workspace.path).exists():
+                    f = workspace.view / job.workspace.path
                 else:
-                    f = case.workspace.dir
+                    f = job.workspace.dir
         print(f)
         return 0

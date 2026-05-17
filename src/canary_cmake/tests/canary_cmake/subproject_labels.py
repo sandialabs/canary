@@ -26,7 +26,7 @@ def test_cdash_subproject_label(tmpdir):
     """Test the plugin 'canary_cdash_subroject_label'
 
     This plugin allows tests to define their CDash subproject label.  If the subproject label is
-    not included in the test case's keywords, it is added
+    not included in the job's keywords, it is added
 
     """
     with working_dir(tmpdir.strpath, create=True):
@@ -91,7 +91,7 @@ def setup_cdash_subproject_label():
     """Test the plugin 'canary_cdash_subroject_label'
 
     This plugin allows tests to define their CDash subproject label.  If the subproject label is
-    not included in the test case's keywords, it is added
+    not included in the job's keywords, it is added
 
     """
     mkdirp("baz")

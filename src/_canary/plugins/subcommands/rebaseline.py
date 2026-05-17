@@ -46,29 +46,29 @@ class Rebaseline(CanarySubcommand):
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
             raise ValueError("At least one filtering criteria required")
         workspace = Workspace.load()
-        cases: list[Job]
+        jobs: list[Job]
         if args.start:
             specs = workspace.select_from_view(path=Path(args.start))
-            cases = workspace.load_jobs(ids=[spec.id for spec in specs])
+            jobs = workspace.load_jobs(ids=[spec.id for spec in specs])
         else:
-            cases = workspace.load_jobs(args.case_specs)
+            jobs = workspace.load_jobs(args.job_specs)
         if args.keyword_exprs:
-            cases = filter_cases_by_keyword(cases, args.keyword_exprs)
-        for case in cases:
-            case.do_baseline()
+            jobs = filter_cases_by_keyword(jobs, args.keyword_exprs)
+        for job in jobs:
+            job.do_baseline()
         return 0
 
 
-def filter_cases_by_keyword(cases: list["Job"], keyword_exprs: list[str]) -> list["Job"]:
+def filter_cases_by_keyword(jobs: list["Job"], keyword_exprs: list[str]) -> list["Job"]:
     masks: dict[str, bool] = {}
-    for case in cases:
-        kwds = set(case.spec.keywords)
-        kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
+    for job in jobs:
+        kwds = set(job.spec.keywords)
+        kwds.update(job.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
         kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
         if not kwd_all:
             for keyword_expr in keyword_exprs:
                 match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                 if not match:
-                    masks[case.id] = True
+                    masks[job.id] = True
                     break
-    return [case for case in cases if not masks.get(case.id)]
+    return [job for job in jobs if not masks.get(job.id)]

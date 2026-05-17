@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 
 class CanaryConductor:
-    """Defines plugin implementations for executing test cases"""
+    """Defines plugin implementations for executing job"""
 
     def __init__(self) -> None:
         self._rpool: "ResourcePool | None" = None
@@ -69,10 +69,10 @@ class CanaryConductor:
 
     @hookimpl(trylast=True)
     def canary_runtests(self, runner: "Runner") -> bool:
-        """Run each test case in ``cases``.
+        """Run each test jobs in ``jobs``.
 
         Args:
-        jobs: test cases to run
+        jobs: test jobs to run
 
         Returns:
         The session returncode (0 for success)
@@ -83,7 +83,7 @@ class CanaryConductor:
         try:
             rpool = self.get_rpool()
             queue = ResourceQueue(lock=global_lock, resource_pool=rpool)
-            queue.put(*runner.cases)  # type: ignore
+            queue.put(*runner.jobs)  # type: ignore
             queue.prepare()
         except Exception:
             logger.exception("Unable to create resource queue")
@@ -99,16 +99,16 @@ class CanaryConductor:
 class JobExecutor:
     """Class for running ``AbstractJob``."""
 
-    def __call__(self, case: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
+    def __call__(self, job: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
         try:
             now = time.time()
             queue.put({"event": "job_submitted", "timestamp": now})
-            case.timekeeper.submitted = now
-            config.pluginmanager.hook.canary_runteststart(case=case)
+            job.timekeeper.submitted = now
+            config.pluginmanager.hook.canary_runteststart(case=job)
             now = time.time()
             queue.put({"event": "job_started", "timestamp": now})
-            case.timekeeper.started = now
-            config.pluginmanager.hook.canary_runtest(case=case)
-            case.timekeeper.finished = time.time()
+            job.timekeeper.started = now
+            config.pluginmanager.hook.canary_runtest(case=job)
+            job.timekeeper.finished = time.time()
         finally:
-            config.pluginmanager.hook.canary_runtest_finish(case=case)
+            config.pluginmanager.hook.canary_runtest_finish(case=job)

@@ -472,7 +472,7 @@ pathspec syntax:
 
   examples:
     canary run path                        scan path for tests to run
-    canary run 7yral9i                     rerun test case with hash 7yral9i
+    canary run 7yral9i                     rerun test job with hash 7yral9i
 
   script arguments:
     Any argument following the %(sep)s separator is passed directly to each test script's command line.

@@ -26,12 +26,12 @@ class Edit(CanarySubcommand):
     description = "open test files in $EDITOR"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.add_argument("testspec", help="Test file or test case spec")
+        parser.add_argument("testspec", help="Job file or job spec")
 
     def execute(self, args: argparse.Namespace) -> int:
         file = find_file(args.testspec)
         if file is None:
-            print(f"{args.testspec}: no matching generator or test case found in {os.getcwd()}")
+            print(f"{args.testspec}: no matching generator or job found in {os.getcwd()}")
             return 1
         editor(file)
         return 0

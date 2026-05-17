@@ -19,18 +19,18 @@ logger = canary.get_logger(__name__)
 
 
 class CanaryHPCExecutor:
-    def __init__(self, *, workspace: str, backend: str, case: str | None = None) -> None:
+    def __init__(self, *, workspace: str, backend: str, job: str | None = None) -> None:
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         cfg = TestBatch.loadconfig(workspace)
         self.session: str = cfg["session"]
         self.batch: str = cfg["id"]
         assert workspace == cfg["workspace"]
         self.workspace = Path(cfg["workspace"])
-        self.cases: list[str] = []
-        if case is not None:
-            self.cases.append(case)
+        self.jobs: list[str] = []
+        if job is not None:
+            self.jobs.append(job)
         else:
-            self.cases.extend(cfg["cases"])
+            self.jobs.extend(cfg["jobs"])
         if "CANARY_BATCH_ID" not in os.environ:
             os.environ["CANARY_BATCH_ID"] = self.batch
         elif self.batch != os.environ["CANARY_BATCH_ID"]:
@@ -40,13 +40,13 @@ class CanaryHPCExecutor:
         pluginmanager.register(self, "canary_hpc_executor")
 
     def run(self, args: argparse.Namespace) -> int:
-        n = len(self.cases)
+        n = len(self.jobs)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load()
         f = workspace.logs_dir / f"canary.{self.batch[:7]}.log"
         h = canary.logging.json_file_handler(f)
         canary.logging.add_handler(h)
-        specs = workspace.db.load_specs(ids=self.cases, include_upstreams=True)
+        specs = workspace.db.load_specs(ids=self.jobs, include_upstreams=True)
         self.modify_specs(specs)
         session = workspace.run(specs, session=self.session, update_view=False, only="all")
         return session.returncode
@@ -74,8 +74,8 @@ class CanaryHPCExecutor:
         resource_types = self.backend.resource_types()
         counts: dict[str, int] = {canonical_name(rtype): cpn(rtype) for rtype in resource_types}
         for spec in specs:
-            if spec.id not in self.cases:
-                spec.mask = canary.Mask(True, reason=f"Case not in batch {self.batch}")
+            if spec.id not in self.jobs:
+                spec.mask = canary.Mask(True, reason=f"Job not in batch {self.batch}")
             params = spec.parameters | spec.meta_parameters
             if node_count := params.get("nodes"):
                 for rtype, count in counts.items():
@@ -89,7 +89,7 @@ class CanaryHPCExecutor:
         parser.add_argument(
             "--backend", dest="canary_hpc_backend", help="The HPC connect backend name"
         )
-        parser.add_argument("--case", dest="canary_hpc_case", help="Run only this case")
+        parser.add_argument("--job", dest="canary_hpc_case", help="Run only this job")
         parser.add_argument(
             "--workspace", dest="canary_hpc_workspace", help="The batch's workspace", required=True
         )

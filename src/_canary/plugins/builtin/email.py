@@ -49,9 +49,9 @@ def canary_sessionfinish(session: "Session") -> None:
 
 def generate_html_report(session: "Session") -> str:
     totals: dict[str, list["Job"]] = {}
-    for case in session.cases:
-        group = case.status.category.title()
-        totals.setdefault(group, []).append(case)
+    for job in session.jobs:
+        group = job.status.category.title()
+        totals.setdefault(group, []).append(job)
     file = io.StringIO()
     file.write("<html><head><style>\n")
     file.write("table{font-family:arial,sans-serif;border-collapse:collapse;}\n")
@@ -61,12 +61,12 @@ def generate_html_report(session: "Session") -> str:
     file.write("</style>")
     file.write("<body>\n<h1>Canary test summary</h1>\n<table>\n")
     file.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
-    for group, cases in totals.items():
-        for case in sorted(cases, key=lambda c: c.timekeeper.duration()):
+    for group, jobs in totals.items():
+        for job in sorted(jobs, key=lambda c: c.timekeeper.duration()):
             file.write(
-                f"<tr><td>{case.display_name()}</td>"
-                f"<td>{case.timekeeper.duration():.2f}</td>"
-                f"<td>{case.status.display_name(style='html')}</td></tr>\n"
+                f"<tr><td>{job.display_name()}</td>"
+                f"<td>{job.timekeeper.duration():.2f}</td>"
+                f"<td>{job.status.display_name(style='html')}</td></tr>\n"
             )
     file.write("</table>\n</body>\n</html>")
     return file.getvalue()

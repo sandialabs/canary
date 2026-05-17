@@ -90,29 +90,29 @@ def repeat_until_fail(case: "Job") -> None:
         )
 
 
-def rerun_case(case: "Job", attempt: int) -> None:
+def rerun_case(job: "Job", attempt: int) -> None:
     try:
-        case.restore_workspace()
-        if summary := job_start_summary(case):
+        job.restore_workspace()
+        if summary := job_start_summary(job):
             logger.debug(summary)
-        case.setup()
-        case.run()
+        job.setup()
+        job.run()
     finally:
-        if summary := job_finish_summary(case, attempt=attempt):
+        if summary := job_finish_summary(job, attempt=attempt):
             logger.debug(summary)
 
 
-def job_start_summary(case: "Job") -> str:
+def job_start_summary(job: "Job") -> str:
     if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
     if os.getenv("GITLAB_CI"):
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-    fmt.write("[bold]Repeating[/] %s: %s" % (case.id[:7], case.display_name(resolve=True)))
+    fmt.write("[bold]Repeating[/] %s: %s" % (job.id[:7], job.display_name(resolve=True)))
     return fmt.getvalue().strip()
 
 
-def job_finish_summary(case: "Job", *, attempt: int) -> str:
+def job_finish_summary(job: "Job", *, attempt: int) -> str:
     if logging.get_level() > logging.INFO:
         return ""
     fmt = io.StringIO()
@@ -120,6 +120,6 @@ def job_finish_summary(case: "Job", *, attempt: int) -> str:
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     fmt.write(
         f"[bold]Finished[/] %s (attempt {attempt + 1}): %s %s"
-        % (case.id[:7], case.display_name(resolve=True), case.status.display_name())
+        % (job.id[:7], job.display_name(resolve=True), job.status.display_name())
     )
     return fmt.getvalue().strip()

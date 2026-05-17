@@ -27,11 +27,11 @@ class ResourceQueue(queue.ResourceQueue):
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
 
-    def cases(self) -> list[BaseJob]:
-        cases: list[BaseJob] = [case for slot in self._heap for case in slot.job]  # type: ignore
-        cases.extend([case for batch in self._busy.values() for case in batch])
-        cases.extend([case for batch in self._finished.values() for case in batch])
-        return cases
+    def jobs(self) -> list[BaseJob]:
+        jobs: list[BaseJob] = [job for slot in self._heap for job in slot.job]  # type: ignore
+        jobs.extend([job for batch in self._busy.values() for job in batch])
+        jobs.extend([job for batch in self._finished.values() for job in batch])
+        return jobs
 
     def status(self, start: float | None = None) -> str:
 
@@ -49,11 +49,11 @@ class ResourceQueue(queue.ResourceQueue):
             pending = sum([len(_.job) for _ in self._heap])  # type: ignore
             total = done + busy + pending
             totals: Counter[key_type] = Counter()
-            case: canary.Job
+            job: canary.Job
             for batch in self._finished.values():
-                for case in batch:
-                    if case.state.is_done():
-                        key = (case.status.category, case.status.outcome)
+                for job in batch:
+                    if job.state.is_done():
+                        key = (job.status.category, job.status.outcome)
                         totals[key] += 1
             row: list[str] = []
             if busy:

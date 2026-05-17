@@ -41,7 +41,7 @@ class CanaryHPCSchedulerArgs(argparse.Action):
 
 
 class CanaryHPCBatchExec(argparse.Action):
-    "Arguments to determine how to partition test cases"
+    "Arguments to determine how to partition test jobs"
 
     def __call__(self, parser, namespace, value, option_string=None):
         spec = self.parse(strip_quotes(value))
@@ -55,8 +55,8 @@ class CanaryHPCBatchExec(argparse.Action):
                 spec["backend"] = match.group(1)
             elif match := re.search(r"^batch[:=](.*)$", arg.lower()):
                 spec["batch"] = match.group(1)
-            elif match := re.search(r"^case[:=](.*)$", arg.lower()):
-                spec["case"] = match.group(1)
+            elif match := re.search(r"^job[:=](.*)$", arg.lower()):
+                spec["job"] = match.group(1)
         if "backend" not in spec:
             raise ValueError("Batch exec spec missing required key 'backend'")
         if "batch" not in spec:
@@ -105,7 +105,7 @@ class CanaryHPCBatchSpec(argparse.Action):
         description = """\
     Batch specification syntax
 
-    A batch spec controls how Canary HPC groups test cases into batches.
+    A batch spec controls how Canary HPC groups test jobs into batches.
 
     Syntax:
         option=value[,option=value...]
@@ -125,10 +125,10 @@ class CanaryHPCBatchSpec(argparse.Action):
               (Setting duration implies count=auto.)
 
           count=max
-              One test case per batch (maximum number of batches).
+              One test job per batch (maximum number of batches).
 
           count=N
-              N is [0-9]+. Partition test cases into at most N batches.
+              N is [0-9]+. Partition test jobs into at most N batches.
 
       duration
           Target approximate runtime per batch. Implies count=auto.
@@ -143,21 +143,21 @@ class CanaryHPCBatchSpec(argparse.Action):
           Controls dependency rules within and between batches.
 
           layout=flat (default)
-              Test cases within a batch do NOT depend on each other.
+              Jobs within a batch do NOT depend on each other.
               Batches MAY depend on other batches.
 
           layout=atomic
-              Test cases within a batch MAY depend on each other.
+              Jobs within a batch MAY depend on each other.
               Batches do NOT depend on other batches (each batch is independent).
 
       nodes
           Controls whether tests in a batch must request the same node count.
 
           nodes=same (default)
-              All test cases in a batch require the same number of nodes.
+              All test jobs in a batch require the same number of nodes.
 
           nodes=any
-              Test cases within a batch may require different numbers of nodes.
+              Jobs within a batch may require different numbers of nodes.
 
     Examples:
 
@@ -172,11 +172,11 @@ class CanaryHPCBatchSpec(argparse.Action):
 
       3) One test per batch
           count=max
-              Run each test case in its own batch.
+              Run each job in its own batch.
 
       4) Limit the number of batches
           count=4
-              Partition test cases into at most 4 batches.
+              Partition jobs into at most 4 batches.
 
       5) Allow mixed node counts within a batch
           nodes=any,duration=30m

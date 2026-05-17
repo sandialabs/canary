@@ -523,7 +523,7 @@ class ResourceQueueExecutor:
                     self._check_for_leaks()
                     raise
 
-        return compute_returncode(self.queue.cases())
+        return compute_returncode(self.queue.jobs())
 
     def notify_listeners(self, event: EventTypes, *args: Any) -> None:
         for cb in self.listeners:
@@ -864,28 +864,28 @@ class Reporter:
 
     def final_table(self) -> Group:
         xtor = self.executor
-        cases = xtor.queue.cases()
+        jobs = xtor.queue.jobs()
         text = xtor.queue.status(start=xtor.started_on)
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
         table = Table(expand=False, box=box.SQUARE)
         self.add_table_columns(table, self.final_columns)
-        for case in cases:
-            if case.status.is_success():
+        for job in jobs:
+            if job.status.is_success():
                 continue
             self.add_table_row(
                 table,
                 self.final_columns,
-                job=case.display_name(style="rich", resolve=self.namefmt == "long"),
-                id=case.id[:7],
-                status=case.status.display_name(style="rich"),
-                elapsed=fmt_secs(case.timekeeper.duration()),
-                queued=fmt_secs(case.timekeeper.queued()),
-                details=case.status.reason or "",
+                job=job.display_name(style="rich", resolve=self.namefmt == "long"),
+                id=job.id[:7],
+                status=job.status.display_name(style="rich"),
+                elapsed=fmt_secs(job.timekeeper.duration()),
+                queued=fmt_secs(job.timekeeper.queued()),
+                details=job.status.reason or "",
             )
         if not table.row_count:
-            n = len(cases)
+            n = len(jobs)
             return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
         return Group(table, footer)
 

@@ -33,7 +33,7 @@ class GitLabMRReporter(canary.CanaryReporter):
         access_token = kwargs["access_token"]
         cdash_url = kwargs["cdash_url"]
         mr = MergeRequest(access_token=access_token)
-        failed = group_failed_tests(workspace.load_jobs())
+        failed = group_failed_jobs(workspace.load_jobs())
         if failed:
             mr.report_failed(failed, cdash_build_url=cdash_url)
         else:
@@ -86,8 +86,8 @@ class MergeRequest:
             fp.write(f"{sec}\n\n")
         fp.write("| Test | Status |\n| --- | --- |\n")
         for stat in failed_cases:
-            for case in failed_cases[stat]:
-                fp.write(f"| {case} | {stat} |\n")
+            for job in failed_cases[stat]:
+                fp.write(f"| {job} | {stat} |\n")
         fp.write("\n")
         if num_failed > detail_threshold:
             fp.write("</details>\n\n")
@@ -107,11 +107,11 @@ class MergeRequest:
         self.add_note(note)
 
 
-def group_failed_tests(cases: list["canary.Job"]):
+def group_failed_jobs(jobs: list["canary.Job"]):
     failed: dict[str, list["canary.Job"]] = {}
-    for case in cases:
-        if not case.status.is_success():
-            failed.setdefault(case.status.outcome.name, []).append(case)
+    for job in jobs:
+        if not job.status.is_success():
+            failed.setdefault(job.status.outcome.name, []).append(job)
     return failed
 
 

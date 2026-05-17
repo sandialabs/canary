@@ -37,7 +37,7 @@ logger = canary.get_logger(__name__)
 @dataclasses.dataclass
 class BatchSpec:
     layout: str
-    cases: list[canary.Job]
+    jobs: list[canary.Job]
     dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
@@ -47,23 +47,23 @@ class BatchSpec:
     def __post_init__(self) -> None:
         import uuid
 
-        self.id = str(uuid.uuid4())  # hashit(",".join(case.id for case in self.cases), length=20)
-        self.session = cast(str, self.cases[0].workspace.session)
+        self.id = str(uuid.uuid4())  # hashit(",".join(job.id for job in self.jobs), length=20)
+        self.session = cast(str, self.jobs[0].workspace.session)
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
         self.rparameters = {"cpus": 1, "gpus": 0}
 
     def __len__(self) -> int:
-        return len(self.cases)
+        return len(self.jobs)
 
     def required_resources(self) -> list[dict[str, Any]]:
         return [{"type": "cpus", "slots": 1}]
 
 
 class TestBatch(BaseJob):
-    """A batch of test cases
+    """A batch of jobs
 
     Args:
-      cases: The list of test cases in this batch
+      jobs: The list of jobs in this batch
 
     """
 
@@ -76,8 +76,8 @@ class TestBatch(BaseJob):
     ) -> None:
         super().__init__()
         self.spec = spec
-        self.cases = spec.cases
-        self.status: BatchStatus = BatchStatus(self.cases)
+        self.jobs = spec.jobs
+        self.status: BatchStatus = BatchStatus(self.jobs)
         self.session = self.spec.session
         self.workspace = workspace
         self.lockfile = self.workspace.joinpath("batch.lock")
@@ -92,10 +92,10 @@ class TestBatch(BaseJob):
         self.backend_supports_dependencies = backend_supports_dependencies
 
     def __iter__(self):
-        return iter(self.cases)
+        return iter(self.jobs)
 
     def __len__(self) -> int:
-        return len(self.cases)
+        return len(self.jobs)
 
     def __str__(self) -> str:
         p = [f"id={self.id[:7]}"]
@@ -104,12 +104,12 @@ class TestBatch(BaseJob):
         return f"TestBatch({','.join(p)})"
 
     def __repr__(self) -> str:
-        case_repr: str
-        if len(self.cases) <= 3:
-            case_repr = ",".join(repr(case) for case in self.cases)
+        job_repr: str
+        if len(self.jobs) <= 3:
+            job_repr = ",".join(repr(job) for job in self.jobs)
         else:
-            case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
-        return f"TestBatch({case_repr})"
+            job_repr = f"{self.jobs[0]!r},{self.jobs[1]!r},...,{self.jobs[-1]!r}"
+        return f"TestBatch({job_repr})"
 
     @property
     def id(self) -> str:
@@ -126,7 +126,7 @@ class TestBatch(BaseJob):
             return f"{name} ({combined_stat})"
 
     def cost(self) -> float:
-        cpus = max(case.cpus for case in self.cases)
+        cpus = max(job.cpus for job in self.jobs)
         return math.sqrt(cpus**2 + self.runtime**2)
 
     @property
@@ -148,9 +148,9 @@ class TestBatch(BaseJob):
     def find_approximate_runtime(self) -> float:
         from .batching import packed_perimeter
 
-        if len(self.cases) == 1:
-            return self.cases[0].runtime
-        _, height = packed_perimeter(self.cases)
+        if len(self.jobs) == 1:
+            return self.jobs[0].runtime
+        _, height = packed_perimeter(self.jobs)
         t = sum(c.runtime for c in self)
         return float(min(height, t))
 
@@ -182,8 +182,8 @@ class TestBatch(BaseJob):
             a, _ = p.parse_known_args(scheduler_args)
             if a.qtime:
                 return time_in_seconds(a.qtime)
-        if len(self.cases) == 1:
-            return self.cases[0].runtime
+        if len(self.jobs) == 1:
+            return self.jobs[0].runtime
         total_runtime = self.runtime
         if total_runtime < 100.0:
             total_runtime = 300.0
@@ -231,7 +231,7 @@ class TestBatch(BaseJob):
         return all(d.jobid is not None for d in self.dependencies)
 
     def dependency_batches_complete(self) -> bool:
-        return all(all(c.state.is_done() for c in d.cases) for d in self.dependencies)
+        return all(all(c.state.is_done() for c in d.jobs) for d in self.dependencies)
 
     def refresh_readiness(self) -> None:
         # If we're already done/running, nothing to do.
@@ -294,10 +294,10 @@ class TestBatch(BaseJob):
                 rc = 1
             self.refresh()
             self.state.phase = JobPhase.DONE
-            if all(case.status.is_success() for case in self):
+            if all(job.status.is_success() for job in self):
                 self.status.set_base(outcome="SUCCESS")
             else:
-                self.status.set_base(outcome="FAILED", reason="One or more test cases did not pass")
+                self.status.set_base(outcome="FAILED", reason="One or more jobs did not pass")
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
@@ -311,15 +311,15 @@ class TestBatch(BaseJob):
             "timekeeper": self.timekeeper,
             "state": self.state,
         }
-        for case in self.cases:
-            if case.state.is_pending():
-                case.status = Status.BROKEN(reason=f"{case.state=} after execution of batch")
-            elif case.state.is_running():
-                case.status = Status.CANCELLED(reason=f"{case.state=} after execution of batch")
-            data[case.id] = {
-                "status": case.status,
-                "timekeeper": case.timekeeper,
-                "state": case.state,
+        for job in self.jobs:
+            if job.state.is_pending():
+                job.status = Status.BROKEN(reason=f"{job.state=} after execution of batch")
+            elif job.state.is_running():
+                job.status = Status.CANCELLED(reason=f"{job.state=} after execution of batch")
+            data[job.id] = {
+                "status": job.status,
+                "timekeeper": job.timekeeper,
+                "state": job.state,
             }
         return data
 
@@ -344,17 +344,17 @@ class TestBatch(BaseJob):
                 self.timekeeper.submitted = timekeeper.submitted
                 self.timekeeper.started = timekeeper.started
                 self.timekeeper.finished = timekeeper.finished
-        for case in self.cases:
-            if d := data.get(case.id):
-                case.setstate(d)
+        for job in self.jobs:
+            if d := data.get(job.id):
+                job.setstate(d)
         self.save()
 
     def finish(self) -> None:
         pass
 
     def refresh(self) -> None:
-        for case in self:
-            case.refresh()
+        for job in self:
+            job.refresh()
 
     def _combined_status(self) -> str:
         """Return a string like
@@ -363,8 +363,8 @@ class TestBatch(BaseJob):
 
         """
         stat: dict[str, int] = {}
-        for case in self.cases:
-            stat[case.status.category] = stat.get(case.status.category, 0) + 1
+        for job in self.jobs:
+            stat[job.status.category] = stat.get(job.status.category, 0) + 1
         parts: list[str] = []
         for name, n in stat.items():
             parts.append("%d %s" % (n, name))
@@ -373,20 +373,20 @@ class TestBatch(BaseJob):
     def times(self) -> tuple[float | None, float | None, float | None]:
         """Return total, running, and time in queue"""
 
-        def started(case):
-            t = case.timekeeper.started
+        def started(job):
+            t = job.timekeeper.started
             return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
-        def finished(case):
-            t = case.timekeeper.finished
+        def finished(job):
+            t = job.timekeeper.finished
             return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         total_duration = self.timekeeper.duration()
         duration: float | None = total_duration if total_duration > 0 else None
         running: float | None = None
         time_in_queue: float | None = None
-        started_on = [started(case) for case in self.cases]
-        finished_on = [finished(case) for case in self.cases]
+        started_on = [started(job) for job in self.jobs]
+        finished_on = [finished(job) for job in self.jobs]
         if any(started_on) and any(finished_on):
             ti = min(dt for dt in started_on if dt)
             tf = max(dt for dt in finished_on if dt)
@@ -406,7 +406,7 @@ class TestBatch(BaseJob):
             "id": self.id,
             "session": self.session,
             "workspace": str(self.workspace.dir),
-            "cases": [case.id for case in self],
+            "jobs": [job.id for job in self],
             "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),
@@ -421,8 +421,8 @@ class TestBatch(BaseJob):
         cfg["measurements"] = serialize(self.measurements)
         with open(self.lockfile, "w") as fh:
             json.dump(cfg, fh, indent=2)
-        for case in self:
-            case.save()
+        for job in self:
+            job.save()
 
     def set_status(
         self,

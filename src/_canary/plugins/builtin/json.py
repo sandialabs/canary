@@ -24,10 +24,10 @@ class JsonReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_jobs()
+        jobs = workspace.load_jobs()
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
-        for case in cases:
-            data[case.id] = serialize(case)
+        for job in jobs:
+            data[job.id] = serialize(job)
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

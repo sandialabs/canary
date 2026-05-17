@@ -61,7 +61,7 @@ def flatten_unique(xss: list[list[str]]) -> list[str]:
 
 class AbstractTestGenerator(ABC):
     """The AbstractTestGenerator is an abstract object representing a test file that
-    can generate test cases
+    can generate jobs
 
     Args:
       root: The base test directory, or file path if ``path`` is not given
@@ -136,10 +136,10 @@ class AbstractTestGenerator(ABC):
 
     @abstractmethod
     def lock(self, on_options: list[str] | None = None) -> Sequence["JobSpecIR | JobSpec"]:
-        """Expand parameters and instantiate concrete test cases
+        """Expand parameters and instantiate concrete test jobs
 
         Args:
-          on_options: User specified options used to filter tests.  Test cases not matching
+          on_options: User specified options used to filter tests.  Jobs not matching
             ``on_options`` should be masked.
 
         Notes:
@@ -599,7 +599,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
                 psets = self.parameter_sets.eval(family=family, on_options=on_options)
                 if not any(psets):
                     raise ValueError(
-                        "Generation of composite base case requires at least one parameter"
+                        "Generation of composite base job requires at least one parameter"
                     )
 
                 modules = self.get_modules(family, parameters=None, on_options=on_options)

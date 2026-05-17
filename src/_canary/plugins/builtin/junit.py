@@ -32,15 +32,15 @@ class JunitReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_jobs()
+        jobs = workspace.load_jobs()
         doc = JunitDocument()
-        root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
+        root = doc.create_testsuite_element(jobs, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output
-        groups = groupby_classname(cases)
-        for classname, cases in groups.items():
-            suite = doc.create_testsuite_element(cases, name=classname)
-            for case in cases:
-                el = doc.create_testcase_element(case)
+        groups = groupby_classname(jobs)
+        for classname, jobs in groups.items():
+            suite = doc.create_testsuite_element(jobs, name=classname)
+            for job in jobs:
+                el = doc.create_testcase_element(job)
                 suite.appendChild(el)
             root.appendChild(suite)
         doc.appendChild(root)
@@ -59,19 +59,19 @@ def get_root_name() -> str:
     return name
 
 
-def groupby_classname(cases: list["Job"]) -> dict[str, list["Job"]]:
+def groupby_classname(jobs: list["Job"]) -> dict[str, list["Job"]]:
     """Group tests by status"""
     grouped: dict[str, list["Job"]] = {}
-    for case in cases:
-        classname = get_classname(case)
-        grouped.setdefault(classname, []).append(case)
+    for job in jobs:
+        classname = get_classname(job)
+        grouped.setdefault(classname, []).append(job)
     return grouped
 
 
-def get_classname(case: "Job") -> str:
-    if "classname" in case.spec.attributes:
-        return case.spec.attributes["classname"]
-    return case.spec.file_path.parent.name
+def get_classname(job: "Job") -> str:
+    if "classname" in job.spec.attributes:
+        return job.spec.attributes["classname"]
+    return job.spec.file_path.parent.name
 
 
 class JunitDocument(xdom.Document):
@@ -87,7 +87,7 @@ class JunitDocument(xdom.Document):
         return node
 
     def create_testsuite_element(
-        self, cases: list["Job"], tagname: str = "testsuite", **attrs: str
+        self, jobs: list["Job"], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
         """Create a testcase element with the following structure
 
@@ -98,7 +98,7 @@ class JunitDocument(xdom.Document):
 
         """
         element = self.create_element(tagname)
-        stats = gather_statistics(cases)
+        stats = gather_statistics(jobs)
         for name, value in attrs.items():
             element.setAttribute(name, value)
         element.setAttribute("tests", str(stats.num_tests))
@@ -109,7 +109,7 @@ class JunitDocument(xdom.Document):
         element.setAttribute("timestamp", stats.timestamp)
         return element
 
-    def create_testcase_element(self, case: "Job") -> xdom.Element:
+    def create_testcase_element(self, job: "Job") -> xdom.Element:
         """Create a testcase element with the following structure:
 
         .. code-block: xml
@@ -121,16 +121,16 @@ class JunitDocument(xdom.Document):
 
         """
         testcase = self.create_element("testcase")
-        testcase.setAttribute("name", case.display_name())
-        testcase.setAttribute("classname", get_classname(case))
-        testcase.setAttribute("time", str(case.timekeeper.duration()))
-        testcase.setAttribute("file", getattr(case, "relpath", str(case.spec.file_path)))
-        if case.status.is_failure():
+        testcase.setAttribute("name", job.display_name())
+        testcase.setAttribute("classname", get_classname(job))
+        testcase.setAttribute("time", str(job.timekeeper.duration()))
+        testcase.setAttribute("file", getattr(job, "relpath", str(job.spec.file_path)))
+        if job.status.is_failure():
             failure = self.create_element("failure")
-            failure.setAttribute("message", f"Test case status: {case.status.outcome.name}")
-            failure.setAttribute("type", case.status.outcome.name)
+            failure.setAttribute("message", f"Test job status: {job.status.outcome.name}")
+            failure.setAttribute("type", job.status.outcome.name)
             testcase.appendChild(failure)
-            text = self.create_cdata_node(case.read_output())
+            text = self.create_cdata_node(job.read_output())
             system_out = self.create_element("system-out")
             system_out.appendChild(text)
             testcase.appendChild(system_out)
@@ -140,33 +140,33 @@ class JunitDocument(xdom.Document):
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
                     failure.appendChild(text)
-        elif case.status.is_skipped():
+        elif job.status.is_skipped():
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", case.status.outcome.name)
+            skipped.setAttribute("message", job.status.outcome.name)
             testcase.appendChild(skipped)
         return testcase
 
 
-def gather_statistics(cases: list["Job"]) -> SimpleNamespace:
+def gather_statistics(jobs: list["Job"]) -> SimpleNamespace:
     stats = SimpleNamespace(num_skipped=0, num_failed=0, num_error=0, num_tests=0, time=0.0)
     started_on: datetime | None = None
     finished_on: datetime | None = None
-    for case in cases:
+    for job in jobs:
         stats.num_tests += 1
-        if case.status.is_failure():
+        if job.status.is_failure():
             stats.num_failed += 1
-        elif case.status.is_skipped():
+        elif job.status.is_skipped():
             stats.num_skipped += 1
-        elif not case.state.is_done():
+        elif not job.state.is_done():
             stats.num_error += 1
-        if case.state.is_done():
-            t = case.timekeeper.started
+        if job.state.is_done():
+            t = job.timekeeper.started
             if started_on is None:
                 if t > 0:
                     started_on = datetime.fromtimestamp(t)
             elif t > 0 and datetime.fromtimestamp(t) < started_on:
                 started_on = datetime.fromtimestamp(t)
-            t = case.timekeeper.finished
+            t = job.timekeeper.finished
             if finished_on is None:
                 if t > 0:
                     finished_on = datetime.fromtimestamp(t)

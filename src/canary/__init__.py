@@ -170,11 +170,11 @@ def get_testcase(arg_path: Path | str | None = None) -> Job | None:
     from _canary.testcase import load_testcase_from_file
 
     try:
-        case = load_testcase_from_file(arg_path)
-        atexit.register(lambda: case.save())
+        job = load_testcase_from_file(arg_path)
+        atexit.register(lambda: job.save())
     except FileNotFoundError:
         return None
-    return case
+    return job
 
 
 def __getattr__(name):

@@ -55,11 +55,11 @@ class AnyMatcher:
 
 @dataclass(frozen=True, slots=True)
 class Dependency:
-    case: "Job"
+    job: "Job"
     when: str | None
 
     def __serialize__(self) -> dict[str, Any]:
-        return {"case": self.case, "when": self.when}
+        return {"job": self.job, "when": self.when}
 
     @classmethod
     def __deserialize__(cls, d: dict) -> "Dependency":
@@ -68,24 +68,24 @@ class Dependency:
     def is_satisfied(self) -> bool:
         from .status import Category
 
-        if not self.case.is_done():
+        if not self.job.is_done():
             return False
         when = self.when
         if when is None:
             return True
         assert isinstance(when, str)
         if when in ("*", "always"):
-            return self.case.is_done()
+            return self.job.is_done()
         if when == "on_success":
-            return self.case.status.category is Category.PASS
+            return self.job.status.category is Category.PASS
         elif when == "on_failure":
-            return self.case.status.category is Category.FAIL
+            return self.job.status.category is Category.FAIL
         expr = Expression.compile(when)
-        choices = (self.case.status.category.name, self.case.status.outcome.name)
+        choices = (self.job.status.category.name, self.job.status.outcome.name)
         return expr.evaluate(AnyMatcher(set(choices)))
 
     def is_done(self) -> bool:
-        return self.case.is_done()
+        return self.job.is_done()
 
 
 class Job(BaseJob):
@@ -108,7 +108,7 @@ class Job(BaseJob):
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         self.depends_on: list[Dependency] = dependencies or []
-        self.dependencies: list["Job"] = [d.case for d in self.depends_on]
+        self.dependencies: list["Job"] = [d.job for d in self.depends_on]
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Job):
@@ -164,7 +164,7 @@ class Job(BaseJob):
 
     @property
     def upstreams(self) -> list["Job"]:
-        return [d.case for d in self.depends_on]
+        return [d.job for d in self.depends_on]
 
     @property
     def stdout(self) -> str:
@@ -341,12 +341,12 @@ class Job(BaseJob):
         return self.status.is_skipped()
 
     def is_runnable(self) -> bool:
-        """True if this case could still run in the future."""
+        """True if this job could still run in the future."""
         if self.state.is_done():
             return False
         if self.status.is_skipped():
             return False
-        # If any dependency finished in a way that violates criteria, this case will never run
+        # If any dependency finished in a way that violates criteria, this job will never run
         if self.depends_on and any(d.is_done() and not d.is_satisfied() for d in self.depends_on):
             return False
         return True
@@ -360,7 +360,7 @@ class Job(BaseJob):
             if not dep.is_satisfied():
                 self.state.phase = JobPhase.DONE
                 self.status = Status.BLOCKED(
-                    f"Dependency {dep.case.name} finished with {dep.case.status.outcome.name!r}; "
+                    f"Dependency {dep.job.name} finished with {dep.job.status.outcome.name!r}; "
                     f"needed {dep.when!r}"
                 )
                 return
@@ -437,7 +437,7 @@ class Job(BaseJob):
                 with self.workspace.enter(), self.timekeeper.timeit():
                     self.state.phase = JobPhase.RUNNING
                     self.save()
-                    code = self.launcher.run(case=self)
+                    code = self.launcher.run(job=self)
                     self.update_status_from_exit_code(code=code)
         except KeyboardInterrupt:
             self.status = Status.INTERRUPTED()
@@ -462,7 +462,7 @@ class Job(BaseJob):
             self.status.set(outcome="TIMEOUT", reason=None if not e.args else e.args[0])
         except BaseException as e:
             if config.get("debug"):
-                logger.exception("Exception during test case execution")
+                logger.exception("Exception during test job execution")
             fh = io.StringIO()
             traceback.print_exc(file=fh, limit=2)
             reason = fh.getvalue()
@@ -601,7 +601,7 @@ class Job(BaseJob):
         return variables
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
-        """Default parameters used to set up resources required by test case"""
+        """Default parameters used to set up resources required by test job"""
         resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
         p = self.spec.parameters | self.spec.meta_parameters
         rparameters: dict[str, int] = {}
@@ -669,7 +669,7 @@ class Job(BaseJob):
 
     def load_cached_runs(self) -> dict[str, Any] | None:
         if cache_dir := find_cache_dir(start=self.workspace.root):
-            file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+            file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
             if file.exists():
                 return json.loads(file.read_text())["cache"]
         return None
@@ -679,7 +679,7 @@ class Job(BaseJob):
         if not self.status.is_success():
             return
         if cache_dir := find_cache_dir(start=self.workspace.root):
-            file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+            file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
             file.parent.mkdir(parents=True, exist_ok=True)
             cache: dict[str, Any]
             if not file.exists():
@@ -739,14 +739,14 @@ def load_testcase_from_file(arg: Path | str | None) -> Job:
     lock_data = json.loads(file.read_text())
     id = lock_data["spec"]["id"]
     workspace = Workspace.load()
-    return workspace.find(case=id)
+    return workspace.find(job=id)
 
 
 def load_testcase_from_state(lock_data: dict) -> Job:
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
-    return workspace.find(case=lock_data["spec"]["id"])
+    return workspace.find(job=lock_data["spec"]["id"])
 
 
 def find_cache_dir(start: Path) -> Path | None:

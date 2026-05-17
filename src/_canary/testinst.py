@@ -116,57 +116,57 @@ class TestMultiInstance(TestInstance):
         return True
 
 
-def from_testcase(case: "Job") -> TestInstance:
+def from_testcase(job: "Job") -> TestInstance:
     dependencies: list[TestInstance] = []
-    for dep in case.dependencies:
+    for dep in job.dependencies:
         dependencies.append(from_testcase(dep))
 
     parameters: Parameters
     cls: Type[TestInstance]
-    if case.spec.attributes.get("multicase"):
+    if job.spec.attributes.get("multicase"):
         cls = TestMultiInstance
         columns: dict[str, list[Any]] = {}
-        for key in case.dependencies[0].spec.parameters.keys():
+        for key in job.dependencies[0].spec.parameters.keys():
             col = columns.setdefault(key, [])
-            for dep in case.dependencies:
+            for dep in job.dependencies:
                 col.append(dep.spec.parameters[key])
         parameters = MultiParameters(**columns)
     else:
         cls = TestInstance
-        parameters = Parameters(**case.spec.parameters)
+        parameters = Parameters(**job.spec.parameters)
 
     sources: dict[str, list[tuple[str, str | None]]] = {}
-    for asset in case.spec.assets:
+    for asset in job.spec.assets:
         sources.setdefault(asset.action, []).append((str(asset.src), asset.dst))
-    start = case.timekeeper.started
-    stop = case.timekeeper.finished
+    start = job.timekeeper.started
+    stop = job.timekeeper.finished
     instance = cls(
-        file_root=str(case.spec.file_root),
-        file_path=str(case.spec.file_path),
-        name=case.spec.name,
-        file=os.path.join(str(case.spec.file_root), str(case.spec.file_path)),
-        cpu_ids=case.cpu_ids,
-        gpu_ids=case.gpu_ids,
-        family=case.spec.family,
-        keywords=case.spec.keywords,
+        file_root=str(job.spec.file_root),
+        file_path=str(job.spec.file_path),
+        name=job.spec.name,
+        file=os.path.join(str(job.spec.file_root), str(job.spec.file_path)),
+        cpu_ids=job.cpu_ids,
+        gpu_ids=job.gpu_ids,
+        family=job.spec.family,
+        keywords=job.spec.keywords,
         parameters=parameters,
-        timeout=case.spec.timeout,
-        runtime=case.runtime,
-        baseline=case.spec.baseline,
+        timeout=job.spec.timeout,
+        runtime=job.runtime,
+        baseline=job.spec.baseline,
         sources=sources,
-        work_tree=str(case.workspace.dir),  # type: ignore
-        working_directory=str(case.workspace.dir),
-        state=case.state,
-        status=case.status,
+        work_tree=str(job.workspace.dir),  # type: ignore
+        working_directory=str(job.workspace.dir),
+        state=job.state,
+        status=job.status,
         start=start,
         stop=stop,
-        id=case.spec.id,
-        returncode=case.status.code,
-        variables={key: var for key, var in case.variables.items() if var is not None},
+        id=job.spec.id,
+        returncode=job.status.code,
+        variables={key: var for key, var in job.variables.items() if var is not None},
         dependencies=dependencies,
-        ofile=case.stdout,
-        efile=case.stderr,
-        lockfile=str(case.workspace.dir / "testcase.lock"),
+        ofile=job.stdout,
+        efile=job.stderr,
+        lockfile=str(job.workspace.dir / "testcase.lock"),
     )
     return instance
 
@@ -177,5 +177,5 @@ def load_instance(
     lookup = lookup or {}
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
-    case = json.loads(file.read_text())
-    return from_testcase(case)
+    job = json.loads(file.read_text())
+    return from_testcase(job)

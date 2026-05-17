@@ -42,7 +42,7 @@ class CTestTestGenerator(AbstractTestGenerator):
     def lock(self, on_options: list[str] | None = None) -> list[canary.JobSpec]:
         cmake = find_cmake()
         if cmake is None:
-            logger.warning("cmake not found, test cases cannot be generated")
+            logger.warning("cmake not found, jobs cannot be generated")
             return []
 
         tests = self.load()
@@ -75,9 +75,9 @@ class CTestTestGenerator(AbstractTestGenerator):
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
-        cases = self.lock(on_options=on_options)
-        file.write(f"{len(cases)} test cases:\n")
-        canary.graph.print(cases, file=file)
+        jobs = self.lock(on_options=on_options)
+        file.write(f"{len(jobs)} test jobs:\n")
+        canary.graph.print(jobs, file=file)
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
@@ -309,12 +309,12 @@ def apply_env_mods(mods: list[dict[str, str]]) -> dict[str, str | None]:
     return variables
 
 
-def setup_ctest(case: canary.Job):
-    variables = resource_groups_vars(case)
-    case.add_variables(**variables)
+def setup_ctest(job: canary.Job):
+    variables = resource_groups_vars(job)
+    job.add_variables(**variables)
 
 
-def resource_groups_vars(case: canary.Job) -> dict[str, str]:
+def resource_groups_vars(job: canary.Job) -> dict[str, str]:
     """Set the resource group variables as required by CTest
 
     canary does not have a notion of resource groups, like ctest does.  When a test checks out
@@ -328,11 +328,11 @@ def resource_groups_vars(case: canary.Job) -> dict[str, str]:
 
     """
     variables: dict[str, str] = {}
-    resource_groups = case.spec.attributes.get("resource_groups") or []
+    resource_groups = job.spec.attributes.get("resource_groups") or []
     if not resource_groups:
         return variables
     avail: dict[str, Any] = {}
-    for type, items in case.resources.items():
+    for type, items in job.resources.items():
         slots_per_id: dict[str, Any] = {}
         for item in items:
             slots_per_id[item["id"]] = slots_per_id.get(item["id"], 0) + item["slots"]
@@ -365,51 +365,51 @@ def resource_groups_vars(case: canary.Job) -> dict[str, str]:
     return variables
 
 
-def finish_ctest(case: "canary.Job") -> None:
-    output = case.read_output()
+def finish_ctest(job: "canary.Job") -> None:
+    output = job.read_output()
 
-    if case.status.is_skipped() or case.status.is_cancelled():
+    if job.status.is_skipped() or job.status.is_cancelled():
         return
-    elif case.status.is_timeout():
+    elif job.status.is_timeout():
         return
 
-    if pass_regular_expression := case.spec.attributes.get("pass_regular_expression"):
+    if pass_regular_expression := job.spec.attributes.get("pass_regular_expression"):
         for regex in pass_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status = Status.SUCCESS()
+                job.status = Status.SUCCESS()
                 break
         else:
             regex = ", ".join(pass_regular_expression)
-            case.status = Status.FAILED(
-                reason=f"Regular expressions {regex} not found in {case.stdout}"
+            job.status = Status.FAILED(
+                reason=f"Regular expressions {regex} not found in {job.stdout}"
             )
 
-    if skip_return_code := case.spec.attributes.get("skip_return_code"):
-        if case.status.has_code(skip_return_code):
-            case.status = Status.SKIPPED(f"Return code={skip_return_code!r}")
+    if skip_return_code := job.spec.attributes.get("skip_return_code"):
+        if job.status.has_code(skip_return_code):
+            job.status = Status.SKIPPED(f"Return code={skip_return_code!r}")
 
-    if skip_regular_expression := case.attributes.get("skip_regular_expression"):
+    if skip_regular_expression := job.attributes.get("skip_regular_expression"):
         for regex in skip_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status = Status.SKIPPED(
-                    reason=f"Regular expression {regex!r} found in {case.stdout}"
+                job.status = Status.SKIPPED(
+                    reason=f"Regular expression {regex!r} found in {job.stdout}"
                 )
                 break
 
-    if fail_regular_expression := case.spec.attributes.get("fail_regular_expression"):
+    if fail_regular_expression := job.spec.attributes.get("fail_regular_expression"):
         for regex in fail_regular_expression:
             if re.search(regex, output, re.MULTILINE):
-                case.status = Status.FAILED(
-                    reason=f"Regular expression {regex!r} found in {case.stdout}"
+                job.status = Status.FAILED(
+                    reason=f"Regular expression {regex!r} found in {job.stdout}"
                 )
                 break
 
     # invert logic
-    if case.spec.attributes.get("will_fail"):
-        if case.status.is_success():
-            case.status = Status.FAILED(reason="Test case marked will_fail but succeeded")
-        elif not case.status.is_skipped():
-            case.status = Status.SUCCESS()
+    if job.spec.attributes.get("will_fail"):
+        if job.status.is_success():
+            job.status = Status.FAILED(reason="Test job marked will_fail but succeeded")
+        elif not job.status.is_skipped():
+            job.status = Status.SUCCESS()
 
 
 def safeint(arg: str) -> None | int:

@@ -81,7 +81,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
 
 
 def set_vvtest_execpath(spec: "canary.JobSpec") -> None:
-    """Set the execpath of the case
+    """Set the execpath of the job
 
     In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
     ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
@@ -110,11 +110,11 @@ class AnalyzeAction(argparse.Action):
         setattr(namespace, "canary_vvtest", opts)
 
 
-def write_vvtest_util(case: "canary.Job", stage: str = "run") -> None:
-    if not case.spec.file_path.suffix == ".vvt":
+def write_vvtest_util(job: "canary.Job", stage: str = "run") -> None:
+    if not job.spec.file_path.suffix == ".vvt":
         return
-    attrs = get_vvtest_attrs(case)
-    with case.workspace.openfile("vvtest_util.py", "w") as fh:
+    attrs = get_vvtest_attrs(job)
+    with job.workspace.openfile("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
         for key, value in attrs.items():
@@ -129,25 +129,26 @@ def write_vvtest_util(case: "canary.Job", stage: str = "run") -> None:
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "canary.Job") -> dict:
+def get_vvtest_attrs(job: "canary.Job") -> dict:
     attrs = {}
     compiler_spec = None
     if vendor := canary.config.get("cmake:compiler:vendor"):
         version = canary.config.get("cmake:compiler:version")
         compiler_spec = f"{vendor}@{version}"
-    attrs["CASEID"] = case.spec.id
-    attrs["NAME"] = case.spec.family
-    attrs["TESTID"] = case.spec.fullname
+    attrs["JOBID"] = job.spec.id
+    attrs["CASEID"] = job.spec.id
+    attrs["NAME"] = job.spec.family
+    attrs["TESTID"] = job.spec.fullname
     attrs["PLATFORM"] = sys.platform.lower()
     attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
-    attrs["TESTROOT"] = str(case.workspace.root)
+    attrs["TESTROOT"] = str(job.workspace.root)
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = canary.config.getoption("on_options") or []
     attrs["OPTIONS_OFF"] = canary.config.getoption("off_options") or []
-    attrs["SRCDIR"] = str(case.spec.file.parent)
-    attrs["TIMEOUT"] = case.spec.timeout
-    attrs["KEYWORDS"] = case.spec.keywords
+    attrs["SRCDIR"] = str(job.spec.file.parent)
+    attrs["TIMEOUT"] = job.spec.timeout
+    attrs["KEYWORDS"] = job.spec.keywords
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
 
@@ -163,13 +164,13 @@ def get_vvtest_attrs(case: "canary.Job") -> dict:
     analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
 
-    attrs["is_analyze"] = "multicase" in case.spec.attributes
+    attrs["is_analyze"] = "multicase" in job.spec.attributes
     attrs["is_baseline"] = canary.config.getoption("command") == "rebaseline"
-    attrs["PARAM_DICT"] = case.spec.parameters or {}
-    for key, val in case.spec.parameters.items():
+    attrs["PARAM_DICT"] = job.spec.parameters or {}
+    for key, val in job.spec.parameters.items():
         attrs[key] = val
     if attrs["is_analyze"]:
-        for paramset in case.spec.attributes["paramsets"]:
+        for paramset in job.spec.attributes["paramsets"]:
             key = "_".join(paramset["keys"])
             table = attrs.setdefault(f"PARAM_{key}", [])
             for row in paramset["values"]:
@@ -179,19 +180,19 @@ def get_vvtest_attrs(case: "canary.Job") -> dict:
                     table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.dependencies]
+    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in job.dependencies]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
-    attrs["exec_dir"] = str(case.workspace.dir)
-    attrs["exec_root"] = str(case.workspace.root)
-    attrs["exec_path"] = str(case.workspace.path)
-    attrs["file_root"] = str(case.spec.file_root)
-    attrs["file_dir"] = str(case.spec.file.parent)
-    attrs["file_path"] = str(case.spec.file_path)
+    attrs["exec_dir"] = str(job.workspace.dir)
+    attrs["exec_root"] = str(job.workspace.root)
+    attrs["exec_path"] = str(job.workspace.path)
+    attrs["file_root"] = str(job.spec.file_root)
+    attrs["file_dir"] = str(job.spec.file.parent)
+    attrs["file_path"] = str(job.spec.file_path)
 
-    attrs["RESOURCE_np"] = case.cpus
-    attrs["RESOURCE_IDS_np"] = [int(_) for _ in case.cpu_ids]
-    attrs["RESOURCE_ndevice"] = case.gpus
-    attrs["RESOURCE_IDS_ndevice"] = [int(_) for _ in case.gpu_ids]
+    attrs["RESOURCE_np"] = job.cpus
+    attrs["RESOURCE_IDS_np"] = [int(_) for _ in job.cpu_ids]
+    attrs["RESOURCE_ndevice"] = job.gpus
+    attrs["RESOURCE_IDS_ndevice"] = [int(_) for _ in job.gpu_ids]
 
     return attrs

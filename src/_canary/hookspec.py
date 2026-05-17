@@ -374,7 +374,7 @@ def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, 
 
 @hookspec(firstresult=True)
 def canary_resource_pool_accommodates(case: "Job") -> "Outcome":
-    """Determine if there are sufficient resource to run ``case``."""
+    """Determine if there are sufficient resource to run ``job``."""
     raise NotImplementedError
 
 

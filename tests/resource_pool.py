@@ -16,7 +16,7 @@ def test_fill_simple():
     }
 
 
-class Case:
+class Job:
     def required_resources(self) -> list[dict[str, object]]:
         group: list[dict[str, object]] = []
         group.extend([{"type": "cpus", "slots": 1} for _ in range(2)])
@@ -26,10 +26,10 @@ class Case:
 
 
 def test_resource_pool_checkout():
-    case = Case()
+    job = Job()
     pool = ResourcePool()
     pool.populate(cpus=4, gpus=4)
-    resources = pool.checkout(case.required_resources())
+    resources = pool.checkout(job.required_resources())
     expected = {
         "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
         "gpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],

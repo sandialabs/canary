@@ -56,7 +56,7 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
     if tagged:
         group.add_argument(
             "--tag",
-            help="Tag this test case selection for future runs [default: False]",
+            help="Tag this job selection for future runs [default: False]",
         )
 
 
@@ -75,7 +75,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         help=f"Set the timeout for {bold('type')} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n"
         f"• type={bold('session')}, the timeout T is applied to the entire test session.\n\n"
         f"• type={bold('multiplier')}, the multiplier T is applied to each test's timeout.\n\n"
-        f"• type={bold('*')}, the timeout T is applied to all test cases.\n\n"
+        f"• type={bold('*')}, the timeout T is applied to all jobs.\n\n"
         f"• type={bold('batch')}, choices for T are 'conservative' to use a conservative "
         "estimate for batch timeouts (queue times) or 'aggressive'.\n\n"
         f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.\n\n"
@@ -124,6 +124,6 @@ class TimeoutResource(argparse.Action):
         setattr(args, "timeout", timeouts)
 
 
-def filter_cases_by_path(cases: list["Job"], pathspec: str) -> list["Job"]:
+def filter_cases_by_path(jobs: list["Job"], pathspec: str) -> list["Job"]:
     prefix = os.path.abspath(pathspec)
-    return [c for c in cases if c.workspace.dir.relative_to(prefix)]
+    return [c for c in jobs if c.workspace.dir.relative_to(prefix)]

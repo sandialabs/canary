@@ -114,10 +114,10 @@ class HPCConnectRunner:
         f.write_text(json.dumps({"resource_pool": pool}, indent=2))
 
     def nodes_required(self, batch: "TestBatch") -> int:
-        """Nodes required to run cases in ``batch``"""
+        """Nodes required to run jobs in ``batch``"""
         max_count_per_type: dict[str, int] = {}
-        for case in batch.cases:
-            reqd_resources = case.required_resources()
+        for job in batch.jobs:
+            reqd_resources = job.required_resources()
             total_slots_per_type: dict[str, int] = {}
             for member in reqd_resources:
                 type = member["type"]
@@ -207,7 +207,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         invocation = self.canary_invocation(batch)
         node_count = self.nodes_required(batch)
         variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
-        job = hpc_connect.JobSpec(
+        hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
             nodes=node_count,
@@ -219,11 +219,11 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             submit_args=self.scheduler_args(),
         )
         if all(b.jobid is not None for b in batch.dependencies):
-            job = job.with_dependencies([b.jobid for b in batch.dependencies])  # type: ignore
+            hpc_job = hpc_job.with_dependencies([b.jobid for b in batch.dependencies])  # type: ignore
         try:
-            future = self.backend.submission_manager().submit(job)
+            future = self.backend.submission_manager().submit(hpc_job)
         except Exception:
-            logger.exception(f"Submission for job {job} failed")
+            logger.exception(f"Submission for job {hpc_job} failed")
             raise
         return future
 
@@ -270,8 +270,8 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         rc: int = -1
         with batch.workspace.enter():
             futures: list[hpc_connect.futures.Future] = []
-            for i, case in enumerate(batch.cases):
-                future = self.submit(batch, case)
+            for i, job in enumerate(batch.jobs):
+                future = self.submit(batch, job)
                 if i == 0:
                     future.add_jobstart_callback(set_starttime)
                 futures.append(future)
@@ -320,27 +320,27 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
         logger.debug(f"Finished {batch} with exit code {rc}")
         return rc
 
-    def submit(self, batch: "TestBatch", case: "canary.Job") -> hpc_connect.futures.Future:
+    def submit(self, batch: "TestBatch", job: "canary.Job") -> hpc_connect.futures.Future:
         variables = self.rc_environ(batch)
         timeoutx = batch.timeout_multiplier
-        invocation = self.canary_invocation(batch, case)
-        job = hpc_connect.JobSpec(
-            name=f"canary.{case.id[:7]}",
+        invocation = self.canary_invocation(batch, job)
+        hpc_job = hpc_connect.JobSpec(
+            name=f"canary.{job.id[:7]}",
             commands=[invocation],
-            cpus=case.cpus,
-            gpus=case.gpus,
-            time_limit=case.runtime * timeoutx,
+            cpus=job.cpus,
+            gpus=job.gpus,
+            time_limit=job.runtime * timeoutx,
             env=variables,
-            output=str(batch.workspace.joinpath(f"{case.id[:7]}-out.txt")),
-            error=str(batch.workspace.joinpath(f"{case.id[:7]}-err.txt")),
+            output=str(batch.workspace.joinpath(f"{job.id[:7]}-out.txt")),
+            error=str(batch.workspace.joinpath(f"{job.id[:7]}-err.txt")),
             workspace=batch.workspace.dir,
             submit_args=self.scheduler_args(),
         )
-        future = self.backend.submission_manager().submit(job, exclusive=False)
+        future = self.backend.submission_manager().submit(hpc_job, exclusive=False)
         return future
 
-    def canary_invocation(self, batch: "TestBatch", case: "canary.Job") -> str:
-        """Write the canary invocation used to run this test case"""
+    def canary_invocation(self, batch: "TestBatch", job: "canary.Job") -> str:
+        """Write the canary invocation used to run this job"""
         default_args = [
             sys.executable,
             "-m",
@@ -348,9 +348,9 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
             "-C",
             str(batch.workspace.dir),
             "-r",
-            f"cpus={case.cpus}",
+            f"cpus={job.cpus}",
             "-r",
-            f"gpus={case.gpus}",
+            f"gpus={job.gpus}",
         ]
         if canary.config.get("debug"):
             default_args.append("-d")
@@ -362,7 +362,7 @@ class HPCConnectSeriesRunner(HPCConnectRunner):
             *default_args,
             "--workers=1",
             f"--backend={self.backend.name}",
-            f"--case={case.id}",
+            f"--job={job.id}",
             f"--workspace={batch.workspace.dir}",
         ]
         invocation = shlex.join(args)

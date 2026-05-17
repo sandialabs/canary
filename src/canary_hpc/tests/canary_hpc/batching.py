@@ -35,7 +35,7 @@ def generate_files(tmpdir):
     yield workdir
 
 
-def generate_testcases(dirname):
+def generate_jobs(dirname):
     import _canary.collect
     import _canary.testcase
     import _canary.testexec
@@ -45,36 +45,36 @@ def generate_testcases(dirname):
     generators = _canary.collect.find_generators_in_path(dirname)
     specs = generate_specs(generators)
     lookup = {}
-    cases = []
+    jobs = []
     for spec in specs:
         ws = _canary.testexec.ExecutionSpace(Path.cwd(), Path("foo"))
-        deps = [Dependency(case=lookup[d.spec.id], when="on_success") for d in spec.dependencies]
-        case = _canary.testcase.Job(spec=spec, workspace=ws, dependencies=deps)
-        cases.append(case)
-        lookup[case.id] = case
-    return cases
+        deps = [Dependency(job=lookup[d.spec.id], when="on_success") for d in spec.dependencies]
+        job = _canary.testcase.Job(spec=spec, workspace=ws, dependencies=deps)
+        jobs.append(job)
+        lookup[job.id] = job
+    return jobs
 
 
 def test_batch_n(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
-        cases = generate_testcases(workdir)
+        jobs = generate_jobs(workdir)
         kwds = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_testcases(cases=cases, **kwds)
+        batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert len(batches) == 5
         assert sum(len(_) for _ in batches) == num_cases
         kwds = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_testcases(cases=cases, **kwds)
+        batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert len(batches) == num_cases
 
 
 def test_batch_t(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
-        cases = generate_testcases(workdir)
+        jobs = generate_jobs(workdir)
         kwds = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_testcases(cases=cases, **kwds)
+        batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert sum(len(_) for _ in batches) == num_cases
         kwds = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
-        batches = batching.batch_testcases(cases=cases, **kwds)
+        batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert len(batches) == num_cases

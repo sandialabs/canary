@@ -432,7 +432,7 @@ def make_argument_parser(**kwargs):
     )
     parser.add_argument(
         "--cache-dir",
-        help="Store test case cache info in the given folder [default: .canary_cache/]",
+        help="Store job cache info in the given folder [default: .canary_cache/]",
     )
     parser.set_defaults(banner=False)
 

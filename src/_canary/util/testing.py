@@ -76,17 +76,17 @@ def generate_random_testcases(
 
     session = root / "session"
     lookup: dict[str, Job] = {}
-    cases: list[Job] = []
+    jobs: list[Job] = []
     specs = generate_random_jobspecs(
         root=root, count=count, max_params=max_params, max_rows=max_rows
     )
     for spec in static_order(specs):
-        deps = [Dependency(case=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+        deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
         space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
-        case: Job = Job(spec=spec, workspace=space, dependencies=deps)
-        lookup[spec.id] = case
-        cases.append(case)
-    return cases
+        job: Job = Job(spec=spec, workspace=space, dependencies=deps)
+        lookup[spec.id] = job
+        jobs.append(job)
+    return jobs
 
 
 def generate_random_jobspecs(

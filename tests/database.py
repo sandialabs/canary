@@ -40,13 +40,13 @@ def make_random_specs():
 @pytest.fixture
 def make_session():
     def factory(root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5):
-        cases = generate_random_testcases(
+        jobs = generate_random_testcases(
             root, count=count, max_params=max_params, max_rows=max_rows
         )
-        for case in cases:
-            with case.timekeeper.timeit():
-                case.status.set(category="PASS", outcome="SUCCESS")
-        session = SimpleNamespace(name="session", cases=cases)
+        for job in jobs:
+            with job.timekeeper.timeit():
+                job.status.set(category="PASS", outcome="SUCCESS")
+        session = SimpleNamespace(name="session", jobs=jobs)
         return session
 
     return factory
@@ -176,7 +176,7 @@ def test_missing_selection_raises(db: WorkspaceDatabase):
 
 def test_put_and_get_results(db: WorkspaceDatabase, make_session):
     session = make_session(db.path.parent)
-    db.put_results(*session.cases)
+    db.put_results(*session.jobs)
     results = db.get_results()
     for spec_id, result in results.items():
         assert result["id"] == spec_id
@@ -187,17 +187,17 @@ def test_put_and_get_results(db: WorkspaceDatabase, make_session):
 
 def test_result_history(db: WorkspaceDatabase, make_session):
     session = make_session(db.path.parent)
-    for case in session.cases:
-        case.workspace.session = "s1"
-    db.put_results(*session.cases)
+    for job in session.jobs:
+        job.workspace.session = "s1"
+    db.put_results(*session.jobs)
 
-    for case in session.cases:
-        with case.timekeeper.timeit():
-            case.status.set(category="PASS", outcome="SUCCESS")
-            case.workspace.session = "s2"
-    db.put_results(*session.cases)
+    for job in session.jobs:
+        with job.timekeeper.timeit():
+            job.status.set(category="PASS", outcome="SUCCESS")
+            job.workspace.session = "s2"
+    db.put_results(*session.jobs)
 
-    spec_id = session.cases[0].id
+    spec_id = session.jobs[0].id
     history = db.get_result_history(spec_id)
     assert len(history) == 2
     assert {history[0]["session"], history[1]["session"]} == {"s1", "s2"}

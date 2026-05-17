@@ -255,12 +255,12 @@ def pack_to_height(
         ts.done(*ready)
     if len(blocks) != sum([len(bin) for bin in bins]):
         raise ValueError("Incorrect partition lengths!")
-    logger.debug(f"Partitioned {len(blocks)} test cases in to {len(bins)} bins")
+    logger.debug(f"Partitioned {len(blocks)} jobs in to {len(bins)} bins")
     return [bin for bin in bins if len(bin)]
 
 
 def groupby_dep(blocks: Sequence[Block]) -> list[set[Block]]:
-    """Group cases such that a case and any of its dependencies are in the same
+    """Group jobs such that a job and any of its dependencies are in the same
     group
     """
     sets = [{block} | set(block.dependencies) for block in blocks]

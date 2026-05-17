@@ -35,20 +35,20 @@ class CDashXMLReporter:
     @classmethod
     def from_workspace(cls, dest: str | None = None) -> "CDashXMLReporter":
         workspace = canary.Workspace.load()
-        cases = workspace.load_testcases()
-        if not cases:
+        jobs = workspace.load_jobs()
+        if not jobs:
             raise ValueError(f"No results found in {workspace.root}")
         if dest is None:
             dest = str((workspace.view or workspace.sessions_dir) / "CDASH")
         self = cls(dest=dest)
-        for case in cases:
-            self.data.add_test(case)
+        for job in jobs:
+            self.data.add_job(job)
         return self
 
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
-        raise NotImplementedError("No way of loading the case directly from lock yet")
+        raise NotImplementedError("No way of loading the job directly from lock yet")
 
     #        from _canary.testcase import factory as testcase_factory
     #
@@ -63,17 +63,17 @@ class CDashXMLReporter:
     #                    dep_ids = [d["properties"]["id"] for d in dependencies]
     #                    ts.add(id, *dep_ids)
     #                    break
-    #        cases: dict[str, canary.Job] = {}
+    #        jobs: dict[str, canary.Job] = {}
     #        for id in ts.static_order():
     #            state = data[id]
-    #            case = testcase_factory(state.pop("type"))
-    #            case.setstate(state)
-    #            for i, dep in enumerate(case.dependencies):
-    #                case.dependencies[i] = cases[dep.id]
-    #            cases[id] = case
-    #        for case in cases.values():
-    #            # case.refresh()
-    #            self.data.add_test(case)
+    #            job = testcase_factory(state.pop("type"))
+    #            job.setstate(state)
+    #            for i, dep in enumerate(job.dependencies):
+    #                job.dependencies[i] = jobs[dep.id]
+    #            jobs[id] = job
+    #        for job in jobs.values():
+    #            # job.refresh()
+    #            self.data.add_job(job)
     #        return self
 
     def create(
@@ -102,8 +102,8 @@ class CDashXMLReporter:
         unique_subproject_labels: set[str] = set(subproject_labels or [])
         if label_sets := canary.config.pluginmanager.hook.canary_cdash_labels_for_subproject():
             unique_subproject_labels.update([_ for ls in label_sets for _ in ls if ls])
-        for case in self.data.cases:
-            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=case):
+        for job in self.data.jobs:
+            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=job):
                 unique_subproject_labels.add(label)
         if unique_subproject_labels:
             subproject_labels = list(unique_subproject_labels)
@@ -111,10 +111,10 @@ class CDashXMLReporter:
         if chunk_size is None:
             chunk_size = 500
         if chunk_size > 0:  # type: ignore
-            for cases in chunked(self.data.cases, chunk_size):
-                self.write_test_xml(cases, subproject_labels=subproject_labels)
+            for jobs in chunked(self.data.jobs, chunk_size):
+                self.write_test_xml(jobs, subproject_labels=subproject_labels)
         elif chunk_size < 0:  # type: ignore
-            self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
+            self.write_test_xml(self.data.jobs, subproject_labels=subproject_labels)
         else:
             raise ValueError("chunk_size must be a positive integer or -1")
         self.write_notes_xml()
@@ -226,7 +226,7 @@ class CDashXMLReporter:
         return doc
 
     def write_test_xml(
-        self, cases: list[canary.Job], subproject_labels: list[str] | None = None
+        self, jobs: list[canary.Job], subproject_labels: list[str] | None = None
     ) -> str:
         i = 0
         while True:
@@ -234,7 +234,7 @@ class CDashXMLReporter:
             if not os.path.exists(filename):
                 break
             i += 1
-        logger.info(f"Writing {os.path.basename(filename)} ({len(cases)} test cases)")
+        logger.info(f"Writing {os.path.basename(filename)} ({len(jobs)} jobs)")
 
         doc = self.create_document()
         root = doc.firstChild
@@ -254,41 +254,41 @@ class CDashXMLReporter:
 
         testlist = doc.createElement("TestList")
         pm = canary.config.pluginmanager.hook
-        for case in cases:
-            name = pm.canary_cdash_name(case=case) or case.display_name()
-            add_text_node(testlist, "Test", f"./{case.workspace.path.parent}/{name}")
+        for job in jobs:
+            name = pm.canary_cdash_name(case=job) or job.display_name()
+            add_text_node(testlist, "Test", f"./{job.workspace.path.parent}/{name}")
         l1.appendChild(testlist)
 
         status: str
         pm = canary.config.pluginmanager.hook
-        for case in cases:
-            exit_value = case.status.code
+        for job in jobs:
+            exit_value = job.status.code
             fail_reason = None
-            if not case.state.is_done():
+            if not job.state.is_done():
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status.is_skipped():
+            elif job.status.is_skipped():
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.is_success():
+            elif job.status.is_success():
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status.is_timeout():
+            elif job.status.is_timeout():
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status.is_failure():
+            elif job.status.is_failure():
                 status = "failed"
-                exit_code = case.status.outcome.name.title()
+                exit_code = job.status.outcome.name.title()
                 completion_status = "Completed"
-                fail_reason = case.status.reason or f"Test {case.status.outcome.name.lower()}"
-            elif case.status.is_cancelled():
+                fail_reason = job.status.reason or f"Test {job.status.outcome.name.lower()}"
+            elif job.status.is_cancelled():
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
-                fail_reason = case.status.reason or "Test case was cancelled"
+                fail_reason = job.status.reason or "Job was cancelled"
             else:
                 status = "failed"
                 exit_code = "No Status"
@@ -296,30 +296,30 @@ class CDashXMLReporter:
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
             name_fmt = canary.config.getoption("name_format")
-            name = pm.canary_cdash_name(case=case) or case.display_name()
-            fullname = f"{case.workspace.path.parent}/{name}"
-            command = case.measurements.data.get("command_line", "")
+            name = pm.canary_cdash_name(case=job) or job.display_name()
+            fullname = f"{job.workspace.path.parent}/{name}"
+            command = job.measurements.data.get("command_line", "")
             add_text_node(
                 test_node, "Name", truncate_middle(fullname if name_fmt == "long" else name)
             )
-            add_text_node(test_node, "Path", truncate_middle(str(case.workspace.dir.parent)))
+            add_text_node(test_node, "Path", truncate_middle(str(job.workspace.dir.parent)))
             add_text_node(test_node, "FullName", truncate_middle(f"./{fullname}"))
             add_text_node(test_node, "FullCommandLine", truncate_middle(str(command)))
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = max(0.0, case.timekeeper.duration())
+            duration = max(0.0, job.timekeeper.duration())
             add_named_measurement(results, "Command Line", command, type="cdata")
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
             add_named_measurement(results, "Completion Status", completion_status)
-            add_named_measurement(results, "Processors", int(case.cpus or 1))
-            if case.gpus:
-                add_named_measurement(results, "GPUs", case.gpus)
-            for name, value in pm.canary_cdash_named_measurements(case=case).items():
+            add_named_measurement(results, "Processors", int(job.cpus or 1))
+            if job.gpus:
+                add_named_measurement(results, "GPUs", job.gpus)
+            for name, value in pm.canary_cdash_named_measurements(case=job).items():
                 add_named_measurement(results, name.title(), value)
-            for key, value in case.measurements.items():
+            for key, value in job.measurements.items():
                 name = key.replace("_", " ").title()
                 if key == "command_line":
                     continue
@@ -335,13 +335,13 @@ class CDashXMLReporter:
                     add_named_measurement(results, name, json.dumps(value))
             add_measurement(
                 results,
-                case.read_output(compress=True),
+                job.read_output(compress=True),
                 encoding="base64",
                 compression="gzip",
             )
             test_node.appendChild(results)
 
-            artifacts = canary.config.pluginmanager.hook.canary_cdash_artifacts(case=case)
+            artifacts = canary.config.pluginmanager.hook.canary_cdash_artifacts(case=job)
             if artifacts:
                 payload = targz_compress(*artifacts, path="artifacts")
                 add_named_measurement(
@@ -355,9 +355,9 @@ class CDashXMLReporter:
                 )
 
             labels: set[str] = set(
-                canary.config.pluginmanager.hook.canary_cdash_labels(case=case) or []
+                canary.config.pluginmanager.hook.canary_cdash_labels(case=job) or []
             )
-            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=case):
+            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=job):
                 labels.add(label)
             if labels:
                 el = doc.createElement("Labels")
@@ -510,30 +510,30 @@ class TestData:
         self.start: float = sys.maxsize
         self.stop: float = -1
         self.status: int = 0
-        self.cases: list["canary.Job"] = []
+        self.jobs: list["canary.Job"] = []
 
     def __len__(self):
-        return len(self.cases)
+        return len(self.jobs)
 
     def __iter__(self):
-        for case in self.cases:
-            yield case
+        for job in self.jobs:
+            yield job
 
-    def update_status(self, case: "canary.Job") -> None:
-        if case.status.is_success():
+    def update_status(self, job: "canary.Job") -> None:
+        if job.status.is_success():
             return
-        elif case.status.is_failure():
+        elif job.status.is_failure():
             self.status |= 2**1
         else:
             self.status |= 2**2
 
-    def add_test(self, case: "canary.Job") -> None:
-        if case.timekeeper.started > 0 and case.timekeeper.finished > 0:
-            start = case.timekeeper.started
-            finish = case.timekeeper.finished
+    def add_job(self, job: "canary.Job") -> None:
+        if job.timekeeper.started > 0 and job.timekeeper.finished > 0:
+            start = job.timekeeper.started
+            finish = job.timekeeper.finished
             if start < self.start:
                 self.start = start
             if finish > self.stop:
                 self.stop = finish
-        self.update_status(case)
-        self.cases.append(case)
+        self.update_status(job)
+        self.jobs.append(job)

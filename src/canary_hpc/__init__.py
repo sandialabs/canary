@@ -55,7 +55,7 @@ class HPC(canary.CanarySubcommand):
     def setup_parser(self, parser: canary.Parser):
         subparsers = parser.add_subparsers(dest="hpc_cmd", title="subcommands", metavar="")
 
-        p = subparsers.add_parser("run", help="Batch test cases and submit to HPC scheduler")
+        p = subparsers.add_parser("run", help="Batch jobs and submit to HPC scheduler")
         Run().setup_parser(p)
         group = p.add_argument_group(title="Batched execution options")
         CanaryHPCConductor.setup_parser(group)
@@ -98,7 +98,7 @@ class HPC(canary.CanarySubcommand):
             # register the CanaryHPCExector plugin so that executor.runtests is registered
             backend_name = args.canary_hpc_backend or canary.config.getoption("canary_hpc_backend")
             executor = CanaryHPCExecutor(
-                workspace=args.canary_hpc_workspace, backend=backend_name, case=args.canary_hpc_case
+                workspace=args.canary_hpc_workspace, backend=backend_name, job=args.canary_hpc_case
             )
             executor.register(canary.config.pluginmanager)
             return executor.run(args)

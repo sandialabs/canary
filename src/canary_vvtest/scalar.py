@@ -4,7 +4,7 @@
 
 """Simple classes that subclass Python's builtin float, int, and str classes.
 These classes are used when reading vvtest .vvt files so that a 'string'
-property can be added and later used to create test case execution directories"""
+property can be added and later used to create job execution directories"""
 
 from _canary.util.string import strip_quotes
 

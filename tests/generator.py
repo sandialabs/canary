@@ -6,6 +6,7 @@
 import canary_pyt
 from _canary.ir import DependencySpec
 from _canary.util.filesystem import working_dir
+from _canary.jobspec import BaselineCopyAction
 
 
 def write(path: str, text: str) -> None:
@@ -108,9 +109,9 @@ canary.directives.artifact('art_{p}.txt', upon='always')
 
         # baseline substituted
         b = s.baseline[0]
-        assert b["src"] == "a_2.exo"
-        assert b["dst"] == "b_2.exo"
-        assert b["type"] == "copy"
+        assert isinstance(b, BaselineCopyAction)
+        assert b.src.name == "a_2.exo"
+        assert b.dst == "b_2.exo"
 
         # artifacts substituted
         assert any(a.pattern == "art_2.txt" for a in s.artifacts)

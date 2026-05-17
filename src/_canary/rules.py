@@ -150,7 +150,7 @@ class KeywordRule(Rule):
     """Selects specs based on keyword expressions.
 
     A spec passes if all keyword expressions match its explicit or implicit keywords, unless the
-    expression list contains '__all__' or ':all:', in which case all specs pass."""
+    expression list contains '__all__' or ':all:', in which job all specs pass."""
 
     def __init__(self, keyword_exprs: list[str], priority: int = 0):
         super().__init__(priority=priority)
@@ -304,7 +304,7 @@ class RuntimeRule:
     def __init__(self, priority: int = 0) -> None:
         self.priority = priority
 
-    def __call__(self, case: "Job") -> RuleOutcome:
+    def __call__(self, job: "Job") -> RuleOutcome:
         raise NotImplementedError
 
     @cached_property
@@ -319,7 +319,7 @@ class RuntimeRule:
 
 
 class ResourceCapacityRule(RuntimeRule):
-    """Selects cases based on system resource capacity.
+    """Selects jobs based on system resource capacity.
 
     This rule queries plugin hooks to determine whether the available resource pool can accommodate
     the spec's declared resource needs.  Evaluation results are cached based on the resource set's
@@ -340,14 +340,14 @@ class ResourceCapacityRule(RuntimeRule):
         frozen = [(r["type"], r["slots"]) for r in resource_set]
         return tuple(sorted(frozen))
 
-    def __call__(self, case: "Job") -> RuleOutcome:
-        resource_set = case.required_resources()
+    def __call__(self, job: "Job") -> RuleOutcome:
+        resource_set = job.required_resources()
         frozen = self.freeze_resource_set(resource_set)
         if frozen not in self.cache:
             outcome: RuleOutcome | None = None
             pm = config.pluginmanager.hook
             try:
-                result = pm.canary_resource_pool_accommodates(case=case)
+                result = pm.canary_resource_pool_accommodates(case=job)
                 outcome = RuleOutcome(ok=result.ok, reason=result.reason)
             except Exception as e:
                 outcome = RuleOutcome.failed("[bold]%s[/](%r)" % (e.__class__.__name__, e.args[0]))
@@ -379,9 +379,9 @@ class RerunRule(RuntimeRule):
     def default_reason(self) -> str:
         return "previous result is not empty"
 
-    def __call__(self, case: "Job") -> RuleOutcome:
+    def __call__(self, job: "Job") -> RuleOutcome:
         if self.strategy == "ids":
-            if case.spec.id in self._ids:
+            if job.spec.id in self._ids:
                 return RuleOutcome(ok=True)
             if len(self._ids) > 4:
                 ids = [self._ids[0][:7], self._ids[1][:7], "…", self._ids[-1][:7]]
@@ -391,22 +391,22 @@ class RerunRule(RuntimeRule):
         elif self.strategy == "all":
             return RuleOutcome(ok=True)
         elif self.strategy == "changed":
-            t = case.timekeeper.started
-            if t < 0 or case.spec.file.stat().st_mtime > t:
+            t = job.timekeeper.started
+            if t < 0 or job.spec.file.stat().st_mtime > t:
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason="case spec has not changed since last run")
+            return RuleOutcome(ok=False, reason="job spec has not changed since last run")
         elif self.strategy == "not_pass":
-            if not case.status.is_success():
+            if not job.status.is_success():
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {case.status.outcome}")
+            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome}")
         elif self.strategy == "failed":
-            if case.status.is_failure():
+            if job.status.is_failure():
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {case.status.outcome} != FAIL")
+            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome} != FAIL")
         elif self.strategy == "not_run":
-            if case.status.is_unset():
+            if job.status.is_unset():
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {case.status.category!r}")
+            return RuleOutcome(ok=False, reason=f"previous result = {job.status.category!r}")
         else:
             raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
 
