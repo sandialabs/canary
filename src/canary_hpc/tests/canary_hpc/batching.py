@@ -37,10 +37,10 @@ def generate_files(tmpdir):
 
 def generate_jobs(dirname):
     import _canary.collect
-    import _canary.testcase
+    import _canary.job
     import _canary.testexec
 
-    Dependency = _canary.testcase.Dependency
+    Dependency = _canary.job.Dependency
 
     generators = _canary.collect.find_generators_in_path(dirname)
     specs = generate_specs(generators)
@@ -49,7 +49,7 @@ def generate_jobs(dirname):
     for spec in specs:
         ws = _canary.testexec.ExecutionSpace(Path.cwd(), Path("foo"))
         deps = [Dependency(job=lookup[d.spec.id], when="on_success") for d in spec.dependencies]
-        job = _canary.testcase.Job(spec=spec, workspace=ws, dependencies=deps)
+        job = _canary.job.Job(spec=spec, workspace=ws, dependencies=deps)
         jobs.append(job)
         lookup[job.id] = job
     return jobs

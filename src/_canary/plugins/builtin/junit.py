@@ -17,7 +17,7 @@ from ...workspace import Workspace
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...testcase import Job
+    from ...job import Job
 
 
 @hookimpl(specname="canary_session_reporter")

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
-    from .testcase import Job
+    from .job import Job
     from .workspace import Session
 
 

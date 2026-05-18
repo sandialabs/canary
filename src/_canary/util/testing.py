@@ -16,7 +16,7 @@ from .graph import static_order
 
 if TYPE_CHECKING:
     from ..jobspec import JobSpec
-    from ..testcase import Job
+    from ..job import Job
 
 
 class CanaryCommand:
@@ -64,14 +64,14 @@ class CanaryCommand:
         return cp
 
 
-def generate_random_testcases(
+def generate_random_jobs(
     root: Path,
     count: int = 10,
     max_params: int = 3,
     max_rows: int = 5,
 ) -> list["Job"]:
-    from ..testcase import Dependency
-    from ..testcase import Job
+    from ..job import Dependency
+    from ..job import Job
     from ..testexec import ExecutionSpace
 
     session = root / "session"

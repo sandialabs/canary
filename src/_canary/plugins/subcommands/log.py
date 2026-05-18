@@ -15,7 +15,7 @@ from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import Job
+    from ...job import Job
 
 
 @hookimpl

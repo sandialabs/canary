@@ -84,7 +84,7 @@ from .util.string import pluralize
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .jobspec import JobSpec
-    from .testcase import Job
+    from .job import Job
 
 
 logger = logging.get_logger(__name__)

@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..testcase import Job
+from ..job import Job
 from .rpool import Outcome
 from .rpool import ResourceUnavailable
 

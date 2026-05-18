@@ -22,7 +22,7 @@ from .util.time import hhmmss
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .status import Outcome
-    from .testcase import Job
+    from .job import Job
     from .workspace import Workspace
 
 

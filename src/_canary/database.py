@@ -4,7 +4,6 @@
 import collections
 import dataclasses
 import datetime
-import pickle  # nosec B403
 import sqlite3
 import threading
 import time
@@ -19,7 +18,6 @@ from . import jobspec
 from .job import JobPhase
 from .job import JobState
 from .jobspec import JobSpec
-from .jobspec import SpecDependency
 from .status import Status
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -27,7 +25,7 @@ from .util import logging
 from .util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
-    from .testcase import Job
+    from .job import Job
 
 
 logger = logging.get_logger(__name__)

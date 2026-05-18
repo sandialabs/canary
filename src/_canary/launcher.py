@@ -28,7 +28,7 @@ from .util.module import load as load_module
 from .util.shell import source_rcfile
 
 if TYPE_CHECKING:
-    from .testcase import Job
+    from .job import Job
 
 logger = logging.get_logger(__name__)
 StdErrorT = TextIO | int

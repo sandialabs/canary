@@ -20,7 +20,7 @@ __all__ = [
 
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
-    from ....testcase import Job
+    from ....job import Job
 
 logger = logging.get_logger(__name__)
 
@@ -86,7 +86,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         "--no-incremental",
         action="store_true",
         default=False,
-        help="Don't use the .canary_cache to infer testcase runtimes",
+        help="Don't use the .canary_cache to infer job runtimes",
     )
     group.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
     group.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)

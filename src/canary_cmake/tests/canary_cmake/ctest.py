@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import _canary.testcase as tc
 import canary
+from _canary.job import Job
 from _canary.resource_pool import ResourcePool
 from _canary.testexec import ExecutionSpace
 from _canary.util.executable import Executable
@@ -121,7 +121,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            job = tc.Job(spec=spec, workspace=workspace)
+            job = Job(spec=spec, workspace=workspace)
             runner(job)
             assert job.status.is_failure()
             assert job.status.has_code(65)
@@ -146,7 +146,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            job = tc.Job(spec=spec, workspace=workspace)
+            job = Job(spec=spec, workspace=workspace)
             runner(job)
             assert job.status.is_skipped()
 
@@ -170,7 +170,7 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         runner = JobRunner()
         with canary.config.override():
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            job = tc.Job(spec=spec, workspace=workspace)
+            job = Job(spec=spec, workspace=workspace)
             runner(job)
         assert job.status.is_success()
         assert job.status.code == 0
@@ -297,7 +297,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [spec] = file.lock()
             workspace = ExecutionSpace(Path.cwd(), Path("foo"))
-            job = tc.Job(spec=spec, workspace=workspace)
+            job = Job(spec=spec, workspace=workspace)
             check = pool.accommodates(job.required_resources())
             if not check:
                 raise ValueError(check.reason)

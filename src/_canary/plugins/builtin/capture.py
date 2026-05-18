@@ -15,7 +15,7 @@ from ...util.term import terminal_size
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import Job
+    from ...job import Job
     from ...workspace import Session
 
 

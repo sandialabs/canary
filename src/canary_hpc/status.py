@@ -18,7 +18,7 @@ class BatchStatus:
     """Aggregate status for a batch job.
 
     - `base` is the batch job's own terminal status (submission errors, etc.).
-    - display/derived semantics are computed from child testcases.
+    - display/derived semantics are computed from child jobs.
     """
 
     children: list[canary.Job]

@@ -5,7 +5,7 @@
 import os
 from pathlib import Path
 
-import _canary.testcase as tc
+import _canary.job as cj
 import _canary.testinst as inst
 import canary
 from _canary import collect
@@ -40,11 +40,11 @@ def test_instance_deps(tmpdir):
         for spec in specs:
             p = Path(work_tree)
             space = ExecutionSpace(p.parent, Path(p.name))
-            deps = [tc.Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            job = tc.Job(spec=spec, workspace=space, dependencies=deps)
+            deps = [cj.Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+            job = cj.Job(spec=spec, workspace=space, dependencies=deps)
             lookup[job.id] = job
             job.save()
-            instance = inst.from_testcase(job)
+            instance = inst.from_job(job)
             if job.get_attribute("multicase"):
                 assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
                 assert instance.parameters.b == (1, 3, 5, 1, 3, 5)

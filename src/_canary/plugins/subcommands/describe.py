@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...generator import AbstractTestGenerator
     from ...jobspec import JobSpec
-    from ...testcase import Job
+    from ...job import Job
 
 
 @hookimpl
@@ -57,7 +57,7 @@ class Describe(CanarySubcommand):
             job_or_spec = workspace.find(job=args.testspec)
         except:
             job_or_spec = workspace.find(spec=args.testspec)
-        describe_testcase(job_or_spec)
+        describe_job(job_or_spec)
         return 0
 
 
@@ -73,7 +73,7 @@ def dump(data: dict[str, Any]) -> str:
     return yaml.dump(data, default_flow_style=False)
 
 
-def describe_testcase(job: "Job | JobSpec", indent: str = "") -> None:
+def describe_job(job: "Job | JobSpec", indent: str = "") -> None:
     from pygments import highlight
     from pygments.formatters import (
         TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]

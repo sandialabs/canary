@@ -27,8 +27,8 @@ from .generate import Generator
 from .generator import AbstractTestGenerator
 from .runtest import Runner
 from .runtest import canary_runtests
-from .testcase import Dependency
-from .testcase import Job
+from .job import Dependency
+from .job import Job
 from .testexec import ExecutionSpace
 from .util import json_helper as json
 from .util import logging

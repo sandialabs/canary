@@ -51,12 +51,12 @@ class Status(CanarySubcommand):
             action=StatusFormatAction,
             help="Comma separated list of fields to print to the screen [default: %(default)s]. "
             "Choices are:\n\n"
-            "• Name: the testcase name\n\n"
-            "• FullName: the testcase full name (name including relative execution path)\n\n"
-            "• Session: the session name the testcase was last ran in\n\n"
-            "• Exit Code: the testcase's exit code\n\n"
-            "• Duration: testcase duration\n\n"
-            "• Status: testcase exit status\n\n"
+            "• Name: the job name\n\n"
+            "• FullName: the job full name (name including relative execution path)\n\n"
+            "• Session: the session name the job was last ran in\n\n"
+            "• Exit Code: the job's exit code\n\n"
+            "• Duration: job duration\n\n"
+            "• Status: job exit status\n\n"
             "• Details: additional details, if any\n\n",
         )
         parser.add_argument(

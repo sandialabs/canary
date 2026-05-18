@@ -32,7 +32,7 @@ from .util import logging
 
 if TYPE_CHECKING:
     from .jobspec import JobSpec
-    from .testcase import Job
+    from .job import Job
 
 
 logger = logging.get_logger(__name__)

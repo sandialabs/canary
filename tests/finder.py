@@ -9,7 +9,7 @@ import canary
 from _canary import collect
 from _canary import rules
 from _canary import select
-from _canary import testcase
+from _canary import job as cj
 from _canary import testexec
 from _canary.generate import Generator
 from _canary.hookspec import hookimpl
@@ -162,7 +162,7 @@ def test_cpu_count(tmpdir):
         jobs: list[canary.Job] = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            job = testcase.Job(spec=spec, workspace=space)
+            job = cj.Job(spec=spec, workspace=space)
             jobs.append(job)
         filter_cases(jobs)
         assert len(specs) == 4
@@ -177,7 +177,7 @@ def test_cpu_count(tmpdir):
         jobs = []
         for spec in specs:
             space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
-            job = testcase.Job(spec=spec, workspace=space)
+            job = cj.Job(spec=spec, workspace=space)
             jobs.append(job)
         filter_cases(jobs)
         assert len(specs) == 4

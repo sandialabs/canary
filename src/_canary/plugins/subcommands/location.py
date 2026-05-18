@@ -59,7 +59,7 @@ If no options are give, -x is assumed."""
 
     def execute(self, args: argparse.Namespace) -> int:
         from ...jobspec import JobSpec
-        from ...testcase import Job
+        from ...job import Job
 
         workspace = Workspace.load()
         f: Path | str

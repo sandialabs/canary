@@ -12,7 +12,7 @@ from ...util import logging
 from ...util.sendmail import sendmail
 
 if TYPE_CHECKING:
-    from ...testcase import Job
+    from ...job import Job
     from ...workspace import Session
 
 logger = logging.get_logger(__name__)

@@ -18,7 +18,7 @@ from .util.paramview import MultiParameters
 from .util.paramview import Parameters
 
 if TYPE_CHECKING:
-    from .testcase import Job
+    from .job import Job
 
 
 @dataclasses.dataclass(frozen=True)
@@ -116,10 +116,10 @@ class TestMultiInstance(TestInstance):
         return True
 
 
-def from_testcase(job: "Job") -> TestInstance:
+def from_job(job: "Job") -> TestInstance:
     dependencies: list[TestInstance] = []
     for dep in job.dependencies:
-        dependencies.append(from_testcase(dep))
+        dependencies.append(from_job(dep))
 
     parameters: Parameters
     cls: Type[TestInstance]
@@ -178,4 +178,4 @@ def load_instance(
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
     job = json.loads(file.read_text())
-    return from_testcase(job)
+    return from_job(job)

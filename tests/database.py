@@ -9,7 +9,7 @@ import pytest
 from _canary.database import NotASelection
 from _canary.database import WorkspaceDatabase
 from _canary.util.testing import generate_random_jobspecs
-from _canary.util.testing import generate_random_testcases
+from _canary.util.testing import generate_random_jobs
 
 if TYPE_CHECKING:
     from _canary.jobspec import JobSpec
@@ -40,9 +40,7 @@ def make_random_specs():
 @pytest.fixture
 def make_session():
     def factory(root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5):
-        jobs = generate_random_testcases(
-            root, count=count, max_params=max_params, max_rows=max_rows
-        )
+        jobs = generate_random_jobs(root, count=count, max_params=max_params, max_rows=max_rows)
         for job in jobs:
             with job.timekeeper.timeit():
                 job.status.set(category="PASS", outcome="SUCCESS")
