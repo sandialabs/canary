@@ -6,6 +6,7 @@ import pytest
 from _canary.error import diff_exit_status
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.ir import DependencySpec
+from _canary.jobspec import BaselineCopyAction
 from _canary.paramset import ParameterSet
 
 
@@ -108,7 +109,10 @@ def test_sources_and_baseline_substitution(tmp_path: Path) -> None:
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]
     assert s.assets[0].src.name == "in_2.txt"
     assert s.assets[0].dst == "out_2.txt"
-    assert s.baseline[0] == {"dst": "b_2.exo", "src": "a_2.exo", "type": "copy"}
+    b = s.baseline[0]
+    assert isinstance(b, BaselineCopyAction)
+    assert b.src.name == "a_2.exo"
+    assert b.dst == "b_2.exo"
 
 
 def test_dependencies_substitution(tmp_path: Path) -> None:
