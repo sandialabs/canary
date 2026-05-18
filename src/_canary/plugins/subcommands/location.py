@@ -58,8 +58,8 @@ If no options are give, -x is assumed."""
         parser.add_argument("testspec", help="Test name or test id")
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...jobspec import JobSpec
         from ...job import Job
+        from ...jobspec import JobSpec
 
         workspace = Workspace.load()
         f: Path | str

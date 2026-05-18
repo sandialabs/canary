@@ -19,8 +19,8 @@ from ..types import CanarySubcommand
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...generator import AbstractTestGenerator
-    from ...jobspec import JobSpec
     from ...job import Job
+    from ...jobspec import JobSpec
 
 
 @hookimpl

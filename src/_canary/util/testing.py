@@ -15,8 +15,8 @@ from typing import Iterable
 from .graph import static_order
 
 if TYPE_CHECKING:
-    from ..jobspec import JobSpec
     from ..job import Job
+    from ..jobspec import JobSpec
 
 
 class CanaryCommand:

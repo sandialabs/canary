@@ -15,11 +15,11 @@ import tokenize
 from itertools import repeat
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import cast
 from typing import Any
 from typing import ClassVar
 from typing import Generator
 from typing import Literal
+from typing import cast
 
 import canary
 from _canary.enums import list_parameter_space

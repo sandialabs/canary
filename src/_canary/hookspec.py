@@ -18,13 +18,13 @@ if TYPE_CHECKING:
     from .config.config import Config as CanaryConfig
     from .generate import Generator
     from .generator import AbstractTestGenerator
+    from .job import Job
     from .launcher import Launcher
     from .pluginmanager import CanaryPluginManager
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
-    from .job import Job
     from .workspace import Session
 
 

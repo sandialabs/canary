@@ -8,9 +8,9 @@ import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import cast
 from typing import Any
 from typing import Literal
+from typing import cast
 
 import yaml
 
@@ -25,10 +25,10 @@ from .error import StopExecution
 from .error import notests_exit_status
 from .generate import Generator
 from .generator import AbstractTestGenerator
-from .runtest import Runner
-from .runtest import canary_runtests
 from .job import Dependency
 from .job import Job
+from .runtest import Runner
+from .runtest import canary_runtests
 from .testexec import ExecutionSpace
 from .util import json_helper as json
 from .util import logging

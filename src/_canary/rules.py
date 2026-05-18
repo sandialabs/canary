@@ -31,8 +31,8 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
-    from .jobspec import JobSpec
     from .job import Job
+    from .jobspec import JobSpec
 
 
 logger = logging.get_logger(__name__)

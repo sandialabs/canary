@@ -83,8 +83,8 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .jobspec import JobSpec
     from .job import Job
+    from .jobspec import JobSpec
 
 
 logger = logging.get_logger(__name__)

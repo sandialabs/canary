@@ -21,8 +21,8 @@ from .util.time import hhmmss
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .status import Outcome
     from .job import Job
+    from .status import Outcome
     from .workspace import Workspace
 
 

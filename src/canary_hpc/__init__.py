@@ -149,6 +149,7 @@ def series_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConne
 
 def display_batch_log(id: str) -> None:
     import pydoc
+
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
