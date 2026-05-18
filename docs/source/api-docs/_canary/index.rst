@@ -18,15 +18,18 @@ _canary
    generate
    generator
    hookspec
+   ir
+   job
+   jobspec
    launcher
    main
    paramset
    pluginmanager
    plugins/index
-   protocols
    queue
    queue_executor
    rerun
+   resolve_dependency
    resource_pool/index
    rules
    runtest
@@ -35,7 +38,6 @@ _canary
    testcase
    testexec
    testinst
-   testspec
    timekeeper
    util/index
    version

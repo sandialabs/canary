@@ -12,12 +12,12 @@
 The execute and analyze pattern
 ===============================
 
-The "execute and analyze" pattern generates a collection of :ref:`test cases <basics-testcase>` consisting of
+The "execute and analyze" pattern generates a collection of :ref:`jobs <basics-job>` consisting of
 
 * a :ref:`test file's <basics-testfile>` parameterized instantiations; and
-* the test file's base, un-parameterized, case.
+* the test file's base, un-parameterized, job.
 
-The base case runs only after all of the parameterized test cases are finished.
+The base case runs only after all of the parameterized jobs are finished.
 
 The execute and analyze pattern is enabled by adding :func:`canary.directives.generate_composite_base_case` to the test file's directives.
 
@@ -45,13 +45,13 @@ As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_a
 Test execution phases
 ---------------------
 
-To take advantage of the execute and analyze pattern, a test should define separate functions for the parameterized and base test cases. For example, a test might define separate ``run_parameterized_case`` and ``analyze_composite_base_case`` functions as below:
+To take advantage of the execute and analyze pattern, a test should define separate functions for the parameterized and base cases. For example, a test might define separate ``run_parameterized_job`` and ``analyze_composite_base_job`` functions as below:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :lines: 12-25
     :language: python
 
-The function ``run_parameterized_test`` is intended to be called for each parameterized child test  and the function ``analyze_composite_base_case`` the final composite base case (in which the children tests are made available in the ``canary.TestMultiInstance.dependencies`` attribute).
+The function ``run_parameterized_test`` is intended to be called for each parameterized child test  and the function ``analyze_composite_base_job`` the final composite base case (in which the children tests are made available in the ``canary.TestMultiInstance.dependencies`` attribute).
 
 You can key off of the test instance type to determine which function to call:
 

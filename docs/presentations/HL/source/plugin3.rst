@@ -33,7 +33,7 @@ canary_runteststart
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_runteststart(case: canary.TestCase):
+    def canary_runteststart(case: canary.Job):
         case.variables["CUDA_VISIBLE_DEVICES"] = ",".join(case.gpu_ids)
 
 .. container:: fragment
@@ -60,7 +60,7 @@ canary_runteststart
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_runteststart(case: canary.TestCase):
+    def canary_runteststart(case: canary.Job):
         if case.gpu_ids:
             case.variables["CUDA_VISIBLE_DEVICES"] = ",".join(case.gpu_ids)
 
@@ -104,7 +104,7 @@ canary_nvidia
 .. code-block:: python
 
     @canary.hookimpl
-    def canary_runteststart(case: canary.TestCase):
+    def canary_runteststart(case: canary.Job):
         gpu_ids = [id for id in case.gpu_ids if id.startswith("NVIDIA:")]
         if gpu_ids:
             visible = ",".join(gpu_id.split(":", 2)[2] for gpu_id in gpu_ids)
@@ -161,7 +161,7 @@ Plugin specs
    * - :py:`canary_collect_report`
      - Report collection results.
    * - :py:`canary_testcase_generator`
-     - Select a testcase generator implementation.
+     - Select a job generator implementation.
    * - :py:`canary_generatestart`
      - Start test generation.
    * - :py:`canary_generate_modifyitems`
@@ -195,13 +195,13 @@ Plugin specs
    * - :py:`canary_runtests_report`
      - Report run results.
    * - :py:`canary_runtest_launcher`
-     - Provide the launcher for a testcase.
+     - Provide the launcher for a job.
    * - :py:`canary_runteststart`
-     - Setup phase for a testcase.
+     - Setup phase for a Job.
    * - :py:`canary_runtest`
-     - Execute a testcase.
+     - Execute a Job.
    * - :py:`canary_runtest_finish`
-     - Finish/postprocess a testcase.
+     - Finish/postprocess a Job.
 
 .. revealjs-break::
    :data-transition: none
@@ -213,7 +213,7 @@ Plugin specs
    * - :py:`canary_resource_pool_fill`
      - Populate the resource pool.
    * - :py:`canary_resource_pool_accommodates`
-     - Decide if a testcase can run (resource check).
+     - Decide if a Job can run (resource check).
    * - :py:`canary_resource_pool_count`
      - Count available resources of a type.
    * - :py:`canary_resource_pool_count_per_node`

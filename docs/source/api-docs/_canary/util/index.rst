@@ -12,9 +12,11 @@ util
    banner
    collections
    compression
+   conditional
    editor
    entry_points
    executable
+   field
    filesystem
    glyphs
    graph
@@ -27,10 +29,12 @@ util
    multiprocessing
    names
    paramview
+   reducer
    returncode
    rich
    rprobe
    sendmail
+   serialize
    shell
    singleton
    string

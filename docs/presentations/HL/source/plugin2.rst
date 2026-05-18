@@ -10,7 +10,7 @@ Really, everything is a plugin
    .. code-block:: python
 
       @canary.hookspec(first_result=True)
-      def canary_runtests(cases: list[TestCase]) -> bool: ...
+      def canary_runtests(cases: list[Job]) -> bool: ...
 
 .. revealjs-fragments::
 
@@ -21,7 +21,7 @@ Really, everything is a plugin
     .. code-block:: python
 
         @canary.hookimpl(trylast=True)
-        def canary_runtests(cases: list[TestCase]) -> bool:
+        def canary_runtests(cases: list[Job]) -> bool:
             """Default implementation"""
             queue = ResourceQueue(...)
             queue.put(*cases)
@@ -36,7 +36,7 @@ Really, everything is a plugin
 .. code-block:: python
 
    @canary.hookspec(first_result=True)
-   def canary_runtests(cases: list[TestCase]) -> bool: ...
+   def canary_runtests(cases: list[Job]) -> bool: ...
 
 .. container:: fragment
 
@@ -45,10 +45,10 @@ Really, everything is a plugin
         :emphasize-lines: 4-7
 
         @canary.hookimpl(tryfirst=True)
-        def canary_runtests(cases: list[TestCase]) -> bool:
+        def canary_runtests(cases: list[Job]) -> bool:
             """Run test cases in batches on HPC systems"""
             batches = []
-            for batched in batch_testcases(cases=cases, ...):
+            for batched in batch_jobs(cases=cases, ...):
                 batches.append(TestBatch(batched, ...))
             queue = ResourceQueue(...)
             queue.put(*batches)
@@ -74,7 +74,7 @@ Really, everything is a plugin
 .. code-block:: python
 
    @canary.hookspec(first_result=True)
-   def canary_runtests(cases: list[TestCase]) -> bool: ...
+   def canary_runtests(cases: list[Job]) -> bool: ...
 
 .. container:: fragment
 
@@ -83,10 +83,10 @@ Really, everything is a plugin
         :emphasize-lines: 8
 
         @canary.hookimpl(tryfirst=True)
-        def canary_runtests(cases: list[TestCase]) -> bool:
+        def canary_runtests(cases: list[Job]) -> bool:
             """Run test cases in batches on distributed pool of machines"""
             batches = []
-            for batched in batch_testcases(cases=cases, ...):
+            for batched in batch_jobs(cases=cases, ...):
                 batch = TestBatch(batched, ...)
                 batches.append(batch)
             dpool = DistributedResourcePool(...)

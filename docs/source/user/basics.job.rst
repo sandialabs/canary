@@ -2,12 +2,12 @@
 
    SPDX-License-Identifier: MIT
 
-.. _basics-testcase:
+.. _basics-job:
 
-The test case
-=============
+The Job object
+==============
 
-A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<usage-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
+A job is a concrete instantiation of a :ref:`test file <basics-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single job whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<usage-parameterize>` that expand to define multiple jobs whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -18,10 +18,10 @@ would expand into two test instances with names
 * ``parameterize1[a=1]``
 * ``parameterize1[a=4]``
 
-Test case execution
--------------------
+Job execution
+-------------
 
-During a test session, ``canary`` creates a :ref:`unique test execution directory <test-exec-dir>` for each test case and executes the script with the current python interpreter in its own subprocess.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
+During a test session, ``canary`` creates a :ref:`unique test execution directory <test-exec-dir>` for each job and executes the script with the current python interpreter in its own subprocess.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -30,16 +30,16 @@ During a test session, ``canary`` creates a :ref:`unique test execution director
 The test instance object defines the following attributes and methods:
 
 ``file_root: str``:
-  The test case file's root search path, as passed to ``canary run``.
+  The job file's root search path, as passed to ``canary run``.
 
 ``file_path: str``:
-  Path to the test case's file, relative to ``file_root``.
+  Path to the job's file, relative to ``file_root``.
 
 ``file: str``:
-  Full path to the test case's file.
+  Full path to the job's file.
 
 ``name: str``:
-  The test case's name.
+  The job's name.
 
 ``cpu_ids: list[int]``:
   List of CPUs reserved for this job [1]_.
@@ -48,16 +48,16 @@ The test instance object defines the following attributes and methods:
   List of GPUs reserved for this job [1]_.
 
 ``family: str``:
-  The test case family is the basename of ``test_path``
+  The job family is the basename of ``test_path``
 
 ``keywords: list[str]``:
   The test file's :ref:`keywords  <directive-keywords>`.
 
 ``parameters: dict[str, Union[str, float, int]]``:
-  The expanded :ref:`parameters <directive-parameterize>` for this test case.
+  The expanded :ref:`parameters <directive-parameterize>` for this job.
 
 ``timeout: float``:
-  The test cases :ref:`timeout <directive-timeout>`.
+  The job's :ref:`timeout <directive-timeout>`.
 
 ``runtime: float``:
   The approximate :ref:`run time <basics-runtimes>`.
@@ -69,10 +69,10 @@ The test instance object defines the following attributes and methods:
   The root :ref:`session <basics-workspace>` execution directory.
 
 ``exec_dir: str``:
-  The test case's execution directory.
+  The job's execution directory.
 
 ``id: str``:
-  The test case's ID.
+  The job's ID.
 
 ``cmd_line: str``:
   The command line used to launch this test.

@@ -17,6 +17,5 @@ plugins.builtin
    junit
    markdown
    post_clean
-   pyt
    repeat
    testcase_generator

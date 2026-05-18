@@ -17,7 +17,7 @@ Examples of plugin-provided behavior include:
 * batched execution via external systems (e.g., ``canary_hpc``).
 
 In this tutorial section we focus on adding support for a new *test input format* by implementing
-a testcase generator hook.
+a job generator hook.
 
 
 .. toctree::

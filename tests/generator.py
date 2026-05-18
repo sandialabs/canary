@@ -5,8 +5,8 @@
 
 import canary_pyt
 from _canary.ir import DependencySpec
-from _canary.util.filesystem import working_dir
 from _canary.jobspec import BaselineCopyAction
+from _canary.util.filesystem import working_dir
 
 
 def write(path: str, text: str) -> None:

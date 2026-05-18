@@ -56,10 +56,10 @@ Because ``.pyt`` test files are imported during the discovery process, the test 
     if __name__ == "__main__":
         # run the test
 
-Test case expansion
+Parameter expansion
 -------------------
 
-Test files define one or more :ref:`test cases <basics-testcase>`.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
+Test files define one or more :ref:`jobs <basics-job>`.  In the simplest case, a test file defines a single job whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple jobs whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -70,13 +70,13 @@ would expand into two test instances, one with the parameter ``a=1`` and one wit
 .. image:: /dot/Simple.png
     :align: center
 
-Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
+Each job would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
     :lines: 11-13
 
-When multiple ``parameterize`` directives are used in a test file, Canary expands them by taking the Cartesian product of all parameter values—each unique combination becomes a separate TestCase.
+When multiple ``parameterize`` directives are used in a test file, Canary expands them by taking the Cartesian product of all parameter values—each unique combination becomes a separate ``Job``.
 
 
 .. image:: /dot/General.png

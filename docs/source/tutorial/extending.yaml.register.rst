@@ -7,7 +7,7 @@
 Registering the generator
 =========================
 
-A testcase generator becomes active when a plugin registers it during collection. The YAML plugin
+A job generator becomes active when a plugin registers it during collection. The YAML plugin
 does this by implementing the ``canary_collectstart`` hook:
 
 .. literalinclude:: /static/yaml_generator.py

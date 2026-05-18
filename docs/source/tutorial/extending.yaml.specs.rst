@@ -4,11 +4,11 @@
 
 .. _tutorial-extending-yaml-specs:
 
-Building :class:`~canary.ResolvedSpec` objects
-==============================================
+Building :class:`~canary.JobSpec` objects
+=========================================
 
-A testcase generator ultimately returns runnable work items to ``canary``. In this plugin, those
-work items are :class:`~canary.ResolvedSpec` objects.
+A job generator ultimately returns runnable work items to ``canary``. In this plugin, those
+work items are :class:`~canary.JobSpec` objects.
 
 What the YAML plugin sets
 -------------------------

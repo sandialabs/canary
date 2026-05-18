@@ -14,7 +14,7 @@ This section covers every basic command you need to get started with Canary.  By
 
    basics.workspace
    basics.testfile
-   basics.testcase
+   basics.job
    basics.status
    basics.resource
    basics.runtime

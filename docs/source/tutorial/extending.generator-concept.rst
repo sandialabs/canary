@@ -4,23 +4,23 @@
 
 .. _tutorial-extending-generator-concept:
 
-Testcase generators
-===================
+Job generators
+==============
 
-A **testcase generator** is responsible for:
+A **job generator** is responsible for:
 
 1. deciding whether it recognizes a file (a *match* step); and
-2. generating one or more :class:`~_canary.test.case.TestCase` objects from that file.
+2. generating one or more :class:`~_canary.job.Job` objects from that file.
 
 In other words: ``canary`` discovers files, but plugins decide which of those files become runnable
-test cases.
+jobs.
 
 At a minimum, a generator typically provides:
 
 * a ``matches(path)`` method to identify supported files; and
-* a method that returns a list of test cases (in this example, ``lock()``).
+* a method that returns a list of jobs (in this example, ``lock()``).
 
-Each generated :class:`~_canary.test.case.TestCase` controls execution details such as:
+Each generated :class:`~_canary.job.Job` controls execution details such as:
 
 * the test *family* (name);
 * keywords/labels;

@@ -4,12 +4,12 @@
 
 
 
-.. _canary.testspec:
+.. _canary.job:
 
-testspec
-========
+job
+===
 
-.. automodule:: _canary.testspec
+.. automodule:: _canary.job
    :members:
    :undoc-members:
    :show-inheritance:

@@ -4,12 +4,12 @@
 
 
 
-.. _canary.protocols:
+.. _canary.resolve_dependency:
 
-protocols
-=========
+resolve_dependency
+==================
 
-.. automodule:: _canary.protocols
+.. automodule:: _canary.resolve_dependency
    :members:
    :undoc-members:
    :show-inheritance:

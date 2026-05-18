@@ -31,12 +31,12 @@ User defined reports
         output = output or "canary-report.txt"
         workspace = canary.Workspace.load()
         with open(output, "w") as fh:
-            for case in workspace.active_testcases():
+            for job in workspace.load_jobs():
                 fh.write("====\n")
-                fh.write(f"Name: {case.spec.name}\n")
-                fh.write(f"Start: {case.timekeeper.started_on}\n")
-                fh.write(f"Finish: {case.timekeeper.finished_on}\n")
-                fh.write(f"Status: {case.status.name}\n")
+                fh.write(f"Name: {job.spec.name}\n")
+                fh.write(f"Start: {job.timekeeper.started_on}\n")
+                fh.write(f"Finish: {job.timekeeper.finished_on}\n")
+                fh.write(f"Status: {job.status.name}\n")
 
 .. code-block:: console
 

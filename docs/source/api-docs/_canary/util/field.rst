@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.builtin.pyt:
+.. _canary.util.field:
 
-pyt
-===
+field
+=====
 
-.. automodule:: _canary.plugins.builtin.pyt
+.. automodule:: _canary.util.field
    :members:
    :undoc-members:
    :show-inheritance:

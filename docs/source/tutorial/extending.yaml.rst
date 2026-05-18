@@ -4,8 +4,8 @@
 
 .. _tutorial-extending-yaml:
 
-Worked example: a YAML testcase generator
-=========================================
+Worked example: a YAML jobspec generator
+========================================
 
 Consider the YAML test file:
 
@@ -25,7 +25,7 @@ This file can be turned into a runnable ``canary`` test spec in just a few lines
 
    @canary.hookimpl
    def canary_collectstart(collector) -> None:
-       collector.add_generator(YAMLTestGenerator)
+       collector.add_generator(YAMLJobGenerator)
 
 Further sections will describe how the generator recognizes files, validates YAML, and generates
 one or more :class:`~canary.ResolvedSpec` objects.

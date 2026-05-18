@@ -33,7 +33,7 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
 
     file_patterns: ClassVar[tuple[str, ...]] = ("test_*.yaml",)
 
-    def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.JobSpec]:
         """Take the cartesian product of parameters and from each combination create a test case."""
 
         with open(self.file, "r") as fh:
@@ -57,11 +57,11 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
                     p = kwds["parameters"] = dict(zip(keys, values))
                     shell_cmds: list[str] = [Template(_).safe_substitute(**p) for _ in script]
                     kwds["command"] = [sh, "-c", "set -e\n" + "\n".join(shell_cmds)]
-                    spec = canary.ResolvedSpec(**kwds)
+                    spec = canary.JobSpec(**kwds)
                     specs.append(spec)
             else:
                 kwds["command"] = [sh, "-c", "set -e\n" + "\n".join(script)]
-                spec = canary.ResolvedSpec(**kwds)
+                spec = canary.JobSpec(**kwds)
                 specs.append(spec)
 
         return specs
