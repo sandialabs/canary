@@ -26,7 +26,7 @@ from _canary.generator import AbstractTestGenerator
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
-from _canary.ir import DependencySpec
+from _canary.ir import DependencySelector
 from _canary.ir import JobSpecIR
 from _canary.job import BaseJob
 from _canary.job import Job
@@ -110,7 +110,7 @@ __all__ = [
     "SubprocessLauncher",
     "TestInstance",
     "TestMultiInstance",
-    "DependencySpec",
+    "DependencySelector",
     "Artifact",
     "Asset",
     "JobSpec",

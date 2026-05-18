@@ -102,10 +102,10 @@ from typing import Any
 from typing import Sequence
 
 from _canary import enums
-from _canary.ir import DependencySpec
+from _canary.ir import DependencySelector
 
 WhenType = str | dict[str, str]
-DependencyType = str | dict[str, Any] | DependencySpec
+DependencyType = str | dict[str, Any] | DependencySelector
 
 
 def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -> None:

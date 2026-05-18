@@ -182,13 +182,13 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                 if dep is None:
                     continue
                 if isinstance(dep, str):
-                    d = canary.DependencySpec(pattern=dep, when="on_success", expects="+")
+                    d = canary.DependencySelector(pattern=dep, when="on_success", expects="+")
                     self.add_dependency(d, when=arg.when)
                 else:
                     assert isinstance(dep, dict)
                     for dep_name, dep_params in dep.items():
                         p = ".".join(f"{k}={dep_params[k]}" for k in sorted(dep_params))
-                        d = canary.DependencySpec(
+                        d = canary.DependencySelector(
                             pattern=f"{dep_name}.{p}", when="on_success", expects="+"
                         )
                         self.add_dependency(d, when=arg.when)
@@ -264,7 +264,7 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
             result = re.sub(r"(?i)\bfail\b", "failed", result)
             result = re.sub(r"(?i)\bskip\b", "skipped", result)
             when = result
-        d = canary.DependencySpec(pattern=arg.argument, expects=expects, when=when.lower())
+        d = canary.DependencySelector(pattern=arg.argument, expects=expects, when=when.lower())
         self.add_dependency(d, when=arg.when)
 
 

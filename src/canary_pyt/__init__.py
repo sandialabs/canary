@@ -13,14 +13,14 @@ from typing import Sequence
 from _canary import enums
 from _canary.generator import CanaryDSLSpecGenerator
 from _canary.hookspec import hookimpl
-from _canary.ir import DependencySpec
+from _canary.ir import DependencySelector
 from _canary.paramset import ParameterSet
 from _canary.status import Outcome
 from _canary.third_party.monkeypatch import monkeypatch
 from _canary.util import logging
 
 WhenType = str | dict[str, str]
-DependencyType = str | dict[str, Any] | DependencySpec
+DependencyType = str | dict[str, Any] | DependencySelector
 logger = logging.get_logger(__name__)
 
 
@@ -279,8 +279,8 @@ class PYTAdapter(CanaryDSLSpecGenerator):
 
 def parse_dependencies(
     arg: DependencyType | list[DependencyType], **kwargs: Any
-) -> list[DependencySpec]:
-    if not isinstance(arg, (str, list, dict, DependencySpec)):
+) -> list[DependencySelector]:
+    if not isinstance(arg, (str, list, dict, DependencySelector)):
         raise TypeError(f"expected string, dict, or list, got {type(arg).__name__}: {arg!r}")
 
     legacy_expect = kwargs.pop("expect", None)
@@ -289,7 +289,7 @@ def parse_dependencies(
         # unknown kwargs should be an error; otherwise typos silently pass
         raise TypeError(f"depends_on(): unexpected keyword(s): {', '.join(sorted(kwargs))}")
 
-    if isinstance(arg, DependencySpec):
+    if isinstance(arg, DependencySelector):
         return [arg]
 
     if isinstance(arg, str):
@@ -318,7 +318,7 @@ def parse_dependencies(
     return [parse_dependency(a, i) for i, a in enumerate(arg)]
 
 
-def parse_dependency(arg: DependencyType, index: int) -> DependencySpec:
+def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
     prefix = "depends_on" if index is None else f"depends_on[{index}]"
     if not isinstance(arg, (str, dict)):
         raise TypeError(f"{prefix}: expected string or dict, got {type(arg).__name__}: {arg!r}")
@@ -326,9 +326,9 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySpec:
     if isinstance(arg, str):
         if not arg.strip():
             raise ValueError(f"{prefix}: job must be a non-empty string")
-        return DependencySpec(pattern=arg, expects="+", when="on_success")
+        return DependencySelector(pattern=arg, expects="+", when="on_success")
 
-    if isinstance(arg, DependencySpec):
+    if isinstance(arg, DependencySelector):
         return arg
 
     assert isinstance(arg, dict)
@@ -364,7 +364,7 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySpec:
     elif expects <= 0:
         raise ValueError(f"{prefix}['expects']: invalid value: {expects!r} (must be > 0)")
 
-    return DependencySpec(pattern=job, expects=expects, when=when)
+    return DependencySelector(pattern=job, expects=expects, when=when)
 
 
 @hookimpl

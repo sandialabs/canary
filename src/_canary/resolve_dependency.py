@@ -16,7 +16,7 @@ from .ir import JobSpecIR
 from .jobspec import JobSpec
 
 if TYPE_CHECKING:
-    from .ir import DependencySpec
+    from .ir import DependencySelector
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ class ResolveContext:
 
 
 def _find_matching_specs(
-    dp: "DependencySpec",
+    dp: "DependencySelector",
     source_spec: "JobSpecIR",
     ctx: ResolveContext,
 ) -> list["JobSpecIR | JobSpec"]:

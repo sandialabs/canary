@@ -209,7 +209,7 @@ def create_ir(
     if depends:
         deps = kwargs.setdefault("dependencies", [])
         for d in depends:
-            deps.append(canary.DependencySpec(pattern=d, expects="+", when="on_success"))
+            deps.append(canary.DependencySelector(pattern=d, expects="+", when="on_success"))
     if environment is not None:
         kwargs.setdefault("environment", {}).update(environment)
     if disabled:

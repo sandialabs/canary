@@ -28,10 +28,10 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class DependencySpec:
+class DependencySelector:
     """String representation of test dependencies
 
-    Dependency resolution is performed after job discovery.  The ``DependencySpec``
+    Dependency resolution is performed after job discovery.  The ``DependencySelector``
     object holds information needed to perform the resolution.
 
     Args:
@@ -48,15 +48,15 @@ class DependencySpec:
     def __post_init__(self):
         expects = self.expects
         if not isinstance(expects, (str, int)):
-            raise TypeError(f"DependencySpec.expects: invalid type {type(expects).__name__!r}")
+            raise TypeError(f"DependencySelector.expects: invalid type {type(expects).__name__!r}")
         if isinstance(expects, str):
             choices = {"+", "?", "*"}
             if expects not in choices:
                 s = ", ".join(sorted(choices))
-                msg = f"DependencySpec.expect: invalid choice: {expects!r} (choose from {s})"
+                msg = f"DependencySelector.expect: invalid choice: {expects!r} (choose from {s})"
                 raise TypeError(msg)
         elif expects <= 0:
-            raise ValueError(f"DependencySpec.expect: invalid value: {expects!r} (must be > 0)")
+            raise ValueError(f"DependencySelector.expect: invalid value: {expects!r} (must be > 0)")
 
     def matches(self, spec: Any) -> bool:
         choices = {
@@ -97,7 +97,7 @@ class JobSpecIR:
         family: str | None = None,
         stdout: str = "canary-out.txt",
         stderr: str | None = None,  # combine stdout/stderr by default
-        dependencies: list[DependencySpec] | None = None,
+        dependencies: list[DependencySelector] | None = None,
         parameters: dict[str, Any] | None = None,
         meta_parameters: dict[str, Any] | None = None,
         attributes: dict[str, Any] | None = None,
@@ -126,7 +126,7 @@ class JobSpecIR:
         self.meta_parameters: dict[str, Any] = meta_parameters or {}
         self.stdout: str = stdout
         self.stderr: str | None = stderr
-        self.dependencies: list[DependencySpec] = self.build_dependencies(dependencies or [])
+        self.dependencies: list[DependencySelector] = self.build_dependencies(dependencies or [])
         self.attributes: dict[str, Any] = attributes or {}
         self.keywords: list[str] = keywords or []
         self.assets: list[Asset] = assets or []
@@ -223,21 +223,23 @@ class JobSpecIR:
             view_path=self.view_path,
         )
 
-    def build_dependencies(self, args: Sequence[str | DependencySpec]) -> list[DependencySpec]:
-        dependency_specs: list[DependencySpec] = []
+    def build_dependencies(
+        self, args: Sequence[str | DependencySelector]
+    ) -> list[DependencySelector]:
+        dependency_specs: list[DependencySelector] = []
         parameters: dict[str, str] = {}
         for key, val in self.parameters.items():
             parameters[key] = stringify(val)
         for arg in args:
-            if isinstance(arg, DependencySpec):
+            if isinstance(arg, DependencySelector):
                 t = string.Template(arg.pattern)
                 pattern = t.safe_substitute(**parameters)
-                d = DependencySpec(pattern=pattern, expects=arg.expects, when=arg.when)
+                d = DependencySelector(pattern=pattern, expects=arg.expects, when=arg.when)
                 dependency_specs.append(d)
             else:
                 t = string.Template(arg)
                 pattern = t.safe_substitute(**parameters)
-                dep_pattern = DependencySpec(pattern=pattern)
+                dep_pattern = DependencySelector(pattern=pattern)
                 dependency_specs.append(dep_pattern)
         return dependency_specs
 

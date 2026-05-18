@@ -5,7 +5,7 @@ import pytest
 
 from _canary.error import diff_exit_status
 from _canary.generator import CanaryDSLSpecGenerator
-from _canary.ir import DependencySpec
+from _canary.ir import DependencySelector
 from _canary.jobspec import BaselineCopyAction
 from _canary.paramset import ParameterSet
 
@@ -119,7 +119,7 @@ def test_dependencies_substitution(tmp_path: Path) -> None:
     gen = make_gen(tmp_path, "x.pyt")
     gen.add_family("a")
     gen.add_parameter_set(ParameterSet.list_parameter_space("p", [2]))
-    d = DependencySpec(pattern="dep_${P}", expects=1, when="on_success")
+    d = DependencySelector(pattern="dep_${P}", expects=1, when="on_success")
     gen.add_dependency(d)
     specs = gen.lock()
     s = [x for x in specs if x.family == "a" and x.parameters.get("p") == 2][0]

@@ -19,7 +19,7 @@ from typing import Literal
 from typing import Sequence
 
 from .error import diff_exit_status
-from .ir import DependencySpec
+from .ir import DependencySelector
 from .ir import JobSpecIR
 from .jobspec import Artifact
 from .jobspec import Asset
@@ -221,7 +221,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         self.sources: Field[Asset, list[Asset]] = Field(reducer=reducer.IDENTITY)
         self.baseline: Field[BaselineAction, list[BaselineAction]] = Field(reducer=reducer.IDENTITY)
         self.exclusive: Field[bool, bool] = Field(reducer=reducer.ANY)
-        self.depends_on: Field[DependencySpec, list[DependencySpec]] = Field(
+        self.depends_on: Field[DependencySelector, list[DependencySelector]] = Field(
             reducer=reducer.IDENTITY
         )
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
@@ -303,7 +303,7 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
     def set_exclusive(self, when: WhenType | None = None) -> None:
         self.exclusive.add(True, when=when)
 
-    def add_dependency(self, dep: DependencySpec, when: WhenType | None = None) -> None:
+    def add_dependency(self, dep: DependencySelector, when: WhenType | None = None) -> None:
         self.depends_on.add(dep, when=when)
 
     def set_attributes(self, when: WhenType | None = None, **attrs: Any) -> None:
@@ -444,11 +444,11 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
         parameters: dict[str, Any] | None = None,
         on_options: list[str] | None = None,
         subs: dict[str, Any] | None = None,
-    ) -> list[DependencySpec]:
+    ) -> list[DependencySelector]:
         deps = self.depends_on.eval(family=family, parameters=parameters, on_options=on_options)
         if subs:
             for i, dep in enumerate(deps):
-                deps[i] = DependencySpec(
+                deps[i] = DependencySelector(
                     pattern=self.safe_substitute(dep.pattern, **subs),
                     expects=dep.expects,
                     when=dep.when,
@@ -604,7 +604,8 @@ class CanaryDSLSpecGenerator(AbstractTestGenerator):
 
                 modules = self.get_modules(family, parameters=None, on_options=on_options)
                 deps = [
-                    DependencySpec(pattern=d.id, expects=1, when=analyze.requires) for d in my_irs
+                    DependencySelector(pattern=d.id, expects=1, when=analyze.requires)
+                    for d in my_irs
                 ]
 
                 pset_meta = []

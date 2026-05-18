@@ -16,7 +16,7 @@ def test_depends_on_one(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         Path("f1.pyt").touch()
         Path("f2.pyt").touch()
-        dep = ir.DependencySpec(pattern="f1")
+        dep = ir.DependencySelector(pattern="f1")
         drafts = [
             ir.JobSpecIR(file_root=Path("."), file_path=Path("f1.pyt"), dependencies=[]),
             ir.JobSpecIR(file_root=Path("."), file_path=Path("f2.pyt"), dependencies=[dep]),
@@ -34,11 +34,11 @@ def test_depends_on_one_to_many(tmpdir):
         b1 = ir.JobSpecIR(file_root=root, file_path=Path("f1.pyt"), dependencies=[])
         Path("f2.pyt").touch()
 
-        dep = ir.DependencySpec(pattern="f1")
+        dep = ir.DependencySelector(pattern="f1")
         b2 = ir.JobSpecIR(file_root=root, file_path=Path("f2.pyt"), dependencies=[dep])
 
         Path("f3.pyt").touch()
-        dep = ir.DependencySpec(pattern="f1")
+        dep = ir.DependencySelector(pattern="f1")
         b3 = ir.JobSpecIR(file_root=root, file_path=Path("f3.pyt"), dependencies=[dep])
         drafts = [b1, b2, b3]
         resolved = generate.resolve(drafts)
@@ -60,7 +60,7 @@ def test_depends_on_param(tmpdir):
             )
             drafts.append(b)
         Path("f2.pyt").touch()
-        dep = ir.DependencySpec(pattern="f1.a=2")
+        dep = ir.DependencySelector(pattern="f1.a=2")
         b = ir.JobSpecIR(file_root=root, file_path=Path("f2.pyt"), dependencies=[dep])
         drafts.append(b)
         resolved = generate.resolve(drafts)
@@ -83,9 +83,9 @@ def test_depends_on_many_to_one(tmpdir):
         f2 = Path("f2.pyt")
         f2.touch()
         deps = [
-            ir.DependencySpec(pattern="f1.a=1"),
-            ir.DependencySpec(pattern="f1.a=3"),
-            ir.DependencySpec(pattern="f1.a=4"),
+            ir.DependencySelector(pattern="f1.a=1"),
+            ir.DependencySelector(pattern="f1.a=3"),
+            ir.DependencySelector(pattern="f1.a=4"),
         ]
         b = ir.JobSpecIR(file_root=root, file_path=f1, dependencies=deps)
         drafts.append(b)
@@ -111,7 +111,7 @@ def test_depends_on_glob(tmpdir):
             b = ir.JobSpecIR(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
             drafts.append(b)
         Path("f2.pyt").touch()
-        dep = ir.DependencySpec(pattern="f1.a=*")
+        dep = ir.DependencySelector(pattern="f1.a=*")
         b = ir.JobSpecIR(file_root=root, file_path=Path("f2.pyt"), dependencies=[dep])
         drafts.append(b)
         resolved = generate.resolve(drafts)
@@ -142,7 +142,7 @@ def test_depends_on_param_subs(tmpdir):
         drafts.append(b)
         f2 = Path("f2.pyt")
         f2.touch()
-        dep = ir.DependencySpec(pattern="abc_run.my_var=${my_var}")
+        dep = ir.DependencySelector(pattern="abc_run.my_var=${my_var}")
         b = ir.JobSpecIR(
             file_root=root,
             file_path=f2,
@@ -162,7 +162,7 @@ def test_depends_on_missing(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")
         Path("f1.pyt").touch()
-        dep = ir.DependencySpec(pattern="f2")
+        dep = ir.DependencySelector(pattern="f2")
         b = ir.JobSpecIR(file_root=root, file_path=Path("f1.pyt"), dependencies=[dep])
         with pytest.raises(UnresolvedDependenciesErrors):
             generate.resolve([b])
@@ -178,7 +178,7 @@ def test_generate_specs(tmpdir):
             b = ir.JobSpecIR(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
             drafts.append(b)
         Path("f2.pyt").touch()
-        dep = ir.DependencySpec(pattern="f1.a=*")
+        dep = ir.DependencySelector(pattern="f1.a=*")
         b = ir.JobSpecIR(file_root=root, file_path=Path("f2.pyt"), dependencies=[dep])
         drafts.append(b)
         resolved = generate.resolve(specs=drafts)
