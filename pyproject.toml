@@ -124,7 +124,7 @@ output = "coverage.xml"
 branch = true
 omit = [ "*/third_party/*" ]
 source = [ "_canary" ]
-command_line = "-m pytest"
+command_line = "-m pytest ./tests"
 
 [tool.coverage.html]
 directory = "html.cov"

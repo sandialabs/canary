@@ -28,22 +28,23 @@ jobs:
       - name: Pytest
         run: |
           pip install .[dev]
+          pytest src/canary_gitlab/tests
           pytest src/canary_cmake/tests
           pytest src/canary_vvtest/tests
           pytest src/canary_pyt/tests
           pytest src/canary_hpc/tests
           pytest tests
-      - name: Coverage
-        run: |
-          coverage run
-          coverage report
-          coverage xml
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report-${{ matrix.python-version }}-${{ matrix.coverage-tool }}
-          path: coverage.xml
-          retention-days: 30
+#      - name: Coverage
+#        run: |
+#          coverage run
+#          coverage report
+#          coverage xml
+#      - name: Upload coverage report
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: coverage-report-${{ matrix.python-version }}-${{ matrix.coverage-tool }}
+#          path: coverage.xml
+#          retention-days: 30
 
   slurm:
    runs-on: ubuntu-latest
