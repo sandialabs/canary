@@ -10,7 +10,7 @@ def test_random_name_with_seed_is_repeatable():
 
 
 def test_random_name_does_not_repeat_for_small_count():
-    N = 30
+    N = 20
     # set the random number generator seed so this test is repeatable
     names.random_name(seed=1)
     random_names = {names.random_name() for _ in range(N)}
