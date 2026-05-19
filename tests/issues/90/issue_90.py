@@ -9,13 +9,11 @@ def test_issue_90(tmpdir):
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             write_testfile(fh)
-        cp = run("-w", ".", check=False, debug=True)
+        env = os.environ.copy()
+        cp = run("-w", ".", env=env, check=False, debug=True)
         assert cp.returncode != 0
-        try:
-            os.environ["FIX_B"] = "1"
-            cp = run("--only=failed", "b", debug=True)
-        finally:
-            os.environ.pop("FIX_B")
+        env["FIX_B"] = "1"
+        cp = run("--only=failed", "b", env=env, debug=True)
         assert cp.returncode == 0
         assert set(os.listdir("TestResults")) == {"VIEW.TAG", "a", "b", "c"}
 

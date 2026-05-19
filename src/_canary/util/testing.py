@@ -60,7 +60,7 @@ class CanaryCommand:
         cmd.extend(self.default_args)
         cmd.append(self.command_name)
         cmd.extend(args)
-        cp = subprocess.run(cmd, **kwargs)
+        cp = subprocess.run(cmd, env=env, **kwargs)
         return cp
 
 
