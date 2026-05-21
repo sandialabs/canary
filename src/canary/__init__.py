@@ -46,6 +46,8 @@ from _canary.rules import RuntimeRule
 from _canary.select import RuntimeSelector
 from _canary.select import Selector
 from _canary.testcase import TestCase
+from _canary.testinst import LockFileNotFoundError
+from _canary.testinst import MissingTestInstance
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.util import _difflib as difflib
@@ -107,6 +109,7 @@ __all__ = [
     "TestCase",
     "Launcher",
     "logging",
+    "MissingTestInstance",
     "SubprocessLauncher",
     "TestInstance",
     "TestMultiInstance",
@@ -156,14 +159,13 @@ def make_argument_parser() -> TestParser:
 make_std_parser = make_argument_parser
 
 
-def get_instance(arg_path: Path | str | None = None) -> TestInstance | None:
+def get_instance(arg_path: Path | str | None = None) -> TestInstance | MissingTestInstance:
     from _canary.testinst import load_instance
 
     try:
-        instance = load_instance(arg_path)
-    except FileNotFoundError:
-        return None
-    return instance
+        return load_instance(arg_path)
+    except LockFileNotFoundError:
+        return MissingTestInstance(arg_path)
 
 
 def get_job(arg_path: Path | str | None = None) -> Job | None:

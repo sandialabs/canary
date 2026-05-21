@@ -375,6 +375,9 @@ class RerunRule(RuntimeRule):
             if self.strategy not in self.STRATEGIES:
                 raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
 
+    def __repr__(self) -> str:
+        return f"RerunRule(strategy={self.strategy})"
+
     @cached_property
     def default_reason(self) -> str:
         return "previous result is not empty"

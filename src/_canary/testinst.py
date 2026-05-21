@@ -177,5 +177,165 @@ def load_instance(
     lookup = lookup or {}
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
+    if not file.exists():
+        raise LockFileNotFoundError(file.as_posix())
     job = json.loads(file.read_text())
     return from_job(job)
+
+
+class MissingTestInstanceError(RuntimeError):
+    def __init__(self, file: str | Path | None, attr: str) -> None:
+        self.file = str(file)
+        self.attr = attr
+        super().__init__(f"MissingTestInstance(file={self.file!r}) does not implement {attr!r}")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MissingTestInstance:
+    file: str | Path | None
+
+    def __bool__(self) -> bool:
+        return False
+
+    def _raise(self, attr: str) -> Any:
+        raise MissingTestInstanceError(self.file, attr)
+
+    @property
+    def analyze(self) -> bool:
+        return self._raise("analyze")
+
+    @property
+    def multicase(self) -> bool:
+        return self._raise("multicase")
+
+    def logfile(self, stage: str = "run") -> str:
+        return self._raise("logfile")
+
+    def output(self) -> str:
+        return self._raise("output")
+
+    @property
+    def processors(self) -> int:
+        return self._raise("processors")
+
+    @property
+    def cpus(self) -> int:
+        return self._raise("cpus")
+
+    @property
+    def gpus(self) -> int:
+        return self._raise("gpus")
+
+    def set_attribute(self, **kwargs: Any) -> None:
+        return self._raise("set_attribute")
+
+    def get_dependency(self, **params: Any):
+        return self._raise("get_dependency")
+
+    @property
+    def file_root(self):
+        return self._raise("file_root")
+
+    @property
+    def file_path(self):
+        return self._raise("file_path")
+
+    @property
+    def name(self):
+        return self._raise("name")
+
+    @property
+    def cpu_ids(self):
+        return self._raise("cpu_ids")
+
+    @property
+    def gpu_ids(self):
+        return self._raise("gpu_ids")
+
+    @property
+    def family(self):
+        return self._raise("family")
+
+    @property
+    def keywords(self):
+        return self._raise("keywords")
+
+    @property
+    def parameters(self):
+        return self._raise("parameters")
+
+    @property
+    def timeout(self):
+        return self._raise("timeout")
+
+    @property
+    def runtime(self):
+        return self._raise("runtime")
+
+    @property
+    def baseline(self):
+        return self._raise("baseline")
+
+    @property
+    def sources(self):
+        return self._raise("sources")
+
+    @property
+    def work_tree(self):
+        return self._raise("work_tree")
+
+    @property
+    def working_directory(self):
+        return self._raise("working_directory")
+
+    @property
+    def state(self):
+        return self._raise("state")
+
+    @property
+    def status(self):
+        return self._raise("status")
+
+    @property
+    def start(self):
+        return self._raise("start")
+
+    @property
+    def stop(self):
+        return self._raise("stop")
+
+    @property
+    def id(self):
+        return self._raise("id")
+
+    @property
+    def returncode(self):
+        return self._raise("returncode")
+
+    @property
+    def variables(self):
+        return self._raise("variables")
+
+    @property
+    def dependencies(self):
+        return self._raise("dependencies")
+
+    @property
+    def ofile(self):
+        return self._raise("ofile")
+
+    @property
+    def efile(self):
+        return self._raise("efile")
+
+    @property
+    def lockfile(self):
+        return self._raise("lockfile")
+
+    @property
+    def attributes(self):
+        return self._raise("attributes")
+
+
+class LockFileNotFoundError(FileNotFoundError):
+    pass

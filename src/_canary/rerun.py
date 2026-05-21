@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .jobspec import JobSpec
 
 
-StrategyType = Literal["changed"]
+StrategyType = Literal["changed", "all"]
 STRATEGIES: dict[str, Callable[..., set[str]]] = {}
 
 
