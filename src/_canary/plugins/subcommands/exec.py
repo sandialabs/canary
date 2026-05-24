@@ -7,6 +7,8 @@ import datetime
 import time
 from typing import TYPE_CHECKING
 
+import rich
+
 from ... import config
 from ...hookspec import hookimpl
 from ...job import Job
@@ -61,14 +63,21 @@ class Exec(CanarySubcommand):
 
     def run_job(self, job: Job) -> None:
         pm = config.pluginmanager.hook
+        style = config.getoption("console_style") or {}
+        namefmt = style.get("name", "short")
+        display_name = job.display_name(style="rich", resolve=namefmt == "long")
         try:
             now = time.time()
             job.timekeeper.submitted = now
+            rich.print(f"{display_name}: [blue]STARTING[/]")
             pm.canary_runteststart(case=job)
             now = time.time()
             job.timekeeper.started = now
+            rich.print(f"{display_name}: [blue]RUNNING[/]")
             pm.canary_runtest(case=job)
             job.timekeeper.finished = time.time()
         finally:
+            st = job.status.display_name(style="rich")
+            rich.print(f"{display_name}: {st}")
             pm.canary_runtest_finish(case=job)
             job.save()
