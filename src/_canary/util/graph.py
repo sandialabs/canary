@@ -56,12 +56,12 @@ def print_spec(
         dependencies = spec.dependencies
         pointers = [tee] * (len(dependencies) - 1) + [last]
         for pointer, dependency in zip(pointers, dependencies):
-            if dependency.dependencies:
-                yield prefix + pointer + dependency.display_name(style=style)
+            if dependency.spec.dependencies:
+                yield prefix + pointer + dependency.spec.display_name(style=style)
                 extension = branch if pointer == tee else space
-                yield from inner(dependency, prefix=prefix + extension, level=level - 1)
+                yield from inner(dependency.spec, prefix=prefix + extension, level=level - 1)
             else:
-                yield prefix + pointer + dependency.display_name(style=style)
+                yield prefix + pointer + dependency.spec.display_name(style=style)
 
     file.write(f"{tee if not end else last}{indent}{spec.display_name(style=style)}\n")
     iterator = inner(spec, level=level)

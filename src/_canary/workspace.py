@@ -335,10 +335,6 @@ class Workspace:
         if update_view:
             view_entries: list[tuple[Path, str]] = []
             for job in session.jobs:
-                if job.workspace.session is not None:
-                    prefix = self.sessions_dir / job.workspace.session
-                else:
-                    prefix = session.prefix
                 view_entries.append((job.workspace.dir, job.viewpath))
             self.update_view(view_entries)
 

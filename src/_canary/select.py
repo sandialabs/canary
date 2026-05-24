@@ -73,7 +73,6 @@ from schema import Schema
 from . import config
 from .config.argparsing import Parser
 from .hookspec import hookimpl
-from .job import JobPhase
 from .jobspec import Mask
 from .rules import Rule
 from .rules import RuntimeRule
@@ -179,8 +178,8 @@ class Selector:
                         spec.mask = Mask.masked(outcome.reason or rule.default_reason)
                         self.masked.add(spec.id)
                         break
-        config.pluginmanager.hook.canary_select_modifyitems(selector=self)
         self.propagate()
+        config.pluginmanager.hook.canary_select_modifyitems(selector=self)
         config.pluginmanager.hook.canary_select_report(selector=self)
         return [spec for spec in self.specs if spec.id not in self.masked]
 
@@ -296,11 +295,12 @@ class RuntimeSelector:
                     job.mask = Mask.masked(reason=outcome.reason or rule.default_reason)
                     self.masked.add(job.id)
                     break
-        config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
         self.propagate()
+        config.pluginmanager.hook.canary_rtselect_modifyitems(selector=self)
         for job in self.jobs:
             if not job.mask:
-                job.state.phase = JobPhase.PENDING
+                job.state.reset()
+                job.status.reset()
                 job.timekeeper.reset()
                 job.measurements.reset()
         pm.done()
@@ -410,3 +410,23 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
             table.add_row(reason, str(len(reasons[key])))
         console = Console(file=sys.stderr)
         console.print(table)
+
+
+@hookimpl(specname="canary_rtselect_modifyitems", tryfirst=True)
+def unblock_blocked(selector) -> None:
+    jobs = selector.jobs
+    if not jobs:
+        return
+    changed = True
+    while changed:
+        changed = False
+        unmasked_ids = {j.id for j in jobs if not j.mask}
+        for j in jobs:
+            if not j.mask:
+                continue
+            if not j.status.is_blocked():
+                continue
+            if any(dep.job.id in unmasked_ids for dep in j.dependencies):
+                j.mask = Mask.unmasked()  # job-level override
+                selector.masked.discard(j.id)
+                changed = True

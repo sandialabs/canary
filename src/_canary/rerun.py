@@ -41,8 +41,8 @@ def get_specs_from_view(
 def get_specs(
     db: WorkspaceDatabase,
     *,
-    strategy: StrategyType,
-    tag: str | None,
+    strategy: StrategyType = "all",
+    tag: str | None = None,
 ) -> list["JobSpec"]:
     """
     Compute the full rerun spec set using a named strategy.
@@ -114,6 +114,8 @@ def failed(
     pspecs = db.get_partial_specs(tag=tag)
     for pspec in pspecs:
         if pspec.result_category == "FAIL":
+            ids.add(pspec.id)
+        elif pspec.result_outcome == "BLOCKED":
             ids.add(pspec.id)
     return ids
 

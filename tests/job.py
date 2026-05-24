@@ -303,5 +303,5 @@ def test_job_dependency_graph_roundtrip_json(repo: Path, space, tmp_path):
 
     out = json.loads(json.dumps(job_b))
     assert isinstance(out, Job)
-    assert out.depends_on[0].when == "on_success"
-    assert out.depends_on[0].job.id == job_a.id
+    assert out.dependencies[0].when == "on_success"
+    assert out.dependencies[0].job.id == job_a.id

@@ -132,6 +132,12 @@ class Status:
     def __deserialize__(cls, d: dict) -> "Status":
         return cls(**d)
 
+    def reset(self) -> None:
+        self.category = Category.NONE
+        self.outcome = Outcome.NONE
+        self.reason = None
+        self.code = -1
+
     # --- Category query methods
     def is_success(self) -> bool:
         return self.category == Category.PASS
@@ -152,6 +158,9 @@ class Status:
         return self.category != Category.NONE
 
     # --- Outcome query methods
+    def is_blocked(self) -> bool:
+        return self.outcome == Outcome.BLOCKED
+
     def is_diffed(self) -> bool:
         return self.outcome == Outcome.DIFFED
 

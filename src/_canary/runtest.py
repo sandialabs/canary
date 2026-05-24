@@ -74,6 +74,10 @@ class Runner:
         finally:
             self.finish = time.time()
 
+    @property
+    def cases(self) -> list["Job"]:
+        return self.jobs
+
 
 @hookimpl(wrapper=True)
 def canary_runteststart(case: "Job") -> Generator[None, None, bool]:

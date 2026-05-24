@@ -42,7 +42,7 @@ def batch_jobs(
     lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
     graph: dict[str, list[str]] = {}
     for job in jobs:
-        graph[job.id] = [dep.id for dep in job.dependencies if dep.id in lookup]
+        graph[job.id] = [dep.job.id for dep in job.dependencies if dep.job.id in lookup]
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
@@ -52,7 +52,7 @@ def batch_jobs(
             assert job.id == id
             dependencies: list[binpack.Block] = []
             for dep in job.dependencies:
-                if b := blocks.get(dep.id):
+                if b := blocks.get(dep.job.id):
                     dependencies.append(b)
             blocks[job.id] = binpack.Block(
                 job.id, job.cpus, math.ceil(job.runtime), dependencies=dependencies
@@ -83,7 +83,7 @@ def batch_jobs(
         deps: list[BatchSpec] = []
         for job in spec.jobs:
             for dep in job.dependencies:
-                dep_spec = job_to_batch.get(dep.id)
+                dep_spec = job_to_batch.get(dep.job.id)
                 if dep_spec is not None and dep_spec is not spec and dep_spec not in deps:
                     deps.append(dep_spec)
         spec.dependencies = deps

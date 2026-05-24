@@ -180,7 +180,7 @@ def get_vvtest_attrs(job: "canary.Job") -> dict:
                     table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in job.dependencies]
+    attrs["DEPDIRS"] = [str(dep.job.workspace.dir) for dep in job.dependencies]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
     attrs["exec_dir"] = str(job.workspace.dir)

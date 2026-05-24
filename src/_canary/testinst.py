@@ -119,17 +119,17 @@ class TestMultiInstance(TestInstance):
 def from_job(job: "Job") -> TestInstance:
     dependencies: list[TestInstance] = []
     for dep in job.dependencies:
-        dependencies.append(from_job(dep))
+        dependencies.append(from_job(dep.job))
 
     parameters: Parameters
     cls: Type[TestInstance]
     if job.spec.attributes.get("multicase"):
         cls = TestMultiInstance
         columns: dict[str, list[Any]] = {}
-        for key in job.dependencies[0].spec.parameters.keys():
+        for key in job.dependencies[0].job.spec.parameters.keys():
             col = columns.setdefault(key, [])
             for dep in job.dependencies:
-                col.append(dep.spec.parameters[key])
+                col.append(dep.job.spec.parameters[key])
         parameters = MultiParameters(**columns)
     else:
         cls = TestInstance

@@ -143,24 +143,24 @@ class Check(CanarySubcommand):
                 f"Lint checking examples in {self.root}/src/canary/examples"
             )
             paths = Check.find_pyt_files("./src/canary/examples")
-            ruff("check", "--fix", "--select", "S324", *paths)
-            ruff("check", "--fix", "--select", "S324", "./src/canary/examples")
-            ruff("check", "--fix", "--select", "S324", "./docs")
-            ruff("check", "--fix", "--select", "S324", "./bin")
+            ruff_check(*paths)
+            ruff_check("./src/canary/examples")
+            ruff_check("./docs")
+            ruff_check("./bin")
             pm.done()
 
             pm = logger.progress_monitor(
                 f"Lint checking examples in {self.root}/docs/source/static"
             )
-            ruff("check", "--fix", "--select", "S324", "./docs/source/static")
+            ruff_check("./docs/source/static")
             pm.done()
 
             pm = logger.progress_monitor(f"Lint checking tests in {self.root}/tests")
-            ruff("check", "--fix", "--select", "S324", "./tests")
+            ruff_check("./tests")
             pm.done()
 
             pm = logger.progress_monitor(f"Lint checking source in {self.root}/src")
-            ruff("check", "--fix", "--select", "S324", "./src")
+            ruff_check("./src")
             pm.done()
 
     def security_check(self, args: argparse.Namespace):
@@ -240,6 +240,11 @@ def ruff(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
             sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
+
+
+def ruff_check(*paths: str, **kwargs) -> subprocess.CompletedProcess:
+    ruff("check", "--fix", *paths, **kwargs)
+    return ruff("check", "--fix", "--select", "S324", *paths, **kwargs)
 
 
 def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:

@@ -401,11 +401,13 @@ class RerunRule(RuntimeRule):
         elif self.strategy == "not_pass":
             if not job.status.is_success():
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome}")
+            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome.name}")
         elif self.strategy == "failed":
             if job.status.is_failure():
                 return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome} != FAIL")
+            return RuleOutcome(
+                ok=False, reason=f"previous result = {job.status.outcome.name} != FAIL"
+            )
         elif self.strategy == "not_run":
             if job.status.is_unset():
                 return RuleOutcome(ok=True)

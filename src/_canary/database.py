@@ -242,9 +242,8 @@ class WorkspaceDatabase:
             return None
         if hi is None:
             return None
-        rows = self.connection.execute(
-            "SELECT spec_id FROM specs WHERE spec_id >= ? AND spec_id < ? LIMIT 2", (id, hi)
-        ).fetchall()
+        sql = "SELECT spec_id FROM specs WHERE spec_id >= ? AND spec_id < ? LIMIT 2"
+        rows = self.connection.execute(sql, (id, hi)).fetchall()
         if len(rows) == 0:
             return None
         elif len(rows) > 1:
@@ -349,8 +348,8 @@ class WorkspaceDatabase:
             str(job.workspace.session),
             str(job.workspace.path),
             job.state.phase.value,
-            job.status.category,
-            job.status.outcome,
+            job.status.category.value,
+            job.status.outcome.name,
             job.status.reason or "",
             job.status.code,
             job.timekeeper.submitted,
@@ -605,7 +604,9 @@ class WorkspaceDatabase:
             r.spec_id,
             r.finished,
             r.status_category,
-            r.status_outcome
+            r.status_outcome,
+            r.status_reason,
+            r.status_code
           FROM results r
           JOIN latest_session ls
           ON r.spec_id = ls.spec_id
@@ -617,7 +618,9 @@ class WorkspaceDatabase:
           sm.view,
           lr.finished,
           lr.status_category,
-          lr.status_outcome
+          lr.status_outcome,
+          lr.status_reason,
+          lr.status_code
         FROM specs s
         JOIN specs_meta sm
           ON sm.spec_id = s.spec_id
@@ -636,7 +639,7 @@ class WorkspaceDatabase:
                 view=row[2],
                 started_at=start,
                 result_category=row[4],
-                result_status=row[5],
+                result_outcome=row[5],
             )
             candidates.append(c)
         return candidates
@@ -702,7 +705,7 @@ class PartialSpec:
     file: Path
     view: str
     result_category: str
-    result_status: str
+    result_outcome: str
     started_at: float
 
 

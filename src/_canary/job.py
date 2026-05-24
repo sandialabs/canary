@@ -115,6 +115,9 @@ class JobState:
     def __serialize__(self) -> dict[str, Any]:
         return {"phase": self.phase}
 
+    def reset(self) -> None:
+        self.phase = JobPhase.PENDING
+
     @classmethod
     def __deserialize__(cls, d: dict) -> "JobState":
         return cls(**d)
@@ -282,8 +285,7 @@ class Job(BaseJob):
         self._resources: dict[str, list[dict]] = {}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
-        self.depends_on: list[Dependency] = dependencies or []
-        self.dependencies: list["Job"] = [d.job for d in self.depends_on]
+        self.dependencies: list[Dependency] = dependencies or []
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Job):
@@ -300,7 +302,7 @@ class Job(BaseJob):
         return super().__serialize__() | {
             "spec": self.spec,
             "workspace": self.workspace,
-            "dependencies": self.depends_on,
+            "dependencies": self.dependencies,
             "variables": self.variables,
             "resources": self._resources,
             "rparameters": self.rparameters,
@@ -339,7 +341,7 @@ class Job(BaseJob):
 
     @property
     def upstreams(self) -> list["Job"]:
-        return [d.job for d in self.depends_on]
+        return [d.job for d in self.dependencies]
 
     @property
     def stdout(self) -> str:
@@ -522,14 +524,16 @@ class Job(BaseJob):
         if self.status.is_skipped():
             return False
         # If any dependency finished in a way that violates criteria, this job will never run
-        if self.depends_on and any(d.is_done() and not d.is_satisfied() for d in self.depends_on):
+        if self.dependencies and any(
+            d.is_done() and not d.is_satisfied() for d in self.dependencies
+        ):
             return False
         return True
 
     def refresh_readiness(self) -> None:
-        if self.state.is_done() or not self.depends_on:
+        if self.state.is_done() or not self.dependencies:
             return
-        for dep in self.depends_on:
+        for dep in self.dependencies:
             if not dep.is_done():
                 continue
             if not dep.is_satisfied():
@@ -541,15 +545,15 @@ class Job(BaseJob):
                 return
 
     def is_ready(self) -> bool:
-        if not self.depends_on:
+        if not self.dependencies:
             return True
         if self.state.is_done() or self.state.is_running():
             return False
         self.refresh_readiness()
         if not self.is_runnable():
             return False
-        all_satisfied = all(d.is_satisfied() for d in self.depends_on if d.is_done())
-        all_done = all(d.is_done() for d in self.depends_on)
+        all_satisfied = all(d.is_satisfied() for d in self.dependencies if d.is_done())
+        all_done = all(d.is_done() for d in self.dependencies)
         return all_satisfied and all_done
 
     @property

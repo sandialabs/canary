@@ -179,7 +179,7 @@ class Run(CanarySubcommand):
                 assert isinstance(request, TagRequest)
                 tag = request.value
                 logger.info(f"[bold]Running[/] tests in tag {tag}")
-                specs = rerun.get_specs(workspace.db, strategy=args.only, tag=tag)
+                specs = rerun.get_specs(workspace.db, tag=tag)
             workspace.apply_selection_rules(
                 specs,
                 keyword_exprs=args.keyword_exprs,
