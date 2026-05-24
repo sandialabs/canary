@@ -7,6 +7,7 @@ from _canary.util.testing import CanaryCommand
 
 b = os.getenv("CI") is not None
 
+
 @pytest.mark.skipif(b, reason="Fails in GitHub workflow")
 def test_issue_90(tmpdir):
     run = CanaryCommand("run")
