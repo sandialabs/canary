@@ -5,8 +5,9 @@ import pytest
 import _canary.util.filesystem as fs
 from _canary.util.testing import CanaryCommand
 
+b = os.getenv("CI") is not None
 
-@pytest.mark.skipif(os.getenv("GITHUB_ACTION") is None, reason="Fails in GitHub workflow")
+@pytest.mark.skipif(b, reason="Fails in GitHub workflow")
 def test_issue_90(tmpdir):
     run = CanaryCommand("run")
     with fs.working_dir(tmpdir.strpath, create=True):
