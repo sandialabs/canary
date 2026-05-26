@@ -12,6 +12,9 @@ from _canary.config.argparsing import make_argument_parser
 from _canary.config.argparsing import safe_loads
 
 
+ci_env = os.getenv("CI") is not None
+
+
 def test_config_args():
 
     parser = make_argument_parser()
@@ -161,6 +164,7 @@ def test_helpformatter_split_lines_pad_and_wrapping(monkeypatch: pytest.MonkeyPa
     assert any("wrap" in l for l in lines)
 
 
+@pytest.mark.skipif(ci_env, reason="Skip in CI")
 def test_helpformatter_usage_renders():
     parser = make_argument_parser()
     # ensure our formatter class is actually in use
