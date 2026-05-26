@@ -41,17 +41,10 @@ class Exec(CanarySubcommand):
         now = datetime.datetime.now()
         session_name = args.session or now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = workspace.sessions_dir / session_name
-        id = args.spec
-        if id.startswith("/"):
-            id = id[1:]
-        specs = workspace.db.load_specs(ids=[id], include_upstreams=True)
+        spec = workspace.find_jobspec(args.spec)
+        specs = workspace.db.load_specs(ids=[spec.id], include_upstreams=True)
         jobs = workspace.construct_jobs(specs, session_dir)
-        job: Job
-        for job in jobs:
-            if job.id.startswith(id):
-                break
-        else:
-            raise RuntimeError(f"{args.spec}: spec ID not found in workspace")
+        job: Job = next(j for j in jobs if j.id == spec.id)
         job.status.reset()
         job.state.reset()
         if job.is_ready():

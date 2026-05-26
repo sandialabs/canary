@@ -295,17 +295,58 @@ class JobSpec:
         """Implicit keywords, used for some filtering operations"""
         return {self.name, self.family, str(self.file)}
 
-    def matches(self, arg: str) -> bool:
-        if arg.startswith(select_sygil) and not Path(arg).exists():
-            arg = arg[1:]
-        if self.display_name() == arg:
-            return True
-        if self.name == arg:
-            return True
-        return False
-
     def set_attribute(self, name: str, value: Any) -> None:
         self.attributes[name] = value
 
     def set_attributes(self, **kwds: Any) -> None:
         self.attributes.update(**kwds)
+
+    def matches(self, arg: str, *, fuzzy: bool = False) -> bool:
+        s = arg.strip()
+        if not s:
+            return False
+
+        # Legacy: leading "/" indicates an ID prefix, but "/" is also a Unix root anchor.
+        # We therefore:
+        #   1) always attempt ID-prefix matching (with "/" stripped if present)
+        #   2) only treat paths as matching if they resolve to *this* spec's file
+        id_query = s[1:] if s.startswith(select_sygil) else s
+        if id_query and self.id.startswith(id_query):
+            return True
+
+        # If arg looks like a path, allow matching by file identity
+        # - absolute paths (Unix "/" anchor included)
+        # - any string containing a path separator
+        looks_like_path = (Path(s).is_absolute()) or ("/" in s) or ("\\" in s)
+        if looks_like_path:
+            p = Path(s)
+            try:
+                if p.exists() and p.resolve() == self.file.resolve():
+                    return True
+            except OSError:
+                pass
+            try:
+                pr = self.file_root / p
+                if pr.exists() and pr.resolve() == self.file.resolve():
+                    return True
+            except OSError:
+                pass
+
+        if s == self.fullname:
+            return True
+
+        if not fuzzy:
+            return False
+
+        if s == self.name:
+            return True
+
+        if s == self.family:
+            return True
+
+        # Suffix match on the spec file path (normalize separators for cross-platform use)
+        s_posix = s.replace("\\", "/")
+        if "/" in s_posix and self.file.as_posix().endswith(s_posix):
+            return True
+
+        return False
