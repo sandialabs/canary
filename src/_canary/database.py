@@ -178,7 +178,7 @@ class WorkspaceDatabase:
     def put_specs(self, specs: list[JobSpec]) -> None:
         def process_one_spec(spec: JobSpec) -> tuple[str, str, str, str, list[str]]:
             blob = json.dumps_min(spec)
-            view = Path(spec.execpath) / spec.file.name
+            view = spec.exec_path / spec.file.name
             source = spec.file
             dep_ids = [dep.spec.id for dep in spec.dependencies]
             return spec.id, blob, source.as_posix(), view.as_posix(), dep_ids

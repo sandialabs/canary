@@ -22,8 +22,7 @@ from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generate import Generator
-from _canary.generator import AbstractTestGenerator
-from _canary.generator import CanaryDSLSpecGenerator
+from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
 from _canary.ir import DependencySelector
@@ -72,6 +71,7 @@ get_logger = logging.get_logger
 version = _v.version
 version_info = _v.version_info
 ResolvedSpec = JobSpec
+AbstractTestGenerator = AbstractSpecGenerator
 del _v
 
 
@@ -96,8 +96,8 @@ __all__ = [
     "TestDiffed",
     "TestFailed",
     "TestSkipped",
+    "AbstractSpecGenerator",
     "AbstractTestGenerator",
-    "CanaryDSLSpecGenerator",
     "hookimpl",
     "hookspec",
     "console_main",

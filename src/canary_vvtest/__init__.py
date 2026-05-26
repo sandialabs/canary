@@ -1,24 +1,93 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import argparse
 import json
-import os
 import re
 import sys
 import typing
 
 import canary
 
-from .generator import VVTestAdapter
+from .vvt import VVTestAdapter
+from .vvt import VVTestLoader
+from .vvt import VVTestLockEmitter
+from .vvt import VVTestModel
 
 logger = canary.get_logger(__name__)
 
 
+class VVTestSpecGenerator(canary.AbstractSpecGenerator):
+    file_patterns: typing.ClassVar[tuple[str, ...]] = ("*.vvt",)
+
+    def __init__(self, root: str, path: str | None = None) -> None:
+        super().__init__(root, path=path)
+        self.model = VVTestModel(root=self.root, path=self.path)  # whatever context needed
+        self.adapter = VVTestAdapter(self.model)
+        calls = VVTestLoader(file=self.file).parse()
+        self.adapter.apply(calls)
+
+    def lock(self, on_options=None):
+        return VVTestLockEmitter().lock(self.model, on_options=on_options)
+
+    def describe(self, on_options: list[str] | None = None) -> str:
+        import io
+        import os
+
+        from _canary.generate import resolve
+        from _canary.util import graph
+        from _canary.util.field import Field
+        from _canary.util.string import pluralize
+
+        file = io.StringIO()
+        file.write(f"--- {self.name} ------------\n")
+        file.write(f"File: {self.file}\n")
+        file.write(f"Keywords: {', '.join(self.model.get_keywords(on_options=on_options))}\n")
+        options = self.model.option_expressions()
+        if options:
+            file.write(f"Recognized options: {', '.join(options)}\n")
+
+        # Print raw (unsubstituted) source specs if present
+        if hasattr(self.model, "sources") and isinstance(getattr(self.model, "sources"), Field):
+            src_field = getattr(self.model, "sources")
+            if src_field.items:
+                file.write("Source files:\n")
+                grouped: dict[str, list[tuple[str, str | None]]] = {}
+                for c in src_field.items:
+                    s = c.value
+                    grouped.setdefault(s.action, []).append((s.src, s.dst))
+                for action, files in grouped.items():
+                    file.write(f"  {action.title()}:\n")
+                    for src, dst in files:
+                        file.write(f"    {src}")
+                        if dst and dst != os.path.basename(src):
+                            file.write(f" -> {dst}")
+                        file.write("\n")
+
+        try:
+            specs = self.lock(on_options=on_options)
+            resolved = resolve(specs)
+            n = len(specs)
+            opts = ", ".join(on_options or [])
+            file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
+            try:
+                graph.print(resolved, file=file)
+            except Exception:  # nosec B110
+                pass
+        except Exception:
+            logger.warning("Unable to generate dependency graph")
+        return file.getvalue()
+
+    def info(self) -> dict[str, typing.Any]:
+        info: dict[str, typing.Any] = super().info()
+        info["keywords"] = self.model.get_keywords()
+        info["options"] = self.model.option_expressions()
+        return info
+
+
 @canary.hookimpl
 def canary_collectstart(collector) -> None:
-    collector.add_generator(VVTestAdapter)
+    collector.add_generator(VVTestSpecGenerator)
 
 
 @canary.hookimpl
@@ -27,7 +96,7 @@ def canary_generate_modifyitems(generator: "canary.Generator") -> None:
         if spec.file_path.suffix == ".vvt":
             spec.stdout = "execute.log"
             spec.stderr = None
-            set_vvtest_execpath(spec)
+            set_vvtest_exec_path(spec)
             if "np" in spec.parameters:
                 spec.meta_parameters["cpus"] = spec.parameters["np"]
             if "ndevice" in spec.parameters:
@@ -42,7 +111,7 @@ def canary_cdash_name(case: canary.Job) -> str | None:
         return None
     elif not case.spec.parameters:
         return case.spec.family
-    _, _, s = os.path.basename(case.spec.execpath).partition(".")
+    _, _, s = case.spec.exec_path.name.partition(".")
     pattern = re.compile(r"([^.=]+)=.*?(?=\. [^.=]+=|$)", re.VERBOSE)
     s_params = ",".join([m.group() for m in pattern.finditer(s)])
     return f"{case.spec.family}[{s_params}]"
@@ -80,8 +149,8 @@ def canary_addoption(parser: "canary.Parser") -> None:
     )
 
 
-def set_vvtest_execpath(spec: "canary.JobSpec") -> None:
-    """Set the execpath of the job
+def set_vvtest_exec_path(spec: "canary.JobSpec") -> None:
+    """Set the execution path of the job
 
     In the vvtest generator we call ``scalar.cast`` on each value.  That operation puts a
     ``string`` attribute on each value that is the string parameter given in the vvtest file.  this
@@ -92,7 +161,8 @@ def set_vvtest_execpath(spec: "canary.JobSpec") -> None:
     name = spec.family
     if parts:
         name = "%s.%s" % (name, ".".join(parts))
-    spec.execpath = str(spec.file_path.parent / name)  # ty: ignore [invalid-assignment]
+    spec.exec_path = spec.file_path.parent / name
+    spec.view_path = spec.file_path.parent / name
 
 
 class RerunAction(argparse.Action):

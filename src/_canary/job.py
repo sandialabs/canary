@@ -387,8 +387,8 @@ class Job(BaseJob):
         self._mask = arg
 
     @property
-    def viewpath(self) -> str:
-        return self.spec.viewpath
+    def view_path(self) -> Path:
+        return self.spec.view_path
 
     def display_name(self, **kwargs) -> str:
         return self.spec.display_name(**kwargs)

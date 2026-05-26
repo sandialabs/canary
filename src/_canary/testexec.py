@@ -70,14 +70,6 @@ class ExecutionSpace:
         finally:
             os.chdir(current_cwd)
 
-    @contextmanager
-    def openfile(self, name: Path | str, mode: str = "r") -> Generator[IO[Any], None, None]:
-        try:
-            fh = open(self.dir / name, mode=mode)
-            yield fh
-        finally:
-            fh.close()
-
     def exists(self) -> bool:
         return self.dir.exists()
 
@@ -100,7 +92,21 @@ class ExecutionSpace:
         (self.dir / dest.name).symlink_to(src)
 
     def joinpath(self, *parts: Path | str) -> Path:
-        f = self.dir
+        base = self.dir.resolve()
+        p = base
         for part in parts:
-            f /= part
-        return f
+            part = Path(part)
+            if part.is_absolute():
+                raise ValueError(f"absolute paths not allowed: {part}")
+            p = p / part
+        resolved = p.resolve()
+        if resolved != base and base not in resolved.parents:
+            raise ValueError(f"path escapes base directory: {resolved}")
+        return resolved
+
+    @contextmanager
+    def openfile(self, name: Path | str, mode: str = "r") -> Generator[IO[Any], None, None]:
+        path = self.joinpath(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open(mode) as fh:
+            yield fh

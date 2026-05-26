@@ -82,7 +82,7 @@ def generate_random_jobs(
     )
     for spec in static_order(specs):
         deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-        space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
+        space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
         job: Job = Job(spec=spec, workspace=space, dependencies=deps)
         lookup[spec.id] = job
         jobs.append(job)

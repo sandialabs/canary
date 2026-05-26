@@ -112,6 +112,12 @@ class Run(CanarySubcommand):
             "live={yes,no}[yes]: live console updating\n\n"
             "name={short,long}[short]: print short (default) names or long\n\n",
         )
+        parser.add_argument(
+            "--view",
+            default=None,
+            choices=("symlink", "hardlink", "copy", "none"),
+            help="Create results view with this mode (overrides workspace:view:mode)",
+        )
         group = parser.add_argument_group("console reporting")
         group.add_argument("-e", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
         group.add_argument("--capture", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
@@ -188,7 +194,13 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         reuse = isinstance(request, ViewPathsRequest)
-        session = workspace.run(specs, reuse_latest_session=reuse, only=args.only or "not_pass")
+        view = True if args.view is None else False if args.view == "none" else args.view
+        session = workspace.run(
+            specs,
+            reuse_latest_session=reuse,
+            only=args.only or "not_pass",
+            update_view=view,
+        )
         return session.returncode
 
 

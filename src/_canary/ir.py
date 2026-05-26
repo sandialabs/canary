@@ -3,10 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import fnmatch
-import hashlib
 import shlex
 import string
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,12 +12,14 @@ from typing import Literal
 from typing import Sequence
 
 from . import config
+from .jobspec import NULL_PATH
 from .jobspec import Artifact
 from .jobspec import Asset
 from .jobspec import BaselineAction
 from .jobspec import JobSpec
 from .jobspec import Mask
 from .jobspec import SpecDependency
+from .jobspec import build_spec_id
 from .util import logging
 from .util.string import stringify
 
@@ -152,7 +152,7 @@ class JobSpecIR:
         if id is None:
             kwds = self.parameters | self.meta_parameters
             kwds.pop("runtime")
-            id = build_id(self.family, self.file_root / self.file_path, **kwds)
+            id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
         self.id: str = id
 
     def __hash__(self) -> int:
@@ -219,8 +219,8 @@ class JobSpecIR:
             stderr=self.stderr,
             id=self.id,
             command=self.command,
-            exec_path=self.exec_path,
-            view_path=self.view_path,
+            exec_path=NULL_PATH if not self.exec_path else Path(self.exec_path),
+            view_path=NULL_PATH if not self.view_path else Path(self.view_path),
         )
 
     def build_dependencies(
@@ -258,72 +258,3 @@ class JobSpecIR:
 
     def display_name(self, resolve: bool = False) -> str:
         return self.name if not resolve else self.fullname
-
-
-class _GlobalSpecCache:
-    """Simple cache for storing re-used data feeding the spec ID"""
-
-    _key: dict[Path, Path] = {}
-    """Maps the input file path to a key index (absolute path)"""
-
-    _file_hash: dict[Path, bytes] = {}
-    _repo_root: dict[Path, bytes] = {}
-    _rel_repo: dict[Path, bytes] = {}
-    _lock = threading.Lock()
-
-    @classmethod
-    def _compute_repo_root(cls, path: Path) -> Path:
-        d = path.parent
-        while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
-                root = d
-                break
-            d = d.parent
-        else:
-            root = d
-        return root
-
-    @classmethod
-    def populate_cache(cls, path: Path) -> Path:
-        try:
-            return cls._key[path]
-        except KeyError:
-            pass
-
-        key = path.absolute()
-        h = hashlib.sha256()
-        h.update(key.read_bytes())
-        digest = h.digest()[:16]
-        root = cls._compute_repo_root(key)
-        rel = key.relative_to(root)
-
-        with cls._lock:
-            cls._repo_root[key] = str(root).encode()
-            cls._rel_repo[key] = str(rel).encode()
-            cls._file_hash[key] = digest.hex().encode()
-            return cls._key.setdefault(path, key)
-
-    @classmethod
-    def file_hash(cls, path: Path) -> bytes:
-        key = cls.populate_cache(path)
-        return cls._file_hash[key]
-
-    @classmethod
-    def rel_repo(cls, path: Path) -> bytes:
-        key = cls.populate_cache(path)
-        return cls._rel_repo[key]
-
-
-def build_id(*args: Any, **kwargs: Any) -> str:
-    # Hasher is used to build ID
-    float_fmt = "%.16e"
-    hasher = hashlib.sha256()
-    for arg in args:
-        if isinstance(arg, Path):
-            hasher.update(_GlobalSpecCache.file_hash(arg))
-            hasher.update(_GlobalSpecCache.rel_repo(arg))
-        else:
-            hasher.update(stringify(arg, float_fmt=float_fmt).encode())
-    for key in sorted(kwargs):
-        hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
-    return hasher.hexdigest()

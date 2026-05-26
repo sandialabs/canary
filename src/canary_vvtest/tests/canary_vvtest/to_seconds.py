@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from canary_vvtest.generator import to_seconds
+from canary_vvtest.vvt import to_seconds
 
 
 def isclose(a, b, rtol=1e-16, atol=1e-16):

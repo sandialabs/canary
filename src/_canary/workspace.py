@@ -155,7 +155,7 @@ class Workspace:
         if file.exists():
             relpath = Path(file.read_text().strip())
             view = cache_dir / relpath
-        if view is None:
+        if view is None or not view.exists():
             if (workspace / workspace_tag).exists():
                 force_remove(workspace)
             pm.done()
@@ -229,8 +229,6 @@ class Workspace:
                     f"Canary requires ownership of existing directory {self.view}. "
                     f"Rename {self.view} and try again."
                 )
-            self.view.mkdir(parents=True)
-            write_directory_tag(self.view / view_tag)
             file = self.cache_dir / "view"
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
@@ -260,10 +258,6 @@ class Workspace:
         if file.exists():
             relpath = file.read_text().strip()
             self.view = (self.cache_dir / relpath).resolve()
-            self.view.mkdir(parents=True, exist_ok=True)
-            view_file = self.view / view_tag
-            if not view_file.exists():
-                write_directory_tag(view_file)
         self.db = WorkspaceDatabase.load(self.root)
         return self
 
@@ -272,7 +266,7 @@ class Workspace:
         specs: list["JobSpec"],
         session: str | None = None,
         reuse_latest_session: bool = False,
-        update_view: bool = True,
+        update_view: ViewT | bool = True,
         only: str = "not_pass",
     ) -> Session:
         if session is not None and not (self.sessions_dir / session).exists():
@@ -330,13 +324,14 @@ class Workspace:
         self.add_session_results(s, update_view=update_view)
         return s
 
-    def add_session_results(self, session: Session, update_view: bool = True) -> None:
+    def add_session_results(self, session: Session, update_view: ViewT | bool = True) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         if update_view:
-            view_entries: list[tuple[Path, str]] = []
+            mode: ViewT | None = None if isinstance(update_view, bool) else update_view
+            view_entries: list[tuple[Path, Path]] = []
             for job in session.jobs:
-                view_entries.append((job.workspace.dir, job.viewpath))
-            self.update_view(view_entries)
+                view_entries.append((job.workspace.dir, job.view_path))
+            self.update_view(view_entries, mode=mode)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"
@@ -353,9 +348,9 @@ class Workspace:
             return
         logger.info(f"Rebuilding view at {self.root}")
         jobs = self.load_jobs()
-        view_entries: list[tuple[Path, str]] = []
+        view_entries: list[tuple[Path, Path]] = []
         for job in jobs:
-            view_entries.append((job.workspace.dir, job.viewpath))
+            view_entries.append((job.workspace.dir, job.view_path))
         for path in self.view.iterdir():
             if path.is_dir():
                 force_remove(path)
@@ -363,7 +358,7 @@ class Workspace:
 
     def update_view(
         self,
-        view_entries: list[tuple[Path, str]],
+        view_entries: list[tuple[Path, Path]],
         mode: ViewT | None = None,
     ) -> None:
         logger.info(f"[bold]Updating[/] view at {self.view}")
@@ -375,6 +370,10 @@ class Workspace:
                 raise ValueError(
                     f"Invalid workspace:view:mode={mode!r} (expected symlink|hardlink|copy)"
                 )
+        self.view.mkdir(parents=True, exist_ok=True)
+        view_file = self.view / view_tag
+        if not view_file.exists():
+            write_directory_tag(view_file)
         for target, relpath in view_entries:
             link = self.view / relpath
             link.parent.mkdir(parents=True, exist_ok=True)
@@ -653,7 +652,7 @@ class Workspace:
                 job.timekeeper = mine["timekeeper"]
                 job.measurements = mine["measurements"]
             else:
-                space = ExecutionSpace(root=session, path=Path(spec.execpath), session=session.name)
+                space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
                 job = Job(spec=spec, workspace=space, dependencies=deps)
             lookup[spec.id] = job
             jobs.append(job)

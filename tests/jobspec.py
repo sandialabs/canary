@@ -99,16 +99,10 @@ def test_jobspec_name_fullname_with_parameters(repo: Path):
     assert spec.fullname.endswith("suite/t.a=1.b=2")
 
 
-def test_jobspec_execpath_and_viewpath_defaults(repo: Path):
+def test_jobspec_exec_path_and_view_path_defaults(repo: Path):
     spec = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, family="t")
-    assert spec.execpath.endswith("suite/t")
-    assert spec.viewpath == spec.execpath
-
-
-def test_jobspec_execpath_override(repo: Path):
-    spec = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, family="t")
-    spec.execpath = "custom/exec"
-    assert spec.execpath == "custom/exec"
+    assert spec.exec_path.as_posix().endswith("suite/t")
+    assert spec.view_path == spec.exec_path
 
 
 def test_jobspec_serialization_roundtrip_includes_mask_and_baseline(repo: Path):

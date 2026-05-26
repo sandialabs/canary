@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
+import hashlib
 import itertools
+import threading
 from functools import cached_property
 from functools import lru_cache
 from pathlib import Path
@@ -140,13 +142,16 @@ class SpecDependency:
         return cls(**d)
 
 
+NULL_PATH = Path("\0")
+
+
 @dataclasses.dataclass
 class JobSpec:
     # The search path containing the generated spec; typically the some version-control root
     file_root: Path
     # The path to the test file relative to `file_root`
     file_path: Path
-    id: str
+    id: str = ""
     family: str = ""
     stdout: str = "canary-out.txt"
     stderr: str | None = None  # combine stdout/stderr by default
@@ -168,11 +173,22 @@ class JobSpec:
     meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     command: list[str] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
-    exec_path: str | None = None
-    view_path: str | None = None
+
+    exec_path: Path = dataclasses.field(default=NULL_PATH)
+    view_path: Path = dataclasses.field(default=NULL_PATH)
 
     def __post_init__(self) -> None:
         self.family = self.family or self.file.stem
+        if not self.id:
+            kwds = self.parameters | self.meta_parameters
+            kwds.pop("runtime", None)
+            self.id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
+        if self.exec_path == NULL_PATH:
+            self.exec_path = self.file_path.parent / self.name
+        self.exec_path = Path(self.exec_path)
+        if self.view_path == NULL_PATH:
+            self.view_path = self.file_path.parent / self.name
+        self.view_path = Path(self.view_path)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -211,7 +227,9 @@ class JobSpec:
     def __deserialize__(cls, d: dict) -> "JobSpec":
         root = Path(d.pop("file_root"))
         path = Path(d.pop("file_path"))
-        return cls(file_root=root, file_path=path, **d)
+        exec_path = Path(d.pop("exec_path"))
+        view_path = Path(d.pop("view_path"))
+        return cls(file_root=root, file_path=path, exec_path=exec_path, view_path=view_path, **d)
 
     def add_artifact(
         self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
@@ -237,22 +255,6 @@ class JobSpec:
     @cached_property
     def fullname(self) -> str:
         return str(self.file_path.parent / self.name)
-
-    @property
-    def execpath(self) -> str:
-        if p := self.attributes.get("execpath"):
-            return p
-        return str(self.file_path.parent / self.name)
-
-    @execpath.setter
-    def execpath(self, arg: str) -> None:
-        self.attributes["execpath"] = arg
-
-    @property
-    def viewpath(self) -> str:
-        if p := self.attributes.get("viewpath"):
-            return p
-        return self.execpath
 
     @lru_cache
     def display_name(
@@ -350,3 +352,72 @@ class JobSpec:
             return True
 
         return False
+
+
+class _GlobalSpecCache:
+    """Simple cache for storing re-used data feeding the spec ID"""
+
+    _key: dict[Path, Path] = {}
+    """Maps the input file path to a key index (absolute path)"""
+
+    _file_hash: dict[Path, bytes] = {}
+    _repo_root: dict[Path, bytes] = {}
+    _rel_repo: dict[Path, bytes] = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def _compute_repo_root(cls, path: Path) -> Path:
+        d = path.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                root = d
+                break
+            d = d.parent
+        else:
+            root = d
+        return root
+
+    @classmethod
+    def populate_cache(cls, path: Path) -> Path:
+        try:
+            return cls._key[path]
+        except KeyError:
+            pass
+
+        key = path.absolute()
+        h = hashlib.sha256()
+        h.update(key.read_bytes())
+        digest = h.digest()[:16]
+        root = cls._compute_repo_root(key)
+        rel = key.relative_to(root)
+
+        with cls._lock:
+            cls._repo_root[key] = str(root).encode()
+            cls._rel_repo[key] = str(rel).encode()
+            cls._file_hash[key] = digest.hex().encode()
+            return cls._key.setdefault(path, key)
+
+    @classmethod
+    def file_hash(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._file_hash[key]
+
+    @classmethod
+    def rel_repo(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._rel_repo[key]
+
+
+def build_spec_id(*args: Any, **kwargs: Any) -> str:
+    # Hasher is used to build ID
+    float_fmt = "%.16e"
+    hasher = hashlib.sha256()
+    for arg in args:
+        if isinstance(arg, Path):
+            hasher.update(_GlobalSpecCache.file_hash(arg))
+            hasher.update(_GlobalSpecCache.rel_repo(arg))
+        else:
+            hasher.update(stringify(arg, float_fmt=float_fmt).encode())
+    for key in sorted(kwargs):
+        hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
+    return hasher.hexdigest()

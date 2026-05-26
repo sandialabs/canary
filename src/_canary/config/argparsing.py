@@ -218,7 +218,8 @@ class Parser(argparse.ArgumentParser):
             if isinstance(commands, str):
                 commands = [commands]
             for command in set(commands):
-                parsers.append(self.__subcommand_parsers[command])
+                p = self.get_subparser(command)
+                parsers.append(p)
         else:
             parsers = [self]
         group_name = kwargs.pop("group", "plugin options")
@@ -229,6 +230,28 @@ class Parser(argparse.ArgumentParser):
             else:
                 group = super(Parser, parser).add_argument_group(group_name)
             group.add_argument(*args, **kwargs)
+
+    def get_subparser(self, arg: str) -> "Parser":
+        names = arg.split("::")
+        current: Parser
+        try:
+            current = self.__subcommand_parsers[names[0]]
+        except KeyError as e:
+            choices = list(self.__subcommand_parsers.keys())
+            raise KeyError(f"Unknown subcommand {names[0]}. Available: {choices}") from None
+        ActionClass = argparse._SubParsersAction
+        for name in names[1:]:
+            actions = current._actions
+            sub_action = next((a for a in actions if isinstance(a, ActionClass)), None)
+            if sub_action is None:
+                p = getattr(current, "prog", current)
+                raise KeyError(f"No subparsers found under parser {p}")
+            try:
+                current = sub_action.choices[name]
+            except KeyError as e:
+                choices = list(sub_action.choices.keys())
+                raise KeyError(f"Unknown subcommand {name}. Available: {choices}") from e
+        return current
 
     @staticmethod
     def add_main_epilog(parser: "Parser") -> None:

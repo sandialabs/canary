@@ -14,142 +14,80 @@ import sys
 import tokenize
 from itertools import repeat
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Any
+from typing import Callable
 from typing import ClassVar
 from typing import Generator
 from typing import Literal
 from typing import cast
 
 import canary
+import canary_pyt.pyt as pyt
 from _canary.enums import list_parameter_space
-from _canary.generator import CanaryDSLSpecGenerator
+from _canary.ir import DependencySelector
 from _canary.paramset import ParameterSet
 from _canary.util import string
 
 from . import scalar
 
-if TYPE_CHECKING:
-    pass
-
 logger = canary.get_logger(__name__)
 ActionT = Literal["copy", "link", "none"]
 
 
-class VVTestAdapter(CanaryDSLSpecGenerator):
-    file_patterns: ClassVar[tuple[str, ...]] = ("*.vvt",)
+@dataclasses.dataclass(slots=True)
+class Directive:
+    name: str
+    file: str
+    when: dict[str, str]
+    options: list[tuple[str, Any]]
+    argument: str
+    line: str
+    line_no: int
 
-    def __init__(self, root: str, path: str | None = None) -> None:
-        super().__init__(root, path=path)
-        self.load()
 
-    def load(self, file: str | None = None) -> None:
-        file = file or self.file.as_posix()
-        for arg in p_VVT(file):
-            match arg.name:
-                case "keywords":
-                    self.f_KEYWORDS(arg)
-                case "copy" | "link" | "sources":
-                    self.f_SOURCES(arg)
-                case "preload":
-                    self.f_PRELOAD(arg)
-                case "parameterize":
-                    self.f_PARAMETERIZE(arg)
-                case "analyze":
-                    self.f_ANALYZE(arg)
-                case "name" | "testname":
-                    self.f_NAME(arg)
-                case "timeout":
-                    self.f_TIMEOUT(arg)
-                case "skipif":
-                    self.f_SKIPIF(arg)
-                case "filter_warnings":
-                    self.f_FILTER_WARNINGS(arg)
-                case "baseline":
-                    self.f_BASELINE(arg)
-                case "enable":
-                    self.f_ENABLE(arg)
-                case "depends_on":
-                    self.f_DEPENDS_ON(arg)
-                case "include" | "insert_directive_file":
-                    raise VVTParseError(
-                        f"{arg.name}: include file should have already been included!", arg
-                    )
-                case _:
-                    raise VVTParseError(f"Unknown command: {arg.name}", arg)
+class VVTestModel(pyt.PYTModel): ...
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.path})"
 
-    def describe(self, on_options: list[str] | None = None) -> str:
-        from _canary.generate import resolve
-        from _canary.util import graph
-        from _canary.util.field import Field
-        from _canary.util.string import pluralize
+class VVTestLockEmitter(pyt.PYTLockEmitter): ...
 
-        file = io.StringIO()
-        file.write(f"--- {self.name} ------------\n")
-        file.write(f"File: {self.file}\n")
-        file.write(f"Keywords: {', '.join(self.get_keywords(on_options=on_options))}\n")
-        options = self._option_expressions()
-        if options:
-            file.write(f"Recognized options: {', '.join(options)}\n")
 
-        # Print raw (unsubstituted) source specs if present
-        if hasattr(self, "sources") and isinstance(getattr(self, "sources"), Field):
-            src_field = getattr(self, "sources")
-            if src_field.items:
-                file.write("Source files:\n")
-                grouped: dict[str, list[tuple[str, str | None]]] = {}
-                for c in src_field.items:
-                    s = c.value
-                    grouped.setdefault(s.action, []).append((s.src, s.dst))
-                for action, files in grouped.items():
-                    file.write(f"  {action.title()}:\n")
-                    for src, dst in files:
-                        file.write(f"    {src}")
-                        if dst and dst != os.path.basename(src):
-                            file.write(f" -> {dst}")
-                        file.write("\n")
+class VVTestLoader:
+    def __init__(self, *, file: Path) -> None:
+        self.file = file
 
-        try:
-            specs = self.lock(on_options=on_options)
-            resolved = resolve(specs)
-            n = len(specs)
-            opts = ", ".join(on_options or [])
-            file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
-            try:
-                graph.print(resolved, file=file)
-            except Exception:  # nosec B110
-                pass
-        except Exception:
-            logger.warning("Unable to generate dependency graph")
-        return file.getvalue()
+    def parse(self) -> list[Directive]:
+        directives: list[Directive] = []
+        for directive in p_VVT(self.file):
+            if directive.name in ("include", "insert_directive_file"):
+                raise VVTParseError(
+                    f"{directive.name}: include file should have already been included!", directive
+                )
+            directives.append(directive)
+        return directives
 
-    def info(self) -> dict[str, Any]:
-        info: dict[str, Any] = super().info()
-        info["keywords"] = self.get_keywords()
-        info["options"] = self._option_expressions()
-        return info
 
-    def _option_expressions(self) -> list[str]:
-        from _canary.util.field import Field
+class VVTestAdapter:
+    def __init__(self, model: VVTestModel) -> None:
+        self.m = model
 
-        option_expressions: set[str] = set()
-        for _, attr in vars(self).items():
-            if not isinstance(attr, Field):
-                continue
-            for c in attr.items:
-                expr = c.when.option_expr
-                if expr:
-                    option_expressions.add(expr)
-        return sorted(option_expressions)
+    def apply(self, directives: list[Directive]) -> None:
+        for directive in directives:
+            fn: Callable[[Directive], None]
+            if directive.name in ("copy", "link", "sources"):
+                fn = self.f_SOURCES
+            elif directive.name in ("name", "testname"):
+                fn = self.f_NAME
+            elif not hasattr(self, f"f_{directive.name.upper()}"):
+                raise VVTParseError(f"Unknown command: {directive.name}", directive)
+            else:
+                fn = getattr(self, f"f_{directive.name.upper()}")
+            fn(directive)
 
-    def f_KEYWORDS(self, arg: "Directive") -> None:
+    def f_KEYWORDS(self, arg: Directive) -> None:
         assert arg.name == "keywords"
-        self.add_keywords(*arg.argument.split(), when=arg.when)
+        self.m.add_keywords(*arg.argument.split(), when=arg.when)
 
-    def f_SOURCES(self, arg: "Directive") -> None:
+    def f_SOURCES(self, arg: Directive) -> None:
         action = cast(ActionT, arg.name if arg.name in ("copy", "link") else "none")
         assert action in ("copy", "link", "none")
         kwds = dict(arg.options or {})
@@ -162,18 +100,18 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                         f"invalid rename option: {arg.line!r}.  rename requires src,dst file pairs",
                         arg,
                     )
-                self.add_source(action=action, src=file_pair[0], dst=file_pair[1], when=arg.when)
+                self.m.add_source(action=action, src=file_pair[0], dst=file_pair[1], when=arg.when)
         else:
             files = arg.argument.split() if arg.argument else []
             for f in files:
-                self.add_source(action=action, src=f, when=arg.when)
+                self.m.add_source(action=action, src=f, when=arg.when)
 
-    def f_PRELOAD(self, arg: "Directive") -> None:
+    def f_PRELOAD(self, arg: Directive) -> None:
         assert arg.name == "preload"
         # VVT preload options existed historically but pyt.preload has no effect; keep signature minimal
-        self.set_preload(arg.argument, when=arg.when)
+        self.m.set_preload(arg.argument, when=arg.when)
 
-    def f_PARAMETERIZE(self, arg: "Directive") -> None:
+    def f_PARAMETERIZE(self, arg: Directive) -> None:
         names, values, kwds, deps = p_PARAMETERIZE(arg)
 
         if deps:
@@ -182,73 +120,73 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
                 if dep is None:
                     continue
                 if isinstance(dep, str):
-                    d = canary.DependencySelector(pattern=dep, when="on_success", expects="+")
-                    self.add_dependency(d, when=arg.when)
+                    d = DependencySelector(pattern=dep, when="on_success", expects="+")
+                    self.m.add_dependency(d, when=arg.when)
                 else:
                     assert isinstance(dep, dict)
                     for dep_name, dep_params in dep.items():
                         p = ".".join(f"{k}={dep_params[k]}" for k in sorted(dep_params))
-                        d = canary.DependencySelector(
+                        d = DependencySelector(
                             pattern=f"{dep_name}.{p}", when="on_success", expects="+"
                         )
-                        self.add_dependency(d, when=arg.when)
+                        self.m.add_dependency(d, when=arg.when)
 
-        ps = ParameterSet.list_parameter_space(list(names), values, file=self.file.as_posix())
-        self.add_parameter_set(ps, when=arg.when)
+        ps = ParameterSet.list_parameter_space(list(names), values, file=self.m.file.as_posix())
+        self.m.add_parameter_set(ps, when=arg.when)
 
-    def f_ANALYZE(self, arg: "Directive") -> None:
+    def f_ANALYZE(self, arg: Directive) -> None:
         options = dict(arg.options or {})
         if arg.argument:
             key = "flag" if arg.argument.startswith("-") else "script"
             options[key] = arg.argument
-        self.set_analyze(when=arg.when, **options)
+        self.m.set_analyze(when=arg.when, **options)
 
-    def f_TIMEOUT(self, arg: "Directive") -> None:
+    def f_TIMEOUT(self, arg: Directive) -> None:
         try:
             seconds = to_seconds(arg.argument)
         except InvalidTimeFormat:
             raise VVTParseError(f"invalid time format: {arg.line!r}", arg) from None
-        self.add_timeout(seconds, when=arg.when)
+        self.m.add_timeout(seconds, when=arg.when)
 
-    def f_FILTER_WARNINGS(self, arg: "Directive") -> None:
+    def f_FILTER_WARNINGS(self, arg: Directive) -> None:
         fw = p_FILTER_WARNINGS(arg)
-        self.set_filter_warnings(fw)
+        self.m.set_filter_warnings(fw)
 
-    def f_SKIPIF(self, arg: "Directive") -> None:
+    def f_SKIPIF(self, arg: Directive) -> None:
         skip, reason = p_SKIPIF(arg)
-        self.set_skipif(skip, reason=reason)
+        self.m.set_skipif(skip, reason=reason)
 
-    def f_BASELINE(self, arg: "Directive") -> None:
+    def f_BASELINE(self, arg: Directive) -> None:
         items = make_table(arg.argument)
         options = dict(arg.options or {})
         # baseline currently only supports src/dst or flag; ignore other options for now
         for item in items:
             if len(item) == 1 and item[0].startswith("--"):
-                self.add_baseline(flag=item[0], when=arg.when)
+                self.m.add_baseline(flag=item[0], when=arg.when)
             elif len(item) == 2:
-                self.add_baseline(src=item[0], dst=item[1], when=arg.when)
+                self.m.add_baseline(src=item[0], dst=item[1], when=arg.when)
             else:
                 raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
 
-    def f_ENABLE(self, arg: "Directive") -> None:
+    def f_ENABLE(self, arg: Directive) -> None:
         if arg.argument and arg.argument.lower() == "true":
             value = True
         elif arg.argument and arg.argument.lower() == "false":
             value = False
-        elif arg.argument is None:
+        elif not arg.argument:
             value = True
         else:
             value = bool(arg.argument)
 
-        self.set_enable(value, when=arg.when)
+        self.m.set_enable(value, when=arg.when)
 
-    def f_NAME(self, arg: "Directive") -> None:
+    def f_NAME(self, arg: Directive) -> None:
         # VVT name/testname: create an additional family
         name = (arg.argument or "").strip()
         if name:
-            self.add_family(name)
+            self.m.add_family(name)
 
-    def f_DEPENDS_ON(self, arg: "Directive") -> None:
+    def f_DEPENDS_ON(self, arg: Directive) -> None:
         options = dict(arg.options or {})
         expects = "+"
         if expect := options.get("expect"):
@@ -264,8 +202,8 @@ class VVTestAdapter(CanaryDSLSpecGenerator):
             result = re.sub(r"(?i)\bfail\b", "failed", result)
             result = re.sub(r"(?i)\bskip\b", "skipped", result)
             when = result
-        d = canary.DependencySelector(pattern=arg.argument, expects=expects, when=when.lower())
-        self.add_dependency(d, when=arg.when)
+        d = DependencySelector(pattern=arg.argument, expects=expects, when=when.lower())
+        self.m.add_dependency(d, when=arg.when)
 
 
 def csplit(text: str) -> list[Any]:
@@ -283,17 +221,6 @@ class TableToken:
     NC: ClassVar[str] = "==NC=="
     NR: ClassVar[str] = "==NR=="
     WORD: ClassVar[str] = "==WORD=="
-
-
-@dataclasses.dataclass(slots=True)
-class Directive:
-    name: str
-    file: str
-    when: dict[str, str]
-    options: list[tuple[str, Any]]
-    argument: str
-    line: str
-    line_no: int
 
 
 def popnext(arg: list[str]) -> str:
@@ -391,7 +318,7 @@ EQUAL = "="
 SPACE = " "
 
 
-def p_GEN_PARAMETERIZE(arg: "Directive") -> tuple[list, list, dict, list | None]:
+def p_GEN_PARAMETERIZE(arg: Directive) -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS,generator ) [:=] script [--options]"""
     script, *opts = shlex.split(arg.argument)
     if script in ("python", "python3"):
@@ -423,7 +350,7 @@ def p_GEN_PARAMETERIZE(arg: "Directive") -> tuple[list, list, dict, list | None]
     return names, values, kwds, deps
 
 
-def p_PARAMETERIZE(arg: "Directive") -> tuple[list, list, dict, list | None]:
+def p_PARAMETERIZE(arg: Directive) -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
 
     names_spec: name1,name2,...
@@ -524,15 +451,15 @@ def p_LINE(file: Path | str, line: str) -> Directive | None:
     )
 
 
-def p_VVT(filename: Path | str) -> Generator["Directive", None, None]:
+def p_VVT(arg: Path | str) -> Generator[Directive, None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
-    lines, line_no = find_vvt_lines(filename)
+    lines, _ = find_vvt_lines(arg)
     for line in lines:
-        ns = p_LINE(filename, line)
+        ns = p_LINE(arg, line)
         if ns and ns.name in ("include", "insert_directive_file"):
             inc_file = ns.argument.strip()  # type: ignore[union-attr]
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
-                inc_file = os.path.join(os.path.dirname(filename), inc_file)
+                inc_file = os.path.join(os.path.dirname(arg), inc_file)
             if not os.path.exists(inc_file):
                 raise VVTParseError(f"include file does not exist: {inc_file!r}", ns)
             for i_ns in p_VVT(inc_file):
@@ -577,14 +504,17 @@ def make_when_expr(options: dict) -> dict[str, str]:
     return when_expr
 
 
-def find_vvt_lines(filename: Path | str) -> tuple[list[str], int]:
+def find_vvt_lines(arg: Path | str) -> tuple[list[str], int]:
     """Find all lines starting with ``#VVT: COMMAND``, or continuations ``#VVT::``"""
     tokens: Generator[tokenize.TokenInfo, None, None]
-    if os.path.exists(filename):
-        tokens = tokenize.tokenize(open(filename, "rb").readline)
+    if isinstance(arg, Path):
+        if not arg.exists():
+            raise FileNotFoundError(arg)
+        tokens = tokenize.tokenize(open(arg, "rb").readline)
+    elif os.path.exists(arg):
+        tokens = tokenize.tokenize(open(arg, "rb").readline)
     else:
-        # assume ``filename`` is a string containing directives
-        tokens = string.get_tokens(filename)
+        tokens = string.get_tokens(arg)
     s = io.StringIO()
     for token in tokens:
         if token.type == tokenize.ENCODING:
@@ -648,7 +578,7 @@ def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> list[tuple[str
     return options
 
 
-def p_FILTER_WARNINGS(arg: "Directive") -> bool:
+def p_FILTER_WARNINGS(arg: Directive) -> bool:
     expression = arg.argument
     filter_warnings = evaluate_boolean_expression(expression)
     if filter_warnings is None:
@@ -681,7 +611,7 @@ def evaluate_boolean_expression(expression: str) -> bool | None:
     return bool(result)
 
 
-def p_SKIPIF(arg: "Directive") -> tuple[bool, str]:
+def p_SKIPIF(arg: Directive) -> tuple[bool, str]:
     expression = arg.argument
     options = dict(arg.options)
     reason = str(options.get("reason") or "")
