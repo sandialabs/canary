@@ -11,7 +11,6 @@ from _canary.config.argparsing import HelpFormatter
 from _canary.config.argparsing import make_argument_parser
 from _canary.config.argparsing import safe_loads
 
-
 ci_env = os.getenv("CI") is not None
 
 
