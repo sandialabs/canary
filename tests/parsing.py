@@ -2,12 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import os
 
 import pytest
 
 from _canary.config import Config
 from _canary.config.argparsing import HelpFormatter
+from _canary.config.argparsing import Parser
 from _canary.config.argparsing import make_argument_parser
 from _canary.config.argparsing import safe_loads
 
@@ -205,3 +207,43 @@ def test_safe_loads_falls_back_to_string_on_non_json():
     assert safe_loads("true") is True
     assert safe_loads("1") == 1
     assert safe_loads("not-json") == "not-json"
+
+
+def _make_parser_tree() -> Parser:
+    """
+    Build a small nested subparser tree: report -> cdash -> create.
+
+    Uses argparse.ArgumentParser as a stand-in for canary.Parser; the function under
+    test only requires `. _actions` and argparse subparser actions.
+    """
+    parser = make_argument_parser()
+    sp1 = parser.add_subparsers(dest="cmd")
+
+    report = sp1.add_parser("report", prog="root report")
+    parser._Parser__subcommand_parsers["report"] = report
+    sp2 = report.add_subparsers(dest="report_cmd")
+
+    cdash = sp2.add_parser("cdash", prog="root report cdash")
+    sp3 = cdash.add_subparsers(dest="cdash_cmd")
+
+    sp3.add_parser("create", prog="root report cdash create")
+    return parser
+
+
+def test_get_nested_subparser_returns_leaf_parser():
+    parser = _make_parser_tree()
+    leaf = parser.get_subparser("report::cdash::create")
+    assert isinstance(leaf, argparse.ArgumentParser)
+    assert leaf.prog.endswith("create")
+
+
+def test_get_nested_subparser_raises_if_no_subparsers_under_current():
+    parser = make_argument_parser()
+    with pytest.raises(KeyError, match=r"No subparsers found under parser"):
+        parser.get_subparser("report")
+
+
+def test_get_nested_subparser_raises_on_unknown_subcommand():
+    parser = _make_parser_tree()
+    with pytest.raises(KeyError, match=r"Unknown subcommand nope\. Available:"):
+        parser.get_subparser("report::nope")

@@ -11,7 +11,6 @@ from typing import Any
 from typing import Literal
 from typing import Sequence
 
-from . import config
 from .jobspec import NULL_PATH
 from .jobspec import Artifact
 from .jobspec import Asset
@@ -20,6 +19,7 @@ from .jobspec import JobSpec
 from .jobspec import Mask
 from .jobspec import SpecDependency
 from .jobspec import build_spec_id
+from .jobspec import default_timeout
 from .util import logging
 from .util.string import stringify
 
@@ -134,7 +134,7 @@ class JobSpecIR:
         self.artifacts: list[Artifact] = artifacts or []
         self.exclusive = exclusive
         if timeout < 0:
-            timeout = self._default_timeout()
+            timeout = default_timeout(self.keywords)
         self.timeout: float = timeout
         self.meta_parameters["runtime"] = self.timeout
         self.xstatus: int = xstatus
@@ -168,20 +168,6 @@ class JobSpecIR:
 
     def set_attributes(self, **kwds: Any) -> None:
         self.attributes.update(**kwds)
-
-    def _default_timeout(self) -> float:
-        if cli_timeouts := config.getoption("timeout"):
-            for keyword in self.keywords:
-                if t := cli_timeouts.get(keyword):
-                    return float(t)
-            if t := cli_timeouts.get("*"):
-                return float(t)
-        for keyword in self.keywords:
-            if t := config.get(f"run:timeout:{keyword}"):
-                return float(t)
-        if t := config.get("run:timeout:all"):
-            return float(t)
-        return float(config.get("run:timeout:default"))
 
     def finalize(
         self,

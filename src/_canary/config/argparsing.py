@@ -233,14 +233,9 @@ class Parser(argparse.ArgumentParser):
 
     def get_subparser(self, arg: str) -> "Parser":
         names = arg.split("::")
-        current: Parser
-        try:
-            current = self.__subcommand_parsers[names[0]]
-        except KeyError as e:
-            choices = list(self.__subcommand_parsers.keys())
-            raise KeyError(f"Unknown subcommand {names[0]}. Available: {choices}") from None
+        current: Parser = self
         ActionClass = argparse._SubParsersAction
-        for name in names[1:]:
+        for name in names:
             actions = current._actions
             sub_action = next((a for a in actions if isinstance(a, ActionClass)), None)
             if sub_action is None:

@@ -14,6 +14,7 @@ from typing import Any
 from typing import Literal
 from typing import MutableSequence
 
+from . import config
 from .util import logging
 from .util.string import stringify
 
@@ -189,6 +190,8 @@ class JobSpec:
         if self.view_path == NULL_PATH:
             self.view_path = self.file_path.parent / self.name
         self.view_path = Path(self.view_path)
+        if self.timeout < 0:
+            self.timeout = default_timeout(self.keywords)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -421,3 +424,18 @@ def build_spec_id(*args: Any, **kwargs: Any) -> str:
     for key in sorted(kwargs):
         hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
     return hasher.hexdigest()
+
+
+def default_timeout(keywords: list[str]) -> float:
+    if cli_timeouts := config.getoption("timeout"):
+        for keyword in keywords:
+            if t := cli_timeouts.get(keyword):
+                return float(t)
+        if t := cli_timeouts.get("*"):
+            return float(t)
+    for keyword in keywords:
+        if t := config.get(f"run:timeout:{keyword}"):
+            return float(t)
+    if t := config.get("run:timeout:all"):
+        return float(t)
+    return float(config.get("run:timeout:default"))
