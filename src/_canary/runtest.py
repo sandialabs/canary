@@ -40,7 +40,7 @@ def canary_runtests(runner: "Runner") -> None:
         logger.error(f"Session timed out after {(time.time() - runner.start):.2f} s.")
         raise
     except Exception:
-        logger.exception("Unhandled exception in canary_runtest")
+        logger.exception("Unhandled exception in canary_runtests")
         raise
     finally:
         logger.info(

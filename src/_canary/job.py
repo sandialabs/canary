@@ -578,8 +578,7 @@ class Job(BaseJob):
         self.create_workspace()
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-        try:
-            file = open(self.workspace.joinpath(self.stdout), "a")
+        with open(self.workspace.joinpath(self.stdout), "a") as file:
             file.write(f"[{prefix}] Preparing test: {self.name}\n")
             file.write(f"[{prefix}] Directory: {self.workspace.dir}\n")
             file.write(f"[{prefix}] Linking and copying working files...\n")
@@ -600,8 +599,6 @@ class Job(BaseJob):
                 else:
                     file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
                     self.workspace.link(asset.src, asset.dst)
-        finally:
-            file.close()
 
     def run(self) -> None:
         from .status import Outcome
