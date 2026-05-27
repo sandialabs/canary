@@ -204,7 +204,7 @@ def repo(tmp_path) -> Path:
 
 @pytest.fixture
 def spec(repo: Path) -> JobSpec:
-    return JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, timeout=300.)
+    return JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, timeout=300.0)
 
 
 @pytest.fixture
@@ -290,8 +290,9 @@ def test_job_dependency_graph_roundtrip_json(repo: Path, space, tmp_path):
     (Note: this will duplicate the dependent Job object; if you later want
     identity preservation, you'll need an id-based scheme.)
     """
-    spec_a = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, family="a")
-    spec_b = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="b" * 64, family="b")
+    f = Path("suite/test_x.py")
+    spec_a = JobSpec(file_root=repo, file_path=f, id="a" * 64, family="a", timeout=10.0)
+    spec_b = JobSpec(file_root=repo, file_path=f, id="b" * 64, family="b", timeout=10.0)
 
     # Spec-level dependency (b depends on a)
     spec_b.dependencies.append(SpecDependency(spec=spec_a, when="on_success"))
