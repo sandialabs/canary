@@ -25,23 +25,26 @@ def canary_addoption(parser: "Parser") -> None:
     parser.add_argument(
         "--repeat-until-pass",
         type=int,
+        metavar="N",
         command="run",
         group=group,
-        help="Allow each test to run up to <n> times in order to pass",
+        help="Allow each test to run up to N times in order to pass",
     )
     parser.add_argument(
         "--repeat-after-timeout",
         type=int,
+        metavar="N",
         command="run",
         group=group,
-        help="Allow each test to run up to <n> times if it times out",
+        help="Allow each test to run up to N times if it times out",
     )
     parser.add_argument(
         "--repeat-until-fail",
         type=int,
+        metavar="N",
         command="run",
         group=group,
-        help="Require each test to run <n> times without failing in order to pass",
+        help="Require each test to run N times without failing in order to pass",
     )
 
 

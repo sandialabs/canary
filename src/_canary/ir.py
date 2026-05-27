@@ -161,7 +161,9 @@ class JobSpecIR:
     def add_artifact(
         self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
     ) -> None:
-        self.artifacts.append(Artifact(pattern=pattern, when=when))
+        a = Artifact(pattern=pattern, when=when)
+        if a not in self.artifacts:
+            self.artifacts.append(a)
 
     def set_attribute(self, name: str, value: Any) -> None:
         self.attributes[name] = value

@@ -79,6 +79,11 @@ class Artifact:
     pattern: str
     when: Literal["always", "never", "on_failure", "on_success"] = "always"
 
+    def __eq__(self, o):
+        if isinstance(o, Artifact):
+            return (o.pattern, o.when) == (self.pattern, self.when)
+        return NotImplemented
+
     def active(self, status: "Status") -> bool:
         from .status import Category
 
@@ -237,7 +242,9 @@ class JobSpec:
     def add_artifact(
         self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
     ) -> None:
-        self.artifacts.append(Artifact(pattern=pattern, when=when))
+        a = Artifact(pattern=pattern, when=when)
+        if a not in self.artifacts:
+            self.artifacts.append(a)
 
     @cached_property
     def file(self) -> Path:

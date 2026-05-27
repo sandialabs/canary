@@ -696,6 +696,10 @@ class PYTLockEmitter:
                     dependencies=deps,
                     command=list(model.command),
                 )
+                ir.add_artifact("testcase.lock")
+                ir.add_artifact(ir.stdout)
+                if ir.stderr is not None:
+                    ir.add_artifact(ir.stderr)
 
                 enabled, reason = model.get_enable(family, parameters, on_options=on_options)
                 if test_mask is None and enabled is False:
@@ -752,7 +756,10 @@ class PYTLockEmitter:
                     attributes={"multicase": True, "paramsets": pset_meta},
                     dependencies=deps,
                 )
-
+                parent.add_artifact("testcase.lock")
+                parent.add_artifact(parent.stdout)
+                if parent.stderr is not None:
+                    parent.add_artifact(parent.stderr)
                 if analyze.flag:
                     parent.command = [sys.executable, os.path.basename(model.path), analyze.flag]
                 elif analyze.script:
