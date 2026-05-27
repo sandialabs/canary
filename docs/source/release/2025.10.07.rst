@@ -1,0 +1,65 @@
+canary 2025.10.07 release notes
+===============================
+
+.. contents::
+
+SYNOPSIS
+
+* This release covers commits from 2025-05-14 through 2025-10-07.
+* Pull requests in this range focus on CI/containerization updates, configuration refactors, and robustness/security hardening.
+
+Authors
+-------
+
+* Tim Fuller (241)
+* Alex Knigge (137)
+* Stuart Baxley (30)
+* Mario Vincent LoPrinzi (5)
+* Anthony Garland (3)
+* Matthew Mosby (2)
+* Ben Wibking (1)
+* CI Bot (1)
+
+A total of 7 authors contributed 420 commits to this release.
+
+Pull requests referenced for 2025.10.07
+--------------------------------------
+
+* `#1 <https://github.com/sandialabs/canary/pull/1>`__
+* `#2 <https://github.com/sandialabs/canary/pull/2>`__
+* `#7 <https://github.com/sandialabs/canary/pull/7>`__
+* `#9 <https://github.com/sandialabs/canary/pull/9>`__
+* `#10 <https://github.com/sandialabs/canary/pull/10>`__
+* `#11 <https://github.com/sandialabs/canary/pull/11>`__
+* `#13 <https://github.com/sandialabs/canary/pull/13>`__
+* `#14 <https://github.com/sandialabs/canary/pull/14>`__
+* `#17 <https://github.com/sandialabs/canary/pull/17>`__
+* `#21 <https://github.com/sandialabs/canary/pull/21>`__
+* `#22 <https://github.com/sandialabs/canary/pull/22>`__
+* `#23 <https://github.com/sandialabs/canary/pull/23>`__
+* `#25 <https://github.com/sandialabs/canary/pull/25>`__
+* `#26 <https://github.com/sandialabs/canary/pull/26>`__
+* `#29 <https://github.com/sandialabs/canary/pull/29>`__
+* `#32 <https://github.com/sandialabs/canary/pull/32>`__
+* `#33 <https://github.com/sandialabs/canary/pull/33>`__
+* `#34 <https://github.com/sandialabs/canary/pull/34>`__
+* `#35 <https://github.com/sandialabs/canary/pull/35>`__
+* `#36 <https://github.com/sandialabs/canary/pull/36>`__
+* `#37 <https://github.com/sandialabs/canary/pull/37>`__
+* `#38 <https://github.com/sandialabs/canary/pull/38>`__
+* `#39 <https://github.com/sandialabs/canary/pull/39>`__
+* `#40 <https://github.com/sandialabs/canary/pull/40>`__
+* `#41 <https://github.com/sandialabs/canary/pull/41>`__
+* `#42 <https://github.com/sandialabs/canary/pull/42>`__
+* `#43 <https://github.com/sandialabs/canary/pull/43>`__
+* `#44 <https://github.com/sandialabs/canary/pull/44>`__
+* `#45 <https://github.com/sandialabs/canary/pull/45>`__
+* `#50 <https://github.com/sandialabs/canary/pull/50>`__
+* `#83 <https://github.com/sandialabs/canary/pull/83>`__
+* `#85 <https://github.com/sandialabs/canary/pull/85>`__
+* `#86 <https://github.com/sandialabs/canary/pull/86>`__
+* `#87 <https://github.com/sandialabs/canary/pull/87>`__
+* `#89 <https://github.com/sandialabs/canary/pull/89>`__
+* `#90 <https://github.com/sandialabs/canary/pull/90>`__
+* `#92 <https://github.com/sandialabs/canary/pull/92>`__
+* `#93 <https://github.com/sandialabs/canary/pull/93>`__

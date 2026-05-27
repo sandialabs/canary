@@ -1,0 +1,23 @@
+canary 2026.05.27 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2026-04-16 through 2026-05-27.
+* Pull requests in this range focus on batch dependency handling, the TestCase-to-Job naming migration, and FIPS-related hashing/compliance updates.
+
+Authors
+-------
+
+* Tim Fuller (83)
+* Mario LoPrinzi (2)
+
+A total of 2 authors contributed 85 commits to this release.
+
+Pull requests referenced for 2026.05.27
+--------------------------------------
+
+* `#110 <https://github.com/sandialabs/canary/pull/110>`__
+* `#111 <https://github.com/sandialabs/canary/pull/111>`__
+* `#117 <https://github.com/sandialabs/canary/pull/117>`__
+* `#118 <https://github.com/sandialabs/canary/pull/118>`__

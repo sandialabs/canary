@@ -1,0 +1,46 @@
+canary 2026.03.18 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2025-10-08 through 2026-03-18.
+* Pull requests in this range focus on queue/batch execution robustness and performance, workspace/DB improvements, and new/expanded CLI capabilities.
+
+Authors
+-------
+
+* Tim Fuller (370)
+* Matthew Mosby (56)
+
+A total of 2 authors contributed 426 commits to this release.
+
+Pull requests referenced for 2026.03.18
+--------------------------------------
+
+* `#51 <https://github.com/sandialabs/canary/pull/51>`__
+* `#52 <https://github.com/sandialabs/canary/pull/52>`__
+* `#53 <https://github.com/sandialabs/canary/pull/53>`__
+* `#54 <https://github.com/sandialabs/canary/pull/54>`__
+* `#55 <https://github.com/sandialabs/canary/pull/55>`__
+* `#56 <https://github.com/sandialabs/canary/pull/56>`__
+* `#57 <https://github.com/sandialabs/canary/pull/57>`__
+* `#58 <https://github.com/sandialabs/canary/pull/58>`__
+* `#59 <https://github.com/sandialabs/canary/pull/59>`__
+* `#60 <https://github.com/sandialabs/canary/pull/60>`__
+* `#63 <https://github.com/sandialabs/canary/pull/63>`__
+* `#67 <https://github.com/sandialabs/canary/pull/67>`__
+* `#70 <https://github.com/sandialabs/canary/pull/70>`__
+* `#75 <https://github.com/sandialabs/canary/pull/75>`__
+* `#76 <https://github.com/sandialabs/canary/pull/76>`__
+* `#85 <https://github.com/sandialabs/canary/pull/85>`__
+* `#88 <https://github.com/sandialabs/canary/pull/88>`__
+* `#89 <https://github.com/sandialabs/canary/pull/89>`__
+* `#91 <https://github.com/sandialabs/canary/pull/91>`__
+* `#92 <https://github.com/sandialabs/canary/pull/92>`__
+* `#93 <https://github.com/sandialabs/canary/pull/93>`__
+* `#94 <https://github.com/sandialabs/canary/pull/94>`__
+* `#95 <https://github.com/sandialabs/canary/pull/95>`__
+* `#96 <https://github.com/sandialabs/canary/pull/96>`__
+* `#99 <https://github.com/sandialabs/canary/pull/99>`__
+* `#100 <https://github.com/sandialabs/canary/pull/100>`__
+* `#101 <https://github.com/sandialabs/canary/pull/101>`__

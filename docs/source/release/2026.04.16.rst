@@ -1,0 +1,24 @@
+canary 2026.04.16 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2026-03-18 through 2026-04-16.
+* Pull requests in this range focus on hpc-connect integration/config updates, queue executor robustness/refactoring, and launcher/spec improvements.
+
+Authors
+-------
+
+* Tim Fuller (25)
+
+A total of 1 authors contributed 25 commits to this release.
+
+Pull requests referenced for 2026.04.16
+--------------------------------------
+
+* `#72 <https://github.com/sandialabs/canary/pull/72>`__
+* `#98 <https://github.com/sandialabs/canary/pull/98>`__
+* `#104 <https://github.com/sandialabs/canary/pull/104>`__
+* `#106 <https://github.com/sandialabs/canary/pull/106>`__
+* `#107 <https://github.com/sandialabs/canary/pull/107>`__
+* `#108 <https://github.com/sandialabs/canary/pull/108>`__
