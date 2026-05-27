@@ -204,7 +204,7 @@ def repo(tmp_path) -> Path:
 
 @pytest.fixture
 def spec(repo: Path) -> JobSpec:
-    return JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64)
+    return JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="a" * 64, timeout=300.)
 
 
 @pytest.fixture
