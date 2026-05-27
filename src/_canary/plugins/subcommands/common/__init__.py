@@ -75,7 +75,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         help=f"Set the timeout for {bold('type')} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n"
         f"• type={bold('session')}, the timeout T is applied to the entire test session.\n\n"
         f"• type={bold('multiplier')}, the multiplier T is applied to each test's timeout.\n\n"
-        f"• type={bold('*')}, the timeout T is applied to all jobs.\n\n"
+        f"• type={bold('all')}, the timeout T is applied to all jobs.\n\n"
         f"• type={bold('batch')}, choices for T are 'conservative' to use a conservative "
         "estimate for batch timeouts (queue times) or 'aggressive'.\n\n"
         f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.\n\n"
@@ -96,19 +96,15 @@ def add_resource_arguments(parser: "Parser") -> None:
 class TimeoutResource(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
         if option_string == "--session-timeout":
-            logger.warning(
-                f"option --session-timeout is deprecated, use --timeout session={values}"
-            )
+            logger.warning(f"--session-timeout is deprecated, use --timeout session={values}")
             type = "session"
             value = time_in_seconds(values)
         elif option_string == "--timeout-multiplier":
-            logger.warning(
-                f"option --timeout-multiplier is deprecated, use --timeout multiplier={values}"
-            )
+            logger.warning(f"--timeout-multiplier is deprecated, use --timeout multiplier={values}")
             type = "multiplier"
             value = time_in_seconds(values)
         elif option_string == "--test-timeout":
-            logger.warning(f"option --test-timeout is deprecated, use --timeout all={values}")
+            logger.warning(f"--test-timeout is deprecated, use --timeout all={values}")
             type = "*"
             value = time_in_seconds(values)
         else:

@@ -433,6 +433,8 @@ def default_timeout(keywords: list[str]) -> float:
                 return float(t)
         if t := cli_timeouts.get("*"):
             return float(t)
+        elif t := cli_timeouts.get("default"):
+            return float(t)
     for keyword in keywords:
         if t := config.get(f"run:timeout:{keyword}"):
             return float(t)
