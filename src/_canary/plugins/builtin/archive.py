@@ -27,11 +27,11 @@ def canary_addoption(parser: Parser) -> None:
 def canary_sessionfinish(session: Session) -> None:
     if (var := os.getenv("CANARY_LEVEL")) and int(var) > 0:
         return
-    if f := config.getoption("archive_name"):
-        dest = Path(f)
-    else:
+    f = config.getoption("archive_name")
+    if f is None:
         return
-    mode: Literal["w:gz", "w"] = "w:gz" if str(dest).endswith((".tgz", ".gz")) else "w"
+    dest = Path(f)
+    mode: Literal["w:gz", "w"] = "w:gz" if str(dest).endswith((".tgz", ".tar.gz")) else "w"
     prefix = Path(session.prefix)
     dest.parent.mkdir(exist_ok=True, parents=True)
     seen: set[Path] = set()
@@ -47,5 +47,10 @@ def canary_sessionfinish(session: Session) -> None:
                     if rp in seen:
                         continue
                     seen.add(rp)
-                    relpath = path.relative_to(prefix)
+                    relpath: Path
+                    if path.is_relative_to(prefix):
+                        relpath = path.relative_to(prefix)
+                    else:
+                        tmp = job.workspace.dir / path.relative_to(job.spec.file.parent)
+                        relpath = tmp.relative_to(prefix)
                     tf.add(path, arcname=str(relpath), recursive=True)

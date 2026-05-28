@@ -120,7 +120,7 @@ class server:
         with no_proxy():
             # Proxy settings must be turned off to submit to CDash
             curl = Executable("curl")
-            curl.add_default_args("-v")
+            curl.add_default_args("-v", "-L", "--proto", "=https", "--proto-redir", "=https")
             args = ["--upload-file", file, url]
             efile = "cdash-put-err.txt"
             payload = {"status": "NA", "message": None, "buildid": None}
@@ -173,7 +173,7 @@ class server:
         logger.debug(f"Getting build ID from CDash using the following query: {url}")
         curl = Executable("curl")
         try:
-            result = curl("-k", url, output=str, error=os.devnull)
+            result = curl("-k", "-L", url, output=str, error=os.devnull)
             doc = dom.parseString(result.get_output())
             if els := doc.getElementsByTagName("buildid"):
                 buildid = get_text(els[0])

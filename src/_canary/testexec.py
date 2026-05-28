@@ -81,15 +81,30 @@ class ExecutionSpace:
 
     def copy(self, src: Path, dst: Path | str | None = None) -> None:
         """Copy the file at ``src`` to this workspace with name ``dst``"""
+        if src.is_dir():
+            return self.copytree(src, dst)
         dest: Path = Path(dst or src.name)
-        (self.dir / dest.name).unlink(missing_ok=True)
-        shutil.copy(str(src), str(self.dir / dest.name))
+        target: Path = self.dir / dest.name
+        target.unlink(missing_ok=True)
+        shutil.copy(src, target)
+
+    def copytree(self, src: Path, dst: Path | str | None = None) -> None:
+        """Copy the directory at ``src`` to this workspace with name ``dst``."""
+        dest: Path = Path(dst or src.name)
+        target: Path = self.dir / dest.name
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink(missing_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, target)
 
     def link(self, src: Path, dst: Path | str | None = None) -> None:
         """Symlink the file at ``src`` to this workspace with name ``dst``"""
         dest: Path = Path(dst or src.name)
-        (self.dir / dest.name).unlink(missing_ok=True)
-        (self.dir / dest.name).symlink_to(src)
+        target: Path = self.dir / dest.name
+        target.unlink(missing_ok=True)
+        target.symlink_to(src)
 
     def joinpath(self, *parts: Path | str) -> Path:
         base = self.dir.resolve()
