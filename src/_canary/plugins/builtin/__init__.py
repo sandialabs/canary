@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-from . import addoption
 from . import archive
 from . import capture
+from . import cli
 from . import email
 from . import html
 from . import json
@@ -15,9 +15,9 @@ from . import repeat
 from . import testcase_generator
 
 plugins = [
-    addoption,
     archive,
     capture,
+    cli,
     email,
     html,
     json,

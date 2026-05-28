@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 # mypy: disable-error-code=empty-body
-
+import argparse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
@@ -104,6 +104,11 @@ def canary_addcommand(parser: "Parser") -> None:
            parser.add_command(MyCommand())
 
     """
+
+
+@hookspec(firstresult=True)
+def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespace:
+    raise NotImplementedError
 
 
 @hookspec

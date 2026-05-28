@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 from typing import TYPE_CHECKING
 from typing import Generator
 
@@ -18,3 +19,8 @@ def canary_addoption(parser: "Parser") -> Generator[None, None, None]:
         mp.setattr(parser, "add_argument", parser.add_plugin_argument)
         mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
         yield
+
+
+@hookimpl(trylast=True)
+def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespace:
+    return parser.parse_args(args)

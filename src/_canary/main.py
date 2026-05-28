@@ -12,7 +12,6 @@ import traceback
 import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Sequence
 
 from . import config
 from .config.argparsing import make_argument_parser
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
 reraise: bool = False
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Perform an in-process test run.
 
     :param args:
@@ -46,7 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.add_main_epilog(parser)
         config.pluginmanager.hook.canary_addcommand(parser=parser)
         config.pluginmanager.hook.canary_addoption(parser=parser)
-        args = parser.parse_args(m.argv)
+        args = config.pluginmanager.hook.canary_cmdline_parse(parser=parser, args=m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             sys.stderr.write(shlex.join(a) + "\n")
@@ -68,8 +67,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 class CanaryMain:
     """Set up and teardown this canary session"""
 
-    def __init__(self, argv: Sequence[str] | None = None) -> None:
-        self.argv: Sequence[str] = list(argv or sys.argv[1:])
+    def __init__(self, argv: list[str] | None = None) -> None:
+        self.argv: list[str] = list(argv or sys.argv[1:])
 
     def __enter__(self) -> "CanaryMain":
         """Preparsing is necessary to parse out options that need to take effect before the main
