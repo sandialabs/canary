@@ -265,10 +265,11 @@ class Workspace:
         self,
         specs: list["JobSpec"],
         session: str | None = None,
-        reuse_latest_session: bool = False,
+        inplace: bool = False,
         update_view: ViewT | bool = True,
         only: str = "not_pass",
     ) -> Session:
+        reuse_session: bool = session is not None
         if session is not None and not (self.sessions_dir / session).exists():
             raise ValueError(f"Session {session} not found in {self.sessions_dir}")
         now = datetime.datetime.now()
@@ -281,17 +282,15 @@ class Workspace:
         selector.run()
 
         # At this point, test jobs have been reconstructed and, if previous results exist,
-        # restored to their last ran state.  If reuse_latest_session, we leave the test job as is.
+        # restored to their last ran state.  If inplace, we leave the test job as is.
         # Otherwise, we swap out the old session for the new.
         ready: list["Job"] = []
         for job in jobs:
             if job.mask:
                 continue
-            elif reuse_latest_session:
+            elif inplace:
                 if not job.workspace.dir.exists():
-                    raise RuntimeError(
-                        f"{job}: requested to reuse_latest_session but results do not exist"
-                    )
+                    raise RuntimeError(f"{job}: requested to run in place but results do not exist")
             else:
                 # Force override session dir
                 job.workspace.root = session_dir
@@ -301,7 +300,8 @@ class Workspace:
             ready.append(job)
 
         s = Session(name=session_dir.name, prefix=session_dir, jobs=ready)
-        config.pluginmanager.hook.canary_sessionstart(session=s)
+        if not reuse_session:
+            config.pluginmanager.hook.canary_sessionstart(session=s)
 
         # We need to take great care to only write results into the database from the parent process
         # On the parent process, create a results listener that looks for results in the spool.
@@ -320,7 +320,8 @@ class Workspace:
             listener.stop_and_join()
             not_saved = [job for job in s.jobs if job.id not in listener._processed]
             self.db.put_results(*not_saved)
-        config.pluginmanager.hook.canary_sessionfinish(session=s)
+        if not reuse_session:
+            config.pluginmanager.hook.canary_sessionfinish(session=s)
         self.add_session_results(s, update_view=update_view)
         return s
 

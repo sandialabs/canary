@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import os
 import tarfile
 from pathlib import Path
 from typing import Literal
@@ -25,8 +24,6 @@ def canary_addoption(parser: Parser) -> None:
 
 @hookimpl
 def canary_sessionfinish(session: Session) -> None:
-    if (var := os.getenv("CANARY_LEVEL")) and int(var) > 0:
-        return
     f = config.getoption("archive_name")
     if f is None:
         return

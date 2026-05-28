@@ -193,11 +193,11 @@ class Run(CanarySubcommand):
                 owners=args.owners,
                 regex=args.regex_filter,
             )
-        reuse = isinstance(request, ViewPathsRequest)
+        inplace: bool = isinstance(request, ViewPathsRequest)
         view = True if args.view is None else False if args.view == "none" else args.view
         session = workspace.run(
             specs,
-            reuse_latest_session=reuse,
+            inplace=inplace,
             only=args.only or "not_pass",
             update_view=view,
         )
