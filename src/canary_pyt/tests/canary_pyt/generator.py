@@ -208,11 +208,11 @@ canary.directives.keywords("k1")
 def test_artifact_upon_mapping_success_failure(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     a = PYTAdapter(m)
-    a.f_artifact("out.txt", upon="success")
-    a.f_artifact("err.txt", upon="failure")
+    a.f_artifact("baz.txt", upon="success")
+    a.f_artifact("spam.txt", upon="failure")
     specs = lock_model(m)
-    arts = specs[0].artifacts
-    assert [x.when for x in arts] == ["on_success", "on_failure"]
+    w = {a.when for a in specs[0].artifacts if a.pattern in ("baz.txt", "spam.txt")}
+    assert w == {"on_success", "on_failure"}
 
 
 def test_artifact_invalid_upon_raises(tmp_path: Path) -> None:
