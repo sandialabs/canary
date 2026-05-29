@@ -23,6 +23,7 @@ from .util.rich import colorize
 from .util.rich import set_color_when
 
 if TYPE_CHECKING:
+    from .config.argparsing import Parser
     from .plugins.types import CanarySubcommand
 
 
@@ -45,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_main_epilog(parser)
         config.pluginmanager.hook.canary_addcommand(parser=parser)
         config.pluginmanager.hook.canary_addoption(parser=parser)
-        args = config.pluginmanager.hook.canary_cmdline_parse(parser=parser, args=m.argv)
+        args = cmdline_parse(parser=parser, args=m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             sys.stderr.write(shlex.join(a) + "\n")
@@ -98,6 +99,12 @@ class CanaryMain:
 
 def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int:
     return command.execute(args)
+
+
+def cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespace:
+    ns = config.pluginmanager.hook.canary_cmdline_parse(parser=parser, args=args)
+    config.pluginmanager.hook.canary_cmdline_modifyargs(parser=parser, args=ns)
+    return ns
 
 
 class Profiler:

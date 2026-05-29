@@ -24,17 +24,17 @@ logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl
-def canary_configure(config: "canary.Config") -> None:
+def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace) -> None:
     """Do some post configuration checks"""
-    backend = config.getoption("canary_hpc_backend")
-    command = config.getoption("command")
+    command = args.command
+    backend = getattr(args, "canary_hpc_backend", None)
     if backend is not None and command == "run":
         # Run with the HPC conductor
-        config.options.command = "hpc"
-        config.options.hpc_cmd = "run"
-        if not hasattr(config.options, "canary_hpc_batchspec"):
+        args.command = "hpc"
+        args.hpc_cmd = "run"
+        if not hasattr(args, "canary_hpc_batchspec"):
             # no batchspec was passed on the command line, so set the defaults
-            setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
+            args.canary_hpc_batchspec = CanaryHPCBatchSpec.defaults()
 
 
 @canary.hookimpl

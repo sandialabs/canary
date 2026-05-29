@@ -112,6 +112,10 @@ def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespac
 
 
 @hookspec
+def canary_cmdline_modifyargs(parser: "Parser", args: argparse.Namespace) -> None: ...
+
+
+@hookspec
 def canary_subcommand() -> CanarySubcommand:
     """DEPRECATED: use canary_addcommand"""
     raise NotImplementedError

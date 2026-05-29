@@ -337,8 +337,10 @@ class RequestBuilder:
         elif self.kind != k:
             errors.append(f"Cannot mix {self.kind} with {what}")
 
-    def finalize(self) -> RequestNode:
-        if self.kind in (None, "tag"):
+    def finalize(self) -> RequestNode | None:
+        if self.kind is None:
+            return None
+        if self.kind == "tag":
             return TagRequest(value=self.tag or "")
         if self.kind == "scanpaths":
             return ScanPathsRequest(value=self.scanpaths)
@@ -517,7 +519,7 @@ class ReadPathsFromFile(argparse.Action):
         setattr(namespace, "request", request)
         setattr(namespace, self.dest, values)
         # backward compat
-        setattr(namespace, "scanpaths", request.value)
+        setattr(namespace, "scanpaths", None if request is None else request.value)
         return
 
     @staticmethod
