@@ -1,53 +1,77 @@
 # CANARY
 
-`canary` is a python package providing an application testing framework designed to test scientific applications.
+`canary` is a Python package for defining, scheduling, and executing jobs across a wide range of computing environments, from developer laptops to large-scale HPC systems.
 
 - **Documentation:** https://canary-wm.readthedocs.io/en/production/
 
- `canary` is inspired by [vvtest](https://github.com/sandialabs/vvtest) and designed to run tests on diverse hardware from laptops to super computing clusters.  `canary` not only validates the functionality of your application but can also serve as a workflow manager for analysts.  A "test" is an executable script with extension `.pyt` or `.vvt`.  If the exit code upon executing the script is `0`, the test is considered to have passed, otherwise a non-passing status will be assigned.  `canary`'s methodology is simple: given a path on the filesystem, `canary` recursively searches for test scripts, sets up the tests described in each script, executes them, and reports the results.
 
-`canary` offers several advantages over similar testing tools:
+Originally developed for application testing, `canary` has evolved into a general-purpose workflow execution framework. Today it is used to automate software testing, manage analysis workflows, execute computational pipelines, and coordinate collections of dependent jobs.
 
-**Speed**: Hierarchical parallelism is used to run tests asynchronously, optimizing resource utilization and speeding up the testing process.
 
-**Python**: Test files are written in [Python](python.org), giving developers access to the full Python ecosystem.
+`canary` is inspired by `vvtest` and retains its strengths in scalable test execution while providing a flexible foundation for broader workflow automation. Built on `pluggy`, `canary` uses a plugin-based architecture for job discovery and execution. Common plugins support Python-based job definitions in `.pyt` and `.vvt` files, while others provide integration with frameworks such as CMake/CTest. Given one or more filesystem paths, `canary` recursively discovers job definitions, constructs the execution graph, schedules work according to available resources and dependencies, executes jobs, and reports results.
 
-**Integration**: `canary` integrates with popular developer tools like [CMake](cmake.org), [CDash](cdash.org) and [GitLab](gitlab.com), streamlining the testing and continuous integration (CI) processes.
 
-**Extensibility**: `canary` can be extended through user plugins, allowing developers to customize their test sessions according to their specific needs.
+Testing remains a primary use case, but it is no longer the defining purpose of the project. A `canary` job may represent a software test, simulation, data-processing stage, analysis task, validation check, or any other executable unit of work.
+
+
+`canary` offers several advantages:
+
+
+**Scalable Execution**: Hierarchical parallelism enables efficient utilization of available resources, allowing large collections of jobs to execute concurrently across diverse hardware platforms.
+
+
+**Workflow and Testing**: The same framework supports both automated software testing and general workflow orchestration, reducing the need for separate tools.
+
+
+**Python-Based Definitions**: Python-based plugins provide access to the full Python ecosystem while enabling concise and expressive workflow descriptions.
+
+
+**Integration**: `canary` integrates with common development and automation tools such as CMake, CDash, and GitLab, simplifying testing and continuous integration workflows.
+
+
+**Extensibility**: A plugin architecture allows users to customize discovery, scheduling, execution, reporting, job-definition formats, and other aspects of a `canary` session.
+
 
 ## Requirements
 
 Python 3.10+
 
+
 ## Install
 
-`canary` is distributed as a python library and is most easily installed via `pip` (or other compatible tool):
+`canary` is distributed as a Python package and is most easily installed using `pip` (or another compatible package manager).
 
-To install the latest production version, execute:
+
+To install the latest production release:
 
 ```console
 python3 -m pip install canary-wm
 ```
 
-To install the latest development version, execute:
+
+To install the latest development version:
 
 ```console
 python3 -m pip install "canary-wm@git+ssh://git@github.com/sandialabs/canary"
 ```
 
-> **NOTE:** Installing from the main development branch depends on floating git refs to one or more dependencies.  For stable installs, install a published release.
+
+> **NOTE:** Installing from the main development branch may depend on floating git references in one or more dependencies. For stable installations, use a published release.
 
 
 ## Developers
 
-For developers wanting to make modifications and/or contributions to `canary`, install in editable mode:
+For developers wishing to modify or contribute to `canary`, install in editable mode:
 
 ```console
 python3 -m pip install -e git+https://github.com/sandialabs/canary#egg=canary-wm[dev]
 ```
 
-which will leave a copy of `canary` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
+
+This places a working copy of the source in your Python distribution's `$prefix/src` directory, allowing changes to become immediately visible to the interpreter.
+
+
+Alternatively:
 
 ```console
 git clone git@github.com:sandialabs/canary
@@ -55,16 +79,20 @@ cd canary
 python3 -m pip install --editable .[dev]
 ```
 
-To format code and run `canary`'s internal tests, execute
+
+To format code and run `canary`'s internal test suite:
 
 ```console
 canary check
 ```
 
+
 ## License
 
-Canary is distributed under the terms of the MIT license, see [LICENSE](https://github.com/sandialabs/canary/blob/main/LICENSE) and [COPYRIGHT](https://github.com/sandialabs/canary/blob/main/COPYRIGHT).
+Canary is distributed under the terms of the MIT license. See `LICENSE` and `COPYRIGHT` for details.
+
 
 SPDX-License-Identifier: MIT
+
 
 SCR#:3170.0
