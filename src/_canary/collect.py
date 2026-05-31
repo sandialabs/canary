@@ -1,6 +1,24 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
+"""Collector module for discovering and instantiating test generators.
+
+This module provides the infrastructure to scan various sources—including local filesystem paths
+and version control systems (Git and Google Repo)—to find files that match registered test
+generator patterns. Once discovered, these files are processed in parallel using a process pool to
+instantiate AbstractTestGenerator objects.
+
+Usage patterns:
+    1. Integration with the CLI: The `Collector.setup_parser` method adds arguments to allow users
+       to specify scan paths via `-r` or a configuration file via `-f`.
+    2. Programmatic usage: Use `find_generators_in_path(path)` for a simple way to retrieve all
+       generators within a specific directory.
+    3. Plugin-based extension: The module uses hooks (e.g., `canary_collectstart`) to allow plugins
+       to modify the collection behavior or exclude specific directories.
+
+"""
+
 import argparse
 import dataclasses
 import fnmatch
@@ -30,6 +48,14 @@ vc_prefixes = ("git@", "repo@")
 
 
 def recursedirs_type(arg: str) -> dict[str, list[str]]:
+    """Parses a path string into a root directory and optional file list.
+
+    Args:
+        arg: Path string, potentially in 'root:path' format.
+
+    Returns:
+        A dictionary mapping the root directory to a list of relative paths.
+    """
     if os.path.isdir(arg):
         return {os.path.abspath(arg): []}
     elif os.path.isfile(arg):
@@ -43,6 +69,14 @@ def recursedirs_type(arg: str) -> dict[str, list[str]]:
 
 
 def read_recursedirs(file: str) -> dict[str, list[str]]:
+    """Reads test paths from a JSON or YAML file.
+
+    Args:
+        file: Path to the configuration file.
+
+    Returns:
+        A dictionary mapping root directories to lists of relative paths.
+    """
     data: dict
     if file.endswith(".json"):
         with open(file, "r") as fh:
@@ -65,6 +99,8 @@ def read_recursedirs(file: str) -> dict[str, list[str]]:
 
 
 class update_action(argparse.Action):
+    """Action to update a dictionary in the argparse namespace."""
+
     def __call__(self, parser, namespace, values, option_string=None) -> None:
         assert isinstance(values, dict)
         value = getattr(namespace, self.dest, None) or {}
@@ -73,6 +109,8 @@ class update_action(argparse.Action):
 
 
 class Collector:
+    """Collects and instantiates test generators from various sources."""
+
     def __init__(self) -> None:
         self.skip_dirs: list[str] = []
         self.scanpaths: dict[str, list[str]] = {}
@@ -101,6 +139,11 @@ class Collector:
         )
 
     def run(self) -> list["AbstractTestGenerator"]:
+        """Executes the collection process.
+
+        Returns:
+            A list of instantiated test generators.
+        """
         config.pluginmanager.hook.canary_collectstart(collector=self)
         for scanpath in self.iter_scanpaths():
             if scanpath.root.startswith(vc_prefixes):
@@ -115,6 +158,7 @@ class Collector:
         return self.generators
 
     def finalize(self) -> None:
+        """Instantiates generators from the collected files using a process pool."""
         pm = logger.progress_monitor("[bold]Instantiating[/] generators from collected files")
         errors = 0
         self.generators.clear()
@@ -133,6 +177,11 @@ class Collector:
         return
 
     def collect_from_path(self, scanpath: "ScanPath") -> None:
+        """Collects generator files from a local filesystem path.
+
+        Args:
+            scanpath: The path configuration to scan.
+        """
         root_path = Path(scanpath.root)
         assert root_path.exists()
         cwd = Path.cwd()
@@ -158,6 +207,11 @@ class Collector:
         pm.done()
 
     def collect_from_vc(self, root: str) -> None:
+        """Collects generator files from a version control system.
+
+        Args:
+            root: The VC root string (e.g., 'git@path').
+        """
         assert root.startswith(vc_prefixes)
         type, _, vcroot = root.partition("@")
         pm = logger.progress_monitor(
@@ -168,13 +222,24 @@ class Collector:
         pm.done()
 
     def add_generator(self, generator: Type[AbstractTestGenerator]) -> None:
+        """Adds a generator type to the collection criteria.
+
+        Args:
+            generator: The generator class to add.
+        """
         self.types.add(generator)
 
     @property
     def file_patterns(self) -> set[str]:
+        """Returns the set of all file patterns associated with registered generator types."""
         return {pat for type in self.types for pat in type.file_patterns}
 
     def add_skip_dirs(self, dirs: list[str]) -> None:
+        """Adds directories to be skipped during collection.
+
+        Args:
+            dirs: A list of directory names or patterns to skip.
+        """
         for dir in dirs:
             if dir not in self.skip_dirs:
                 self.skip_dirs.append(dir)
@@ -188,10 +253,21 @@ class Collector:
         return False
 
     def add_scanpaths(self, scanpaths: dict[str, list[str]]) -> None:
+        """Adds multiple scan paths to the collector.
+
+        Args:
+            scanpaths: A dictionary of root paths and their associated relative paths.
+        """
         for root, paths in scanpaths.items():
             self.add_scanpath(root, paths)
 
     def add_scanpath(self, root: str, paths: list[str]) -> None:
+        """Adds a single scan path to the collector.
+
+        Args:
+            root: The root directory of the scan path.
+            paths: A list of relative paths to include.
+        """
         if not root.startswith(vc_prefixes):
             root = os.path.abspath(root)
         if os.path.isfile(root):
@@ -208,6 +284,11 @@ class Collector:
         self.scanpaths[root] = sorted(my_paths, key=lambda p: (len(p.split(os.sep)), p))
 
     def iter_scanpaths(self) -> Iterator["ScanPath"]:
+        """Iterates over all configured scan paths.
+
+        Returns:
+            An iterator of ScanPath objects.
+        """
         for root, paths in self.scanpaths.items():
             if not paths:
                 yield ScanPath(root=root)
@@ -216,9 +297,21 @@ class Collector:
                     yield ScanPath(root=root, path=path)
 
     def add_file(self, root: str, path: str) -> None:
+        """Adds a single file to the collection.
+
+        Args:
+            root: The root directory.
+            path: The relative path to the file.
+        """
         self.add_files(root, [path])
 
     def add_files(self, root: str, paths: list[str]) -> None:
+        """Adds multiple files to the collection.
+
+        Args:
+            root: The root directory.
+            paths: A list of relative paths to the files.
+        """
         root = os.path.abspath(root)
         my_files: set[str] = set(self.files.get(root, []))
         for path in paths:
@@ -232,6 +325,12 @@ class Collector:
         self.files[root] = sorted(my_files, key=lambda p: (len(p.split(os.sep)), p))
 
     def remove_file(self, root: str, path: str) -> None:
+        """Removes a file from the collection.
+
+        Args:
+            root: The root directory.
+            path: The relative path to the file.
+        """
         paths = self.files.pop(root, [])
         relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
         if relpath in paths:
@@ -240,11 +339,23 @@ class Collector:
             self.files[root] = paths
 
     def iter_files(self) -> Iterator[tuple[str, str]]:
+        """Iterates over all collected files.
+
+        Returns:
+            An iterator of (root, path) tuples.
+        """
         for root, paths in self.files.items():
             for path in paths:
                 yield root, path
 
     def matches(self, f: str) -> bool:
+        """Checks if a filename matches any of the registered generator types.
+
+        Args:
+            f: The filename to check.
+        Returns:
+            True if it matches any generator type, False otherwise.
+        """
         for type in self.types:
             if type.matches(f):
                 return True
@@ -252,11 +363,21 @@ class Collector:
 
 
 def worker_init(snapshot: dict[str, Any]):
+    """Initializes a worker process with a configuration snapshot.
+
+    Args:
+        snapshot: The configuration snapshot.
+    """
     config.load_snapshot(snapshot)
 
 
 @hookimpl
 def canary_collectstart(collector: "Collector") -> None:
+    """Hook to configure the collector at the start of collection.
+
+    Args:
+        collector: The Collector instance.
+    """
     dirs = [
         "__pycache__",
         ".git",
@@ -270,6 +391,16 @@ def canary_collectstart(collector: "Collector") -> None:
 
 
 def _from_version_control(type: str, root: str, file_patterns: Iterable[str]) -> list[str]:
+    """Dispatch to the appropriate version control listing function.
+
+    Args:
+        type: The VC type ('git' or 'repo').
+        root: The root of the repository.
+        file_patterns: Patterns to match files.
+
+    Returns:
+        A list of matching file paths.
+    """
     """Find files in version control repository"""
     if type == "git":
         return git_ls(root, file_patterns)
@@ -280,6 +411,15 @@ def _from_version_control(type: str, root: str, file_patterns: Iterable[str]) ->
 
 
 def git_ls(root: str, patterns: Iterable[str]) -> list[str]:
+    """Lists files in a git repository matching specific patterns.
+
+    Args:
+        root: Path to the git repository.
+        patterns: File patterns to match.
+
+    Returns:
+        A list of matching file paths.
+    """
     gitified_patterns = [f"**/{p}" for p in patterns]
     args = [
         "git",
@@ -295,6 +435,15 @@ def git_ls(root: str, patterns: Iterable[str]) -> list[str]:
 
 
 def repo_ls(root: str, patterns: Iterable[str]) -> list[str]:
+    """Lists files across all projects in a Google repo manifest.
+
+    Args:
+        root: Path to the repo root.
+        patterns: File patterns to match.
+
+    Returns:
+        A list of matching file paths across all projects.
+    """
     files: list[str] = []
     with working_dir(root):
         cp = subprocess.run(["repo", "list"], capture_output=True, text=True)
@@ -315,6 +464,14 @@ class ScanPath:
 
 
 def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:
+    """Attempts to create a generator for a single file.
+
+    Args:
+        args: A tuple containing (generator_types, root, file_path).
+
+    Returns:
+        A tuple of (success_boolean, generator_instance_or_none).
+    """
     types, root, f = args
     try:
         for type in types:
@@ -328,6 +485,14 @@ def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:
+    """Convenience function to find and instantiate generators in a given path.
+
+    Args:
+        path: The path to scan.
+
+    Returns:
+        A list of instantiated AbstractTestGenerator objects.
+    """
     collector = Collector()
     collector.add_scanpath(str(path), [])
     generators = collector.run()

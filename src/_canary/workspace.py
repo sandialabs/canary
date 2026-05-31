@@ -1,6 +1,27 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+"""
+Workspace management for Canary test execution.
+
+This module defines the `Workspace` and `Session` classes which handle the lifecycle of test
+execution environments. A Workspace acts as the central repository for test specifications, results
+databases, and "views" (consolidated results). Sessions represent a specific execution run of a set
+of jobs.
+
+Key functionalities include:
+    - Creating and loading persistent workspaces on disk.
+    - Managing a "View" of the latest test results via symlinks, hardlinks, or copies.
+    - Coordinating the execution of `Job` objects within a `Session`.
+    - Interfacing with the `WorkspaceDatabase` to store and retrieve job specifications.
+    - Providing selection mechanisms to filter tests by tags, regex, or owners.
+
+Example:
+    >>> ws = Workspace.create(path=".")
+    >>> specs = ws.collect(scanpaths={"/src/tests": []})
+    >>> session = ws.run(specs=specs)
+"""
+
 import dataclasses
 import datetime
 import fnmatch
@@ -67,11 +88,24 @@ class Session:
     finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
 
     def __post_init__(self) -> None:
+        """Validates session jobs.
+
+        Raises:
+            ValueError: If any job in the session is unexpectedly masked.
+        """
         for job in self.jobs:
             if job.mask:
                 raise ValueError(f"{job}: unexpectedly masked test job")
 
     def run(self, workspace: "Workspace") -> None:
+        """Executes the session's jobs using a Runner.
+
+        Args:
+            workspace: The Workspace instance providing the environment.
+
+        Raises:
+            StopExecution: If no runnable jobs are found.
+        """
         self.prefix.mkdir(parents=True, exist_ok=True)
         ready = [job for job in self.jobs if job.is_runnable()]
         runner = Runner(ready, self.name, workspace=workspace)
@@ -96,6 +130,7 @@ class Workspace:
     version_info = (1, 0, 0)
 
     def __init__(self, anchor: str | Path = Path.cwd()) -> None:
+        """Internal constructor. Use `Workspace.create()` or `Workspace.load()`."""
         # Even through this function is not meant to be called, we declare types so that code
         # editors know what to work with.
         self.root: Path
@@ -127,6 +162,11 @@ class Workspace:
         return f"{self.__class__.__name__}({self.root})"
 
     def initialize_properties(self, *, anchor: Path) -> None:
+        """Sets up the internal directory structure paths based on the anchor.
+
+        Args:
+            anchor: The base directory where the .canary folder resides.
+        """
         self.root = anchor / workspace_path
         self.view = None
         self.refs_dir = self.root / "refs"
@@ -142,6 +182,14 @@ class Workspace:
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> Path | None:
+        """Deletes a workspace and its associated view.
+
+        Args:
+            start: Path to start searching for the workspace.
+
+        Returns:
+            The path to the removed workspace, or None if no workspace was found.
+        """
         relpath = Path(start).absolute().relative_to(Path.cwd())
         pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {relpath}")
         anchor = Workspace.find_anchor(start=start)
@@ -172,6 +220,7 @@ class Workspace:
             return None
 
     def rmf(self) -> None:
+        """Dangerously removes the workspace and view directories from disk."""
         # This is dangerous!!!
         if self.view:
             async_rmtree(self.view)
@@ -179,6 +228,14 @@ class Workspace:
 
     @staticmethod
     def find_anchor(start: str | Path = Path.cwd()) -> Path | None:
+        """Searches upwards from start to find the directory containing the workspace.
+
+        Args:
+            start: The directory to start the search from.
+
+        Returns:
+            The anchor Path if found, otherwise None.
+        """
         current_path = Path(start).absolute()
         if current_path.stem == workspace_path:
             return current_path.parent
@@ -192,12 +249,29 @@ class Workspace:
 
     @staticmethod
     def find_workspace(start: str | Path = Path.cwd()) -> Path | None:
+        """Locates the .canary workspace directory.
+
+        Args:
+            start: The directory to start the search from.
+
+        Returns:
+            The path to the workspace directory if found, otherwise None.
+        """
         if anchor := Workspace.find_anchor(start=start):
             return anchor / workspace_path
         return None
 
     @classmethod
     def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
+        """Creates a new Canary workspace at the specified path.
+
+        Args:
+            path: The anchor directory for the workspace.
+            force: If True, remove existing workspace at path before creating.
+
+        Returns:
+            The newly created Workspace instance.
+        """
         path = Path(path).absolute()
         if path.stem == workspace_path:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
@@ -245,6 +319,17 @@ class Workspace:
 
     @classmethod
     def load(cls, start: str | Path | None = None) -> "Workspace":
+        """Loads an existing workspace from the filesystem.
+
+        Args:
+            start: The directory to start searching for the workspace.
+
+        Returns:
+            A loaded Workspace instance.
+
+        Raises:
+            NotAWorkspaceError: If no workspace is found.
+        """
         start = Path(start or Path.cwd())
         logger.debug(f"Loading Canary workspace from {start}")
         anchor = cls.find_anchor(start=start)
@@ -269,6 +354,18 @@ class Workspace:
         update_view: ViewT | bool = True,
         only: str = "not_pass",
     ) -> Session:
+        """Executes a set of job specifications in a new or existing session.
+
+        Args:
+            specs: List of job specs to run.
+            session: Optional existing session name to reuse.
+            inplace: If True, run jobs in their existing result directories.
+            update_view: Whether to update the consolidated results view.
+            only: Rerun strategy (e.g., 'not_pass').
+
+        Returns:
+            The resulting Session object.
+        """
         reuse_session: bool = session is not None
         if session is not None and not (self.sessions_dir / session).exists():
             raise ValueError(f"Session {session} not found in {self.sessions_dir}")
@@ -362,6 +459,12 @@ class Workspace:
         view_entries: list[tuple[Path, Path]],
         mode: ViewT | None = None,
     ) -> None:
+        """Updates the consolidated results view.
+
+        Args:
+            view_entries: Mapping of result directories to relative view paths.
+            mode: The linking mode ('symlink', 'hardlink', 'copy').
+        """
         logger.info(f"[bold]Updating[/] view at {self.view}")
         if self.view is None:
             return
@@ -420,10 +523,23 @@ class Workspace:
         return None
 
     def is_session_dir(self, path: str | os.PathLike[str]) -> bool:
+        """Checks if a path is located within the workspace's sessions directory.
+
+        Args:
+            path: The path to check.
+
+        Returns:
+            True if the path is inside the sessions directory, False otherwise.
+        """
         p = Path(path).absolute()
         return p.is_relative_to(self.sessions_dir)
 
     def info(self) -> dict[str, Any]:
+        """Returns summary information about the workspace.
+
+        Returns:
+            A dictionary containing root, session count, latest session, and version.
+        """
         latest_session: str | None = None
         if (self.refs_dir / "latest").exists():
             link = (self.refs_dir / "latest").read_text().strip()
@@ -445,7 +561,15 @@ class Workspace:
         scanpaths: dict[str, list[str]],
         on_options: list[str] | None = None,
     ) -> list["JobSpec"]:
-        """Find test job generators in scan_paths and add them to this workspace"""
+        """Find test job generators in scan_paths and add them to this workspace.
+
+        Args:
+            scanpaths: Dictionary of root paths to scan.
+            on_options: Options used to filter tests by option.
+
+        Returns:
+            A list of resolved JobSpecs.
+        """
         collector = Collector()
         collector.add_scanpaths(scanpaths)
         generators = collector.run()
@@ -454,6 +578,11 @@ class Workspace:
         return resolved
 
     def store_specs(self, specs: list["JobSpec"]) -> None:
+        """Caches the provided job specifications into the workspace database.
+
+        Args:
+            specs: The resolved job specifications to store.
+        """
         pm = logger.progress_monitor("[bold]Caching[/] test specs")
         self.db.put_specs(specs)
         pm.done()
@@ -467,7 +596,19 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test job generators in scan_paths and add them to this workspace"""
+        """Selects job specifications from the database using filters and saves as a tag.
+
+        Args:
+            tag: The name of the selection tag to create.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The list of selected JobSpecs.
+        """
         resolved = self.db.load_specs()
         specs = self.select_from_specs(
             resolved,
@@ -496,7 +637,19 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test job generators in scan_paths and add them to this workspace"""
+        """Filters a list of JobSpecs using the provided rules.
+
+        Args:
+            resolved: The list of specs to filter.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The filtered list of JobSpecs.
+        """
         selector = select.Selector(resolved, self.root)
         if keyword_exprs:
             selector.add_rule(rules.KeywordRule(keyword_exprs))
@@ -521,7 +674,20 @@ class Workspace:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Find test job generators in scan_paths and add them to this workspace"""
+        """Collects generators from paths and creates a tagged selection.
+
+        Args:
+            tag: Tag name (randomly generated if None).
+            scanpaths: Paths to scan for generators.
+            on_options: Options to filter tests by.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameters.
+            owners: Filter by owners.
+            regex: Filter by regex.
+
+        Returns:
+            The created selection of JobSpecs.
+        """
         resolved = self.collect(scanpaths, on_options=on_options)
         specs = self.select_from_specs(
             resolved,
@@ -553,6 +719,16 @@ class Workspace:
         regex: str | None = None,
         ids: list[str] | None = None,
     ) -> None:
+        """Filters the provided specs in-place using selection rules.
+
+        Args:
+            specs: The list of specs to filter.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameters.
+            owners: Filter by owners.
+            regex: Filter by regex.
+            ids: Filter by specific IDs.
+        """
         selector = select.Selector(specs, self.root)
         if keyword_exprs:
             selector.add_rule(rules.KeywordRule(keyword_exprs))
@@ -568,7 +744,14 @@ class Workspace:
             selector.run()
 
     def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
-        """Load cached test jobs.  Dependency resolution is performed."""
+        """Loads jobs from the database, reconstructing them with their latest results.
+
+        Args:
+            ids: Optional list of specific job IDs to load.
+
+        Returns:
+            A list of Job objects in static dependency order.
+        """
         lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
         specs = self.db.load_specs(ids, include_upstreams=True)
@@ -594,6 +777,14 @@ class Workspace:
         self,
         path: Path,
     ) -> list["JobSpec"]:
+        """Identifies JobSpecs based on 'testcase.lock' files found in the view.
+
+        Args:
+            path: The directory path to scan for lock files.
+
+        Returns:
+            A list of corresponding JobSpecs.
+        """
         ids: list[str] = []
         for file in path.rglob("*/testcase.lock"):
             job = json.loads(file.read_text())
@@ -602,6 +793,14 @@ class Workspace:
         return resolved
 
     def remove_tag(self, tag: str) -> bool:
+        """Deletes a selection tag from the database.
+
+        Args:
+            tag: The tag name to remove.
+
+        Returns:
+            True if the tag was removed, False if it didn't exist.
+        """
         if not self.db.is_selection(tag):
             logger.error(f"{tag!r} is not a tag")
             return False
@@ -609,6 +808,14 @@ class Workspace:
         return True
 
     def is_tag(self, tag: str) -> bool:
+        """Checks if a given string is a valid selection tag.
+
+        Args:
+            tag: The string to check.
+
+        Returns:
+            True if it is a selection tag, False otherwise.
+        """
         return self.db.is_selection(tag)
 
     def generate_jobspecs(
@@ -616,16 +823,14 @@ class Workspace:
         generators: list["AbstractTestGenerator"],
         on_options: list[str] | None = None,
     ) -> list["JobSpec"]:
-        """Generate resolved test specs
+        """Generate resolved test specs.
 
         Args:
-          on_options: Used to filter tests by option.  In the typical job, options are added to
-            ``on_options`` by passing them on the command line, e.g., ``-o dbg`` would add ``dbg`` to
-            ``on_options``.  Tests can define filtering criteria based on what options are on.
+            generators: List of test generators.
+            on_options: Used to filter tests by option.
 
         Returns:
-          Resolved specs
-
+            A list of resolved JobSpecs.
         """
         on_options = on_options or []
         generator = Generator(generators, workspace=self.root, on_options=on_options or [])
@@ -633,6 +838,15 @@ class Workspace:
         return resolved
 
     def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
+        """Creates Job objects from JobSpecs, attempting to link latest results.
+
+        Args:
+            specs: The specifications to turn into jobs.
+            session: The directory for the current session.
+
+        Returns:
+            A list of constructed Job objects.
+        """
         lookup: dict[str, Job] = {}
         jobs: list[Job] = []
         latest = self.db.get_results([spec.id for spec in specs])
@@ -660,12 +874,24 @@ class Workspace:
         return jobs
 
     def get_selection(self, tag: str | None) -> list["JobSpec"]:
+        """Retrieves a list of JobSpecs associated with a tag.
+
+        Args:
+            tag: The tag name, or None/:all: for all specs.
+
+        Returns:
+            A list of JobSpecs.
+        """
         if tag is None or tag == ":all:":
             return self.db.load_specs()
         return self.db.load_specs_by_tagname(tag)
 
     def gc(self, dryrun: bool = False) -> None:
-        """Keep only the latet results"""
+        """Garbage collects old result directories, keeping only the latest per job.
+
+        Args:
+            dryrun: If True, only log what would be removed without actually deleting.
+        """
         raise NotImplementedError
 
         def mtime(path: Path):
@@ -701,7 +927,15 @@ class Workspace:
                 self.update_view(view_entries)
 
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
-        """Locate something in the workspace"""
+        """Locates a Job or JobSpec in the workspace.
+
+        Args:
+            job: Identifier to find a Job.
+            spec: Identifier to find a JobSpec.
+
+        Returns:
+            The found Job or JobSpec.
+        """
         assert not (job and spec)
         if job is not None:
             return self.find_job(job)
@@ -709,6 +943,17 @@ class Workspace:
             return self.find_jobspec(spec)
 
     def find_job(self, root: str) -> Job:
+        """Locates a Job by ID or matching pattern.
+
+        Args:
+            root: The ID or pattern to match.
+
+        Returns:
+            The matching Job object.
+
+        Raises:
+            ValueError: If no matching job is found.
+        """
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
@@ -723,6 +968,17 @@ class Workspace:
         raise ValueError(f"{root}: no matching test job found in {self.root}")
 
     def find_jobspec(self, root: str) -> "JobSpec":
+        """Locates a JobSpec by ID or matching pattern.
+
+        Args:
+            root: The ID or pattern to match.
+
+        Returns:
+            The matching JobSpec object.
+
+        Raises:
+            ValueError: If no matching spec is found.
+        """
         id = self.db.resolve_spec_id(root)
         if id is not None:
             try:
@@ -737,6 +993,14 @@ class Workspace:
         raise ValueError(f"{root}: no matching spec found in {self.root}")
 
     def find_specids(self, ids: list[str]) -> list[str | None]:
+        """Resolves a list of potentially partial IDs or names to full spec IDs.
+
+        Args:
+            ids: List of strings to resolve.
+
+        Returns:
+            A list of resolved spec IDs, or None if not found.
+        """
         specs = self.db.load_specs()
         found: list[str | None] = []
         for id in ids:
@@ -757,17 +1021,29 @@ class Workspace:
         return found
 
     def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
+        """Callback to queue job results for database persistence.
+
+        Args:
+            event: The event type.
+            *args: Event arguments, expected to contain the finished job.
+        """
         if event == "job_finished":
             self.db.queue.put(args[0].job)
 
 
 class WorkspaceExistsError(Exception):
+    """Raised when attempting to create a workspace in a directory that already exists."""
+
     pass
 
 
 class NotAWorkspaceError(Exception):
+    """Raised when a directory is not recognized as a Canary workspace."""
+
     pass
 
 
 class SpecNotFoundError(Exception):
+    """Raised when a requested JobSpec cannot be located in the workspace."""
+
     pass
