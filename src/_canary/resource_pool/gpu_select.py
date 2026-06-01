@@ -2,11 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+import os
 from typing import Any
+
+from schema import Optional
+from schema import Schema
 
 import canary
 
-from ..config import Config
 from ..config.argparsing import Parser
 from ..hookspec import hookimpl
 from ..hookspec import hookspec
@@ -14,11 +17,11 @@ from ..hookspec import hookspec
 
 class GPUSelect:
     @hookspec
-    def canary_gpu_backend_detect(self, config: Config) -> str | None:
+    def canary_gpu_backend_detect(self, config: "canary.Config") -> str | None:
         raise NotImplementedError
 
     @hookspec
-    def canary_gpu_list_gpus(self, config: Config) -> list[dict] | None:
+    def canary_gpu_list_gpus(self, config: "canary.Config") -> list[dict] | None:
         raise NotImplementedError
 
 
@@ -27,8 +30,8 @@ def canary_addoption(parser: Parser) -> None:
     parser.add_argument(
         "--gpu-backend",
         group="resource control",
-        default="auto",
-        help="Use this GPU backend [default: auto]",
+        default="none",
+        help="Use this GPU backend [default: none]",
     )
 
 
@@ -37,42 +40,46 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager") -> None:
     pluginmanager.add_hookspecs(GPUSelect)
 
 
+@hookimpl(specname="canary_configure", tryfirst=True)
+def setup_config(config: "canary.Config") -> None:
+    config.add_section(name="gpu_select", schema=gpu_select_schema)
+
+
 @hookimpl(specname="canary_configure")
 def detect_gpu_backend(config: "canary.Config") -> None:
     pm = config.pluginmanager
-    requested = config.getoption("gpu_backend") or "auto"
-    candidates: list[tuple[str, str]] = []
+    requested = config.getoption("gpu_backend") or "none"
+    if requested == "none":
+        config.set("gpu_select:runtime:backend", None)
+        return
+    candidates: dict[str, str] = {}
     for impl in pm.hook.canary_gpu_backend_detect.get_hookimpls():
         plugin = impl.plugin
-        plugin_name = (
-            getattr(impl, "plugin_name", None) or getattr(impl, "pluginname", None) or "<unknown>"
-        )
+        plugin_name = get_plugin_name(impl)
         fun = getattr(plugin, "canary_gpu_backend_detect")
         backend = fun(config=config)
         if backend:
-            candidates.append((str(backend).lower(), str(plugin_name)))
-    selected = _select_backend(requested, candidates)
+            key = str(backend).lower()
+            if key in candidates:
+                raise ValueError(f"Duplicate GPU backends detected for {key!r}")
+            candidates[key] = plugin_name
+    selected = _select_backend(config, candidates)
     # Persist selection for later phases:
-    if selected is None:
-        config.set("scratch:gpu:selected_plugin", None)
-    else:
-        key, name = selected
-        config.set("scratch:gpu:backend", key)
-        config.set("scratch:gpu:selected_plugin", name)
+    config.set("gpu_select:runtime:backend", selected)
 
 
 @hookimpl(specname="canary_resource_pool_fill")
-def canary_fill_gpu(config: Config, pool: dict[str, dict[str, Any]]) -> None:
+def canary_fill_gpu(config: "canary.Config", pool: dict[str, dict[str, Any]]) -> None:
     resources = pool.setdefault("resources", {})
     if resources.get("gpus"):
         return
-    plugin_name = config.get("scratch:gpu:selected_plugin")
-    if not plugin_name:
+    backend = config.get("gpu_select:runtime:backend")
+    if backend is None:
         return
     pm = config.pluginmanager
-    plugin = pm.get_plugin(plugin_name)
+    plugin = pm.get_plugin(backend["plugin"])
     if plugin is None:
-        raise RuntimeError(f"Selected GPU plugin '{plugin_name}' is not registered")
+        raise RuntimeError(f"Selected GPU plugin {backend['plugin']!r} is not registered")
     gpu_specs = plugin.canary_gpu_list_gpus(config=config)
     if gpu_specs:
         gpus = [
@@ -82,23 +89,37 @@ def canary_fill_gpu(config: Config, pool: dict[str, dict[str, Any]]) -> None:
         resources["gpus"] = gpus
 
 
-def _select_backend(requested: str, candidates: list[tuple[str, str]]) -> tuple[str, str] | None:
-    requested = (requested or "auto").lower()
+def _select_backend(config: "canary.Config", candidates: dict[str, str]) -> dict[str, str] | None:
+    requested = (config.getoption("gpu_backend") or "none").lower()
     if requested == "none":
         return None
     if requested == "auto":
         if len(candidates) == 0:
             return None
         if len(candidates) == 1:
-            return candidates[0]
-        # ambiguous: force user to choose
-        keys = sorted({k[0] for k in candidates})
+            return candidates
+        keys = sorted(candidates.keys())
         raise ValueError(
             f"Multiple GPU backends detected: {', '.join(keys)}. Choose one with --gpu-backend=BACKEND."
         )
     # allow selecting by backend key OR by plugin registered name
-    for key, plugin_name in candidates:
-        if requested == key or requested == plugin_name.lower():
-            return (key, plugin_name)
-    keys = sorted({k for (k, _) in candidates})
+    for backend_name, plugin_name in candidates.items():
+        if requested.lower() in {backend_name, plugin_name.lower()}:
+            return {"name": backend_name, "plugin": plugin_name}
+    keys = sorted(candidates.keys())
     raise ValueError(f"GPU backend '{requested}' not detected. Choose from {', '.join(keys)}.")
+
+
+def get_plugin_name(plugin: Any) -> str:
+    if name := getattr(plugin, "plugin_name", None):
+        return name
+    elif name := getattr(plugin, "pluginname", None):
+        return name
+    return plugin.__class__.__name__
+
+
+default_backend = os.getenv("CANARY_GPU_BACKEND")
+gpu_select_schema = Schema(
+    {Optional("default_backend", default=default_backend): str},
+    ignore_extra_keys=True,
+)
