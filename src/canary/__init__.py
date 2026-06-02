@@ -61,6 +61,7 @@ from _canary.util import time
 from _canary.util.executable import Executable
 from _canary.workspace import NotAWorkspaceError
 from _canary.workspace import Session
+from _canary.workspace import ViewSettings
 from _canary.workspace import Workspace
 
 from . import directives
@@ -132,6 +133,7 @@ __all__ = [
     "version_info",
     "NotAWorkspaceError",
     "Session",
+    "ViewSettings",
     "Workspace",
     "directives",
     "patterns",

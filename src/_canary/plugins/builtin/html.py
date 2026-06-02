@@ -4,6 +4,7 @@
 
 import os
 import string
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
@@ -35,7 +36,11 @@ class HTMLReporter(CanaryReporter):
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
-        work_tree = workspace.view or workspace.sessions_dir
+        work_tree: Path
+        if view := workspace.latest_view():
+            work_tree = view.dir
+        else:
+            work_tree = workspace.sessions_dir
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.html_dir = os.path.join(dest, "HTML")
         self.jobs_dir = os.path.join(self.html_dir, "jobs")

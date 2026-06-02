@@ -27,6 +27,7 @@ from ...util.filesystem import working_dir
 from ...util.rich import bold
 from ...util.string import pluralize
 from ...workspace import NotAWorkspaceError
+from ...workspace import ViewSettings
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 from .common import add_resource_arguments
@@ -114,9 +115,10 @@ class Run(CanarySubcommand):
         )
         parser.add_argument(
             "--view",
+            action=ViewAction,
+            metavar=ViewAction.metavar,
             default=None,
-            choices=("symlink", "hardlink", "copy", "none"),
-            help="Create results view with this mode (overrides workspace:view:mode)",
+            help=ViewAction.help_page(),
         )
         group = parser.add_argument_group("console reporting")
         group.add_argument("-e", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
@@ -146,11 +148,16 @@ class Run(CanarySubcommand):
             if not isinstance(request, ScanPathsRequest):
                 raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
             Workspace.remove(work_tree)
+
+        view_t: ViewSettings | None = None
+        if user_view_args := args.view:
+            view_t = ViewSettings(**user_view_args)
+
         workspace: Workspace
         try:
             workspace = Workspace.load(start=work_tree)
         except NotAWorkspaceError:
-            workspace = Workspace.create(path=work_tree)
+            workspace = Workspace.create(path=work_tree, view_t=view_t)
         f = workspace.logs_dir / "canary.0.log"
         h = logging.json_file_handler(f)
         logging.add_handler(h)
@@ -194,13 +201,7 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         inplace: bool = isinstance(request, ViewPathsRequest)
-        view = True if args.view is None else False if args.view == "none" else args.view
-        session = workspace.run(
-            specs,
-            inplace=inplace,
-            only=args.only or "not_pass",
-            update_view=view,
-        )
+        session = workspace.run(specs, inplace=inplace, only=args.only or "not_pass", view_t=view_t)
         return session.returncode
 
 
@@ -498,6 +499,56 @@ pathspec syntax:
             "sep": bold("--"),
         }
         return pathspec_help
+
+
+class ViewAction(argparse.Action):
+    default_value = {"mode": "symlink", "only": "all", "when": "always"}
+    metavar = "key=value"
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        assert isinstance(values, str)
+        choices = {
+            "mode": {"symlink", "hardlink", "copy", "none"},
+            "only": {"all", "failed", "not_pass", "passed"},
+            "when": {"on_success", "on_failure", "always", "never"},
+            "name": set(),
+        }
+        view = getattr(namespace, self.dest, None) or {
+            "mode": "symlink",
+            "only": "all",
+            "when": "always",
+            "name": "TestResults",
+        }
+        section, _, value = values.partition("=")
+        if not value:
+            err = f"Expected {option_string} <section>=<value>, got {values}"
+            raise argparse.ArgumentError(self, err)
+        if section not in list(choices.keys()):
+            s = ", ".join(choices.keys())
+            raise argparse.ArgumentError(
+                self, f"Unknown view section {section!r}.  Choose from {s}"
+            )
+        if section != "name" and value not in choices[section]:
+            s = ", ".join(choices[section])
+            raise argparse.ArgumentError(
+                self, f"Unknown view {section} {value!r}.  Choose from {s}"
+            )
+        view[section] = value
+        setattr(namespace, self.dest, view)
+        return
+
+    @staticmethod
+    def help_page() -> str:
+        return """Configure the results view. Given as key=value pairs:\n
+• mode={symlink,hardlink,copy,none}[symlink]: how to create the view\n
+• only={all,failed,not_pass,passed}[all]: which tests to include\n
+• when={on_success,on_failure,always,never}[always]: when to create the view\n"""
 
 
 class ReadPathsFromFile(argparse.Action):

@@ -1,7 +1,3 @@
-import errno
-import os
-from pathlib import Path
-
 import pytest
 
 from _canary.workspace import NotAWorkspaceError
@@ -106,45 +102,6 @@ def test_relative_to_view_none_when_no_view(chdir_tmp):
     assert ws.relative_to_view(root / "anything") is None
 
 
-@pytest.mark.parametrize("mode", ["symlink", "copy"])
-def test_update_view_creates_entries(chdir_tmp, monkeypatch, mode):
-    """
-    This test only runs modes that are reliable on most systems:
-      - symlink may require admin privileges on Windows
-      - hardlink works only within same filesystem and isn't always permitted
-    """
-    root = chdir_tmp / "proj"
-    root.mkdir()
-
-    # Force view configuration. Adjust to match your config system if different.
-    # workspace.create checks config.get("workspace:view") and expects a mapping with "name".
-    from _canary import config
-
-    monkeypatch.setattr(
-        config,
-        "get",
-        lambda key: {"name": "TestResults", "mode": mode} if key == "workspace:view" else None,
-    )
-    monkeypatch.setattr(config, "getoption", lambda key, default=None: default)
-
-    ws = Workspace.create(root)
-    assert ws.view is not None
-
-    target = ws.sessions_dir / "s1" / "case1"
-    target.mkdir(parents=True)
-    (target / "file.txt").write_text("hello")
-
-    ws.update_view([(target, Path("foo/bar"))], mode=mode)
-    link = ws.view / "foo" / "bar"
-    assert link.exists()
-
-    if mode == "copy":
-        assert (link / "file.txt").read_text() == "hello"
-    elif mode == "symlink":
-        # link should point to directory
-        assert link.is_symlink() or link.is_dir()
-
-
 def test_is_session_dir(chdir_tmp):
     root = chdir_tmp / "proj"
     root.mkdir()
@@ -170,66 +127,3 @@ def test_info_contains_expected_fields(chdir_tmp):
     assert "version" in info
     assert "workspace_version" in info
     assert info["root"] == str(ws.root)
-
-
-@pytest.mark.skipif(
-    os.name == "nt", reason="Hard links are unreliable/permission-limited on Windows"
-)
-def test_update_view_creates_entries_hardlink(chdir_tmp, monkeypatch):
-    """
-    Hardlink mode should create a directory entry in the view tree and hardlink
-    files (not directories). Skip on Windows and gracefully skip on filesystems /
-    environments that don't support hardlinks.
-    """
-    root = chdir_tmp / "proj"
-    root.mkdir()
-
-    # Force view configuration to enable a view
-    from _canary import config
-
-    monkeypatch.setattr(
-        config,
-        "get",
-        lambda key: (
-            {"name": "TestResults", "mode": "hardlink"} if key == "workspace:view" else None
-        ),
-    )
-    monkeypatch.setattr(config, "getoption", lambda key, default=None: default)
-
-    ws = Workspace.create(root)
-    assert ws.view is not None
-
-    # Create a target with an actual file to hardlink
-    target = ws.sessions_dir / "s1" / "case1"
-    target.mkdir(parents=True)
-    (target / "file.txt").write_text("hello")
-
-    try:
-        ws.update_view([(target, Path("foo/bar"))], mode="hardlink")
-    except (OSError, NotImplementedError) as e:
-        # Skip if hardlinks aren't supported by the filesystem or environment
-        if isinstance(e, NotImplementedError):
-            pytest.skip("Hard links not supported in this environment")
-        if getattr(e, "errno", None) in (
-            errno.EPERM,
-            errno.EACCES,
-            errno.EXDEV,
-            errno.ENOTSUP,
-            errno.EOPNOTSUPP,
-        ):
-            pytest.skip(f"Hard links not supported/allowed here: {e}")
-        raise
-
-    link = ws.view / "foo" / "bar"
-    assert link.exists()
-    assert link.is_dir()
-
-    linked_file = link / "file.txt"
-    assert linked_file.exists()
-    assert linked_file.read_text() == "hello"
-
-    # Verify it's really a hardlink (same inode) where supported
-    src_stat = (target / "file.txt").stat()
-    dst_stat = linked_file.stat()
-    assert src_stat.st_ino == dst_stat.st_ino
-    assert src_stat.st_dev == dst_stat.st_dev

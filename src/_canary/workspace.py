@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
-from typing import cast
 
 import yaml
 
@@ -76,6 +75,147 @@ workspace_log = "canary.log"
 DB_MAX_RETRIES = 8
 DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
 SQL_CHUNK_SIZE = 900
+
+
+@dataclasses.dataclass
+class ViewSettings:
+    name: str = "TestResults"
+    when: Literal["always", "on_success", "on_failure", "never"] = "always"
+    only: Literal["all", "failed", "not_pass", "passed"] = "all"
+    mode: Literal["symlink", "hardlink", "copy"] = "symlink"
+
+    @classmethod
+    def default(cls) -> "ViewSettings":
+        view_cfg = config.get("workspace:view") or {}
+        name = view_cfg.get("name") or "TestResults"
+        when = view_cfg.get("when") or "always"
+        only = view_cfg.get("only") or "all"
+        mode = view_cfg.get("mode") or "symlink"
+        return ViewSettings(name=name, when=when, only=only, mode=mode)
+
+    def __serialize__(self) -> dict[str, Any]:
+        # json_helper.Encoder will add ".type" automatically
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "ViewSettings":
+        return cls(**d)
+
+    def __post_init__(self):
+        assert os.path.sep not in self.name
+        assert self.when in {"on_success", "on_failure", "always", "never"}
+        assert self.only in {"all", "failed", "not_pass", "passed"}
+        assert self.mode in {"symlink", "hardlink", "copy"}
+
+    def include_job(self, job: Job) -> bool:
+        if job.status.is_skipped():
+            return False
+        if self.only == "failed" and not job.status.is_failure():
+            return False
+        elif self.only == "passed" and not job.status.is_success():
+            return False
+        elif self.only == "not_pass" and job.status.is_success():
+            return False
+        return True
+
+    def is_enabled_for_status(self, status: int) -> bool:
+        if self.when == "never":
+            return False
+        elif self.when == "on_success":
+            return status == 0
+        elif self.when == "on_failure":
+            return status != 0
+        assert self.when == "always"
+        return True
+
+    def is_disabled(self) -> bool:
+        return self.when == "never"
+
+
+@dataclasses.dataclass(frozen=True)
+class ResultsView:
+    root: Path
+    settings: ViewSettings
+
+    def __serialize__(self) -> dict[str, Any]:
+        # json_helper.Encoder will add ".type" automatically
+        return {"root": self.root, "settings": self.settings}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "ResultsView":
+        return cls(root=Path(d["root"]), settings=d["settings"])
+
+    @property
+    def dir(self) -> Path:
+        return (self.root / self.settings.name).resolve()
+
+    def exists(self) -> bool:
+        return self.dir.exists() and (self.dir / view_tag).exists()
+
+    def make(self, exist_ok: bool = False) -> None:
+        tag = self.dir / view_tag
+        if self.dir.exists():
+            if not tag.exists():
+                raise ValueError("Cannot create view in non-owning directory")
+            elif not exist_ok:
+                raise ValueError(f"View already exists at {self.dir}")
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        write_directory_tag(tag)
+
+    def unlink(self, missing_ok: bool = False) -> None:
+        if not self.dir.exists():
+            if not missing_ok:
+                raise ValueError(f"View does not exist at {self.dir}")
+            return
+        tag = self.dir / view_tag
+        if self.dir.exists() and not tag.exists():
+            raise ValueError("Cannot remove non-owning directory")
+        force_remove(self.dir)
+
+    def update(self, jobs: list[Job]) -> bool:
+        status = 0 if all(job.status.is_success() or job.status.is_skipped() for job in jobs) else 1
+        if not self.settings.is_enabled_for_status(status):
+            return False
+        for job in jobs:
+            self.maybe_add(job)
+        return True
+
+    def maybe_add(self, job: Job) -> bool:
+        if not self.settings.include_job(job):
+            return False
+        self.add(job)
+        return True
+
+    def add(self, job: Job) -> None:
+        source = job.workspace.dir
+        dest = self.dir / job.view_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.is_symlink() or dest.is_file():
+            dest.unlink()
+        elif dest.is_dir():
+            force_remove(dest)
+        if self.settings.mode == "symlink":
+            try:
+                dest.symlink_to(source, target_is_directory=True)
+            except FileExistsError:
+                pass
+        elif self.settings.mode == "hardlink":
+            # Mirror the directory tree with hardlinks for files.
+            # (Hardlinks don't work across filesystems; will raise OSError in this job.)
+            for src in source.rglob("*"):
+                rel = src.relative_to(source)
+                dst = dest / rel
+                if src.is_dir():
+                    dst.mkdir(parents=True, exist_ok=True)
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if dst.exists() or dst.is_symlink():
+                    dst.unlink()
+                os.link(src, dst)
+        elif self.settings.mode == "copy":
+            # Copy the directory tree
+            shutil.copytree(source, dest, dirs_exist_ok=True, symlinks=False)
 
 
 @dataclasses.dataclass
@@ -135,8 +275,6 @@ class Workspace:
         # editors know what to work with.
         self.root: Path
 
-        self.view: Path | None
-
         # Storage for pointers to test sessions
         self.refs_dir: Path
 
@@ -168,7 +306,6 @@ class Workspace:
             anchor: The base directory where the .canary folder resides.
         """
         self.root = anchor / workspace_path
-        self.view = None
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
@@ -221,10 +358,19 @@ class Workspace:
 
     def rmf(self) -> None:
         """Dangerously removes the workspace and view directories from disk."""
-        # This is dangerous!!!
-        if self.view:
-            async_rmtree(self.view)
+        if view := self.latest_view():
+            async_rmtree(view.dir)
         async_rmtree(self.root)
+
+    def latest_view(self) -> ResultsView | None:
+        file = self.cache_dir / "view"
+        if file.exists():
+            view = json.loads(file.read_text())
+            return view
+        return None
+
+    def register_view(self, view: ResultsView) -> None:
+        (self.cache_dir / "view").write_text(json.dumps(view, indent=2))
 
     @staticmethod
     def find_anchor(start: str | Path = Path.cwd()) -> Path | None:
@@ -262,7 +408,9 @@ class Workspace:
         return None
 
     @classmethod
-    def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
+    def create(
+        cls, path: str | Path = Path.cwd(), view_t: ViewSettings | None = None, force: bool = False
+    ) -> "Workspace":
         """Creates a new Canary workspace at the specified path.
 
         Args:
@@ -294,18 +442,6 @@ class Workspace:
         self.logs_dir.mkdir(parents=True)
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
-
-        if view_config := config.get("workspace:view"):
-            name: str = view_config.get("name") or "TestResults"
-            self.view = (self.root.parent / name).resolve()
-            if self.view.exists():
-                raise FileExistsError(
-                    f"Canary requires ownership of existing directory {self.view}. "
-                    f"Rename {self.view} and try again."
-                )
-            file = self.cache_dir / "view"
-            link = os.path.relpath(str(self.view), str(file.parent))
-            file.write_text(link)
 
         self.db = WorkspaceDatabase.create(self.root)
         file = self.root / "config.yaml"
@@ -339,10 +475,6 @@ class Workspace:
             )
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
-        file = self.cache_dir / "view"
-        if file.exists():
-            relpath = file.read_text().strip()
-            self.view = (self.cache_dir / relpath).resolve()
         self.db = WorkspaceDatabase.load(self.root)
         return self
 
@@ -351,7 +483,7 @@ class Workspace:
         specs: list["JobSpec"],
         session: str | None = None,
         inplace: bool = False,
-        update_view: ViewT | bool = True,
+        view_t: ViewSettings | None = None,
         only: str = "not_pass",
     ) -> Session:
         """Executes a set of job specifications in a new or existing session.
@@ -360,7 +492,7 @@ class Workspace:
             specs: List of job specs to run.
             session: Optional existing session name to reuse.
             inplace: If True, run jobs in their existing result directories.
-            update_view: Whether to update the consolidated results view.
+            view_t: View settings.
             only: Rerun strategy (e.g., 'not_pass').
 
         Returns:
@@ -419,93 +551,67 @@ class Workspace:
             self.db.put_results(*not_saved)
         if not reuse_session:
             config.pluginmanager.hook.canary_sessionfinish(session=s)
-        self.add_session_results(s, update_view=update_view)
+        self.add_session_results(s, view_t=view_t)
         return s
 
-    def add_session_results(self, session: Session, update_view: ViewT | bool = True) -> None:
+    def add_session_results(self, session: Session, view_t: ViewSettings | None = None) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        if update_view:
-            mode: ViewT | None = None if isinstance(update_view, bool) else update_view
-            view_entries: list[tuple[Path, Path]] = []
-            for job in session.jobs:
-                view_entries.append((job.workspace.dir, job.view_path))
-            self.update_view(view_entries, mode=mode)
-
+        view_t = view_t or ViewSettings.default()
+        if not view_t.is_disabled():
+            view = ResultsView(root=self.root.parent, settings=view_t)
+            logger.info(f"Updating view at {view.dir}")
+            view.make(exist_ok=True)
+            if view.update(session.jobs):
+                self.register_view(view)
         # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"
         file.unlink(missing_ok=True)
         link = os.path.relpath(str(session.prefix), str(file.parent))
         file.write_text(str(link))
 
-    def rebuild_view(self, mode: ViewT = "symlink") -> None:
-        """Keep only the latet results"""
-        if not self.view:
-            return
-        view_config = config.get("workspace:view")
-        if not view_config:
-            return
+    def rebuild_view(self, view_t: ViewSettings | None = None) -> None:
+        """Keep only the latest results."""
         logger.info(f"Rebuilding view at {self.root}")
         jobs = self.load_jobs()
-        view_entries: list[tuple[Path, Path]] = []
-        for job in jobs:
-            view_entries.append((job.workspace.dir, job.view_path))
-        for path in self.view.iterdir():
-            if path.is_dir():
-                force_remove(path)
-        self.update_view(view_entries, mode=mode)
 
-    def update_view(
-        self,
-        view_entries: list[tuple[Path, Path]],
-        mode: ViewT | None = None,
-    ) -> None:
-        """Updates the consolidated results view.
+        old_view = self.latest_view()
+        old_dir: str | None = None
+        bak_dir: str | None = None
 
-        Args:
-            view_entries: Mapping of result directories to relative view paths.
-            mode: The linking mode ('symlink', 'hardlink', 'copy').
-        """
-        logger.info(f"[bold]Updating[/] view at {self.view}")
-        if self.view is None:
-            return
-        if mode is None:
-            mode = cast(ViewT, (config.get("workspace:view:mode") or "symlink").lower())
-            if mode not in {"symlink", "hardlink", "copy"}:
-                raise ValueError(
-                    f"Invalid workspace:view:mode={mode!r} (expected symlink|hardlink|copy)"
-                )
-        self.view.mkdir(parents=True, exist_ok=True)
-        view_file = self.view / view_tag
-        if not view_file.exists():
-            write_directory_tag(view_file)
-        for target, relpath in view_entries:
-            link = self.view / relpath
-            link.parent.mkdir(parents=True, exist_ok=True)
-            if link.is_symlink() or link.is_file():
-                link.unlink()
-            elif link.is_dir():
-                force_remove(link)
-            if mode == "symlink":
-                try:
-                    link.symlink_to(target, target_is_directory=True)
-                except FileExistsError:
-                    pass
-            elif mode == "hardlink":
-                # Mirror the directory tree with hardlinks for files.
-                # (Hardlinks don't work across filesystems; will raise OSError in that job.)
-                for src in target.rglob("*"):
-                    rel = src.relative_to(target)
-                    dst = link / rel
-                    if src.is_dir():
-                        dst.mkdir(parents=True, exist_ok=True)
-                        continue
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    if dst.exists() or dst.is_symlink():
-                        dst.unlink()
-                    os.link(src, dst)
-            elif mode == "copy":
-                # Copy the directory tree
-                shutil.copytree(target, link, dirs_exist_ok=True)
+        if old_view is not None and old_view.exists():
+            old_dir = str(old_view.dir)
+            bak_dir = old_dir + ".tmp"
+            os.rename(old_dir, bak_dir)
+            if view_t is None:
+                view_t = old_view.settings
+
+        made_new = False
+        try:
+            settings = view_t or ViewSettings.default()
+            if settings.is_disabled():
+                made_new = False
+                return
+            view = ResultsView(root=self.root.parent, settings=settings)
+            # ensure we start clean (there shouldn't be anything at view.dir now,
+            # since we renamed old_dir away, but this keeps it robust)
+            view.unlink(missing_ok=True)
+            view.make()
+            if view.update(jobs):
+                self.register_view(view)
+                made_new = True
+            else:
+                view.unlink(missing_ok=True)
+                made_new = False
+        finally:
+            # If we built and registered a new view, remove the backup.
+            if made_new:
+                if bak_dir is not None:
+                    force_remove(bak_dir)
+            # Otherwise restore the previous view, if we had one.
+            else:
+                if bak_dir is not None and old_dir is not None:
+                    if not os.path.exists(old_dir) and os.path.exists(bak_dir):
+                        os.rename(bak_dir, old_dir)
 
     def relative_to_view(self, path: str | os.PathLike[str]) -> str | None:
         """
@@ -515,11 +621,10 @@ class Workspace:
         Examples:
           /ws/TestResults/foo/bar/test.py  -> foo/bar/test.py
         """
-        if self.view is None:
-            return None
-        p = Path(path).absolute()
-        if p.is_relative_to(self.view):
-            return str(p.relative_to(self.view))
+        if latest_view := self.latest_view():
+            p = Path(path).absolute()
+            if p.is_relative_to(latest_view.dir):
+                return str(p.relative_to(latest_view.dir))
         return None
 
     def is_session_dir(self, path: str | os.PathLike[str]) -> bool:

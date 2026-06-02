@@ -71,8 +71,8 @@ If no options are give, -x is assumed."""
             if args.show_log:
                 f = job.workspace.joinpath(job.stdout)
             else:
-                if workspace.view and (workspace.view / job.workspace.path).exists():
-                    f = workspace.view / job.workspace.path
+                if (view := workspace.latest_view()) and (view.dir / job.view_path).exists():
+                    f = view.dir / job.view_path
                 else:
                     f = job.workspace.dir
         print(f)

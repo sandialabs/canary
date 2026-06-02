@@ -48,7 +48,8 @@ class CanaryHPCExecutor:
         canary.logging.add_handler(h)
         specs = workspace.db.load_specs(ids=self.jobs, include_upstreams=True)
         self.modify_specs(specs)
-        session = workspace.run(specs, session=self.session, update_view=False, only="all")
+        view_t = canary.ViewSettings(when="never")
+        session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
     def load_resource_pool(self) -> dict:
