@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from schema import Optional
+from schema import Or
 from schema import Schema
 
 import canary
@@ -43,6 +44,7 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager") -> None:
 @hookimpl(specname="canary_configure", tryfirst=True)
 def setup_config(config: "canary.Config") -> None:
     config.add_section(name="gpu_select", schema=gpu_select_schema)
+    # config.set("gpu_select:default_backend", default_backend)
 
 
 @hookimpl(specname="canary_configure")
@@ -50,7 +52,6 @@ def detect_gpu_backend(config: "canary.Config") -> None:
     pm = config.pluginmanager
     requested = config.getoption("gpu_backend") or "none"
     if requested == "none":
-        config.set("gpu_select:runtime:backend", None)
         return
     candidates: dict[str, str] = {}
     for impl in pm.hook.canary_gpu_backend_detect.get_hookimpls():
@@ -65,7 +66,7 @@ def detect_gpu_backend(config: "canary.Config") -> None:
             candidates[key] = plugin_name
     selected = _select_backend(config, candidates)
     # Persist selection for later phases:
-    config.set("gpu_select:runtime:backend", selected)
+    config.set("gpu_select:.runtime:backend", selected)
 
 
 @hookimpl(specname="canary_resource_pool_fill")
@@ -73,7 +74,7 @@ def canary_fill_gpu(config: "canary.Config", pool: dict[str, dict[str, Any]]) ->
     resources = pool.setdefault("resources", {})
     if resources.get("gpus"):
         return
-    backend = config.get("gpu_select:runtime:backend")
+    backend = config.get("gpu_select:.runtime:backend")
     if backend is None:
         return
     pm = config.pluginmanager
@@ -118,8 +119,11 @@ def get_plugin_name(plugin: Any) -> str:
     return plugin.__class__.__name__
 
 
-default_backend = os.getenv("CANARY_GPU_BACKEND")
+# default_backend = os.getenv("CANARY_GPU_BACKEND")
 gpu_select_schema = Schema(
-    {Optional("default_backend", default=default_backend): str},
+    {
+        # Optional("default_backend", default=default_backend): Or(str, None),
+        Optional(".runtime"): {"backend": {"name": str, "plugin": str}},
+    },
     ignore_extra_keys=True,
 )
