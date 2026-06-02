@@ -115,9 +115,9 @@ class Run(CanarySubcommand):
         )
         parser.add_argument(
             "--view",
+            default=None,
             action=ViewAction,
             metavar=ViewAction.metavar,
-            default=None,
             help=ViewAction.help_page(),
         )
         group = parser.add_argument_group("console reporting")
@@ -525,27 +525,30 @@ class ViewAction(argparse.Action):
             "when": "always",
             "name": "TestResults",
         }
-        section, _, value = values.partition("=")
-        if not value:
-            err = f"Expected {option_string} <section>=<value>, got {values}"
-            raise argparse.ArgumentError(self, err)
-        if section not in list(choices.keys()):
-            s = ", ".join(choices.keys())
-            raise argparse.ArgumentError(
-                self, f"Unknown view section {section!r}.  Choose from {s}"
-            )
-        if section != "name" and value not in choices[section]:
-            s = ", ".join(choices[section])
-            raise argparse.ArgumentError(
-                self, f"Unknown view {section} {value!r}.  Choose from {s}"
-            )
-        view[section] = value
+        for value in values.split(","):
+            if not value.split():
+                continue
+            section, _, arg = value.partition("=")
+            if not arg:
+                err = f"Expected {option_string} <section>=<value>, got {value}"
+                raise argparse.ArgumentError(self, err)
+            if section not in list(choices.keys()):
+                s = ", ".join(choices.keys())
+                raise argparse.ArgumentError(
+                    self, f"Unknown view section {section!r}.  Choose from {s}"
+                )
+            if section != "name" and arg not in choices[section]:
+                s = ", ".join(choices[section])
+                raise argparse.ArgumentError(
+                    self, f"Unknown view {section} {arg!r}.  Choose from {s}"
+                )
+            view[section] = arg
         setattr(namespace, self.dest, view)
         return
 
     @staticmethod
     def help_page() -> str:
-        return """Configure the results view. Given as key=value pairs:\n
+        return """Configure the results view. Given as comma separated key=value pairs:\n
 • mode={symlink,hardlink,copy,none}[symlink]: how to create the view\n
 • only={all,failed,not_pass,passed}[all]: which tests to include\n
 • when={on_success,on_failure,always,never}[always]: when to create the view\n"""
