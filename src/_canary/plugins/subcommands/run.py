@@ -149,15 +149,11 @@ class Run(CanarySubcommand):
                 raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
             Workspace.remove(work_tree)
 
-        view_t: ViewSettings | None = None
-        if user_view_args := args.view:
-            view_t = ViewSettings(**user_view_args)
-
         workspace: Workspace
         try:
             workspace = Workspace.load(start=work_tree)
         except NotAWorkspaceError:
-            workspace = Workspace.create(path=work_tree, view_t=view_t)
+            workspace = Workspace.create(path=work_tree)
         f = workspace.logs_dir / "canary.0.log"
         h = logging.json_file_handler(f)
         logging.add_handler(h)
@@ -201,6 +197,9 @@ class Run(CanarySubcommand):
                 regex=args.regex_filter,
             )
         inplace: bool = isinstance(request, ViewPathsRequest)
+        view_t: ViewSettings | None = None
+        if user_view_args := args.view:
+            view_t = ViewSettings(**user_view_args)
         session = workspace.run(specs, inplace=inplace, only=args.only or "not_pass", view_t=view_t)
         return session.returncode
 

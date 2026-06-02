@@ -408,9 +408,7 @@ class Workspace:
         return None
 
     @classmethod
-    def create(
-        cls, path: str | Path = Path.cwd(), view_t: ViewSettings | None = None, force: bool = False
-    ) -> "Workspace":
+    def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
         """Creates a new Canary workspace at the specified path.
 
         Args:
