@@ -106,10 +106,11 @@ max_supported_python = "3.14"
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
-    "src/canary_vvtest/tests",
     "src/canary_cmake/tests",
+    "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
-    "src/canary_gitlab/tests"
+    "src/canary_pyt/tests",
+    "src/canary_vvtest/tests",
 ]
 norecursedirs = "mock data generators"
 addopts = "-ra --durations=10"
@@ -124,7 +125,7 @@ output = "coverage.xml"
 branch = true
 omit = [ "*/third_party/*" ]
 source = [ "_canary" ]
-command_line = "-m pytest ./tests"
+command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
 
 [tool.coverage.html]
 directory = "html.cov"

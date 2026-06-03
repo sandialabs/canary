@@ -9,6 +9,11 @@ import shutil
 import site
 import subprocess
 import sys
+import time
+from concurrent.futures import Future
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -31,6 +36,14 @@ stdout: Any = subprocess.PIPE
 stderr: Any = subprocess.PIPE
 
 logger = logging.get_logger(__name__)
+test_paths = (
+    "tests",
+    "src/canary_cmake/tests",
+    "src/canary_gitlab/tests",
+    "src/canary_hpc/tests",
+    "src/canary_pyt/tests",
+    "src/canary_vvtest/tests",
+)
 
 
 class Action(argparse.Action):
@@ -54,8 +67,8 @@ class Check(CanarySubcommand):
         parser.add_argument(
             "-b", nargs=0, action=Action, help="run bandit security checks (default)"
         )
-        parser.add_argument("-t", nargs=0, action=Action, help="run pytest")
-        parser.add_argument("-C", nargs=0, action=Action, help="run coverage (default)")
+        parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
+        parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
         parser.add_argument("-e", nargs=0, action=Action, help="run examples test")
         parser.add_argument("-d", nargs=0, action=Action, help="make docs")
         parser.add_argument("-v", action="store_true", help="verbose")
@@ -72,7 +85,7 @@ class Check(CanarySubcommand):
             raise ValueError("canary check must be run from a editable install of canary")
         self.root = os.path.normpath(str(root))
         if not hasattr(args, "action"):
-            args.action = set("fcmbC")
+            args.action = set("fcmbt")
         if shutil.which("ruff") is None and "f" in args.action:
             raise ValueError("ruff must be on PATH to format and check code")
         if shutil.which("ruff") is None and "c" in args.action:
@@ -179,24 +192,20 @@ class Check(CanarySubcommand):
         if "e" in args.action:
             os.environ["CANARY_RUN_EXAMPLES_TEST"] = "1"
         with working_dir(self.root):
-            if "C" not in args.action:
-                pm = logger.progress_monitor(f"Running tests in {self.root}/tests")
-                pytest("./tests")
-                pm.done()
-                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_pyt/tests")
-                pytest("./src/canary_pyt/tests")
-                pm.done()
-                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_cmake/tests")
-                pytest("./src/canary_cmake/tests")
-                pm.done()
-                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_hpc/tests")
-                pytest("./src/canary_hpc/tests")
-                pm.done()
-                pm = logger.progress_monitor(f"Running tests in {self.root}/canary_vvtest/tests")
-                pytest("./src/canary_vvtest/tests")
-                pm.done()
+            if "t" in args.action:
+                results = run_pytests_parallel(Path(self.root), test_paths)
+                failed = [r for r in results if not r.ok]
+                if failed:
+                    for r in failed:
+                        if r.stdout:
+                            sys.stdout.write(r.stdout)
+                        if r.stderr:
+                            sys.stderr.write(r.stderr)
+                    raise ValueError(
+                        f"{len(failed)} pytest runs failed: {', '.join(r.path for r in failed)}"
+                    )
             else:
-                pm = logger.progress_monitor(f"Running coverage in {self.root}/tests")
+                pm = logger.progress_monitor(f"Running coverage in {self.root}")
                 coverage("run")
                 pm.done()
                 pm = logger.progress_monitor("Creating coverage report")
@@ -300,6 +309,56 @@ def pytest(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
             sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
+
+
+@dataclass(frozen=True)
+class PytestResult:
+    path: str
+    returncode: int
+    stdout: str
+    stderr: str
+    elapsed_s: float
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+def run_pytest_one(root: str, relpath: str, pytest_args: tuple[str, ...] = ()) -> PytestResult:
+    # Runs in a worker process
+    t0 = time.time()
+    command = ["pytest", relpath, *pytest_args]
+    cp = subprocess.run(command, cwd=root, stdout=stdout, stderr=stderr, encoding="utf-8")
+    return PytestResult(
+        path=relpath,
+        returncode=cp.returncode,
+        stdout=cp.stdout or "",
+        stderr=cp.stderr or "",
+        elapsed_s=time.time() - t0,
+    )
+
+
+def run_pytests_parallel(
+    root: Path,
+    test_paths: tuple[str, ...],
+    *,
+    max_workers: int | None = None,
+    pytest_args: tuple[str, ...] = (),
+) -> list[PytestResult]:
+    results: list[PytestResult] = []
+
+    with ProcessPoolExecutor(max_workers=max_workers or os.cpu_count()) as ex:
+        futures: dict[Future, str] = {}
+        for p in test_paths:
+            logger.info(f"Submitting tests in {p} to pytest")
+            fut = ex.submit(run_pytest_one, str(root), str(p), pytest_args)
+            futures[fut] = str(p)
+        for fut in as_completed(futures):
+            res = fut.result()
+            results.append(res)
+            # Print on completion (no interleaving during run)
+            logger.info(f"pytest finished: {res.path} ({res.elapsed_s:.1f}s) rc={res.returncode}")
+    return results
 
 
 def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:

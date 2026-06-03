@@ -34,47 +34,17 @@ class CDashXMLReporter:
 
     @classmethod
     def from_workspace(cls, dest: str | None = None) -> "CDashXMLReporter":
-        workspace = canary.Workspace.load()
+        workspace: canary.Workspace = canary.Workspace.load()
         jobs = workspace.load_jobs()
         if not jobs:
             raise ValueError(f"No results found in {workspace.root}")
         if dest is None:
-            dest = str((workspace.view or workspace.sessions_dir) / "CDASH")
+            view = workspace.latest_view()
+            dest = str((workspace.sessions_dir if view is None else view.dir) / "CDASH")
         self = cls(dest=dest)
         for job in jobs:
             self.data.add_job(job)
         return self
-
-    @classmethod
-    def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
-        """Create an xml report from a json report"""
-        raise NotImplementedError("No way of loading the job directly from lock yet")
-
-    #        from _canary.testcase import factory as testcase_factory
-    #
-    #        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
-    #        self = cls(dest=dest)
-    #        data = json.load(open(file))
-    #        ts: TopologicalSorter = TopologicalSorter()
-    #        for id, state in data.items():
-    #            for name, value in state["properties"].items():
-    #                if name == "dependencies":
-    #                    dependencies = value
-    #                    dep_ids = [d["properties"]["id"] for d in dependencies]
-    #                    ts.add(id, *dep_ids)
-    #                    break
-    #        jobs: dict[str, canary.Job] = {}
-    #        for id in ts.static_order():
-    #            state = data[id]
-    #            job = testcase_factory(state.pop("type"))
-    #            job.setstate(state)
-    #            for i, dep in enumerate(job.dependencies):
-    #                job.dependencies[i] = jobs[dep.id]
-    #            jobs[id] = job
-    #        for job in jobs.values():
-    #            # job.refresh()
-    #            self.data.add_job(job)
-    #        return self
 
     def create(
         self,

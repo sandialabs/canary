@@ -52,12 +52,6 @@ class CDashReporter(canary.CanaryReporter):
             metavar="directory",
             help="Write reports to this directory [default: $session/_reports/cdash]",
         )
-        p.add_argument(
-            "-j",
-            dest="json",
-            metavar="file",
-            help="Create reports from this JSON file [default: $session/_reports/cdash]",
-        )
         group = p.add_mutually_exclusive_group()
         group.add_argument(
             "--track",
@@ -232,11 +226,7 @@ class CDashReporter(canary.CanaryReporter):
         return
 
     def create(self, **kwargs: Any) -> None:
-        reporter: CDashXMLReporter
-        if kwargs.get("json"):
-            reporter = CDashXMLReporter.from_json(file=kwargs["json"], dest=kwargs["dest"])
-        else:
-            reporter = CDashXMLReporter.from_workspace(dest=kwargs["dest"])
+        reporter: CDashXMLReporter = CDashXMLReporter.from_workspace(dest=kwargs["dest"])
         if kwargs["f"]:
             opts = dict(
                 buildstamp=kwargs["buildstamp"],
