@@ -122,6 +122,10 @@ def canary_subcommand() -> CanarySubcommand:
 
 
 @hookspec
+def canary_addconfig(config: "CanaryConfig") -> None: ...
+
+
+@hookspec
 def canary_configure(config: "CanaryConfig") -> None:
     """Allow plugins to perform initial configuration.
 

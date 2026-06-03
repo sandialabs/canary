@@ -52,10 +52,14 @@ def canary_runtest_finish(case: canary.Job) -> None:
         finish_ctest(case)
 
 
-@canary.hookimpl(specname="canary_configure")
-def add_default_ctest_timeout(config: canary.Config):
-    config.set("run:timeout:ctest", 1500.0)
+@canary.hookimpl
+def canary_addconfig(config: canary.Config):
     config.add_section(name="cmake", schema=cmake_schema)
+
+
+@canary.hookimpl
+def canary_configure(config: canary.Config):
+    config.set("run:timeout:ctest", 1500.0)
 
 
 @canary.hookimpl(specname="canary_addoption")

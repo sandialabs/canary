@@ -16,14 +16,6 @@ from schema import Use
 from ..util.time import time_in_seconds
 
 
-def list_of_str(arg: typing.Any) -> bool:
-    return isinstance(arg, list) and all([isinstance(_, str) for _ in arg])
-
-
-def list_of_int(arg: typing.Any) -> bool:
-    return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
-
-
 def vardict(arg: typing.Any) -> bool:
     if arg is None:
         return True
@@ -60,12 +52,12 @@ positive_int = And(int, lambda x: x > 0)  # type: ignore
 nonnegative_int = And(int, lambda x: x >= 0)  # type: ignore
 optional_str = Or(str, None)  # type: ignore
 
-any_schema = Schema({object: object}, ignore_extra_keys=True)
+any_schema = Schema({Optional(str): object}, ignore_extra_keys=True)
 
 environment_schema = Schema(
     {
         Optional("set"): vardict,
-        Optional("unset"): list_of_str,
+        Optional("unset"): [str],
         Optional("prepend-path"): vardict,
         Optional("append-path"): vardict,
     }
@@ -105,24 +97,28 @@ run_schema = Schema(
     }
 )
 
+
 config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
         Optional("workspace"): workspace_schema,
-        Optional("plugins"): list_of_str,
+        Optional("plugins"): [str],
         Optional("environment"): environment_schema,
         Optional("scratch"): any_schema,
         Optional("run"): run_schema,
+        Optional("system"): any_schema,
     },
     ignore_extra_keys=True,
 )
-testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
+testpaths_schema = Schema({"testpaths": [{"root": str, "paths": [str]}]})
 
 
 class EnvarSchema(Schema):
-    def validate(self, data, is_root_eval=True):
-        data = super().validate(data, is_root_eval=False)  # ty: ignore[invalid-argument-type]
+    def validate(self, data: typing.Any, **kwargs: typing.Any):
+        is_root_eval = kwargs.pop("is_root_eval", True)
+        kwargs["is_root_eval"] = False
+        data = super().validate(data, **kwargs)
         if is_root_eval:
             validated = {}
             for key, val in data.items():

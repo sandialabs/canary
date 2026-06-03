@@ -77,69 +77,77 @@ def default_config_values() -> dict[str, Any]:
 
 
 class Config:
-    def __init__(self, initialize: bool = True) -> None:
+    def __init__(self, loadini: bool = True) -> None:
         self.invocation_dir = invocation_dir
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.pluginmanager.hook.canary_addhooks(pluginmanager=self.pluginmanager)
         self.data: dict[str, Any] = {}
         self.options: argparse.Namespace = argparse.Namespace()
-        if initialize:
-            self.init()
+        if loadini:
+            self.load()
 
-    def init(self) -> None:
-        self.data = default_config_values()
+    def load(self) -> None:
+        data: dict[str, Any] = default_config_values()
         for name in ("site", "global", "local"):
             try:
                 scope = get_config_scope_data(name)
             except LocalScopeDoesNotExistError:
                 continue
-            self.data = merge(self.data, scope)  # type: ignore
+            data = merge(data, scope)  # type: ignore
         if env_scope := get_env_scope():
-            self.data = merge(self.data, env_scope)  # type: ignore
+            data = merge(data, env_scope)  # type: ignore
+        bootstrap = Schema({Optional("plugins"): [str]}, ignore_extra_keys=True).validate(data)
+        for plugin in bootstrap.get("plugins", []):
+            self.pluginmanager.consider_plugin(plugin)
+        self.pluginmanager.hook.canary_addconfig(config=self)
+        self.data = config_schema.validate(data)
         if self.get("debug"):
             logging.set_level(logging.DEBUG)
 
     @staticmethod
     def factory() -> "Config":
         logging.setup_logging()
-        config: Config = Config(initialize=False)
-        snapshot: dict[str, Any]
+        config = Config(loadini=False)
         if f := os.getenv(CONFIG_ENV_FILENAME):
             with open(f, "r") as fh:
                 snapshot = json.load(fh)
-            config.invocation_dir = snapshot["invocation_dir"]
-            config.options = argparse.Namespace(**snapshot["options"])
-            config.data.clear()
-            config.data.update(snapshot["data"])
+            config._apply_snapshot(snapshot)
+            config._load_plugins_from_data()
         elif envcfg := os.getenv(CONFIG_ENV_CFG64):
             snapshot = deserialize(envcfg)
-            config.invocation_dir = snapshot["invocation_dir"]
-            config.options = argparse.Namespace(**snapshot["options"])
-            config.data.clear()
-            config.data.update(snapshot["data"])
+            config._apply_snapshot(snapshot)
+            config._load_plugins_from_data()
         else:
-            config.init()
-        log_level = config.get("log_level")
-        if logging.get_level_name(logger.level) != log_level:
-            logging.set_level(log_level)
-        for plugin in config.data["plugins"]:
-            config.pluginmanager.consider_plugin(plugin)
+            config.load()
+        Config._set_log_level(config)
         return config
 
     @staticmethod
     def from_snapshot(snapshot: dict[str, Any]) -> "Config":
         logging.setup_logging()
-        config: Config = Config(initialize=False)
-        config.invocation_dir = snapshot["invocation_dir"]
-        config.options = argparse.Namespace(**snapshot["options"])
-        config.data.clear()
-        config.data.update(snapshot["data"])
+        config = Config(loadini=False)
+        config._apply_snapshot(snapshot)
+        config._load_plugins_from_data()
+        Config._set_log_level(config)
+        return config
+
+    def _apply_snapshot(self, snapshot: dict[str, Any]) -> None:
+        self.invocation_dir = snapshot["invocation_dir"]
+        self.options = argparse.Namespace(**snapshot["options"])
+        self.data.clear()
+        self.data.update(snapshot["data"])
+
+    def _load_plugins_from_data(self) -> None:
+        # Load plugins listed in current self.data, then let them add config sections
+        for plugin in self.data.get("plugins", []):
+            self.pluginmanager.consider_plugin(plugin)
+        self.pluginmanager.hook.canary_addconfig(config=self)
+
+    @staticmethod
+    def _set_log_level(config: "Config") -> None:
         log_level = config.get("log_level")
         if logging.get_level_name(logger.level) != log_level:
             logging.set_level(log_level)
-        for plugin in config.data["plugins"]:
-            config.pluginmanager.consider_plugin(plugin)
-        return config
 
     def dump(self, file: IO[Any]) -> None:
         file.write(json.dumps(self.snapshot(), indent=2))
@@ -156,8 +164,7 @@ class Config:
         return serialize(self.snapshot())
 
     def getoption(self, name: str, default: Any = None) -> Any:
-        value = getattr(self.options, name, None)
-        return value or default
+        return getattr(self.options, name, default)
 
     def get(self, path: str, default: Any = None) -> Any:
         parts = process_config_path(path)
@@ -211,7 +218,7 @@ class Config:
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
-                fd = config_schema.validate(fd)
+                data = config_schema.validate(fd)
 
         logging.set_level(logging.INFO)
         if args.color is not None:
@@ -287,7 +294,6 @@ def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     file = get_scope_filename(scope)
     if file is not None and (fd := read_config_file(file)):
         data.update(fd)
-    data = config_schema.validate(data)
     return data
 
 

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+echo 0, GPU-aaa44ebd-4b8d-11f1-962d-70f1a1feb6f1, NVIDIA L40-4Q
+echo 1, GPU-aaa44ebd-4b8d-11f1-962d-70f1a1feb6f2, NVIDIA L41-4Q
+echo 2, GPU-aaa44ebd-4b8d-11f1-962d-70f1a1feb6f3, NVIDIA L42-4Q
+echo 3, GPU-aaa44ebd-4b8d-11f1-962d-70f1a1feb6f4, NVIDIA L43-4Q

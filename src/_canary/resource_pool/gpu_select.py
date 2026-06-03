@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 from typing import Any
 
 from schema import Optional
@@ -41,10 +40,9 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager") -> None:
     pluginmanager.add_hookspecs(GPUSelect)
 
 
-@hookimpl(specname="canary_configure", tryfirst=True)
-def setup_config(config: "canary.Config") -> None:
+@hookimpl
+def canary_addconfig(config: "canary.Config") -> None:
     config.add_section(name="gpu_select", schema=gpu_select_schema)
-    # config.set("gpu_select:default_backend", default_backend)
 
 
 @hookimpl(specname="canary_configure")
@@ -122,7 +120,9 @@ def get_plugin_name(plugin: Any) -> str:
 # default_backend = os.getenv("CANARY_GPU_BACKEND")
 gpu_select_schema = Schema(
     {
-        # Optional("default_backend", default=default_backend): Or(str, None),
+        Optional("backend", default={"default": None}): {
+            Optional("default", default=None): Or(str, None),  # type: ignore
+        },
         Optional(".runtime"): {"backend": {"name": str, "plugin": str}},
     },
     ignore_extra_keys=True,
