@@ -254,3 +254,60 @@ def test_analyze_script_adds_asset_link_if_missing(tmp_path: Path) -> None:
     assert parent.command == [(tmp_path / "sub" / "analyze.sh").as_posix()]
     # and link it as an asset (dst should be basename)
     assert any(a.src.name == "analyze.sh" and a.action == "link" for a in parent.assets)
+
+
+def test_sources_glob_expands_into_multiple_assets(tmp_path: Path) -> None:
+    make_test_file(tmp_path, "sub/x.pyt")
+    make_test_file(tmp_path, "sub/pattern1.txt")
+    make_test_file(tmp_path, "sub/pattern2.txt")
+
+    m = PYTModel(str(tmp_path), "sub/x.pyt")
+    m.add_source(action="copy", src="pattern*.txt")
+    specs = lock_model(m)
+
+    srcs = sorted(a.src for a in specs[0].assets)
+    assert srcs == [
+        tmp_path / "sub" / "pattern1.txt",
+        tmp_path / "sub" / "pattern2.txt",
+    ]
+
+
+def test_sources_glob_no_matches_warns_and_skips(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    make_test_file(tmp_path, "sub/x.pyt")
+
+    m = PYTModel(str(tmp_path), "sub/x.pyt")
+    m.add_source(action="copy", src="does_not_exist_*.txt")
+
+    caplog.clear()
+    caplog.set_level("WARNING")
+
+    specs = lock_model(m)
+
+    assert specs[0].assets == []
+    assert any("source glob matched nothing" in r.message for r in caplog.records)
+
+
+def test_sources_glob_multiple_matches_with_dst_warns_and_ignores_dst(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    make_test_file(tmp_path, "sub/x.pyt")
+    make_test_file(tmp_path, "sub/pattern1.txt")
+    make_test_file(tmp_path, "sub/pattern2.txt")
+
+    m = PYTModel(str(tmp_path), "sub/x.pyt")
+    m.add_source(action="copy", src="pattern*.txt", dst="out.txt")
+
+    caplog.clear()
+    caplog.set_level("WARNING")
+
+    specs = lock_model(m)
+    assets = specs[0].assets
+
+    assert sorted(a.src for a in assets) == [
+        tmp_path / "sub" / "pattern1.txt",
+        tmp_path / "sub" / "pattern2.txt",
+    ]
+    assert all(a.dst is None for a in assets)
+    assert any("matched" in r.message and "dst=" in r.message for r in caplog.records)

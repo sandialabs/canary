@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import errno
+import glob
 import inspect
 import os
 import sys
@@ -360,14 +361,51 @@ class PYTModel:
         subs: dict[str, Any] | None = None,
     ) -> list[Asset]:
         sources = self.sources.eval(family=family, parameters=parameters, on_options=on_options)
-        if subs:
-            for i, s in enumerate(sources):
-                sources[i] = Asset(
-                    src=Path(self.safe_substitute(s.src.as_posix(), **subs)),
-                    dst=None if s.dst is None else self.safe_substitute(s.dst, **subs),
-                    action=s.action,
-                )
-        return sources
+
+        assets: list[Asset] = []
+        base_dir = self.file.parent
+
+        def _has_glob(p: str) -> bool:
+            return any(ch in p for ch in ("*", "?", "["))
+
+        for s in sources:
+            src_text = s.src.as_posix()
+            dst_text = s.dst
+
+            if subs:
+                src_text = self.safe_substitute(src_text, **subs)
+                dst_text = None if dst_text is None else self.safe_substitute(dst_text, **subs)
+
+            # Expand globs (relative patterns resolved from the test file directory)
+            if _has_glob(src_text):
+                if os.path.isabs(src_text):
+                    matches = [Path(p) for p in glob.glob(src_text)]
+                else:
+                    matches = sorted(base_dir.glob(src_text))
+
+                if not matches:
+                    logger.warning("source glob matched nothing: %r (from %s)", src_text, self.file)
+                    continue
+
+                # If dst is provided and multiple files match, a single dst is ambiguous
+                if dst_text is not None and len(matches) > 1:
+                    logger.warning(
+                        "source glob %r matched %d files but dst=%r was provided; "
+                        "ignoring dst and using default destination names",
+                        src_text,
+                        len(matches),
+                        dst_text,
+                    )
+                    dst_use = None
+                else:
+                    dst_use = dst_text
+
+                for m in matches:
+                    assets.append(Asset(src=m, dst=dst_use, action=s.action))
+            else:
+                assets.append(Asset(src=Path(src_text), dst=dst_text, action=s.action))
+
+        return assets
 
     def get_baseline(
         self,
