@@ -100,15 +100,35 @@ class JobExecutor:
     """Class for running ``AbstractJob``."""
 
     def __call__(self, job: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
+        from .status import Status
+
+        def record_event(event: str, t: float) -> None:
+            queue.put({"event": f"job_{event}", "timestamp": t})
+            setattr(job.timekeeper, event, t)
+
+        def mark_broken(phase: str, e: Exception) -> None:
+            r = f"{e.__class__.__name__}({', '.join(repr(_) for _ in e.args)})"
+            job.status = Status.BROKEN(reason=r)
+            logger.debug(f"Failed to {phase} {job}", exc_info=e)
+            job.save()
+
+        record_event("submitted", time.time())
         try:
-            now = time.time()
-            queue.put({"event": "job_submitted", "timestamp": now})
-            job.timekeeper.submitted = now
             config.pluginmanager.hook.canary_runteststart(case=job)
-            now = time.time()
-            queue.put({"event": "job_started", "timestamp": now})
-            job.timekeeper.started = now
+        except Exception as e:
+            mark_broken("setup", e)
+            return
+
+        record_event("started", time.time())
+        try:
             config.pluginmanager.hook.canary_runtest(case=job)
             job.timekeeper.finished = time.time()
-        finally:
+        except Exception as e:
+            mark_broken("run", e)
+            return
+
+        try:
             config.pluginmanager.hook.canary_runtest_finish(case=job)
+        except Exception as e:
+            logger.debug(f"Failed to teardown {job}", exc_info=e)
+            return

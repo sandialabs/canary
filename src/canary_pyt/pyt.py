@@ -776,6 +776,7 @@ class PYTLockEmitter:
                 for ps in psets:
                     pset_meta.append({"keys": ps.keys, "values": ps.values})
 
+                kw = model._sub_kwds(family, None)
                 parent = JobSpecIR(
                     file_root=Path(model.root),
                     file_path=Path(model.path),
@@ -783,12 +784,12 @@ class PYTLockEmitter:
                     baseline=[],
                     owners=model.owners,
                     modules=[m.name for m in modules],
-                    assets=model.get_sources(family, on_options=on_options),
+                    assets=model.get_sources(family, on_options=on_options, subs=kw),
                     xstatus=model.get_xstatus(family, on_options=on_options),
                     preload=model.get_preload(family, on_options=on_options),
                     rcfiles=model.get_rcfiles(family, on_options=on_options),
                     keywords=model.get_keywords(family, on_options=on_options),
-                    artifacts=model.get_artifacts(family, on_options=on_options),
+                    artifacts=model.get_artifacts(family, on_options=on_options, subs=kw),
                     exclusive=model.get_exclusive(family, on_options=on_options),
                     timeout=model.get_timeout(family, on_options=on_options) or -1.0,
                     attributes={"multicase": True, "paramsets": pset_meta},
