@@ -64,7 +64,6 @@ if TYPE_CHECKING:
     from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
-ViewT = Literal["symlink", "hardlink", "copy"]
 
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"

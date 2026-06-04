@@ -12,7 +12,7 @@ def serialize(obj: Any) -> Any:
     __serialize__() to objects that define it.
 
     Similar in spirit to dataclasses.asdict(), but uses the library's serialization
-    protocol and preserves the ".type" tag so the result can be round-tripped with
+    protocol and preserves the "__type__" tag so the result can be round-tripped with
     object_hook/__deserialize__.
 
     Returns

@@ -26,7 +26,7 @@ class Encoder(json.JSONEncoder):
             return list(o)
         elif hasattr(o, "__serialize__"):
             data = dict(o.__serialize__())
-            data[".type"] = f"{o.__class__.__module__}::{o.__class__.__qualname__}"
+            data["__type__"] = f"{o.__class__.__module__}::{o.__class__.__qualname__}"
             return data
         return json.JSONEncoder.default(self, o)
 
@@ -41,11 +41,11 @@ def _load_class(class_spec: str) -> Any:
 
 
 def object_hook(d: dict):
-    class_spec = d.get(".type")
+    class_spec = d.get("__type__")
     if class_spec is None:
         return d
     payload = dict(d)
-    payload.pop(".type")
+    payload.pop("__type__")
     cls = _load_class(class_spec=class_spec)
     return cls.__deserialize__(payload)
 
