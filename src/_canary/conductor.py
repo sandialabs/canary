@@ -72,10 +72,10 @@ class CanaryConductor:
         """Run each test jobs in ``jobs``.
 
         Args:
-        jobs: test jobs to run
+          jobs: test jobs to run
 
         Returns:
-        The session returncode (0 for success)
+          The session returncode (0 for success)
 
         """
         from .queue_executor import ResourceQueueExecutor

@@ -26,8 +26,8 @@ def test_roundtrip_plain_dict_no_type_tag():
     obj = {"a": 1, "b": {"c": 2}}
     out = roundtrip(obj)
     assert out == obj
-    assert ".type" not in out
-    assert ".type" not in out["b"]
+    assert "__type__" not in out
+    assert "__type__" not in out["b"]
 
 
 def test_roundtrip_path_serializes_to_string():
@@ -92,20 +92,20 @@ def test_roundtrip_custom_type_nested_qualname():
 def test_type_tag_present_in_encoded_json_for_custom_type():
     s = dumps(Simple(1, "x"))
     d = json.loads(s)  # no hook: inspect raw payload
-    assert d[".type"].endswith("::Simple")
+    assert d["__type__"].endswith("::Simple")
     assert d["x"] == 1
     assert d["y"] == "x"
 
 
 def test_object_hook_ignores_dicts_without_type():
-    d = {"x": 1, "y": 2, ".typex": "not-a-type-tag"}
+    d = {"x": 1, "y": 2, "__type__x": "not-a-type-tag"}
     out = json.loads(json.dumps(d), object_hook=object_hook)
     assert out == d
 
 
 def test_object_hook_preserves_type_payload_copy_semantics():
     # Ensure object_hook doesn't mutate caller-provided dict (defensive).
-    raw = {"x": 1, "y": "a", ".type": f"{Simple.__module__}::{Simple.__qualname__}"}
+    raw = {"x": 1, "y": "a", "__type__": f"{Simple.__module__}::{Simple.__qualname__}"}
     raw_copy = dict(raw)
     out = object_hook(raw)
     assert out == Simple(1, "a")
@@ -113,7 +113,7 @@ def test_object_hook_preserves_type_payload_copy_semantics():
 
 
 def test_object_hook_raises_on_bad_class_spec():
-    bad = {".type": "nope", "x": 1}
+    bad = {"__type__": "nope", "x": 1}
     with pytest.raises(ValueError):
         object_hook(bad)
 
@@ -123,7 +123,7 @@ def test_object_hook_raises_on_missing_deserialize():
         def __serialize__(self):
             return {"a": 1}
 
-    payload = {"a": 1, ".type": f"{NoDeserialize.__module__}::{NoDeserialize.__qualname__}"}
+    payload = {"a": 1, "__type__": f"{NoDeserialize.__module__}::{NoDeserialize.__qualname__}"}
     with pytest.raises(AttributeError):
         object_hook(payload)
 
