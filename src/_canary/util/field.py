@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import Any

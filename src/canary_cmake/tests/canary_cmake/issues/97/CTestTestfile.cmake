@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # CMake generated Testfile for
 # Source directory: .../sceptre/src/radlib/driver/test
 # Build directory: .../debug/src/radlib/driver/test
