@@ -27,6 +27,8 @@ import datetime
 import fnmatch
 import os
 import shutil
+from enum import Enum
+from enum import auto
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -93,7 +95,6 @@ class ViewSettings:
         return ViewSettings(name=name, when=when, only=only, mode=mode)
 
     def __serialize__(self) -> dict[str, Any]:
-        # json_helper.Encoder will add ".type" automatically
         return dataclasses.asdict(self)
 
     @classmethod
@@ -117,18 +118,23 @@ class ViewSettings:
             return False
         return True
 
-    def is_enabled_for_status(self, status: int) -> bool:
-        if self.when == "never":
+    def is_enabled(self, jobs: list[Job]) -> bool:
+        if self.always_disabled():
             return False
-        elif self.when == "on_success":
-            return status == 0
-        elif self.when == "on_failure":
-            return status != 0
-        assert self.when == "always"
-        return True
+        elif self.always_enabled():
+            return True
+        outcome = SessionOutcome.from_jobs(jobs)
+        if self.when == "on_success":
+            return outcome == SessionOutcome.PASS
+        if self.when == "on_failure":
+            return outcome != SessionOutcome.PASS
+        raise AssertionError(f"unexpected when={self.when!r}")
 
-    def is_disabled(self) -> bool:
+    def always_disabled(self) -> bool:
         return self.when == "never"
+
+    def always_enabled(self) -> bool:
+        return self.when == "always"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -173,8 +179,7 @@ class ResultsView:
         force_remove(self.dir)
 
     def update(self, jobs: list[Job]) -> bool:
-        status = 0 if all(job.status.is_success() or job.status.is_skipped() for job in jobs) else 1
-        if not self.settings.is_enabled_for_status(status):
+        if not self.settings.is_enabled(jobs):
             return False
         for job in jobs:
             self.maybe_add(job)
@@ -215,6 +220,22 @@ class ResultsView:
         elif self.settings.mode == "copy":
             # Copy the directory tree
             shutil.copytree(source, dest, dirs_exist_ok=True, symlinks=False)
+
+
+class SessionOutcome(Enum):
+    PASS = auto()
+    FAIL = auto()
+    INCONCLUSIVE = auto()
+
+    @classmethod
+    def from_jobs(cls, jobs: list[Job]) -> "SessionOutcome":
+        any_success: bool = False
+        for job in jobs:
+            if job.status.is_failure():
+                return cls.FAIL
+            if job.status.is_success():
+                any_success = True
+        return cls.PASS if any_success else cls.INCONCLUSIVE
 
 
 @dataclasses.dataclass
@@ -553,8 +574,10 @@ class Workspace:
 
     def add_session_results(self, session: Session, view_t: ViewSettings | None = None) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        view_t = view_t or ViewSettings.default()
-        if not view_t.is_disabled():
+        if view_t is None:
+            last = self.latest_view()
+            view_t = last.settings if last is not None else ViewSettings.default()
+        if not view_t.always_disabled():
             view = ResultsView(root=self.root.parent, settings=view_t)
             logger.info(f"Updating view at {view.dir}")
             view.make(exist_ok=True)
@@ -585,7 +608,7 @@ class Workspace:
         made_new = False
         try:
             settings = view_t or ViewSettings.default()
-            if settings.is_disabled():
+            if settings.always_disabled():
                 made_new = False
                 return
             view = ResultsView(root=self.root.parent, settings=settings)
