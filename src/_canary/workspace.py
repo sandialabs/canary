@@ -73,11 +73,6 @@ view_tag = "VIEW.TAG"
 workspace_log = "canary.log"
 
 
-DB_MAX_RETRIES = 8
-DB_BASE_DELAY = 0.05  # 50ms base for exponential backoff (0.05, 0.1, 0.2, ...)
-SQL_CHUNK_SIZE = 900
-
-
 @dataclasses.dataclass
 class ViewSettings:
     name: str = "TestResults"
