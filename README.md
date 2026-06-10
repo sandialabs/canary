@@ -2,7 +2,7 @@
 
 `canary` is a Python package for defining, scheduling, and executing jobs across a wide range of computing environments, from developer laptops to large-scale HPC systems.
 
-- **Documentation:** https://canary-wm.readthedocs.io/en/production/
+- **Documentation:** https://canary-wm.readthedocs.io
 
 
 Originally developed for application testing, `canary` has evolved into a general-purpose workflow execution framework. Today it is used to automate software testing, manage analysis workflows, execute computational pipelines, and coordinate collections of dependent jobs.
