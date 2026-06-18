@@ -26,6 +26,9 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from .job_queue import JobQueue
+from .job_queue import ExecutionSlot
+
 from . import config
 from .error import StopExecution
 from .job import BaseJob
@@ -37,7 +40,7 @@ from .util import multiprocessing as mp
 from .util.misc import boolean
 from .util.returncode import compute_returncode
 
-from .reporter import EventTypes, ExecutionSlot, LiveReporter, ReportableExecutor
+from .reporter import LiveReporter
 from .reporter import EventReporter
 
 logger = logging.get_logger(__name__)
@@ -284,7 +287,48 @@ class _MainWorker:
             logger.debug("event_conn.close failed: %s", e)
 
 
-class ResourceQueueExecutor(ReportableExecutor):
+class ResourceQueueAdapter(JobQueue):
+    def __init__(self, queue: ResourceQueue):
+        super().__init__()
+        self.queue = queue
+
+    @property
+    def _busy(self):
+        """For now continue to expose this internal detail through the adapter"""
+        return self.queue._busy
+
+    def __len__(self) -> int:
+        return len(self.queue)
+
+    def _get_job(self) -> BaseJob:
+        return self.queue.get()
+
+    def jobs(self) -> list[BaseJob]:
+        return self.queue.jobs()
+
+    def pending(self) -> list[BaseJob]:
+        return self.queue.pending()
+
+    def status(self, start: float | None = None) -> str:
+        return self.queue.status(start)
+
+    def update(self, payload: dict[str, Any]) -> None:
+        super().update(payload)
+        job_id: str = payload["job_id"]
+        event: str = payload["event"] or ""
+
+        slot = self.slots_by_id.get(job_id)
+        if slot is None:
+            return
+
+        match event:
+            case "job_finished" | "job_timeout" | "job_died":
+                self.queue.done(slot.job)
+            case _:
+                pass
+
+
+class ResourceQueueExecutor:
     """Manages a pool of worker processes with timeout support and metrics collection."""
 
     def __init__(
@@ -296,18 +340,13 @@ class ResourceQueueExecutor(ReportableExecutor):
     ):
         super().__init__()
         self.max_workers = mp.max_workers(hint=max_workers)
-        self.queue: ResourceQueue = queue
+        self.queue = ResourceQueueAdapter(queue)
         self.executor = executor
         self.busy_wait_time = busy_wait_time
 
-        self._submitted: dict[str, ExecutionSlot] = {}
-        self._running: dict[str, ExecutionSlot] = {}
-        self._finished: dict[str, ExecutionSlot] = {}
         self.entered: bool = False
-        self._started_on: float = -1.0
         self._store: dict[str, Any] = {}
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
-        self.listeners: list[Callable[..., None]] = []
 
         # worker infrastructure
         self.workers: list[dict[str, Any]] = []
@@ -328,31 +367,6 @@ class ResourceQueueExecutor(ReportableExecutor):
             self.live_reporting = False
         elif os.getenv("CANARY_MAKE_DOCS"):
             self.live_reporting = False
-
-    @property
-    def started_on(self) -> float:
-        return self._started_on
-
-    @property
-    def submitted(self) -> dict[str, ExecutionSlot]:
-        return self._submitted
-
-    @property
-    def running(self) -> dict[str, ExecutionSlot]:
-        return self._running
-
-    @property
-    def finished(self) -> dict[str, ExecutionSlot]:
-        return self._finished
-
-    def jobs(self) -> list[BaseJob]:
-        return self.queue.jobs()
-
-    def pending(self) -> list[BaseJob]:
-        return self.queue.pending()
-
-    def status(self, start: float | None = None) -> str:
-        return self.queue.status(start)
 
     def __enter__(self) -> "ResourceQueueExecutor":
         self._store.clear()
@@ -385,12 +399,12 @@ class ResourceQueueExecutor(ReportableExecutor):
             self.idle_workers.append(wid)
 
         self.entered = True
-        self._started_on = time.time()
+        self.queue.started_on = time.time()
         return self
 
     def __exit__(self, *args):
         self.entered = False
-        self._started_on = -1.0
+        self.queue.started_on = -1.0
         self._shutdown_workers()
         self._stop_mp_logging()
         for c in self.worker_connections:
@@ -459,7 +473,11 @@ class ResourceQueueExecutor(ReportableExecutor):
         qrank, qsize = 0, len(self.queue)
         start = time.time()
 
-        reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
+        reporter = (
+            LiveReporter(self.queue)
+            if self.live_reporting
+            else EventReporter(self.queue)
+        )
         with reporter:
             while True:
                 try:
@@ -488,22 +506,12 @@ class ResourceQueueExecutor(ReportableExecutor):
                             )
                         time.sleep(self.busy_wait_time)
 
-                    job = self.queue.get()
+                    wid = self.idle_workers.pop()
+                    slot = self.queue.get(qrank=qrank, worker_id=wid)
+                    self.busy_workers[wid] = slot.job.id
                     qrank += 1
 
-                    wid = self.idle_workers.pop()
-                    self.busy_workers[wid] = job.id
-                    slot = ExecutionSlot(
-                        job=job,
-                        spawned=time.time(),
-                        qrank=qrank,
-                        qsize=qsize,
-                        worker_id=wid,
-                    )
-                    self.slots_by_id[job.id] = slot
-                    self._submitted[job.id] = slot
-
-                    self.workers[wid]["task_q"].put((job, kwargs))
+                    self.workers[wid]["task_q"].put((slot.job, kwargs))
 
                 except Busy:
                     time.sleep(self.busy_wait_time)
@@ -564,126 +572,27 @@ class ResourceQueueExecutor(ReportableExecutor):
                     self._handle_worker_payload(payload)
 
     def _handle_worker_payload(self, payload: dict[str, Any]) -> None:
-        job_id: str = payload["job_id"]
         wid: int = payload["worker_id"]
-
-        slot = self.slots_by_id.get(job_id)
-        if slot is None:
+        self.queue.update(payload)
+        if not wid:
             return
 
         if event := payload.get("event"):
-            if event == "job_submitted":
-                slot.job.on_submitted()
-                slot.job.timekeeper.submitted = slot.submitted = float(
-                    payload["timestamp"]
-                )
-                self.notify_listeners(event, slot)
-                return
-
-            if event == "job_started":
-                slot.job.timekeeper.started = slot.started = float(payload["timestamp"])
-                slot.job.on_started()
-                self._running[job_id] = slot
-                self._submitted.pop(job_id, None)
-                self.notify_listeners(event, slot)
-                return
-
-            if event == "job_updated":
-                # This job, running in a different process, is passing updated attributes
-                attrs = payload.get("attrs", {})
-                if not isinstance(attrs, dict):
-                    logger.warning(f"Malformed job_updated payload: {payload!r}")
-                    return
-                for name, value in attrs.items():
-                    if isinstance(name, str) and not name.startswith("_"):
-                        setattr(slot.job, name, value)
-                return
 
             if event == "job_finished":
-                # job_started event sent by worker process
-                slot.job.timekeeper.finished = slot.finished = time.time()
-                try:
-                    slot.job.refresh()
-                except Exception:
-                    logger.exception(f"Post-processing failed for job {slot.job}")
-                    slot.job.set_status(
-                        outcome="ERROR", reason="Post-processing failure"
-                    )
-                    try:
-                        slot.job.save()
-                    except Exception as e:
-                        logger.debug("job.save failed: %s", e)
-                finally:
-                    slot.job.on_finished()
-                    self._finished[job_id] = slot
-                    self._running.pop(job_id, None)
-                    self._submitted.pop(job_id, None)
-                    self.queue.done(slot.job)
-                    self.notify_listeners(event, slot)
-                    self.busy_workers.pop(wid, None)
-                    self.idle_workers.append(wid)
+                self.busy_workers.pop(wid, None)
+                self.idle_workers.append(wid)
                 return
 
             if event == "job_timeout":
-                if slot.submitted < 0.0:
-                    slot.submitted = time.time()
-                if slot.started < 0.0:
-                    slot.started = time.time()
-                slot.finished = time.time()
-                reason: str
-                t = slot.job.total_timeout()
-                reason = f"Job timed out after {t} s."
-                try:
-                    slot.job.refresh()
-                except Exception as e:
-                    logger.debug("job.refresh failed during job_timeout: %s", e)
-                slot.job.on_finished()
-                slot.job.set_status(outcome="TIMEOUT", reason=reason)
-                slot.job.timekeeper.submitted = slot.submitted
-                slot.job.timekeeper.started = slot.started
-                slot.job.timekeeper.finished = slot.finished
-                slot.job.save()
-
-                self._finished[job_id] = slot
-                self._running.pop(job_id, None)
-                self._submitted.pop(job_id, None)
-                self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
                 return
 
             if event == "job_died":
-                slot.finished = time.time()
-                try:
-                    slot.job.refresh()
-                except Exception as e:
-                    logger.debug("job.refresh failed during job_died: %s", e)
-                exitcode = payload.get("exitcode", None)
-                reason = "Worker job process died unexpectedly"
-                if isinstance(exitcode, int):
-                    if exitcode < 0:
-                        reason += f" (signal {-exitcode})"
-                    else:
-                        reason += f" (exitcode {exitcode})"
-
-                slot.job.on_finished()
-                slot.job.set_status(outcome="ERROR", reason=reason)
-                slot.job.timekeeper.submitted = slot.submitted
-                slot.job.timekeeper.started = slot.started
-                slot.job.timekeeper.finished = slot.finished
-                slot.job.save()
-
-                self._finished[job_id] = slot
-                self._running.pop(job_id, None)
-                self._submitted.pop(job_id, None)
-                self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
                 return
-
-            logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")
 
     def _handle_dead_worker_conn(self, conn: Connection, exc: BaseException) -> None:
         # map conn -> wid
@@ -766,7 +675,7 @@ class ResourceQueueExecutor(ReportableExecutor):
     def _check_for_leaks(self) -> None:
         # NOTE: still reads queue internals; ideally ResourceQueue should provide a safe accessor.
         busy_ids = set(self.queue._busy)
-        inflight_ids = {slot.job.id for slot in self.inflight.values()}
+        inflight_ids = {slot.job.id for slot in self.queue.inflight.values()}
         if busy_ids != inflight_ids:
             leaked = busy_ids - inflight_ids
             missing = inflight_ids - busy_ids
@@ -785,7 +694,7 @@ class ResourceQueueExecutor(ReportableExecutor):
 
     def _wait_all(self, start: float, timeout: float) -> None:
         while True:
-            if not self.inflight:
+            if not self.queue.inflight:
                 break
             if timeout >= 0.0 and time.time() - start > timeout:
                 self._terminate_all(signal.SIGUSR2)
