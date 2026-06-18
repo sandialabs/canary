@@ -156,6 +156,9 @@ class PYTModel:
         self.parameter_sets: Field[ParameterSet, list[ParameterSet]] = Field(
             reducer=reducer.IDENTITY
         )
+        self.meta_parameters: Field[dict[str, Any], dict[str, Any]] = Field(
+            reducer=reducer.MERGE_DICTS
+        )
         self.keywords: Field[list[str], list[str]] = Field(
             reducer=Reducer("flatten_unique", flatten_unique)
         )
@@ -293,6 +296,22 @@ class PYTModel:
 
     def set_xdiff(self, when: WhenType | None = None) -> None:
         self.xstatus.add(XstatusSpec(code=diff_exit_status), when=when)
+
+    def set_meta_parameters(self, when: WhenType | None = None, **params: Any) -> None:
+        self.meta_parameters.add(dict(params), when=when)
+
+    def set_resource_parameter(
+        self,
+        name: Literal["cpus", "gpus", "nodes"],
+        value: int,
+        when: WhenType | None = None,
+    ) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
+        minimum = 0 if name == "gpus" else 1
+        if value < minimum:
+            raise ValueError(f"{name} must be >= {minimum}, got {value}")
+        self.set_meta_parameters(when=when, **{name: value})
 
     # ----------------------------- getters -----------------------------
 
@@ -495,6 +514,16 @@ class PYTModel:
     ) -> AnalyzeSpec | None:
         return self.analyze.eval(family=family, parameters=None, on_options=on_options)
 
+    def get_meta_parameters(
+        self,
+        family: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        on_options: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self.meta_parameters.eval(
+            family=family, parameters=parameters, on_options=on_options
+        )
+
     # ----------------------------- substitution helpers -----------------------------
 
     def safe_substitute(self, text: str, **kwds: Any) -> str:
@@ -502,10 +531,17 @@ class PYTModel:
             return Template(text).safe_substitute(**kwds)
         return text.format(**kwds)
 
-    def _sub_kwds(self, family: str | None, parameters: dict[str, Any] | None) -> dict[str, Any]:
+    def _sub_kwds(
+        self,
+        family: str | None,
+        parameters: dict[str, Any] | None,
+        meta_parameters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         kw: dict[str, Any] = {}
         if parameters:
             kw.update({k: stringify(v) for k, v in parameters.items()})
+        if meta_parameters:
+            kw.update({k: stringify(v) for k, v in meta_parameters.items()})
         if family:
             kw["name"] = family
         for k in list(kw.keys()):
@@ -560,6 +596,15 @@ class PYTAdapter:
         else:
             pset = ParameterSet.list_parameter_space(names, values, file=self.m.file.as_posix())
         self.m.add_parameter_set(pset, when=when)
+
+    def f_cpus(self, arg: int, *, when: WhenType | None = None) -> None:
+        self.m.set_resource_parameter("cpus", arg, when=when)
+
+    def f_gpus(self, arg: int, *, when: WhenType | None = None) -> None:
+        self.m.set_resource_parameter("gpus", arg, when=when)
+
+    def f_nodes(self, arg: int, *, when: WhenType | None = None) -> None:
+        self.m.set_resource_parameter("nodes", arg, when=when)
 
     def f_copy(
         self,
@@ -700,7 +745,8 @@ class PYTLockEmitter:
             my_irs: list[JobSpecIR] = []
 
             for parameters in param_dicts:
-                kw = model._sub_kwds(family, parameters)
+                meta_params = model.get_meta_parameters(family, parameters, on_options=on_options)
+                kw = model._sub_kwds(family, parameters, meta_parameters=meta_params)
                 test_mask = model.get_skip_reason(family, parameters, on_options=on_options)
                 keywords = model.get_keywords(family, parameters, on_options=on_options)
                 modules = model.get_modules(family, parameters, on_options=on_options)
@@ -721,6 +767,7 @@ class PYTLockEmitter:
                     family=family,
                     keywords=keywords,
                     parameters=parameters,
+                    meta_parameters=meta_params,
                     modules=[m.name for m in modules],
                     owners=model.owners,
                     timeout=timeout or -1.0,

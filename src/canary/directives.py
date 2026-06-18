@@ -1117,6 +1117,50 @@ def cpus(
     """  # noqa: E501
 
 
+def nodes(
+    arg: int,
+    *,
+    when: WhenType | None = None,
+) -> None:
+    """This test requires this many nodes
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import canary
+       canary.directives.nodes(arg, when=...)
+
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``arg``: The number of nodes required by this test.
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
+    Notes
+    -----
+
+    * Use ``nodes(int)`` to set a single, fixed resource requirement for a job without
+      creating additional test instantiations.
+    * Test naming reflects only parameters introduced via `parameterize()`. Therefore,
+      when nodes are set via ``nodes(arg)``, ``nodes=<arg>`` are not
+      appended to the generated test name. If you want distinct named variants such as
+      ``...nodes=8``, use ``parameterize("nodes", ...)`` instead.
+
+    """  # noqa: E501
+
+
 def gpus(
     arg: int,
     *,

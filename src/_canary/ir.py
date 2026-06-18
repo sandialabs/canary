@@ -122,8 +122,15 @@ class JobSpecIR:
         self.file_path: Path = Path(file_path)
         self.file = self.file_root / self.file_path
         self.family: str = family or self.file.stem
-        self.parameters: dict[str, Any] = parameters or {}
-        self.meta_parameters: dict[str, Any] = meta_parameters or {}
+        self.parameters: dict[str, Any] = dict(parameters or {})
+        self.meta_parameters: dict[str, Any] = dict(meta_parameters or {})
+        duplicate_parameter_keys = set(self.parameters) & set(self.meta_parameters)
+        if duplicate_parameter_keys:
+            keys = ", ".join(sorted(duplicate_parameter_keys))
+            raise ValueError(
+                "JobSpecIR received duplicate key(s) in parameters and meta_parameters: "
+                f"{keys}. A key may appear in only one of these dictionaries."
+            )
         self.stdout: str = stdout
         self.stderr: str | None = stderr
         self.dependencies: list[DependencySelector] = self.build_dependencies(dependencies or [])
@@ -136,7 +143,8 @@ class JobSpecIR:
         if timeout < 0:
             timeout = default_timeout(self.keywords)
         self.timeout: float = timeout
-        self.meta_parameters["runtime"] = self.timeout
+        if "runtime" not in self.meta_parameters:
+            self.meta_parameters["runtime"] = self.timeout
         self.xstatus: int = xstatus
         self.preload: str | None = preload
         self.modules: list[str] | None = modules
