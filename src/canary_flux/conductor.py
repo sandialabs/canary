@@ -11,6 +11,7 @@ import shlex
 
 from _canary import reporter
 from _canary.job import BaseJob, Job, JobPhase
+from _canary.job_queue import JobQueue
 from _canary.runtest import Runner
 from _canary.util.time import hhmmss
 import canary
@@ -34,32 +35,19 @@ def create_job_env() -> dict[str, str | None]:
 global_lock = threading.Lock()
 
 
-class QueueMonitor(reporter.ReportableExecutor):
+class QueueMonitor(JobQueue):
     def __init__(self, jobs: Iterable[Job], lock: threading.Lock):
         super().__init__()
         self.lock = lock
         self.qsize = len(jobs)
-        self.start_time: float = time.time()
+        self.started_on = time.time()
         self._pending: dict[str, Job] = {job.id: job for job in jobs}
-        self._submitted: dict[str, reporter.ExecutionSlot] = {}
-        self._running: dict[str, reporter.ExecutionSlot] = {}
-        self._finished: dict[str, reporter.ExecutionSlot] = {}
 
-    @property
-    def started_on(self) -> float:
-        return self.start_time
+    def __len__(self) -> int:
+        return self.qsize
 
-    @property
-    def submitted(self) -> dict[str, reporter.ExecutionSlot]:
-        return self._submitted
-
-    @property
-    def running(self) -> dict[str, reporter.ExecutionSlot]:
-        return self._running
-
-    @property
-    def finished(self) -> dict[str, reporter.ExecutionSlot]:
-        return self._finished
+    def _get_job(self) -> BaseJob:
+        raise NotImplementedError
 
     def jobs(self) -> list[BaseJob]:
         all_jobs: list[BaseJob] = self.pending()

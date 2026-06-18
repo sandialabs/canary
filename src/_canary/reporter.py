@@ -20,95 +20,17 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from _canary.job import BaseJob
+from .job_queue import ExecutionSlot, JobQueue
 
 from . import config
 from .util import logging
 
 logger = logging.get_logger(__name__)
 
-EventTypes = Literal["job_submitted", "job_started", "job_finished"]
-
-
-@dataclasses.dataclass
-class ExecutionSlot:
-    job: BaseJob
-    qrank: int
-    qsize: int
-    spawned: float
-    worker_id: int
-    submitted: float = -1.0
-    started: float = -1.0
-    finished: float = -1.0
-
-    def queued(self) -> float:
-        if self.started < 0:
-            return time.time() - self.spawned
-        return self.started - self.spawned
-
-    def elapsed(self) -> float:
-        if self.finished < 0:
-            return time.time() - self.spawned
-        return self.finished - self.spawned
-
-    def running(self) -> float:
-        if self.started < 0:
-            return -1.0
-        if self.finished >= 0:
-            return self.finished - self.started
-        return time.time() - self.started
-
-
-class ReportableExecutor(abc.ABC):
-
-    def __init__(self):
-        self.listeners: list[Callable[..., None]] = []
-
-    @property
-    @abc.abstractmethod
-    def started_on(self) -> float: ...
-
-    @property
-    @abc.abstractmethod
-    def submitted(self) -> dict[str, ExecutionSlot]: ...
-
-    @property
-    @abc.abstractmethod
-    def running(self) -> dict[str, ExecutionSlot]: ...
-
-    @property
-    @abc.abstractmethod
-    def finished(self) -> dict[str, ExecutionSlot]: ...
-
-    @property
-    def inflight(self) -> dict[str, ExecutionSlot]:
-        return self.submitted | self.running
-
-    @abc.abstractmethod
-    def jobs(self) -> list[BaseJob]: ...
-
-    @abc.abstractmethod
-    def pending(self) -> list[BaseJob]: ...
-
-    @abc.abstractmethod
-    def status(self, start: float | None = None) -> str: ...
-
-    def add_listener(self, callback: Callable[..., None]) -> None:
-        self.listeners.append(callback)
-
-    def remove_listener(self, callback: Callable[..., None]) -> None:
-        try:
-            self.listeners.remove(callback)
-        except ValueError:  # nosec B110
-            pass
-
-    def notify_listeners(self, event: EventTypes, slot: ExecutionSlot):
-        for cb in self.listeners:
-            cb(event, slot)
-
 
 class Reporter:
-    def __init__(self, executor: ReportableExecutor) -> None:
+
+    def __init__(self, executor: JobQueue) -> None:
         self.executor = executor
         style = config.getoption("console_style") or {}
         self.namefmt = style.get("name", "short")
@@ -155,7 +77,9 @@ class Reporter:
                 kwds["justify"] = "right"
             table.add_column(name, **kwds)
 
-    def add_table_row(self, table: Table, columns: tuple[str, ...], **kwargs: str) -> None:
+    def add_table_row(
+        self, table: Table, columns: tuple[str, ...], **kwargs: str
+    ) -> None:
         row: list[str] = []
         for name in columns:
             row.append(kwargs.get(name.lower(), ""))
@@ -185,15 +109,20 @@ class Reporter:
             )
         if not table.row_count:
             n = len(jobs)
-            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
+            return Group(
+                f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]"
+            )
         return Group(table, footer)
 
 
 class LiveReporter(Reporter):
-    def __init__(self, executor: ReportableExecutor) -> None:
+
+    def __init__(self, executor: JobQueue) -> None:
         super().__init__(executor)
         console = Console(file=sys.stdout, force_terminal=True)
-        self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
+        self.live = Live(
+            refresh_per_second=1, console=console, transient=False, auto_refresh=False
+        )
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
         self._stop = threading.Event()
@@ -261,7 +190,9 @@ class LiveReporter(Reporter):
         decay_window = 8.0  # seconds to keep finished visible
         max_finished = 5  # hard cap
 
-        recent_finished = [s for s in xtor.finished.values() if now - s.finished < decay_window]
+        recent_finished = [
+            s for s in xtor.finished.values() if now - s.finished < decay_window
+        ]
 
         # Most recent first
         recent_finished.sort(key=lambda s: s.finished, reverse=True)
@@ -344,7 +275,8 @@ class LiveReporter(Reporter):
 
 
 class EventReporter(Reporter):
-    def __init__(self, executor: ReportableExecutor) -> None:
+
+    def __init__(self, executor: JobQueue) -> None:
         super().__init__(executor)
         self.table = StaticTable()
         maxnamelen: int = -1
@@ -390,7 +322,7 @@ class EventReporter(Reporter):
             case _:
                 return
 
-    def on_job_submit(self, slot: "ExecutionSlot") -> None:
+    def on_job_submit(self, slot: ExecutionSlot) -> None:
         row = [
             slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
             slot.job.id[:7],
@@ -402,7 +334,7 @@ class EventReporter(Reporter):
         text = self.table.render_row(row)
         logger.info(text.markup, extra={"prefix": ""})
 
-    def on_job_start(self, slot: "ExecutionSlot") -> None:
+    def on_job_start(self, slot: ExecutionSlot) -> None:
         row = [
             slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
             slot.job.id[:7],
@@ -438,7 +370,9 @@ class StaticTable:
     def __init__(self, columns: list[StaticColumn] | None = None) -> None:
         self.columns = list(columns or [])
 
-    def add_column(self, header: str, width: int, align: Literal["left", "right"] = "left") -> None:
+    def add_column(
+        self, header: str, width: int, align: Literal["left", "right"] = "left"
+    ) -> None:
         self.columns.append(StaticColumn(header=header, width=width, align=align))
 
     def _format_cell(self, value: str, col: StaticColumn) -> Text:
