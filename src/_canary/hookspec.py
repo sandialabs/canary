@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .select import RuntimeSelector
     from .select import Selector
     from .workspace import Session
+    from .workspace import Workspace
 
 
 project_name = "canary"
@@ -136,6 +137,18 @@ def canary_configure(config: "CanaryConfig") -> None:
 
     Args:
       config: The canary config object.
+
+    """
+
+
+@hookspec
+def canary_initfinish(workspace: "Workspace") -> None:
+    """Allow plugins to modify the newly initialized workspace without additional user commands/steps.
+
+    This hook is called by `canary init` just before exit.
+
+    Args:
+      workspace: The canary Workspace object.
 
     """
 
