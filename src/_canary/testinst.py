@@ -126,14 +126,18 @@ def from_job(job: "Job") -> TestInstance:
     if job.spec.attributes.get("multicase"):
         cls = TestMultiInstance
         columns: dict[str, list[Any]] = {}
-        for key in job.dependencies[0].job.spec.parameters.keys():
+        sp = job.dependencies[0].job.spec
+        keys = set(sp.parameters.keys()) | set(sp.meta_parameters.keys())
+        for key in keys:
             col = columns.setdefault(key, [])
             for dep in job.dependencies:
-                col.append(dep.job.spec.parameters[key])
+                sp = dep.job.spec
+                val = sp.parameters[key] if key in sp.parameters else sp.meta_parameters[key]
+                col.append(val)
         parameters = MultiParameters(**columns)
     else:
         cls = TestInstance
-        parameters = Parameters(**job.spec.parameters)
+        parameters = Parameters(**(job.spec.parameters | job.spec.meta_parameters))
 
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in job.spec.assets:
