@@ -178,7 +178,7 @@ class TestBatch(BaseJob):
     def estimated_runtime(self) -> float:
         if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):
             p = argparse.ArgumentParser()
-            p.add_argument("--time", dest="qtime")
+            p.add_argument("--time", "--time-limit", dest="qtime")
             a, _ = p.parse_known_args(scheduler_args)
             if a.qtime:
                 return time_in_seconds(a.qtime)
