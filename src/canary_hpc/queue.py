@@ -34,7 +34,6 @@ class ResourceQueue(queue.ResourceQueue):
         return jobs
 
     def status(self, start: float | None = None) -> str:
-
         def sortkey(x):
             c, o = x
             if c == canary.status.Category.PASS:

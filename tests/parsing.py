@@ -17,7 +17,6 @@ ci_env = os.getenv("CI") is not None
 
 
 def test_config_args():
-
     parser = make_argument_parser()
     args = parser.parse_args(
         [
@@ -41,7 +40,6 @@ def test_config_args():
 
 
 def test_parser_preparse_plugins_debug_and_C():
-
     parser = make_argument_parser()
 
     # -p / --debug / -C should be detected; unknown things ignored; stop on known command
@@ -76,14 +74,12 @@ def test_parser_addopts_from_environment(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_convert_arg_line_to_args_strips_comments_and_splits():
-
     parser = make_argument_parser()
     assert parser.convert_arg_line_to_args("-c debug:true  # comment") == ["-c", "debug:true"]
     assert parser.convert_arg_line_to_args("   ") == []
 
 
 def test_configmods_nested_and_safe_loads_types():
-
     parser = make_argument_parser()
     args = parser.parse_args(
         [
@@ -103,7 +99,6 @@ def test_configmods_nested_and_safe_loads_types():
 
 
 def test_configmods_merges_multiple_updates_to_same_tree():
-
     parser = make_argument_parser()
     args = parser.parse_args(["-c", "a:b:1", "-c", "a:c:2", "-c", "a:b:3"])
     mods = args.config_mods
@@ -112,7 +107,6 @@ def test_configmods_merges_multiple_updates_to_same_tree():
 
 
 def test_environment_modification_action_sets_os_environ():
-
     parser = make_argument_parser()
     args = parser.parse_args(["-e", "HELLO=WORLD"])
     cfg = Config()
@@ -134,14 +128,12 @@ def test_environment_modification_invalid_raises():
 
 
 def test_register_plugin_action_records_plugins():
-
     parser = make_argument_parser()
     args = parser.parse_args(["-p", "my.plugin", "-p", "other.plugin"])
     assert args.config_mods["plugins"] == ["my.plugin", "other.plugin"]
 
 
 def test_parser_read_args_from_file_updates_parser_argv(tmp_path):
-
     f = tmp_path / "args.txt"
     f.write_text("-c debug:true\n", encoding="utf-8")
     parser = make_argument_parser()
@@ -179,7 +171,6 @@ def test_helpformatter_usage_renders():
 
 
 def test_parser_remove_argument_by_optstring_and_dest():
-
     parser = make_argument_parser()
     # remove by opt string
     parser.remove_argument("--banner")
@@ -193,7 +184,6 @@ def test_parser_remove_argument_by_optstring_and_dest():
 
 
 def test_parser_get_group_returns_existing_or_creates():
-
     parser = make_argument_parser()
     g1 = parser.get_group("runtime configuration")
     g2 = parser.get_group("runtime configuration")

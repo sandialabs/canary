@@ -1,12 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import dataclasses
 import os
-import shutil
 import signal
 import sys
-import threading
 import time
 from multiprocessing.connection import Connection
 from multiprocessing.connection import Pipe
@@ -16,32 +13,21 @@ from pathlib import Path
 from queue import Empty as QueueEmpty
 from typing import Any
 from typing import Callable
-from typing import Literal
-
-from rich import box
-from rich import print as rprint
-from rich.console import Console
-from rich.console import Group
-from rich.live import Live
-from rich.table import Table
-from rich.text import Text
-
-from .job_queue import JobQueue
-from .job_queue import ExecutionSlot
 
 from . import config
 from .error import StopExecution
 from .job import BaseJob
+from .job_queue import ExecutionSlot
+from .job_queue import JobQueue
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
+from .reporter import EventReporter
+from .reporter import LiveReporter
 from .util import logging
 from .util import multiprocessing as mp
 from .util.misc import boolean
 from .util.returncode import compute_returncode
-
-from .reporter import LiveReporter
-from .reporter import EventReporter
 
 logger = logging.get_logger(__name__)
 
@@ -473,11 +459,7 @@ class ResourceQueueExecutor:
         qrank, qsize = 0, len(self.queue)
         start = time.time()
 
-        reporter = (
-            LiveReporter(self.queue)
-            if self.live_reporting
-            else EventReporter(self.queue)
-        )
+        reporter = LiveReporter(self.queue) if self.live_reporting else EventReporter(self.queue)
         with reporter:
             while True:
                 try:
@@ -578,7 +560,6 @@ class ResourceQueueExecutor:
             return
 
         if event := payload.get("event"):
-
             if event == "job_finished":
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
@@ -708,9 +689,9 @@ class ResourceQueueExecutor:
         stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
         reason = f"Job terminated with signal {signum}"
 
-        inflight_slots = list(self.inflight.values())
-        self._running.clear()
-        self._submitted.clear()
+        inflight_slots = list(self.queue.inflight.values())
+        self.queue.running.clear()
+        self.queue.submitted.clear()
 
         for slot in inflight_slots:
             try:
@@ -726,7 +707,7 @@ class ResourceQueueExecutor:
             except Exception:
                 logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
             finally:
-                self._finished[slot.job.id] = slot
+                self.queue.finished[slot.job.id] = slot
                 try:
                     self.queue.done(slot.job)
                 except Exception as e:
