@@ -69,12 +69,12 @@ class QueueMonitor(JobQueue):
             return (n, x[1])
 
         with self.lock:
-            done = len(self._finished)
-            busy = len(self._running)
+            done = len(self.finished)
+            busy = len(self.running)
             pending = len(self._pending)
             total = done + busy + pending
             totals: Counter[tuple[Category, Outcome]] = Counter()
-            for es in self._finished.values():
+            for es in self.finished.values():
                 job = es.job
                 if job.state.is_done():
                     key = (job.status.category, job.status.outcome)
@@ -110,12 +110,12 @@ class QueueCallbacks:
         )
         es.job.on_submitted()
         with self.qm.lock:
-            self.qm._submitted[job.id] = es
+            self.qm.submitted[job.id] = es
         self.qm.notify_listeners("job_submitted", es)
 
     def on_started(self, job_id: str):
         with self.qm.lock:
-            es = self.qm._submitted.pop(job_id)
+            es = self.qm.submitted.pop(job_id)
             es.started = time.time()
             self.qm._running[job_id] = es
         es.job.on_started()
@@ -123,7 +123,7 @@ class QueueCallbacks:
 
     def on_finished(self, job_id: str):
         with self.qm.lock:
-            es = self.qm._running.pop(job_id)
+            es = self.qm.running.pop(job_id)
             es.finished = time.time()
             self.qm._finished[job_id] = es
 
