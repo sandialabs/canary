@@ -108,11 +108,15 @@ class JobQueue(abc.ABC):
         match event:
             case "job_submitted":
                 slot.job.on_submitted()
-                slot.job.timekeeper.submitted = slot.submitted = float(payload["timestamp"])
+                slot.job.timekeeper.submitted = slot.submitted = float(
+                    payload.get("timestamp", time.time())
+                )
                 self.notify_listeners(event, slot)
 
             case "job_started":
-                slot.job.timekeeper.started = slot.started = float(payload["timestamp"])
+                slot.job.timekeeper.started = slot.started = float(
+                    payload.get("timestamp", time.time())
+                )
                 slot.job.on_started()
                 self.running[job_id] = slot
                 self.submitted.pop(job_id, None)
