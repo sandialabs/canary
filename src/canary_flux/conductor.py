@@ -12,7 +12,7 @@ import canary
 from _canary import reporter
 from _canary.job import BaseJob
 from _canary.job import Job
-from _canary.job_queue import JobQueue
+import _canary.job_queue as job_queue
 from _canary.runtest import Runner
 from _canary.util.time import hhmmss
 from canary_flux.flux_alloc import FluxAllocation
@@ -36,7 +36,16 @@ def create_job_env() -> dict[str, str | None]:
 global_lock = threading.Lock()
 
 
-class QueueMonitor(JobQueue):
+class Busy(Exception):
+    pass
+
+
+class Empty(Exception):
+    pass
+
+
+class JobQueue(job_queue.JobQueue):
+
     def __init__(self, jobs: Iterable[Job], lock: threading.Lock):
         super().__init__()
         self.lock = lock
@@ -48,7 +57,15 @@ class QueueMonitor(JobQueue):
         return self.qsize
 
     def _get_job(self) -> BaseJob:
-        raise NotImplementedError
+        if not self._pending:
+            raise Empty
+
+        for id, job in self._pending.items():
+            if job.is_ready():
+                self._pending.pop(id)
+                return job
+        else:
+            raise Busy
 
     def jobs(self) -> list[BaseJob]:
         all_jobs: list[BaseJob] = self.pending()
@@ -93,63 +110,26 @@ class QueueMonitor(JobQueue):
             return ", ".join(row)
 
 
-class QueueCallbacks:
-    def __init__(self, queue_monitor: QueueMonitor):
-        self.qm = queue_monitor
-
-    def on_submitted(self, job_id: str):
-        with self.qm.lock:
-            job = self.qm._pending.pop(job_id)
-        es = reporter.ExecutionSlot(
-            job=job,
-            qrank=-1,
-            qsize=self.qm.qsize,
-            spawned=time.time(),
-            worker_id=-1,
-            submitted=time.time(),
-        )
-        es.job.on_submitted()
-        with self.qm.lock:
-            self.qm.submitted[job.id] = es
-        self.qm.notify_listeners("job_submitted", es)
-
-    def on_started(self, job_id: str):
-        with self.qm.lock:
-            es = self.qm.submitted.pop(job_id)
-            es.started = time.time()
-            self.qm._running[job_id] = es
-        es.job.on_started()
-        self.qm.notify_listeners("job_finished", es)
-
-    def on_finished(self, job_id: str):
-        with self.qm.lock:
-            es = self.qm.running.pop(job_id)
-            es.finished = time.time()
-            self.qm._finished[job_id] = es
-
-        es.job.refresh()
-        es.job.on_finished()
-        # es.job.timekeeper.submitted = es.submitted
-        # es.job.timekeeper.started = es.started
-        # es.job.timekeeper.finished = es.finished
-        es.job.save()
-        self.qm.notify_listeners("job_finished", es)
-
-
 class JobExecutor:
-    def __init__(self, qm: QueueMonitor):
+
+    def __init__(self, queue: job_queue.JobQueue):
         self.submitter = hpc_connect.get_backend("flux").submission_manager()
         self.job_env = create_job_env()
-        self.cb = QueueCallbacks(qm)
+        self.queue = queue
 
-    def __call__(self, job: Job) -> hpc_connect.Future:
-        spec = self.hpc_jobspec(job)
+    def __call__(self, rank) -> hpc_connect.Future:
+        slot = self.queue.get(qrank=rank)
+        spec = self.hpc_jobspec(slot.job)
         fut = self.submitter.submit(spec, exclusive=False)
 
-        job_id = job.id
-        self.cb.on_submitted(job_id)
-        fut.add_jobstart_callback(lambda f: self.cb.on_started(job_id))
-        fut.add_done_callback(lambda f: self.cb.on_finished(job_id))
+        job_id = slot.job.id
+        self.queue.update({"job_id": job_id, "event": "job_submitted"})
+        fut.add_jobstart_callback(
+            lambda f: self.queue.update({"job_id": job_id, "event": "job_started"})
+        )
+        fut.add_done_callback(
+            lambda f: self.queue.update({"job_id": job_id, "event": "job_finished"})
+        )
         return fut
 
     def canary_invocation(self, job: Job) -> str:
@@ -183,18 +163,25 @@ class FluxConductor:
     def canary_runtests(self, runner: Runner) -> bool:
         futures: list[hpc_connect.Future] = []
         style = canary.config.getoption("console_style") or {}
-        live_reporting = False  # style.get("live", True)
-        qm = QueueMonitor(runner.jobs, global_lock)
+        live_reporting = style.get("live", True)
+        qm = JobQueue(runner.jobs, global_lock)
         rep = reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
         with FluxAllocation("flux"):
             extor = JobExecutor(qm)
+            rank = 1
             with rep:
-                for job in runner.jobs:
+                while True:
                     try:
-                        f = extor(job)
+                        f = extor(rank)
                         futures.append(f)
+                        rank += 1
                     except hpc_connect.SubmissionFailedError:
                         pass
+                    except Busy:
+                        time.sleep(3)
+                        continue
+                    except Empty:
+                        break
                 for f in hpc_connect.futures.as_completed(futures):
                     continue
         return True
