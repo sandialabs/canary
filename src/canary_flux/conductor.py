@@ -1,20 +1,20 @@
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import shlex
 import sys
 import threading
 import time
+from collections import Counter
 from typing import Iterable
 
 import hpc_connect
-import shlex
 
+import canary
 from _canary import reporter
-from _canary.job import BaseJob, Job, JobPhase
+from _canary.job import BaseJob
+from _canary.job import Job
 from _canary.job_queue import JobQueue
 from _canary.runtest import Runner
 from _canary.util.time import hhmmss
-import canary
 from canary_flux.flux_alloc import FluxAllocation
 
 logger = canary.get_logger(__name__)
@@ -31,6 +31,7 @@ def create_job_env() -> dict[str, str | None]:
     if canary.config.get("debug"):
         variables["CANARY_DEBUG"] = "on"
     return variables
+
 
 global_lock = threading.Lock()
 
@@ -136,7 +137,6 @@ class QueueCallbacks:
 
 
 class JobExecutor:
-
     def __init__(self, qm: QueueMonitor):
         self.submitter = hpc_connect.get_backend("flux").submission_manager()
         self.job_env = create_job_env()
@@ -185,9 +185,7 @@ class FluxConductor:
         style = canary.config.getoption("console_style") or {}
         live_reporting = False  # style.get("live", True)
         qm = QueueMonitor(runner.jobs, global_lock)
-        rep = (
-            reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
-        )
+        rep = reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
         with FluxAllocation("flux"):
             extor = JobExecutor(qm)
             with rep:

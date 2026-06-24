@@ -1,16 +1,13 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import abc
 import dataclasses
 import os
 import shutil
 import sys
 import threading
 import time
-
-from typing import Callable, Literal
-import typing
+from typing import Literal
 
 from rich import box
 from rich import print as rprint
@@ -20,16 +17,15 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from .job_queue import ExecutionSlot, JobQueue
-
 from . import config
+from .job_queue import ExecutionSlot
+from .job_queue import JobQueue
 from .util import logging
 
 logger = logging.get_logger(__name__)
 
 
 class Reporter:
-
     def __init__(self, executor: JobQueue) -> None:
         self.executor = executor
         style = config.getoption("console_style") or {}
@@ -77,9 +73,7 @@ class Reporter:
                 kwds["justify"] = "right"
             table.add_column(name, **kwds)
 
-    def add_table_row(
-        self, table: Table, columns: tuple[str, ...], **kwargs: str
-    ) -> None:
+    def add_table_row(self, table: Table, columns: tuple[str, ...], **kwargs: str) -> None:
         row: list[str] = []
         for name in columns:
             row.append(kwargs.get(name.lower(), ""))
@@ -109,20 +103,15 @@ class Reporter:
             )
         if not table.row_count:
             n = len(jobs)
-            return Group(
-                f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]"
-            )
+            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
         return Group(table, footer)
 
 
 class LiveReporter(Reporter):
-
     def __init__(self, executor: JobQueue) -> None:
         super().__init__(executor)
         console = Console(file=sys.stdout, force_terminal=True)
-        self.live = Live(
-            refresh_per_second=1, console=console, transient=False, auto_refresh=False
-        )
+        self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
         self._stop = threading.Event()
@@ -190,9 +179,7 @@ class LiveReporter(Reporter):
         decay_window = 8.0  # seconds to keep finished visible
         max_finished = 5  # hard cap
 
-        recent_finished = [
-            s for s in xtor.finished.values() if now - s.finished < decay_window
-        ]
+        recent_finished = [s for s in xtor.finished.values() if now - s.finished < decay_window]
 
         # Most recent first
         recent_finished.sort(key=lambda s: s.finished, reverse=True)
@@ -275,7 +262,6 @@ class LiveReporter(Reporter):
 
 
 class EventReporter(Reporter):
-
     def __init__(self, executor: JobQueue) -> None:
         super().__init__(executor)
         self.table = StaticTable()
@@ -370,9 +356,7 @@ class StaticTable:
     def __init__(self, columns: list[StaticColumn] | None = None) -> None:
         self.columns = list(columns or [])
 
-    def add_column(
-        self, header: str, width: int, align: Literal["left", "right"] = "left"
-    ) -> None:
+    def add_column(self, header: str, width: int, align: Literal["left", "right"] = "left") -> None:
         self.columns.append(StaticColumn(header=header, width=width, align=align))
 
     def _format_cell(self, value: str, col: StaticColumn) -> Text:

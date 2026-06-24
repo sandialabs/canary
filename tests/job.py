@@ -55,7 +55,6 @@ def test_basejob_is_abstract() -> None:
 
 
 def test_basejob_default_phase_transitions() -> None:
-
     class DummyJob(BaseJob):
         # Satisfy BaseJob abstract interface as loosely as possible for this test.
         id = "dummy"

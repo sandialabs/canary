@@ -2,18 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-import shlex
-
-import sys
-
 import argparse
-import hpc_connect
-
-from .conductor import FluxConductor
-from typing import TYPE_CHECKING
 
 import canary
 from _canary.plugins.subcommands.run import Run
+
+from .conductor import FluxConductor
 
 logger = canary.get_logger(__name__)
 

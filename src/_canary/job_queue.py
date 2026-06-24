@@ -1,12 +1,12 @@
 import abc
 import dataclasses
 import time
-from typing import Any, Callable, Literal
-
-from .util import logging
-
+from typing import Any
+from typing import Callable
+from typing import Literal
 
 from .job import BaseJob
+from .util import logging
 
 logger = logging.get_logger(__name__)
 
@@ -44,8 +44,7 @@ class ExecutionSlot:
 
 
 class JobQueue(abc.ABC):
-
-    def __init__(self):
+    def __init__(self) -> None:
         self.listeners: list[Callable[..., None]] = []
         self.started_on: float = -1
         self.submitted: dict[str, ExecutionSlot] = {}
@@ -109,9 +108,7 @@ class JobQueue(abc.ABC):
         match event:
             case "job_submitted":
                 slot.job.on_submitted()
-                slot.job.timekeeper.submitted = slot.submitted = float(
-                    payload["timestamp"]
-                )
+                slot.job.timekeeper.submitted = slot.submitted = float(payload["timestamp"])
                 self.notify_listeners(event, slot)
 
             case "job_started":
@@ -138,9 +135,7 @@ class JobQueue(abc.ABC):
                     slot.job.refresh()
                 except Exception:
                     logger.exception(f"Post-processing failed for job {slot.job}")
-                    slot.job.set_status(
-                        outcome="ERROR", reason="Post-processing failure"
-                    )
+                    slot.job.set_status(outcome="ERROR", reason="Post-processing failure")
                     try:
                         slot.job.save()
                     except Exception as e:
