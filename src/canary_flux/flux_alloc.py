@@ -15,37 +15,41 @@ logger = canary.get_logger(__name__)
 
 
 class UnsupportedBackend(RuntimeError):
-    def __init__(self, backend: hpc_connect.Backend, supported_backends: list[str] = []):
+    def __init__(self, backend: str, supported_backends: list[str] = []):
         super().__init__(
-            f"Unsupported backend {backend.name} (supported backends: {supported_backends})"
+            f"Unsupported backend {backend} (supported backends: {supported_backends})"
         )
 
 
-def bootstrap_flux(
-    backend: hpc_connect.Backend, workspace: Path = Path.cwd()
-) -> hpc_connect.Future:
-    # need to get these from command line args
-    nodes: int = 1
-    time_limit: float = 3600.0
+def bootstrap_flux_jobspec(
+    backend_name: str,
+    nodes: int,
+    time_limit: float,
+    workspace: Path = Path.cwd(),
+) -> hpc_connect.JobSpec:
     submit_args: list[str] = []
+    commands: list[str] = []
 
-    submitter = backend.submission_manager()
     supported_backends = ["flux"]
-    if backend.name not in supported_backends:
-        raise UnsupportedBackend(backend, supported_backends=supported_backends)
+
+    match backend_name:
+        case "flux":
+            commands = ["sleep infinity"]
+        case _:
+            raise UnsupportedBackend(backend_name, supported_backends=supported_backends)
 
     spec = hpc_connect.JobSpec(
         name="bootstrap-flux",
-        commands=["sleep infinity"],
+        commands=commands,
         nodes=nodes,
         time_limit=time_limit,
         env=os.environ.copy(),
         submit_args=submit_args,
-        # output=str(workspace / "canary-flux.log"),
+        output=str(workspace / "bootstrap-flux.log"),
         workspace=workspace,
     )
 
-    return submitter.submit(spec, exclusive=True)
+    return spec
 
 
 class FailedFluxAllocStartup(Exception):
@@ -53,13 +57,23 @@ class FailedFluxAllocStartup(Exception):
 
 
 class FluxAllocation:
-    def __init__(self, bootstrap_backend: str) -> None:
+    def __init__(
+        self,
+        scheduler: str,
+        nodes: int = 1,
+        queue_timeout: float = 1200,
+        time_limit: float = 1200,
+        workspace: Path = Path.cwd(),
+    ) -> None:
         self._submitted_event = threading.Event()
         self._start_event = threading.Event()
         self._flux_uri = os.environ.get("FLUX_URI")
 
-        self.start_timeout: float = 5.0  # seconds
-        self.backend = hpc_connect.get_backend(bootstrap_backend)
+        self.nodes = nodes
+        self.queue_timeout = queue_timeout
+        self.time_limit = time_limit
+        self.spec = bootstrap_flux_jobspec(scheduler, nodes, time_limit, workspace)
+        self.backend = hpc_connect.get_backend(scheduler)
 
     def _mark_job_submitted(self, job: hpc_connect.Future) -> None:
         self._submitted_event.set()
@@ -68,7 +82,7 @@ class FluxAllocation:
         self._start_event.set()
 
     def submit(self) -> None:
-        self.job: hpc_connect.Future = bootstrap_flux(self.backend)
+        self.job = self.backend.submission_manager().submit(spec=self.spec)
         self.job.add_jobid_callback(self._mark_job_submitted)
         self.job.add_jobstart_callback(self._mark_job_start)
 
@@ -81,8 +95,8 @@ class FluxAllocation:
         progress = logger.progress_monitor(
             f"Waiting for FluxAllocation job {self.job.jobid} to start"
         )
-        if not self._start_event.wait(timeout=self.start_timeout):
-            raise RuntimeError(f"Exceeded Flux start timeout ({self.start_timeout}s)")
+        if not self._start_event.wait(timeout=self.queue_timeout):
+            raise RuntimeError(f"Exceeded Flux start timeout ({self.queue_timeout}s)")
         progress.done()
 
     def set_flux_uri(self) -> None:

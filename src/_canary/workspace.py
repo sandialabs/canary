@@ -62,8 +62,8 @@ from .util.names import unique_random_name
 
 if TYPE_CHECKING:
     from .database import ResultListener
+    from .job_queue import EventTypes
     from .jobspec import JobSpec
-    from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
 
