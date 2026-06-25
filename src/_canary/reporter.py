@@ -71,7 +71,7 @@ class Reporter:
                 kwds["overflow"] = "ellipsis"
             elif name in ("Queued", "Elapsed", "Running"):
                 kwds["justify"] = "right"
-            table.add_column(name, **kwds)
+            table.add_column(name, **kwds)  # type: ignore
 
     def add_table_row(self, table: Table, columns: tuple[str, ...], **kwargs: str) -> None:
         row: list[str] = []

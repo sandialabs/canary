@@ -27,7 +27,7 @@ def bootstrap_flux(
     # need to get these from command line args
     nodes: int = 1
     time_limit: float = 3600.0
-    submit_args: str = ""
+    submit_args: list[str] = []
 
     submitter = backend.submission_manager()
     supported_backends = ["flux"]
@@ -53,13 +53,12 @@ class FailedFluxAllocStartup(Exception):
 
 
 class FluxAllocation:
-    def __init__(self, bootstrap_backend: str):
+    def __init__(self, bootstrap_backend: str) -> None:
         self._submitted_event = threading.Event()
         self._start_event = threading.Event()
         self._flux_uri = os.environ.get("FLUX_URI")
 
         self.start_timeout: float = 5.0  # seconds
-        self.job: hpc_connect.Future | None = None
         self.backend = hpc_connect.get_backend(bootstrap_backend)
 
     def _mark_job_submitted(self, job: hpc_connect.Future) -> None:
@@ -68,8 +67,8 @@ class FluxAllocation:
     def _mark_job_start(self, job: hpc_connect.Future) -> None:
         self._start_event.set()
 
-    def submit(self):
-        self.job = bootstrap_flux(self.backend)
+    def submit(self) -> None:
+        self.job: hpc_connect.Future = bootstrap_flux(self.backend)
         self.job.add_jobid_callback(self._mark_job_submitted)
         self.job.add_jobstart_callback(self._mark_job_start)
 
@@ -110,6 +109,6 @@ class FluxAllocation:
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         exc_traceback: TracebackType | None,
-    ) -> bool:
+    ):
         self.shutdown()
         return False

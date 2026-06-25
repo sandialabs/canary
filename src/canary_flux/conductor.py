@@ -4,7 +4,6 @@ import sys
 import threading
 import time
 from collections import Counter
-from typing import Iterable
 
 import hpc_connect
 
@@ -20,7 +19,7 @@ from canary_flux.flux_alloc import FluxAllocation
 logger = canary.get_logger(__name__)
 
 
-def create_job_env() -> dict[str, str | None]:
+def create_job_env() -> dict[str, str]:
     level = int(os.getenv("CANARY_LEVEL", "0"))
     variables = {
         "CANARY_LEVEL": str(level + 1),
@@ -45,7 +44,7 @@ class Empty(Exception):
 
 
 class JobQueue(job_queue.JobQueue):
-    def __init__(self, jobs: Iterable[Job], lock: threading.Lock):
+    def __init__(self, jobs: list[Job], lock: threading.Lock):
         super().__init__()
         self.lock = lock
         self.qsize = len(jobs)
@@ -117,6 +116,7 @@ class JobExecutor:
 
     def __call__(self, rank) -> hpc_connect.Future:
         slot = self.queue.get(qrank=rank)
+        assert isinstance(slot.job, Job)
         spec = self.hpc_jobspec(slot.job)
         fut = self.submitter.submit(spec, exclusive=False)
 
@@ -131,6 +131,7 @@ class JobExecutor:
         return fut
 
     def canary_invocation(self, job: Job) -> str:
+        assert job.workspace.session
         args: list[str] = [
             sys.executable,
             "-m",

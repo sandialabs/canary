@@ -700,22 +700,13 @@ class ResourceQueueExecutor:
                 logger.debug("job.refresh failed: %s", e)
             try:
                 slot.job.set_status(outcome=stat, reason=reason)
-                slot.job.timekeeper.submitted = slot.submitted
-                slot.job.timekeeper.finished = time.time()
-                slot.finished = time.time()
                 slot.job.save()
+                self.queue.update({"job_id": slot.job.id, "event": "job_finished"})
             except Exception:
                 logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
-            finally:
-                self.queue.finished[slot.job.id] = slot
-                try:
-                    self.queue.done(slot.job)
-                except Exception as e:
-                    logger.debug("queue.done failed: %s", e)
-                self.notify_listeners("job_finished", slot)
 
         self._shutdown_workers()
-        self.queue.clear(stat)
+        self.queue.queue.clear(stat)
 
 
 def terminate_proc(proc):
