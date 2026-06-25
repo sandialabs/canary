@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 from collections import Counter
+from typing import Any
 
 import hpc_connect
 
@@ -157,30 +158,47 @@ class JobExecutor:
         )
 
 
+def flux_alloc_opts() -> dict[str, Any]:
+    opts: dict[str, Any] = {}
+    opts["scheduler"] = canary.config.getoption("canary_flux_scheduler")
+    opts["queue_timeout"] = canary.config.getoption("canary_flux_queue_timeout")
+    opts["nodes"] = canary.config.getoption("canary_flux_nodes")
+    opts["time_limit"] = canary.config.getoption("canary_flux_time_limit")
+
+    logger.debug(f"FluxAllocation options: {opts}")
+    return opts
+
+
 class FluxConductor:
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: Runner) -> bool:
-        futures: list[hpc_connect.Future] = []
-        style = canary.config.getoption("console_style") or {}
-        live_reporting = style.get("live", True)
-        qm = JobQueue(runner.jobs, global_lock)
-        rep = reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
-        with FluxAllocation("flux"):
-            extor = JobExecutor(qm)
-            rank = 1
-            with rep:
-                while True:
-                    try:
-                        f = extor(rank)
-                        futures.append(f)
-                        rank += 1
-                    except hpc_connect.SubmissionFailedError:
-                        pass
-                    except Busy:
-                        time.sleep(3)
+        try:
+            futures: list[hpc_connect.Future] = []
+            style = canary.config.getoption("console_style") or {}
+            live_reporting = style.get("live", True)
+            qm = JobQueue(runner.jobs, global_lock)
+            rep = reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
+            with FluxAllocation(
+                **flux_alloc_opts(),
+                workspace=runner.workspace.sessions_dir / runner.session,
+            ):
+                extor = JobExecutor(qm)
+                rank = 1
+                with rep:
+                    while True:
+                        try:
+                            f = extor(rank)
+                            futures.append(f)
+                            rank += 1
+                        except hpc_connect.SubmissionFailedError:
+                            pass
+                        except Busy:
+                            time.sleep(3)
+                            continue
+                        except Empty:
+                            break
+                    for f in hpc_connect.futures.as_completed(futures):
                         continue
-                    except Empty:
-                        break
-                for f in hpc_connect.futures.as_completed(futures):
-                    continue
+        except Exception as e:
+            logger.exception(e)
         return True
