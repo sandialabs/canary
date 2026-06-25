@@ -8,11 +8,11 @@ from typing import Iterable
 
 import hpc_connect
 
+import _canary.job_queue as job_queue
 import canary
 from _canary import reporter
 from _canary.job import BaseJob
 from _canary.job import Job
-import _canary.job_queue as job_queue
 from _canary.runtest import Runner
 from _canary.util.time import hhmmss
 from canary_flux.flux_alloc import FluxAllocation
@@ -45,7 +45,6 @@ class Empty(Exception):
 
 
 class JobQueue(job_queue.JobQueue):
-
     def __init__(self, jobs: Iterable[Job], lock: threading.Lock):
         super().__init__()
         self.lock = lock
@@ -111,7 +110,6 @@ class JobQueue(job_queue.JobQueue):
 
 
 class JobExecutor:
-
     def __init__(self, queue: job_queue.JobQueue):
         self.submitter = hpc_connect.get_backend("flux").submission_manager()
         self.job_env = create_job_env()

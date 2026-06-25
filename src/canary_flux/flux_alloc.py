@@ -2,14 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 import os
-from pathlib import Path
 import subprocess
 import threading
+from pathlib import Path
 from types import TracebackType
 
 import hpc_connect
 
-from _canary.util.logging import ProgressMonitor
 import canary
 
 logger = canary.get_logger(__name__)
