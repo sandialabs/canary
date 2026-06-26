@@ -323,7 +323,7 @@ class ResourcePool:
                 for inst in self.resources[rtype]:
                     if inst["id"] == rspec["id"]:
                         inst["slots"] += rspec["slots"]
-                        types["rtype"] += rspec["slots"]
+                        types[rtype] += rspec["slots"]
                         break
                 else:
                     raise ValueError(f"Attempting to checkin a resource with unknown ID: {rspec!r}")
