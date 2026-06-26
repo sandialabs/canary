@@ -39,10 +39,7 @@ def _bucket_for_width(width, extents):
 
 
 def test_pack_to_height_places_every_block_once_and_respects_bounds():
-    blocks = [
-        canary_hpc.binpack.Block(f"a{i}", i, 1)
-        for i in range(1, 13)
-    ]
+    blocks = [canary_hpc.binpack.Block(f"a{i}", i, 1) for i in range(1, 13)]
 
     bins = canary_hpc.binpack.pack_to_height(blocks, width=12, height=3)
 
@@ -55,10 +52,7 @@ def test_pack_to_height_places_every_block_once_and_respects_bounds():
 
 
 def test_pack_to_height_with_grouper_places_every_block_once():
-    blocks = [
-        canary_hpc.binpack.Block(f"a{i}", i, 1)
-        for i in range(1, 13)
-    ]
+    blocks = [canary_hpc.binpack.Block(f"a{i}", i, 1) for i in range(1, 13)]
 
     extents = [4, 8, 12]
     bins = canary_hpc.binpack.pack_to_height(
@@ -73,10 +67,7 @@ def test_pack_to_height_with_grouper_places_every_block_once():
         width, height = _placed_extents(bin_.blocks)
         assert height <= 5
 
-        bucket_ids = {
-            _bucket_for_width(block.width, extents)
-            for block in bin_.blocks
-        }
+        bucket_ids = {_bucket_for_width(block.width, extents) for block in bin_.blocks}
 
         assert len(bucket_ids) == 1
         assert width <= next(iter(bucket_ids))
@@ -112,10 +103,7 @@ def test_grouper_rejects_block_that_fits_no_extent():
 
 
 def test_pack_to_height_rejects_grouper_that_drops_blocks():
-    blocks = [
-        canary_hpc.binpack.Block(f"a{i}", i, 1)
-        for i in range(1, 5)
-    ]
+    blocks = [canary_hpc.binpack.Block(f"a{i}", i, 1) for i in range(1, 5)]
 
     class DroppingGrouper:
         def __call__(self, blocks):
@@ -130,10 +118,7 @@ def test_pack_to_height_rejects_grouper_that_drops_blocks():
 
 
 def test_pack_to_height_rejects_grouper_that_duplicates_blocks():
-    blocks = [
-        canary_hpc.binpack.Block(f"a{i}", i, 1)
-        for i in range(1, 5)
-    ]
+    blocks = [canary_hpc.binpack.Block(f"a{i}", i, 1) for i in range(1, 5)]
 
     class DuplicatingGrouper:
         def __call__(self, blocks):
