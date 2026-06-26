@@ -88,9 +88,9 @@ class CanaryHPCBatchSpec(argparse.Action):
                     raise ValueError("count <= -1")
                 spec["count"] = count
             elif match := re.search(r"^count[:=]auto$", arg.lower()):
-                spec["count"] = binpack.AUTO
+                spec["count"] = binpack.BatchMode.AUTO
             elif match := re.search(r"^count[:=]max$", arg.lower()):
-                spec["count"] = binpack.ONE_PER_BIN
+                spec["count"] = binpack.BatchMode.ONE_PER_BIN
             elif match := re.search(r"^duration[:=](.*)$", arg.lower()):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:

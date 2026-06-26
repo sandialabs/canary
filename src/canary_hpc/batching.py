@@ -65,7 +65,7 @@ def batch_jobs(
             list(blocks.values()), height=height, width=width, grouper=grouper
         )
     else:
-        assert isinstance(count, int)
+        assert isinstance(count, (int, binpack.BatchMode)), type(count)
         logger.debug(f"Batching jobs using count={count}")
         if layout == "atomic":
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)

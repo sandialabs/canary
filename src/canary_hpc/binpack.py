@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 import math
 import statistics
+from enum import Enum
+from enum import auto
 from graphlib import TopologicalSorter
 from typing import Callable
 from typing import Generator
@@ -13,8 +15,11 @@ import canary
 
 logger = canary.get_logger(__name__)
 
-AUTO = 1000001  # automically choose batch size
-ONE_PER_BIN = 1000002  # One block per bin
+
+class BatchMode(Enum):
+    AUTO = auto()
+    ONE_PER_BIN = auto()
+
 
 GrouperType = Callable[[Sequence["Block"]], list[list["Block"]]]
 
@@ -37,6 +42,11 @@ class Block:
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Block):
+            return NotImplemented
+        return self.id == other.id
 
     def __repr__(self):
         return f"Block({self.id}, {self.width}, {self.height})"
@@ -105,35 +115,40 @@ class Bin:
         return math.sqrt(vector[0] ** 2 + vector[1] ** 2)
 
 
-def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
+def pack_by_count_atomic(blocks: Sequence[Block], count: int | BatchMode = 8) -> list[Bin]:
     """Partition blocks into ``count`` blocks.
 
     A note on the value of ``count``:
 
-    * If ``count == ONE_PER_BIN``, tests are put into individual batches
-    * If ``count == AUTO``, tests are put into batches automatically
+    * If ``count == BatchMode.ONE_PER_BIN``, tests are put into individual batches
+    * If ``count == BatchMode.AUTO``, tests are put into batches automatically
     * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
 
     """
-    if count <= 0:
+    if count is BatchMode.ONE_PER_BIN:
+        return [Bin([block]) for block in blocks]
+    if isinstance(count, int) and count <= 0:
         raise ValueError(f"{count=} must be > 0")
     if count == 1:
         return [Bin(blocks)]
     groups = groupby_dep(blocks)
     bins: list[Bin]
-    if count == AUTO:
+    if count == BatchMode.AUTO:
         bins = [Bin(list(group)) for group in groups if len(group) > 1]
+        if not bins:
+            # Choose some reasonable fallback.
+            # For example, one bin per block, or pack greedily into sqrt/mean-based groups.
+            return [Bin(list(group)) for group in groups]
         mean_bin_size = statistics.mean([b.norm() for b in bins])
-        bin: Bin = Bin()
-        # Handle groups of length 1 individually
+        current_bin = Bin()
         for group in groups:
             if len(group) == 1:
-                bin.update(group)
-                if bin.norm() >= mean_bin_size:
-                    bins.append(Bin(list(group)))
-                    bin.clear()
-        if bin:
-            bins.append(bin)
+                current_bin.update(group)
+                if current_bin.norm() >= mean_bin_size:
+                    bins.append(Bin(list(current_bin.blocks)))
+                    current_bin.clear()
+        if current_bin:
+            bins.append(current_bin)
         return bins
     else:
         bins = [Bin() for i in range(count)]
@@ -145,7 +160,7 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
 
 def pack_by_count(
     blocks: Sequence[Block],
-    count: int = 8,
+    count: int | BatchMode = 8,
     grouper: GrouperType | None = None,
 ) -> list[Bin]:
     """Pack blocks into ``count`` bins such that each bin has no
@@ -153,12 +168,12 @@ def pack_by_count(
 
     A note on the value of ``count``:
 
-    * If ``count == ONE_PER_BIN``, tests are put into individual batches
-    * If ``count == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
+    * If ``count == BatchMode.ONE_PER_BIN``, tests are put into individual batches
+    * If ``count == BatchMode.AUTO``, tests are batched such that each batch contains no inter-batch dependencies
     * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
 
     """
-    if count == ONE_PER_BIN:
+    if count is BatchMode.ONE_PER_BIN:
         return [Bin([block]) for block in blocks]
     elif count == 1:
         return [Bin(blocks)]
@@ -172,14 +187,11 @@ def pack_by_count(
     while ts.is_active():
         ready = cast(list[Block], list(ts.get_ready()))
         new_groups: list[list[Block]] = [ready] if grouper is None else list(grouper(ready))
-        if canary.config.get("config:debug"):
-            flat = [b for g in new_groups for b in g]
-            if sorted(flat, key=id) != sorted(ready, key=id):
-                raise ValueError("grouper must partition 'ready' exactly (no drops/dups)")
+        validate_partition(ready, new_groups)
         groups.extend(new_groups)
         sizes.extend(sum(b.norm() for b in g) for g in new_groups)
         ts.done(*ready)
-    if count == AUTO:
+    if count is BatchMode.AUTO:
         return [Bin(group) for group in groups]
     if len(groups) > count:
         raise ValueError(f"{count=} insufficient to partition blocks")
@@ -224,20 +236,22 @@ def pack_to_height(
         max_height = max(block.height for block in ready)
         target_height = int(max(max_height, height))
         packer.pack(ready, target_width, target_height)
-        bins.append(Bin([map[b.id] for b in ready if b.fit]))
+        bins.append(Bin([blocks_by_id[b.id] for b in ready if b.fit]))
         unfit = [block for block in ready if not block.fit]
         while unfit:
             max_width = max(block.width for block in unfit)
             target_width = max_width if width is None else width
             target_height = int(max(max_height, height))
             packer.pack(unfit, target_width, target_height)
-            bins.append(Bin([map[b.id] for b in unfit if b.fit]))
+            bins.append(Bin([blocks_by_id[b.id] for b in unfit if b.fit]))
             tmp = [block for block in unfit if not block.fit]
             if len(tmp) == len(unfit):
                 raise RuntimeError("Unable to partition blocks")
             unfit = tmp
 
-    map: dict[str, Block] = {block.id: block for block in blocks}
+    blocks_by_id: dict[str, Block] = {block.id: block for block in blocks}
+    if len(blocks_by_id) != len(blocks):
+        raise ValueError("Block ids must be unique")
     graph: dict[Block, list[Block]] = {}
     for block in blocks:
         graph[block] = [dep for dep in block.dependencies if dep in blocks]
@@ -263,7 +277,8 @@ def groupby_dep(blocks: Sequence[Block]) -> list[set[Block]]:
     """Group jobs such that a job and any of its dependencies are in the same
     group
     """
-    sets = [{block} | set(block.dependencies) for block in blocks]
+    block_set = set(blocks)
+    sets = [{block} | {dep for dep in block.dependencies if dep in block_set} for block in blocks]
     groups: list[set[Block]] = []
     while sets:
         first, *rest = sets
@@ -324,12 +339,16 @@ class Packer:
             return None
 
     def split_node(self, node: Node, size: tuple[int, int]) -> Node:
+        old_width, old_height = node.size
         node.used = True
+        node.size = size
         node.down = Node(
-            (node.origin[0], node.origin[1] + size[1]), (node.size[0], node.size[1] - size[1])
+            (node.origin[0], node.origin[1] + size[1]),
+            (old_width, old_height - size[1]),
         )
         node.right = Node(
-            (node.origin[0] + size[0], node.origin[1]), (node.size[0] - size[0], size[1])
+            (node.origin[0] + size[0], node.origin[1]),
+            (old_width - size[0], size[1]),
         )
         return node
 
@@ -388,6 +407,12 @@ def perimeter(blocks: list[Block]) -> tuple[int, int]:
     for block in blocks:
         if block.fit is None:
             continue
-        max_x = max(max_x, block.fit.origin[0] + block.fit.size[0])
-        max_y = max(max_y, block.fit.origin[1] + block.fit.size[1])
+        max_x = max(max_x, block.fit.origin[0] + block.width)
+        max_y = max(max_y, block.fit.origin[1] + block.height)
     return max_x, max_y
+
+
+def validate_partition(original: Sequence[Block], groups: Sequence[Sequence[Block]]) -> None:
+    grouped = [block for group in groups for block in group]
+    if sorted(grouped, key=id) != sorted(original, key=id):
+        raise ValueError("grouper must partition input exactly: no drops or duplicates")

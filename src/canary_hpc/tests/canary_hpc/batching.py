@@ -8,7 +8,7 @@ import pytest
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 from canary_hpc import batching
-from canary_hpc.binpack import ONE_PER_BIN
+from canary_hpc.binpack import BatchMode
 
 num_cases = 25
 num_base_cases = 5
@@ -63,7 +63,7 @@ def test_batch_n(generate_files, tmpdir):
         batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert len(batches) == 5
         assert sum(len(_) for _ in batches) == num_cases
-        kwds = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
+        kwds = {"count": BatchMode.ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
         batches = batching.batch_jobs(jobs=jobs, **kwds)
         assert len(batches) == num_cases
 

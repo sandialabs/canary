@@ -55,9 +55,9 @@ def test_parsing_0():
     args = parser.parse_args(["--hpc-batch-spec=layout:flat"])
     assert args.canary_hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["--hpc-batch-spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] == binpack.AUTO
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["--hpc-batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["--hpc-backend=local"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
@@ -103,9 +103,9 @@ def test_parsing_1():
     args = parser.parse_args(["--batch-spec=layout:flat"])
     assert args.canary_hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["--batch-spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] == binpack.AUTO
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["--batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["--backend=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
@@ -157,9 +157,9 @@ def test_parsing_legacy():
     args = parser.parse_args(["-b", "spec=layout:flat"])
     assert args.canary_hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["-b", "spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] == binpack.AUTO
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["-b", "spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
+    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["-b", "backend=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
