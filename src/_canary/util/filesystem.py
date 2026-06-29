@@ -361,22 +361,17 @@ def sortby_mtime(files: list[str]) -> list[str]:
     return files
 
 
-def touch(path: str) -> None:
+def touch(path: PathLike) -> None:
     """Creates an empty file at the specified path."""
-    perms = os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY
-    fd = None
-    try:
-        fd = os.open(path, perms)
-        os.utime(path, None)
-    finally:
-        if fd is not None:
-            os.close(fd)
+    path = pathlib.Path(path)
+    path.touch(exist_ok=True, mode=os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY)
 
 
-def touchp(path: str) -> None:
+def touchp(path: PathLike) -> None:
     """Like ``touch``, but creates any parent directories needed for the file."""
-    mkdirp(os.path.dirname(os.path.abspath(path)))
-    touch(path)
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(exist_ok=True, mode=os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY)
 
 
 @contextmanager
@@ -393,7 +388,7 @@ def working_dir(dirname: str | pathlib.Path, create: bool = False) -> Generator[
     os.chdir(orig_dir)
 
 
-def mkdirp(*paths: str, mode: int | None = None) -> None:
+def mkdirp(*paths: PathLike, mode: int | None = None) -> None:
     """Creates a directory, as well as parent directories if needed.
 
     Arguments:
@@ -404,15 +399,16 @@ def mkdirp(*paths: str, mode: int | None = None) -> None:
             set on the created directory -- use OS default if not provided
     """
     for path in paths:
-        if not os.path.exists(path):
+        path = pathlib.Path(path)
+        if not path.exists():
             try:
-                os.makedirs(path)
+                path.mkdir(parents=True, exist_ok=True)
                 if mode is not None:
                     os.chmod(path, mode)
             except OSError as e:
-                if e.errno != errno.EEXIST or not os.path.isdir(path):
+                if e.errno != errno.EEXIST or not path.is_dir():
                     raise e
-        elif not os.path.isdir(path):
+        elif not path.is_dir():
             raise OSError(errno.EEXIST, "File already exists", path)
 
 

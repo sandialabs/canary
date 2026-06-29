@@ -281,6 +281,15 @@ class ResultsView:
 
 
 @dataclasses.dataclass
+class ViewReportRequest:
+    workspace: "Workspace"
+    view: ResultsView
+    formats: tuple[str, ...]
+    reason: Literal["finish", "rebuild", "command"] = "finish"
+    output_dir: Path | None = None
+
+
+@dataclasses.dataclass
 class ViewManager:
     """Live manager for maintaining the session results view.
 
@@ -346,6 +355,8 @@ class ViewManager:
         with self.locked():
             manifest = self.view.load_manifest()
             self.view.save_manifest(manifest)
+        if self.workspace.canary_level == 0:
+            self.report(reason="finish")
         return self.view
 
     def sync(self, job: Job) -> None:
@@ -390,6 +401,8 @@ class ViewManager:
                 if view.update(jobs):
                     self.view = view
                     made_new = True
+                    if self.workspace.canary_level == 0:
+                        self.report(reason="rebuild")
                     return view
                 else:
                     view.unlink(missing_ok=True)
@@ -402,6 +415,21 @@ class ViewManager:
                     if bak_dir is not None and old_dir is not None:
                         if not old_dir.exists() and bak_dir.exists():
                             os.rename(bak_dir, old_dir)
+
+    def report(self, *, reason: Literal["finish", "rebuild", "command"]) -> None:
+        if self.view is None:
+            return
+        formats = tuple(config.get("workspace:view:reports") or ("html",))
+        if not formats:
+            return
+        request = ViewReportRequest(
+            workspace=self.workspace,
+            view=self.view,
+            formats=formats,
+            reason=reason,
+            output_dir=self.view.metadata_dir / "reports",
+        )
+        config.pluginmanager.hook.canary_view_report(request=request)
 
     def __enter__(self) -> "ViewManager":
         self.start()

@@ -4,7 +4,6 @@
 
 from argparse import Namespace
 from typing import TYPE_CHECKING
-from typing import Any
 
 from ..util import logging
 
@@ -42,37 +41,21 @@ class CanarySubcommand:
 
 
 class CanaryReporter:
-    """Canary reporter class
+    """Canary report command descriptor.
 
-    Args:
-      type: Report type name (e.g., ``canary report my-report``)
-      description: Subcommand description, shown in ``canary report --help``
-      execute: Called when the subcommand is invoked
-      setup_parser: Called when the subcommand parser is initialized
-      multipage: Whether the report is a multi-page report
+    Simple reporters should implement:
 
+        canary report <type>
+
+    Complex reporters, such as CDash, may override setup_parser and
+    run_from_args to provide their own subcommands.
     """
 
     type: str
     description: str
-    multipage: bool = False
-    default_output: str = "report.ext"
 
     def setup_parser(self, parser: "Parser") -> None:
-        subparsers = parser.add_subparsers(dest="action", metavar="subcommands")
-        p = subparsers.add_parser("create", help=f"Create {self.type.upper()} report")
-        if self.multipage:
-            p.add_argument(
-                "--dest", default="$canary_work_tree", help="Write reports to this directory"
-            )
-        else:
-            p.add_argument(
-                "-o", dest="output", help=f"Output file name [default: {self.default_output}]"
-            )
+        pass
 
-    def create(self, **kwargs: Any) -> None:
+    def run_from_args(self, args: Namespace) -> int:
         raise NotImplementedError
-
-    def not_implemented(self, **kwargs: Any) -> None:
-        action = kwargs["action"]
-        raise NotImplementedError(f"{self}: {action} method is not implemented")

@@ -149,7 +149,7 @@ class CDashHooks:
 
 
 @canary.hookimpl
-def canary_session_reporter() -> canary.CanaryReporter:
+def canary_reporter() -> canary.CanaryReporter:
     return CDashReporter()
 
 

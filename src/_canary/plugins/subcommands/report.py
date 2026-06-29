@@ -20,27 +20,38 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class Report(CanarySubcommand):
     name = "report"
-    description = "Create and post test reports"
+    description = "Create reports from Canary results"
 
     def setup_parser(self, parser: "Parser") -> None:
-        from ... import config
+        reporters = self.collect_reporters()
 
-        subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
-        for reporter in config.pluginmanager.hook.canary_session_reporter():
-            parent = subparsers.add_parser(reporter.type, help=reporter.description)
-            reporter.setup_parser(parent)
+        subparsers = parser.add_subparsers(
+            dest="type",
+            metavar="report-type",
+            required=True,
+        )
+
+        for reporter in reporters:
+            p = subparsers.add_parser(reporter.type, help=reporter.description)
+            reporter.setup_parser(p)
+            p.set_defaults(_canary_reporter=reporter)
 
     def execute(self, args: Namespace) -> int:
+        reporter = getattr(args, "_canary_reporter", None)
+        if reporter is None:
+            raise ValueError("canary report: missing report type")
+        return reporter.run_from_args(args)
+
+    @staticmethod
+    def collect_reporters() -> list[CanaryReporter]:
         from ... import config
 
-        reporter: CanaryReporter
-        for reporter in config.pluginmanager.hook.canary_session_reporter():
-            if reporter.type == args.type:
-                break
-        else:
-            raise ValueError(f"canary report: unknown report type {args.type!r}")
+        reporters = list(config.pluginmanager.hook.canary_reporter())
 
-        kwargs = vars(args)
-        action = getattr(reporter, args.action.replace("-", "_"), reporter.not_implemented)
-        action(**kwargs)
-        return 0
+        seen: set[str] = set()
+        for reporter in reporters:
+            if reporter.type in seen:
+                raise ValueError(f"duplicate report type {reporter.type!r}")
+            seen.add(reporter.type)
+
+        return reporters

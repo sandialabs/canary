@@ -20,7 +20,14 @@ def test_issue_90(tmpdir):
         env["FIX_B"] = "1"
         cp = run("--only=failed", "b", env=env, debug=True)
         assert cp.returncode == 0
-        assert set(os.listdir("TestResults")) == {"VIEW.TAG", "_canary", "a", "b", "c"}
+        assert set(os.listdir("TestResults")) == {
+            "VIEW.TAG",
+            "_canary",
+            "summary.html",
+            "a",
+            "b",
+            "c",
+        }
 
 
 def write_testfile(file):

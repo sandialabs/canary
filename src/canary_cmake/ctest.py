@@ -124,7 +124,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                 if fixture_name in setup_fixtures:
                     for fixture in setup_fixtures[fixture_name]:
                         if fixture not in [_.spec for _ in spec.dependencies]:
-                            dep = SpecDependency(spec=spec, when="on_success")
+                            dep = SpecDependency(spec=fixture, when="on_success")
                             spec.dependencies.append(dep)
                 if fixture_name in cleanup_fixtures:
                     for fixture in cleanup_fixtures[fixture_name]:
@@ -454,16 +454,14 @@ def load(file: str) -> dict[str, Any]:
         project_source_dir: str | None = None
         if project_binary_dir is not None:
             project_source_dir = infer_project_source_dir(project_binary_dir)
-
         try:
-            with open(".ctest-json-v1.json", "w") as fh:
-                args = [ctest, "--show-only=json-v1"]
-                if ctest_config := canary.config.getoption("canary_cmake_ctest_config"):
-                    args.extend(["-C", ctest_config])
-                p = subprocess.Popen(args, stdout=fh)
-                p.wait()
-            with open(".ctest-json-v1.json", "r") as fh:
-                payload = json.load(fh)
+            env = dict(os.environ)
+            env["PATH"] = f"{os.path.dirname(file)}:{env['PATH']}"
+            args = [ctest, "--show-only=json-v1"]
+            if ctest_config := canary.config.getoption("canary_cmake_ctest_config"):
+                args.extend(["-C", ctest_config])
+            out = subprocess.check_output(args, env=env)
+            payload = json.loads(out)
         finally:
             canary.filesystem.force_remove(".ctest-json-v1.json")
 
