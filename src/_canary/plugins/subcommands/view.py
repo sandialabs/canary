@@ -6,7 +6,7 @@ import argparse
 from typing import TYPE_CHECKING
 
 from ...hookspec import hookimpl
-from ...workspace import ViewSettings
+from ...view import ViewSettings
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 

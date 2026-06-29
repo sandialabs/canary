@@ -26,8 +26,8 @@ from ...util import logging
 from ...util.filesystem import working_dir
 from ...util.rich import bold
 from ...util.string import pluralize
+from ...view import ViewSettings
 from ...workspace import NotAWorkspaceError
-from ...workspace import ViewSettings
 from ...workspace import Workspace
 from ..types import CanarySubcommand
 from .common import add_resource_arguments

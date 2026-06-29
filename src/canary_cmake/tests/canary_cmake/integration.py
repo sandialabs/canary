@@ -62,13 +62,12 @@ def test_cmake_integration(tmpdir):
             assert os.path.exists("baz.pyt")
             make = ex.Executable("make")
             make()
-            print(os.listdir("."))
             run = CanaryCommand("run")
             run.add_default_args("-r", "cpus:6", "-r", "gpus:0")
             run("-w", "--recurse-ctest", ".", debug=True)
             dirs = sorted(os.listdir("TestResults"))
-            assert len(dirs) == 4
-            assert set(dirs) == {"VIEW.TAG", "baz", "foo", "spam"}
+            assert len(dirs) == 5
+            assert set(dirs) == {"VIEW.TAG", "_canary", "baz", "foo", "spam"}
 
 
 f3 = fs.which("mpirun")
@@ -109,7 +108,7 @@ def test_cmake_integration_parallel(tmpdir):
                     print(f"{file}:")
                     print(open(file).read())
                 assert 0, "test failed"
-            assert len(os.listdir("TestResults")) == 2
+            assert len(os.listdir("TestResults")) == 3
 
 
 f3 = fs.which("mpirun")

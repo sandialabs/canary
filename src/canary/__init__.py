@@ -59,9 +59,9 @@ from _canary.util import shell
 from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
+from _canary.view import ViewSettings
 from _canary.workspace import NotAWorkspaceError
 from _canary.workspace import Session
-from _canary.workspace import ViewSettings
 from _canary.workspace import Workspace
 
 from . import directives

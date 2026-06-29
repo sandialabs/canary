@@ -51,7 +51,7 @@ if __name__ == '__main__':
         hpc.add_default_args("-r", "cpus=6", "-r", "gpus=0")
         cp = hpc("run", "-w", "--batch-spec=count=4", "--scheduler=shell", ".", debug=True)
         dirs = os.listdir("TestResults")
-        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG", "_canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
         files = glob_files_in_session("*.sh")
         assert len(files) == 4
@@ -87,7 +87,7 @@ if __name__ == '__main__':
         args.append(".")
         cp = hpc(*args)
         dirs = os.listdir("TestResults")
-        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG", "_canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
         files = glob_files_in_session("*.sh")
         assert len(files) == 4
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         run.add_default_args("-r", "cpus=6", "-r", "gpus=0")
         cp = run("-w", "-b", "spec=count:4", "-b", "backend=shell", ".")
         dirs = os.listdir("TestResults")
-        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG", "_canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
         files = glob_files_in_session("*.sh")
         assert len(files) == 4
@@ -164,7 +164,7 @@ if __name__ == '__main__':
         args.append(".")
         cp = run(*args)
         dirs = os.listdir("TestResults")
-        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG", "_canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
         files = glob_files_in_session("*.sh")
         assert len(files) == 4

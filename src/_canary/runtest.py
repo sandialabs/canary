@@ -8,6 +8,7 @@ import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Callable
 from typing import Generator
 
 import rich
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def canary_runtests(runner: "Runner") -> None:
+def canary_runtests(runner: "Runner", listeners: list[Callable[..., None]] | None = None) -> None:
     pm = config.pluginmanager.hook
     try:
         logger.info(f"[bold]Starting[/] session {runner.session}")

@@ -15,9 +15,10 @@ def test_issue_47(tmpdir):
         cp = run(f)
         assert cp.returncode == 0
         files = os.listdir("TestResults")
-        assert len(files) == 7
+        assert len(files) == 8
         assert set(files) == {
             "VIEW.TAG",
+            "_canary",
             "test2.arg3=apple",
             "test2.arg3=strawberry",
             "test4.arg1=pear.arg2=kiwi",
