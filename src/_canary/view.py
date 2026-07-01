@@ -420,7 +420,7 @@ class ViewManager:
         if self.view is None:
             return
         formats = tuple(config.get("workspace:view:reports") or ("html",))
-        if not formats:
+        if not formats or "none" in formats:
             return
         request = ViewReportRequest(
             workspace=self.workspace,

@@ -58,7 +58,13 @@ def default_config_values() -> dict[str, Any]:
             "unset": [],
         },
         "workspace": {
-            "view": {"name": "TestResults", "mode": "symlink", "when": "always", "only": "all"},
+            "view": {
+                "name": "TestResults",
+                "mode": "symlink",
+                "when": "always",
+                "only": "all",
+                "reports": ["html"],
+            },
         },
         "run": {
             "default_tag": ":all:",
@@ -183,15 +189,33 @@ class Config:
     def add_section(self, name: str, schema: Schema) -> None:
         config_schema._schema.update({Optional(name): schema})
 
-    def set(self, path: str, value: Any) -> None:
+    def set(self, path: str, value: Any, *, replace: bool = False) -> None:
         parts = process_config_path(path)
         data = value
         for key in reversed(parts):
             data = {key: data}
+
         data = config_schema.validate(data)
+
         if parts[0] == "environment":
             self.apply_environment_mods(data["environment"])
-        self.data = merge(self.data, data)
+
+        if replace:
+            validated_value = data
+            for key in parts:
+                validated_value = validated_value[key]
+
+            target = self.data
+            for key in parts[:-1]:
+                child = target.get(key)
+                if not isinstance(child, dict):
+                    child = {}
+                    target[key] = child
+                target = child
+
+            target[parts[-1]] = validated_value
+        else:
+            self.data = merge(self.data, data)
 
     def write_new(self, path: str, value: Any, scope: ConfigScopes) -> None:
         parts = process_config_path(path)

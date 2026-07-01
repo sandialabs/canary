@@ -64,7 +64,14 @@ environment_schema = Schema(
 )
 
 
-default_view = {"name": "TestResults", "mode": "symlink", "when": "always", "only": "all"}
+report_formats = {"html", "none", "markdown"}
+default_view = {
+    "name": "TestResults",
+    "mode": "symlink",
+    "when": "always",
+    "only": "all",
+    "reports": ["html"],
+}
 view_choices = {
     "mode": {"symlink", "hardlink", "copy"},
     "when": {"on_success", "on_failure", "always", "never"},
@@ -79,6 +86,12 @@ def validate_view(section: str) -> typing.Callable[[str], bool]:
     return inner
 
 
+def validate_reports(value: typing.Any) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(item, str) and item in report_formats for item in value
+    )
+
+
 workspace_schema = Schema(
     {
         Optional("view", default=default_view): {
@@ -86,6 +99,7 @@ workspace_schema = Schema(
             Optional("mode", default=default_view["mode"]): And(str, validate_view("mode")),
             Optional("when", default=default_view["when"]): And(str, validate_view("when")),
             Optional("only", default=default_view["only"]): And(str, validate_view("only")),
+            Optional("reports", default=["html"]): And(list, validate_reports),
         },
     }
 )
