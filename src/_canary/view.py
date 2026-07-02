@@ -32,6 +32,7 @@ class ViewSettings:
     when: Literal["always", "never"] = "always"
     only: Literal["all", "failed", "not_pass", "passed"] = "all"
     mode: Literal["symlink", "hardlink", "copy"] = "symlink"
+    reports: list[str] = dataclasses.field(default_factory=lambda: ["html"])
 
     @classmethod
     def default(cls) -> "ViewSettings":
@@ -40,7 +41,8 @@ class ViewSettings:
         when = view_cfg.get("when") or "always"
         only = view_cfg.get("only") or "all"
         mode = view_cfg.get("mode") or "symlink"
-        return ViewSettings(name=name, when=when, only=only, mode=mode)
+        reports = view_cfg.get("reports") or ["html"]
+        return ViewSettings(name=name, when=when, only=only, mode=mode, reports=reports)
 
     def __serialize__(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -54,6 +56,7 @@ class ViewSettings:
         assert self.when in {"always", "never"}
         assert self.only in {"all", "failed", "not_pass", "passed"}
         assert self.mode in {"symlink", "hardlink", "copy"}
+        assert all([x in {"html", "markdown", "none"} for x in self.reports])
 
     def include_job(self, job: Job) -> bool:
         if job.status.is_skipped():
@@ -419,7 +422,7 @@ class ViewManager:
     def report(self, *, reason: Literal["finish", "rebuild", "command"]) -> None:
         if self.view is None:
             return
-        formats = tuple(config.get("workspace:view:reports") or ("html",))
+        formats = tuple(self.settings.reports)
         if not formats or "none" in formats:
             return
         request = ViewReportRequest(
