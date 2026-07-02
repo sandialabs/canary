@@ -1,10 +1,16 @@
-# Copyright NTESS. See COPYRIGHT file for details.
-#
-# SPDX-License-Identifier: MIT
-
 import copy
 from typing import Any
 from typing import Iterable
+from typing import TypeVar
+from typing import overload
+
+K1 = TypeVar("K1")
+K2 = TypeVar("K2")
+V1 = TypeVar("V1")
+V2 = TypeVar("V2")
+T1 = TypeVar("T1")
+T2 = TypeVar("T2")
+T = TypeVar("T")
 
 
 class defaultlist(list):
@@ -18,7 +24,31 @@ class defaultlist(list):
         return self[-1]
 
 
-def merge(dest, source):
+@overload
+def merge(dest: dict[K1, V1], source: dict[K2, V2]) -> dict[K1 | K2, V1 | V2]: ...
+
+
+@overload
+def merge(dest: list[T1], source: list[T2]) -> list[T1 | T2]: ...
+
+
+@overload
+def merge(dest: None, source: None) -> None: ...
+
+
+@overload
+def merge(dest: object, source: None) -> None: ...
+
+
+@overload
+def merge(dest: None, source: T) -> T: ...
+
+
+@overload
+def merge(dest: object, source: object) -> Any: ...
+
+
+def merge(dest: Any, source: Any) -> Any:
     """Merges source into dest; entries in source take precedence over dest.
 
     This routine may modify dest and should be assigned to dest, in
@@ -36,45 +66,41 @@ def merge(dest, source):
     parent instead of merging.
     """
 
-    def they_are(t):
+    def they_are(t: type) -> bool:
         return isinstance(dest, t) and isinstance(source, t)
 
     # If source is None, overwrite with source.
     if source is None:
         return None
 
-    # Source list is prepended (for precedence)
+    # Source list is prepended for precedence.
     if they_are(list):
         dest[:] = source + [x for x in dest if x not in source]
         return dest
 
     # Source dict is merged into dest.
     elif they_are(dict):
-        # save dest keys to reinsert later -- this ensures that  source items
-        # come *before* dest in OrderdDicts
+        # Save dest keys to reinsert later. This ensures that source items
+        # come before dest items in OrderedDicts.
         dest_keys = [dk for dk in dest.keys() if dk not in source]
 
         for sk, sv in source.items():
-            # always remove the dest items. Python dicts do not overwrite
-            # keys on insert, so this ensures that source keys are copied
-            # into dest along with mark provenance (i.e., file/line info).
             merge_objects = sk in dest
             old_dest_value = dest.pop(sk, None)
 
             if merge_objects:
                 dest[sk] = merge(old_dest_value, sv)
             else:
-                # if sk ended with ::, or if it's new, completely override
                 dest[sk] = copy.deepcopy(sv)
 
-        # reinsert dest keys so they are last in the result
+        # Reinsert dest keys so they are last in the result.
         for dk in dest_keys:
             dest[dk] = dest.pop(dk)
 
         return dest
 
-    # If we reach here source and dest are either different types or are
-    # not both lists or dicts: replace with source.
+    # If source and dest are different types, or are not both lists or dicts,
+    # replace with source.
     return copy.copy(source)
 
 
