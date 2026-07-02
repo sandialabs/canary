@@ -20,6 +20,13 @@ class BatchMode(Enum):
     AUTO = auto()
     ONE_PER_BIN = auto()
 
+    def __serialize__(self) -> str:
+        return self.name
+
+    @classmethod
+    def __deserialize__(cls, value: str) -> "BatchMode":
+        return cls[value]
+
 
 GrouperType = Callable[[Sequence["Block"]], list[list["Block"]]]
 
