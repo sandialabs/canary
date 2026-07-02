@@ -48,7 +48,11 @@ canary.directives.parameterize("cpus", [1], when="testname=create_inputs")
 canary.directives.name("run_cepxs")
 canary.directives.preload("source-script preload/sceptre_env.sh", when="testname=run_cepxs")
 canary.directives.depends_on(
-    {"job": "create_inputs.*cable=${cable}*.spectrum=${spectrum}", "expects": 1, "when": "on_success"},
+    {
+        "job": "create_inputs.*cable=${cable}*.spectrum=${spectrum}",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname=run_cepxs",
 )
 canary.directives.timeout(300, when="testname=run_cepxs")
@@ -62,7 +66,11 @@ canary.directives.keywords("cce", "cubit", when="testname=run_cubit")
 canary.directives.parameterize("cpus", [1], when="testname=run_cubit")
 canary.directives.name("run_seacas")
 canary.directives.depends_on(
-    {"job": "run_cubit.*cable=${cable}.*mesh_level=${mesh_level}*", "expects": 1, "when": "on_success"},
+    {
+        "job": "run_cubit.*cable=${cable}.*mesh_level=${mesh_level}*",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname=run_seacas",
 )
 canary.directives.preload("source-script preload/empire_env.sh", when="testname=run_seacas")
@@ -73,11 +81,19 @@ canary.directives.parameterize("target_np", [72], when="testname=run_seacas plat
 canary.directives.parameterize("target_np", [64], when="testname=run_seacas platforms=TLCC2")
 canary.directives.name("run_sceptre")
 canary.directives.depends_on(
-    {"job": "create_inputs.*cable=${cable}.*spectrum=${spectrum}", "expects": 1, "when": "on_success"},
+    {
+        "job": "create_inputs.*cable=${cable}.*spectrum=${spectrum}",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname=run_sceptre",
 )
 canary.directives.depends_on(
-    {"job": "run_seacas.*cable=${cable}.*mesh_level=${mesh_level}.*target_np=${cpus}", "expects": 1, "when": "on_success"},
+    {
+        "job": "run_seacas.*cable=${cable}.*mesh_level=${mesh_level}.*target_np=${cpus}",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname=run_sceptre",
 )
 canary.directives.depends_on(
@@ -92,11 +108,19 @@ canary.directives.parameterize("cpus", [64], when="testname=run_sceptre platform
 canary.directives.name("run_cable")
 canary.directives.name("run_cable_pregen")
 canary.directives.depends_on(
-    {"job": "run_sceptre.*cable=${cable}.*mesh_level=${mesh_level}.*spectrum=${spectrum}", "expects": 1, "when": "on_success"},
+    {
+        "job": "run_sceptre.*cable=${cable}.*mesh_level=${mesh_level}.*spectrum=${spectrum}",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname=run_cable",
 )
 canary.directives.depends_on(
-    {"job": "create_inputs.*cable=${cable}.*spectrum=${spectrum}", "expects": 1, "when": "on_success"},
+    {
+        "job": "create_inputs.*cable=${cable}.*spectrum=${spectrum}",
+        "expects": 1,
+        "when": "on_success",
+    },
     when="testname='run_cable*'",
 )
 canary.directives.preload("source-script preload/empire_env.sh", when="testname='run_cable*'")
@@ -108,7 +132,11 @@ canary.directives.parameterize("cpus", [4], when="testname=run_cable")
 canary.directives.parameterize("cpus", [1], when="testname=run_cable_pregen")
 canary.directives.name("sver_pregen")
 canary.directives.depends_on(
-    {"job": "run_cable_pregen.*cable=${cable}.*spectrum=${spectrum}*", "expects": 3, "when": "on_success"},
+    {
+        "job": "run_cable_pregen.*cable=${cable}.*spectrum=${spectrum}*",
+        "expects": 3,
+        "when": "on_success",
+    },
     when="testname=sver_pregen",
 )
 canary.directives.preload("source-script preload/empire_env.sh", when="testname=sver_pregen")

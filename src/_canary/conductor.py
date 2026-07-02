@@ -91,7 +91,7 @@ class CanaryConductor:
         executor = JobExecutor()
         max_workers = config.getoption("workers") or -1
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
-            ex.add_listener(runner.workspace.testcase_done_callback)
+            ex.queue.add_listener(runner.workspace.testcase_done_callback)
             ex.run()
         return True
 

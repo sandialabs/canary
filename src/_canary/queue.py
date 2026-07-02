@@ -200,7 +200,7 @@ class ResourceQueue:
             if pending:
                 row.append(f"{busy}/{total} [green]RUNNING[/]")
             else:
-                row.append(f"{total}/{total} [blue]COMPLETE[/]")
+                row.append(f"{done}/{total} [blue]COMPLETE[/]")
             for key in sorted(totals, key=sortkey):
                 color = key[0].rich_color()
                 row.append(f"{totals[key]} [{color}]{key[1].name}[/]")

@@ -111,7 +111,6 @@ class server:
 
     @staticmethod
     def put(url, file):
-
         def _get_text(doc, tag):
             if els := doc.getElementsByTagName(tag):
                 return get_text(els[0])
