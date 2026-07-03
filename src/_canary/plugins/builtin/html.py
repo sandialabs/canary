@@ -327,6 +327,43 @@ h2 {
   color: var(--text);
 }
 
+details.panel {
+  margin-top: 1.5rem;
+}
+
+details.panel:first-of-type {
+  margin-top: 0;
+}
+
+details.panel > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.035);
+  font-weight: 800;
+}
+
+details.panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.panel > summary::before {
+  content: "▾";
+  display: inline-block;
+  margin-right: 0.55rem;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+details.panel:not([open]) > summary {
+  border-bottom: none;
+}
+
+details.panel:not([open]) > summary::before {
+  transform: rotate(-90deg);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -418,6 +455,10 @@ pre {
   font-weight: 700;
 }
 
+.measurement-value {
+  white-space: pre-wrap;
+}
+
 .footer {
   margin-top: 2rem;
   color: var(--muted);
@@ -501,20 +542,8 @@ pre {
         fh.write(f'<div class="subtitle">{self.status_badge(job)}</div>\n')
         fh.write("</section>\n")
 
-        fh.write('<section class="panel">\n')
-        fh.write('<div class="panel-header"><h2 class="panel-title">Metadata</h2></div>\n')
-        fh.write('<div class="meta-grid">\n')
-        self.write_meta_row(fh, "Test", job.display_name())
-        self.write_meta_row(fh, "Status", job.status.display_name())
-        self.write_meta_row(fh, "Outcome", job.status.outcome.name)
-        self.write_meta_row(fh, "Exit code", str(job.status.code))
-        self.write_meta_row(fh, "ID", job.id)
-        self.write_meta_row(fh, "Location", str(job.workspace.dir))
-        self.write_meta_row(fh, "Duration", f"{job.timekeeper.duration():.4f}s")
-        if job.status.reason:
-            self.write_meta_row(fh, "Reason", job.status.reason)
-        fh.write("</div>\n")
-        fh.write("</section>\n")
+        self.write_metadata_panel(job, fh)
+        self.write_measurements_panel(job, fh)
 
         fh.write('<section class="output">\n')
         fh.write("<h2>Test output</h2>\n<pre>")
@@ -527,9 +556,63 @@ pre {
 
         fh.write("</main></body>\n</html>\n")
 
+    def write_metadata_panel(self, job: "Job", fh: TextIO) -> None:
+        fh.write('<details class="panel" open>\n')
+        fh.write("<summary>Metadata</summary>\n")
+        fh.write('<div class="meta-grid">\n')
+
+        self.write_meta_row(fh, "Test", job.display_name())
+        self.write_meta_row(fh, "Status", job.status.display_name())
+        self.write_meta_row(fh, "Outcome", job.status.outcome.name)
+        self.write_meta_row(fh, "Exit code", str(job.status.code))
+        self.write_meta_row(fh, "ID", job.id)
+        self.write_meta_row(fh, "Location", str(job.workspace.dir))
+        self.write_meta_row(fh, "Duration", f"{job.timekeeper.duration():.4f}s")
+
+        if job.status.reason:
+            self.write_meta_row(fh, "Reason", job.status.reason)
+
+        fh.write("</div>\n")
+        fh.write("</details>\n")
+
+    def write_measurements_panel(self, job: "Job", fh: TextIO) -> None:
+        measurements = list(job.measurements.items())
+
+        fh.write('<details class="panel">\n')
+        fh.write("<summary>Measurements</summary>\n")
+
+        if not measurements:
+            fh.write('<div class="meta-grid">\n')
+            self.write_meta_row(fh, "Measurements", "None recorded")
+            fh.write("</div>\n")
+            fh.write("</details>\n")
+            return
+
+        fh.write('<div class="meta-grid">\n')
+        for key, value in sorted(measurements, key=lambda item: str(item[0])):
+            self.write_measurement_row(fh, str(key), value)
+        fh.write("</div>\n")
+        fh.write("</details>\n")
+
     def write_meta_row(self, fh: TextIO, key: str, value: str) -> None:
         fh.write(f'<div class="meta-key">{html.escape(key)}</div>\n')
         fh.write(f"<div>{html.escape(value)}</div>\n")
+
+    def write_measurement_row(self, fh: TextIO, key: str, value: object) -> None:
+        fh.write(f'<div class="meta-key">{html.escape(key)}</div>\n')
+        fh.write(
+            f'<div class="measurement-value">{html.escape(self.format_measurement(value))}</div>\n'
+        )
+
+    def format_measurement(self, value: object) -> str:
+        if isinstance(value, float):
+            return f"{value:.8g}"
+        if isinstance(value, int | bool | str):
+            return str(value)
+        try:
+            return json.dumps(value, indent=2)
+        except Exception:
+            return repr(value)
 
     def generate_index(
         self,
