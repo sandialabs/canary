@@ -1,4 +1,4 @@
-FROM rockylinux:9.3
+FROM rockylinux:9
 
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
