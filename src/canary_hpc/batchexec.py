@@ -104,7 +104,11 @@ class HPCConnectRunner:
             slots = 1
             if not type.endswith("s"):
                 type += "s"
-            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
+            resources[type] = [
+                {"id": f"hpc:{i}:{j}", "slots": slots}
+                for i in range(node_count)
+                for j in range(count)
+            ]
             additional_properties[f"{type}_per_node"] = count
         pool: dict[str, Any] = {
             "resources": resources,

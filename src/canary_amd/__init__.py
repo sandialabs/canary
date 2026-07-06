@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import os
 import json
 import re
 import shutil
@@ -29,9 +30,36 @@ def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
 
 @canary.hookimpl
 def canary_runteststart(case: "canary.Job"):
-    gpu_ids = [id for id in case.gpu_ids if id.startswith("AMD:")]
-    if gpu_ids:
-        visible = ",".join(gpu_id.split(":", 2)[2] for gpu_id in gpu_ids)
+
+    gpu_ids = list(case.gpu_ids)
+    if not gpu_ids:
+        return
+
+    visible_device_vars = ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES")
+    env = os.environ | case.variables
+    if any(var in env for var in visible_device_vars):
+        # User already set an AMD-compatible visible-devices variable, so don't
+        # override. These variables can interact, so avoid creating an
+        # inconsistent mask.
+        return
+
+    visible: str | None = None
+
+    # Handle Canary AMD-qualified IDs, e.g. NVIDIA:h100:0 or NVIDIA:GPU-uuid:0
+    if all(gpu_id.startswith("AMD:") for gpu_id in gpu_ids):
+        visible = ",".join(gpu_id.rsplit(":", 1)[-1] for gpu_id in gpu_ids)
+
+    # Handle integer GPU IDs, e.g. "0", "1", "2", "3"
+    elif all(re.fullmatch(r"[0-9]+", gpu_id) for gpu_id in gpu_ids):
+        visible = ",".join(gpu_ids)
+
+    # Handle canary_hpc resource spec, e.g. "hpc:0:0"
+    elif all(re.fullmatch(r"hpc:[0-9]+:[0-9]+", gpu_id) for gpu_id in gpu_ids):
+        local_ids = [gpu_id.rsplit(":", 1)[-1] for gpu_id in gpu_ids]
+        visible = ",".join(dict.fromkeys(local_ids))
+
+    if visible is not None:
+        case.variables["CUDA_VISIBLE_DEVICES"] = visible
         case.variables["ROCR_VISIBLE_DEVICES"] = visible
         case.variables["HIP_VISIBLE_DEVICES"] = visible
 

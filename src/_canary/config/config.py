@@ -16,6 +16,7 @@ from schema import Optional
 from schema import Schema
 
 from ..pluginmanager import CanaryPluginManager
+from ..resource_pool import ResourceManager
 from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge
@@ -87,6 +88,7 @@ class Config:
         self.invocation_dir = invocation_dir
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.pluginmanager.hook.canary_addhooks(pluginmanager=self.pluginmanager)
+        self.resource_manager: ResourceManager = ResourceManager(self)
         self.data: dict[str, Any] = {}
         self.options: argparse.Namespace = argparse.Namespace()
         if loadini:
@@ -106,6 +108,7 @@ class Config:
         for plugin in bootstrap.get("plugins", []):
             self.pluginmanager.consider_plugin(plugin)
         self.pluginmanager.hook.canary_addconfig(config=self)
+        self.resource_manager.clear()
         self.data = config_schema.validate(data)
         if self.get("debug"):
             logging.set_level(logging.DEBUG)
@@ -142,6 +145,9 @@ class Config:
         self.options = argparse.Namespace(**snapshot["options"])
         self.data.clear()
         self.data.update(snapshot["data"])
+        self.resource_manager.clear()
+        if resource_manager_snapshot := snapshot.get("resource_manager"):
+            self.resource_manager.load_snapshot(resource_manager_snapshot)
 
     def _load_plugins_from_data(self) -> None:
         # Load plugins listed in current self.data, then let them add config sections
@@ -163,6 +169,7 @@ class Config:
             "invocation_dir": str(self.invocation_dir),
             "options": vars(self.options),
             "data": self.data,
+            "resource_manager": self.resource_manager.snapshot(),
         }
         return snapshot
 
@@ -277,6 +284,7 @@ class Config:
 
         self.data = merge(self.data, data)  # type: ignore
         self.options = args
+        self.resource_manager.clear()
 
         if self.data["debug"]:
             logging.set_level(logging.DEBUG)
