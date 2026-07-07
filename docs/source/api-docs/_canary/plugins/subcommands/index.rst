@@ -16,6 +16,7 @@ plugins.subcommands
    describe
    docs
    edit
+   exec
    fetch
    find
    gc

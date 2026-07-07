@@ -8,8 +8,8 @@ resource_pool
 .. toctree::
    :maxdepth: 1
 
-   adapter
    gpu_select
    hooks
+   manager
    rpool
    schemas

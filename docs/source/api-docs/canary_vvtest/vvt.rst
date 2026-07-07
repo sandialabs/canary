@@ -4,12 +4,12 @@
 
 
 
-.. _canary.resource_pool.adapter:
+.. _canary_vvtest.vvt:
 
-adapter
-=======
+vvt
+===
 
-.. automodule:: _canary.resource_pool.adapter
+.. automodule:: canary_vvtest.vvt
    :members:
    :undoc-members:
    :show-inheritance:

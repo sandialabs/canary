@@ -9,8 +9,9 @@ plugins.builtin
    :maxdepth: 1
 
    addcommand
-   addoption
+   archive
    capture
+   cli
    email
    html
    json
