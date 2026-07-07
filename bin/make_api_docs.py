@@ -119,44 +119,28 @@ if __name__ == "__main__":
     maker.init()
     print("Making canary api docs")
     maker.add_package(
-        "_canary",
-        os.path.join(canary_root, "src/_canary"),
-        skip_dirs=["third_party"],
+        "_canary", os.path.join(canary_root, "src/_canary"), skip_dirs=["third_party"]
     )
-    maker.add_package(
-        "canary",
-        os.path.join(canary_root, "src/canary"),
-        skip_dirs=["examples"],
-    )
+    maker.add_package("canary", os.path.join(canary_root, "src/canary"), skip_dirs=["examples"])
     maker.add_package(
         "canary_cmake",
         os.path.join(canary_root, "src/canary_cmake"),
         skip_dirs=["validators", "tests"],
     )
     maker.add_package(
-        "canary_amd",
-        os.path.join(canary_root, "src/canary_amd"),
-        skip_dirs=["tests"],
+        "canary_amd", os.path.join(canary_root, "src/canary_amd"), skip_dirs=["tests"]
     )
     maker.add_package(
-        "canary_nvidia",
-        os.path.join(canary_root, "src/canary_nvidia"),
-        skip_dirs=["tests"],
+        "canary_nvidia", os.path.join(canary_root, "src/canary_nvidia"), skip_dirs=["tests"]
     )
     maker.add_package(
-        "canary_hpc",
-        os.path.join(canary_root, "src/canary_hpc"),
-        skip_dirs=["tests"],
+        "canary_hpc", os.path.join(canary_root, "src/canary_hpc"), skip_dirs=["tests"]
     )
     maker.add_package(
-        "canary_gitlab",
-        os.path.join(canary_root, "src/canary_gitlab"),
-        skip_dirs=["tests"],
+        "canary_gitlab", os.path.join(canary_root, "src/canary_gitlab"), skip_dirs=["tests"]
     )
     maker.add_package(
-        "canary_vvtest",
-        os.path.join(canary_root, "src/canary_vvtest"),
-        skip_dirs=["tests"],
+        "canary_vvtest", os.path.join(canary_root, "src/canary_vvtest"), skip_dirs=["tests"]
     )
 
     hpc_connect = str(importlib.resources.files("hpc_connect"))
@@ -169,9 +153,7 @@ if __name__ == "__main__":
             skip_dirs=["tests", "templates"],
         )
         maker.add_package(
-            "hpcc_pbs",
-            os.path.join(hpcc_root, "src/hpcc_pbs"),
-            skip_dirs=["tests", "templates"],
+            "hpcc_pbs", os.path.join(hpcc_root, "src/hpcc_pbs"), skip_dirs=["tests", "templates"]
         )
         maker.add_package(
             "hpcc_slurm",
@@ -179,9 +161,7 @@ if __name__ == "__main__":
             skip_dirs=["tests", "templates"],
         )
         maker.add_package(
-            "hpcc_flux",
-            os.path.join(hpcc_root, "src/hpcc_flux"),
-            skip_dirs=["tests", "templates"],
+            "hpcc_flux", os.path.join(hpcc_root, "src/hpcc_flux"), skip_dirs=["tests", "templates"]
         )
         maker.add_package(
             "hpcc_remote",

@@ -14,7 +14,6 @@ import hpc_connect.futures
 
 import canary
 import canary_hpc.batchexec as be
-from _canary.util import json_helper as json
 from _canary.util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:

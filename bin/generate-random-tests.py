@@ -90,9 +90,4 @@ if __name__ == "__main__":
     parser.add_argument("--max-rows", type=int, default=5)
     args = parser.parse_args()
 
-    main(
-        outdir=args.outdir,
-        files=args.count,
-        max_params=args.max_params,
-        max_rows=args.max_rows,
-    )
+    main(outdir=args.outdir, files=args.count, max_params=args.max_params, max_rows=args.max_rows)
