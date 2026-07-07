@@ -60,9 +60,7 @@ def canary_view_report(request: "ViewReportRequest") -> None:
     output_dir = output_root / "markdown"
 
     markdown_request = MarkdownReportRequest(
-        workspace=request.workspace,
-        jobs=jobs,
-        output_dir=output_dir,
+        workspace=request.workspace, jobs=jobs, output_dir=output_dir
     )
 
     reporter.write(markdown_request)
@@ -87,10 +85,7 @@ class MarkdownReportCommand(CanaryReporter):
 
     def add_create_options(self, parser: "Parser") -> None:
         parser.add_argument(
-            "-o",
-            "--output-dir",
-            default="MARKDOWN",
-            help="Output directory [default: %(default)s]",
+            "-o", "--output-dir", default="MARKDOWN", help="Output directory [default: %(default)s]"
         )
 
     def run_from_args(self, args: Namespace) -> int:
@@ -100,9 +95,7 @@ class MarkdownReportCommand(CanaryReporter):
         jobs = workspace.load_jobs()
 
         request = MarkdownReportRequest(
-            workspace=workspace,
-            jobs=jobs,
-            output_dir=Path(args.output_dir).absolute(),
+            workspace=workspace, jobs=jobs, output_dir=Path(args.output_dir).absolute()
         )
 
         MarkdownReporter().write(request)
@@ -124,11 +117,7 @@ class MarkdownReporter:
         mkdirp(tmp_dir)
 
         try:
-            self.write_report(
-                jobs=request.jobs,
-                md_dir=tmp_dir,
-                index=tmp_dir / "index.md",
-            )
+            self.write_report(jobs=request.jobs, md_dir=tmp_dir, index=tmp_dir / "index.md")
 
             force_remove(final_dir)
             os.rename(tmp_dir, final_dir)
@@ -168,13 +157,7 @@ class MarkdownReporter:
             logger.exception(f"{lockfile}: failed to load testcase lock")
             return None
 
-    def write_report(
-        self,
-        *,
-        jobs: list["Job"],
-        md_dir: Path,
-        index: Path,
-    ) -> None:
+    def write_report(self, *, jobs: list["Job"], md_dir: Path, index: Path) -> None:
         for job in jobs:
             file = md_dir / f"{job.id}.md"
             with open(file, "w") as fh:
@@ -214,14 +197,7 @@ class MarkdownReporter:
             fh.write(f"| **{escape_table_cell(key)}** | {escape_table_cell(val)} |\n")
         fh.write("\n")
 
-    def generate_index(
-        self,
-        jobs: list["Job"],
-        *,
-        md_dir: Path,
-        index: Path,
-        fh: TextIO,
-    ) -> None:
+    def generate_index(self, jobs: list["Job"], *, md_dir: Path, index: Path, fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
         fh.write(
             "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Invalid | Cancelled | Total |\n"
@@ -282,12 +258,7 @@ class MarkdownReporter:
         return outcome.title()
 
     def generate_group_index(
-        self,
-        jobs: list["Job"],
-        *,
-        file: Path,
-        md_dir: Path,
-        fh: TextIO,
+        self, jobs: list["Job"], *, file: Path, md_dir: Path, fh: TextIO
     ) -> None:
         group = self.report_group(jobs[0])
 
@@ -310,12 +281,7 @@ class MarkdownReporter:
             )
 
     def generate_all_tests_index(
-        self,
-        totals: dict[str, list["Job"]],
-        *,
-        file: Path,
-        md_dir: Path,
-        fh: TextIO,
+        self, totals: dict[str, list["Job"]], *, file: Path, md_dir: Path, fh: TextIO
     ) -> None:
         fh.write("# Test Results\n\n")
         fh.write("| Test | ID | Duration | Status |\n")

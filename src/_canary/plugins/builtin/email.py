@@ -25,11 +25,7 @@ def canary_addoption(parser: Parser) -> None:
         command="run",
         help="Send a test session summary to the comma separated list of email addresses",
     )
-    parser.add_argument(
-        "--mail-from",
-        command="run",
-        help="Send mail from this user",
-    )
+    parser.add_argument("--mail-from", command="run", help="Send mail from this user")
 
 
 @hookimpl(trylast=True)

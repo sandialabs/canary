@@ -28,14 +28,7 @@ class FakeState:
 
 
 class FakeJob:
-    def __init__(
-        self,
-        *,
-        id: str,
-        cpus: int = 1,
-        gpus: int = 0,
-        runtime: float = 10.0,
-    ) -> None:
+    def __init__(self, *, id: str, cpus: int = 1, gpus: int = 0, runtime: float = 10.0) -> None:
         self.id = id
         self.cpus = cpus
         self.gpus = gpus
@@ -46,12 +39,7 @@ class FakeJob:
         self.state = FakeState()
 
     def __serialize__(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "cpus": self.cpus,
-            "gpus": self.gpus,
-            "runtime": self.runtime,
-        }
+        return {"id": self.id, "cpus": self.cpus, "gpus": self.gpus, "runtime": self.runtime}
 
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
@@ -88,9 +76,7 @@ def test_assign_resources_extracts_distributed_metadata(tmp_path):
             "hostname": "host-a",
             "transaction_id": "tx-1",
         },
-        "resources": {
-            "cpus": [{"node": "host-a", "id": "0", "slots": 1}],
-        },
+        "resources": {"cpus": [{"node": "host-a", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -104,13 +90,8 @@ def test_assign_resources_derives_hostname_from_resources(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 
     allocation = {
-        "metadata": {
-            "source": "distributed",
-            "transaction_id": "tx-1",
-        },
-        "resources": {
-            "cpus": [{"node": "host-a", "id": "0", "slots": 1}],
-        },
+        "metadata": {"source": "distributed", "transaction_id": "tx-1"},
+        "resources": {"cpus": [{"node": "host-a", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -134,9 +115,7 @@ def test_remote_resource_pool_is_single_node_batch_local_pool(tmp_path):
                 {"node": "host-a", "id": "0", "slots": 1},
                 {"node": "host-a", "id": "1", "slots": 1},
             ],
-            "gpus": [
-                {"node": "host-a", "id": "0", "slots": 1},
-            ],
+            "gpus": [{"node": "host-a", "id": "0", "slots": 1}],
         },
     }
 
@@ -154,13 +133,8 @@ def test_remote_resource_pool_is_single_node_batch_local_pool(tmp_path):
             {
                 "id": "host-a",
                 "resources": {
-                    "cpus": [
-                        {"id": "0", "slots": 1},
-                        {"id": "1", "slots": 1},
-                    ],
-                    "gpus": [
-                        {"id": "0", "slots": 1},
-                    ],
+                    "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
+                    "gpus": [{"id": "0", "slots": 1}],
                 },
             }
         ],
@@ -169,11 +143,7 @@ def test_remote_resource_pool_is_single_node_batch_local_pool(tmp_path):
 
 def test_required_resources_uses_max_per_job_resources(tmp_path):
     batch = make_batch(
-        tmp_path,
-        [
-            FakeJob(id="job-1", cpus=4, gpus=1),
-            FakeJob(id="job-2", cpus=2, gpus=2),
-        ],
+        tmp_path, [FakeJob(id="job-1", cpus=4, gpus=1), FakeJob(id="job-2", cpus=2, gpus=2)]
     )
 
     request = batch.required_resources()
@@ -192,9 +162,7 @@ def test_setup_writes_resource_pool_and_allocation(tmp_path):
             "hostname": "host-a",
             "transaction_id": "tx-1",
         },
-        "resources": {
-            "cpus": [{"node": "host-a", "id": "0", "slots": 1}],
-        },
+        "resources": {"cpus": [{"node": "host-a", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)

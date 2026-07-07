@@ -47,10 +47,7 @@ def parse(text: str, style: DocstringStyle = DocstringStyle.AUTO) -> Docstring:
     return sorted(rets, key=lambda d: len(d.meta), reverse=True)[0]
 
 
-def parse_from_object(
-    obj: T.Any,
-    style: DocstringStyle = DocstringStyle.AUTO,
-) -> Docstring:
+def parse_from_object(obj: T.Any, style: DocstringStyle = DocstringStyle.AUTO) -> Docstring:
     """Parse the object's docstring(s) into its components.
 
     The object can be anything that has a ``__doc__`` attribute. In contrast to

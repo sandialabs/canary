@@ -270,10 +270,7 @@ def test_sources_glob_expands_into_multiple_assets(tmp_path: Path) -> None:
     specs = lock_model(m)
 
     srcs = sorted(a.src for a in specs[0].assets)
-    assert srcs == [
-        tmp_path / "sub" / "pattern1.txt",
-        tmp_path / "sub" / "pattern2.txt",
-    ]
+    assert srcs == [tmp_path / "sub" / "pattern1.txt", tmp_path / "sub" / "pattern2.txt"]
 
 
 def test_sources_glob_no_matches_warns_and_skips(

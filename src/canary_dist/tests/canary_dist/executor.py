@@ -20,14 +20,7 @@ def test_executor_resource_pool_fill_returns_batch_local_pool(tmp_path):
             "hostname": "host-a",
             "transaction_id": "tx-1",
         },
-        "nodes": [
-            {
-                "id": "host-a",
-                "resources": {
-                    "cpus": [{"id": "0", "slots": 1}],
-                },
-            }
-        ],
+        "nodes": [{"id": "host-a", "resources": {"cpus": [{"id": "0", "slots": 1}]}}],
     }
 
     config = {

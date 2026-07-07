@@ -321,11 +321,7 @@ class TestBatch(BaseJob):
                 job.status = Status.BROKEN(reason=f"{job.state=} after execution of batch")
             elif job.state.is_running():
                 job.status = Status.CANCELLED(reason=f"{job.state=} after execution of batch")
-            data[job.id] = {
-                "status": job.status,
-                "timekeeper": job.timekeeper,
-                "state": job.state,
-            }
+            data[job.id] = {"status": job.status, "timekeeper": job.timekeeper, "state": job.state}
         return data
 
     def setstate(self, data: dict[str, Any]):
@@ -338,10 +334,7 @@ class TestBatch(BaseJob):
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
                 self.status.set_base(
-                    category=stat.category,
-                    outcome=stat.outcome,
-                    reason=stat.reason,
-                    code=stat.code,
+                    category=stat.category, outcome=stat.outcome, reason=stat.reason, code=stat.code
                 )
             if st := mydata.get("state"):
                 self.state.phase = st.phase

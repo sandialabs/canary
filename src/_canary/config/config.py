@@ -52,12 +52,7 @@ def default_config_values() -> dict[str, Any]:
         "debug": False,
         "log_level": "INFO",
         "plugins": [],
-        "environment": {
-            "prepend-path": {},
-            "append-path": {},
-            "set": {},
-            "unset": [],
-        },
+        "environment": {"prepend-path": {}, "append-path": {}, "set": {}, "unset": []},
         "workspace": {
             "view": {
                 "name": "TestResults",
@@ -65,7 +60,7 @@ def default_config_values() -> dict[str, Any]:
                 "when": "always",
                 "only": "all",
                 "reports": ["html"],
-            },
+            }
         },
         "run": {
             "default_tag": ":all:",

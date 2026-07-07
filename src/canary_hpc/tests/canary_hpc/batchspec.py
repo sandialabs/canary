@@ -28,14 +28,7 @@ class FakeState:
 
 
 class FakeJob:
-    def __init__(
-        self,
-        *,
-        id: str,
-        cpus: int = 1,
-        gpus: int = 0,
-        runtime: float = 10.0,
-    ) -> None:
+    def __init__(self, *, id: str, cpus: int = 1, gpus: int = 0, runtime: float = 10.0) -> None:
         self.id = id
         self.cpus = cpus
         self.gpus = gpus
@@ -46,12 +39,7 @@ class FakeJob:
         self.state = FakeState()
 
     def __serialize__(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "cpus": self.cpus,
-            "gpus": self.gpus,
-            "runtime": self.runtime,
-        }
+        return {"id": self.id, "cpus": self.cpus, "gpus": self.gpus, "runtime": self.runtime}
 
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
@@ -91,18 +79,13 @@ def test_batch_assign_resources_stores_full_allocation(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 
     allocation = {
-        "metadata": {
-            "source": "test",
-            "transaction_id": "abc123",
-        },
+        "metadata": {"source": "test", "transaction_id": "abc123"},
         "resources": {
             "cpus": [
                 {"node": "node0", "id": "0", "slots": 1},
                 {"node": "node0", "id": "1", "slots": 1},
             ],
-            "gpus": [
-                {"node": "node0", "id": "0", "slots": 1},
-            ],
+            "gpus": [{"node": "node0", "id": "0", "slots": 1}],
         },
     }
 
@@ -119,9 +102,7 @@ def test_batch_assign_resources_deep_copies_allocation(tmp_path):
 
     allocation = {
         "metadata": {"source": "test"},
-        "resources": {
-            "cpus": [{"node": "node0", "id": "0", "slots": 1}],
-        },
+        "resources": {"cpus": [{"node": "node0", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -131,9 +112,7 @@ def test_batch_assign_resources_deep_copies_allocation(tmp_path):
 
     assert batch.allocation == {
         "metadata": {"source": "test"},
-        "resources": {
-            "cpus": [{"node": "node0", "id": "0", "slots": 1}],
-        },
+        "resources": {"cpus": [{"node": "node0", "id": "0", "slots": 1}]},
     }
 
 
@@ -141,14 +120,8 @@ def test_batch_free_resources_returns_full_allocation_and_clears_batch(tmp_path)
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 
     allocation = {
-        "metadata": {
-            "source": "distributed",
-            "hostname": "worker01",
-            "transaction_id": "abc123",
-        },
-        "resources": {
-            "cpus": [{"node": "worker01", "id": "0", "slots": 1}],
-        },
+        "metadata": {"source": "distributed", "hostname": "worker01", "transaction_id": "abc123"},
+        "resources": {"cpus": [{"node": "worker01", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -165,9 +138,7 @@ def test_batch_free_resources_returns_deep_copy(tmp_path):
 
     allocation = {
         "metadata": {"source": "test"},
-        "resources": {
-            "cpus": [{"node": "node0", "id": "0", "slots": 1}],
-        },
+        "resources": {"cpus": [{"node": "node0", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -183,13 +154,8 @@ def test_batch_setup_writes_allocation_to_lockfile(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 
     allocation = {
-        "metadata": {
-            "source": "test",
-            "transaction_id": "abc123",
-        },
-        "resources": {
-            "cpus": [{"node": "node0", "id": "0", "slots": 1}],
-        },
+        "metadata": {"source": "test", "transaction_id": "abc123"},
+        "resources": {"cpus": [{"node": "node0", "id": "0", "slots": 1}]},
     }
 
     batch.assign_resources(allocation)
@@ -205,11 +171,7 @@ def test_batch_setup_writes_allocation_to_lockfile(tmp_path):
 
 def test_batch_required_resources_is_submission_resource_only(tmp_path):
     batch = make_batch(
-        tmp_path,
-        [
-            FakeJob(id="job-1", cpus=4, gpus=1),
-            FakeJob(id="job-2", cpus=2, gpus=0),
-        ],
+        tmp_path, [FakeJob(id="job-1", cpus=4, gpus=1), FakeJob(id="job-2", cpus=2, gpus=0)]
     )
 
     assert batch.required_resources() == [{"type": "cpus", "slots": 1}]

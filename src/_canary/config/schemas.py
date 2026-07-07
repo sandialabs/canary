@@ -100,15 +100,12 @@ workspace_schema = Schema(
             Optional("when", default=default_view["when"]): And(str, validate_view("when")),
             Optional("only", default=default_view["only"]): And(str, validate_view("only")),
             Optional("reports", default=["html"]): And(list, validate_reports),
-        },
+        }
     }
 )
 
 run_schema = Schema(
-    {
-        Optional("default_tag"): str,
-        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
-    }
+    {Optional("default_tag"): str, Optional("timeout"): {Optional(str): Use(time_in_seconds)}}
 )
 
 

@@ -129,21 +129,11 @@ class monkeypatch:
 
     @overload
     def setattr(
-        self,
-        target: str,
-        name: object,
-        value: Notset = ...,
-        raising: bool = ...,
+        self, target: str, name: object, value: Notset = ..., raising: bool = ...
     ) -> None: ...
 
     @overload
-    def setattr(
-        self,
-        target: object,
-        name: str,
-        value: object,
-        raising: bool = ...,
-    ) -> None: ...
+    def setattr(self, target: object, name: str, value: object, raising: bool = ...) -> None: ...
 
     def setattr(
         self,
@@ -218,10 +208,7 @@ class monkeypatch:
         setattr(target, name, value)
 
     def delattr(
-        self,
-        target: Union[object, str],
-        name: Union[str, Notset] = notset,
-        raising: bool = True,
+        self, target: Union[object, str], name: Union[str, Notset] = notset, raising: bool = True
     ) -> None:
         """Delete attribute ``name`` from ``target``.
 

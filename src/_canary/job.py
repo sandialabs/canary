@@ -713,8 +713,7 @@ class Job(BaseJob):
         if xcode == Outcome.DIFFED.value:
             if code != Outcome.DIFFED.value:
                 self.status = Status.FAILED(
-                    reason=f"{self.spec.display_name()}: expected test to diff",
-                    code=code,
+                    reason=f"{self.spec.display_name()}: expected test to diff", code=code
                 )
             else:
                 self.status = Status.XDIFF()
@@ -722,13 +721,11 @@ class Job(BaseJob):
             # Expected to fail
             if xcode > 0 and code != xcode:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name()}: expected to exit with code={code}",
-                    code=code,
+                    f"{self.spec.display_name()}: expected to exit with code={code}", code=code
                 )
             elif code == 0:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name()}: expected to exit with code != 0",
-                    code=code,
+                    f"{self.spec.display_name()}: expected to exit with code != 0", code=code
                 )
             else:
                 self.status = Status.XFAIL()

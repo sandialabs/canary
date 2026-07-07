@@ -22,15 +22,7 @@ def test_pathspec_parse_new(tmpdir):
         with open("foo.json", "w") as fh:
             f = {"testpaths": [{"root": os.getcwd(), "paths": ["bacon"]}]}
             json.dump(f, fh)
-        values = [
-            "./baz",
-            "./spam",
-            "./eggs:f.pyt",
-            "./ham/f.pyt",
-            "--",
-            "--foo",
-            "--bar",
-        ]
+        values = ["./baz", "./spam", "./eggs:f.pyt", "./ham/f.pyt", "--", "--foo", "--bar"]
         p = ReadPathsFromFile("", "f_pathspec")
         args = argparse.Namespace()
         p(None, args, "foo.json", option_string="-f")

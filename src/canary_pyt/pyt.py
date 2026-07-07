@@ -301,10 +301,7 @@ class PYTModel:
         self.meta_parameters.add(dict(params), when=when)
 
     def set_resource_parameter(
-        self,
-        name: Literal["cpus", "gpus", "nodes"],
-        value: int,
-        when: WhenType | None = None,
+        self, name: Literal["cpus", "gpus", "nodes"], value: int, when: WhenType | None = None
     ) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
@@ -723,9 +720,7 @@ class PYTAdapter:
 
 class PYTLockEmitter:
     def lock(
-        self,
-        model: PYTModel,
-        on_options: list[str] | None = None,
+        self, model: PYTModel, on_options: list[str] | None = None
     ) -> Sequence["JobSpecIR | JobSpec"]:
         if model.filter_warnings:
             with logging.suppress_stream_below(logging.ERROR):

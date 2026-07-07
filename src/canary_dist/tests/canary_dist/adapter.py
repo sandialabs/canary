@@ -21,27 +21,17 @@ class FakeAdapter(DistributedResourcePoolAdapter):
         self.resource_types: list[str] = []
 
     def curl(
-        self,
-        endpoint: str,
-        method: str = "POST",
-        data: Any = None,
-        **parameters: str,
+        self, endpoint: str, method: str = "POST", data: Any = None, **parameters: str
     ) -> subprocess.CompletedProcess:
         self.requests.append((endpoint, method, data, parameters))
         payload = self.responses.get(endpoint, {"success": True})
         return subprocess.CompletedProcess(
-            args=["curl"],
-            returncode=0,
-            stdout=__import__("json").dumps(payload),
-            stderr="",
+            args=["curl"], returncode=0, stdout=__import__("json").dumps(payload), stderr=""
         )
 
 
 def test_with_node_adds_node_to_flat_server_resources():
-    resources = {
-        "cpus": [{"id": "0", "slots": 1}],
-        "gpus": [{"id": "0", "slots": 1}],
-    }
+    resources = {"cpus": [{"id": "0", "slots": 1}], "gpus": [{"id": "0", "slots": 1}]}
 
     assert _with_node(resources, "host-a") == {
         "cpus": [{"id": "0", "slots": 1, "node": "host-a"}],
@@ -50,10 +40,7 @@ def test_with_node_adds_node_to_flat_server_resources():
 
 
 def test_update_resource_counts_counts_available_slots(monkeypatch):
-    monkeypatch.setattr(
-        "canary.config.getoption",
-        lambda name, default=None: None,
-    )
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
 
     adapter = FakeAdapter(
         responses={
@@ -70,19 +57,13 @@ def test_update_resource_counts_counts_available_slots(monkeypatch):
                                     {"id": "1", "slots": 0},
                                     {"id": "2", "slots": 1},
                                 ],
-                                "gpus": [
-                                    {"id": "0", "slots": 0},
-                                ],
+                                "gpus": [{"id": "0", "slots": 0}],
                             },
                         },
                         {
                             "hostname": "host-b",
                             "state": "offline",
-                            "resources": {
-                                "cpus": [
-                                    {"id": "0", "slots": 8},
-                                ],
-                            },
+                            "resources": {"cpus": [{"id": "0", "slots": 8}]},
                         },
                     ]
                 },
@@ -92,20 +73,12 @@ def test_update_resource_counts_counts_available_slots(monkeypatch):
 
     adapter.update_resource_counts()
 
-    assert adapter.resource_counts == {
-        "host-a": {
-            "cpus": 2,
-            "gpus": 0,
-        }
-    }
+    assert adapter.resource_counts == {"host-a": {"cpus": 2, "gpus": 0}}
     assert adapter.resource_types == ["cpus", "gpus"]
 
 
 def test_to_resource_pool_filters_offline_machines(monkeypatch):
-    monkeypatch.setattr(
-        "canary.config.getoption",
-        lambda name, default=None: None,
-    )
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
 
     adapter = FakeAdapter(
         responses={
@@ -118,16 +91,12 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
                             "state": "online",
                             "tags": ["gpu"],
                             "groups": ["nightly"],
-                            "resources": {
-                                "cpus": [{"id": "0", "slots": 1}],
-                            },
+                            "resources": {"cpus": [{"id": "0", "slots": 1}]},
                         },
                         {
                             "hostname": "host-b",
                             "state": "offline",
-                            "resources": {
-                                "cpus": [{"id": "0", "slots": 1}],
-                            },
+                            "resources": {"cpus": [{"id": "0", "slots": 1}]},
                         },
                     ]
                 },
@@ -139,22 +108,13 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
 
     assert pool == {
         "allow_multinode": False,
-        "additional_properties": {
-            "source": "distributed",
-            "server_url": "http://server",
-        },
+        "additional_properties": {"source": "distributed", "server_url": "http://server"},
         "nodes": [
             {
                 "id": "host-a",
-                "resources": {
-                    "cpus": [{"id": "0", "slots": 1}],
-                },
+                "resources": {"cpus": [{"id": "0", "slots": 1}]},
                 "additional_properties": {
-                    "distributed": {
-                        "state": "online",
-                        "tags": ["gpu"],
-                        "groups": ["nightly"],
-                    }
+                    "distributed": {"state": "online", "tags": ["gpu"], "groups": ["nightly"]}
                 },
             }
         ],
@@ -162,10 +122,7 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
 
 
 def test_checkout_returns_core_allocation(monkeypatch):
-    monkeypatch.setattr(
-        "canary.config.getoption",
-        lambda name, default=None: None,
-    )
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
 
     adapter = FakeAdapter(
         responses={
@@ -174,9 +131,7 @@ def test_checkout_returns_core_allocation(monkeypatch):
                 "success": True,
                 "hostname": "host-a",
                 "transaction_id": "tx-1",
-                "resources": {
-                    "cpus": [{"id": "0", "slots": 1}],
-                },
+                "resources": {"cpus": [{"id": "0", "slots": 1}]},
             },
         }
     )
@@ -190,9 +145,7 @@ def test_checkout_returns_core_allocation(monkeypatch):
             "hostname": "host-a",
             "transaction_id": "tx-1",
         },
-        "resources": {
-            "cpus": [{"id": "0", "slots": 1, "node": "host-a"}],
-        },
+        "resources": {"cpus": [{"id": "0", "slots": 1, "node": "host-a"}]},
     }
 
     assert adapter.requests[0][0] == "/rx"
@@ -210,18 +163,12 @@ def test_checkout_returns_core_allocation(monkeypatch):
 
 
 def test_checkout_raises_when_server_reports_unavailable(monkeypatch):
-    monkeypatch.setattr(
-        "canary.config.getoption",
-        lambda name, default=None: None,
-    )
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
 
     adapter = FakeAdapter(
         responses={
             "/rx": {"success": True},
-            "/checkout": {
-                "success": False,
-                "message": "resources unavailable",
-            },
+            "/checkout": {"success": False, "message": "resources unavailable"},
         }
     )
 
@@ -230,29 +177,13 @@ def test_checkout_raises_when_server_reports_unavailable(monkeypatch):
 
 
 def test_checkin_uses_transaction_id():
-    adapter = FakeAdapter(
-        responses={
-            "/checkin": {"success": True},
-        }
-    )
+    adapter = FakeAdapter(responses={"/checkin": {"success": True}})
 
-    allocation = {
-        "metadata": {
-            "transaction_id": "tx-1",
-        },
-        "resources": {},
-    }
+    allocation = {"metadata": {"transaction_id": "tx-1"}, "resources": {}}
 
     adapter.checkin(allocation)
 
-    assert adapter.requests == [
-        (
-            "/checkin",
-            "POST",
-            {"transaction_id": "tx-1"},
-            {},
-        )
-    ]
+    assert adapter.requests == [("/checkin", "POST", {"transaction_id": "tx-1"}, {})]
 
 
 def test_checkin_requires_transaction_id():

@@ -26,18 +26,8 @@ def test_nvidia_sets_cuda_visible_devices_for_nvidia_gpus(monkeypatch):
     job = FakeJob(
         {
             "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                },
-                {
-                    "node": "local",
-                    "id": "1",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                },
+                {"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}},
+                {"node": "local", "id": "1", "slots": 1, "properties": {"vendor": "NVIDIA"}},
             ]
         }
     )
@@ -53,18 +43,8 @@ def test_nvidia_sets_cuda_visible_devices_for_unknown_vendor(monkeypatch):
     job = FakeJob(
         {
             "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "UNKNOWN"},
-                },
-                {
-                    "node": "local",
-                    "id": "1",
-                    "slots": 1,
-                    "properties": {"vendor": "UNKNOWN"},
-                },
+                {"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "UNKNOWN"}},
+                {"node": "local", "id": "1", "slots": 1, "properties": {"vendor": "UNKNOWN"}},
             ]
         }
     )
@@ -77,18 +57,7 @@ def test_nvidia_sets_cuda_visible_devices_for_unknown_vendor(monkeypatch):
 def test_nvidia_treats_missing_vendor_as_unknown(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
-    job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {},
-                }
-            ]
-        }
-    )
+    job = FakeJob({"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {}}]})
 
     nvidia.canary_runteststart(job)
 
@@ -98,17 +67,7 @@ def test_nvidia_treats_missing_vendor_as_unknown(monkeypatch):
 def test_nvidia_treats_missing_properties_as_unknown(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
-    job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                }
-            ]
-        }
-    )
+    job = FakeJob({"gpus": [{"node": "local", "id": "0", "slots": 1}]})
 
     nvidia.canary_runteststart(job)
 
@@ -121,18 +80,8 @@ def test_nvidia_deduplicates_local_ids_for_multinode(monkeypatch):
     job = FakeJob(
         {
             "gpus": [
-                {
-                    "node": "0",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                },
-                {
-                    "node": "1",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                },
+                {"node": "0", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}},
+                {"node": "1", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}},
             ]
         }
     )
@@ -146,16 +95,7 @@ def test_nvidia_does_not_claim_explicit_amd_gpus(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}}]}
     )
 
     nvidia.canary_runteststart(job)
@@ -167,16 +107,7 @@ def test_nvidia_does_not_override_environment(monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "7")
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}}]}
     )
 
     nvidia.canary_runteststart(job)
@@ -188,16 +119,7 @@ def test_nvidia_does_not_override_case_variable(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}}]}
     )
     job.variables["CUDA_VISIBLE_DEVICES"] = "7"
 

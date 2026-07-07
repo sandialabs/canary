@@ -74,11 +74,7 @@ def cdash_summary(
 
 
 def generate_cdash_html_summary(
-    url: str,
-    project: str,
-    *,
-    groups: list[str] | None = None,
-    skip_sites: list[str] | None = None,
+    url: str, project: str, *, groups: list[str] | None = None, skip_sites: list[str] | None = None
 ) -> str:
     """Generates a CDash summary page
 

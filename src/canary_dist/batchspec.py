@@ -100,12 +100,7 @@ class TestBatch(bs.TestBatch):
         return {
             "allow_multinode": False,
             "additional_properties": metadata,
-            "nodes": [
-                {
-                    "id": self.hostname,
-                    "resources": resources,
-                }
-            ],
+            "nodes": [{"id": self.hostname, "resources": resources}],
         }
 
     def setup(self) -> None:

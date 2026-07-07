@@ -23,12 +23,7 @@ _COLOR_CONSOLE = Console(
     legacy_windows=False,
 )
 
-_PLAIN_CONSOLE = Console(
-    file=StringIO(),
-    force_terminal=False,
-    color_system=None,
-    width=10_000,
-)
+_PLAIN_CONSOLE = Console(file=StringIO(), force_terminal=False, color_system=None, width=10_000)
 
 
 def set_color_when(when):

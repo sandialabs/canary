@@ -61,9 +61,7 @@ def canary_view_report(request: "ViewReportRequest") -> None:
 
     output_root = request.output_dir or request.view.metadata_dir / "reports"
     junit_request = JunitReportRequest(
-        workspace=request.workspace,
-        jobs=jobs,
-        output=output_root / JunitReporter.default_output,
+        workspace=request.workspace, jobs=jobs, output=output_root / JunitReporter.default_output
     )
 
     reporter.write(junit_request)
@@ -99,9 +97,7 @@ class JunitReportCommand(CanaryReporter):
         jobs = workspace.load_jobs()
 
         request = JunitReportRequest(
-            workspace=workspace,
-            jobs=jobs,
-            output=Path(args.output).absolute(),
+            workspace=workspace, jobs=jobs, output=Path(args.output).absolute()
         )
 
         JunitReporter().write(request)
@@ -119,9 +115,7 @@ class JunitReporter:
         """Write a JUnit XML report and return the output path."""
         doc = JunitDocument()
         root = doc.create_testsuite_element(
-            request.jobs,
-            name=get_root_name(),
-            tagname="testsuites",
+            request.jobs, name=get_root_name(), tagname="testsuites"
         )
 
         groups = groupby_classname(request.jobs)
@@ -213,10 +207,7 @@ class JunitDocument(xdom.Document):
         return node
 
     def create_testsuite_element(
-        self,
-        jobs: list["Job"],
-        tagname: str = "testsuite",
-        **attrs: str,
+        self, jobs: list["Job"], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
         """Create a testsuite/testsuites element."""
         element = self.create_element(tagname)

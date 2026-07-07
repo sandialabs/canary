@@ -25,11 +25,7 @@ class Report(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         reporters = self.collect_reporters()
 
-        subparsers = parser.add_subparsers(
-            dest="type",
-            metavar="report-type",
-            required=True,
-        )
+        subparsers = parser.add_subparsers(dest="type", metavar="report-type", required=True)
 
         for reporter in reporters:
             p = subparsers.add_parser(reporter.type, help=reporter.description)

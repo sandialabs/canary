@@ -131,12 +131,7 @@ class HPCConnectRunner:
                 resources[rtype] = _resource_specs(count, rtype=rtype)
                 additional_properties[f"{rtype}_per_node"] = count
 
-            nodes.append(
-                {
-                    "id": str(i),
-                    "resources": resources,
-                }
-            )
+            nodes.append({"id": str(i), "resources": resources})
 
         pool: dict[str, Any] = {
             "allow_multinode": node_count > 1,
@@ -199,10 +194,7 @@ def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
 
     for j in range(count):
-        spec: dict[str, Any] = {
-            "id": str(j),
-            "slots": 1,
-        }
+        spec: dict[str, Any] = {"id": str(j), "slots": 1}
 
         if rtype == "gpus":
             spec["properties"] = {"vendor": "UNKNOWN"}

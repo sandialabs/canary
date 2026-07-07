@@ -136,12 +136,7 @@ def test_put_and_load_selection(db: WorkspaceDatabase, make_random_specs: MakeRa
     specs = make_random_specs(db.path.parent, count=4)
     db.put_specs(specs)
 
-    db.put_selection(
-        tag="smoke",
-        specs=specs[:2],
-        scanpaths={"tests": ["a", "b"]},
-        owners=["me"],
-    )
+    db.put_selection(tag="smoke", specs=specs[:2], scanpaths={"tests": ["a", "b"]}, owners=["me"])
 
     meta = db.get_selection_metadata("smoke")
     assert meta["tag"] == "smoke"

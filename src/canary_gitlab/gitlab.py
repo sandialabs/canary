@@ -288,11 +288,7 @@ class repo:
     @api_access_required
     def release(self, *, name, tag, assets=None):
         headers = {"PRIVATE-TOKEN": str(self.access_token)}
-        params = {
-            "name": name,
-            "tag_name": tag,
-            "description": f"{self.name} release {name}",
-        }
+        params = {"name": name, "tag_name": tag, "description": f"{self.name} release {name}"}
         encoded_params = urlencode(params)
         url = self.build_api_url(path=f"projects/{self.project_id}/releases", query=encoded_params)
         request = Request(url=url, headers=headers, method="POST")

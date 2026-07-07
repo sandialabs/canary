@@ -52,43 +52,18 @@ class FakeConfig:
 
 def make_pool() -> ResourcePool:
     return ResourcePool(
-        {
-            "nodes": [
-                {
-                    "id": "local",
-                    "resources": {
-                        "cpus": [{"id": "0", "slots": 1}],
-                        "gpus": [],
-                    },
-                }
-            ]
-        }
+        {"nodes": [{"id": "local", "resources": {"cpus": [{"id": "0", "slots": 1}], "gpus": []}}]}
     )
 
 
 def test_gpu_select_adds_gpus_to_first_node():
     plugin = FakeGPUPlugin(
         [
-            {
-                "id": "0",
-                "slots": 1,
-                "vendor": "nvidia",
-                "uuid": "GPU-0000",
-                "name": "NVIDIA H100",
-            },
-            {
-                "id": "1",
-                "slots": 1,
-                "vendor": "nvidia",
-                "uuid": "GPU-1111",
-                "name": "NVIDIA H100",
-            },
+            {"id": "0", "slots": 1, "vendor": "nvidia", "uuid": "GPU-0000", "name": "NVIDIA H100"},
+            {"id": "1", "slots": 1, "vendor": "nvidia", "uuid": "GPU-1111", "name": "NVIDIA H100"},
         ]
     )
-    config = FakeConfig(
-        backend={"name": "nvidia", "plugin": "fake_gpu_plugin"},
-        plugin=plugin,
-    )
+    config = FakeConfig(backend={"name": "nvidia", "plugin": "fake_gpu_plugin"}, plugin=plugin)
     pool = make_pool()
 
     gpu_select.canary_fill_gpu(config=config, pool=pool)
@@ -98,28 +73,19 @@ def test_gpu_select_adds_gpus_to_first_node():
         {
             "id": "0",
             "slots": 1,
-            "properties": {
-                "vendor": "NVIDIA",
-                "uuid": "GPU-0000",
-                "name": "NVIDIA H100",
-            },
+            "properties": {"vendor": "NVIDIA", "uuid": "GPU-0000", "name": "NVIDIA H100"},
         },
         {
             "id": "1",
             "slots": 1,
-            "properties": {
-                "vendor": "NVIDIA",
-                "uuid": "GPU-1111",
-                "name": "NVIDIA H100",
-            },
+            "properties": {"vendor": "NVIDIA", "uuid": "GPU-1111", "name": "NVIDIA H100"},
         },
     ]
 
 
 def test_gpu_select_does_not_override_existing_gpus():
     config = FakeConfig(
-        backend={"name": "nvidia", "plugin": "fake_gpu_plugin"},
-        plugin=RaisingGPUPlugin(),
+        backend={"name": "nvidia", "plugin": "fake_gpu_plugin"}, plugin=RaisingGPUPlugin()
     )
     pool = ResourcePool(
         {
@@ -128,13 +94,7 @@ def test_gpu_select_does_not_override_existing_gpus():
                     "id": "local",
                     "resources": {
                         "cpus": [{"id": "0", "slots": 1}],
-                        "gpus": [
-                            {
-                                "id": "7",
-                                "slots": 1,
-                                "properties": {"vendor": "UNKNOWN"},
-                            }
-                        ],
+                        "gpus": [{"id": "7", "slots": 1, "properties": {"vendor": "UNKNOWN"}}],
                     },
                 }
             ]
@@ -144,11 +104,7 @@ def test_gpu_select_does_not_override_existing_gpus():
     gpu_select.canary_fill_gpu(config=config, pool=pool)
 
     assert pool.first_node().resources["gpus"] == [
-        {
-            "id": "7",
-            "slots": 1,
-            "properties": {"vendor": "UNKNOWN"},
-        }
+        {"id": "7", "slots": 1, "properties": {"vendor": "UNKNOWN"}}
     ]
 
 
@@ -162,10 +118,7 @@ def test_gpu_select_no_backend_does_nothing():
 
 
 def test_gpu_select_missing_plugin_raises():
-    config = FakeConfig(
-        backend={"name": "nvidia", "plugin": "missing_plugin"},
-        plugin=None,
-    )
+    config = FakeConfig(backend={"name": "nvidia", "plugin": "missing_plugin"}, plugin=None)
     pool = make_pool()
 
     with pytest.raises(RuntimeError, match="Selected GPU plugin"):
@@ -175,13 +128,7 @@ def test_gpu_select_missing_plugin_raises():
 def test_gpu_resource_spec_defaults_vendor_to_unknown():
     spec = gpu_select._gpu_resource_spec({"id": 0, "slots": 1})
 
-    assert spec == {
-        "id": "0",
-        "slots": 1,
-        "properties": {
-            "vendor": "UNKNOWN",
-        },
-    }
+    assert spec == {"id": "0", "slots": 1, "properties": {"vendor": "UNKNOWN"}}
 
 
 def test_select_backend_auto_none():
@@ -204,25 +151,13 @@ def test_select_backend_auto_multiple_raises():
     config = type("Config", (), {"getoption": lambda self, name: "auto"})()
 
     with pytest.raises(ValueError, match="Multiple GPU backends detected"):
-        gpu_select._select_backend(
-            config,
-            {
-                "nvidia": "canary_nvidia",
-                "amd": "canary_amd",
-            },
-        )
+        gpu_select._select_backend(config, {"nvidia": "canary_nvidia", "amd": "canary_amd"})
 
 
 def test_select_backend_explicit_backend_name():
     config = type("Config", (), {"getoption": lambda self, name: "nvidia"})()
 
-    selected = gpu_select._select_backend(
-        config,
-        {
-            "nvidia": "canary_nvidia",
-            "amd": "canary_amd",
-        },
-    )
+    selected = gpu_select._select_backend(config, {"nvidia": "canary_nvidia", "amd": "canary_amd"})
 
     assert selected == {"name": "nvidia", "plugin": "canary_nvidia"}
 
@@ -230,13 +165,7 @@ def test_select_backend_explicit_backend_name():
 def test_select_backend_explicit_plugin_name():
     config = type("Config", (), {"getoption": lambda self, name: "canary_nvidia"})()
 
-    selected = gpu_select._select_backend(
-        config,
-        {
-            "nvidia": "canary_nvidia",
-            "amd": "canary_amd",
-        },
-    )
+    selected = gpu_select._select_backend(config, {"nvidia": "canary_nvidia", "amd": "canary_amd"})
 
     assert selected == {"name": "nvidia", "plugin": "canary_nvidia"}
 
@@ -245,10 +174,4 @@ def test_select_backend_missing_explicit_raises():
     config = type("Config", (), {"getoption": lambda self, name: "intel"})()
 
     with pytest.raises(ValueError, match="GPU backend 'intel' not detected"):
-        gpu_select._select_backend(
-            config,
-            {
-                "nvidia": "canary_nvidia",
-                "amd": "canary_amd",
-            },
-        )
+        gpu_select._select_backend(config, {"nvidia": "canary_nvidia", "amd": "canary_amd"})

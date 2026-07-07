@@ -490,9 +490,7 @@ class Workspace:
         return info
 
     def collect(
-        self,
-        scanpaths: dict[str, list[str]],
-        on_options: list[str] | None = None,
+        self, scanpaths: dict[str, list[str]], on_options: list[str] | None = None
     ) -> list["JobSpec"]:
         """Find test job generators in scan_paths and add them to this workspace.
 
@@ -706,10 +704,7 @@ class Workspace:
             return [job for job in lookup.values() if job.id in ids]
         return list(lookup.values())
 
-    def select_from_view(
-        self,
-        path: Path,
-    ) -> list["JobSpec"]:
+    def select_from_view(self, path: Path) -> list["JobSpec"]:
         """Identifies JobSpecs based on 'testcase.lock' files found in the view.
 
         Args:
@@ -752,9 +747,7 @@ class Workspace:
         return self.db.is_selection(tag)
 
     def generate_jobspecs(
-        self,
-        generators: list["AbstractTestGenerator"],
-        on_options: list[str] | None = None,
+        self, generators: list["AbstractTestGenerator"], on_options: list[str] | None = None
     ) -> list["JobSpec"]:
         """Generate resolved test specs.
 

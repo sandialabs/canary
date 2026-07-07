@@ -341,15 +341,9 @@ def compose(
 
     process_sect("Args:", [p for p in docstring.params or [] if p.args[0] == "param"])
 
-    process_sect(
-        "Attributes:",
-        [p for p in docstring.params or [] if p.args[0] == "attribute"],
-    )
+    process_sect("Attributes:", [p for p in docstring.params or [] if p.args[0] == "attribute"])
 
-    process_sect(
-        "Returns:",
-        [p for p in docstring.many_returns or [] if not p.is_generator],
-    )
+    process_sect("Returns:", [p for p in docstring.many_returns or [] if not p.is_generator])
 
     process_sect("Yields:", [p for p in docstring.many_returns or [] if p.is_generator])
 

@@ -29,20 +29,13 @@ def compute_rerun_closure(db: WorkspaceDatabase, roots: Iterable[str]) -> list["
     return resolved
 
 
-def get_specs_from_view(
-    db: WorkspaceDatabase,
-    *,
-    prefixes: list[str],
-) -> list["JobSpec"]:
+def get_specs_from_view(db: WorkspaceDatabase, *, prefixes: list[str]) -> list["JobSpec"]:
     roots = db.select_from_view(prefixes=prefixes)
     return compute_rerun_closure(db, roots=roots)
 
 
 def get_specs(
-    db: WorkspaceDatabase,
-    *,
-    strategy: StrategyType = "all",
-    tag: str | None = None,
+    db: WorkspaceDatabase, *, strategy: StrategyType = "all", tag: str | None = None
 ) -> list["JobSpec"]:
     """
     Compute the full rerun spec set using a named strategy.
@@ -67,11 +60,7 @@ def rerun_strategy(fn: Callable[..., set[str]]) -> Callable[..., set[str]]:
 
 
 @rerun_strategy
-def changed(
-    db: WorkspaceDatabase,
-    *,
-    tag: str | None = None,
-) -> set[str]:
+def changed(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
     """
     Specs whose file mtime is newer than their latest result.
     """
@@ -85,11 +74,7 @@ def changed(
 
 
 @rerun_strategy
-def not_pass(
-    db: WorkspaceDatabase,
-    *,
-    tag: str | None = None,
-) -> set[str]:
+def not_pass(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
     """
     Specs with no result or non-PASS result.
     """
@@ -102,11 +87,7 @@ def not_pass(
 
 
 @rerun_strategy
-def failed(
-    db: WorkspaceDatabase,
-    *,
-    tag: str | None = None,
-) -> set[str]:
+def failed(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
     """
     Specs whose latest result is FAIL.
     """
@@ -121,11 +102,7 @@ def failed(
 
 
 @rerun_strategy
-def not_run(
-    db: WorkspaceDatabase,
-    *,
-    tag: str | None = None,
-) -> set[str]:
+def not_run(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
     """
     Specs whose latest result is FAIL.
     """
@@ -138,11 +115,7 @@ def not_run(
 
 
 @rerun_strategy
-def all(
-    db: WorkspaceDatabase,
-    *,
-    tag: str | None = None,
-) -> set[str]:
+def all(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
     """
     Specs whose latest result is FAIL.
     """

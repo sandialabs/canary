@@ -72,9 +72,7 @@ PathLike = pathlib.Path | str
 
 @overload
 def which(
-    *args: str,
-    path: str | list[str] | tuple[str, ...] | None = None,
-    required: Literal[True],
+    *args: str, path: str | list[str] | tuple[str, ...] | None = None, required: Literal[True]
 ) -> str: ...
 
 
@@ -87,9 +85,7 @@ def which(
 
 
 def which(
-    *args: str,
-    path: str | list[str] | tuple[str, ...] | None = None,
-    required: bool = False,
+    *args: str, path: str | list[str] | tuple[str, ...] | None = None, required: bool = False
 ) -> str | None:
     """Finds an executable in the path like command-line which.
 
@@ -253,10 +249,7 @@ def async_rmtree(path: PathLike) -> None:
             pass
 
     t = threading.Thread(
-        target=_rm_rf,
-        args=(tombstone,),
-        name=f"wipe-{tombstone.name}",
-        daemon=True,
+        target=_rm_rf, args=(tombstone,), name=f"wipe-{tombstone.name}", daemon=True
     )
     t.start()
 

@@ -61,8 +61,5 @@ class DistributedPoolExecutor:
             "--workers", type=int, help="Run tests in batch using this many workers"
         )
         parser.add_argument(
-            "--workspace",
-            dest="canary_dist_workspace",
-            help="The batch's workspace",
-            required=True,
+            "--workspace", dest="canary_dist_workspace", help="The batch's workspace", required=True
         )

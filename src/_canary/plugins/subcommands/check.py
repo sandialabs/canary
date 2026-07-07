@@ -38,10 +38,12 @@ stderr: Any = subprocess.PIPE
 logger = logging.get_logger(__name__)
 test_paths = (
     "tests",
+    "src/canary_amd/tests",
     "src/canary_cmake/tests",
     "src/canary_dist/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
+    "src/canary_nvidia/tests",
     "src/canary_pyt/tests",
     "src/canary_vvtest/tests",
 )
@@ -351,7 +353,9 @@ def run_pytests_parallel(
     with ProcessPoolExecutor(max_workers=max_workers or os.cpu_count()) as ex:
         futures: dict[Future, str] = {}
         for p in test_paths:
-            logger.info(f"Submitting tests in {p} to pytest")
+            ap = os.path.abspath(p)
+            rp = os.path.relpath(ap, root)
+            logger.info(f"Submitting tests in ./{rp} to pytest")
             fut = ex.submit(run_pytest_one, str(root), str(p), pytest_args)
             futures[fut] = str(p)
         for fut in as_completed(futures):

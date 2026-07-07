@@ -33,11 +33,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             started_at = now
             batch.timekeeper.started = now
             queue.put(
-                {
-                    "event": "job_started",
-                    "timestamp": now,
-                    "host": getattr(batch, "hostname", None),
-                }
+                {"event": "job_started", "timestamp": now, "host": getattr(batch, "hostname", None)}
             )
 
         def set_jobid(future):
@@ -97,9 +93,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
         # manager. For distributed execution, the remote process must see only
         # the resources checked out for this batch.
         snapshot = canary.config.snapshot()
-        snapshot["resource_manager"] = {
-            "resource_pool": batch.remote_resource_pool(),
-        }
+        snapshot["resource_manager"] = {"resource_pool": batch.remote_resource_pool()}
 
         config_file = variables.get(canary.config.CONFIG_ENV_FILENAME)
         if config_file:
@@ -172,14 +166,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
         if canary.config.get("debug"):
             default_args.append("-d")
 
-        args: list[str] = [
-            sys.executable,
-            "-m",
-            "canary",
-            *default_args,
-            "dist",
-            "exec",
-        ]
+        args: list[str] = [sys.executable, "-m", "canary", *default_args, "dist", "exec"]
 
         n = canary.config.getoption("canary_dist_remote_workers") or -1
         args.extend([f"--workers={n}", f"--workspace={batch.workspace.dir}"])

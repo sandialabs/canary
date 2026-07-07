@@ -55,11 +55,7 @@ def test_pack_to_height_with_grouper_places_every_block_once():
     blocks = [canary_hpc.binpack.Block(f"a{i}", i, 1) for i in range(1, 13)]
 
     extents = [4, 8, 12]
-    bins = canary_hpc.binpack.pack_to_height(
-        blocks,
-        height=5,
-        grouper=Grouper(extents),
-    )
+    bins = canary_hpc.binpack.pack_to_height(blocks, height=5, grouper=Grouper(extents))
 
     _assert_same_blocks_once(_flatten_bins(bins), blocks)
 
@@ -93,10 +89,7 @@ def test_grouper_partitions_by_first_matching_extent():
 
 
 def test_grouper_rejects_block_that_fits_no_extent():
-    blocks = [
-        canary_hpc.binpack.Block("ok", 12, 1),
-        canary_hpc.binpack.Block("too-wide", 13, 1),
-    ]
+    blocks = [canary_hpc.binpack.Block("ok", 12, 1), canary_hpc.binpack.Block("too-wide", 13, 1)]
 
     with pytest.raises(ValueError, match="does not fit"):
         Grouper([4, 8, 12])(blocks)
@@ -110,11 +103,7 @@ def test_pack_to_height_rejects_grouper_that_drops_blocks():
             return [list(blocks[:-1])]
 
     with pytest.raises(ValueError, match="partition|drop|drops|duplicate|duplicates"):
-        canary_hpc.binpack.pack_to_height(
-            blocks,
-            height=2,
-            grouper=DroppingGrouper(),
-        )
+        canary_hpc.binpack.pack_to_height(blocks, height=2, grouper=DroppingGrouper())
 
 
 def test_pack_to_height_rejects_grouper_that_duplicates_blocks():
@@ -125,11 +114,7 @@ def test_pack_to_height_rejects_grouper_that_duplicates_blocks():
             return [list(blocks) + [blocks[0]]]
 
     with pytest.raises(ValueError, match="partition|drop|drops|duplicate|duplicates"):
-        canary_hpc.binpack.pack_to_height(
-            blocks,
-            height=2,
-            grouper=DuplicatingGrouper(),
-        )
+        canary_hpc.binpack.pack_to_height(blocks, height=2, grouper=DuplicatingGrouper())
 
 
 class Grouper:

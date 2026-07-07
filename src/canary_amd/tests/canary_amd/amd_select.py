@@ -27,18 +27,8 @@ def test_amd_sets_visible_devices_for_amd_gpus(monkeypatch):
     job = FakeJob(
         {
             "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                },
-                {
-                    "node": "local",
-                    "id": "1",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                },
+                {"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}},
+                {"node": "local", "id": "1", "slots": 1, "properties": {"vendor": "AMD"}},
             ]
         }
     )
@@ -55,16 +45,7 @@ def test_amd_sets_visible_devices_for_rocm_vendor(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "ROCM"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "ROCM"}}]}
     )
 
     amd.canary_runteststart(job)
@@ -81,18 +62,8 @@ def test_amd_deduplicates_local_ids_for_multinode(monkeypatch):
     job = FakeJob(
         {
             "gpus": [
-                {
-                    "node": "0",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                },
-                {
-                    "node": "1",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                },
+                {"node": "0", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}},
+                {"node": "1", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}},
             ]
         }
     )
@@ -109,16 +80,7 @@ def test_amd_does_not_claim_unknown_vendor(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "UNKNOWN"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "UNKNOWN"}}]}
     )
 
     amd.canary_runteststart(job)
@@ -132,18 +94,7 @@ def test_amd_does_not_claim_missing_vendor(monkeypatch):
     for var in amd._AMD_VISIBLE_DEVICES_VARIABLES:
         monkeypatch.delenv(var, raising=False)
 
-    job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {},
-                }
-            ]
-        }
-    )
+    job = FakeJob({"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {}}]})
 
     amd.canary_runteststart(job)
 
@@ -157,16 +108,7 @@ def test_amd_does_not_claim_nvidia_vendor(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "NVIDIA"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}}]}
     )
 
     amd.canary_runteststart(job)
@@ -183,16 +125,7 @@ def test_amd_does_not_override_existing_env_visible_device(monkeypatch):
     monkeypatch.setenv("HIP_VISIBLE_DEVICES", "7")
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}}]}
     )
 
     amd.canary_runteststart(job)
@@ -207,16 +140,7 @@ def test_amd_does_not_override_existing_case_variable(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     job = FakeJob(
-        {
-            "gpus": [
-                {
-                    "node": "local",
-                    "id": "0",
-                    "slots": 1,
-                    "properties": {"vendor": "AMD"},
-                }
-            ]
-        }
+        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}}]}
     )
     job.variables["ROCR_VISIBLE_DEVICES"] = "7"
 

@@ -106,9 +106,7 @@ def canary_fill_gpu(config: "canary.Config", pool: "ResourcePool") -> None:
 def _gpu_resource_spec(spec: dict[str, Any]) -> dict[str, Any]:
     vendor = str(spec.get("vendor", "UNKNOWN")).upper()
 
-    properties: dict[str, Any] = {
-        "vendor": vendor,
-    }
+    properties: dict[str, Any] = {"vendor": vendor}
 
     if "uuid" in spec:
         properties["uuid"] = spec["uuid"]
@@ -167,11 +165,9 @@ def get_plugin_name(plugin: Any) -> str:
 gpu_select_schema = Schema(
     {
         Optional("backend", default={"default": None}): {
-            Optional("default", default=None): Or(str, None),  # type: ignore[arg-type]
+            Optional("default", default=None): Or(str, None)  # type: ignore[arg-type]
         },
-        Optional(".runtime"): {
-            Optional("backend", default=None): object,
-        },
+        Optional(".runtime"): {Optional("backend", default=None): object},
     },
     ignore_extra_keys=True,
 )

@@ -34,8 +34,7 @@ def test_to_seconds():
         to_seconds("1 day 23 hours and 15 mins."), 1 * 24 * 60 * 60 + 23 * 60 * 60 + 15 * 60
     )
     assert isclose(
-        to_seconds("1 day - 23 hours and 15 mins."),
-        1 * 24 * 60 * 60 - 23 * 60 * 60 + 15 * 60,
+        to_seconds("1 day - 23 hours and 15 mins."), 1 * 24 * 60 * 60 - 23 * 60 * 60 + 15 * 60
     )
     assert isclose(to_seconds(4000), 4000)
     assert isclose(to_seconds(400.0), 400.0)

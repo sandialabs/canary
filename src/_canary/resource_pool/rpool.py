@@ -264,10 +264,7 @@ class Node:
         return None
 
     def getstate(self) -> dict[str, Any]:
-        state: dict[str, Any] = {
-            "id": self.id,
-            "resources": copy.deepcopy(self.resources),
-        }
+        state: dict[str, Any] = {"id": self.id, "resources": copy.deepcopy(self.resources)}
         if self.additional_properties:
             state["additional_properties"] = copy.deepcopy(self.additional_properties)
         return state
@@ -445,12 +442,7 @@ class ResourcePool:
 
         pool = {
             "additional_properties": {},
-            "nodes": [
-                {
-                    "id": os.uname().nodename,
-                    "resources": resources,
-                }
-            ],
+            "nodes": [{"id": os.uname().nodename, "resources": resources}],
         }
         self.fill(pool)
 
@@ -739,13 +731,7 @@ class ResourcePool:
         for node in self.nodes:
             node.set_resource_count(rtype, count)
 
-    def set_slots_per_resource(
-        self,
-        rtype: str,
-        slots: int,
-        *,
-        node_id: str | None = None,
-    ) -> None:
+    def set_slots_per_resource(self, rtype: str, slots: int, *, node_id: str | None = None) -> None:
         if node_id is not None:
             self.get_node(node_id).set_slots_per_resource(rtype, slots)
             return
@@ -755,11 +741,7 @@ class ResourcePool:
                 node.set_slots_per_resource(rtype, slots)
 
     def multiply_slots_per_resource(
-        self,
-        rtype: str,
-        factor: int,
-        *,
-        node_id: str | None = None,
+        self, rtype: str, factor: int, *, node_id: str | None = None
     ) -> None:
         if node_id is not None:
             self.get_node(node_id).multiply_slots_per_resource(rtype, factor)

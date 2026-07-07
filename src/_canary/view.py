@@ -117,9 +117,7 @@ class ViewManifest:
             job_id: ViewManifestEntry(**entry) for job_id, entry in data.get("entries", {}).items()
         }
         return cls(
-            version=data.get("version", 1),
-            settings=data.get("settings", {}),
-            entries=entries,
+            version=data.get("version", 1), settings=data.get("settings", {}), entries=entries
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -239,13 +237,7 @@ class ResultsView:
             fh.write("\n")
         os.replace(tmp, self.manifest_file)
 
-    def sync(
-        self,
-        job: Job,
-        manifest: ViewManifest | None = None,
-        *,
-        save: bool = True,
-    ) -> bool:
+    def sync(self, job: Job, manifest: ViewManifest | None = None, *, save: bool = True) -> bool:
         """Synchronize this job's latest result into the view.
 
         This removes any previous entry for the job, then conditionally adds

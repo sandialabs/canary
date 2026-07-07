@@ -28,9 +28,7 @@ class ResolveContext:
 
 
 def _find_matching_specs(
-    dp: "DependencySelector",
-    source_spec: "JobSpecIR",
-    ctx: ResolveContext,
+    dp: "DependencySelector", source_spec: "JobSpecIR", ctx: ResolveContext
 ) -> list["JobSpecIR | JobSpec"]:
     matches: set[str] = set()
     matched_specs: list["JobSpecIR | JobSpec"] = []
@@ -65,13 +63,8 @@ def _find_matching_specs(
 
 
 def _resolve_dependencies_serial(
-    specs_to_resolve: list["JobSpecIR"],
-    ctx: ResolveContext,
-) -> tuple[
-    dict[str, list[str]],
-    dict[str, list[tuple[int, list[str]]]],
-    list[str],
-]:
+    specs_to_resolve: list["JobSpecIR"], ctx: ResolveContext
+) -> tuple[dict[str, list[str]], dict[str, list[tuple[int, list[str]]]], list[str]]:
     edges_by_id: dict[str, list[str]] = {}
     groups_by_id: dict[str, list[tuple[int, list[str]]]] = {}
     errors: list[str] = []
@@ -99,13 +92,8 @@ def _resolve_dependencies_serial(
 
 
 def _resolve_dependencies_parallel(
-    specs_to_resolve: list["JobSpecIR"],
-    ctx: ResolveContext,
-) -> tuple[
-    dict[str, list[str]],
-    dict[str, list[tuple[int, list[str]]]],
-    list[str],
-]:
+    specs_to_resolve: list["JobSpecIR"], ctx: ResolveContext
+) -> tuple[dict[str, list[str]], dict[str, list[tuple[int, list[str]]]], list[str]]:
     if not specs_to_resolve:
         return {}, {}, []
 

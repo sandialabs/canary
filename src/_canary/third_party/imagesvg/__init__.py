@@ -44,10 +44,7 @@ def _get_html_object_tag_attributes(self, node):
     if olduri in self.builder.images:
         node["uri"] = posixpath.join(self.builder.imgpath, self.builder.images[olduri])
 
-    attrs = {
-        "type": "image/svg+xml",
-        "data": node["uri"],
-    }
+    attrs = {"type": "image/svg+xml", "data": node["uri"]}
     if "width" in node:
         attrs["width"] = node["width"]
     if "height" in node:
@@ -67,9 +64,7 @@ def _get_html_iframe_tag_attributes(self, node):
     if olduri in self.builder.images:
         node["uri"] = posixpath.join(self.builder.imgpath, self.builder.images[olduri])
 
-    attrs = {
-        "src": node["uri"],
-    }
+    attrs = {"src": node["uri"]}
     style = {}
     styleLength = 0
     if "width" in node:
@@ -118,9 +113,7 @@ class ImageSVGDirective(Image):
 
     """
 
-    own_option_spec = dict(
-        tagtype=str,
-    )
+    own_option_spec = dict(tagtype=str)
 
     option_spec = Image.option_spec.copy()
     option_spec.update(own_option_spec)

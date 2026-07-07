@@ -37,8 +37,4 @@ def sys_info():
     else:
         version_str = version[0]
 
-    return SimpleNamespace(
-        vendor=vendor,
-        version_info=version_info,
-        version_str=version_str,
-    )
+    return SimpleNamespace(vendor=vendor, version_info=version_info, version_str=version_str)

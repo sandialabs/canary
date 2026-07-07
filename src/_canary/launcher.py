@@ -328,11 +328,7 @@ class MeasuredProcess:
             vals = [s[k] for s in self.samples if isinstance(s.get(k), (int, float))]
             if not vals:
                 continue
-            measurements[k] = {
-                "min": min(vals),
-                "max": max(vals),
-                "ave": sum(vals) / len(vals),
-            }
+            measurements[k] = {"min": min(vals), "max": max(vals), "ave": sum(vals) / len(vals)}
         return measurements
 
 

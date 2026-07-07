@@ -16,13 +16,7 @@ from .common import DocstringParam
 ast_constant_attr = {ast.Constant: "value"}
 
 if sys.version_info[:2] <= (3, 7):
-    ast_constant_attr.update(
-        {
-            ast.NameConstant: "value",
-            ast.Num: "n",
-            ast.Str: "s",
-        }
-    )
+    ast_constant_attr.update({ast.NameConstant: "value", ast.Num: "n", ast.Str: "s"})
 
 
 def ast_get_constant_value(node: ast.AST) -> T.Any:
@@ -51,9 +45,7 @@ def ast_is_literal_str(node: ast.AST) -> bool:
     )
 
 
-def ast_get_attribute(
-    node: ast.AST,
-) -> T.Optional[T.Tuple[str, T.Optional[str], T.Optional[str]]]:
+def ast_get_attribute(node: ast.AST) -> T.Optional[T.Tuple[str, T.Optional[str], T.Optional[str]]]:
     """Return name, type and default if the given node is an attribute."""
     if isinstance(node, (ast.Assign, ast.AnnAssign)):
         target = node.targets[0] if isinstance(node, ast.Assign) else node.target

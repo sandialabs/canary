@@ -34,13 +34,8 @@ def test_queue_done_checkins_full_allocation():
     q = ResourceQueue(threading.Lock(), resource_pool=rpool)  # type: ignore[arg-type]
 
     allocation = {
-        "metadata": {
-            "source": "distributed",
-            "transaction_id": "tx-1",
-        },
-        "resources": {
-            "cpus": [{"node": "host-a", "id": "0", "slots": 1}],
-        },
+        "metadata": {"source": "distributed", "transaction_id": "tx-1"},
+        "resources": {"cpus": [{"node": "host-a", "id": "0", "slots": 1}]},
     }
 
     batch = FakeBatch(allocation)

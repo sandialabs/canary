@@ -122,10 +122,7 @@ class DistributedResourcePoolAdapter:
 
         return {
             "allow_multinode": False,
-            "additional_properties": {
-                "source": "distributed",
-                "server_url": self.server_url,
-            },
+            "additional_properties": {"source": "distributed", "server_url": self.server_url},
             "nodes": nodes,
         }
 
@@ -251,11 +248,7 @@ class DistributedResourcePoolAdapter:
             logger.error(f"Failed to checkin resources for {transaction_id}")
 
     def curl(
-        self,
-        endpoint: str,
-        method: str = "POST",
-        data: Any = None,
-        **parameters: str,
+        self, endpoint: str, method: str = "POST", data: Any = None, **parameters: str
     ) -> subprocess.CompletedProcess:
         url = f"{self.server_url}{endpoint}"
 
@@ -312,8 +305,7 @@ class DistributedResourcePoolAdapter:
 
 
 def _with_node(
-    resources: dict[str, list[dict[str, Any]]],
-    node: str,
+    resources: dict[str, list[dict[str, Any]]], node: str
 ) -> dict[str, list[dict[str, Any]]]:
     """Attach Canary node identity to flat server-side resource specs."""
     result: dict[str, list[dict[str, Any]]] = {}

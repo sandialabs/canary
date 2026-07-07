@@ -40,14 +40,7 @@ def composite_base_case(case: canary.TestMultiInstance):
     assert sorted(case.parameters.a) == sorted((1, 2, 4, 1, 2, 4))
     assert sorted(case.parameters.b) == sorted((2, 3, 5, 2, 3, 5))
     assert sorted(case.parameters[("cpus", "a", "b")]) == sorted(
-        (
-            (1, 1, 2),
-            (1, 2, 3),
-            (1, 4, 5),
-            (2, 1, 2),
-            (2, 2, 3),
-            (2, 4, 5),
-        )
+        ((1, 1, 2), (1, 2, 3), (1, 4, 5), (2, 1, 2), (2, 2, 3), (2, 4, 5))
     )
     for i, dep in enumerate(case.dependencies):
         x = (dep.parameters["cpus"], dep.parameters["a"], dep.parameters["b"])

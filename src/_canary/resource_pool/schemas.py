@@ -19,16 +19,11 @@ empty_resource_spec_schema = Schema({})
 
 typed_resource_spec_schema = Schema(
     {
-        str: [resource_instance_schema],  # type: ignore
+        str: [resource_instance_schema]  # type: ignore
     }
 )
 
-resource_spec_schema = Schema(
-    Or(
-        empty_resource_spec_schema,
-        typed_resource_spec_schema,
-    )
-)
+resource_spec_schema = Schema(Or(empty_resource_spec_schema, typed_resource_spec_schema))
 
 node_schema = Schema(
     {

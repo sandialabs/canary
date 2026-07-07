@@ -421,15 +421,7 @@ def git_ls(root: str, patterns: Iterable[str]) -> list[str]:
         A list of matching file paths.
     """
     gitified_patterns = [f"**/{p}" for p in patterns]
-    args = [
-        "git",
-        "-C",
-        root,
-        "ls-files",
-        "--recurse-submodules",
-        "--",
-        *gitified_patterns,
-    ]
+    args = ["git", "-C", root, "ls-files", "--recurse-submodules", "--", *gitified_patterns]
     cp = subprocess.run(args, capture_output=True, text=True)
     return [f.strip() for f in cp.stdout.split("\n") if f.split()]
 

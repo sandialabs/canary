@@ -206,9 +206,7 @@ def to_str_path(x: object) -> str:
 
 
 @canary.hookimpl(wrapper=True)
-def canary_cdash_artifacts(
-    case: canary.Job,
-) -> Generator[None, list[str], list[str]]:
+def canary_cdash_artifacts(case: canary.Job) -> Generator[None, list[str], list[str]]:
     result = yield
     candidates: set[str] = {a for b in result for a in b if b}
     artifacts: list[str] = []
