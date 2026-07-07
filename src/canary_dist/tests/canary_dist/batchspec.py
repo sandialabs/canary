@@ -171,5 +171,4 @@ def test_setup_writes_resource_pool_and_allocation(tmp_path):
     data = DistBatch.loadconfig(str(batch.workspace.dir))
 
     assert data["allocation"] == allocation
-    assert data["resource_pool"] == batch.remote_resource_pool()
     assert data["remote host"] == "host-a"

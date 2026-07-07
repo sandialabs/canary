@@ -212,8 +212,8 @@ canary.directives.keywords("k1")
 def test_artifact_upon_mapping_success_failure(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     a = PYTAdapter(m)
-    a.f_artifact("baz.txt", upon="success")
-    a.f_artifact("spam.txt", upon="failure")
+    a.f_artifact("baz.txt", save_on="success")
+    a.f_artifact("spam.txt", save_on="failure")
     specs = lock_model(m)
     w = {a.when for a in specs[0].artifacts if a.pattern in ("baz.txt", "spam.txt")}
     assert w == {"on_success", "on_failure"}
@@ -223,7 +223,7 @@ def test_artifact_invalid_upon_raises(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     a = PYTAdapter(m)
     with pytest.raises(ValueError):
-        a.f_artifact("out.txt", upon="nope")
+        a.f_artifact("out.txt", save_on="nope")
 
 
 def test_dependency_parsing_legacy_string(tmp_path: Path) -> None:

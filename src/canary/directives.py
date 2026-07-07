@@ -108,7 +108,7 @@ WhenType = str | dict[str, str]
 DependencyType = str | dict[str, Any] | DependencySelector
 
 
-def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
+def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always") -> None:
     """Save ``file`` as an artifact.  This directive is not used by the test directly.  Reporters
     can save a test's artifacts at their destination.  For instance, the artifacts may submitted to
     CDash as part of the test submission.
@@ -121,7 +121,7 @@ def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -
     .. code-block:: python
 
        import canary
-       canary.directives.artifact(file, *, when=..., upon=...)
+       canary.directives.artifact(file, *, when=..., save_on=...)
 
     ``.vvt``: ``NA``
 
@@ -129,7 +129,7 @@ def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -
     ----------
 
     * ``when``: Restrict processing of the directive to this condition
-    * ``upon``: Define when to save the artifact, based on the status of the job.
+    * ``save_on``: Define when to save the artifact, based on the status of the job.
       * ``success``: Save artifacts only when the job succeeds.
       * ``failure``: Save artifacts only when the job fails or diffs.
       * ``always``: Always save artifacts (except when jobs time out).
@@ -149,7 +149,7 @@ def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -
     .. code-block:: python
 
        import canary
-       canary.directives.artifacts("file.txt", when="platforms='not darwin'", upon="success")
+       canary.directives.artifacts("file.txt", when="platforms='not darwin'", save_on="success")
     """
 
 

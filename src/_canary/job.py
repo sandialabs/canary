@@ -416,7 +416,7 @@ class Job(BaseJob):
     def set_attributes(self, **kwds: Any) -> None:
         self.spec.set_attributes(**kwds)
 
-    def get_attribute(self, name: str, default: None = None, /) -> None | Any:
+    def get_attribute(self, name: str, default: Any = None, /) -> None | Any:
         return self.spec.attributes.get(name, default)
 
     @property

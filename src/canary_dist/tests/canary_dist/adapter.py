@@ -91,12 +91,12 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
                             "state": "online",
                             "tags": ["gpu"],
                             "groups": ["nightly"],
-                            "resources": {"cpus": [{"id": "0", "slots": 1}]},
+                            "resources": {"cpus": [{"id": "0", "slots": 1}], "gpus": []},
                         },
                         {
                             "hostname": "host-b",
                             "state": "offline",
-                            "resources": {"cpus": [{"id": "0", "slots": 1}]},
+                            "resources": {"cpus": [{"id": "0", "slots": 1}], "gpus": []},
                         },
                     ]
                 },
@@ -112,7 +112,7 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
         "nodes": [
             {
                 "id": "host-a",
-                "resources": {"cpus": [{"id": "0", "slots": 1}]},
+                "resources": {"cpus": [{"id": "0", "slots": 1}], "gpus": []},
                 "additional_properties": {
                     "distributed": {"state": "online", "tags": ["gpu"], "groups": ["nightly"]}
                 },

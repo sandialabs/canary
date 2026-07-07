@@ -28,10 +28,10 @@ def test_executor_resource_pool_fill_returns_batch_local_pool(tmp_path):
         "session": "session-1",
         "workspace": str(workspace),
         "jobs": ["job-1"],
-        "resource_pool": resource_pool,
     }
 
     (workspace / "batch.lock").write_text(json.dumps(config))
+    (workspace / "resource_pool.json").write_text(json.dumps({"resource_pool": resource_pool}))
 
     executor = DistributedPoolExecutor(workspace=str(workspace))
 
