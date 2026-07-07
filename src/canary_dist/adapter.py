@@ -106,10 +106,13 @@ class DistributedResourcePoolAdapter:
             if not self._machine_eligible(machine, tags=tags, groups=groups):
                 continue
 
+            resources = dict(machine.get("resources", {}))
+            resources.setdefault("cpus", [])
+            resources.setdefault("gpus", [])
             nodes.append(
                 {
                     "id": machine["hostname"],
-                    "resources": machine.get("resources", {}),
+                    "resources": resources,
                     "additional_properties": {
                         "distributed": {
                             "state": machine.get("state", "online"),

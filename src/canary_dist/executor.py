@@ -48,7 +48,8 @@ class DistributedPoolExecutor:
         for spec in specs:
             if spec.id not in self.jobs:
                 spec.mask = canary.Mask(True, reason=f"Job not in batch {self.batch}")
-        view_t = canary.ViewSettings(when="never")
+        view_cfg = canary.config.get("workspace:view")
+        view_t = canary.ViewSettings(**view_cfg) if view_cfg else canary.ViewSettings.default()
         session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
