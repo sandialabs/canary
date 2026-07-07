@@ -593,12 +593,16 @@ class Job(BaseJob):
                     continue
                 if not asset.src.exists():
                     raise MissingSourceError(asset.src)
-                if asset.action == "copy" or copy_all_resources:
-                    file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
-                    self.workspace.copy(asset.src, asset.dst)
-                else:
-                    file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
-                    self.workspace.link(asset.src, asset.dst)
+                try:
+                    if asset.action == "copy" or copy_all_resources:
+                        file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
+                        self.workspace.copy(asset.src, asset.dst)
+                    else:
+                        file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
+                        self.workspace.link(asset.src, asset.dst)
+                except:
+                    logger.exception("FAILED")
+                    raise
 
     def run(self) -> None:
         from .status import Outcome
@@ -778,7 +782,7 @@ class Job(BaseJob):
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
         """Default parameters used to set up resources required by test job"""
-        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
+        resource_types: set[str] = set(config.resource_manager.types())
         p = self.spec.parameters | self.spec.meta_parameters
         rparameters: dict[str, int] = {}
         for key in p.keys() & (resource_types | {"nodes"}):
@@ -791,7 +795,7 @@ class Job(BaseJob):
         cpus: int | None = rparameters.get("cpus")
         gpus: int | None = rparameters.get("gpus")
         nodes: int | None = rparameters.get("nodes")
-        rpcount = config.pluginmanager.hook.canary_resource_pool_count_per_node
+        rpcount = config.resource_manager.count_per_node
         cpus_per_node: int = rpcount(type="cpu") or cpu_count()
         gpus_per_node: int = rpcount(type="gpu") or 0
         if nodes is not None:

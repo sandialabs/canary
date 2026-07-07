@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import TYPE_CHECKING
 from typing import Any
 
 from schema import Optional
@@ -13,6 +14,9 @@ import canary
 from ..config.argparsing import Parser
 from ..hookspec import hookimpl
 from ..hookspec import hookspec
+
+if TYPE_CHECKING:
+    from ..resource_pool.rpool import ResourcePool
 
 
 class GPUSelect:
@@ -51,60 +55,103 @@ def detect_gpu_backend(config: "canary.Config") -> None:
     requested = config.getoption("gpu_backend") or "none"
     if requested == "none":
         return
+
     candidates: dict[str, str] = {}
+
     for impl in pm.hook.canary_gpu_backend_detect.get_hookimpls():
         plugin = impl.plugin
         plugin_name = get_plugin_name(impl)
         fun = getattr(plugin, "canary_gpu_backend_detect")
         backend = fun(config=config)
+
         if backend:
             key = str(backend).lower()
             if key in candidates:
                 raise ValueError(f"Duplicate GPU backends detected for {key!r}")
             candidates[key] = plugin_name
+
     selected = _select_backend(config, candidates)
-    # Persist selection for later phases:
+
+    # Persist selection for later phases.
     config.set("gpu_select:.runtime:backend", selected)
 
 
-@hookimpl(specname="canary_resource_pool_fill")
-def canary_fill_gpu(config: "canary.Config", pool: dict[str, dict[str, Any]]) -> None:
-    resources = pool.setdefault("resources", {})
-    if resources.get("gpus"):
+@hookimpl(specname="canary_resource_pool_update")
+def canary_fill_gpu(config: "canary.Config", pool: "ResourcePool") -> None:
+    """Fill local-node GPU resources from the selected GPU backend.
+
+    GPU backend discovery is local-node discovery, so this hook populates the
+    first node's resources. Multi-node/HPC plugins can replace or populate nodes
+    separately.
+    """
+    node = pool.first_node()
+
+    if node.has_resource("gpus") and node.get_resource("gpus"):
         return
+
     backend = config.get("gpu_select:.runtime:backend")
     if backend is None:
         return
+
     pm = config.pluginmanager
     plugin = pm.get_plugin(backend["plugin"])
     if plugin is None:
         raise RuntimeError(f"Selected GPU plugin {backend['plugin']!r} is not registered")
+
     gpu_specs = plugin.canary_gpu_list_gpus(config=config)
     if gpu_specs:
-        gpus = [
-            {"id": f"{spec['vendor'].upper()}:{spec['id']}:{spec['uuid']}", "slots": spec["slots"]}
-            for spec in gpu_specs
-        ]
-        resources["gpus"] = gpus
+        node.set_resource("gpus", [_gpu_resource_spec(spec) for spec in gpu_specs])
+
+
+def _gpu_resource_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    vendor = str(spec.get("vendor", "UNKNOWN")).upper()
+
+    properties: dict[str, Any] = {
+        "vendor": vendor,
+    }
+
+    if "uuid" in spec:
+        properties["uuid"] = spec["uuid"]
+
+    if "name" in spec:
+        properties["name"] = spec["name"]
+
+    if "model" in spec:
+        properties["model"] = spec["model"]
+
+    return {
+        # Node-local runtime device ID. This is what CUDA_VISIBLE_DEVICES,
+        # HIP_VISIBLE_DEVICES, etc. should use.
+        "id": str(spec["id"]),
+        "slots": spec.get("slots", 1),
+        "properties": properties,
+    }
 
 
 def _select_backend(config: "canary.Config", candidates: dict[str, str]) -> dict[str, str] | None:
     requested = (config.getoption("gpu_backend") or "none").lower()
+
     if requested == "none":
         return None
+
     if requested == "auto":
         if len(candidates) == 0:
             return None
         if len(candidates) == 1:
-            return candidates
+            backend_name, plugin_name = next(iter(candidates.items()))
+            return {"name": backend_name, "plugin": plugin_name}
+
         keys = sorted(candidates.keys())
         raise ValueError(
-            f"Multiple GPU backends detected: {', '.join(keys)}. Choose one with --gpu-backend=BACKEND."
+            f"Multiple GPU backends detected: {', '.join(keys)}. "
+            "Choose one with --gpu-backend=BACKEND."
         )
-    # allow selecting by backend key OR by plugin registered name
+
+    # Allow selecting by backend key OR by plugin registered name.
     for backend_name, plugin_name in candidates.items():
-        if requested.lower() in {backend_name, plugin_name.lower()}:
+        if requested in {backend_name, plugin_name.lower()}:
             return {"name": backend_name, "plugin": plugin_name}
+
     keys = sorted(candidates.keys())
     raise ValueError(f"GPU backend '{requested}' not detected. Choose from {', '.join(keys)}.")
 
@@ -112,18 +159,19 @@ def _select_backend(config: "canary.Config", candidates: dict[str, str]) -> dict
 def get_plugin_name(plugin: Any) -> str:
     if name := getattr(plugin, "plugin_name", None):
         return name
-    elif name := getattr(plugin, "pluginname", None):
+    if name := getattr(plugin, "pluginname", None):
         return name
     return plugin.__class__.__name__
 
 
-# default_backend = os.getenv("CANARY_GPU_BACKEND")
 gpu_select_schema = Schema(
     {
         Optional("backend", default={"default": None}): {
-            Optional("default", default=None): Or(str, None),  # type: ignore
+            Optional("default", default=None): Or(str, None),  # type: ignore[arg-type]
         },
-        Optional(".runtime"): {"backend": {"name": str, "plugin": str}},
+        Optional(".runtime"): {
+            Optional("backend", default=None): object,
+        },
     },
     ignore_extra_keys=True,
 )

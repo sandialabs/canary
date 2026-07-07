@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 import os
-import re
 import shutil
 import subprocess
+from typing import Any
 
 import canary
 
@@ -20,33 +20,56 @@ def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
 
 
 @canary.hookimpl
-def canary_runteststart(case: "canary.Job"):
-
-    gpu_ids = list(case.gpu_ids)
-    if not gpu_ids:
-        return
-
+def canary_runteststart(case: "canary.Job") -> None:
     if "CUDA_VISIBLE_DEVICES" in os.environ or "CUDA_VISIBLE_DEVICES" in case.variables:
-        # User already set visible devices: don't override
+        # User already set visible devices: don't override.
         return
 
-    visible: str | None = None
+    gpus = _nvidia_gpus(case)
+    if not gpus:
+        return
 
-    # Handle Canary NVIDIA-qualified IDs, e.g. NVIDIA:h100:0 or NVIDIA:GPU-uuid:0
-    if all(gpu_id.startswith("NVIDIA:") for gpu_id in gpu_ids):
-        visible = ",".join(gpu_id.rsplit(":", 1)[-1] for gpu_id in gpu_ids)
+    # GPU resource IDs are node-local runtime device IDs in the topology-aware
+    # resource model.
+    local_ids = [str(gpu["id"]) for gpu in gpus]
 
-    # Handle integer GPU IDs, e.g. "0", "1", "2", "3"
-    elif all(re.fullmatch(r"[0-9]+", gpu_id) for gpu_id in gpu_ids):
-        visible = ",".join(gpu_ids)
+    # Preserve order while removing duplicates. This matters for multi-node
+    # allocations where each node may contribute local GPU id "0".
+    visible = ",".join(dict.fromkeys(local_ids))
 
-    # Handle canary_hpc resource spec, e.g. "hpc:0:0"
-    elif all(re.fullmatch(r"hpc:[0-9]+:[0-9]+", gpu_id) for gpu_id in gpu_ids):
-        local_ids = [gpu_id.rsplit(":", 1)[-1] for gpu_id in gpu_ids]
-        visible = ",".join(dict.fromkeys(local_ids))
-
-    if visible is not None:
+    if visible:
         case.variables["CUDA_VISIBLE_DEVICES"] = visible
+
+
+def _nvidia_gpus(case: "canary.Job") -> list[dict[str, Any]]:
+    resources = getattr(case, "resources", None)
+    if not isinstance(resources, dict):
+        return []
+
+    gpus = resources.get("gpus", [])
+    if not isinstance(gpus, list):
+        return []
+
+    nvidia_gpus: list[dict[str, Any]] = []
+
+    for gpu in gpus:
+        if not isinstance(gpu, dict):
+            return []
+
+        properties = gpu.get("properties", {})
+        if not isinstance(properties, dict):
+            return []
+
+        vendor = str(properties.get("vendor", "")).upper()
+        if vendor not in {"NVIDIA", "UNKNOWN", ""}:
+            return []
+
+        if "id" not in gpu:
+            return []
+
+        nvidia_gpus.append(gpu)
+
+    return nvidia_gpus
 
 
 def _nvidia_smi_list_gpus(config: canary.Config) -> list[dict] | None:

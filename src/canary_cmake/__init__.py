@@ -12,6 +12,7 @@ from schema import Optional
 from schema import Schema
 
 import canary
+from _canary.util import cpu_count
 
 from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
@@ -173,18 +174,29 @@ def canary_cdash_name(case: canary.Job) -> str:
     return f"{case.spec.family}[{s_params}]"
 
 
-@canary.hookimpl
-def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, Any]]) -> None:
-    if f := config.getoption("canary_cmake_resource_spec_file"):
-        logger.info("Setting resource pool from ctest resource spec file")
-        pool["additional_properties"].clear()
-        pool["additional_properties"]["ctest"] = {"resource_spec_file": os.path.abspath(f)}
-        resource_specs = read_resource_specs(f)
-        cpu_spec = pool["resources"].pop("cpus")
-        pool["resources"].clear()
-        pool["resources"].update(resource_specs["local"])
-        if "cpus" not in pool["resources"]:
-            pool["resources"]["cpus"] = cpu_spec
+@canary.hookimpl(tryfirst=True)
+def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
+    f = config.getoption("canary_cmake_resource_spec_file")
+    if not f:
+        return None
+
+    logger.info("Setting resource pool from ctest resource spec file")
+
+    resource_specs = read_resource_specs(f)
+    ctest_resources = dict(resource_specs["local"])
+
+    # CTest resource specs often describe accelerator/custom resources but may
+    # omit CPUs. Since this hook creates the base pool, provide the same default
+    # CPU discovery used by Canary's local resource-pool creator.
+    if "cpus" not in ctest_resources:
+        ht: bool = config.getoption("resource_pool_enable_hyperthreads", False)
+        cpus = int(var) if (var := os.getenv("CANARY_TESTING_CPUS")) else cpu_count(logical=ht)
+        ctest_resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus)]
+    return {
+        "allow_multi_node": False,
+        "additional_properties": {"ctest": {"resource_spec_file": os.path.abspath(f)}},
+        "nodes": [{"id": os.uname().nodename, "resources": ctest_resources}],
+    }
 
 
 def to_str_path(x: object) -> str:

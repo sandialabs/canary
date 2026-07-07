@@ -12,7 +12,6 @@ from . import config
 from .hookspec import hookimpl
 from .job import Job
 from .queue import ResourceQueue
-from .resource_pool import make_resource_pool
 from .resource_pool.rpool import Outcome
 from .util import logging
 from .util.multiprocessing import SimpleQueue

@@ -384,9 +384,24 @@ def canary_runtest_finish(case: "Job") -> bool:
 # -------------------------------------------------------------------------
 
 
+@hookspec(firstresult=True)
+def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
+    """Create the initial resource-pool specification.
+
+    Implementations should return a topology-aware resource-pool spec or None.
+
+    """
+    raise NotImplementedError
+
+
 @hookspec
-def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, Any]]) -> None:
-    """Fill ``resources`` with available resources."""
+def canary_resource_pool_update(config: "CanaryConfig", pool: dict[str, Any]) -> None:
+    """Update an existing resource-pool specification.
+
+    Implementations may mutate ``pool`` in place. This hook is intended for
+    composable modifications such as GPU discovery, CTest resource specs,
+    command-line overrides, oversubscription, or metadata.
+    """
     raise NotImplementedError
 
 

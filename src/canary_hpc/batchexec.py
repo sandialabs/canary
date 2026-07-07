@@ -18,6 +18,7 @@ import hpc_connect
 import hpc_connect.futures
 
 import canary
+from _canary.util import json_helper
 from _canary.util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
@@ -51,9 +52,13 @@ class HPCConnectRunner:
         )
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
+        resource_pool_file = batch.workspace.joinpath("resource_pool.json")
+        resource_pool_data = json.loads(resource_pool_file.read_text())["resource_pool"]
+        snapshot = canary.config.snapshot()
+        snapshot["resource_manager"] = {"resource_pool": resource_pool_data}
         f = batch.workspace.joinpath("config.json")
         with open(f, "w") as fh:
-            canary.config.dump(fh)
+            fh.write(json_helper.dumps(snapshot, indent=2))
         variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         return variables
 
@@ -97,46 +102,114 @@ class HPCConnectRunner:
 
     def generate_resource_pool(self, batch: "TestBatch") -> None:
         node_count = self.nodes_required(batch)
-        resources: dict[str, list[Any]] = {}
-        additional_properties = {"node_count": node_count, "backend": self.backend.name}
-        for type in self.backend.resource_types():
-            count = self.backend.count_per_node(type)
-            slots = 1
-            if not type.endswith("s"):
-                type += "s"
-            resources[type] = [
-                {"id": f"hpc:{i}:{j}", "slots": slots}
-                for i in range(node_count)
-                for j in range(count)
-            ]
-            additional_properties[f"{type}_per_node"] = count
-        pool: dict[str, Any] = {
-            "resources": resources,
-            "additional_properties": additional_properties,
+
+        additional_properties: dict[str, Any] = {
+            "node_count": node_count,
+            "backend": self.backend.name,
+            "source": "hpc-batch",
         }
+
+        resource_types = {
+            _canonical_resource_type(rtype) for rtype in self.backend.resource_types()
+        }
+        resource_types.update({"cpus", "gpus"})
+
+        nodes: list[dict[str, Any]] = []
+
+        for i in range(node_count):
+            resources: dict[str, list[dict[str, Any]]] = {}
+
+            for rtype in sorted(resource_types):
+                try:
+                    count = self.backend.count_per_node(rtype)
+                except ValueError:
+                    try:
+                        count = self.backend.count_per_node(_singular_resource_type(rtype))
+                    except ValueError:
+                        count = 0
+
+                resources[rtype] = _resource_specs(count, rtype=rtype)
+                additional_properties[f"{rtype}_per_node"] = count
+
+            nodes.append(
+                {
+                    "id": str(i),
+                    "resources": resources,
+                }
+            )
+
+        pool: dict[str, Any] = {
+            "allow_multi_node": node_count > 1,
+            "additional_properties": additional_properties,
+            "nodes": nodes,
+        }
+
         f = batch.workspace.joinpath("resource_pool.json")
         f.write_text(json.dumps({"resource_pool": pool}, indent=2))
 
     def nodes_required(self, batch: "TestBatch") -> int:
-        """Nodes required to run jobs in ``batch``"""
+        """Return number of scheduler nodes required to run jobs in batch."""
         max_count_per_type: dict[str, int] = {}
+        explicit_nodes = 1
+
         for job in batch.jobs:
             reqd_resources = job.required_resources()
             total_slots_per_type: dict[str, int] = {}
+
             for member in reqd_resources:
-                type = member["type"]
-                total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
-            for type, count in total_slots_per_type.items():
-                max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
-        node_count: int = 1
-        for type, count in max_count_per_type.items():
+                rtype = member["type"]
+                slots = int(member["slots"])
+
+                if rtype in ("node", "nodes"):
+                    explicit_nodes = max(explicit_nodes, slots)
+                    continue
+
+                rtype = _canonical_resource_type(rtype)
+                total_slots_per_type[rtype] = total_slots_per_type.get(rtype, 0) + slots
+
+            for rtype, count in total_slots_per_type.items():
+                max_count_per_type[rtype] = max(max_count_per_type.get(rtype, 0), count)
+
+        node_count = explicit_nodes
+
+        for rtype, count in max_count_per_type.items():
             try:
-                count_per_node: int = self.backend.count_per_node(type)
+                count_per_node = self.backend.count_per_node(rtype)
             except ValueError:
-                continue
+                try:
+                    count_per_node = self.backend.count_per_node(_singular_resource_type(rtype))
+                except ValueError:
+                    continue
+
             if count_per_node > 0:
                 node_count = max(node_count, int(math.ceil(count / count_per_node)))
+
         return node_count
+
+
+def _canonical_resource_type(rtype: str) -> str:
+    return rtype if rtype.endswith("s") else f"{rtype}s"
+
+
+def _singular_resource_type(rtype: str) -> str:
+    return rtype[:-1] if rtype.endswith("s") else rtype
+
+
+def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+
+    for j in range(count):
+        spec: dict[str, Any] = {
+            "id": str(j),
+            "slots": 1,
+        }
+
+        if rtype == "gpus":
+            spec["properties"] = {"vendor": "UNKNOWN"}
+
+        specs.append(spec)
+
+    return specs
 
 
 class HPCConnectBatchRunner(HPCConnectRunner):

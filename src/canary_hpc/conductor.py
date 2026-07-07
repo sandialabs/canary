@@ -1,9 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import argparse
 import logging
+import os
 import threading
 from collections import Counter
 from graphlib import TopologicalSorter
@@ -17,12 +17,10 @@ import canary
 from _canary.plugins.subcommands.run import Run
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
-from _canary.resource_pool.rpool import Outcome
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
 from _canary.util.multiprocessing import SimpleQueue
-from _canary.util.rich import colorize
 from _canary.util.time import time_in_seconds
 
 from .argparsing import CanaryHPCBatchSpec
@@ -42,23 +40,30 @@ class CanaryHPCConductor:
         hpc_connect.config.export()
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
 
-        # compute the total slots per resource type so that we can determine whether a test can be
-        # run by this backend.
+        # Compute available resource types reported by hpc-connect.
         self._slots_per_resource_type: Counter[str] | None = None
         rtypes: set[str] = {"cpus", "gpus"}
         for rtype in self.backend.resource_types():
-            # canary resource pool uses the plural, whereas the hpc-connect resource set uses
-            # the singular
             rtype = rtype if rtype.endswith("s") else f"{rtype}s"
             rtypes.add(rtype)
         self.available_resource_types = sorted(rtypes)
 
-        # The batch conductor resource pool is used for checking in/out resources to run the
-        # _batches_, which amounts to submitting the batch to the scheduler and waiting for the job
-        # to finish.  Batches have no specialized resource requirements, just need cpus to run the
-        # submission on.
-        self.rpool = ResourcePool()
-        self.rpool.populate(cpus=cpu_count(), gpus=0)
+        # This private resource pool is only used to schedule local batch
+        # submission workers. It is not the HPC test resource pool.
+        self.rpool = ResourcePool(
+            {
+                "additional_properties": {"source": "canary_hpc_batch_conductor"},
+                "nodes": [
+                    {
+                        "id": os.uname().nodename,
+                        "resources": {
+                            "cpus": [{"id": str(j), "slots": 1} for j in range(cpu_count())],
+                            "gpus": [],
+                        },
+                    }
+                ],
+            }
+        )
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_conductor")
@@ -76,85 +81,52 @@ class CanaryHPCConductor:
         setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
-    @property
-    def slots_per_resource_type(self) -> Counter[str]:
-        if self._slots_per_resource_type is None:
-            self._slots_per_resource_type = Counter()
-            node_count = self.backend.node_count
-            slots_per_type: int = 1
-            for type in self.backend.resource_types():
-                count = self.backend.count_per_node(type)
-                if not type.endswith("s"):
-                    # hpc_connect does not add an 's' to end of resource types
-                    type += "s"
-                self._slots_per_resource_type[type] = slots_per_type * count * node_count
-        assert self._slots_per_resource_type is not None
-        return self._slots_per_resource_type
+    @canary.hookimpl(tryfirst=True)
+    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
+        """Create a topology-aware resource pool representing the HPC backend.
 
-    @canary.hookimpl
-    def canary_resource_pool_count(self, type: str) -> int:
+        Node IDs are virtual/backend-local bookkeeping IDs. Canary core does not
+        need to know where the scheduler will physically place the job.
+        """
         node_count = self.backend.node_count
-        if type in ("nodes", "node"):
-            return node_count
-        try:
-            type_per_node = self.backend.count_per_node(type)
-        except ValueError:
-            return 0
-        else:
-            return node_count * type_per_node
 
-    @canary.hookimpl
-    def canary_resource_pool_count_per_node(self, type: str) -> int:
-        try:
-            return self.backend.count_per_node(type)
-        except ValueError:
-            return 0
+        resource_types = {
+            _canonical_resource_type(rtype) for rtype in self.backend.resource_types()
+        }
+        resource_types.update({"cpus", "gpus"})
 
-    @canary.hookimpl
-    def canary_resource_pool_types(self) -> list[str]:
-        return self.available_resource_types
+        nodes: list[dict[str, Any]] = []
 
-    @canary.hookimpl
-    def canary_resource_pool_accommodates(self, case: canary.Job) -> Outcome:
-        return self.backend_accommodates(case)
+        for i in range(node_count):
+            resources: dict[str, list[dict[str, Any]]] = {}
 
-    def backend_accommodates(self, job: canary.Job) -> Outcome:
-        """determine if the resources for this test are available"""
+            for rtype in sorted(resource_types):
+                try:
+                    count = self.backend.count_per_node(rtype)
+                except ValueError:
+                    try:
+                        count = self.backend.count_per_node(_singular_resource_type(rtype))
+                    except ValueError:
+                        count = 0
 
-        slots_needed: Counter[str] = Counter()
-        missing: set[str] = set()
+                resources[rtype] = _resource_specs(count, rtype=rtype)
 
-        # Step 1: Gather resource requirements and detect missing types
-        for member in job.required_resources():
-            rtype = member["type"]
-            if rtype in self.slots_per_resource_type:
-                slots_needed[rtype] += member["slots"]
-            else:
-                missing.add(rtype)
-        if missing:
-            types = colorize("[bold]%s[/]" % ",".join(sorted(missing)))
-            key = canary.string.pluralize("Resource", n=len(missing))
-            return Outcome(False, reason=f"{key} unavailable: {types}")
+            nodes.append(
+                {
+                    "id": str(i),
+                    "resources": resources,
+                }
+            )
 
-        # Step 2: Check available slots vs. needed slots
-        wanting: dict[str, tuple[int, int]] = {}
-        for rtype, slots in slots_needed.items():
-            slots_avail = self.slots_per_resource_type[rtype]
-            if slots_avail < slots:
-                wanting[rtype] = (slots, slots_avail)
-        if wanting:
-            reason: str
-            if canary.config.get("debug"):
-                fmt = lambda t, n, m: "[bold]%s[/] (requested %d, available %d)" % (t, n, m)
-                types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
-                reason = f"{job}: insufficient slots of {types}"
-            else:
-                types = ", ".join("[bold]%s[/]" % t for t in wanting)
-                reason = f"insufficient slots of {types}"
-            return Outcome(False, reason=reason)
-
-        # Step 3: all good
-        return Outcome(True)
+        return {
+            "allow_multi_node": True,
+            "additional_properties": {
+                "backend": self.backend.name,
+                "source": "hpc",
+                "node_count": node_count,
+            },
+            "nodes": nodes,
+        }
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: "Runner") -> bool:
@@ -273,6 +245,31 @@ class CanaryHPCConductor:
     def setup_legacy_parser(parser: canary.Parser) -> None:
         p = LegacyParserAdapter(parser)
         CanaryHPCConductor.setup_parser(p)
+
+
+def _canonical_resource_type(rtype: str) -> str:
+    return rtype if rtype.endswith("s") else f"{rtype}s"
+
+
+def _singular_resource_type(rtype: str) -> str:
+    return rtype[:-1] if rtype.endswith("s") else rtype
+
+
+def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+
+    for j in range(count):
+        spec: dict[str, Any] = {
+            "id": str(j),
+            "slots": 1,
+        }
+
+        if rtype == "gpus":
+            spec["properties"] = {"vendor": "UNKNOWN"}
+
+        specs.append(spec)
+
+    return specs
 
 
 class LegacyParserAdapter:

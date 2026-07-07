@@ -58,30 +58,33 @@ class CanaryHPCExecutor:
         fd = json.loads(f.read_text())
         return fd["resource_pool"]
 
-    @canary.hookimpl
-    def canary_resource_pool_fill(
-        self, config: canary.Config, pool: dict[str, dict[str, Any]]
-    ) -> None:
-        mypool = self.load_resource_pool()
-        # require full control of resource pool
-        pool["additional_properties"].clear()
-        pool["additional_properties"].update(mypool["additional_properties"])
-        pool["resources"].clear()
-        pool["resources"].update(mypool["resources"])
+    @canary.hookimpl(tryfirst=True)
+    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
+        """Load the batch-local topology-aware resource pool."""
+        return self.load_resource_pool()
 
     def modify_specs(self, specs: list[canary.JobSpec]) -> None:
-        # If a test requests just nodes, fill in the additional resources it would require.
+        # If a test requests nodes, fill in per-node resources so checkout
+        # reserves full nodes. Do not multiply by node_count here; topology-aware
+        # checkout applies the resource request independently to each node.
         canonical_name = lambda s: f"{s}s" if not s.endswith("s") else s
-        cpn = self.backend.count_per_node
-        resource_types = self.backend.resource_types()
-        counts: dict[str, int] = {canonical_name(rtype): cpn(rtype) for rtype in resource_types}
+
+        counts: dict[str, int] = {}
+        for rtype in self.backend.resource_types():
+            name = canonical_name(rtype)
+            try:
+                counts[name] = self.backend.count_per_node(rtype)
+            except ValueError:
+                counts[name] = self.backend.count_per_node(name)
+
         for spec in specs:
             if spec.id not in self.jobs:
                 spec.mask = canary.Mask(True, reason=f"Job not in batch {self.batch}")
+
             params = spec.parameters | spec.meta_parameters
-            if node_count := params.get("nodes"):
+            if params.get("nodes"):
                 for rtype, count in counts.items():
-                    spec.meta_parameters[rtype] = node_count * count
+                    spec.meta_parameters.setdefault(rtype, count)
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:

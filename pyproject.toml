@@ -140,6 +140,8 @@ exclude = [
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
     "src/canary_gitlab/tests/*",
+    "src/canary_amd/tests/canary_amd/amd_select.py",
+    "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
 ]
 
 [[tool.mypy.overrides]]
@@ -226,6 +228,8 @@ exclude = [
     "src/canary_vvtest/tests/*",  # just until we get them fixed
     "src/canary_hpc/tests/*",  # just until we get them fixed
     "src/_canary/rerun.py",
+    "src/canary_amd/tests/canary_amd/amd_select.py",
+    "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
 ]
 include = ["src", "tests"]
 [tool.ty.rules]
