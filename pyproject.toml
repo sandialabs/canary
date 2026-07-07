@@ -69,6 +69,7 @@ scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
 canary_cmake = "canary_cmake"
+canary_dist = "canary_dist"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
 canary_amd = "canary_amd"
@@ -107,6 +108,7 @@ max_supported_python = "3.14"
 testpaths = [
     "tests",
     "src/canary_cmake/tests",
+    "src/canary_dist/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
     "src/canary_pyt/tests",
@@ -125,7 +127,7 @@ output = "coverage.xml"
 branch = true
 omit = [ "*/third_party/*" ]
 source = [ "_canary" ]
-command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
+command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_dist/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
 
 [tool.coverage.html]
 directory = "html.cov"

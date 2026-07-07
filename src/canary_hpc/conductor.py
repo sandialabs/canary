@@ -119,7 +119,7 @@ class CanaryHPCConductor:
             )
 
         return {
-            "allow_multi_node": True,
+            "allow_multinode": True,
             "additional_properties": {
                 "backend": self.backend.name,
                 "source": "hpc",

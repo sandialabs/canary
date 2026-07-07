@@ -85,7 +85,7 @@ class TestBatch(BaseJob):
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self.state = JobState()
-        self._resources: dict[str, list[dict]] = {}
+        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
         self.jobid: str | None = None
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
         self.dependencies: list["TestBatch"] = dependencies or []
@@ -213,15 +213,20 @@ class TestBatch(BaseJob):
           }
 
         """
-        return self._resources
+        return self._allocation["resources"]
 
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
-        self._resources.clear()
-        self._resources.update(arg)
+    @property
+    def allocation(self) -> dict[str, dict]:
+        return self._allocation
 
-    def free_resources(self) -> dict[str, list[dict]]:
-        tmp = copy.deepcopy(self._resources)
-        self._resources.clear()
+    def assign_resources(self, arg: dict[str, dict]) -> None:
+        self._allocation.clear()
+        self._allocation.update(copy.deepcopy(arg))
+
+    def free_resources(self) -> dict[str, dict]:
+        tmp = copy.deepcopy(self._allocation)
+        self._allocation.clear()
+        self._allocation.update({"metadata": {}, "resources": {}})
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:
@@ -410,6 +415,7 @@ class TestBatch(BaseJob):
             "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),
+            "allocation": serialize(self.allocation),
         }
         self.lockfile.write_text(json.dumps(config, indent=2))
         return
@@ -419,6 +425,7 @@ class TestBatch(BaseJob):
         cfg["status"] = serialize(self.status)["base"]
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
+        cfg["allocation"] = serialize(self.allocation)
         with open(self.lockfile, "w") as fh:
             json.dump(cfg, fh, indent=2)
         for job in self:

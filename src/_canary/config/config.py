@@ -16,7 +16,7 @@ from schema import Optional
 from schema import Schema
 
 from ..pluginmanager import CanaryPluginManager
-from ..resource_pool import ResourceManager
+from ..resource_pool.manager import ResourceManager
 from ..util import json_helper as json
 from ..util import logging
 from ..util.collections import merge

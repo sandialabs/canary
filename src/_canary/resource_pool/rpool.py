@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-resource_spec = list[dict[str, Any]]
-resource_request = list[dict[str, Any]]
+ResourceSpec = list[dict[str, Any]]
+ResourceRequest = list[dict[str, Any]]
+ResourceAllocation = dict[str, dict]
 
 
 class Outcome:
@@ -76,7 +77,7 @@ class AllocationTransaction:
 class Inventory:
     __slots__ = ("resources",)
 
-    def __init__(self, resources: dict[str, resource_spec]) -> None:
+    def __init__(self, resources: dict[str, ResourceSpec]) -> None:
         self.resources = resources
 
     def slots_available(self, rtype: str) -> int:
@@ -102,32 +103,18 @@ class Node:
     Resource IDs are node-local.
     """
 
-    __slots__ = (
-        "id",
-        "resources",
-        "slots_per_resource_type",
-        "state",
-        "tags",
-        "groups",
-        "additional_properties",
-    )
+    __slots__ = ("id", "resources", "slots_per_resource_type", "additional_properties")
 
     def __init__(
         self,
         id: str,
-        resources: dict[str, resource_spec] | None = None,
+        resources: dict[str, ResourceSpec] | None = None,
         *,
-        state: str = "online",
-        tags: list[str] | None = None,
-        groups: list[str] | None = None,
         additional_properties: dict[str, Any] | None = None,
     ) -> None:
         self.id = str(id)
-        self.resources: dict[str, resource_spec] = resources or {}
+        self.resources: dict[str, ResourceSpec] = resources or {}
         self.slots_per_resource_type: Counter[str] = Counter()
-        self.state = state
-        self.tags = list(tags or [])
-        self.groups = list(groups or [])
         self.additional_properties = dict(additional_properties or {})
         self._recompute_slots()
 
@@ -143,23 +130,6 @@ class Node:
 
     def empty(self) -> bool:
         return not self.resources
-
-    def online(self) -> bool:
-        return self.state == "online"
-
-    def eligible(
-        self,
-        *,
-        tags: list[str] | None = None,
-        groups: list[str] | None = None,
-    ) -> bool:
-        if not self.online():
-            return False
-        if tags and not all(tag in self.tags for tag in tags):
-            return False
-        if groups and not any(group in self.groups for group in groups):
-            return False
-        return True
 
     def _recompute_slots(self) -> None:
         self.slots_per_resource_type.clear()
@@ -182,7 +152,7 @@ class Node:
         rtype = self._resolve_type(rtype)
         return len(self.resources[rtype])
 
-    def accommodates(self, request: resource_request) -> Outcome:
+    def accommodates(self, request: ResourceRequest) -> Outcome:
         """Determine if this node can accommodate a per-node resource request."""
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
@@ -223,7 +193,7 @@ class Node:
 
         return Outcome(True)
 
-    def score(self, request: resource_request) -> float:
+    def score(self, request: ResourceRequest) -> float:
         """Score this node after satisfying request.
 
         Higher score means more residual capacity. This borrows the idea from
@@ -247,7 +217,7 @@ class Node:
             score += diff**2
         return math.sqrt(score)
 
-    def checkout(self, request: resource_request) -> dict[str, list[dict]]:
+    def checkout(self, request: ResourceRequest) -> dict[str, list[dict]]:
         """Check resources out of this node.
 
         Returned resource specs include the node ID.
@@ -287,7 +257,7 @@ class Node:
                     )
         self._recompute_slots()
 
-    def pop(self, rtype: str) -> resource_spec | None:
+    def pop(self, rtype: str) -> ResourceSpec | None:
         if rtype in self.resources:
             del self.slots_per_resource_type[rtype]
             return self.resources.pop(rtype)
@@ -298,12 +268,6 @@ class Node:
             "id": self.id,
             "resources": copy.deepcopy(self.resources),
         }
-        if self.state != "online":
-            state["state"] = self.state
-        if self.tags:
-            state["tags"] = copy.deepcopy(self.tags)
-        if self.groups:
-            state["groups"] = copy.deepcopy(self.groups)
         if self.additional_properties:
             state["additional_properties"] = copy.deepcopy(self.additional_properties)
         return state
@@ -315,20 +279,18 @@ class Node:
             return True
         return False
 
-    def get_resource(
-        self, rtype: str, default: resource_spec | None = None
-    ) -> resource_spec | None:
+    def get_resource(self, rtype: str, default: ResourceSpec | None = None) -> ResourceSpec | None:
         try:
             rtype = self._resolve_type(rtype)
         except ResourceUnavailable:
             return default
         return self.resources.get(rtype, default)
 
-    def set_resource(self, rtype: str, specs: resource_spec) -> None:
+    def set_resource(self, rtype: str, specs: ResourceSpec) -> None:
         self.resources[rtype] = copy.deepcopy(specs)
         self._recompute_slots()
 
-    def set_resources(self, resources: dict[str, resource_spec]) -> None:
+    def set_resources(self, resources: dict[str, ResourceSpec]) -> None:
         self.resources = copy.deepcopy(resources)
         self._recompute_slots()
 
@@ -357,13 +319,10 @@ class ResourcePool:
     .. code-block:: yaml
 
         resource_pool:
-          additional_properties:
-            allow_multi_node: false
+          allow_multinode: true
+          additional_properties: {}
           nodes:
           - id: node-0
-            state: online
-            tags: []
-            groups: []
             resources:
               cpus:
               - id: "0"
@@ -387,16 +346,15 @@ class ResourcePool:
     - Without an explicit ``nodes`` request, checkout is single-node.
     - With ``{"type": "nodes", "slots": N}``, the remaining resource request
       is interpreted as per-node.
-    - Multi-node checkout requires ``additional_properties.allow_multi_node``.
     """
 
-    __slots__ = ("additional_properties", "nodes", "_node_index", "allow_multi_node")
+    __slots__ = ("additional_properties", "nodes", "_node_index", "_allow_multinode")
 
-    def __init__(self, pool: dict[str, Any] | None = None, allow_multi_node: bool = False) -> None:
+    def __init__(self, pool: dict[str, Any] | None = None, allow_multinode: bool = True) -> None:
         self.additional_properties: dict[str, Any] = {}
         self.nodes: list[Node] = []
         self._node_index: dict[str, Node] = {}
-        self.allow_multi_node = allow_multi_node
+        self._allow_multinode = allow_multinode
         if pool:
             self.fill(pool)
 
@@ -418,13 +376,13 @@ class ResourcePool:
         return sorted(types)
 
     @property
-    def resources(self) -> dict[str, resource_spec]:
+    def resources(self) -> dict[str, ResourceSpec]:
         """Aggregate view of resources across all nodes.
 
         This is primarily a convenience view. Resource specs in this aggregate
         include the owning node ID.
         """
-        resources: dict[str, resource_spec] = {}
+        resources: dict[str, ResourceSpec] = {}
         for node in self.nodes:
             for rtype, instances in node.resources.items():
                 for instance in instances:
@@ -467,11 +425,8 @@ class ResourcePool:
         for node_spec in pool["nodes"]:
             node = Node(
                 id=str(node_spec["id"]),
-                state=node_spec.get("state", "online"),
-                tags=node_spec.get("tags", []),
-                groups=node_spec.get("groups", []),
-                additional_properties=node_spec.get("additional_properties", {}),
                 resources=copy.deepcopy(node_spec.get("resources", {})),
+                additional_properties=node_spec.get("additional_properties", {}),
             )
             if node.id in self._node_index:
                 raise ValueError(f"Duplicate node ID in resource pool: {node.id!r}")
@@ -484,7 +439,7 @@ class ResourcePool:
         if "gpus" not in kwds:
             kwds["gpus"] = 0
 
-        resources: dict[str, resource_spec] = {}
+        resources: dict[str, ResourceSpec] = {}
         for rtype, count in kwds.items():
             resources[rtype] = [{"id": str(j), "slots": 1} for j in range(count)]
 
@@ -537,13 +492,13 @@ class ResourcePool:
     def slots_available(self, rtype: str) -> int:
         rtype = self._resolve_type(rtype)
         if rtype == "nodes":
-            return len([node for node in self.nodes if node.online()])
+            return len(self.nodes)
         return sum(node.slots_available(rtype) for node in self.nodes if rtype in node.resources)
 
     def slots_by_node(self, rtype: str) -> dict[str, int]:
         rtype = self._resolve_type(rtype)
         if rtype == "nodes":
-            return {node.id: 1 if node.online() else 0 for node in self.nodes}
+            return {node.id: 1 for node in self.nodes}
         return {
             node.id: node.slots_available(rtype) if rtype in node.resources else 0
             for node in self.nodes
@@ -559,8 +514,8 @@ class ResourcePool:
         details = ", ".join(f"{node}:{count}" for node, count in sorted(counts.items()))
         raise ResourceUnavailable(f"Resource {rtype!r} is not homogeneous across nodes: {details}")
 
-    def pop(self, rtype: str) -> resource_spec | None:
-        popped: resource_spec = []
+    def pop(self, rtype: str) -> ResourceSpec | None:
+        popped: ResourceSpec = []
         for node in self.nodes:
             rspec = node.pop(rtype)
             if rspec:
@@ -570,7 +525,7 @@ class ResourcePool:
                     popped.append(item)
         return popped or None
 
-    def _split_node_request(self, request: resource_request) -> tuple[int, resource_request]:
+    def _split_node_request(self, request: ResourceRequest) -> tuple[int, ResourceRequest]:
         nodes_requested: int | None = None
         resource_request: list[dict[str, Any]] = []
 
@@ -583,15 +538,7 @@ class ResourcePool:
 
         return nodes_requested or 1, resource_request
 
-    def _candidate_nodes(
-        self,
-        *,
-        tags: list[str] | None = None,
-        groups: list[str] | None = None,
-    ) -> list[Node]:
-        return [node for node in self.nodes if node.eligible(tags=tags, groups=groups)]
-
-    def accommodates(self, request: resource_request) -> Outcome:
+    def accommodates(self, request: ResourceRequest) -> Outcome:
         """Determine if the resources for this test are available."""
         if self.empty():
             raise EmptyResourcePoolError
@@ -600,7 +547,7 @@ class ResourcePool:
 
         if nodes_requested <= 1:
             reasons: list[str] = []
-            for node in self._candidate_nodes():
+            for node in self.nodes:
                 outcome = node.accommodates(per_node_request)
                 if outcome:
                     return Outcome(True)
@@ -611,15 +558,13 @@ class ResourcePool:
                 reason += ": " + "; ".join(reasons)
             return Outcome(False, reason=reason)
 
-        if not self.allow_multi_node:
+        if not self.allow_multinode:
             return Outcome(
                 False,
                 reason="Multi-node allocation requested but this resource pool does not allow it",
             )
 
-        candidates = [
-            node for node in self._candidate_nodes() if node.accommodates(per_node_request)
-        ]
+        candidates = [node for node in self.nodes if node.accommodates(per_node_request)]
         if len(candidates) < nodes_requested:
             return Outcome(
                 False,
@@ -631,7 +576,7 @@ class ResourcePool:
 
         return Outcome(True)
 
-    def checkout(self, request: resource_request, **kwds: Any) -> dict[str, list[dict]]:
+    def checkout(self, request: ResourceRequest, **kwds: Any) -> ResourceAllocation:
         """Returns resources available to the test.
 
         Returned resources have the form:
@@ -639,11 +584,14 @@ class ResourcePool:
         .. code-block:: python
 
             {
-                "<type>": [
-                    {"node": "<node-id>", "id": "<local-resource-id>", "slots": N},
+                "metadata": {},
+                "resources": {
+                    "<type>": [
+                        {"node": "<node-id>", "id": "<local-resource-id>", "slots": N},
+                        ...
+                    ],
                     ...
-                ],
-                ...
+                }
             }
 
         For multi-node checkout, ``nodes=N`` means the non-node resource request
@@ -651,34 +599,13 @@ class ResourcePool:
         """
         if self.empty():
             raise EmptyResourcePoolError
-
         nodes_requested, per_node_request = self._split_node_request(request)
-
-        tags = kwds.get("tags")
-        groups = kwds.get("groups")
-
         if nodes_requested <= 1:
-            return self._checkout_single_node(per_node_request, tags=tags, groups=groups)
+            return self._checkout_single_node(per_node_request)
+        return self._checkout_multi_node(nodes_requested, per_node_request)
 
-        return self._checkout_multi_node(
-            nodes_requested,
-            per_node_request,
-            tags=tags,
-            groups=groups,
-        )
-
-    def _checkout_single_node(
-        self,
-        request: resource_request,
-        *,
-        tags: list[str] | None = None,
-        groups: list[str] | None = None,
-    ) -> dict[str, list[dict]]:
-        candidates = [
-            node
-            for node in self._candidate_nodes(tags=tags, groups=groups)
-            if node.accommodates(request)
-        ]
+    def _checkout_single_node(self, request: ResourceRequest) -> ResourceAllocation:
+        candidates = [node for node in self.nodes if node.accommodates(request)]
 
         if not candidates:
             raise ResourceUnavailable("No single node can accommodate requested resources")
@@ -688,30 +615,19 @@ class ResourcePool:
         acquired = node.checkout(request)
 
         self._log_acquired(acquired)
-        return acquired
+        return {"metadata": {}, "resources": acquired}
 
     def _checkout_multi_node(
-        self,
-        nodes_requested: int,
-        request: resource_request,
-        *,
-        tags: list[str] | None = None,
-        groups: list[str] | None = None,
-    ) -> dict[str, list[dict]]:
-        if not self.allow_multi_node:
+        self, nodes_requested: int, request: ResourceRequest
+    ) -> ResourceAllocation:
+        if not self.allow_multinode:
             raise ResourceUnavailable(
                 "Multi-node allocation requested but this resource pool does not allow it"
             )
 
-        candidates = [
-            node
-            for node in self._candidate_nodes(tags=tags, groups=groups)
-            if node.accommodates(request)
-        ]
+        candidates = [node for node in self.nodes if node.accommodates(request)]
         candidates.sort(key=lambda node: node.score(request), reverse=True)
-
         selected = candidates[:nodes_requested]
-
         if len(selected) < nodes_requested:
             raise ResourceUnavailable(
                 f"Requested {nodes_requested} nodes, but only {len(selected)} "
@@ -725,24 +641,21 @@ class ResourcePool:
             for node in selected:
                 node_acquired = node.checkout(request)
                 checked_out_nodes.append((node, node_acquired))
-
                 for rtype, rspecs in node_acquired.items():
                     acquired.setdefault(rtype, []).extend(rspecs)
-
         except Exception:
             for node, node_acquired in checked_out_nodes:
                 node.checkin(node_acquired)
             raise
 
         self._log_acquired(acquired)
-        return acquired
+        return {"metadata": {}, "resources": acquired}
 
-    def checkin(self, resources: dict[str, list[dict]]) -> None:
+    def checkin(self, allocation: ResourceAllocation) -> None:
         checked_in: Counter[str] = Counter()
 
-        for rtype, rspecs in resources.items():
+        for rtype, rspecs in allocation["resources"].items():
             by_node: dict[str, list[dict]] = {}
-
             for rspec in rspecs:
                 if "node" not in rspec:
                     raise ValueError(f"Checked-in resource is missing node field: {rspec!r}")
@@ -756,7 +669,6 @@ class ResourcePool:
                     raise ValueError(
                         f"Attempting to checkin resource for unknown node {node_id!r}"
                     ) from None
-
                 node.checkin({rtype: node_rspecs})
                 checked_in[rtype] += sum(int(rspec["slots"]) for rspec in node_rspecs)
 
@@ -811,8 +723,13 @@ class ResourcePool:
                 raise ValueError(f"Duplicate node ID in resource pool: {node.id!r}")
             self._node_index[node.id] = node
 
-    def set_allow_multi_node(self, value: bool = True) -> None:
-        self.allow_multi_node = bool(value)
+    @property
+    def allow_multinode(self) -> bool:
+        return self._allow_multinode
+
+    @allow_multinode.setter
+    def allow_multinode(self, arg: bool) -> None:
+        self._allow_multinode = bool(arg)
 
     def set_resource_count(self, rtype: str, count: int, *, node_id: str | None = None) -> None:
         if node_id is not None:
@@ -857,9 +774,9 @@ def make_resource_pool(config: "CanaryConfig") -> ResourcePool:
     data = config.pluginmanager.hook.canary_resource_pool_fill(config=config)
     if data is None:
         raise EmptyResourcePoolError("No resource pool was created")
-    allow_multi_node: bool = data.pop("allow_multi_node", False)
+    allow_multinode: bool = data.pop("allow_multinode", True)
     data = resource_pool_schema.validate(data)
-    pool = ResourcePool(data, allow_multi_node=allow_multi_node)
+    pool = ResourcePool(data, allow_multinode=allow_multinode)
     config.pluginmanager.hook.canary_resource_pool_update(config=config, pool=pool)
     return pool
 

@@ -193,7 +193,7 @@ def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
         cpus = int(var) if (var := os.getenv("CANARY_TESTING_CPUS")) else cpu_count(logical=ht)
         ctest_resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus)]
     return {
-        "allow_multi_node": False,
+        "allow_multinode": True,
         "additional_properties": {"ctest": {"resource_spec_file": os.path.abspath(f)}},
         "nodes": [{"id": os.uname().nodename, "resources": ctest_resources}],
     }

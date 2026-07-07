@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 test_paths = (
     "tests",
     "src/canary_cmake/tests",
+    "src/canary_dist/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
     "src/canary_pyt/tests",

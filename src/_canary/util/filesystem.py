@@ -364,14 +364,14 @@ def sortby_mtime(files: list[str]) -> list[str]:
 def touch(path: PathLike) -> None:
     """Creates an empty file at the specified path."""
     path = pathlib.Path(path)
-    path.touch(exist_ok=True, mode=os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY)
+    path.touch(exist_ok=True, mode=0o666)
 
 
 def touchp(path: PathLike) -> None:
     """Like ``touch``, but creates any parent directories needed for the file."""
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(exist_ok=True, mode=os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY)
+    path.touch(exist_ok=True, mode=0o666)
 
 
 @contextmanager

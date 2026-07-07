@@ -139,7 +139,7 @@ class HPCConnectRunner:
             )
 
         pool: dict[str, Any] = {
-            "allow_multi_node": node_count > 1,
+            "allow_multinode": node_count > 1,
             "additional_properties": additional_properties,
             "nodes": nodes,
         }

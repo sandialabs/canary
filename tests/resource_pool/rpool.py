@@ -45,9 +45,6 @@ def test_schema_accepts_explicit_nodes():
 
     assert validated["additional_properties"] == {}
     assert validated["nodes"][0]["id"] == "0"
-    assert validated["nodes"][0]["state"] == "online"
-    assert validated["nodes"][0]["tags"] == []
-    assert validated["nodes"][0]["groups"] == []
     assert validated["nodes"][0]["additional_properties"] == {}
     assert validated["nodes"][1]["id"] == "1"
 
@@ -151,7 +148,7 @@ def test_single_node_checkout_and_checkin():
 
     acquired = rp.checkout(request)
 
-    assert acquired == {
+    assert acquired["resources"] == {
         "cpus": [
             {"node": "local", "id": "0", "slots": 1},
             {"node": "local", "id": "1", "slots": 1},
@@ -212,7 +209,7 @@ def test_single_node_checkout_uses_node_local_resource_ids():
 
     acquired = rp.checkout([{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}])
 
-    assert acquired == {
+    assert acquired["resources"] == {
         "cpus": [{"node": "local", "id": "01", "slots": 1}],
         "gpus": [{"node": "local", "id": "02", "slots": 1}],
     }
@@ -221,7 +218,7 @@ def test_single_node_checkout_uses_node_local_resource_ids():
 
     acquired = rp.checkout([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}])
 
-    assert acquired == {
+    assert acquired["resources"] == {
         "cpus": [{"node": "local", "id": "ab", "slots": 3}],
         "gpus": [{"node": "local", "id": "02", "slots": 3}],
     }
@@ -257,73 +254,7 @@ def test_single_node_checkout_requires_colocation():
         rp.checkout(request)
 
 
-def test_single_node_checkout_skips_offline_nodes():
-    rp = ResourcePool(
-        {
-            "nodes": [
-                {
-                    "id": "offline-node",
-                    "state": "offline",
-                    "resources": {
-                        "cpus": [{"id": "0", "slots": 4}],
-                    },
-                },
-                {
-                    "id": "online-node",
-                    "state": "online",
-                    "resources": {
-                        "cpus": [{"id": "0", "slots": 4}],
-                    },
-                },
-            ]
-        }
-    )
-
-    acquired = rp.checkout([{"type": "cpus", "slots": 1}])
-
-    assert acquired == {
-        "cpus": [{"node": "online-node", "id": "0", "slots": 1}],
-    }
-
-
-def test_checkout_with_tags_and_groups():
-    rp = ResourcePool(
-        {
-            "nodes": [
-                {
-                    "id": "default-node",
-                    "tags": ["cpu"],
-                    "groups": ["default"],
-                    "resources": {
-                        "cpus": [{"id": "0", "slots": 4}],
-                    },
-                },
-                {
-                    "id": "gpu-node",
-                    "tags": ["gpu"],
-                    "groups": ["nightly"],
-                    "resources": {
-                        "cpus": [{"id": "0", "slots": 4}],
-                    },
-                },
-            ]
-        }
-    )
-
-    acquired = rp.checkout([{"type": "cpus", "slots": 1}], tags=["gpu"])
-    assert acquired == {
-        "cpus": [{"node": "gpu-node", "id": "0", "slots": 1}],
-    }
-
-    rp.checkin(acquired)
-
-    acquired = rp.checkout([{"type": "cpus", "slots": 1}], groups=["nightly"])
-    assert acquired == {
-        "cpus": [{"node": "gpu-node", "id": "0", "slots": 1}],
-    }
-
-
-def test_multi_node_request_requires_allow_multi_node():
+def test_multi_node_request_requires_allow_multinode():
     rp = ResourcePool(
         {
             "additional_properties": {},
@@ -342,7 +273,7 @@ def test_multi_node_request_requires_allow_multi_node():
                 },
             ],
         },
-        allow_multi_node=False,
+        allow_multinode=False,
     )
 
     request = [{"type": "nodes", "slots": 2}, {"type": "cpus", "slots": 1}]
@@ -374,7 +305,7 @@ def test_multi_node_accommodates():
                 },
             ],
         },
-        allow_multi_node=True,
+        allow_multinode=True,
     )
 
     assert rp.accommodates(
@@ -423,7 +354,7 @@ def test_multi_node_checkout_and_checkin():
                 },
             ],
         },
-        allow_multi_node=True,
+        allow_multinode=True,
     )
 
     request = [
@@ -434,7 +365,7 @@ def test_multi_node_checkout_and_checkin():
 
     acquired = rp.checkout(request)
 
-    assert acquired == {
+    assert acquired["resources"] == {
         "cpus": [
             {"node": "0", "id": "0", "slots": 1},
             {"node": "1", "id": "0", "slots": 1},
@@ -485,12 +416,12 @@ def test_multi_node_request_is_per_node():
                 },
             ],
         },
-        allow_multi_node=True,
+        allow_multinode=True,
     )
 
     acquired = rp.checkout([{"type": "nodes", "slots": 2}, {"type": "gpus", "slots": 1}])
 
-    assert acquired == {
+    assert acquired["resources"] == {
         "gpus": [
             {"node": "0", "id": "0", "slots": 1},
             {"node": "1", "id": "0", "slots": 1},
@@ -521,7 +452,7 @@ def test_count_and_slots_by_node():
                 },
             ],
         },
-        allow_multi_node=True,
+        allow_multinode=True,
     )
 
     assert rp.count("nodes") == 2
@@ -577,7 +508,7 @@ def test_checkin_requires_node_field():
     )
 
     with pytest.raises(ValueError, match="missing node"):
-        rp.checkin({"cpus": [{"id": "0", "slots": 1}]})
+        rp.checkin({"metadata": {}, "resources": {"cpus": [{"id": "0", "slots": 1}]}})
 
 
 def test_checkin_rejects_unknown_node():
@@ -595,7 +526,7 @@ def test_checkin_rejects_unknown_node():
     )
 
     with pytest.raises(ValueError, match="unknown node"):
-        rp.checkin({"cpus": [{"node": "missing", "id": "0", "slots": 1}]})
+        rp.checkin({"resources": {"cpus": [{"node": "missing", "id": "0", "slots": 1}]}})
 
 
 def test_empty_resource_pool_errors():

@@ -103,8 +103,8 @@ class ResourceManager:
             request = case_or_request
         return self.get_pool().accommodates(request)
 
-    def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, list[dict]]:
+    def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, dict]:
         return self.get_pool().checkout(request, **kwds)
 
-    def checkin(self, resources: dict[str, list[dict]]) -> None:
-        self.get_pool().checkin(resources)
+    def checkin(self, allocation: dict[str, dict]) -> None:
+        self.get_pool().checkin(allocation)

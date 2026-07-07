@@ -206,10 +206,10 @@ class BaseJob(ABC):
     def required_resources(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None: ...
+    def assign_resources(self, arg: dict[str, dict]) -> None: ...
 
     @abstractmethod
-    def free_resources(self) -> dict[str, list[dict]]: ...
+    def free_resources(self) -> dict[str, dict]: ...
 
     # ---- dependency gating / dispatch readiness ----
     @abstractmethod
@@ -282,7 +282,7 @@ class Job(BaseJob):
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
-        self._resources: dict[str, list[dict]] = {}
+        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         self.dependencies: list[Dependency] = dependencies or []
@@ -304,7 +304,7 @@ class Job(BaseJob):
             "workspace": self.workspace,
             "dependencies": self.dependencies,
             "variables": self.variables,
-            "resources": self._resources,
+            "allocation": self._allocation,
             "rparameters": self.rparameters,
             "mask": self._mask,
         }
@@ -315,8 +315,8 @@ class Job(BaseJob):
         obj._apply_base_state(d)
         if variables := d.get("variables"):
             obj.variables = variables
-        if resources := d.get("resources"):
-            obj._resources = resources
+        if allocation := d.get("allocation"):
+            obj._allocation = allocation
         if rparameters := d.get("rparameters"):
             obj.rparameters = rparameters
         if mask := d.get("mask"):
@@ -476,15 +476,16 @@ class Job(BaseJob):
             }
 
         """
-        return self._resources
+        return self._allocation["resources"]
 
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
-        self._resources.clear()
-        self._resources.update(arg)
+    def assign_resources(self, arg: dict[str, dict]) -> None:
+        self._allocation.clear()
+        self._allocation.update(arg)
 
         # Set resource-type variables
         vars: dict[str, str] = {}
-        for type, instances in arg.items():
+        resources = self._allocation["resources"]
+        for type, instances in resources.items():
             varname = type[:-1] if type[-1] == "s" else type
             ids: list[str] = [str(_["id"]) for _ in instances]
             vars[f"{varname}_ids"] = self.variables[f"CANARY_{varname.upper()}_IDS"] = ",".join(ids)
@@ -498,9 +499,10 @@ class Job(BaseJob):
             except Exception:  # nosec B110
                 pass
 
-    def free_resources(self) -> dict[str, list[dict]]:
-        tmp = copy.deepcopy(self._resources)
-        self._resources.clear()
+    def free_resources(self) -> dict[str, dict]:
+        tmp = copy.deepcopy(self._allocation)
+        self._allocation.clear()
+        self._allocation.update({"metadata": {}, "resources": {}})
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:

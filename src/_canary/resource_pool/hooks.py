@@ -137,7 +137,7 @@ def finalize_resource_pool(config: "CanaryConfig", pool: "ResourcePool") -> None
                 continue
 
             if count > 1:
-                _set_allow_multi_node(pool, True)
+                pool.allow_multinode = True
 
         # Then apply resource-count overrides. These apply per node.
         for key, count in rp.items():
@@ -198,14 +198,6 @@ def _resource_specs(count: int) -> list[dict[str, Any]]:
     return [{"id": str(j), "slots": 1} for j in range(count)]
 
 
-def _set_allow_multi_node(pool: "ResourcePool", value: bool) -> None:
-    try:
-        pool.allow_multi_node = value
-    except AttributeError:
-        # Fallback if allow_multi_node is still stored as metadata.
-        pool.additional_properties["allow_multi_node"] = value
-
-
 def _set_node_count(pool: "ResourcePool", count: int) -> None:
     from .rpool import Node
 
@@ -226,9 +218,6 @@ def _set_node_count(pool: "ResourcePool", count: int) -> None:
         node = Node(
             id=str(i),
             resources=copy.deepcopy(template.resources),
-            state=template.state,
-            tags=copy.deepcopy(template.tags),
-            groups=copy.deepcopy(template.groups),
             additional_properties=copy.deepcopy(template.additional_properties),
         )
         pool.nodes.append(node)

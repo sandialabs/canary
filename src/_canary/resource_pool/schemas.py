@@ -33,9 +33,6 @@ resource_spec_schema = Schema(
 node_schema = Schema(
     {
         "id": Use(str),
-        Optional("state", default="online"): str,
-        Optional("tags", default=[]): [str],
-        Optional("groups", default=[]): [str],
         Optional("additional_properties", default={}): dict,
         "resources": resource_spec_schema,
     }
@@ -43,7 +40,7 @@ node_schema = Schema(
 
 resource_pool_schema = Schema(
     {
-        Optional("allow_multi_node", default=False): bool,
+        Optional("allow_multinode", default=True): bool,
         Optional("additional_properties", default={}): dict,
         "nodes": [node_schema],
     }
