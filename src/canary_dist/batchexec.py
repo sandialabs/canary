@@ -41,7 +41,11 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         with batch.workspace.enter():
-            future = self.submit(batch)
+            try:
+                future = self.submit(batch)
+            except Exception:
+                logger.exception(f"Error submitting {batch}")
+                raise
             future.add_jobstart_callback(set_starttime)
             future.add_jobid_callback(set_jobid)
 
@@ -88,29 +92,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
 
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:  # type: ignore[override]
         variables = super().rc_environ(batch)
-
-        # The base HPC runner may have snapshotted the parent/global resource
-        # manager. For distributed execution, the remote process must see only
-        # the resources checked out for this batch.
-        snapshot = canary.config.snapshot()
-        snapshot["resource_manager"] = {"resource_pool": batch.remote_resource_pool()}
-
-        config_file = variables.get(canary.config.CONFIG_ENV_FILENAME)
-        if config_file:
-            with open(config_file, "w") as fh:
-                fh.write(json.dumps(snapshot, indent=2))
-        else:
-            config_file = str(batch.workspace.joinpath("config.json"))
-            with open(config_file, "w") as fh:
-                fh.write(json.dumps(snapshot, indent=2))
-            variables[canary.config.CONFIG_ENV_FILENAME] = config_file
-
-        # Prefer the explicit config file snapshot over any compressed snapshot
-        # that may have been set by the base runner.
-        variables.pop(canary.config.CONFIG_ENV_CFG64, None)
-
         variables.update({"__CANARY_DIST_EXEC": "1", "PYTHONEXEC": sys.executable})
-
         export = canary.config.getoption("canary_dist_export") or {}
         if export.get("ALL") == "==YES==":
             variables.update(self.filtered_env())
@@ -121,7 +103,6 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
                         variables[var] = env_value
                 else:
                     variables[var] = str(value)
-
         return variables
 
     @staticmethod
@@ -167,8 +148,6 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             default_args.append("-d")
 
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "dist", "exec"]
-
         n = canary.config.getoption("canary_dist_remote_workers") or -1
         args.extend([f"--workers={n}", f"--workspace={batch.workspace.dir}"])
-
         return shlex.join(args)

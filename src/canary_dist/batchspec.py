@@ -106,6 +106,7 @@ class TestBatch(bs.TestBatch):
     def setup(self) -> None:
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
 
+        resource_pool = self.remote_resource_pool()
         config = {
             "id": self.id,
             "session": self.session,
@@ -117,10 +118,11 @@ class TestBatch(bs.TestBatch):
             "local host": os.uname().nodename,
             "remote host": self.hostname,
             "allocation": serialize(self.allocation),
-            "resource_pool": self.remote_resource_pool(),
         }
-
         self.lockfile.write_text(json.dumps(config, indent=2))
+        self.workspace.joinpath("resource_pool.json").write_text(
+            json.dumps({"resource_pool": resource_pool}, indent=2)
+        )
 
 
 def _single_node_from_allocation(allocation: dict[str, Any]) -> str:

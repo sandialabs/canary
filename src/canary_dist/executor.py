@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 import os
 import threading
 from pathlib import Path
@@ -51,9 +52,14 @@ class DistributedPoolExecutor:
         session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
+    def load_resource_pool(self) -> dict:
+        f = self.workspace / "resource_pool.json"
+        fd = json.loads(f.read_text())
+        return fd["resource_pool"]
+
     @canary.hookimpl(tryfirst=True)
     def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
-        return self.config["resource_pool"]
+        return self.load_resource_pool()
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:

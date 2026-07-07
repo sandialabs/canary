@@ -9,6 +9,7 @@ from typing import Any
 
 from .rpool import Outcome
 from .rpool import ResourcePool
+from .rpool import ResourceUnavailable
 from .rpool import make_resource_pool
 
 if TYPE_CHECKING:
@@ -91,7 +92,10 @@ class ResourceManager:
         return self.get_pool().count(type)
 
     def count_per_node(self, type: str) -> int:
-        return self.get_pool().count(type)
+        try:
+            return self.get_pool().count_per_node(type)
+        except ResourceUnavailable:
+            return 0
 
     def accommodates(self, case_or_request: "Job | list[dict[str, Any]]") -> Outcome:
         from ..job import Job
