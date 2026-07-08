@@ -4,6 +4,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -46,6 +47,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
         dest="hpc_backend",
         metavar="BACKEND",
         group="canary hpc",
+        default=os.getenv("CANARY_HPC_BACKEND") or argparse.SUPPRESS,
         help="Use this HPC backend [default: None]",
     )
     CanaryHPCConductor.setup_legacy_parser(parser)
@@ -88,7 +90,7 @@ class HPC(canary.CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.hpc_cmd == "run":
-            hpc_backend = args.hpc_backend
+            hpc_backend = getattr(args, "hpc_backend", None)
             if hpc_backend is None:
                 raise ValueError("canary hpc run requires --backend")
             conductor = CanaryHPCConductor(backend=hpc_backend)

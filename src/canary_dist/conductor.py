@@ -111,7 +111,7 @@ class DistributedPoolConductor:
             "--server-url",
             dest="dist_server_url",
             metavar="URL",
-            default=os.getenv("CANARY_DIST_SERVER_URL"),
+            default=os.getenv("CANARY_DIST_SERVER_URL") or argparse.SUPPRESS,
             help="Distributed pool server location (URL). "
             "Defaults to CANARY_DIST_SERVER_URL environment variable, if defined.",
         )

@@ -139,6 +139,7 @@ class CanaryHPCConductor:
             "--backend",
             "--scheduler",
             dest="hpc_backend",
+            default=os.getenv("CANARY_HPC_BACKEND") or argparse.SUPPRESS,
             metavar="BACKEND",
             help="Submit batches to this HPC scheduler [alias: -b backend=BACKEND] [default: None]",
         )

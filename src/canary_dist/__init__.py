@@ -44,13 +44,15 @@ class Distributed(canary.CanarySubcommand):
 
     def execute(self, args):
         if args.dist_cmd == "status":
-            server = args.dist_server_url
+            server = getattr(args, "dist_server_url", None)
+            assert server is not None
             conductor = DistributedPoolConductor(server_url=server)
             state = conductor.pool_state()
             print_resource_pool_status(state["database"])
             return 0
         elif args.dist_cmd == "run":
-            server = args.dist_server_url
+            server = getattr(args, "dist_server_url", None)
+            assert server is not None
             conductor = DistributedPoolConductor(server_url=server)
             conductor.register(canary.config.pluginmanager)
             return conductor.run(args)
