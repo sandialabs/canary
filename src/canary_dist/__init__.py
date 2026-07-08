@@ -2,6 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
+import json
+import os
+from pathlib import Path
+from typing import Any
 
 import canary
 
@@ -40,21 +44,32 @@ class Distributed(canary.CanarySubcommand):
 
     def execute(self, args):
         if args.dist_cmd == "status":
-            server = args.canary_dist_server_url
+            server = args.dist_server_url
             conductor = DistributedPoolConductor(server_url=server)
             state = conductor.pool_state()
             print_resource_pool_status(state["database"])
             return 0
         elif args.dist_cmd == "run":
-            server = args.canary_dist_server_url
+            server = args.dist_server_url
             conductor = DistributedPoolConductor(server_url=server)
             conductor.register(canary.config.pluginmanager)
             return conductor.run(args)
         elif args.dist_cmd == "exec":
-            executor = DistributedPoolExecutor(workspace=args.canary_dist_workspace)
-            executor.register(canary.config.pluginmanager)
+            executor = DistributedPoolExecutor(workspace=args.dist_workspace)
             return executor.run(args)
         return 0
+
+
+@canary.hookimpl
+def canary_addoption(parser: canary.Parser) -> None:
+    parser.add_argument(
+        "--dist-server-url",
+        dest="dist_server_url",
+        metavar="URL",
+        default=os.getenv("CANARY_DIST_SERVER_URL"),
+        help="Distributed pool server location (URL). "
+        "Defaults to CANARY_DIST_SERVER_URL environment variable, if defined.",
+    )
 
 
 @canary.hookimpl
@@ -68,3 +83,33 @@ def canary_hpc_batch_runner(batch, backend) -> "HPCConnectDistRunner | None":
 
     if hasattr(batch, "hostname") and backend.name == "remote_subprocess":
         return HPCConnectDistRunner(backend)
+
+
+@canary.hookimpl(tryfirst=True)
+def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
+    command = config.getoption("dist_cmd")
+    if command == "exec":
+        workspace = Path(config.getoption("dist_workspace"))
+        if not workspace.exists():
+            raise ValueError(f"Workspace {workspace} does not exist")
+        return fill_local_resource_pool(workspace)
+    server = config.getoption("dist_server_url")
+    if server is None:
+        return None
+    return fill_dist_resource_pool(server)
+
+
+def fill_local_resource_pool(workspace: Path) -> dict[str, Any]:
+    """Load the batch-local topology-aware resource pool."""
+    f = workspace / "resource_pool.json"
+    if not f.exists():
+        raise FileNotFoundError(f"Missing batch resource pool file: {f}")
+    fd = json.loads(f.read_text())
+    return fd["resource_pool"]
+
+
+def fill_dist_resource_pool(server_url: str) -> dict[str, Any]:
+    from .adapter import DistributedResourcePoolAdapter
+
+    dpool = DistributedResourcePoolAdapter(server_url=server_url)
+    return dpool.to_resource_pool()

@@ -356,6 +356,14 @@ class Job(BaseJob):
         return self.spec.file
 
     @property
+    def family(self) -> str:
+        return self.spec.family
+
+    @property
+    def fullname(self) -> str:
+        return self.spec.fullname
+
+    @property
     def name(self) -> str:
         return self.spec.name
 

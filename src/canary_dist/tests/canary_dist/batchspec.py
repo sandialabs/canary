@@ -105,7 +105,7 @@ def test_remote_resource_pool_is_single_node_batch_local_pool(tmp_path):
 
     allocation = {
         "metadata": {
-            "source": "distributed",
+            "source": "distributed-checkout",
             "server_url": "http://server",
             "hostname": "host-a",
             "transaction_id": "tx-1",
@@ -124,7 +124,7 @@ def test_remote_resource_pool_is_single_node_batch_local_pool(tmp_path):
     assert batch.remote_resource_pool() == {
         "allow_multinode": False,
         "additional_properties": {
-            "source": "distributed",
+            "source": "distributed-checkout",
             "server_url": "http://server",
             "hostname": "host-a",
             "transaction_id": "tx-1",

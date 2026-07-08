@@ -34,7 +34,7 @@ def test_parsing_0():
             "--hpc-scheduler-args=--clusters='horse,fly',--licenses='foo,bar'",
         ]
     )
-    assert args.canary_hpc_scheduler_args == [
+    assert args.hpc_scheduler_args == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
@@ -47,26 +47,26 @@ def test_parsing_0():
     ]
 
     args = parser.parse_args(["--hpc-batch-spec=count:1"])
-    assert args.canary_hpc_batchspec["count"] == 1
+    assert args.hpc_batchspec["count"] == 1
     args = parser.parse_args(["--hpc-batch-spec=duration:1"])
-    assert args.canary_hpc_batchspec["duration"] == 1.0
+    assert args.hpc_batchspec["duration"] == 1.0
     args = parser.parse_args(["--hpc-batch-spec=layout:atomic"])
-    assert args.canary_hpc_batchspec["layout"] == "atomic"
+    assert args.hpc_batchspec["layout"] == "atomic"
     args = parser.parse_args(["--hpc-batch-spec=layout:flat"])
-    assert args.canary_hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["--hpc-batch-spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["--hpc-batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["--hpc-backend=local"])
-    spec = getattr(args, "canary_hpc_batchspec", None) or {}
+    spec = getattr(args, "hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-    setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_backend == "local"
-    assert args.canary_hpc_batchspec["layout"] == "flat"
-    assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "same"
+    setattr(args, "hpc_batchspec", spec)
+    assert args.hpc_backend == "local"
+    assert args.hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["duration"] == 60 * 30
+    assert args.hpc_batchspec["nodes"] == "same"
 
 
 def test_parsing_1():
@@ -82,7 +82,7 @@ def test_parsing_1():
             "--scheduler-args=--clusters='horse,fly',--licenses='foo,bar'",
         ]
     )
-    assert args.canary_hpc_scheduler_args == [
+    assert args.hpc_scheduler_args == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
@@ -95,26 +95,26 @@ def test_parsing_1():
     ]
 
     args = parser.parse_args(["--batch-spec=count:1"])
-    assert args.canary_hpc_batchspec["count"] == 1
+    assert args.hpc_batchspec["count"] == 1
     args = parser.parse_args(["--batch-spec=duration:1"])
-    assert args.canary_hpc_batchspec["duration"] == 1.0
+    assert args.hpc_batchspec["duration"] == 1.0
     args = parser.parse_args(["--batch-spec=layout:atomic"])
-    assert args.canary_hpc_batchspec["layout"] == "atomic"
+    assert args.hpc_batchspec["layout"] == "atomic"
     args = parser.parse_args(["--batch-spec=layout:flat"])
-    assert args.canary_hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["--batch-spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["--batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["--backend=shell"])
-    spec = getattr(args, "canary_hpc_batchspec", None) or {}
+    spec = getattr(args, "hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-    setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_backend == "shell"
-    assert args.canary_hpc_batchspec["layout"] == "flat"
-    assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "same"
+    setattr(args, "hpc_batchspec", spec)
+    assert args.hpc_backend == "shell"
+    assert args.hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["duration"] == 60 * 30
+    assert args.hpc_batchspec["nodes"] == "same"
 
 
 def test_parsing_legacy():
@@ -136,7 +136,7 @@ def test_parsing_legacy():
             "option=--clusters='horse,fly',--licenses='foo,bar'",
         ]
     )
-    assert args.canary_hpc_scheduler_args == [
+    assert args.hpc_scheduler_args == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
@@ -149,32 +149,32 @@ def test_parsing_legacy():
     ]
 
     args = parser.parse_args(["-b", "spec=count:1"])
-    assert args.canary_hpc_batchspec["count"] == 1
+    assert args.hpc_batchspec["count"] == 1
     args = parser.parse_args(["-b", "spec=duration:1"])
-    assert args.canary_hpc_batchspec["duration"] == 1.0
+    assert args.hpc_batchspec["duration"] == 1.0
     args = parser.parse_args(["-b", "spec=layout:atomic"])
-    assert args.canary_hpc_batchspec["layout"] == "atomic"
+    assert args.hpc_batchspec["layout"] == "atomic"
     args = parser.parse_args(["-b", "spec=layout:flat"])
-    assert args.canary_hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["-b", "spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.AUTO
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.AUTO
     args = parser.parse_args(["-b", "spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
+    assert args.hpc_batchspec["count"] is binpack.BatchMode.ONE_PER_BIN
 
     args = parser.parse_args(["-b", "backend=shell"])
-    spec = getattr(args, "canary_hpc_batchspec", None) or {}
+    spec = getattr(args, "hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-    setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_backend == "shell"
-    assert args.canary_hpc_batchspec["layout"] == "flat"
-    assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "same"
+    setattr(args, "hpc_batchspec", spec)
+    assert args.hpc_backend == "shell"
+    assert args.hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["duration"] == 60 * 30
+    assert args.hpc_batchspec["nodes"] == "same"
 
     args = parser.parse_args(["-b", "backend=shell"])
-    spec = getattr(args, "canary_hpc_batchspec", None) or {}
+    spec = getattr(args, "hpc_batchspec", None) or {}
     CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-    setattr(args, "canary_hpc_batchspec", spec)
-    assert args.canary_hpc_backend == "shell"
-    assert args.canary_hpc_batchspec["layout"] == "flat"
-    assert args.canary_hpc_batchspec["duration"] == 60 * 30
-    assert args.canary_hpc_batchspec["nodes"] == "same"
+    setattr(args, "hpc_batchspec", spec)
+    assert args.hpc_backend == "shell"
+    assert args.hpc_batchspec["layout"] == "flat"
+    assert args.hpc_batchspec["duration"] == 60 * 30
+    assert args.hpc_batchspec["nodes"] == "same"

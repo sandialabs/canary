@@ -34,6 +34,11 @@ class DistributedPoolConductor:
         hpc_connect.config.export()
         self.backend: hpc_connect.Backend = hpc_connect.get_backend("remote_subprocess")
         self.dpool = DistributedResourcePoolAdapter(server_url=server_url)
+        src = canary.config.resource_manager.get_property("source")
+        if src != "canary-dist":
+            raise ValueError(
+                f"expected resource manager backend to be 'canary-dist' but got {src!r}"
+            )
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_dist_conductor")
@@ -45,13 +50,9 @@ class DistributedPoolConductor:
         """determine if the resources for this test are available"""
         return self.dpool.current_state()
 
-    @canary.hookimpl(tryfirst=True)
-    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
-        return self.dpool.to_resource_pool()
-
     @canary.hookimpl
     def canary_select_modifyitems(self, selector: canary.Selector) -> None:
-        width = canary.config.getoption("canary_dist_batch_width") or 8
+        width = canary.config.getoption("dist_batch_width") or 8
         for spec in selector.specs:
             parameters = spec.parameters | spec.meta_parameters
             if parameters.get("cpus", 1) > width:
@@ -69,12 +70,12 @@ class DistributedPoolConductor:
         The session returncode (0 for success)
 
         """
-        width = canary.config.getoption("canary_dist_batch_width") or 8
+        width = canary.config.getoption("dist_batch_width") or 8
         batch_specs: list[BatchSpec] = batch_jobs(
             jobs=runner.jobs,
-            duration=canary.config.getoption("canary_dist_batch_duration"),
+            duration=canary.config.getoption("dist_batch_duration"),
             width=width,
-            count=canary.config.getoption("canary_dist_batch_count"),
+            count=canary.config.getoption("dist_batch_count"),
             layout="flat",
             nodes="any",
         )
@@ -108,7 +109,7 @@ class DistributedPoolConductor:
     def add_server_argument(parser: canary.Parser | argparse._ArgumentGroup) -> None:
         parser.add_argument(
             "--server-url",
-            dest="canary_dist_server_url",
+            dest="dist_server_url",
             metavar="URL",
             default=os.getenv("CANARY_DIST_SERVER_URL"),
             help="Distributed pool server location (URL). "
@@ -126,14 +127,14 @@ class DistributedPoolConductor:
         DistributedPoolConductor.add_server_argument(group)
         group.add_argument(
             "--tags",
-            dest="canary_dist_tags",
+            dest="dist_tags",
             metavar="TAGS",
             type=lambda arg: [_.strip() for _ in arg.split(",") if _.strip()],
             help="Only run on machines matching all tags (comma separated list of tags)",
         )
         group.add_argument(
             "--batch-width",
-            dest="canary_dist_batch_width",
+            dest="dist_batch_width",
             metavar="N",
             default=8,
             type=int,
@@ -141,7 +142,7 @@ class DistributedPoolConductor:
         )
         group.add_argument(
             "--batch-count",
-            dest="canary_dist_batch_count",
+            dest="dist_batch_count",
             metavar="N",
             default=None,
             type=int,
@@ -149,7 +150,7 @@ class DistributedPoolConductor:
         )
         group.add_argument(
             "--batch-duration",
-            dest="canary_dist_batch_duration",
+            dest="dist_batch_duration",
             default=None,
             metavar="T",
             type=canary.time.time_in_seconds,
@@ -159,7 +160,7 @@ class DistributedPoolConductor:
             "-E",
             "--export",
             metavar="<variables>|ALL",
-            dest="canary_dist_export",
+            dest="dist_export",
             type=export_splitter,
             help="Identify which environment variables from the submission environment are "
             "propagated to the remote host.  By default, no variables are propagated.\n\n"
@@ -173,7 +174,7 @@ class DistributedPoolConductor:
 
     @staticmethod
     def validate_and_set_defaults(args: argparse.Namespace) -> None:
-        server = getattr(args, "canary_dist_server_url", None)
+        server = getattr(args, "dist_server_url", None)
         if server is None:
             raise ValueError(
                 "canary dist: missing required argument --server-url or CANARY_DIST_SERVER_URL"

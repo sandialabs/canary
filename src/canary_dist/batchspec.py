@@ -94,7 +94,7 @@ class TestBatch(bs.TestBatch):
         resources = _strip_node_from_resources(self.resources)
 
         metadata = dict(self.allocation.get("metadata", {}))
-        metadata.setdefault("source", "distributed-checkout")
+        metadata["source"] = "distributed-checkout"
         metadata["hostname"] = self.hostname
 
         return {

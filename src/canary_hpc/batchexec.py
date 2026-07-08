@@ -64,7 +64,7 @@ class HPCConnectRunner:
 
     def scheduler_args(self) -> list[str]:
         options: list[str] = []
-        if args := canary.config.getoption("canary_hpc_scheduler_args"):
+        if args := canary.config.getoption("hpc_scheduler_args"):
             options.extend(args)
         return options
 
@@ -305,7 +305,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         if gpu_backend not in (None, "auto"):
             default_args.append(f"--gpu-backend={gpu_backend}")
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "hpc", "exec"]
-        n = canary.config.getoption("canary_hpc_batch_workers") or -1
+        n = canary.config.getoption("hpc_batch_workers") or -1
         args.extend(
             [
                 f"--workers={n}",
@@ -314,125 +314,3 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             ]
         )
         return shlex.join(args)
-
-
-class HPCConnectSeriesRunner(HPCConnectRunner):
-    def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
-        started_at: float = -1.0
-
-        def set_starttime(future: hpc_connect.futures.Future):
-            nonlocal started_at
-            started_at = time.time()
-            batch.timekeeper.started = started_at
-            queue.put({"event": "job_started", "timestamp": started_at})
-
-        logger.debug(f"Starting {batch} on pid {os.getpid()}")
-        self.generate_resource_pool(batch)
-
-        # TestBatch.run() already set submitted and emitted SUBMITTED
-        submitted_at = batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
-        queue_deadline = submitted_at + batch.queue_timeout
-
-        # Overall run timeout once the first job actually starts
-        run_timeout = float(batch.timeout * batch.timeout_multiplier)
-
-        rc: int = -1
-        with batch.workspace.enter():
-            futures: list[hpc_connect.futures.Future] = []
-            for i, job in enumerate(batch.jobs):
-                future = self.submit(batch, job)
-                if i == 0:
-                    future.add_jobstart_callback(set_starttime)
-                futures.append(future)
-
-            with self.handle_signals(futures, batch):
-                poll = max(1.0, max(getattr(f, "_polling_interval", 1.0) for f in futures))
-
-                # --- queue timeout: wait for first scheduler start ---
-                while started_at < 0.0:
-                    if time.time() >= queue_deadline:
-                        for f in futures:
-                            try:
-                                f.cancel()
-                            except Exception:  # nosec B110
-                                pass
-                        raise TimeoutError(
-                            f"Batch {batch.id[:7]} exceeded queue timeout "
-                            f"{batch.queue_timeout:.1f}s"
-                        )
-                    # If everything finishes without ever "starting", treat as done
-                    if all(f.done() for f in futures):
-                        for f in futures:
-                            try:
-                                rc = max(rc, f.result())
-                            except Exception:
-                                rc = max(rc, 1)
-                        logger.debug(f"Finished {batch} with exit code {rc}")
-                        return rc
-                    time.sleep(poll)
-
-                # --- run timeout: from first STARTED until all complete ---
-                try:
-                    for f in hpc_connect.futures.as_completed(
-                        futures,
-                        timeout=run_timeout,
-                        polling_interval=poll,
-                        cancel_on_exception=True,
-                    ):
-                        rc = max(rc, f.result())
-                except TimeoutError:
-                    # as_completed already cancels remaining futures on timeout
-                    raise TimeoutError(
-                        f"Batch {batch.id[:7]} exceeded run timeout {run_timeout:.1f}s"
-                    )
-
-        logger.debug(f"Finished {batch} with exit code {rc}")
-        return rc
-
-    def submit(self, batch: "TestBatch", job: "canary.Job") -> hpc_connect.futures.Future:
-        variables = self.rc_environ(batch)
-        timeoutx = batch.timeout_multiplier
-        invocation = self.canary_invocation(batch, job)
-        hpc_job = hpc_connect.JobSpec(
-            name=f"canary.{job.id[:7]}",
-            commands=[invocation],
-            cpus=job.cpus,
-            gpus=job.gpus,
-            time_limit=job.runtime * timeoutx,
-            env=variables,
-            output=str(batch.workspace.joinpath(f"{job.id[:7]}-out.txt")),
-            error=str(batch.workspace.joinpath(f"{job.id[:7]}-err.txt")),
-            workspace=batch.workspace.dir,
-            submit_args=self.scheduler_args(),
-        )
-        future = self.backend.submission_manager().submit(hpc_job, exclusive=False)
-        return future
-
-    def canary_invocation(self, batch: "TestBatch", job: "canary.Job") -> str:
-        """Write the canary invocation used to run this job"""
-        default_args = [
-            sys.executable,
-            "-m",
-            "canary",
-            "-C",
-            str(batch.workspace.dir),
-            "-r",
-            f"cpus={job.cpus}",
-            "-r",
-            f"gpus={job.gpus}",
-        ]
-        if canary.config.get("debug"):
-            default_args.append("-d")
-        gpu_backend = canary.config.getoption("gpu_backend")
-        if gpu_backend not in (None, "auto"):
-            default_args.append(f"--gpu-backend={gpu_backend}")
-        default_args.extend(["hpc", "exec"])
-        args = [
-            *default_args,
-            "--workers=1",
-            f"--backend={self.backend.name}",
-            f"--job={job.id}",
-            f"--workspace={batch.workspace.dir}",
-        ]
-        invocation = shlex.join(args)
-        return invocation

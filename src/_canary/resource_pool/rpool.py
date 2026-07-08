@@ -455,6 +455,9 @@ class ResourcePool:
         except KeyError:
             raise ResourceUnavailable(f"Unknown node {node_id!r}") from None
 
+    def get_property(self, name: str) -> Any:
+        return self.additional_properties.get(name)
+
     def _resolve_type(self, rtype: str) -> str:
         if rtype in ("node", "nodes"):
             return "nodes"

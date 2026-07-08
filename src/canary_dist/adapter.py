@@ -31,7 +31,7 @@ class DistributedResourcePoolAdapter:
 
         {
             "metadata": {
-                "source": "distributed",
+                "source": "canary-dist",
                 "server_url": "...",
                 "hostname": "...",
                 "transaction_id": "...",
@@ -70,7 +70,7 @@ class DistributedResourcePoolAdapter:
         data = self.current_state()
         db = data["database"]
 
-        tags = canary.config.getoption("canary_dist_tags") or None
+        tags = canary.config.getoption("dist_tags") or None
         groups = self._current_groups()
 
         rtypes: set[str] = {"cpus", "gpus"}
@@ -97,7 +97,7 @@ class DistributedResourcePoolAdapter:
         data = self.current_state()
         db = data["database"]
 
-        tags = canary.config.getoption("canary_dist_tags") or None
+        tags = canary.config.getoption("dist_tags") or None
         groups = self._current_groups()
 
         nodes: list[dict[str, Any]] = []
@@ -125,7 +125,7 @@ class DistributedResourcePoolAdapter:
 
         return {
             "allow_multinode": False,
-            "additional_properties": {"source": "distributed", "server_url": self.server_url},
+            "additional_properties": {"source": "canary-dist", "server_url": self.server_url},
             "nodes": nodes,
         }
 
@@ -204,7 +204,7 @@ class DistributedResourcePoolAdapter:
         # Run the health check first to check in expired checkouts.
         self.curl("/rx")
 
-        tags = canary.config.getoption("canary_dist_tags") or None
+        tags = canary.config.getoption("dist_tags") or None
         groups = self._current_groups()
         timeout: float = kwds.get("timeout", 60.0 * 30.0)
 
@@ -228,7 +228,7 @@ class DistributedResourcePoolAdapter:
 
         return {
             "metadata": {
-                "source": "distributed",
+                "source": "canary-dist",
                 "server_url": self.server_url,
                 "hostname": hostname,
                 "transaction_id": transaction_id,

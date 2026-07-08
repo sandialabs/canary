@@ -108,7 +108,7 @@ def test_to_resource_pool_filters_offline_machines(monkeypatch):
 
     assert pool == {
         "allow_multinode": False,
-        "additional_properties": {"source": "distributed", "server_url": "http://server"},
+        "additional_properties": {"source": "canary-dist", "server_url": "http://server"},
         "nodes": [
             {
                 "id": "host-a",
@@ -140,7 +140,7 @@ def test_checkout_returns_core_allocation(monkeypatch):
 
     assert allocation == {
         "metadata": {
-            "source": "distributed",
+            "source": "canary-dist",
             "server_url": "http://server",
             "hostname": "host-a",
             "transaction_id": "tx-1",

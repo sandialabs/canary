@@ -77,6 +77,3 @@ fi
 echo " "
 echo " "
 echo "----------------------- Done! ----------------------"
-# Artifacts
-canary report junit create -o $CI_PROJECT_DIR/junit.xml || true
-canary report cdash create -d $CI_PROJECT_DIR/xml || true

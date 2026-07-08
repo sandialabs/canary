@@ -170,13 +170,13 @@ class TestBatch(BaseJob):
     @property
     def queue_timeout(self) -> float:
         four_hours = 4.0 * 60.0 * 60.0
-        return canary.config.getoption("canary_hpc_queue_timeout") or four_hours
+        return canary.config.getoption("hpc_queue_timeout") or four_hours
 
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
 
     def estimated_runtime(self) -> float:
-        if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):
+        if scheduler_args := canary.config.getoption("hpc_scheduler_args"):
             p = argparse.ArgumentParser()
             p.add_argument("--time", "--time-limit", dest="qtime")
             a, _ = p.parse_known_args(scheduler_args)
@@ -278,10 +278,12 @@ class TestBatch(BaseJob):
             return self.dependency_batches_complete()
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
+
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
+
         rc: int | None = -1
         try:
             hpc_connect.config.export()
@@ -293,6 +295,7 @@ class TestBatch(BaseJob):
             finally:
                 self.timekeeper.finished = time.time()
         except Exception:
+            logger.exception(f"Failed to run batch {self}")
             rc = 1
         finally:
             if rc is None:

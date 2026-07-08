@@ -2,11 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
-import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
 
 import hpc_connect
 
@@ -22,6 +20,9 @@ class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, job: str | None = None) -> None:
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
         cfg = TestBatch.loadconfig(workspace)
+        src = canary.config.resource_manager.get_property("source")
+        if src != "hpc-batch":
+            raise ValueError(f"expected resource manager source to be 'hpc-batch' but got {src}")
         self.session: str = cfg["session"]
         self.batch: str = cfg["id"]
         assert workspace == cfg["workspace"]
@@ -36,9 +37,6 @@ class CanaryHPCExecutor:
         elif self.batch != os.environ["CANARY_BATCH_ID"]:
             raise ValueError("env batch id inconsistent with cli batch id")
 
-    def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
-        pluginmanager.register(self, "canary_hpc_executor")
-
     def run(self, args: argparse.Namespace) -> int:
         n = len(self.jobs)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
@@ -52,16 +50,6 @@ class CanaryHPCExecutor:
         view_t = canary.ViewSettings(**view_cfg) if view_cfg else canary.ViewSettings.default()
         session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
-
-    def load_resource_pool(self) -> dict:
-        f = self.workspace / "resource_pool.json"
-        fd = json.loads(f.read_text())
-        return fd["resource_pool"]
-
-    @canary.hookimpl(tryfirst=True)
-    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
-        """Load the batch-local topology-aware resource pool."""
-        return self.load_resource_pool()
 
     def modify_specs(self, specs: list[canary.JobSpec]) -> None:
         # If a test requests nodes, fill in per-node resources so checkout
@@ -91,10 +79,8 @@ class CanaryHPCExecutor:
         parser.add_argument(
             "--workers", type=int, help="Run tests in batch using this many workers"
         )
+        parser.add_argument("--backend", dest="hpc_backend", help="The HPC connect backend name")
+        parser.add_argument("--job", dest="hpc_case", help="Run only this job")
         parser.add_argument(
-            "--backend", dest="canary_hpc_backend", help="The HPC connect backend name"
-        )
-        parser.add_argument("--job", dest="canary_hpc_case", help="Run only this job")
-        parser.add_argument(
-            "--workspace", dest="canary_hpc_workspace", help="The batch's workspace", required=True
+            "--workspace", dest="hpc_workspace", help="The batch's workspace", required=True
         )

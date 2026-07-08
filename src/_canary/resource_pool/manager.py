@@ -51,6 +51,9 @@ class ResourceManager:
         self._pool = make_resource_pool(self.config)
         return self._pool
 
+    def get_property(self, name: str) -> Any:
+        return self.get_pool().get_property(name)
+
     def refresh(self) -> ResourcePool:
         """Force rediscovery/reconstruction of the resource pool.
 

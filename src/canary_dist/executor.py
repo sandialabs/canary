@@ -3,11 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
 
 import canary
 
@@ -19,6 +17,11 @@ logger = canary.get_logger(__name__)
 
 class DistributedPoolExecutor:
     def __init__(self, workspace: str, job: str | None = None) -> None:
+        src = canary.config.resource_manager.get_property("source")
+        if src != "distributed-checkout":
+            raise ValueError(
+                f"expected resource manager source to be 'distributed-checkout' but got {src}"
+            )
         self.config = TestBatch.loadconfig(workspace)
         self.session: str = self.config["session"]
         self.batch: str = self.config["id"]
@@ -33,9 +36,6 @@ class DistributedPoolExecutor:
             os.environ["CANARY_BATCH_ID"] = self.batch
         elif self.batch != os.environ["CANARY_BATCH_ID"]:
             raise ValueError("env batch id inconsistent with cli batch id")
-
-    def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
-        pluginmanager.register(self, "canary_dist_executor")
 
     def run(self, args: argparse.Namespace) -> int:
         n = len(self.jobs)
@@ -53,20 +53,11 @@ class DistributedPoolExecutor:
         session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
-    def load_resource_pool(self) -> dict:
-        f = self.workspace / "resource_pool.json"
-        fd = json.loads(f.read_text())
-        return fd["resource_pool"]
-
-    @canary.hookimpl(tryfirst=True)
-    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
-        return self.load_resource_pool()
-
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:
         parser.add_argument(
             "--workers", type=int, help="Run tests in batch using this many workers"
         )
         parser.add_argument(
-            "--workspace", dest="canary_dist_workspace", help="The batch's workspace", required=True
+            "--workspace", dest="dist_workspace", help="The batch's workspace", required=True
         )

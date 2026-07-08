@@ -5,7 +5,6 @@ import argparse
 import logging
 import os
 import threading
-from collections import Counter
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
@@ -39,29 +38,18 @@ class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
         hpc_connect.config.export()
         self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
-
-        # Compute available resource types reported by hpc-connect.
-        self._slots_per_resource_type: Counter[str] | None = None
-        rtypes: set[str] = {"cpus", "gpus"}
-        for rtype in self.backend.resource_types():
-            rtype = rtype if rtype.endswith("s") else f"{rtype}s"
-            rtypes.add(rtype)
-        self.available_resource_types = sorted(rtypes)
-
+        rpool_backend = canary.config.resource_manager.get_property("hpc_backend")
+        if rpool_backend != self.backend.name:
+            raise ValueError(
+                f"expected resource manager backend to be {self.backend.name} but got {rpool_backend}"
+            )
         # This private resource pool is only used to schedule local batch
         # submission workers. It is not the HPC test resource pool.
+        my_cpus = [{"id": str(j), "slots": 1} for j in range(cpu_count())]
         self.rpool = ResourcePool(
             {
-                "additional_properties": {"source": "canary_hpc_batch_conductor"},
-                "nodes": [
-                    {
-                        "id": os.uname().nodename,
-                        "resources": {
-                            "cpus": [{"id": str(j), "slots": 1} for j in range(cpu_count())],
-                            "gpus": [],
-                        },
-                    }
-                ],
+                "additional_properties": {"source": "canary_hpc_conductor"},
+                "nodes": [{"id": os.uname().nodename, "resources": {"cpus": my_cpus, "gpus": []}}],
             }
         )
 
@@ -69,59 +57,17 @@ class CanaryHPCConductor:
         pluginmanager.register(self, "canary_hpc_conductor")
 
     def run(self, args: argparse.Namespace) -> int:
-        if n := args.canary_hpc_batch_workers:
+        if n := args.hpc_batch_workers:
             if n > cpu_count():
                 logger.warning(f"--hpc-batch-workers={n} > cpu_count={cpu_count()}")
-        batchspec = args.canary_hpc_batchspec or CanaryHPCBatchSpec.defaults()
+        batchspec = args.hpc_batchspec or CanaryHPCBatchSpec.defaults()
         CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
-        setattr(canary.config.options, "canary_hpc_batchspec", batchspec)
+        setattr(canary.config.options, "hpc_batchspec", batchspec)
         console_style = canary.config.getoption("console_style") or {}
         if "live_columns" not in console_style:
             console_style["live_columns"] = "Job,ID,Status,Queued,Elapsed,Rank"
         setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
-
-    @canary.hookimpl(tryfirst=True)
-    def canary_resource_pool_fill(self, config: canary.Config) -> dict[str, Any] | None:
-        """Create a topology-aware resource pool representing the HPC backend.
-
-        Node IDs are virtual/backend-local bookkeeping IDs. Canary core does not
-        need to know where the scheduler will physically place the job.
-        """
-        node_count = self.backend.node_count
-
-        resource_types = {
-            _canonical_resource_type(rtype) for rtype in self.backend.resource_types()
-        }
-        resource_types.update({"cpus", "gpus"})
-
-        nodes: list[dict[str, Any]] = []
-
-        for i in range(node_count):
-            resources: dict[str, list[dict[str, Any]]] = {}
-
-            for rtype in sorted(resource_types):
-                try:
-                    count = self.backend.count_per_node(rtype)
-                except ValueError:
-                    try:
-                        count = self.backend.count_per_node(_singular_resource_type(rtype))
-                    except ValueError:
-                        count = 0
-
-                resources[rtype] = _resource_specs(count, rtype=rtype)
-
-            nodes.append({"id": str(i), "resources": resources})
-
-        return {
-            "allow_multinode": True,
-            "additional_properties": {
-                "backend": self.backend.name,
-                "source": "hpc",
-                "node_count": node_count,
-            },
-            "nodes": nodes,
-        }
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: "Runner") -> bool:
@@ -134,7 +80,7 @@ class CanaryHPCConductor:
         The session returncode (0 for success)
 
         """
-        batchspec = canary.config.getoption("canary_hpc_batchspec")
+        batchspec = canary.config.getoption("hpc_batchspec")
         if not batchspec:
             raise ValueError("Cannot partition jobs: missing batching options")
         batch_specs: list[BatchSpec] = batch_jobs(
@@ -192,13 +138,13 @@ class CanaryHPCConductor:
         parser.add_argument(
             "--backend",
             "--scheduler",
-            dest="canary_hpc_backend",
+            dest="hpc_backend",
             metavar="BACKEND",
             help="Submit batches to this HPC scheduler [alias: -b backend=BACKEND] [default: None]",
         )
         parser.add_argument(
             "--scheduler-args",
-            dest="canary_hpc_scheduler_args",
+            dest="hpc_scheduler_args",
             metavar="ARGS",
             action=CanaryHPCSchedulerArgs,
             help="Comma separated list of options to pass directly "
@@ -206,7 +152,7 @@ class CanaryHPCConductor:
         )
         parser.add_argument(
             "--batch-spec",
-            dest="canary_hpc_batchspec",
+            dest="hpc_batchspec",
             metavar="SPEC",
             action=CanaryHPCBatchSpec,
             help="Comma separated list of options to partition jobs into batches. "
@@ -215,13 +161,13 @@ class CanaryHPCConductor:
         )
         parser.add_argument(
             "--batch-workers",
-            dest="canary_hpc_batch_workers",
+            dest="hpc_batch_workers",
             metavar="WORKERS",
             help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
         )
         parser.add_argument(
             "--batch-timeout-strategy",
-            dest="canary_hpc_batch_timeout_strategy",
+            dest="hpc_batch_timeout_strategy",
             metavar="STRATEGY",
             choices=("aggressive", "conservative"),
             help="Estimate batch runtime (queue time) conservatively or aggressively "
@@ -229,7 +175,7 @@ class CanaryHPCConductor:
         )
         parser.add_argument(
             "--queue-timeout",
-            dest="canary_hpc_queue_timeout",
+            dest="hpc_queue_timeout",
             metavar="T",
             type=time_in_seconds,
             default=30 * 60,
@@ -240,28 +186,6 @@ class CanaryHPCConductor:
     def setup_legacy_parser(parser: canary.Parser) -> None:
         p = LegacyParserAdapter(parser)
         CanaryHPCConductor.setup_parser(p)
-
-
-def _canonical_resource_type(rtype: str) -> str:
-    return rtype if rtype.endswith("s") else f"{rtype}s"
-
-
-def _singular_resource_type(rtype: str) -> str:
-    return rtype[:-1] if rtype.endswith("s") else rtype
-
-
-def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
-    specs: list[dict[str, Any]] = []
-
-    for j in range(count):
-        spec: dict[str, Any] = {"id": str(j), "slots": 1}
-
-        if rtype == "gpus":
-            spec["properties"] = {"vendor": "UNKNOWN"}
-
-        specs.append(spec)
-
-    return specs
 
 
 class LegacyParserAdapter:

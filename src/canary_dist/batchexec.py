@@ -39,6 +39,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             batch.jobid = future.jobid
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
+
         with batch.workspace.enter():
             try:
                 future = self.submit(batch)
@@ -92,7 +93,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:  # type: ignore[override]
         variables = super().rc_environ(batch)
         variables.update({"__CANARY_DIST_EXEC": "1", "PYTHONEXEC": sys.executable})
-        export = canary.config.getoption("canary_dist_export") or {}
+        export = canary.config.getoption("dist_export") or {}
         if export.get("ALL") == "==YES==":
             variables.update(self.filtered_env())
         else:
@@ -147,6 +148,6 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             default_args.append("-d")
 
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "dist", "exec"]
-        n = canary.config.getoption("canary_dist_remote_workers") or -1
+        n = canary.config.getoption("dist_remote_workers") or -1
         args.extend([f"--workers={n}", f"--workspace={batch.workspace.dir}"])
         return shlex.join(args)
