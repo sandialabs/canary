@@ -19,6 +19,7 @@ from .util.paramview import Parameters
 
 if TYPE_CHECKING:
     from .job import Job
+    from .jobspec import JobSpec
 
 
 @dataclasses.dataclass(frozen=True)
@@ -116,6 +117,14 @@ class TestMultiInstance(TestInstance):
         return True
 
 
+def get_parameters(spec: "JobSpec") -> dict[str, Any]:
+    params: dict[str, Any] = dict(spec.parameters)
+    for key in ("cpus", "gpus", "nodes"):
+        if key not in params and key in spec.meta_parameters:
+            params[key] = spec.meta_parameters[key]
+    return params
+
+
 def from_job(job: "Job") -> TestInstance:
     dependencies: list[TestInstance] = []
     for dep in job.dependencies:
@@ -126,8 +135,8 @@ def from_job(job: "Job") -> TestInstance:
     if job.spec.attributes.get("multicase"):
         cls = TestMultiInstance
         columns: dict[str, list[Any]] = {}
-        sp = job.dependencies[0].job.spec
-        keys = set(sp.parameters.keys()) | set(sp.meta_parameters.keys())
+        p = get_parameters(job.dependencies[0].job.spec)
+        keys = set(p)
         for key in keys:
             col = columns.setdefault(key, [])
             for dep in job.dependencies:
@@ -137,7 +146,7 @@ def from_job(job: "Job") -> TestInstance:
         parameters = MultiParameters(**columns)
     else:
         cls = TestInstance
-        parameters = Parameters(**(job.spec.parameters | job.spec.meta_parameters))
+        parameters = Parameters(**get_parameters(job.spec))
 
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in job.spec.assets:
