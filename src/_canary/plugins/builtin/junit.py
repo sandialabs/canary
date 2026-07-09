@@ -72,36 +72,40 @@ class JunitReportCommand(CanaryReporter):
     description = "JUnit reporter"
 
     def setup_parser(self, parser: "Parser") -> None:
-        self.add_create_options(parser)
-
-        # Hidden compatibility spelling:
+        # Compatibility positional:
         #
         #   canary report junit create
         #
-        subparsers = parser.add_subparsers(dest="_junit_action", metavar="subcommands")
-        p = subparsers.add_parser("create", help=argparse.SUPPRESS)
-        self.add_create_options(p)
-
-    def add_create_options(self, parser: "Parser") -> None:
+        # The preferred spelling is:
+        #
+        #   canary report junit
+        #
+        parser.add_argument(
+            "_create", nargs="?", choices=("create",), metavar="", help=argparse.SUPPRESS
+        )
         parser.add_argument(
             "-o",
             "--output",
             default=JunitReporter.default_output,
             help="Output file [default: %(default)s]",
         )
+        parser.set_defaults(_junit_report_handler=self.run_create)
 
     def run_from_args(self, args: Namespace) -> int:
+        handler = getattr(args, "_junit_report_handler", None)
+        if handler is None:
+            raise ValueError("canary report junit: missing action")
+        handler(args)
+        return 0
+
+    def run_create(self, args: Namespace) -> None:
         from ...workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
-
-        request = JunitReportRequest(
-            workspace=workspace, jobs=jobs, output=Path(args.output).absolute()
-        )
-
+        output = Path(args.output).absolute()
+        request = JunitReportRequest(workspace=workspace, jobs=jobs, output=output)
         JunitReporter().write(request)
-        return 0
 
 
 class JunitReporter:

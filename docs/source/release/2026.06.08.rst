@@ -1,0 +1,192 @@
+canary 2026.06.08 release notes
+===============================
+
+.. contents::
+
+SYNOPSIS
+--------
+
+* This release covers the set of changes from April 2026 (sha 98de7fb3d99f66647c90a0e96fb37f1f6be59b15) to June 8, 2026 (sha 80f99b2b3c61622d856d2be0f45f7fe4ae3065f8).
+* Work in this range focuses on the **TestCase → Job** migration, introduction of a new **JobSpec IR + dependency resolver** pipeline, a major **status model refactor**, improved **workspace/view semantics**, HPC batching enhancements, and substantial documentation and CI updates.
+
+Highlights
+----------
+
+Core execution model
+^^^^^^^^^^^^^^^^^^^^
+
+* Migrated core execution terminology and types from **TestCase** to **Job** across the codebase.
+* Introduced :py:`_canary.job.BaseJob` and standardized queue/executor interactions around a job-phase lifecycle.
+* Backward compatibility is preserved: :py:`canary.TestCase`` remains available as an alias of :py:`canary.Job`, so most existing client code does not need to change.
+
+New spec pipeline and dependency resolution
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added :py:`_canary.ir.JobSpecIR` for generator outputs that contain unresolved dependency selectors.
+* Added :py:`_canary.jobspec.JobSpec` as the resolved, runnable spec format.
+* Added :py:`_canary.resolve_dependency` to resolve dependency patterns/selectors into concrete spec dependencies.
+
+Status system refactor
+^^^^^^^^^^^^^^^^^^^^^^
+
+* Replaced legacy status tuple concepts with:
+  * :py:`_canary.status.Category` (PASS/FAIL/SKIP/CANCEL/NONE)
+  * :py:`_canary.status.Outcome` (SUCCESS/FAILED/TIMEOUT/…)
+  * Updated :py:`_canary.status.Status` API (``category/outcome/reason/code``).
+* Updated return-code aggregation and reporting logic to use the new model.
+
+Persistence and DB updates
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Workspace DB now stores specs as JSON (instead of pickled blobs).
+* Results schema updated to store **job_state** and new status fields; includes a migration helper for older DBs.
+
+CLI and UX improvements
+^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added ``canary exec`` subcommand to execute a single job/spec directly.
+* Added view configuration controls:
+  * New view settings (mode/when/only/name).
+  * ``canary run --view key=value,...`` for per-run view behavior.
+  * ``canary view refresh`` enhanced (mode/only/name).
+* Improved parser behavior:
+  * Nested subparser lookup via ``Parser.get_subparser("a::b::c")``.
+  * New hooks: ``canary_cmdline_parse`` and ``canary_cmdline_modifyargs``.
+
+Plugins and integrations
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Extracted former builtin PYT support into a new plugin package: **``canary_pyt``**.
+* Refactored ``canary_vvtest`` to a similar "model/loader/adapter/emitter" architecture.
+* Added builtin ``archive`` plugin: ``--archive NAME`` to tar/tgz selected artifacts post-run.
+* GPU selection improvements:
+  * ``--gpu-backend`` default changed to ``none``.
+  * Added GPU selection config section and stricter backend selection logic.
+
+HPC batching enhancements
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Batch specification defaults updated (notably default batching node constraints).
+* Added explicit batch dependency construction from job dependency graphs.
+* Batch objects now behave as jobs (implementing BaseJob interface).
+* Added ``canary hpc log`` helper to page batch logs.
+
+Docs and examples
+^^^^^^^^^^^^^^^^^
+
+* README updated to describe Canary as a general-purpose job/workflow execution framework.
+* Added a large Sphinx reveal.js presentation under ``docs/presentations/HL``.
+* Expanded tutorials:
+  * Added batch spec documentation and extending-canary tutorial series.
+  * Improved language around workspace/view behavior and job terminology.
+* Added/updated API docs for new modules (``job``, ``jobspec``, ``ir``, ``resolve_dependency``, util modules, etc.).
+
+CI and developer tooling
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Updated pytest paths and CI execution order; added ``src/canary_pyt/tests``.
+* Enabled Ruff security selection (S324) in both GitHub Actions and GitLab CI.
+* GitHub coverage steps currently commented out in workflow.
+* Added ``bin/collect-release-data.sh`` helper script to generate deterministic release inputs from local git history.
+
+Security / compliance
+^^^^^^^^^^^^^^^^^^^^^
+
+* Replaced MD5 hashing usage with SHA-256 in a few helper contexts.
+* Added Ruff S324 checks (hashlib-related security guidance).
+
+Detailed changes
+----------------
+
+Core / execution model
+^^^^^^^^^^^^^^^^^^^^^^
+
+* Added :py:`_canary.job.Job`, :py:`_canary.job.BaseJob`, :py:`_canary.job.JobPhase`, :py:`_canary.job.JobState`.
+* Updated conductor/executor/queue to operate on job phases and readiness rather than legacy testcase status states.
+* Updated job execution path:
+  * robust setup/run/finish error handling;
+  * explicit job event recording (submitted/started/finished) for queue executor.
+
+Specs, dependency resolution, and persistence
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added :py:`_canary.ir.JobSpecIR` and :py:`_canary.resolve_dependency.resolve`.
+* Updated generator system:
+  * generators now emit JobSpecIR/JobSpec rather than legacy UnresolvedSpec/ResolvedSpec.
+  * dependency resolution is handled in a dedicated module (with parallel resolution support).
+* Workspace DB changes:
+  * specs stored as JSON;
+  * dependency reconstruction uses stored ordering to preserve edge positions;
+  * migration routine for legacy ``results.status_state`` → ``results.job_state``.
+
+Status system refactor
+^^^^^^^^^^^^^^^^^^^^^^
+
+* Implemented enum-based status model in :py:`_canary.status`.
+* Updated reporters (JUnit/Markdown/HTML/email/GitLab) to group and display based on new status fields.
+* Updated returncode computation to use status category/outcome and job completion.
+
+CLI and user experience
+^^^^^^^^^^^^^^^^^^^^^^^
+
+* New command: ``canary exec`` to execute a single job from a spec ID.
+* View improvements:
+  * new ``ViewSettings`` and ``ResultsView`` abstractions;
+  * configurable view creation (mode/when/only) and rebuild behavior.
+* Parser improvements:
+  * nested subparser addressing via ``::`` notation;
+  * new hooks for command line parse/modify steps.
+
+Plugins and integrations
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added ``canary_pyt`` plugin:
+  * loader parses directives from .pyt files without executing tests;
+  * adapter applies directives into a model;
+  * lock emitter generates JobSpecIR entries (including analyze/composite base job).
+* Refactored ``canary_vvtest`` to match the same architecture.
+* Added builtin archive plugin:
+  * archives job artifacts into tar/tgz; de-duplicates payload.
+* GPU detection improvements:
+  * updated selection logic; added config schema; clarified backend conflict behavior.
+* YAML example generator updated:
+  * uses schema validation;
+  * emits ``command`` directly;
+  * template substitution via :py:`string.Template`.
+
+HPC batching / canary_hpc
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Batch spec defaults updated and documented (including layout/duration/count/nodes constraints).
+* Introduced batch dependency construction and optional backend dependency usage.
+* Batch objects implement BaseJob interface and emit job events consistent with queue executor.
+* Added ``canary hpc log`` to display batch logs.
+
+Docs and examples
+^^^^^^^^^^^^^^^^^
+
+* README refreshed with updated framing and improved developer instructions.
+* Added HL presentation in Sphinx reveal.js format.
+* Expanded tutorial and user docs:
+  * clarified job terminology and updated examples;
+  * added batch spec doc page;
+  * added extending-canary tutorial series (job generator concepts, YAML generator worked example);
+  * reorganized usage docs into “Integrations” sections (CMake/HPC/VVTest/GitLab).
+
+CI / developer tooling
+^^^^^^^^^^^^^^^^^^^^^^
+
+* GitHub workflow:
+  * expanded pytest suites (canary_gitlab/canary_pyt/canary_vvtest ordering).
+  * ruff: added ``--extend-select S324``.
+  * coverage steps commented out.
+* GitLab CI:
+  * ruff-check updated to include ``--select S324``.
+* Added ``bin/collect-release-data.sh`` utility for deterministic release data extraction.
+* Updated internal check command to run pytest suites in parallel and extend ruff checks across more directories.
+
+Security / compliance
+^^^^^^^^^^^^^^^^^^^^^
+
+* Switched MD5 hashing helpers to SHA-256 in select locations.
+* Enabled Ruff S324 checks for hashing best practices.

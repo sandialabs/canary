@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import io
 import os
 import re
 from argparse import Namespace
-from typing import Callable
 
 import canary
 
@@ -20,22 +20,29 @@ class GitLabMRReporter(canary.CanaryReporter):
     description = "GitLab merge request reporter"
 
     def setup_parser(self, parser: "canary.Parser") -> None:
-        sp = parser.add_subparsers(dest="action", metavar="subcommands", required=True)
-
-        p = sp.add_parser("create", help="Create GitLab merge request reports")
-        p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
-        p.add_argument(
+        # Compatibility positional:
+        #
+        #   canary report gitlab-mr create
+        #
+        # The preferred spelling is:
+        #
+        #   canary report gitlab-mr
+        #
+        parser.add_argument(
+            "_create", nargs="?", choices=("create",), metavar="", help=argparse.SUPPRESS
+        )
+        parser.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
+        parser.add_argument(
             "-a",
             "--access-token",
             help="GitLab access token that allows GET/POST to the merge request API",
         )
-        p.set_defaults(_gitlab_mr_handler=self.run_create)
+        parser.set_defaults(_gitlab_mr_handler=self.run_create)
 
     def run_from_args(self, args: Namespace) -> int:
-        handler: Callable[[Namespace], None] | None = getattr(args, "_gitlab_mr_handler", None)
+        handler = getattr(args, "_gitlab_mr_handler", None)
         if handler is None:
             raise ValueError("canary report gitlab-mr: missing action")
-
         handler(args)
         return 0
 

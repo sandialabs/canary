@@ -71,35 +71,37 @@ class MarkdownReportCommand(CanaryReporter):
     description = "Markdown reporter"
 
     def setup_parser(self, parser: "Parser") -> None:
-        self.add_create_options(parser)
-
-        # Hidden-ish compatibility spelling:
+        # Compatibility positional:
         #
         #   canary report markdown create
         #
-        # argparse does not make subcommands completely invisible in every
-        # help formatter, but SUPPRESS hides it from the subcommand help table.
-        subparsers = parser.add_subparsers(dest="_markdown_action", metavar="subcommands")
-        p = subparsers.add_parser("create", help=argparse.SUPPRESS)
-        self.add_create_options(p)
-
-    def add_create_options(self, parser: "Parser") -> None:
+        # The preferred spelling is:
+        #
+        #   canary report markdown
+        #
+        parser.add_argument(
+            "_create", nargs="?", choices=("create",), metavar="", help=argparse.SUPPRESS
+        )
         parser.add_argument(
             "-o", "--output-dir", default="MARKDOWN", help="Output directory [default: %(default)s]"
         )
+        parser.set_defaults(_markdown_report_handler=self.run_create)
 
     def run_from_args(self, args: Namespace) -> int:
+        handler = getattr(args, "_markdown_report_handler", None)
+        if handler is None:
+            raise ValueError("canary report markdown: missing action")
+        handler(args)
+        return 0
+
+    def run_create(self, args: Namespace) -> None:
         from ...workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
-
-        request = MarkdownReportRequest(
-            workspace=workspace, jobs=jobs, output_dir=Path(args.output_dir).absolute()
-        )
-
+        output_dir = Path(args.output_dir).absolute()
+        request = MarkdownReportRequest(workspace=workspace, jobs=jobs, output_dir=output_dir)
         MarkdownReporter().write(request)
-        return 0
 
 
 class MarkdownReporter:

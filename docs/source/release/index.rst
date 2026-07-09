@@ -5,7 +5,7 @@
 Release Notes
 =============
 
-For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/commits/main?ref_type=heads>`_
+For full details, refer to the `commit logs <https://github.com/sandialabs/canary/commits/main>`_
 
 .. toctree::
     :maxdepth: 1
@@ -21,3 +21,5 @@ For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic
     2026.03.05.rst
     2026.04.16.rst
     2026.05.27.rst
+    2026.06.08.rst
+    2026.07.08.rst

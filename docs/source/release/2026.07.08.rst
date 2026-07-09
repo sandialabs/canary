@@ -1,0 +1,332 @@
+canary 2026.07.08 release notes
+===============================
+
+.. contents::
+
+SYNOPSIS
+--------
+
+* This release covers the set of changes from June 8, 2026 (sha 80f99b2b3c61622d856d2be0f45f7fe4ae3065f8) to July 8, 2026 (sha 6cc5534ca6181082fa5ae7611119011ecd748cf6).
+* Work in this range focuses on a major **resource-pool and allocation model refactor**, topology-aware multi-node resource handling, improved **view/report generation**, expanded HPC and distributed execution support, GPU visibility fixes, and additional directive/test coverage.
+
+Highlights
+----------
+
+Topology-aware resource pools
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Reworked :py:`_canary.resource_pool.ResourcePool` from a flat local inventory into a topology-aware resource model.
+* Added explicit node modeling through :py:`_canary.resource_pool.rpool.Node`.
+* Resource pools now use a canonical layout with:
+  * global ``additional_properties``;
+  * a list of ``nodes``;
+  * per-node resource inventories;
+  * node-local resource IDs.
+* Checked-out resources now preserve node identity by including a ``node`` field in resource specs.
+* Added multi-node allocation semantics:
+  * ``nodes=N`` requests N nodes;
+  * non-node resource requests are interpreted as per-node requirements for multi-node allocations;
+  * pools may disable multi-node checkout with ``allow_multinode=False``.
+* Added helpers for resource counts, per-node counts, node IDs, aggregate resources, and node lookup.
+
+Resource manager lifecycle
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added :py:`_canary.resource_pool.manager.ResourceManager` to own the concrete resource pool for a configuration.
+* :py:`_canary.config.Config` now constructs and manages resource pools lazily through the resource manager.
+* Resource-manager state is included in configuration snapshots so subprocesses can reconstruct an already-discovered resource pool without rerunning discovery hooks.
+* Resource-pool construction is now split into:
+  * ``canary_resource_pool_fill`` for initial pool creation;
+  * ``canary_resource_pool_update`` for composable post-processing and command-line overrides.
+* ``canary config resource_pool`` / ``resources`` now describes the active pool through the resource manager.
+
+Resource-pool CLI and schema updates
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Resource-pool schema support was updated for explicit topology-aware ``nodes`` entries.
+* ``-r nodes=N`` can now set the number of topology nodes.
+* ``-r TYPE=N`` applies resource-count overrides per node.
+* ``slots_per_TYPE=N`` and ``--oversubscribe TYPE=N`` now operate over all matching node-local resources.
+* Resource-pool file loading accepts:
+  * a raw resource-pool payload; or
+  * a top-level ``resource_pool`` payload.
+* Resource-pool validation now catches invalid node counts, duplicate node IDs, invalid node slot overrides, and undefined resource types.
+
+Job allocation model
+^^^^^^^^^^^^^^^^^^^^
+
+* Job and batch allocation state now stores full allocation objects containing:
+  * ``metadata``;
+  * ``resources``.
+* :py:`_canary.job.Job.assign_resources` and :py:`_canary.job.Job.free_resources` now preserve the full allocation structure.
+* CPU/GPU environment variables are derived from the checked-out resource allocation.
+* Job JSON serialization now records allocation data.
+* Added compatibility/error messaging for the removed global ``config.resource_pool`` access path, steering users toward plugin-manager resource-pool hooks.
+
+View and reporting improvements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Moved view management into a dedicated :py:`_canary.view` module.
+* Added :py:`_canary.view.ViewManager` for live, incremental view updates while jobs finish.
+* Added manifest-backed views:
+  * :py:`_canary.view.ViewManifest`;
+  * :py:`_canary.view.ViewManifestEntry`;
+  * per-view metadata under ``_canary``.
+* View updates are protected by a workspace-level lock to support concurrent or re-entrant updates.
+* Views now support configured report generation at finish/rebuild time.
+* Added ``--report`` support to ``canary run`` for selecting final view report formats.
+* Added :py:`_canary.hookspec.canary_view_report` for view-level report generation.
+
+Reporter updates
+^^^^^^^^^^^^^^^^
+
+* Updated report plugins to support both standalone report commands and view-level reports.
+* HTML, Markdown, JSON, and JUnit reporters can now load jobs represented by the current view manifest.
+* HTML reporting was substantially refreshed:
+  * styled summary page;
+  * status cards;
+  * grouped result pages;
+  * per-job pages with metadata, measurements, and output.
+* Markdown reporting now writes grouped indexes and per-job detail pages.
+* JSON and JUnit reporting now write atomically via temporary files.
+* Report commands support direct forms such as:
+  * ``canary report html``;
+  * ``canary report markdown``;
+  * ``canary report json``;
+  * ``canary report junit``.
+* Compatibility spellings such as ``canary report junit create`` remain available.
+
+HPC batching and resource handling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* HPC execution now builds topology-aware resource pools from scheduler/backend information.
+* HPC batch workspaces now receive a batch-local ``resource_pool.json`` describing allocated resources.
+* Batch-local resource pools preserve:
+  * node count;
+  * backend name;
+  * per-node resource counts;
+  * node-local CPU/GPU/custom resources.
+* :py:`canary_hpc.batchspec.TestBatch` now stores and serializes full resource allocations.
+* HPC batch checkout/checkin now operates on full allocation objects.
+* ``nodes`` resource requests are supported and can be expanded into per-node resources for batch execution.
+* Added validation that the active resource manager backend matches the requested HPC backend.
+* Added batch tests covering allocation state, checkin/free behavior, and lockfile persistence.
+* ``canary hpc log`` remains available for paging batch logs.
+
+Distributed execution
+^^^^^^^^^^^^^^^^^^^^^
+
+* Added the new ``canary_dist`` plugin package for distributed-pool execution.
+* Added ``canary dist`` subcommands:
+  * ``canary dist status``;
+  * ``canary dist run``;
+  * ``canary dist exec``.
+* Added distributed resource-pool adapter support for communicating with a pool server.
+* Distributed pool state is translated into Canary's topology-aware resource-pool model.
+* Distributed checkouts preserve metadata such as:
+  * source;
+  * server URL;
+  * hostname;
+  * transaction ID.
+* Added distributed batch execution support through ``hpc_connect`` remote subprocess backends.
+* Distributed batch workspaces write batch-local resource-pool state for remote execution.
+* Added status display helpers for distributed resource-pool state.
+
+GPU selection and visibility
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* GPU resources now include explicit properties such as vendor, UUID, model, and name where available.
+* GPU discovery fills node-local GPU resource IDs suitable for runtime visibility variables.
+* NVIDIA runtime setup now sets ``CUDA_VISIBLE_DEVICES`` from checked-out NVIDIA or unknown GPU resources.
+* AMD runtime setup now sets:
+  * ``HIP_VISIBLE_DEVICES``;
+  * ``ROCR_VISIBLE_DEVICES``;
+  * ``CUDA_VISIBLE_DEVICES``.
+* GPU visibility hooks avoid overriding user-provided environment variables or preexisting case variables.
+* Multi-node GPU allocations preserve node-local device ID semantics and de-duplicate visible IDs as needed.
+* Added focused tests for AMD and NVIDIA GPU selection behavior.
+
+PYT directives and test metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added resource directives for ``.pyt`` tests:
+  * :py:`canary.directives.cpus`;
+  * :py:`canary.directives.gpus`;
+  * :py:`canary.directives.nodes`.
+* Resource directives are stored as meta-parameters so they affect scheduling without changing parameterized test names.
+* Added support for PYT meta-parameters in generated :py:`_canary.ir.JobSpecIR` instances.
+* Added :py:`canary.directives.artifact(..., save_on=...)` spelling for artifact save policy.
+* Test instances now include spec attributes when converted through :py:`_canary.testinst`.
+* Composite/analyze-only handling now accounts for parameters and meta-parameters when building multi-instance parameter tables.
+
+Docs and examples
+^^^^^^^^^^^^^^^^^
+
+* README documentation link now targets the production documentation site.
+* API docs updated for:
+  * built-in archive plugin;
+  * built-in CLI plugin;
+  * subcommand ``exec``;
+  * resource-pool manager;
+  * view support;
+  * ``canary_vvtest.vvt``.
+* Added or restored example tests for:
+  * artifacts;
+  * attributes;
+  * exclusive execution;
+  * owners;
+  * CPU resources;
+  * skipif behavior;
+  * testname behavior;
+  * VVTest include files.
+* API documentation generation script updated to include the current package/module set.
+
+CI and container tests
+^^^^^^^^^^^^^^^^^^^^^^
+
+* Docker-based Flux, PBS, and Slurm test scripts now create JUnit and CDash report artifacts at the end of execution.
+* Flux container tests were expanded with additional batch-spec coverage:
+  * ``count:3,layout:atomic,nodes:any``;
+  * ``count:auto,layout:flat,nodes:any``.
+* Internal check command test paths were updated to include AMD, NVIDIA, and distributed plugin tests.
+* Pyproject test paths and coverage command line were updated for the expanded plugin set.
+
+Detailed changes
+----------------
+
+Resource pool / allocation model
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added :py:`_canary.resource_pool.manager.ResourceManager`.
+* Added :py:`_canary.resource_pool.rpool.Node`.
+* Reworked :py:`_canary.resource_pool.rpool.ResourcePool` to manage one or more nodes.
+* Added node-aware methods:
+  * ``node_ids``;
+  * ``get_node``;
+  * ``first_node``;
+  * ``ensure_node``;
+  * ``add_node``;
+  * ``rebuild_node_index``.
+* Added resource-count helpers:
+  * ``count``;
+  * ``count_by_node``;
+  * ``slots_available``;
+  * ``slots_by_node``;
+  * ``count_per_node``.
+* Added support for:
+  * single-node colocated checkout;
+  * multi-node checkout;
+  * per-node resource request interpretation;
+  * allocation rollback on failed checkout;
+  * aggregate resource views.
+* Added :py:`_canary.resource_pool.rpool.ResourceUnavailable` handling for unknown resources, unknown nodes, and heterogeneous per-node counts.
+* Added :py:`_canary.resource_pool.rpool.EmptyResourcePoolError` behavior for empty pools.
+* Resource-pool tests were expanded substantially for schema validation, checkout/checkin, colocated resources, multi-node requests, node counts, and error handling.
+
+Config and plugin hooks
+^^^^^^^^^^^^^^^^^^^^^^^
+
+* :py:`_canary.config.Config` now initializes a :py:`ResourceManager`.
+* Configuration load/snapshot/restore paths now clear or restore resource-manager state.
+* Config snapshots include resource-manager state so subprocesses can use the resolved pool.
+* Removed the old direct global resource-pool behavior in favor of managed resource pools.
+* Updated resource-pool hooks:
+  * ``canary_resource_pool_fill`` now returns the initial pool specification;
+  * ``canary_resource_pool_update`` mutates an existing pool.
+* Added resource-pool update hooks for GPU discovery and command-line resource modifiers.
+
+Views and workspace behavior
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added a dedicated :py:`_canary.view` module containing:
+  * :py:`ViewSettings`;
+  * :py:`ResultsView`;
+  * :py:`ViewManifest`;
+  * :py:`ViewManager`;
+  * :py:`ViewReportRequest`.
+* Workspace run flow now starts a view manager before executing a session and finalizes it afterward.
+* Live job-finished events update the DB listener and synchronize the view.
+* View rebuild now uses the view manager and preserves/restores previous views on failure.
+* View reports are generated through the new ``canary_view_report`` hook.
+* View settings now include report-format selection with default ``html``.
+
+Reporters
+^^^^^^^^^
+
+* Added view-report support to:
+  * HTML reporter;
+  * Markdown reporter;
+  * JSON reporter;
+  * JUnit reporter.
+* Added request objects for report rendering:
+  * ``HTMLReportRequest``;
+  * ``MarkdownReportRequest``;
+  * ``JsonReportRequest``;
+  * ``JunitReportRequest``.
+* Reporters can load jobs from view manifest entries and ``testcase.lock`` files.
+* HTML reporter now writes:
+  * ``index.html``;
+  * grouped summary pages;
+  * per-job pages;
+  * a view-level ``summary.html`` symlink.
+* Markdown reporter now writes:
+  * ``index.md``;
+  * grouped summary pages;
+  * per-job pages.
+* JSON and JUnit reporters support configurable output files and atomic replacement.
+* Reporter command registration now uses ``canary_reporter`` and reporter-specific argument parsing.
+
+HPC and distributed execution
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Added topology-aware resource-pool generation for HPC backends.
+* HPC conductor now validates that the resource manager was initialized for the requested backend.
+* HPC batch runner now writes the resolved resource-manager state into batch configuration snapshots.
+* Batch-local execution loads resource-pool state from ``resource_pool.json``.
+* Added support for distributed execution through ``canary_dist``:
+  * distributed conductor;
+  * distributed executor;
+  * distributed resource-pool adapter;
+  * distributed queue wrapper;
+  * distributed batch spec;
+  * distributed status printer.
+* Distributed execution supports machine filtering by tags and groups.
+* Distributed checkouts use server-authoritative allocation and release by transaction ID.
+* Added distributed tests for adapter translation, checkout/checkin behavior, batch-local pool construction, and queue checkin.
+
+GPU plugins
+^^^^^^^^^^^
+
+* GPU resource specs now preserve vendor and device metadata under ``properties``.
+* AMD plugin now recognizes AMD/ROCm resources and sets appropriate runtime visibility variables.
+* NVIDIA plugin now recognizes NVIDIA and unknown GPU resources.
+* GPU hooks avoid overriding user-specified visibility variables.
+* Added tests for:
+  * AMD vendor handling;
+  * ROCm vendor handling;
+  * NVIDIA vendor handling;
+  * unknown GPU resources;
+  * multi-node local-ID de-duplication;
+  * user environment override behavior.
+
+PYT and directives
+^^^^^^^^^^^^^^^^^^
+
+* Added PYT model support for meta-parameters.
+* Added resource-parameter handling for ``cpus``, ``gpus``, and ``nodes``.
+* Added public directive documentation for :py:`canary.directives.nodes`.
+* Resource directives validate integer type and minimum value.
+* PYT lock emission now includes meta-parameters in generated IR.
+* Template substitution can use both parameters and meta-parameters.
+* Artifact directive spelling uses ``save_on`` for save policy.
+
+Docs, tests, and cleanup
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Updated API docs for renamed/added modules.
+* Added tests for resource-pool topology behavior and GPU selection.
+* Added tests for HPC batch allocation persistence.
+* Updated reporter tests for direct reporter commands and view-generated reports.
+* Updated integration tests to expect view metadata and generated summaries.
+* Added example files exercising additional directives and VVTest include support.
+* Updated pyproject test paths, coverage paths, mypy exclusions, and ty exclusions for the expanded plugin/test layout.
