@@ -139,10 +139,7 @@ class CDashXMLReporter:
         for file in files:
             logger.info(f"Posting {file} to {url}")
             payload = server.upload(
-                filename=file,
-                sitename=ns.site,
-                buildname=ns.buildname,
-                buildstamp=ns.buildstamp,
+                filename=file, sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp
             )
             buildid = buildid or payload["buildid"]
             upload_error = 0 if payload["status"] == "OK" else 1
@@ -304,10 +301,7 @@ class CDashXMLReporter:
                 else:
                     add_named_measurement(results, name, json.dumps(value))
             add_measurement(
-                results,
-                job.read_output(compress=True),
-                encoding="base64",
-                compression="gzip",
+                results, job.read_output(compress=True), encoding="base64", compression="gzip"
             )
             test_node.appendChild(results)
 

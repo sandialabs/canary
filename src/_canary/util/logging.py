@@ -80,9 +80,7 @@ class Formatter(builtin_logging.Formatter):
         self.color = color
 
     def format(self, record):
-        extra = {
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
-        }
+        extra = {"timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")}
         if not hasattr(record, "prefix"):
             if level_color(record.levelno):
                 prefix = "[bold %s]%s[/]: " % (
@@ -104,9 +102,7 @@ class JsonFormatter(builtin_logging.Formatter):
         super().__init__(fmt, **kwargs)
 
     def format(self, record):
-        extra = {
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
-        }
+        extra = {"timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")}
         if not hasattr(record, "prefix"):
             if record.levelno in (NOTSET, TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL):
                 prefix = f"{record.levelname.upper()}: "

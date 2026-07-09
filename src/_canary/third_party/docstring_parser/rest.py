@@ -59,17 +59,12 @@ def _build_meta(args: T.List[str], desc: str) -> DocstringMeta:
             raise ParseError(f"Expected one or no arguments for a {key} keyword.")
 
         return DocstringReturns(
-            args=args,
-            description=desc,
-            type_name=type_name,
-            is_generator=key in YIELDS_KEYWORDS,
+            args=args, description=desc, type_name=type_name, is_generator=key in YIELDS_KEYWORDS
         )
 
     if key in DEPRECATION_KEYWORDS:
         match = re.search(
-            r"^(?P<version>v?((?:\d+)(?:\.[0-9a-z\.]+))) (?P<desc>.+)",
-            desc,
-            flags=re.I,
+            r"^(?P<version>v?((?:\d+)(?:\.[0-9a-z\.]+))) (?P<desc>.+)", desc, flags=re.I
         )
         return DocstringDeprecated(
             args=args,

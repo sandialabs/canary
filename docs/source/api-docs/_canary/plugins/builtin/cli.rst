@@ -4,12 +4,12 @@
 
 
 
-.. _canary_vvtest.generator:
+.. _canary.plugins.builtin.cli:
 
-generator
-=========
+cli
+===
 
-.. automodule:: canary_vvtest.generator
+.. automodule:: _canary.plugins.builtin.cli
    :members:
    :undoc-members:
    :show-inheritance:

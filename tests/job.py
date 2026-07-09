@@ -271,7 +271,7 @@ def test_job_roundtrip_json_includes_base_state(spec: JobSpec, space):
     job.timekeeper.started = 2.0
     job.timekeeper.finished = 3.0
     job.variables["FOO"] = "BAR"
-    job._resources = {"cpus": [{"id": "0", "slots": 1}]}
+    job._allocation = {"metadata": {}, "resources": {"cpus": [{"id": "0", "slots": 1}]}}
 
     out = json.loads(json.dumps(job))
     assert isinstance(out, Job)

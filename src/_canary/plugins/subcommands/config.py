@@ -114,7 +114,7 @@ def show_config(args: "argparse.Namespace"):
         return
 
     elif args.section in ("resource_pool", "resource-pool", "resources"):
-        print(config.pluginmanager.hook.canary_resource_pool_describe())
+        print(config.resource_manager.describe())
         return
 
     else:

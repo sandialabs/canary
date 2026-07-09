@@ -180,9 +180,7 @@ class JobSpecIR:
         self.attributes.update(**kwds)
 
     def finalize(
-        self,
-        lookup: dict[str, "JobSpec"],
-        resolved: Sequence[tuple[int, Sequence[str]]] = (),
+        self, lookup: dict[str, "JobSpec"], resolved: Sequence[tuple[int, Sequence[str]]] = ()
     ) -> "JobSpec":
         deps: list[SpecDependency] = []
         for dp_index, ids in resolved:

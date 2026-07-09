@@ -8,5 +8,5 @@ canary_vvtest
 .. toctree::
    :maxdepth: 1
 
-   generator
    scalar
+   vvt

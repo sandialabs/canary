@@ -3,15 +3,7 @@
 import enum
 import typing as T
 
-PARAM_KEYWORDS = {
-    "param",
-    "parameter",
-    "arg",
-    "argument",
-    "attribute",
-    "key",
-    "keyword",
-}
+PARAM_KEYWORDS = {"param", "parameter", "arg", "argument", "attribute", "key", "keyword"}
 RAISES_KEYWORDS = {"raises", "raise", "except", "exception"}
 DEPRECATION_KEYWORDS = {"deprecation", "deprecated"}
 RETURNS_KEYWORDS = {"return", "returns"}
@@ -104,10 +96,7 @@ class DocstringRaises(DocstringMeta):
     """DocstringMeta symbolizing :raises metadata."""
 
     def __init__(
-        self,
-        args: T.List[str],
-        description: T.Optional[str],
-        type_name: T.Optional[str],
+        self, args: T.List[str], description: T.Optional[str], type_name: T.Optional[str]
     ) -> None:
         """Initialize self."""
         super().__init__(args, description)
@@ -119,10 +108,7 @@ class DocstringDeprecated(DocstringMeta):
     """DocstringMeta symbolizing deprecation metadata."""
 
     def __init__(
-        self,
-        args: T.List[str],
-        description: T.Optional[str],
-        version: T.Optional[str],
+        self, args: T.List[str], description: T.Optional[str], version: T.Optional[str]
     ) -> None:
         """Initialize self."""
         super().__init__(args, description)
@@ -134,10 +120,7 @@ class DocstringExample(DocstringMeta):
     """DocstringMeta symbolizing example metadata."""
 
     def __init__(
-        self,
-        args: T.List[str],
-        snippet: T.Optional[str],
-        description: T.Optional[str],
+        self, args: T.List[str], snippet: T.Optional[str], description: T.Optional[str]
     ) -> None:
         """Initialize self."""
         super().__init__(args, description)

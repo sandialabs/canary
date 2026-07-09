@@ -57,9 +57,7 @@ def canary_view_report(request: "ViewReportRequest") -> None:
 
     output_root = request.output_dir or request.view.metadata_dir / "reports"
     json_request = JsonReportRequest(
-        workspace=request.workspace,
-        jobs=jobs,
-        output=output_root / JsonReporter.default_output,
+        workspace=request.workspace, jobs=jobs, output=output_root / JsonReporter.default_output
     )
 
     reporter.write(json_request)
@@ -95,9 +93,7 @@ class JsonReportCommand(CanaryReporter):
         jobs = workspace.load_jobs()
 
         request = JsonReportRequest(
-            workspace=workspace,
-            jobs=jobs,
-            output=Path(args.output).absolute(),
+            workspace=workspace, jobs=jobs, output=Path(args.output).absolute()
         )
 
         JsonReporter().write(request)

@@ -1,0 +1,7 @@
+#VVT: include : common_directives.vvtinc
+
+def test():
+    pass
+
+if __name__ == "__main__":
+    test()

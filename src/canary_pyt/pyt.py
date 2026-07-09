@@ -221,10 +221,10 @@ class PYTModel:
     def add_artifact(
         self,
         pattern: str,
-        upon: Literal["always", "never", "on_failure", "on_success"] = "always",
+        save_on: Literal["always", "never", "on_failure", "on_success"] = "always",
         when: WhenType | None = None,
     ) -> None:
-        self.artifacts.add(Artifact(pattern=pattern, when=upon), when=when)
+        self.artifacts.add(Artifact(pattern=pattern, when=save_on), when=when)
 
     def add_source(
         self,
@@ -301,10 +301,7 @@ class PYTModel:
         self.meta_parameters.add(dict(params), when=when)
 
     def set_resource_parameter(
-        self,
-        name: Literal["cpus", "gpus", "nodes"],
-        value: int,
-        when: WhenType | None = None,
+        self, name: Literal["cpus", "gpus", "nodes"], value: int, when: WhenType | None = None
     ) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
@@ -664,17 +661,19 @@ class PYTAdapter:
     def f_source(self, arg: str, *, when: WhenType | None = None) -> None:
         self.m.add_rcfile(arg, when=when)
 
-    def f_artifact(self, file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
+    def f_artifact(
+        self, file: str, *, when: WhenType | None = None, save_on: str = "always"
+    ) -> None:
         mapped: Literal["always", "never", "on_failure", "on_success"]
-        if upon == "always":
+        if save_on == "always":
             mapped = "always"
-        elif upon == "success":
+        elif save_on == "success":
             mapped = "on_success"
-        elif upon == "failure":
+        elif save_on == "failure":
             mapped = "on_failure"
         else:
-            raise ValueError("upon: invalid value, choose from 'always', 'success', 'failure'")
-        self.m.add_artifact(file, upon=mapped, when=when)
+            raise ValueError("save_on: invalid value, choose from 'always', 'success', 'failure'")
+        self.m.add_artifact(file, save_on=mapped, when=when)
 
     def f_enable(self, *args: bool, when: WhenType | None = None) -> None:
         value = True if not args else bool(args[0])
@@ -723,9 +722,7 @@ class PYTAdapter:
 
 class PYTLockEmitter:
     def lock(
-        self,
-        model: PYTModel,
-        on_options: list[str] | None = None,
+        self, model: PYTModel, on_options: list[str] | None = None
     ) -> Sequence["JobSpecIR | JobSpec"]:
         if model.filter_warnings:
             with logging.suppress_stream_below(logging.ERROR):

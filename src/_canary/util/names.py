@@ -12,9 +12,7 @@ def random_name(seed: int | None = None):
 
 
 def unique_random_name(
-    existing_names: Iterable[str],
-    max_samples: int = 20,
-    seed: int | None = None,
+    existing_names: Iterable[str], max_samples: int = 20, seed: int | None = None
 ) -> str:
     """Attempt to generate a random name that is not in `existing_names` within `max_samples`.
 

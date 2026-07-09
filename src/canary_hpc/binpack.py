@@ -33,11 +33,7 @@ GrouperType = Callable[[Sequence["Block"]], list[list["Block"]]]
 
 class Block:
     def __init__(
-        self,
-        id: str,
-        width: int,
-        height: int,
-        dependencies: list["Block"] | None = None,
+        self, id: str, width: int, height: int, dependencies: list["Block"] | None = None
     ) -> None:
         self.id: str = id
         self.width: int = width
@@ -166,9 +162,7 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int | BatchMode = 8) ->
 
 
 def pack_by_count(
-    blocks: Sequence[Block],
-    count: int | BatchMode = 8,
-    grouper: GrouperType | None = None,
+    blocks: Sequence[Block], count: int | BatchMode = 8, grouper: GrouperType | None = None
 ) -> list[Bin]:
     """Pack blocks into ``count`` bins such that each bin has no
     intra-dependencies.  Bin can depend on other bins.
@@ -350,12 +344,10 @@ class Packer:
         node.used = True
         node.size = size
         node.down = Node(
-            (node.origin[0], node.origin[1] + size[1]),
-            (old_width, old_height - size[1]),
+            (node.origin[0], node.origin[1] + size[1]), (old_width, old_height - size[1])
         )
         node.right = Node(
-            (node.origin[0] + size[0], node.origin[1]),
-            (old_width - size[0], size[1]),
+            (node.origin[0] + size[0], node.origin[1]), (old_width - size[0], size[1])
         )
         return node
 

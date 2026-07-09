@@ -386,9 +386,7 @@ class WorkspaceDatabase:
             self.connection.executemany(sql, rows)
 
     def get_results(
-        self,
-        ids: list[str] | None = None,
-        include_upstreams: bool = False,
+        self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> dict[str, dict[str, Any]]:
         rows: list[tuple[str, ...]]
         if not ids:
@@ -454,12 +452,7 @@ class WorkspaceDatabase:
         d["measurements"] = json.loads(row[15])
         return d
 
-    def put_selection(
-        self,
-        tag: str,
-        specs: list["JobSpec"],
-        **meta: Any,
-    ) -> None:
+    def put_selection(self, tag: str, specs: list["JobSpec"], **meta: Any) -> None:
         if tag == ":all:":
             raise ValueError("Tag name :all: is reserved")
         with self.connection:

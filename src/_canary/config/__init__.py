@@ -13,32 +13,12 @@ from .config import get_scope_filename  # noqa: F401
 __all__ = ["Config", "CONFIG_ENV_FILENAME", "get_scope_filename"]
 
 
-class _resource_pool_attr_error:
-    def __getattribute__(self, name):
-        import io
-
-        f = io.StringIO()
-        f.write(
-            "The global canary resource pool has been removed in favor of executor-specific "
-            "resource pools.  Properties of the resource pool are accessed through the canary "
-            "plugin manager. "
-        )
-        if name in ("count", "types", "accommodates"):
-            repl = f"config.pluginmanger.canary_resource_pool_{name}"
-        else:
-            repl = f"a plugin call that can return the pool's {name!r} attribute"
-        f.write(f"In this job, replace config.resource_pool.{name} with {repl}.")
-        raise AttributeError(f.getvalue().strip()) from None
-
-
-resource_pool = _resource_pool_attr_error()
-
-
 _config: Config | None = None
 
 if typing.TYPE_CHECKING:
     _config = typing.cast(Config, _config)
     pluginmanager = _config.pluginmanager
+    resource_manager = _config.resource_manager
     getoption = _config.getoption
     add_section = _config.add_section
     get = _config.get

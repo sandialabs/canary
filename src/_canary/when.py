@@ -390,10 +390,7 @@ def when(
     else:
         expression = When.from_string(input)
     result = expression.evaluate(
-        keywords=keywords,
-        parameters=parameters,
-        testname=testname,
-        on_options=on_options,
+        keywords=keywords, parameters=parameters, testname=testname, on_options=on_options
     )
     return bool(result.value)
 

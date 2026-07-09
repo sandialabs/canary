@@ -97,8 +97,7 @@ def reachable_nodes(graph: dict[str, list[str]], roots: Iterable[str]) -> list[s
 
 
 def reachable_up_down(
-    graph_deps: dict[str, list[str]],
-    nodes: Iterable[str],
+    graph_deps: dict[str, list[str]], nodes: Iterable[str]
 ) -> tuple[set[str], set[str]]:
     """
     graph_deps: node -> list of dependencies (A: [B,C,D] means A depends on B,C,D)

@@ -162,12 +162,7 @@ class server:
           buildid: The integer build ID if found, else ``None``
 
         """
-        params = {
-            "project": self.project,
-            "name": buildname,
-            "site": sitename,
-            "stamp": buildstamp,
-        }
+        params = {"project": self.project, "name": buildname, "site": sitename, "stamp": buildstamp}
         query = urlencode(params)
         url = self.build_api_url(path="getbuildid.php", query=query)
         logger.debug(f"Getting build ID from CDash using the following query: {url}")
@@ -320,13 +315,7 @@ class server:
             tests.extend(build_tests)
         return tests
 
-    def get_failed_tests(
-        self,
-        build,
-        fail_reason=None,
-        skip_missing=False,
-        include_details=True,
-    ):
+    def get_failed_tests(self, build, fail_reason=None, skip_missing=False, include_details=True):
         """Get failed tests from CDash
 
         Args:
@@ -344,19 +333,13 @@ class server:
             assert fail_reason in ("Failed", "Diffed", "Timeout")
             filters.add(field="details", comparison="contains", value=fail_reason)
         failed = self._get_tests_from_build(
-            build,
-            include_details=include_details,
-            skip_missing=skip_missing,
-            **filters.asdict(),
+            build, include_details=include_details, skip_missing=skip_missing, **filters.asdict()
         )
         return failed
 
     def get_tests_from_build(self, build, skip_missing=False, include_details=True, **kwargs):
         return self._get_tests_from_build(
-            build,
-            skip_missing=skip_missing,
-            include_details=include_details,
-            **kwargs,
+            build, skip_missing=skip_missing, include_details=include_details, **kwargs
         )
 
     def _get_tests_from_build(self, build, *args, **kwargs):

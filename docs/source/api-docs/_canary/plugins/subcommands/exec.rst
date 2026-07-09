@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.builtin.addoption:
+.. _canary.plugins.subcommands.exec:
 
-addoption
-=========
+exec
+====
 
-.. automodule:: _canary.plugins.builtin.addoption
+.. automodule:: _canary.plugins.subcommands.exec
    :members:
    :undoc-members:
    :show-inheritance:

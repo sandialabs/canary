@@ -43,18 +43,9 @@ revealjs_css_files = [
     "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/monokai.min.css",
 ]
 revealjs_script_plugins = [
-    {
-        "name": "RevealNotes",
-        "src": "revealjs/plugin/notes/notes.js",
-    },
-    {
-        "name": "RevealHighlight",
-        "src": "revealjs/plugin/highlight/highlight.js",
-    },
-    {
-        "name": "RevealMath",
-        "src": "revealjs/plugin/math/math.js",
-    },
+    {"name": "RevealNotes", "src": "revealjs/plugin/notes/notes.js"},
+    {"name": "RevealHighlight", "src": "revealjs/plugin/highlight/highlight.js"},
+    {"name": "RevealMath", "src": "revealjs/plugin/math/math.js"},
     {
         "name": "RevealCustomControls",
         "src": "https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/customcontrols/plugin.js",

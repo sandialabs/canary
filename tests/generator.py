@@ -103,7 +103,7 @@ import canary
 canary.directives.parameterize('p', (2,))
 canary.directives.copy(src='in_${P}.txt', dst='out_{p}.txt')
 canary.directives.baseline(src='a_{p}.exo', dst='b_${P}.exo')
-canary.directives.artifact('art_{p}.txt', upon='always')
+canary.directives.artifact('art_{p}.txt', save_on='always')
 """,
         )
 

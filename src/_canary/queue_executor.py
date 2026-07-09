@@ -205,13 +205,7 @@ class _MainWorker:
         self.local_q = mp.Queue()
         proc: BaseProcess = self.ctx.Process(
             target=JobFunctor(),
-            args=(
-                self.executor,
-                job,
-                self.local_q,
-                self.logging_queue,
-                self.config_snapshot,
-            ),
+            args=(self.executor, job, self.local_q, self.logging_queue, self.config_snapshot),
             kwargs={**self.common_kwargs, **per_job_kwargs},
         )
         self.proc = proc
@@ -495,11 +489,7 @@ class ResourceQueueExecutor:
                     wid = self.idle_workers.pop()
                     self.busy_workers[wid] = job.id
                     slot = ExecutionSlot(
-                        job=job,
-                        spawned=time.time(),
-                        qrank=qrank,
-                        qsize=qsize,
-                        worker_id=wid,
+                        job=job, spawned=time.time(), qrank=qrank, qsize=qsize, worker_id=wid
                     )
                     self.slots_by_id[job.id] = slot
                     self.submitted[job.id] = slot

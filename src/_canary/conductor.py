@@ -12,7 +12,6 @@ from . import config
 from .hookspec import hookimpl
 from .job import Job
 from .queue import ResourceQueue
-from .resource_pool import make_resource_pool
 from .resource_pool.rpool import Outcome
 from .util import logging
 from .util.multiprocessing import SimpleQueue
@@ -28,17 +27,11 @@ logger = logging.get_logger(__name__)
 class CanaryConductor:
     """Defines plugin implementations for executing job"""
 
-    def __init__(self) -> None:
-        self._rpool: "ResourcePool | None" = None
-
     def get_rpool(self) -> "ResourcePool":
         # Use a function instead of @property since pluggy tries to inspect properties and causes
         # the resource pool to be instantiated prematurely
-        if self._rpool is None:
-            assert config._config is not None
-            self._rpool = make_resource_pool(config._config)
-        assert self._rpool is not None
-        return self._rpool
+        assert config._config is not None
+        return config.resource_manager.get_pool()
 
     @hookimpl(trylast=True)
     def canary_resource_pool_accommodates(self, case: "Job") -> Outcome:

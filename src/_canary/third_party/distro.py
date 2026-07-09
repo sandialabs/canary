@@ -74,7 +74,7 @@ NORMALIZED_LSB_ID = {
 #:
 #: * Value: Normalized value.
 NORMALIZED_DISTRO_ID = {
-    "redhat": "rhel",  # RHEL 6.x, 7.x
+    "redhat": "rhel"  # RHEL 6.x, 7.x
 }
 
 # Pattern for content of distro release file (reversed)

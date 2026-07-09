@@ -206,10 +206,10 @@ class BaseJob(ABC):
     def required_resources(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None: ...
+    def assign_resources(self, arg: dict[str, dict]) -> None: ...
 
     @abstractmethod
-    def free_resources(self) -> dict[str, list[dict]]: ...
+    def free_resources(self) -> dict[str, dict]: ...
 
     # ---- dependency gating / dispatch readiness ----
     @abstractmethod
@@ -282,7 +282,7 @@ class Job(BaseJob):
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
-        self._resources: dict[str, list[dict]] = {}
+        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         self.dependencies: list[Dependency] = dependencies or []
@@ -304,7 +304,7 @@ class Job(BaseJob):
             "workspace": self.workspace,
             "dependencies": self.dependencies,
             "variables": self.variables,
-            "resources": self._resources,
+            "allocation": self._allocation,
             "rparameters": self.rparameters,
             "mask": self._mask,
         }
@@ -315,8 +315,8 @@ class Job(BaseJob):
         obj._apply_base_state(d)
         if variables := d.get("variables"):
             obj.variables = variables
-        if resources := d.get("resources"):
-            obj._resources = resources
+        if allocation := d.get("allocation"):
+            obj._allocation = allocation
         if rparameters := d.get("rparameters"):
             obj.rparameters = rparameters
         if mask := d.get("mask"):
@@ -354,6 +354,14 @@ class Job(BaseJob):
     @property
     def file(self) -> Path:
         return self.spec.file
+
+    @property
+    def family(self) -> str:
+        return self.spec.family
+
+    @property
+    def fullname(self) -> str:
+        return self.spec.fullname
 
     @property
     def name(self) -> str:
@@ -416,7 +424,7 @@ class Job(BaseJob):
     def set_attributes(self, **kwds: Any) -> None:
         self.spec.set_attributes(**kwds)
 
-    def get_attribute(self, name: str, default: None = None, /) -> None | Any:
+    def get_attribute(self, name: str, default: Any = None, /) -> None | Any:
         return self.spec.attributes.get(name, default)
 
     @property
@@ -476,15 +484,16 @@ class Job(BaseJob):
             }
 
         """
-        return self._resources
+        return self._allocation["resources"]
 
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
-        self._resources.clear()
-        self._resources.update(arg)
+    def assign_resources(self, arg: dict[str, dict]) -> None:
+        self._allocation.clear()
+        self._allocation.update(arg)
 
         # Set resource-type variables
         vars: dict[str, str] = {}
-        for type, instances in arg.items():
+        resources = self._allocation["resources"]
+        for type, instances in resources.items():
             varname = type[:-1] if type[-1] == "s" else type
             ids: list[str] = [str(_["id"]) for _ in instances]
             vars[f"{varname}_ids"] = self.variables[f"CANARY_{varname.upper()}_IDS"] = ",".join(ids)
@@ -498,9 +507,10 @@ class Job(BaseJob):
             except Exception:  # nosec B110
                 pass
 
-    def free_resources(self) -> dict[str, list[dict]]:
-        tmp = copy.deepcopy(self._resources)
-        self._resources.clear()
+    def free_resources(self) -> dict[str, dict]:
+        tmp = copy.deepcopy(self._allocation)
+        self._allocation.clear()
+        self._allocation.update({"metadata": {}, "resources": {}})
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:
@@ -593,12 +603,16 @@ class Job(BaseJob):
                     continue
                 if not asset.src.exists():
                     raise MissingSourceError(asset.src)
-                if asset.action == "copy" or copy_all_resources:
-                    file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
-                    self.workspace.copy(asset.src, asset.dst)
-                else:
-                    file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
-                    self.workspace.link(asset.src, asset.dst)
+                try:
+                    if asset.action == "copy" or copy_all_resources:
+                        file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
+                        self.workspace.copy(asset.src, asset.dst)
+                    else:
+                        file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
+                        self.workspace.link(asset.src, asset.dst)
+                except:
+                    logger.exception("FAILED")
+                    raise
 
     def run(self) -> None:
         from .status import Outcome
@@ -707,8 +721,7 @@ class Job(BaseJob):
         if xcode == Outcome.DIFFED.value:
             if code != Outcome.DIFFED.value:
                 self.status = Status.FAILED(
-                    reason=f"{self.spec.display_name()}: expected test to diff",
-                    code=code,
+                    reason=f"{self.spec.display_name()}: expected test to diff", code=code
                 )
             else:
                 self.status = Status.XDIFF()
@@ -716,13 +729,11 @@ class Job(BaseJob):
             # Expected to fail
             if xcode > 0 and code != xcode:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name()}: expected to exit with code={code}",
-                    code=code,
+                    f"{self.spec.display_name()}: expected to exit with code={code}", code=code
                 )
             elif code == 0:
                 self.status = Status.FAILED(
-                    f"{self.spec.display_name()}: expected to exit with code != 0",
-                    code=code,
+                    f"{self.spec.display_name()}: expected to exit with code != 0", code=code
                 )
             else:
                 self.status = Status.XFAIL()
@@ -778,7 +789,7 @@ class Job(BaseJob):
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
         """Default parameters used to set up resources required by test job"""
-        resource_types: set[str] = set(config.pluginmanager.hook.canary_resource_pool_types())
+        resource_types: set[str] = set(config.resource_manager.types())
         p = self.spec.parameters | self.spec.meta_parameters
         rparameters: dict[str, int] = {}
         for key in p.keys() & (resource_types | {"nodes"}):
@@ -791,7 +802,7 @@ class Job(BaseJob):
         cpus: int | None = rparameters.get("cpus")
         gpus: int | None = rparameters.get("gpus")
         nodes: int | None = rparameters.get("nodes")
-        rpcount = config.pluginmanager.hook.canary_resource_pool_count_per_node
+        rpcount = config.resource_manager.count_per_node
         cpus_per_node: int = rpcount(type="cpu") or cpu_count()
         gpus_per_node: int = rpcount(type="gpu") or 0
         if nodes is not None:

@@ -85,7 +85,7 @@ class TestBatch(BaseJob):
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self.state = JobState()
-        self._resources: dict[str, list[dict]] = {}
+        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
         self.jobid: str | None = None
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
         self.dependencies: list["TestBatch"] = dependencies or []
@@ -170,13 +170,13 @@ class TestBatch(BaseJob):
     @property
     def queue_timeout(self) -> float:
         four_hours = 4.0 * 60.0 * 60.0
-        return canary.config.getoption("canary_hpc_queue_timeout") or four_hours
+        return canary.config.getoption("hpc_queue_timeout") or four_hours
 
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
 
     def estimated_runtime(self) -> float:
-        if scheduler_args := canary.config.getoption("canary_hpc_scheduler_args"):
+        if scheduler_args := canary.config.getoption("hpc_scheduler_args"):
             p = argparse.ArgumentParser()
             p.add_argument("--time", "--time-limit", dest="qtime")
             a, _ = p.parse_known_args(scheduler_args)
@@ -213,15 +213,20 @@ class TestBatch(BaseJob):
           }
 
         """
-        return self._resources
+        return self._allocation["resources"]
 
-    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
-        self._resources.clear()
-        self._resources.update(arg)
+    @property
+    def allocation(self) -> dict[str, dict]:
+        return self._allocation
 
-    def free_resources(self) -> dict[str, list[dict]]:
-        tmp = copy.deepcopy(self._resources)
-        self._resources.clear()
+    def assign_resources(self, arg: dict[str, dict]) -> None:
+        self._allocation.clear()
+        self._allocation.update(copy.deepcopy(arg))
+
+    def free_resources(self) -> dict[str, dict]:
+        tmp = copy.deepcopy(self._allocation)
+        self._allocation.clear()
+        self._allocation.update({"metadata": {}, "resources": {}})
         return tmp
 
     def required_resources(self) -> list[dict[str, Any]]:
@@ -273,10 +278,12 @@ class TestBatch(BaseJob):
             return self.dependency_batches_complete()
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
+
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
+
         rc: int | None = -1
         try:
             hpc_connect.config.export()
@@ -288,6 +295,7 @@ class TestBatch(BaseJob):
             finally:
                 self.timekeeper.finished = time.time()
         except Exception:
+            logger.exception(f"Failed to run batch {self}")
             rc = 1
         finally:
             if rc is None:
@@ -316,11 +324,7 @@ class TestBatch(BaseJob):
                 job.status = Status.BROKEN(reason=f"{job.state=} after execution of batch")
             elif job.state.is_running():
                 job.status = Status.CANCELLED(reason=f"{job.state=} after execution of batch")
-            data[job.id] = {
-                "status": job.status,
-                "timekeeper": job.timekeeper,
-                "state": job.state,
-            }
+            data[job.id] = {"status": job.status, "timekeeper": job.timekeeper, "state": job.state}
         return data
 
     def setstate(self, data: dict[str, Any]):
@@ -333,10 +337,7 @@ class TestBatch(BaseJob):
         if mydata := data.pop(self.id, None):
             if stat := mydata.get("status"):
                 self.status.set_base(
-                    category=stat.category,
-                    outcome=stat.outcome,
-                    reason=stat.reason,
-                    code=stat.code,
+                    category=stat.category, outcome=stat.outcome, reason=stat.reason, code=stat.code
                 )
             if st := mydata.get("state"):
                 self.state.phase = st.phase
@@ -410,6 +411,7 @@ class TestBatch(BaseJob):
             "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),
+            "allocation": serialize(self.allocation),
         }
         self.lockfile.write_text(json.dumps(config, indent=2))
         return
@@ -419,6 +421,7 @@ class TestBatch(BaseJob):
         cfg["status"] = serialize(self.status)["base"]
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
+        cfg["allocation"] = serialize(self.allocation)
         with open(self.lockfile, "w") as fh:
             json.dump(cfg, fh, indent=2)
         for job in self:

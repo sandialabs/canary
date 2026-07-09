@@ -69,9 +69,7 @@ class MergeRequest:
         self.backend.add_note(note)
 
     def report_failed(
-        self,
-        failed_cases: dict[str, list["canary.Job"]],
-        cdash_build_url: str | None = None,
+        self, failed_cases: dict[str, list["canary.Job"]], cdash_build_url: str | None = None
     ):
         fp = io.StringIO()
         job = re.sub(":(build|test|report)", "", self.job_name)

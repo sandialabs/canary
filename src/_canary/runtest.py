@@ -111,10 +111,7 @@ def canary_addoption(parser: "Parser") -> None:
         p.add_argument(*args, group="console reporting", command="run", **kwargs)
 
     add_group_argument(
-        parser,
-        "--no-summary",
-        action="store_true",
-        help="Disable summary [default: %(default)s]",
+        parser, "--no-summary", action="store_true", help="Disable summary [default: %(default)s]"
     )
     add_group_argument(
         parser,

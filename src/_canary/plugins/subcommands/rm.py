@@ -29,10 +29,7 @@ class RemoveWorkspace(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser"):
         parser.add_argument(
-            "rm_path",
-            metavar="PATH",
-            default=os.getcwd(),
-            help="Remove workspace at PATH",
+            "rm_path", metavar="PATH", default=os.getcwd(), help="Remove workspace at PATH"
         )
 
     def execute(self, args: "argparse.Namespace") -> int:

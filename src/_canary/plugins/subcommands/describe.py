@@ -61,10 +61,7 @@ class Describe(CanarySubcommand):
         return 0
 
 
-def describe_generator(
-    file: "AbstractTestGenerator",
-    on_options: list[str] | None = None,
-) -> None:
+def describe_generator(file: "AbstractTestGenerator", on_options: list[str] | None = None) -> None:
     description = file.describe(on_options=on_options)
     print(colorize(description.rstrip()))
 

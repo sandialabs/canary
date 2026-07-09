@@ -92,15 +92,7 @@ def parse(text: str) -> Docstring:
 
             # Make sure we didn't match some existing keyword in an incorrect
             # way here:
-            if key in [
-                "param",
-                "keyword",
-                "type",
-                "return",
-                "rtype",
-                "yield",
-                "ytype",
-            ]:
+            if key in ["param", "keyword", "type", "return", "rtype", "yield", "ytype"]:
                 raise ParseError(f'Error parsing meta information near "{chunk}".')
 
         desc = desc_chunk.strip()
@@ -161,16 +153,9 @@ def parse(text: str) -> Docstring:
             is_done["return"] = True
         elif base == "raise":
             (type_name,) = args or (None,)
-            meta_item = DocstringRaises(
-                args=[key] + args,
-                description=desc,
-                type_name=type_name,
-            )
+            meta_item = DocstringRaises(args=[key] + args, description=desc, type_name=type_name)
         elif base == "meta":
-            meta_item = DocstringMeta(
-                args=[key] + args,
-                description=desc,
-            )
+            meta_item = DocstringMeta(args=[key] + args, description=desc)
         else:
             (key, *_) = args or ("return",)
             assert is_done.get(key, False)

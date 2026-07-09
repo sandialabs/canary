@@ -155,10 +155,7 @@ class Parser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="", dest="command")
-        kwds: dict[str, Any] = dict(
-            description=command.description,
-            formatter_class=HelpFormatter,
-        )
+        kwds: dict[str, Any] = dict(description=command.description, formatter_class=HelpFormatter)
         if command.add_help or add_help_override:
             kwds["add_help"] = False  # ty: ignore[invalid-assignment]
             kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
@@ -334,10 +331,7 @@ def make_argument_parser(**kwargs):
         **kwargs,
     )
     parser.add_argument(
-        "--version",
-        action="version",
-        version=version.__version__,
-        help="show version and exit",
+        "--version", action="version", version=version.__version__, help="show version and exit"
     )
     parser.add_argument(
         "-C",
@@ -357,18 +351,8 @@ def make_argument_parser(**kwargs):
         "To avoid loading of plugins, use the `no:` prefix.",
     )
     group = parser.add_argument_group("console reporting")
-    group.add_argument(
-        "-v",
-        default=0,
-        action="count",
-        help="Increase console logging level by 1",
-    )
-    group.add_argument(
-        "-q",
-        default=0,
-        action="count",
-        help="Decrease console logging level by 1",
-    )
+    group.add_argument("-v", default=0, action="count", help="Increase console logging level by 1")
+    group.add_argument("-q", default=0, action="count", help="Decrease console logging level by 1")
     group.add_argument(
         "--banner",
         dest="banner",
@@ -376,11 +360,7 @@ def make_argument_parser(**kwargs):
         help="Print banner [default: %(default)s]",
     )
     parser.add_argument(
-        "-d",
-        "--debug",
-        action="store_true",
-        default=None,
-        help="Debug mode [default: %(default)s]",
+        "-d", "--debug", action="store_true", default=None, help="Debug mode [default: %(default)s]"
     )
     parser.add_argument(
         "--echo",
@@ -426,10 +406,7 @@ def make_argument_parser(**kwargs):
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
-        "-f",
-        dest="config_file",
-        metavar="file",
-        help="Read configuration settings from this file",
+        "-f", dest="config_file", metavar="file", help="Read configuration settings from this file"
     )
     group.add_argument(
         "-c",
@@ -449,8 +426,7 @@ def make_argument_parser(**kwargs):
         % (colorize("[bold]var[/]"), colorize("[bold]val[/]")),
     )
     parser.add_argument(
-        "--cache-dir",
-        help="Store job cache info in the given folder [default: .canary_cache/]",
+        "--cache-dir", help="Store job cache info in the given folder [default: .canary_cache/]"
     )
     parser.set_defaults(banner=False)
 
@@ -472,8 +448,5 @@ def add_parser_help(p: argparse.ArgumentParser) -> None:
 
     """
     p.add_argument(
-        "-h",
-        "--help",
-        action=argparse._HelpAction,
-        help="Show this help message and exit.",
+        "-h", "--help", action=argparse._HelpAction, help="Show this help message and exit."
     )

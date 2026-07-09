@@ -142,19 +142,13 @@ class CDashReporter(canary.CanaryReporter):
             help="The base CDash url (do not include project)",
         )
         parser.add_argument(
-            "--done",
-            action="store_true",
-            default=False,
-            help="Post Done.xml to the build.",
+            "--done", action="store_true", default=False, help="Post Done.xml to the build."
         )
         parser.add_argument("files", nargs="*", help="XML files to post")
 
     def setup_summary_parser(self, parser: "canary.Parser") -> None:
         parser.add_argument(
-            "--project",
-            "--cdash-project",
-            dest="cdash_project",
-            help="The CDash project",
+            "--project", "--cdash-project", dest="cdash_project", help="The CDash project"
         )
         parser.add_argument(
             "--url",
@@ -186,25 +180,18 @@ class CDashReporter(canary.CanaryReporter):
             help="Sites to skip (accepts Python regular expression)",
         )
         parser.add_argument(
-            "-o",
-            dest="output",
-            help="Filename to write the html summary [default: stdout]",
+            "-o", dest="output", help="Filename to write the html summary [default: stdout]"
         )
 
     def setup_make_gitlab_issues_parser(self, parser: "canary.Parser") -> None:
         parser.add_argument(
-            "--cdash-url",
-            required=True,
-            help="The base CDash url, do not include project",
+            "--cdash-url", required=True, help="The base CDash url, do not include project"
         )
         parser.add_argument("--cdash-project", required=True, help="The base CDash project")
         parser.add_argument("--gitlab-url", required=True, help="The GitLab project url")
         parser.add_argument("--gitlab-api-url", required=True, help="The GitLab project's API url")
         parser.add_argument(
-            "--gitlab-project-id",
-            type=int,
-            required=True,
-            help="The GitLab project's ID",
+            "--gitlab-project-id", type=int, required=True, help="The GitLab project's ID"
         )
         parser.add_argument(
             "-a", dest="access_token", help="The GitLab read/write API access token."
@@ -235,11 +222,7 @@ class CDashReporter(canary.CanaryReporter):
         reporter: CDashXMLReporter = CDashXMLReporter.from_workspace(dest=args.dest)
 
         if args.f:
-            opts = {
-                "buildstamp": args.buildstamp,
-                "track": args.track,
-                "buildname": args.buildname,
-            }
+            opts = {"buildstamp": args.buildstamp, "track": args.track, "buildname": args.buildname}
             if any(opts.values()):
                 s = ", ".join(opts.keys())
                 raise ValueError(f"-f {args.f!r} incompatible with {s}")

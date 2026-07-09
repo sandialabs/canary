@@ -60,11 +60,7 @@ def canary_view_report(request: "ViewReportRequest") -> None:
     output_root = request.output_dir or request.view.metadata_dir / "reports"
     output_dir = output_root / "html"
 
-    html_request = HTMLReportRequest(
-        workspace=request.workspace,
-        jobs=jobs,
-        output_dir=output_dir,
-    )
+    html_request = HTMLReportRequest(workspace=request.workspace, jobs=jobs, output_dir=output_dir)
 
     entrypoint = reporter.write(html_request)
     link_summary(request.view.dir / "summary.html", entrypoint)
@@ -87,10 +83,7 @@ class HTMLReportCommand(CanaryReporter):
 
     def add_create_options(self, parser: "Parser") -> None:
         parser.add_argument(
-            "-o",
-            "--output-dir",
-            default="HTML",
-            help="Output directory [default: %(default)s]",
+            "-o", "--output-dir", default="HTML", help="Output directory [default: %(default)s]"
         )
 
     def run_from_args(self, args: Namespace) -> int:
@@ -100,9 +93,7 @@ class HTMLReportCommand(CanaryReporter):
         jobs = workspace.load_jobs()
 
         request = HTMLReportRequest(
-            workspace=workspace,
-            jobs=jobs,
-            output_dir=Path(args.output_dir).absolute(),
+            workspace=workspace, jobs=jobs, output_dir=Path(args.output_dir).absolute()
         )
 
         HTMLReporter().write(request)
@@ -170,12 +161,7 @@ class HTMLReporter:
             return None
 
     def write_report(
-        self,
-        *,
-        jobs: list["Job"],
-        html_dir: Path,
-        jobs_dir: Path,
-        index: Path,
+        self, *, jobs: list["Job"], html_dir: Path, jobs_dir: Path, index: Path
     ) -> None:
         for job in jobs:
             file = jobs_dir / f"{job.id}.html"
@@ -615,13 +601,7 @@ pre {
             return repr(value)
 
     def generate_index(
-        self,
-        jobs: list["Job"],
-        *,
-        html_dir: Path,
-        jobs_dir: Path,
-        index: Path,
-        fh: TextIO,
+        self, jobs: list["Job"], *, html_dir: Path, jobs_dir: Path, index: Path, fh: TextIO
     ) -> None:
         totals: dict[str, list["Job"]] = {}
         for job in jobs:
@@ -701,23 +681,12 @@ pre {
         else:
             fh.write("</a>\n")
 
-    def generate_group_index_file(
-        self,
-        jobs: list["Job"],
-        *,
-        file: Path,
-        jobs_dir: Path,
-    ) -> None:
+    def generate_group_index_file(self, jobs: list["Job"], *, file: Path, jobs_dir: Path) -> None:
         with open(file, "w") as fh:
             self.generate_group_index(jobs, file=file, jobs_dir=jobs_dir, fh=fh)
 
     def generate_group_index(
-        self,
-        jobs: list["Job"],
-        *,
-        file: Path,
-        jobs_dir: Path,
-        fh: TextIO,
+        self, jobs: list["Job"], *, file: Path, jobs_dir: Path, fh: TextIO
     ) -> None:
         group = self.report_group(jobs[0])
 
@@ -757,22 +726,13 @@ pre {
         fh.write("</main></body>\n</html>\n")
 
     def generate_all_tests_index_file(
-        self,
-        totals: dict[str, list["Job"]],
-        *,
-        file: Path,
-        jobs_dir: Path,
+        self, totals: dict[str, list["Job"]], *, file: Path, jobs_dir: Path
     ) -> None:
         with open(file, "w") as fh:
             self.generate_all_tests_index(totals, file=file, jobs_dir=jobs_dir, fh=fh)
 
     def generate_all_tests_index(
-        self,
-        totals: dict[str, list["Job"]],
-        *,
-        file: Path,
-        jobs_dir: Path,
-        fh: TextIO,
+        self, totals: dict[str, list["Job"]], *, file: Path, jobs_dir: Path, fh: TextIO
     ) -> None:
         group_order = ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled")
 

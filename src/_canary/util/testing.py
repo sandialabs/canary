@@ -65,10 +65,7 @@ class CanaryCommand:
 
 
 def generate_random_jobs(
-    root: Path,
-    count: int = 10,
-    max_params: int = 3,
-    max_rows: int = 5,
+    root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5
 ) -> list["Job"]:
     from ..job import Dependency
     from ..job import Job
@@ -90,10 +87,7 @@ def generate_random_jobs(
 
 
 def generate_random_jobspecs(
-    root: Path,
-    count: int = 10,
-    max_params: int = 3,
-    max_rows: int = 5,
+    root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5
 ) -> list["JobSpec"]:
     from ..collect import Collector
     from ..generate import Generator
@@ -110,11 +104,7 @@ def generate_random_jobspecs(
 
 
 def generate_random_test_files(
-    root: Path,
-    count: int = 10,
-    max_params: int = 3,
-    max_rows: int = 5,
-    with_deps: bool = True,
+    root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5, with_deps: bool = True
 ) -> None:
     """Generate a random Canary test suite for performance testing."""
 

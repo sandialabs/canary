@@ -152,6 +152,7 @@ def from_job(job: "Job") -> TestInstance:
         cpu_ids=job.cpu_ids,
         gpu_ids=job.gpu_ids,
         family=job.spec.family,
+        attributes=job.spec.attributes,
         keywords=job.spec.keywords,
         parameters=parameters,
         timeout=job.spec.timeout,

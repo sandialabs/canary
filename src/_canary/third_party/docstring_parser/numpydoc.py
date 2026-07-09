@@ -306,8 +306,7 @@ class NumpydocParser:
 
     def _setup(self):
         self.titles_re = re.compile(
-            r"|".join(s.title_pattern for s in self.sections.values()),
-            flags=re.M,
+            r"|".join(s.title_pattern for s in self.sections.values()), flags=re.M
         )
 
     def add_section(self, section: Section):
@@ -438,25 +437,17 @@ def compose(
     if docstring.blank_after_long_description:
         parts.append("")
 
+    process_sect("Parameters", [item for item in docstring.params or [] if item.args[0] == "param"])
+
     process_sect(
-        "Parameters",
-        [item for item in docstring.params or [] if item.args[0] == "param"],
+        "Attributes", [item for item in docstring.params or [] if item.args[0] == "attribute"]
     )
 
     process_sect(
-        "Attributes",
-        [item for item in docstring.params or [] if item.args[0] == "attribute"],
+        "Returns", [item for item in docstring.many_returns or [] if not item.is_generator]
     )
 
-    process_sect(
-        "Returns",
-        [item for item in docstring.many_returns or [] if not item.is_generator],
-    )
-
-    process_sect(
-        "Yields",
-        [item for item in docstring.many_returns or [] if item.is_generator],
-    )
+    process_sect("Yields", [item for item in docstring.many_returns or [] if item.is_generator])
 
     if docstring.returns and not docstring.many_returns:
         ret = docstring.returns
@@ -465,8 +456,7 @@ def compose(
         process_one(ret)
 
     process_sect(
-        "Receives",
-        [item for item in docstring.params or [] if item.args[0] == "receives"],
+        "Receives", [item for item in docstring.params or [] if item.args[0] == "receives"]
     )
 
     process_sect(
@@ -474,25 +464,13 @@ def compose(
         [item for item in docstring.params or [] if item.args[0] == "other_param"],
     )
 
-    process_sect(
-        "Raises",
-        [item for item in docstring.raises or [] if item.args[0] == "raises"],
-    )
+    process_sect("Raises", [item for item in docstring.raises or [] if item.args[0] == "raises"])
 
-    process_sect(
-        "Warns",
-        [item for item in docstring.raises or [] if item.args[0] == "warns"],
-    )
+    process_sect("Warns", [item for item in docstring.raises or [] if item.args[0] == "warns"])
 
     for meta in docstring.meta:
         if isinstance(
-            meta,
-            (
-                DocstringDeprecated,
-                DocstringParam,
-                DocstringReturns,
-                DocstringRaises,
-            ),
+            meta, (DocstringDeprecated, DocstringParam, DocstringReturns, DocstringRaises)
         ):
             continue  # Already handled
 

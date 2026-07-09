@@ -31,9 +31,6 @@ class Conditional(Generic[T]):
         keywords: list[str] | None = None,
     ) -> bool:
         r = self.when.evaluate(
-            testname=family,
-            on_options=on_options,
-            parameters=parameters,
-            keywords=keywords,
+            testname=family, on_options=on_options, parameters=parameters, keywords=keywords
         )
         return r.value

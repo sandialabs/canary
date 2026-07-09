@@ -16,10 +16,7 @@ from typing import Mapping
 from typing import NoReturn
 from typing import Sequence
 
-__all__ = [
-    "Expression",
-    "ParseError",
-]
+__all__ = ["Expression", "ParseError"]
 
 
 class TokenType(enum.Enum):
@@ -89,10 +86,7 @@ class Scanner:
                         yield Token(TokenType.IDENT, value, pos)
                     pos += len(value)
                 else:
-                    raise ParseError(
-                        pos + 1,
-                        f'unexpected character "{input[pos]}"',
-                    )
+                    raise ParseError(pos + 1, f'unexpected character "{input[pos]}"')
         yield Token(TokenType.EOF, "", pos)
 
     def accept(self, type: TokenType, *, reject: bool = False) -> Token | None:
@@ -109,8 +103,7 @@ class Scanner:
         raise ParseError(
             self.current.pos + 1,
             "expected {}; got {}".format(
-                " OR ".join(type.value for type in expected),
-                self.current.type.value,
+                " OR ".join(type.value for type in expected), self.current.type.value
             ),
         )
 
@@ -218,11 +211,7 @@ class Expression:
         """
         scanner: Scanner = WildcardScanner(input) if allow_wildcards else Scanner(input)
         astexpr = expression(scanner)
-        code: types.CodeType = compile(
-            astexpr,
-            filename="<canary match expression>",
-            mode="eval",
-        )
+        code: types.CodeType = compile(astexpr, filename="<canary match expression>", mode="eval")
         return Expression(code, input)
 
     def evaluate(self, matcher: Callable[[str], bool]) -> bool:

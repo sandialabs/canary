@@ -57,10 +57,7 @@ def make_changelog(
     logging.debug(f"Reading merge requests for {project}")
     merge_requests: list[dict] = []
     for mr in get_merge_requests(
-        project_id=project_id,
-        access_token=access_token,
-        api_v4_url=api_v4_url,
-        state="merged",
+        project_id=project_id, access_token=access_token, api_v4_url=api_v4_url, state="merged"
     ):
         dm = datetime.datetime.fromisoformat(mr["merged_at"])
         if date_in_range(dm, date_from, date_to):
@@ -69,10 +66,7 @@ def make_changelog(
     logging.debug(f"Reading issues for {project}")
     issues: list[dict] = []
     for issue in get_issues(
-        project_id=project_id,
-        access_token=access_token,
-        api_v4_url=api_v4_url,
-        state="closed",
+        project_id=project_id, access_token=access_token, api_v4_url=api_v4_url, state="closed"
     ):
         dc = datetime.datetime.fromisoformat(issue["closed_at"])
         if date_in_range(dc, date_from, date_to):
@@ -173,9 +167,7 @@ def make_argument_parser() -> argparse.ArgumentParser:
         help="The GitLab project name [default: %(default)s]",
     )
     parser.add_argument(
-        "--api-v4-url",
-        required=True,
-        help="The GitLab API v4 root URL [default: %(default)s]",
+        "--api-v4-url", required=True, help="The GitLab API v4 root URL [default: %(default)s]"
     )
     parser.add_argument(
         "--project-id",
@@ -184,9 +176,7 @@ def make_argument_parser() -> argparse.ArgumentParser:
         help="The GitLab ID of the project [default: %(default)s]",
     )
     parser.add_argument(
-        "--access-token",
-        required=True,
-        help="The GitLab API access token [default: %(default)s]",
+        "--access-token", required=True, help="The GitLab API access token [default: %(default)s]"
     )
     parser.add_argument("-o", dest="output", help="Write output to this file")
     parser.add_argument("--version", help="Generate changelog for this version")

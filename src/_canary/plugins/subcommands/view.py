@@ -38,11 +38,7 @@ class View(CanarySubcommand):
             choices=("all", "failed", "not_pass", "passed"),
             help="Which tests to include [default: %(default)s]",
         )
-        p.add_argument(
-            "--name",
-            default="TestResults",
-            help="View name [default: %(default)s]",
-        )
+        p.add_argument("--name", default="TestResults", help="View name [default: %(default)s]")
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.view_subcommand in ("refresh", "create"):

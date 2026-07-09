@@ -45,10 +45,7 @@ class Field(Generic[T, R]):
         active: list[T] = []
         for c in self.items:
             if c.matches(
-                family=family,
-                on_options=on_options,
-                keywords=keywords,
-                parameters=parameters,
+                family=family, on_options=on_options, keywords=keywords, parameters=parameters
             ):
                 active.append(c.value)
         return self.reducer(active)

@@ -212,13 +212,13 @@ class CanaryHPCResourceSetter(argparse.Action):
 
     def __call__(self, parser, namespace, value, option_string=None):
         if match := re.search(r"^spec=(.*)$", value):
-            dest = "canary_hpc_batchspec"
+            dest = "hpc_batchspec"
             raw = strip_quotes(match.group(1))
             spec = getattr(namespace, dest, None) or CanaryHPCBatchSpec.defaults()
             spec.update(CanaryHPCBatchSpec.parse(raw))
             setattr(namespace, dest, spec)
         elif match := re.search(r"^exec=(.*)$", value):
-            dest = "canary_hpc_batchexec"
+            dest = "hpc_batchexec"
             raw = strip_quotes(match.group(1))
             spec = CanaryHPCBatchExec.parse(raw)
             setattr(namespace, dest, spec)
@@ -226,20 +226,20 @@ class CanaryHPCResourceSetter(argparse.Action):
             workers = int(match.group(1))
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
-            setattr(namespace, "canary_hpc_batch_workers", workers)
+            setattr(namespace, "hpc_batch_workers", workers)
         elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", value):
             raw = match.group(2)
-            setattr(namespace, "canary_hpc_backend", raw)
+            setattr(namespace, "hpc_backend", raw)
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
             if raw not in ("conservative", "agressive"):
                 raise ValueError(f"Incorrect batch timeout choice: {raw}")
-            setattr(namespace, "canary_hpc_batch_timeout_strategy", raw)
+            setattr(namespace, "hpc_batch_timeout_strategy", raw)
         elif match := re.search(r"^queue_timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
-            setattr(namespace, "canary_hpc_queue_timeout", time_in_seconds(raw))
+            setattr(namespace, "hpc_queue_timeout", time_in_seconds(raw))
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
-            dest = "canary_hpc_scheduler_args"
+            dest = "hpc_scheduler_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
             opts.extend(CanaryHPCSchedulerArgs.parse(raw))

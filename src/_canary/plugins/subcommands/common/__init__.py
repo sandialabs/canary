@@ -11,11 +11,7 @@ from ....util import logging
 from ....util.rich import bold
 from ....util.time import time_in_seconds
 
-__all__ = [
-    "add_filter_arguments",
-    "add_work_tree_arguments",
-    "add_resource_arguments",
-]
+__all__ = ["add_filter_arguments", "add_work_tree_arguments", "add_resource_arguments"]
 
 
 if TYPE_CHECKING:
@@ -54,10 +50,7 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
         "https://docs.python.org/3/library/re.html",
     )
     if tagged:
-        group.add_argument(
-            "--tag",
-            help="Tag this job selection for future runs [default: False]",
-        )
+        group.add_argument("--tag", help="Tag this job selection for future runs [default: False]")
 
 
 def add_resource_arguments(parser: "Parser") -> None:

@@ -41,5 +41,6 @@ _canary
    timekeeper
    util/index
    version
+   view
    when
    workspace

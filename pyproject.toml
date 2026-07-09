@@ -69,6 +69,7 @@ scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
 canary_cmake = "canary_cmake"
+canary_dist = "canary_dist"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
 canary_amd = "canary_amd"
@@ -83,7 +84,7 @@ line-length = 100
 format.indent-style = "space"
 format.quote-style = "double"
 format.line-ending = "auto"
-format.skip-magic-trailing-comma = false
+format.skip-magic-trailing-comma = true
 format.docstring-code-line-length = "dynamic"
 format.docstring-code-format = false
 lint.select = [ "F", "I" ]
@@ -107,6 +108,7 @@ max_supported_python = "3.14"
 testpaths = [
     "tests",
     "src/canary_cmake/tests",
+    "src/canary_dist/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
     "src/canary_pyt/tests",
@@ -125,7 +127,7 @@ output = "coverage.xml"
 branch = true
 omit = [ "*/third_party/*" ]
 source = [ "_canary" ]
-command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
+command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_dist/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
 
 [tool.coverage.html]
 directory = "html.cov"
@@ -140,6 +142,8 @@ exclude = [
     "src/_canary/third_party/docstring_parser/*",
     "src/_canary/third_party/imagesvg/*",
     "src/canary_gitlab/tests/*",
+    "src/canary_amd/tests/canary_amd/amd_select.py",
+    "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
 ]
 
 [[tool.mypy.overrides]]
@@ -226,6 +230,8 @@ exclude = [
     "src/canary_vvtest/tests/*",  # just until we get them fixed
     "src/canary_hpc/tests/*",  # just until we get them fixed
     "src/_canary/rerun.py",
+    "src/canary_amd/tests/canary_amd/amd_select.py",
+    "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
 ]
 include = ["src", "tests"]
 [tool.ty.rules]

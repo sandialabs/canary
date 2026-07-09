@@ -252,9 +252,9 @@ class Hook:
     def __init__(self, pool):
         self.pool = pool
 
-    @canary.hookimpl
-    def canary_resource_pool_types(self):
-        return self.pool.types
+    @canary.hookimpl(tryfirst=True)
+    def canary_resource_pool_fill(self, config):
+        return self.pool.getstate()
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -292,7 +292,12 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
         }
         with canary.config.override():
             mkdirp("./foo")
-            pool = ResourcePool({"additional_properties": {}, "resources": pool})
+            pool = ResourcePool(
+                {
+                    "additional_properties": {},
+                    "nodes": [{"id": os.uname().nodename, "resources": pool}],
+                }
+            )
             canary.config.pluginmanager.register(Hook(pool), "myhook")
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [spec] = file.lock()

@@ -51,10 +51,7 @@ class ResourceQueue:
     """
 
     def __init__(
-        self,
-        lock: threading.Lock,
-        resource_pool: "ResourcePool",
-        jobs: list[BaseJob] | None = None,
+        self, lock: threading.Lock, resource_pool: "ResourcePool", jobs: list[BaseJob] | None = None
     ) -> None:
         self.lock = lock
         self._heap: list[HeapSlot] = []
