@@ -8,6 +8,7 @@ import fcntl
 import json
 import os
 import shutil
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -231,11 +232,47 @@ class ResultsView:
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
         manifest.settings = self.settings.__serialize__()
 
-        tmp = self.manifest_file.with_suffix(".json.tmp")
-        with open(tmp, "w") as fh:
-            json.dump(manifest.to_dict(), fh, indent=2)
-            fh.write("\n")
-        os.replace(tmp, self.manifest_file)
+        fd: int | None = None
+        tmp_path: Path | None = None
+
+        try:
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".{self.manifest_file.name}.",
+                suffix=".tmp",
+                dir=self.metadata_dir,
+                text=True,
+            )
+            tmp_path = Path(tmp_name)
+
+            with os.fdopen(fd, "w") as fh:
+                fd = None
+                json.dump(manifest.to_dict(), fh, indent=2)
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+
+            os.replace(tmp_path, self.manifest_file)
+
+            # Best-effort directory fsync for rename durability.
+            try:
+                dirfd = os.open(self.metadata_dir, os.O_DIRECTORY)
+            except Exception:  # nosec B110
+                pass
+            else:
+                try:
+                    os.fsync(dirfd)
+                finally:
+                    os.close(dirfd)
+
+        except Exception:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+            raise
 
     def sync(self, job: Job, manifest: ViewManifest | None = None, *, save: bool = True) -> bool:
         """Synchronize this job's latest result into the view.
@@ -308,7 +345,7 @@ class ViewManager:
 
     @property
     def lock_file(self) -> Path:
-        return self.workspace.cache_dir / "view.lock"
+        return (self.workspace.cache_dir / "view.lock").resolve()
 
     @contextmanager
     def locked(self) -> Iterator[None]:
@@ -344,18 +381,26 @@ class ViewManager:
 
     def finish(self) -> ResultsView | None:
         if self.finished:
-            return
+            return self.view
         self.finished = True
-        if not self.enabled:
-            return
-        if self.view is None:
-            return
-        # No cached manifest is kept. Each sync is saved immediately under lock.
+
+        if not self.enabled or self.view is None:
+            return None
+
         with self.locked():
-            manifest = self.view.load_manifest()
+            try:
+                manifest = self.view.load_manifest()
+            except json.JSONDecodeError:
+                logger.exception(
+                    f"{self.view.manifest_file}: corrupt view manifest; "
+                    "run `canary view rebuild` to repair the view"
+                )
+                return self.view
+
             self.view.save_manifest(manifest)
-        if self.workspace.canary_level == 0:
-            self.report(reason="finish")
+
+            # report hook, if present, would go here
+
         return self.view
 
     def sync(self, job: Job) -> None:

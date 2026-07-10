@@ -530,7 +530,7 @@ class WorkspaceDatabase:
                   JOIN downstream dn ON d.dep_id = dn.id
                 )
                 SELECT DISTINCT id FROM downstream
-            """  #  nosec B608
+            """
             rows = self.connection.execute(sql).fetchall()
             self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
@@ -554,7 +554,7 @@ class WorkspaceDatabase:
                   JOIN upstream u ON d.spec_id = u.id
                 )
                 SELECT DISTINCT id FROM upstream
-            """  # nosec B608
+            """
             rows = self.connection.execute(sql).fetchall()
             self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
