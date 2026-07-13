@@ -554,9 +554,6 @@ class ViewAction(argparse.Action):
                 raise argparse.ArgumentError(
                     self, f"Unknown view {section} {arg!r}.  Choose from {s}"
                 )
-            if section == "when" and arg in ("on_success", "on_failure"):
-                logger.warning(f"--view when={arg} is deprecated.  Setting when=always")
-                arg = "always"
             view[section] = arg
         setattr(namespace, self.dest, view)
         return

@@ -34,7 +34,7 @@ view_tag = "VIEW.TAG"
 @dataclasses.dataclass
 class ViewSettings:
     name: str = "TestResults"
-    when: Literal["always", "never"] = "always"
+    when: Literal["always", "never", "on_success", "on_failure"] = "always"
     only: Literal["all", "failed", "not_pass", "passed"] = "all"
     mode: Literal["symlink", "hardlink", "copy"] = "symlink"
     reports: list[str] = dataclasses.field(default_factory=lambda: ["html"])
@@ -58,7 +58,7 @@ class ViewSettings:
 
     def __post_init__(self):
         assert os.path.sep not in self.name
-        assert self.when in {"always", "never"}
+        assert self.when in {"always", "never", "on_success", "on_failure"}
         assert self.only in {"all", "failed", "not_pass", "passed"}
         assert self.mode in {"symlink", "hardlink", "copy"}
         assert all([x in {"html", "markdown", "none"} for x in self.reports])
@@ -75,13 +75,24 @@ class ViewSettings:
         return True
 
     def is_enabled(self, jobs: list[Job]) -> bool:
-        return self.when == "always"
+        if self.when == "always":
+            return True
+        if self.when == "never":
+            return False
+        if self.when == "on_success":
+            return all(job.status.is_success() or job.status.is_skipped() for job in jobs)
+        if self.when == "on_failure":
+            return any(job.status.is_failure() for job in jobs)
+        return False
 
     def always_disabled(self) -> bool:
         return self.when == "never"
 
     def always_enabled(self) -> bool:
         return self.when == "always"
+
+    def deferred_until_finish(self) -> bool:
+        return self.when in {"on_success", "on_failure"}
 
 
 @dataclasses.dataclass
@@ -256,8 +267,8 @@ class ResultsView:
             # Best-effort directory fsync for rename durability.
             try:
                 dirfd = os.open(self.metadata_dir, os.O_DIRECTORY)
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to open {self.metadata_dir}", exc_info=e)
             else:
                 try:
                     os.fsync(dirfd)
@@ -343,6 +354,8 @@ class ViewManager:
     started: bool = dataclasses.field(init=False, default=False)
     finished: bool = dataclasses.field(init=False, default=False)
 
+    _finished_jobs: dict[str, Job] = dataclasses.field(init=False, default_factory=dict)
+
     @property
     def lock_file(self) -> Path:
         return (self.workspace.cache_dir / "view.lock").resolve()
@@ -361,21 +374,19 @@ class ViewManager:
         if self.started:
             return
         self.started = True
-
         if self.settings.always_disabled():
             self.enabled = False
             return
-
         self.enabled = True
         self.view = ResultsView(root=self.workspace.root.parent, settings=self.settings)
-
+        if self.settings.deferred_until_finish():
+            logger.info(f"Deferring view update at {self.view.dir} until session finish")
+            return
         with self.locked():
             logger.info(f"Updating live view at {self.view.dir}")
             self.view.make(exist_ok=True)
-
             manifest = self.view.load_manifest()
             self.view.save_manifest(manifest)
-
             # Preserve existing behavior: latest view settings are remembered.
             self.workspace.register_view(self.view)
 
@@ -383,10 +394,33 @@ class ViewManager:
         if self.finished:
             return self.view
         self.finished = True
-
         if not self.enabled or self.view is None:
             return None
+        if self.settings.deferred_until_finish():
+            jobs = list(self._finished_jobs.values())
+            # Fallback for cases where sync callbacks did not populate _finished_jobs.
+            if not jobs:
+                jobs = self.workspace.load_jobs()
+            if not self.settings.is_enabled(jobs):
+                logger.info(
+                    f"View at {self.view.dir} not created because "
+                    f"workspace result did not satisfy when={self.settings.when!r}"
+                )
+                return None
+            with self.locked():
+                try:
+                    logger.info(f"Creating deferred view at {self.view.dir}")
+                    self.view.update(jobs)
+                    self.workspace.register_view(self.view)
 
+                    if self.workspace.canary_level == 0:
+                        self.report(reason="finish")
+                except json.JSONDecodeError:
+                    logger.exception(
+                        f"{self.view.manifest_file}: corrupt view manifest; "
+                        "run `canary view rebuild` to repair the view"
+                    )
+            return self.view
         with self.locked():
             try:
                 manifest = self.view.load_manifest()
@@ -396,18 +430,19 @@ class ViewManager:
                     "run `canary view rebuild` to repair the view"
                 )
                 return self.view
-
             self.view.save_manifest(manifest)
-
-            # report hook, if present, would go here
-
+            if self.workspace.canary_level == 0:
+                self.report(reason="finish")
         return self.view
 
     def sync(self, job: Job) -> None:
         if not self.enabled:
             return
+        self._finished_jobs[job.id] = job
         if self.view is None:
             raise RuntimeError("ViewManager is enabled but not initialized")
+        if self.settings.deferred_until_finish():
+            return
         with self.locked():
             manifest = self.view.load_manifest()
             changed = self.view.sync(job, manifest=manifest, save=False)
