@@ -399,6 +399,8 @@ class ViewManager:
         if self.settings.deferred_until_finish():
             jobs = list(self._finished_jobs.values())
             # Fallback for cases where sync callbacks did not populate _finished_jobs.
+            if not jobs and self.session is not None:
+                jobs = list(self.session.jobs)
             if not jobs:
                 jobs = self.workspace.load_jobs()
             if not self.settings.is_enabled(jobs):

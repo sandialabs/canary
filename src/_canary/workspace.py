@@ -412,13 +412,14 @@ class Workspace:
             s.run(workspace=self)
         finally:
             self.view_manager = None
+            if listener is not None:
+                listener.stop_and_join()
+                not_saved = [job for job in s.jobs if job.id not in listener._processed]
+                if not_saved:
+                    self.db.put_results(*not_saved)
             view = view_manager.finish()
             if view is not None:
                 self.register_view(view)
-        if listener is not None:
-            listener.stop_and_join()
-            not_saved = [job for job in s.jobs if job.id not in listener._processed]
-            self.db.put_results(*not_saved)
         if not reuse_session:
             config.pluginmanager.hook.canary_sessionfinish(session=s)
         self.register_latest_session(s)

@@ -664,7 +664,7 @@ class ResultListener(threading.Thread):
 
     def __init__(self, db: WorkspaceDatabase, poll_interval: float = 0.05) -> None:
         super().__init__(daemon=True)
-        self.db = db
+        self.db = WorkspaceDatabase.load(db.root)
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._processed: set[str] = set()  # Track processed files
