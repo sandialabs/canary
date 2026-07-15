@@ -339,6 +339,9 @@ class WorkspaceDatabase:
 
     @staticmethod
     def format_single_result(job: "Job") -> tuple[Any, ...]:
+        phase = job.state.phase
+        if isinstance(phase, str):
+            phase = JobPhase(phase)
         row = (
             job.id,
             job.spec.name,
@@ -347,7 +350,7 @@ class WorkspaceDatabase:
             str(job.spec.file_path),
             str(job.workspace.session),
             str(job.workspace.path),
-            job.state.phase.value,
+            phase.value,
             job.status.category.value,
             job.status.outcome.name,
             job.status.reason or "",

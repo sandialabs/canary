@@ -53,7 +53,6 @@ class JobPhase(str, Enum):
     DONE = "DONE"
 
     def __serialize__(self) -> dict[str, Any]:
-        # json_helper.Encoder will add ".type" automatically
         return {"value": self.value}
 
     @classmethod
@@ -112,11 +111,18 @@ class Dependency:
 class JobState:
     phase: JobPhase = JobPhase.PENDING
 
+    def __post_init__(self) -> None:
+        if isinstance(self.phase, str):
+            self.phase = JobPhase(self.phase)
+
     def __serialize__(self) -> dict[str, Any]:
         return {"phase": self.phase}
 
     @classmethod
     def __deserialize__(cls, d: dict) -> "JobState":
+        d["phase"] = d.pop("phase", JobPhase.PENDING)
+        if isinstance(d["phase"], str):
+            d["phase"] = JobPhase(d["phase"])
         return cls(**d)
 
     def reset(self) -> None:
@@ -282,7 +288,7 @@ class Job(BaseJob):
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
-        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
+        self._allocation: dict[str, Any] = {"metadata": {}, "resources": {}, "state": "inactive"}
         self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         self.dependencies: list[Dependency] = dependencies or []
@@ -317,6 +323,9 @@ class Job(BaseJob):
             obj.variables = variables
         if allocation := d.get("allocation"):
             obj._allocation = allocation
+            obj._allocation.setdefault("metadata", {})
+            obj._allocation.setdefault("resources", {})
+            obj._allocation.setdefault("state", "inactive")
         if rparameters := d.get("rparameters"):
             obj.rparameters = rparameters
         if mask := d.get("mask"):
@@ -488,7 +497,10 @@ class Job(BaseJob):
 
     def assign_resources(self, arg: dict[str, dict]) -> None:
         self._allocation.clear()
-        self._allocation.update(arg)
+        self._allocation.update(copy.deepcopy(arg))
+        self._allocation.setdefault("metadata", {})
+        self._allocation.setdefault("resources", {})
+        self._allocation["state"] = "active" if self._allocation["resources"] else "inactive"
 
         # Set resource-type variables
         vars: dict[str, str] = {}
@@ -508,10 +520,12 @@ class Job(BaseJob):
                 pass
 
     def free_resources(self) -> dict[str, dict]:
-        tmp = copy.deepcopy(self._allocation)
-        self._allocation.clear()
-        self._allocation.update({"metadata": {}, "resources": {}})
-        return tmp
+        if self._allocation.get("state") != "active":
+            return {"metadata": {}, "resources": {}}
+        freed = copy.deepcopy(self._allocation)
+        freed.pop("state")
+        self._allocation["state"] = "inactive"
+        return freed
 
     def required_resources(self) -> list[dict[str, Any]]:
         reqd: list[dict[str, Any]] = []

@@ -252,7 +252,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)
         if failures := self.validate_batch(batch):
-            details = "n".join(f.format() for f in failures)
+            details = "\n".join(f.format() for f in failures)
             reason = (
                 f"Generated batch resource pool cannot accommodate all jobs in batch:\n{details}"
             )

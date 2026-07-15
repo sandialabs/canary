@@ -83,7 +83,9 @@ def test_assign_resources_extracts_distributed_metadata(tmp_path):
 
     assert batch.hostname == "host-a"
     assert batch.transaction_id == "tx-1"
-    assert batch.allocation == allocation
+    assert batch.allocation["metadata"] == allocation["metadata"]
+    assert batch.allocation["resources"] == allocation["resources"]
+    assert batch.allocation["state"] == "active"
 
 
 def test_assign_resources_derives_hostname_from_resources(tmp_path):
@@ -170,5 +172,7 @@ def test_setup_writes_resource_pool_and_allocation(tmp_path):
 
     data = DistBatch.loadconfig(str(batch.workspace.dir))
 
-    assert data["allocation"] == allocation
+    assert data["allocation"]["metadata"] == allocation["metadata"]
+    assert data["allocation"]["resources"] == allocation["resources"]
+    assert data["allocation"]["state"] == "active"
     assert data["remote host"] == "host-a"

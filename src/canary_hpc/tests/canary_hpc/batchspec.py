@@ -69,7 +69,7 @@ def make_batch(tmp_path: Path, jobs: list[FakeJob]) -> HPCBatch:
 def test_batch_initial_allocation_is_empty(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 
-    assert batch.allocation == {"metadata": {}, "resources": {}}
+    assert batch.allocation == {"metadata": {}, "resources": {}, "state": "inactive"}
     assert batch.resources == {}
     assert batch.cpu_ids == []
     assert batch.gpu_ids == []
@@ -91,8 +91,9 @@ def test_batch_assign_resources_stores_full_allocation(tmp_path):
 
     batch.assign_resources(allocation)
 
-    assert batch.allocation == allocation
     assert batch.resources == allocation["resources"]
+    assert batch.allocation["metadata"] == allocation["metadata"]
+    assert batch.allocation["state"] == "active"
     assert batch.cpu_ids == ["0", "1"]
     assert batch.gpu_ids == ["0"]
 
@@ -113,6 +114,7 @@ def test_batch_assign_resources_deep_copies_allocation(tmp_path):
     assert batch.allocation == {
         "metadata": {"source": "test"},
         "resources": {"cpus": [{"node": "node0", "id": "0", "slots": 1}]},
+        "state": "active",
     }
 
 
@@ -129,7 +131,9 @@ def test_batch_free_resources_returns_full_allocation_and_clears_batch(tmp_path)
     returned = batch.free_resources()
 
     assert returned == allocation
-    assert batch.allocation == {"metadata": {}, "resources": {}}
+    assert batch.allocation["metadata"] == allocation["metadata"]
+    assert batch.allocation["resources"] == allocation["resources"]
+    assert batch.allocation["state"] == "inactive"
     assert batch.resources == {}
 
 
@@ -147,7 +151,9 @@ def test_batch_free_resources_returns_deep_copy(tmp_path):
     returned["metadata"]["source"] = "mutated"
     returned["resources"]["cpus"][0]["id"] = "99"
 
-    assert batch.allocation == {"metadata": {}, "resources": {}}
+    assert batch.allocation["metadata"] == allocation["metadata"]
+    assert batch.allocation["resources"] == allocation["resources"]
+    assert batch.allocation["state"] == "inactive"
 
 
 def test_batch_setup_writes_allocation_to_lockfile(tmp_path):
@@ -163,7 +169,9 @@ def test_batch_setup_writes_allocation_to_lockfile(tmp_path):
 
     data = batch.loadconfig(str(batch.workspace.dir))
 
-    assert data["allocation"] == allocation
+    assert data["allocation"]["metadata"] == allocation["metadata"]
+    assert data["allocation"]["resources"] == allocation["resources"]
+    assert data["allocation"]["state"] == "active"
     assert data["id"] == batch.id
     assert data["session"] == batch.session
     assert data["jobs"] == ["job-1"]
