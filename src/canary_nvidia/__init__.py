@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import os
 import shutil
 import subprocess
 from typing import Any
@@ -21,7 +20,7 @@ def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
 
 @canary.hookimpl
 def canary_runteststart(case: "canary.Job") -> None:
-    if "CUDA_VISIBLE_DEVICES" in os.environ or "CUDA_VISIBLE_DEVICES" in case.variables:
+    if "CUDA_VISIBLE_DEVICES" in case.variables:
         # User already set visible devices: don't override.
         return
 

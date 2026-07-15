@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -40,8 +39,7 @@ def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
 
 @canary.hookimpl
 def canary_runteststart(case: "canary.Job") -> None:
-    env = os.environ | case.variables
-    if any(var in env for var in _AMD_VISIBLE_DEVICES_VARIABLES):
+    if any(var in case.variables for var in _AMD_VISIBLE_DEVICES_VARIABLES):
         # User already set a visible-devices variable: don't override.
         return
 
