@@ -133,7 +133,26 @@ def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
     backend = config.getoption("hpc_backend")
     if backend is None:
         return None
+    _reject_canary_resource_overrides(config, backend)
     return fill_hpc_resource_pool(backend)
+
+
+def _reject_canary_resource_overrides(config: canary.Config, backend: str) -> None:
+    forbidden: list[str] = []
+    if config.getoption("resource_pool_mods"):
+        forbidden.append("-r/--resource-pool modifiers")
+    if config.getoption("resource_pool_file"):
+        forbidden.append("--resource-pool-file")
+    if config.getoption("oversubscribe"):
+        forbidden.append("--oversubscribe")
+    if forbidden:
+        opts = ", ".join(forbidden)
+        raise ValueError(
+            "Canary HPC mode requires the selected hpc_connect backend to define "
+            f"the test resource pool. Resource-pool overrides are not allowed with "
+            f"HPC backend {backend!r}: {opts}. "
+            "Configure CPUs, GPUs, nodes, and other resources in the hpc_connect backend instead."
+        )
 
 
 def fill_batch_resource_pool(workspace: Path) -> dict[str, Any]:

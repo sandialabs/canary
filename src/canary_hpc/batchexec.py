@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import dataclasses
 import json
 import math
 import os
@@ -30,6 +31,16 @@ logger = canary.get_logger(__name__)
 
 class Cancellable(Protocol):
     def cancel(self) -> bool: ...
+
+
+@dataclasses.dataclass(frozen=True)
+class BatchResourceFailure:
+    job_id: str
+    job_name: str
+    reason: str
+
+    def format(self) -> str:
+        return f"{self.job_id[:7]} {self.job_name}: {self.reason}"
 
 
 class HPCConnectRunner:
@@ -142,6 +153,26 @@ class HPCConnectRunner:
         f = batch.workspace.joinpath("resource_pool.json")
         f.write_text(json.dumps({"resource_pool": pool}, indent=2))
 
+    def validate_batch(self, batch: "TestBatch") -> list[BatchResourceFailure]:
+        from _canary.resource_pool import ResourcePool
+
+        resource_pool_file = batch.workspace.joinpath("resource_pool.json")
+        data = json.loads(resource_pool_file.read_text())["resource_pool"]
+        allow_multinode = bool(data.pop("allow_multinode", True))
+        pool = ResourcePool(data, allow_multinode=allow_multinode)
+        failures: list[BatchResourceFailure] = []
+        for job in batch.jobs:
+            outcome = pool.accommodates(job.required_resources())
+            if not outcome:
+                failures.append(
+                    BatchResourceFailure(
+                        job_id=job.id,
+                        job_name=job.name,
+                        reason=outcome.reason or "resource request cannot be accommodated",
+                    )
+                )
+        return failures
+
     def nodes_required(self, batch: "TestBatch") -> int:
         """Return number of scheduler nodes required to run jobs in batch."""
         max_count_per_type: dict[str, int] = {}
@@ -220,6 +251,19 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)
+        if failures := self.validate_batch(batch):
+            details = "n".join(f.format() for f in failures)
+            reason = (
+                f"Generated batch resource pool cannot accommodate all jobs in batch:\n{details}"
+            )
+            child_reasons = {f.job_id: f.reason for f in failures}
+            logger.error(reason)
+            with batch.workspace.openfile(batch.stdout, "a") as fh:
+                fh.write("ERROR: Batch resource preflight failed\n")
+                fh.write(reason)
+                fh.write("\n")
+            batch.fail_preflight(reason, child_reasons=child_reasons)
+            return 1
 
         submitted_at = batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
         queue_deadline = submitted_at + batch.queue_timeout

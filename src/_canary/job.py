@@ -115,12 +115,12 @@ class JobState:
     def __serialize__(self) -> dict[str, Any]:
         return {"phase": self.phase}
 
-    def reset(self) -> None:
-        self.phase = JobPhase.PENDING
-
     @classmethod
     def __deserialize__(cls, d: dict) -> "JobState":
         return cls(**d)
+
+    def reset(self) -> None:
+        self.phase = JobPhase.PENDING
 
     def is_pending(self) -> bool:
         return self.phase == JobPhase.PENDING

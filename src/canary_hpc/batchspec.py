@@ -278,13 +278,12 @@ class TestBatch(BaseJob):
             return self.dependency_batches_complete()
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
-
         logger.debug(f"Running batch {self.id[:7]}")
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
-
         rc: int | None = -1
+        failure_reason: str | None = None
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
@@ -293,23 +292,25 @@ class TestBatch(BaseJob):
             try:
                 rc = runner.execute(self, queue=queue)
             finally:
-                self.timekeeper.finished = time.time()
-        except Exception:
+                if self.timekeeper.finished < 0:
+                    self.timekeeper.finished = time.time()
+        except Exception as e:
             logger.exception(f"Failed to run batch {self}")
+            failure_reason = f"Batch execution failed: {e}"
+            self.fail_preflight(failure_reason)
             rc = 1
         finally:
             if rc is None:
                 rc = 1
             self.refresh()
             self.state.phase = JobPhase.DONE
-            if all(job.status.is_success() for job in self):
-                self.status.set_base(outcome="SUCCESS")
-            else:
-                self.status.set_base(outcome="FAILED", reason="One or more jobs did not pass")
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
-
+            try:
+                self.save()
+            except Exception:
+                logger.exception(f"Failed to save batch {self}")
         return
 
     def getstate(self) -> dict[str, Any]:
@@ -350,12 +351,65 @@ class TestBatch(BaseJob):
                 job.setstate(d)
         self.save()
 
+    def fail_preflight(self, reason: str, *, child_reasons: dict[str, str] | None = None) -> None:
+        now = time.time()
+        if self.timekeeper.submitted < 0:
+            self.timekeeper.submitted = now
+        if self.timekeeper.started < 0:
+            self.timekeeper.started = now
+        self.timekeeper.finished = now
+        self.state.phase = JobPhase.DONE
+        self.status.set_base(outcome="FAILED", reason=reason)
+        child_reasons = child_reasons or {}
+        for job in self.jobs:
+            if job.state.is_done() and not job.status.is_unset():
+                continue
+            job_reason = child_reasons.get(job.id)
+            if job_reason is None:
+                job_reason = f"Batch was not submitted because preflight failed: {reason}"
+            job.state.phase = JobPhase.DONE
+            job.set_status(outcome="BROKEN", reason=job_reason)
+            if job.timekeeper.submitted < 0:
+                job.timekeeper.submitted = self.timekeeper.submitted
+            if job.timekeeper.started < 0:
+                job.timekeeper.started = now
+            if job.timekeeper.finished < 0:
+                job.timekeeper.finished = now
+            try:
+                job.save()
+            except Exception:
+                logger.exception(f"Failed to save preflight-failed job {job.id[:7]}")
+        try:
+            self.save()
+        except Exception:
+            logger.exception(f"Failed to save preflight-failed batch {self.id[:7]}")
+
     def finish(self) -> None:
         pass
 
     def refresh(self) -> None:
         for job in self:
             job.refresh()
+        self.finalize_status_from_jobs()
+
+    def finalize_status_from_jobs(self) -> None:
+        # If the batch already has an explicit infrastructure/preflight failure,
+        # do not overwrite its reason with a generic child-job summary.
+        base = self.status.base
+        if base.is_failure() and base.reason:
+            return
+
+        unfinished = [job for job in self.jobs if not job.state.is_done() or job.status.is_unset()]
+
+        if unfinished:
+            self.status.set_base(
+                outcome="FAILED",
+                reason=f"{len(unfinished)} job(s) in batch did not produce a final result",
+            )
+        elif all(job.status.is_success() for job in self.jobs):
+            self.status.set_base(outcome="SUCCESS")
+        else:
+            self.status.set_base(outcome="FAILED", reason="One or more jobs did not pass")
 
     def _combined_status(self) -> str:
         """Return a string like

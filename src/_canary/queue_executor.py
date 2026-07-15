@@ -409,8 +409,7 @@ class ResourceQueueExecutor:
                 logger.debug("task_q.put failed: %s", e)
         for w in self.workers:
             try:
-                w["proc"].join(timeout=0.2)
-                w["proc"].close()
+                terminate_proc(w["proc"])
             except Exception as e:
                 logger.debug("proc.close failed: %s", e)
         self.workers.clear()
@@ -545,18 +544,19 @@ class ResourceQueueExecutor:
                 msg = conn.recv()
             except (EOFError, OSError) as e:
                 self._handle_dead_worker_conn(conn, e)
-            else:
-                if payload := validate(msg):
-                    self._handle_worker_payload(payload)
+                continue
+            if payload := validate(msg):
+                self._handle_worker_payload(payload)
             while conn.poll(0.0):
                 try:
+                    if not conn.poll(0.0):
+                        break
                     msg = conn.recv()
                 except (EOFError, OSError) as e:
                     self._handle_dead_worker_conn(conn, e)
                     break
-                else:
-                    if payload := validate(msg):
-                        self._handle_worker_payload(payload)
+                if payload := validate(msg):
+                    self._handle_worker_payload(payload)
 
     def _handle_worker_payload(self, payload: dict[str, Any]) -> None:
 
@@ -716,8 +716,7 @@ class ResourceQueueExecutor:
         except Exception as e:
             logger.debug("task_q.close failed: %s", e)
         try:
-            old["proc"].join(timeout=0.1)
-            old["proc"].close()
+            terminate_proc(old["proc"])
         except Exception as e:
             logger.debug("proc.close failed: %s", e)
         try:
@@ -811,6 +810,15 @@ class ResourceQueueExecutor:
 
         self._shutdown_workers()
         self.queue.clear(stat)
+
+
+def terminate_proc(proc):
+    i = 0
+    while i < 3 and proc.is_alive():
+        proc.terminate()
+        proc.join(timeout=0.5)
+        i += 1
+    proc.close()
 
 
 class Reporter:
