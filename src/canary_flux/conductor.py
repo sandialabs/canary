@@ -22,11 +22,7 @@ logger = canary.get_logger(__name__)
 
 def create_job_env() -> dict[str, str]:
     level = int(os.getenv("CANARY_LEVEL", "0"))
-    variables = {
-        "CANARY_LEVEL": str(level + 1),
-        "CANARY_DISABLE_KB": "1",
-        "CANARY_LIVE": "0",
-    }
+    variables = {"CANARY_LEVEL": str(level + 1), "CANARY_DISABLE_KB": "1", "CANARY_LIVE": "0"}
 
     if canary.config.get("debug"):
         variables["CANARY_DEBUG"] = "on"
@@ -179,8 +175,7 @@ class FluxConductor:
             qm = JobQueue(runner.jobs, global_lock)
             rep = reporter.LiveReporter(qm) if live_reporting else reporter.EventReporter(qm)
             with FluxAllocation(
-                **flux_alloc_opts(),
-                workspace=runner.workspace.sessions_dir / runner.session,
+                **flux_alloc_opts(), workspace=runner.workspace.sessions_dir / runner.session
             ):
                 extor = JobExecutor(qm)
                 rank = 1

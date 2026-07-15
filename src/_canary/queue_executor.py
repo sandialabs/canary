@@ -50,9 +50,7 @@ class JobFunctor:
         try:
             executor(job, queue=result_queue, **kwargs)
         except BaseException as e:
-            logger.exception(
-                f"Job {job}: exception occurred during execution of job functor"
-            )
+            logger.exception(f"Job {job}: exception occurred during execution of job functor")
             job.set_status(outcome="ERROR", reason=repr(e))
             sys.exit(1)
         else:
@@ -91,17 +89,13 @@ def inner_ctx() -> Any:
     elif override in ("fork", "spawn", "forkserver"):
         method = override
     else:
-        logger.warning(
-            f"Unknown CANARY_INNER_START_METHOD={override!r}; falling back to fork"
-        )
+        logger.warning(f"Unknown CANARY_INNER_START_METHOD={override!r}; falling back to fork")
         method = "fork"
 
     try:
         return mp.get_context(method)  # type: ignore[arg-type]
     except Exception as e:
-        logger.warning(
-            f"inner_ctx: failed to get_context({method!r}): {e}; using default"
-        )
+        logger.warning(f"inner_ctx: failed to get_context({method!r}): {e}; using default")
         return mp.get_context()
 
 
@@ -172,13 +166,7 @@ class _MainWorker:
         self.local_q = mp.Queue()
         proc: BaseProcess = self.ctx.Process(
             target=JobFunctor(),
-            args=(
-                self.executor,
-                job,
-                self.local_q,
-                self.logging_queue,
-                self.config_snapshot,
-            ),
+            args=(self.executor, job, self.local_q, self.logging_queue, self.config_snapshot),
             kwargs={**self.common_kwargs, **per_job_kwargs},
         )
         self.proc = proc
@@ -240,9 +228,7 @@ class _MainWorker:
 
             if not proc.is_alive():
                 # Process exited but FINISHED was never observed
-                payload.update(
-                    {"event": "job_died", "exitcode": getattr(proc, "exitcode", None)}
-                )
+                payload.update({"event": "job_died", "exitcode": getattr(proc, "exitcode", None)})
                 self.send(payload)
                 return
 
@@ -427,9 +413,7 @@ class ResourceQueueExecutor:
                 f = Path(h.baseFilename).absolute()
                 handlers.append(logging.json_file_handler(f, h.level))
                 self._store.setdefault("json_file_handlers", []).append(f)
-        listener = logging.QueueListener(
-            logging_queue, *handlers, respect_handler_level=True
-        )
+        listener = logging.QueueListener(logging_queue, *handlers, respect_handler_level=True)
         listener.start()
         self._store["logging_listener"] = listener
         root.handlers.clear()
@@ -451,9 +435,7 @@ class ResourceQueueExecutor:
         if not self.entered:
             raise RuntimeError("ResourceQueueExecutor.run must be called in a context")
 
-        logger.info(
-            f"[bold]Starting[/] process pool with max {self.max_workers} workers"
-        )
+        logger.info(f"[bold]Starting[/] process pool with max {self.max_workers} workers")
 
         session_timeout = float(config.get("run:timeout:session", -1))
         qrank, qsize = 0, len(self.queue)
@@ -477,10 +459,7 @@ class ResourceQueueExecutor:
                     while not self.idle_workers:
                         self._check_finished_processes()
                         self._check_for_leaks()
-                        if (
-                            session_timeout >= 0.0
-                            and time.time() - start > session_timeout
-                        ):
+                        if session_timeout >= 0.0 and time.time() - start > session_timeout:
                             self._terminate_all(signal.SIGUSR2)
                             self._check_for_leaks()
                             raise TimeoutError(
@@ -601,9 +580,7 @@ class ResourceQueueExecutor:
 
         # If a job was in flight, mark it as died so the queue can continue
         if job_id:
-            self._handle_worker_payload(
-                {"job_id": job_id, "worker_id": wid, "event": "job_died"}
-            )
+            self._handle_worker_payload({"job_id": job_id, "worker_id": wid, "event": "job_died"})
 
         # Make the executor robust: retire the worker and optionally restart it
         self._retire_and_restart_worker(wid)
@@ -660,17 +637,11 @@ class ResourceQueueExecutor:
         if busy_ids != inflight_ids:
             leaked = busy_ids - inflight_ids
             missing = inflight_ids - busy_ids
-            logger.critical(
-                f"Busy/inflight mismatch leaked={leaked}, missing={missing}"
-            )
+            logger.critical(f"Busy/inflight mismatch leaked={leaked}, missing={missing}")
             raise StuckQueueError("Busy/inflight mismatch")
-        terminal_busy = {
-            job.id for job in self.queue._busy.values() if job.state.is_done()
-        }
+        terminal_busy = {job.id for job in self.queue._busy.values() if job.state.is_done()}
         if terminal_busy:
-            logger.critical(
-                f"Terminal jobs still marked busy: {','.join(terminal_busy)}"
-            )
+            logger.critical(f"Terminal jobs still marked busy: {','.join(terminal_busy)}")
             raise StuckQueueError(f"Terminal jobs still busy: {terminal_busy}")
 
     def _wait_all(self, start: float, timeout: float) -> None:

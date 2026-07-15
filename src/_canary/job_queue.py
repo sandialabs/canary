@@ -61,11 +61,7 @@ class JobQueue(abc.ABC):
     def get(self, qrank: int = -1, worker_id: int = -1) -> ExecutionSlot:
         job = self._get_job()
         slot = ExecutionSlot(
-            job=job,
-            spawned=time.time(),
-            qrank=qrank,
-            qsize=len(self),
-            worker_id=worker_id,
+            job=job, spawned=time.time(), qrank=qrank, qsize=len(self), worker_id=worker_id
         )
         self.slots_by_id[job.id] = slot
         self.submitted[job.id] = slot

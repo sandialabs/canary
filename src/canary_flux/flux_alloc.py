@@ -22,10 +22,7 @@ class UnsupportedBackend(RuntimeError):
 
 
 def bootstrap_flux_jobspec(
-    backend_name: str,
-    nodes: int,
-    time_limit: float,
-    workspace: Path = Path.cwd(),
+    backend_name: str, nodes: int, time_limit: float, workspace: Path = Path.cwd()
 ) -> hpc_connect.JobSpec:
     submit_args: list[str] = []
     commands: list[str] = []

@@ -36,27 +36,12 @@ class Reporter:
             self.live_columns = tuple(cols.split(","))
         else:
             self.live_columns = ("Job", "ID", "Status", "Elapsed", "Rank")
-        self.final_columns: tuple[str, ...] = (
-            "Job",
-            "ID",
-            "Status",
-            "Elapsed",
-            "Details",
-        )
+        self.final_columns: tuple[str, ...] = ("Job", "ID", "Status", "Elapsed", "Details")
         self.validate_columns(self.live_columns)
         self.validate_columns(self.final_columns)
 
     def validate_columns(self, columns: tuple[str, ...]) -> None:
-        choices = (
-            "Job",
-            "ID",
-            "Status",
-            "Queued",
-            "Running",
-            "Elapsed",
-            "Rank",
-            "Details",
-        )
+        choices = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Rank", "Details")
         for col in columns:
             if col not in choices:
                 s = ",".join(choices)
