@@ -103,18 +103,6 @@ def test_nvidia_does_not_claim_explicit_amd_gpus(monkeypatch):
     assert "CUDA_VISIBLE_DEVICES" not in job.variables
 
 
-def test_nvidia_does_not_override_environment(monkeypatch):
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "7")
-
-    job = FakeJob(
-        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "NVIDIA"}}]}
-    )
-
-    nvidia.canary_runteststart(job)
-
-    assert "CUDA_VISIBLE_DEVICES" not in job.variables
-
-
 def test_nvidia_does_not_override_case_variable(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 

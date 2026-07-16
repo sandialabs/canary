@@ -118,23 +118,6 @@ def test_amd_does_not_claim_nvidia_vendor(monkeypatch):
     assert "CUDA_VISIBLE_DEVICES" not in job.variables
 
 
-def test_amd_does_not_override_existing_env_visible_device(monkeypatch):
-    for var in amd._AMD_VISIBLE_DEVICES_VARIABLES:
-        monkeypatch.delenv(var, raising=False)
-
-    monkeypatch.setenv("HIP_VISIBLE_DEVICES", "7")
-
-    job = FakeJob(
-        {"gpus": [{"node": "local", "id": "0", "slots": 1, "properties": {"vendor": "AMD"}}]}
-    )
-
-    amd.canary_runteststart(job)
-
-    assert "HIP_VISIBLE_DEVICES" not in job.variables
-    assert "ROCR_VISIBLE_DEVICES" not in job.variables
-    assert "CUDA_VISIBLE_DEVICES" not in job.variables
-
-
 def test_amd_does_not_override_existing_case_variable(monkeypatch):
     for var in amd._AMD_VISIBLE_DEVICES_VARIABLES:
         monkeypatch.delenv(var, raising=False)

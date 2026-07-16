@@ -119,6 +119,9 @@ addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
 python_files = "*.py"
 filterwarnings = [ "ignore::DeprecationWarning" ]
+markers = [
+  "integration: marks tests that require external tools or full end-to-end execution",
+]
 
 [tool.coverage.xml]
 output = "coverage.xml"
