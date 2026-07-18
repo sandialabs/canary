@@ -11,36 +11,61 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import TextIO
 
-from ... import config
-from ...hookspec import hookimpl
-from ...util import json_helper as json
-from ...util import logging
-from ...util.filesystem import force_remove
-from ...util.filesystem import mkdirp
-from ..types import CanaryReporter
+from .. import config
+from ..hookspec import hookimpl
+from ..util import json_helper as json
+from ..util import logging
+from ..util.filesystem import mkdirp
+from .reporter import CanaryReporter
+from .reporter import enabled
 
 if TYPE_CHECKING:
-    from ...config.argparsing import Parser
-    from ...job import Job
-    from ...view import ViewManifestEntry
-    from ...view import ViewReportRequest
-    from ...workspace import Workspace
+    from ..config.argparsing import Parser
+    from ..job import Job
+    from ..runtest import Runner
+    from ..workspace import Workspace
 
 logger = logging.get_logger(__name__)
+
+MANIFEST = "manifest.json"
 
 
 @dataclasses.dataclass
 class HTMLReportRequest:
-    """Inputs required to render an HTML report.
-
-    This request is intentionally not tied to a view. View lifecycle reporting
-    and the standalone `canary report html` command both adapt their context
-    into this renderer request.
-    """
-
     workspace: "Workspace"
     jobs: list["Job"]
     output_dir: Path
+
+
+@dataclasses.dataclass
+class HTMLReportRecord:
+    id: str
+    name: str
+    display_name: str
+    status: str
+    group: str
+    code: int
+    reason: str
+    duration: float
+    session: str | None
+    workspace: str
+    page: str
+
+    @classmethod
+    def from_job(cls, job: "Job", reporter: "HTMLReporter") -> "HTMLReportRecord":
+        return cls(
+            id=job.id,
+            name=job.name,
+            display_name=job.display_name(),
+            status=job.status.outcome.name,
+            group=reporter.report_group(job),
+            code=job.status.code,
+            reason=job.status.reason or "",
+            duration=job.timekeeper.duration(),
+            session=job.workspace.session,
+            workspace=str(job.workspace.dir),
+            page=f"jobs/{job.id}.html",
+        )
 
 
 @hookimpl
@@ -48,22 +73,21 @@ def canary_reporter() -> CanaryReporter:
     return HTMLReportCommand()
 
 
-@hookimpl
-def canary_view_report(request: "ViewReportRequest") -> None:
-    """Create an HTML report for a completed view snapshot."""
-    if "html" not in request.formats:
+@hookimpl(trylast=True)
+def canary_runtests_report(runner: "Runner") -> None:
+    """Create or update an HTML report for completed jobs."""
+    if not enabled("html"):
         return
 
+    ws = runner.workspace
     reporter = HTMLReporter()
-    jobs = reporter.load_view_jobs(request)
-
-    output_root = request.output_dir or request.view.metadata_dir / "reports"
-    output_dir = output_root / "html"
-
-    html_request = HTMLReportRequest(workspace=request.workspace, jobs=jobs, output_dir=output_dir)
-
+    html_request = HTMLReportRequest(
+        workspace=ws, jobs=runner.jobs, output_dir=ws.reports_dir / "html"
+    )
     entrypoint = reporter.write(html_request)
-    link_summary(request.view.dir / "summary.html", entrypoint)
+    link = link_summary(runner.workspace.root.parent / "Canary.html", entrypoint)
+    rel = os.path.relpath(link, config.invocation_dir)
+    logger.info(f"HTML report written to {rel}")
 
 
 class HTMLReportCommand(CanaryReporter):
@@ -71,14 +95,6 @@ class HTMLReportCommand(CanaryReporter):
     description = "HTML reporter"
 
     def setup_parser(self, parser: "Parser") -> None:
-        # Compatibility positional:
-        #
-        #   canary report gitlab-mr create
-        #
-        # The preferred spelling is:
-        #
-        #   canary report gitlab-mr
-        #
         parser.add_argument(
             "_create", nargs="?", choices=("create",), metavar="", help=argparse.SUPPRESS
         )
@@ -95,7 +111,7 @@ class HTMLReportCommand(CanaryReporter):
         return 0
 
     def run_create(self, args: Namespace) -> None:
-        from ...workspace import Workspace
+        from ..workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
@@ -105,75 +121,69 @@ class HTMLReportCommand(CanaryReporter):
 
 
 class HTMLReporter:
-    """HTML renderer for Canary reports."""
-
     type = "html"
     description = "HTML reporter"
 
+    group_order = ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled")
+
     def write(self, request: HTMLReportRequest) -> Path:
-        """Write an HTML report and return its entry point."""
+        """Update an HTML report in place and return its entry point."""
         final_dir = request.output_dir
-        tmp_dir = final_dir.with_name(f".{final_dir.name}.tmp-{os.getpid()}")
+        jobs_dir = final_dir / "jobs"
+        mkdirp(jobs_dir)
 
-        force_remove(tmp_dir)
-        mkdirp(tmp_dir / "jobs")
+        records = load_manifest(final_dir)
 
-        try:
-            self.write_report(
-                jobs=request.jobs,
-                html_dir=tmp_dir,
-                jobs_dir=tmp_dir / "jobs",
-                index=tmp_dir / "index.html",
-            )
+        for job in request.jobs:
+            record = HTMLReportRecord.from_job(job, self)
+            records[job.id] = record
 
-            force_remove(final_dir)
-            os.rename(tmp_dir, final_dir)
+            page = final_dir / record.page
+            mkdirp(page.parent)
+            tmp = page.with_name(f".{page.name}.tmp-{os.getpid()}")
+            try:
+                with open(tmp, "w") as fh:
+                    self.generate_case_file(job, fh)
+                os.replace(tmp, page)
+            except Exception:
+                tmp.unlink(missing_ok=True)
+                raise
 
-        except Exception:
-            force_remove(tmp_dir)
-            raise
+        save_manifest(final_dir, records)
+        self.write_index_files(records, html_dir=final_dir)
 
         entrypoint = final_dir / "index.html"
-        rel = os.path.relpath(entrypoint, config.invocation_dir)
-        logger.info(f"HTML report written to {rel}")
         return entrypoint
 
-    def load_view_jobs(self, request: "ViewReportRequest") -> list["Job"]:
-        """Load jobs represented by the current view manifest.
+    def write_index_files(self, records: dict[str, HTMLReportRecord], *, html_dir: Path) -> None:
+        all_records = list(records.values())
 
-        The manifest is treated as authoritative for the view snapshot.
-        """
-        manifest = request.view.load_manifest()
-        jobs: list["Job"] = []
+        totals: dict[str, list[HTMLReportRecord]] = {}
+        for record in all_records:
+            totals.setdefault(record.group, []).append(record)
 
-        for entry in manifest.entries.values():
-            job = self.load_job_from_entry(entry)
-            if job is not None:
-                jobs.append(job)
+        for group in self.group_order:
+            file = html_dir / f"{''.join(group.split())}.html"
+            group_records = totals.get(group, [])
+            if group_records:
+                self.write_group_index_records(group_records, file=file, html_dir=html_dir)
+            else:
+                file.unlink(missing_ok=True)
 
-        return jobs
+        total_file = html_dir / "Total.html"
+        self.write_all_tests_index_records(totals, file=total_file, html_dir=html_dir)
 
-    def load_job_from_entry(self, entry: "ViewManifestEntry") -> "Job | None":
-        lockfile = Path(entry.source) / "testcase.lock"
-        if not lockfile.exists():
-            logger.warning(f"{lockfile}: testcase lock not found; skipping report entry")
-            return None
+        index = html_dir / "index.html"
+        tmp = index.with_name(f".{index.name}.tmp-{os.getpid()}")
         try:
-            return json.loads(lockfile.read_text())
+            with open(tmp, "w") as fh:
+                self.generate_index_records(
+                    all_records, totals=totals, html_dir=html_dir, index=index, fh=fh
+                )
+            os.replace(tmp, index)
         except Exception:
-            logger.exception(f"{lockfile}: failed to load testcase lock")
-            return None
-
-    def write_report(
-        self, *, jobs: list["Job"], html_dir: Path, jobs_dir: Path, index: Path
-    ) -> None:
-        for job in jobs:
-            file = jobs_dir / f"{job.id}.html"
-            with open(file, "w") as fh:
-                self.generate_case_file(job, fh)
-
-        with open(index, "w") as fh:
-            self.generate_index(jobs, html_dir=html_dir, jobs_dir=jobs_dir, index=index, fh=fh)
+            tmp.unlink(missing_ok=True)
+            raise
 
     @property
     def style(self) -> str:
@@ -198,9 +208,7 @@ class HTMLReporter:
   --none: #94a3b8;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -225,13 +233,9 @@ a {
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
-}
+a:hover { text-decoration: underline; }
 
-.header {
-  margin-bottom: 2rem;
-}
+.header { margin-bottom: 2rem; }
 
 .eyebrow {
   color: var(--muted);
@@ -247,13 +251,9 @@ h1 {
   line-height: 1.1;
 }
 
-h2 {
-  margin-top: 0;
-}
+h2 { margin-top: 0; }
 
-.subtitle {
-  color: var(--muted);
-}
+.subtitle { color: var(--muted); }
 
 .cards {
   display: grid;
@@ -301,9 +301,7 @@ h2 {
   box-shadow: 0 14px 30px rgba(0,0,0,0.25);
 }
 
-.panel + .panel {
-  margin-top: 1.5rem;
-}
+.panel + .panel { margin-top: 1.5rem; }
 
 .panel-header {
   padding: 1rem 1.25rem;
@@ -317,13 +315,9 @@ h2 {
   color: var(--text);
 }
 
-details.panel {
-  margin-top: 1.5rem;
-}
+details.panel { margin-top: 1.5rem; }
 
-details.panel:first-of-type {
-  margin-top: 0;
-}
+details.panel:first-of-type { margin-top: 0; }
 
 details.panel > summary {
   cursor: pointer;
@@ -334,9 +328,7 @@ details.panel > summary {
   font-weight: 800;
 }
 
-details.panel > summary::-webkit-details-marker {
-  display: none;
-}
+details.panel > summary::-webkit-details-marker { display: none; }
 
 details.panel > summary::before {
   content: "▾";
@@ -346,13 +338,9 @@ details.panel > summary::before {
   transition: transform 120ms ease;
 }
 
-details.panel:not([open]) > summary {
-  border-bottom: none;
-}
+details.panel:not([open]) > summary { border-bottom: none; }
 
-details.panel:not([open]) > summary::before {
-  transform: rotate(-90deg);
-}
+details.panel:not([open]) > summary::before { transform: rotate(-90deg); }
 
 table {
   width: 100%;
@@ -374,21 +362,15 @@ td, th {
   vertical-align: top;
 }
 
-tbody tr:last-child td {
-  border-bottom: none;
-}
+tbody tr:last-child td { border-bottom: none; }
 
-tr:hover td {
-  background: rgba(96,165,250,0.06);
-}
+tr:hover td { background: rgba(96,165,250,0.06); }
 
 .mono, .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.muted {
-  color: var(--muted);
-}
+.muted { color: var(--muted); }
 
 .badge {
   display: inline-flex;
@@ -422,9 +404,7 @@ pre {
   border: 1px solid var(--border);
 }
 
-.output {
-  margin-top: 1.5rem;
-}
+.output { margin-top: 1.5rem; }
 
 .meta-grid {
   display: grid;
@@ -436,18 +416,14 @@ pre {
   border-bottom: 1px solid rgba(55,65,81,0.75);
 }
 
-.meta-grid > div:nth-last-child(-n + 2) {
-  border-bottom: none;
-}
+.meta-grid > div:nth-last-child(-n + 2) { border-bottom: none; }
 
 .meta-key {
   color: var(--muted);
   font-weight: 700;
 }
 
-.measurement-value {
-  white-space: pre-wrap;
-}
+.measurement-value { white-space: pre-wrap; }
 
 .footer {
   margin-top: 2rem;
@@ -456,18 +432,9 @@ pre {
 }
 
 @media (max-width: 720px) {
-  main {
-    padding: 1rem;
-  }
-
-  h1 {
-    font-size: 1.9rem;
-  }
-
-  .meta-grid {
-    grid-template-columns: 1fr;
-  }
-
+  main { padding: 1rem; }
+  h1 { font-size: 1.9rem; }
+  .meta-grid { grid-template-columns: 1fr; }
   .meta-grid > div:nth-last-child(-n + 2) {
     border-bottom: 1px solid rgba(55,65,81,0.75);
   }
@@ -480,7 +447,6 @@ pre {
         return f'<head>\n<meta charset="utf-8">\n{self.style}\n</head>\n'
 
     def report_group(self, job: "Job") -> str:
-        """Map internal outcomes to stable summary groups."""
         outcome = job.status.outcome.name
 
         if outcome == "NONE":
@@ -520,6 +486,12 @@ pre {
         if glyph:
             label = f"{glyph} {label}"
         return f'<span class="badge {self.badge_class(group)}">{label}</span>'
+
+    def status_badge_record(self, record: HTMLReportRecord) -> str:
+        return (
+            f'<span class="badge {self.badge_class(record.group)}">'
+            f"{html.escape(record.status)}</span>"
+        )
 
     def generate_case_file(self, job: "Job", fh: TextIO) -> None:
         fh.write("<!doctype html>\n<html>\n")
@@ -597,34 +569,28 @@ pre {
     def format_measurement(self, value: object) -> str:
         if isinstance(value, float):
             return f"{value:.8g}"
-        if isinstance(value, int | bool | str):
+        if isinstance(value, (int, bool, str)):
             return str(value)
         try:
             return json.dumps(value, indent=2)
         except Exception:
             return repr(value)
 
-    def generate_index(
-        self, jobs: list["Job"], *, html_dir: Path, jobs_dir: Path, index: Path, fh: TextIO
+    def generate_index_records(
+        self,
+        records: list[HTMLReportRecord],
+        *,
+        totals: dict[str, list[HTMLReportRecord]],
+        html_dir: Path,
+        index: Path,
+        fh: TextIO,
     ) -> None:
-        totals: dict[str, list["Job"]] = {}
-        for job in jobs:
-            group = self.report_group(job)
-            totals.setdefault(group, []).append(job)
-
-        group_order = ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled")
-
         group_files: dict[str, Path] = {}
-        for group in group_order:
-            group_jobs = totals.get(group, [])
-            if not group_jobs:
-                continue
-            file = html_dir / f"{''.join(group.split())}.html"
-            self.generate_group_index_file(group_jobs, file=file, jobs_dir=jobs_dir)
-            group_files[group] = file
+        for group in self.group_order:
+            if totals.get(group):
+                group_files[group] = html_dir / f"{''.join(group.split())}.html"
 
         total_file = html_dir / "Total.html"
-        self.generate_all_tests_index_file(totals, file=total_file, jobs_dir=jobs_dir)
 
         fh.write("<!doctype html>\n<html>\n")
         fh.write(self.head)
@@ -641,8 +607,8 @@ pre {
         fh.write("</section>\n")
 
         fh.write('<section class="cards">\n')
-        self.write_card(fh, "Total", len(jobs), self.href(index, total_file))
-        for group in group_order:
+        self.write_card(fh, "Total", len(records), self.href(index, total_file))
+        for group in self.group_order:
             n = len(totals.get(group, []))
             href = self.href(index, group_files[group]) if group in group_files else "#"
             self.write_card(fh, group, n, href)
@@ -655,7 +621,7 @@ pre {
             fh.write(f"<th>{html.escape(col)}</th>")
         fh.write("</tr></thead>\n<tbody>\n")
 
-        for group in group_order:
+        for group in self.group_order:
             n = len(totals.get(group, []))
             if group in group_files:
                 link = f'<a href="{self.href(index, group_files[group])}">View tests</a>'
@@ -680,25 +646,30 @@ pre {
             fh.write(f'<a class="card" href="{href}">\n')
         fh.write(f'<span class="card-label">{html.escape(label)}</span>\n')
         fh.write(f'<span class="card-value">{value}</span>\n')
-        if href == "#":
-            fh.write("</div>\n")
-        else:
-            fh.write("</a>\n")
+        fh.write("</div>\n" if href == "#" else "</a>\n")
 
-    def generate_group_index_file(self, jobs: list["Job"], *, file: Path, jobs_dir: Path) -> None:
-        with open(file, "w") as fh:
-            self.generate_group_index(jobs, file=file, jobs_dir=jobs_dir, fh=fh)
-
-    def generate_group_index(
-        self, jobs: list["Job"], *, file: Path, jobs_dir: Path, fh: TextIO
+    def write_group_index_records(
+        self, records: list[HTMLReportRecord], *, file: Path, html_dir: Path
     ) -> None:
-        group = self.report_group(jobs[0])
+        tmp = file.with_name(f".{file.name}.tmp-{os.getpid()}")
+        try:
+            with open(tmp, "w") as fh:
+                self.generate_group_index_records(records, file=file, html_dir=html_dir, fh=fh)
+            os.replace(tmp, file)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    def generate_group_index_records(
+        self, records: list[HTMLReportRecord], *, file: Path, html_dir: Path, fh: TextIO
+    ) -> None:
+        group = records[0].group
 
         fh.write("<!doctype html>\n<html>\n")
         fh.write(self.head)
         fh.write("<body><main>\n")
         fh.write('<section class="header">\n')
-        fh.write(f'<div class="eyebrow">{len(jobs)} tests</div>\n')
+        fh.write(f'<div class="eyebrow">{len(records)} tests</div>\n')
         fh.write(f"<h1>{html.escape(group)} Summary</h1>\n")
         fh.write('<div class="subtitle"><a href="index.html">Back to summary</a></div>\n')
         fh.write("</section>\n")
@@ -711,35 +682,34 @@ pre {
         )
         fh.write("<tbody>\n")
 
-        for job in sorted(jobs, key=lambda c: c.timekeeper.duration(), reverse=True):
-            job_file = jobs_dir / f"{job.id}.html"
-            if not job_file.exists():
-                raise ValueError(f"{job_file}: html file not found")
-
-            link = self.job_link(from_file=file, job_file=job_file, job=job)
+        for record in sorted(records, key=lambda r: r.duration, reverse=True):
             fh.write(
                 "<tr>"
-                f"<td>{self.status_badge(job)}</td>"
-                f"<td>{link}</td>"
-                f'<td class="code">{html.escape(job.id[:7])}</td>'
-                f"<td>{job.timekeeper.duration():.2f}s</td>"
+                f"<td>{self.status_badge_record(record)}</td>"
+                f"<td>{self.record_link(from_file=file, html_dir=html_dir, record=record)}</td>"
+                f'<td class="code">{html.escape(record.id[:7])}</td>'
+                f"<td>{record.duration:.2f}s</td>"
                 "</tr>\n"
             )
 
         fh.write("</tbody>\n</table>\n</section>\n")
         fh.write("</main></body>\n</html>\n")
 
-    def generate_all_tests_index_file(
-        self, totals: dict[str, list["Job"]], *, file: Path, jobs_dir: Path
+    def write_all_tests_index_records(
+        self, totals: dict[str, list[HTMLReportRecord]], *, file: Path, html_dir: Path
     ) -> None:
-        with open(file, "w") as fh:
-            self.generate_all_tests_index(totals, file=file, jobs_dir=jobs_dir, fh=fh)
+        tmp = file.with_name(f".{file.name}.tmp-{os.getpid()}")
+        try:
+            with open(tmp, "w") as fh:
+                self.generate_all_tests_index_records(totals, file=file, html_dir=html_dir, fh=fh)
+            os.replace(tmp, file)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
-    def generate_all_tests_index(
-        self, totals: dict[str, list["Job"]], *, file: Path, jobs_dir: Path, fh: TextIO
+    def generate_all_tests_index_records(
+        self, totals: dict[str, list[HTMLReportRecord]], *, file: Path, html_dir: Path, fh: TextIO
     ) -> None:
-        group_order = ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled")
-
         fh.write("<!doctype html>\n<html>\n")
         fh.write(self.head)
         fh.write("<body><main>\n")
@@ -757,41 +727,62 @@ pre {
         )
         fh.write("<tbody>\n")
 
-        for group in group_order:
-            for job in sorted(totals.get(group, []), key=lambda c: c.timekeeper.duration()):
-                job_file = jobs_dir / f"{job.id}.html"
-                if not job_file.exists():
-                    raise ValueError(f"{job_file}: html file not found")
-
-                link = self.job_link(from_file=file, job_file=job_file, job=job)
+        for group in self.group_order:
+            for record in sorted(totals.get(group, []), key=lambda r: r.duration):
                 fh.write(
                     "<tr>"
-                    f"<td>{self.status_badge(job)}</td>"
-                    f"<td>{link}</td>"
-                    f'<td class="code">{html.escape(job.id[:7])}</td>'
-                    f"<td>{job.timekeeper.duration():.2f}s</td>"
+                    f"<td>{self.status_badge_record(record)}</td>"
+                    f"<td>{self.record_link(from_file=file, html_dir=html_dir, record=record)}</td>"
+                    f'<td class="code">{html.escape(record.id[:7])}</td>'
+                    f"<td>{record.duration:.2f}s</td>"
                     "</tr>\n"
                 )
 
         fh.write("</tbody>\n</table>\n</section>\n")
         fh.write("</main></body>\n</html>\n")
 
-    def job_link(self, *, from_file: Path, job_file: Path, job: "Job") -> str:
-        href = self.href(from_file, job_file)
-        text = html.escape(job.display_name())
+    def record_link(self, *, from_file: Path, html_dir: Path, record: HTMLReportRecord) -> str:
+        href = self.href(from_file, html_dir / record.page)
+        text = html.escape(record.display_name)
         return f'<a href="{href}">{text}</a>'
 
     def href(self, from_file: Path, to_file: Path) -> str:
         return html.escape(os.path.relpath(to_file, from_file.parent), quote=True)
 
 
-def link_summary(summary: Path, entrypoint: Path) -> None:
-    """Create or replace a view-level summary.html symlink."""
-    target = os.path.relpath(entrypoint, summary.parent)
+def load_manifest(report_dir: Path) -> dict[str, HTMLReportRecord]:
+    path = report_dir / MANIFEST
+    if not path.exists():
+        return {}
 
+    data = json.loads(path.read_text())
+    records: dict[str, HTMLReportRecord] = {}
+    for job_id, row in data.items():
+        records[job_id] = HTMLReportRecord(**row)
+    return records
+
+
+def save_manifest(report_dir: Path, records: dict[str, HTMLReportRecord]) -> None:
+    path = report_dir / MANIFEST
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+
+    data = {job_id: dataclasses.asdict(record) for job_id, record in records.items()}
+    try:
+        with open(tmp, "w") as fh:
+            json.dump(data, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def link_summary(summary: Path, entrypoint: Path) -> Path:
+    """Create or replace a workspace-level Canary.html symlink."""
+    target = os.path.relpath(entrypoint, summary.parent)
     if summary.is_symlink() or summary.is_file():
         summary.unlink()
     elif summary.exists():
         raise ValueError(f"{summary}: exists and is not a file or symlink")
-
     summary.symlink_to(target)
+    return summary

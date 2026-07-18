@@ -25,7 +25,7 @@ if __name__ == '__main__':
             )
         run = CanaryCommand("run")
         cp = run("-w", ".")
-        assert set(os.listdir("TestResults")) == {"VIEW.TAG", "f1", "_canary", "summary.html"}
+        assert set(os.listdir("TestResults")) == {".canary-view.json", "f1"}
         assert cp.returncode == 0
         os.environ["CANARY_BAZ"] = "1"
         cp = run("-w", "-o", "baz", ".", debug=True)

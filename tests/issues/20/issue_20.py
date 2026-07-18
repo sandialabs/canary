@@ -41,7 +41,6 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with _canary.config.override():
-        _canary.config.set("workspace:view:reports", ["none"], replace=True)
         try:
             _canary.config.pluginmanager.ensure_loaded("canary_vvtest")
         except Exception:

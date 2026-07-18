@@ -9,20 +9,20 @@ from argparse import Namespace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ... import config
-from ...hookspec import hookimpl
-from ...util import json_helper as json
-from ...util import logging
-from ...util.filesystem import mkdirp
-from ...util.serialize import serialize
-from ..types import CanaryReporter
+from .. import config
+from ..hookspec import hookimpl
+from ..util import json_helper as json
+from ..util import logging
+from ..util.filesystem import mkdirp
+from ..util.serialize import serialize
+from .reporter import CanaryReporter
+from .reporter import enabled
 
 if TYPE_CHECKING:
-    from ...config.argparsing import Parser
-    from ...job import Job
-    from ...view import ViewManifestEntry
-    from ...view import ViewReportRequest
-    from ...workspace import Workspace
+    from ..config.argparsing import Parser
+    from ..job import Job
+    from ..runtest import Runner
+    from ..workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -46,20 +46,16 @@ def canary_reporter() -> CanaryReporter:
     return JsonReportCommand()
 
 
-@hookimpl
-def canary_view_report(request: "ViewReportRequest") -> None:
-    """Create a JSON report for a completed view snapshot."""
-    if "json" not in request.formats:
+@hookimpl(trylast=True)
+def canary_runtests_report(runner: "Runner") -> None:
+    """Create a JSON report for a completed jobs."""
+    if not enabled("json"):
         return
-
     reporter = JsonReporter()
-    jobs = reporter.load_view_jobs(request)
-
-    output_root = request.output_dir or request.view.metadata_dir / "reports"
+    ws = runner.workspace
     json_request = JsonReportRequest(
-        workspace=request.workspace, jobs=jobs, output=output_root / JsonReporter.default_output
+        workspace=ws, jobs=runner.jobs, output=ws.reports_dir / JsonReporter.default_output
     )
-
     reporter.write(json_request)
 
 
@@ -95,7 +91,7 @@ class JsonReportCommand(CanaryReporter):
         return 0
 
     def run_create(self, args: Namespace) -> None:
-        from ...workspace import Workspace
+        from ..workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
@@ -134,29 +130,3 @@ class JsonReporter:
         rel = os.path.relpath(output, config.invocation_dir)
         logger.info(f"JSON report written to {rel}")
         return output
-
-    def load_view_jobs(self, request: "ViewReportRequest") -> list["Job"]:
-        """Load jobs represented by the current view manifest.
-
-        The manifest is treated as authoritative for the view snapshot.
-        """
-        manifest = request.view.load_manifest()
-        jobs: list["Job"] = []
-
-        for entry in manifest.entries.values():
-            job = self.load_job_from_entry(entry)
-            if job is not None:
-                jobs.append(job)
-
-        return jobs
-
-    def load_job_from_entry(self, entry: "ViewManifestEntry") -> "Job | None":
-        lockfile = Path(entry.source) / "testcase.lock"
-        if not lockfile.exists():
-            logger.warning(f"{lockfile}: testcase lock not found; skipping report entry")
-            return None
-        try:
-            return json.loads(lockfile.read_text())
-        except Exception:
-            logger.exception(f"{lockfile}: failed to load testcase lock")
-            return None

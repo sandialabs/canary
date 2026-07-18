@@ -28,6 +28,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import conductor
         from . import generate
         from . import launcher
+        from . import reporters
         from . import runtest
         from . import select
         from .plugins import builtin
@@ -39,6 +40,9 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = subcommand.__name__.split(".")[-1].lower()
             self.register(subcommand, name=f"command.{name}")
         for p in builtin.plugins:
+            name = getname(p)
+            self.register(p, f"builtin.{name}")
+        for p in reporters.plugins:
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")

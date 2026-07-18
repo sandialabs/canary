@@ -54,13 +54,7 @@ def default_config_values() -> dict[str, Any]:
         "plugins": [],
         "environment": {"prepend-path": {}, "append-path": {}, "set": {}, "unset": []},
         "workspace": {
-            "view": {
-                "name": "TestResults",
-                "mode": "symlink",
-                "when": "always",
-                "only": "all",
-                "reports": ["html"],
-            }
+            "view": {"name": "TestResults", "mode": "symlink", "when": "always", "only": "all"}
         },
         "run": {
             "default_tag": ":all:",

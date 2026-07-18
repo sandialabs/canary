@@ -20,15 +20,12 @@ from . import config
 from .job import Job
 from .util import logging
 from .util.filesystem import force_remove
-from .util.filesystem import write_directory_tag
 
 if TYPE_CHECKING:
     from .workspace import Session
     from .workspace import Workspace
 
 logger = logging.get_logger(__name__)
-
-view_tag = "VIEW.TAG"
 
 
 @dataclasses.dataclass
@@ -37,7 +34,6 @@ class ViewSettings:
     when: Literal["always", "never", "on_success", "on_failure"] = "always"
     only: Literal["all", "failed", "not_pass", "passed"] = "all"
     mode: Literal["symlink", "hardlink", "copy"] = "symlink"
-    reports: list[str] = dataclasses.field(default_factory=lambda: ["html"])
 
     @classmethod
     def default(cls) -> "ViewSettings":
@@ -46,8 +42,7 @@ class ViewSettings:
         when = view_cfg.get("when") or "always"
         only = view_cfg.get("only") or "all"
         mode = view_cfg.get("mode") or "symlink"
-        reports = view_cfg.get("reports") or ["html"]
-        return ViewSettings(name=name, when=when, only=only, mode=mode, reports=reports)
+        return ViewSettings(name=name, when=when, only=only, mode=mode)
 
     def __serialize__(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -61,7 +56,6 @@ class ViewSettings:
         assert self.when in {"always", "never", "on_success", "on_failure"}
         assert self.only in {"all", "failed", "not_pass", "passed"}
         assert self.mode in {"symlink", "hardlink", "copy"}
-        assert all([x in {"html", "markdown", "none"} for x in self.reports])
 
     def include_job(self, job: Job) -> bool:
         if job.status.is_skipped():
@@ -149,7 +143,7 @@ class ResultsView:
 
     @staticmethod
     def exists_at(p: Path) -> bool:
-        return (p / view_tag).exists()
+        return (p / ".canary-view.json").exists()
 
     def __serialize__(self) -> dict[str, Any]:
         # json_helper.Encoder will add ".type" automatically
@@ -164,10 +158,10 @@ class ResultsView:
         return (self.root / self.settings.name).resolve()
 
     def exists(self) -> bool:
-        return self.dir.exists() and (self.dir / view_tag).exists()
+        return self.dir.exists() and (self.dir / ".canary-view.json").exists()
 
     def make(self, exist_ok: bool = False) -> None:
-        tag = self.dir / view_tag
+        tag = self.dir / ".canary-view.json"
         if self.dir.exists():
             if not tag.exists():
                 raise ValueError("Cannot create view in non-owning directory")
@@ -175,14 +169,13 @@ class ResultsView:
                 raise ValueError(f"View already exists at {self.dir}")
             return
         self.dir.mkdir(parents=True, exist_ok=True)
-        write_directory_tag(tag)
 
     def unlink(self, missing_ok: bool = False) -> None:
         if not self.dir.exists():
             if not missing_ok:
                 raise ValueError(f"View does not exist at {self.dir}")
             return
-        tag = self.dir / view_tag
+        tag = self.dir / ".canary-view.json"
         if self.dir.exists() and not tag.exists():
             raise ValueError("Cannot remove non-owning directory")
         force_remove(self.dir)
@@ -226,12 +219,8 @@ class ResultsView:
             shutil.copytree(source, dest, dirs_exist_ok=True, symlinks=False)
 
     @property
-    def metadata_dir(self) -> Path:
-        return self.dir / "_canary"
-
-    @property
     def manifest_file(self) -> Path:
-        return self.metadata_dir / "view.json"
+        return self.dir / ".canary-view.json"
 
     def load_manifest(self) -> ViewManifest:
         if not self.manifest_file.exists():
@@ -240,7 +229,6 @@ class ResultsView:
             return ViewManifest.from_dict(json.load(fh))
 
     def save_manifest(self, manifest: ViewManifest) -> None:
-        self.metadata_dir.mkdir(parents=True, exist_ok=True)
         manifest.settings = self.settings.__serialize__()
 
         fd: int | None = None
@@ -248,10 +236,7 @@ class ResultsView:
 
         try:
             fd, tmp_name = tempfile.mkstemp(
-                prefix=f".{self.manifest_file.name}.",
-                suffix=".tmp",
-                dir=self.metadata_dir,
-                text=True,
+                prefix=f".{self.manifest_file.name}.", suffix=".tmp", dir=self.dir, text=True
             )
             tmp_path = Path(tmp_name)
 
@@ -266,9 +251,9 @@ class ResultsView:
 
             # Best-effort directory fsync for rename durability.
             try:
-                dirfd = os.open(self.metadata_dir, os.O_DIRECTORY)
+                dirfd = os.open(self.dir, os.O_DIRECTORY)
             except Exception as e:
-                logger.debug(f"Failed to open {self.metadata_dir}", exc_info=e)
+                logger.debug(f"Failed to open {self.dir}", exc_info=e)
             else:
                 try:
                     os.fsync(dirfd)
@@ -325,15 +310,6 @@ class ResultsView:
             path.unlink()
         elif path.is_dir():
             force_remove(path)
-
-
-@dataclasses.dataclass
-class ViewReportRequest:
-    workspace: "Workspace"
-    view: ResultsView
-    formats: tuple[str, ...]
-    reason: Literal["finish", "rebuild", "command"] = "finish"
-    output_dir: Path | None = None
 
 
 @dataclasses.dataclass
@@ -414,9 +390,6 @@ class ViewManager:
                     logger.info(f"Creating deferred view at {self.view.dir}")
                     self.view.update(jobs)
                     self.workspace.register_view(self.view)
-
-                    if self.workspace.canary_level == 0:
-                        self.report(reason="finish")
                 except json.JSONDecodeError:
                     logger.exception(
                         f"{self.view.manifest_file}: corrupt view manifest; "
@@ -433,8 +406,6 @@ class ViewManager:
                 )
                 return self.view
             self.view.save_manifest(manifest)
-            if self.workspace.canary_level == 0:
-                self.report(reason="finish")
         return self.view
 
     def sync(self, job: Job) -> None:
@@ -482,8 +453,6 @@ class ViewManager:
                 if view.update(jobs):
                     self.view = view
                     made_new = True
-                    if self.workspace.canary_level == 0:
-                        self.report(reason="rebuild")
                     return view
                 else:
                     view.unlink(missing_ok=True)
@@ -496,21 +465,6 @@ class ViewManager:
                     if bak_dir is not None and old_dir is not None:
                         if not old_dir.exists() and bak_dir.exists():
                             os.rename(bak_dir, old_dir)
-
-    def report(self, *, reason: Literal["finish", "rebuild", "command"]) -> None:
-        if self.view is None:
-            return
-        formats = tuple(self.settings.reports)
-        if not formats or "none" in formats:
-            return
-        request = ViewReportRequest(
-            workspace=self.workspace,
-            view=self.view,
-            formats=formats,
-            reason=reason,
-            output_dir=self.view.metadata_dir / "reports",
-        )
-        config.pluginmanager.hook.canary_view_report(request=request)
 
     def __enter__(self) -> "ViewManager":
         self.start()
