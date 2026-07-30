@@ -105,6 +105,7 @@ config_schema = Schema(
         Optional("scratch"): any_schema,
         Optional("run"): run_schema,
         Optional("system"): any_schema,
+        Optional("aliases"): {str: str},
     },
     ignore_extra_keys=True,
 )

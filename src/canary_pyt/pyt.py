@@ -780,6 +780,7 @@ class PYTLockEmitter:
                 )
                 ir.add_artifact("testcase.lock")
                 ir.add_artifact(ir.stdout)
+                ir.add_artifact(ir.file.name)
                 if ir.stderr is not None:
                     ir.add_artifact(ir.stderr)
 
@@ -841,6 +842,7 @@ class PYTLockEmitter:
                 )
                 parent.add_artifact("testcase.lock")
                 parent.add_artifact(parent.stdout)
+                parent.add_artifact(parent.file.name)
                 if parent.stderr is not None:
                     parent.add_artifact(parent.stderr)
                 if analyze.flag:
