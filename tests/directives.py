@@ -548,12 +548,9 @@ def test_skipif_directive(tmp_path, monkeypatch):
 import os
 import sys
 import canary
-
 canary.directives.skipif(os.getenv('CANARY_BAZ') is not None, reason='just because')
-
 def test():
     pass
-
 if __name__ == '__main__':
     sys.exit(test())
 """,
@@ -769,6 +766,7 @@ def test_link_when_directive(tmp_path):
     for name, expected in cases.items():
         job = find_job_by_name(workspace, name)
         assert txtfiles(job.workspace.dir) == expected
+
 
 def test_generation_only_directives(tmp_path):
     """Cover directives whose primary effects are on generated specs."""
