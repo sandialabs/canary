@@ -11,7 +11,9 @@ import xml.parsers.expat
 import xml.sax.saxutils
 from contextlib import contextmanager
 from types import SimpleNamespace
+from typing import Any
 from urllib.parse import urlencode
+from urllib.request import Request
 from urllib.request import urlopen
 
 import canary
@@ -61,6 +63,7 @@ class api_filters:
             params[f"field{i}"] = filter.field
             params[f"compare{i}"] = str(self.compmap[filter.compare])
             params[f"value{i}"] = str(filter.value)
+            params[f"comparison{i}"] = filter.compare
         if filtercount > 1:
             params["filtercombine"] = self.combine_mode
         return params
@@ -78,6 +81,7 @@ class server:
         self.baseurl = baseurl
         self.project = project
         self.v1_api_url = f"{self.baseurl}/api/v1"
+        self._build_test_nodes_cache: dict[str, list[dict[str, Any]]] = {}
 
     def build_api_url(self, *, path, query=None):
         url = f"{self.v1_api_url}/{path}"
@@ -189,45 +193,111 @@ class server:
         return False
 
     def builds(self, *, date=None, buildgroups=None, skip_sites=None):
-        """Get all of the CDash builds on (optional) ``date``
+        """Get all CDash builds on optional ``date``.
 
-        Args:
-          date (str): The build date formatted as YYYY-MM-DD
-          buildgroups (list[str]): Build groups to pull down from CDash
-          skip_sites: List of sites to skip.  Can be a python regular expression to skip matching
-            sites.  Eg, 'ascic10?' would match ascic101 but not ascic165.
+        Dynamic build groups such as Latest, Latest::Long, and Latest::Experimental
+        are computed by CDash's index page.  The GraphQL schema does not expose
+        these dynamic groups directly, so we intentionally use the index JSON for
+        group membership and build summary data.
 
+        The returned build dictionaries are normalized to the legacy shape expected
+        by cdash_html_summary.py.
         """
         skip_sites = skip_sites or []
+
         logger.info(f"Getting build groups for {self.project}")
-        buildgroups = self.get_buildgroups(date, buildgroups=buildgroups)
-        nbuild = sum([len(bg["builds"]) for bg in buildgroups])
-        logger.info(f"Found {len(buildgroups)} build groups with {nbuild} builds")
-        builds = []
-        for buildgroup in buildgroups:
-            n = len(buildgroup["builds"])
-            logger.info(f"Getting build summaries for build group {buildgroup['name']}")
-            for i, build in enumerate(buildgroup["builds"], start=1):
-                logger.info("Getting build summary for build %d of %d" % (i, n))
+        groups = self.get_buildgroups(date, buildgroups=buildgroups)
+
+        nbuild = sum(len(group["builds"]) for group in groups)
+        logger.info(f"Found {len(groups)} build groups with {nbuild} builds")
+
+        builds: list[dict] = []
+
+        for group in groups:
+            logger.info(f"Getting build summaries for build group {group['name']}")
+
+            for build in group["builds"]:
                 if self.contains(build["site"], skip_sites):
                     continue
-                build["unixtimestamp"] = buildgroup["unixtimestamp"]
-                params = {"buildid": build["id"]}
-                query = urlencode(params)
-                url = self.build_api_url(path="buildSummary.php", query=query)
-                data = self.get(url)
-                build["compilername"] = data["build"]["compilername"]
-                build["compilerversion"] = data["build"]["compilerversion"]
-                build["generator"] = data["build"]["generator"]
-                build["command"] = data["build"]["command"]
-                build["osname"] = data["build"]["osname"]
-                build["buildgroup"] = buildgroup["name"]
-                if data.get("configure"):
-                    build["build_type"] = find_build_type(data["configure"], build)
-                else:
-                    build["build_type"] = "Unknown"
-                builds.append(build)
+
+                normalized = self.normalize_index_build(build, group)
+                builds.append(normalized)
+
         return builds
+
+    def normalize_index_build(self, build: dict, buildgroup: dict) -> dict:
+        """Normalize a build entry from CDash index.php JSON.
+
+        The index JSON already contains the build summary data needed by the HTML
+        summary.  This method fills in legacy keys that other Canary code expects.
+        """
+        b = dict(build)
+
+        buildname = b.get("buildname") or b.get("name") or ""
+        b["buildname"] = buildname
+        b.setdefault("name", buildname)
+
+        b["buildgroup"] = buildgroup.get("name", "")
+        b["unixtimestamp"] = buildgroup.get("unixtimestamp", 0)
+
+        b.setdefault("site", "")
+        b.setdefault("siteid", None)
+        b.setdefault("id", None)
+
+        # CDash index JSON uses hascompilation; some Canary paths historically
+        # expected hasbuild.  Keep both aliases.
+        if "hascompilation" in b and "hasbuild" not in b:
+            b["hasbuild"] = b["hascompilation"]
+        if "hasbuild" in b and "hascompilation" not in b:
+            b["hascompilation"] = b["hasbuild"]
+
+        b.setdefault("hasupdate", bool(b.get("update")))
+        b.setdefault("hasconfigure", bool(b.get("configure")))
+        b.setdefault("hascompilation", bool(b.get("compilation")))
+        b.setdefault("hasbuild", bool(b.get("compilation")))
+        b.setdefault("hastest", bool(b.get("test")))
+
+        update = dict(b.get("update") or {})
+        update.setdefault("files", "")
+        update.setdefault("errors", 0)
+        update.setdefault("time", "0s")
+        update.setdefault("timefull", 0)
+        b["update"] = update
+
+        configure = dict(b.get("configure") or {})
+        configure.setdefault("command", "")
+        configure.setdefault("error", 0)
+        configure.setdefault("warning", 0)
+        configure.setdefault("warningdiff", 0)
+        configure.setdefault("time", "0s")
+        configure.setdefault("timefull", 0)
+        b["configure"] = configure
+
+        compilation = dict(b.get("compilation") or {})
+        compilation.setdefault("error", 0)
+        compilation.setdefault("warning", 0)
+        compilation.setdefault("time", "0s")
+        compilation.setdefault("timefull", 0)
+        compilation.setdefault("nerrordiffp", None)
+        compilation.setdefault("nerrordiffn", None)
+        compilation.setdefault("nwarningdiffp", None)
+        compilation.setdefault("nwarningdiffn", None)
+        b["compilation"] = compilation
+
+        test = self.empty_test_data()
+        test.update(dict(b.get("test") or {}))
+        b["test"] = test
+
+        b.setdefault("compilername", "")
+        b.setdefault("compilerversion", "")
+        b.setdefault("generator", "")
+        b.setdefault("command", configure.get("command", ""))
+        b.setdefault("osname", "")
+        b.setdefault("buildplatform", b.get("operatingSystemPlatform", ""))
+
+        b["build_type"] = find_build_type(configure, b)
+
+        return b
 
     def get_buildgroups(self, date, buildgroups=None):
         params = {"project": self.project}
@@ -315,82 +385,228 @@ class server:
             tests.extend(build_tests)
         return tests
 
-    def get_failed_tests(self, build, fail_reason=None, skip_missing=False, include_details=True):
-        """Get failed tests from CDash
-
-        Args:
-          fail_reason (str): The reason for the failure
-          skip_missing (bool): Skip missing tests
-          include_details (bool): Return details of each test (slow)
-
-        Returns:
-          ``list`` of ``dict`` describing the ith failed test
-
-        """
-        filters = api_filters()
-        filters.add(field="status", comparison="is", value="Failed")
-        if fail_reason is not None:
-            assert fail_reason in ("Failed", "Diffed", "Timeout")
-            filters.add(field="details", comparison="contains", value=fail_reason)
-        failed = self._get_tests_from_build(
-            build, include_details=include_details, skip_missing=skip_missing, **filters.asdict()
-        )
-        return failed
-
     def get_tests_from_build(self, build, skip_missing=False, include_details=True, **kwargs):
         return self._get_tests_from_build(
             build, skip_missing=skip_missing, include_details=include_details, **kwargs
         )
 
+    def build_test_nodes(self, buildid: int | str) -> list[dict[str, Any]]:
+        key = str(buildid)
+        if key in self._build_test_nodes_cache:
+            return self._build_test_nodes_cache[key]
+
+        query = """
+        query BuildTests($buildid: ID!, $first: Int!, $after: String) {
+        build(id: $buildid) {
+            tests(first: $first, after: $after) {
+            pageInfo {
+                hasNextPage
+                endCursor
+            }
+            edges {
+                node {
+                id
+                name
+                status
+                timeStatusCategory
+                runningTime
+                meanRunningTime
+                stdDevRunningTime
+                startTime
+                details
+                path
+                command
+                }
+            }
+            }
+        }
+        }
+        """
+
+        nodes = self.paginate(query, {"buildid": key}, ("build", "tests"))
+        self._build_test_nodes_cache[key] = nodes
+        return nodes
+
+    def normalize_test_node(self, node: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
+        test_id = node.get("id")
+        status = normalize_cdash_status(node.get("status") or "")
+
+        return {
+            "buildtestid": as_int(test_id),
+            "name": node.get("name") or "",
+            "status": status,
+            "time_status_category": node.get("timeStatusCategory") or "",
+            "site": build.get("site", ""),
+            "siteid": build.get("siteid"),
+            "build": build.get("buildname", ""),
+            "time": float(node.get("runningTime") or 0.0),
+            "execTimeFull": float(node.get("runningTime") or 0.0),
+            "details": node.get("details") or "",
+            "path": node.get("path") or "",
+            "command": node.get("command") or "",
+            "details_link": self.test_details_link(test_id),
+            "summary_link": self.build_summary_link(build.get("id")),
+            "compilername": build.get("compilername", ""),
+            "compilerversion": build.get("compilerversion", ""),
+            "build_type": build.get("build_type", ""),
+            "details_api_url": None,
+        }
+
+    def get_failed_tests(self, build, fail_reason=None, skip_missing=False, include_details=True):
+        filters = api_filters()
+        filters.add(field="status", comparison="is", value="Failed")
+
+        if fail_reason is not None:
+            assert fail_reason in ("Failed", "Diffed", "Timeout")
+            filters.add(field="details", comparison="contains", value=fail_reason)
+
+        return self._get_tests_from_build(
+            build, include_details=include_details, skip_missing=skip_missing, **filters.asdict()
+        )
+
+    def get_failed_test_category_counts(self, build: dict[str, Any]) -> tuple[int, int, int]:
+        """
+        Return (diffed, timeout, failed_other) for one build.
+
+        This intentionally avoids fill_test_details(), since the Build.tests GraphQL
+        node already provides status/details fields needed for categorization.
+        """
+        failed = self.get_failed_tests(build, skip_missing=True, include_details=False)
+
+        num_diffed = 0
+        num_timeout = 0
+
+        for test in failed:
+            text = " ".join(
+                str(test.get(key) or "") for key in ("details", "status", "time_status_category")
+            ).lower()
+
+            if "diffed" in text:
+                num_diffed += 1
+            elif "timeout" in text:
+                num_timeout += 1
+
+        num_failed = max(len(failed) - num_diffed - num_timeout, 0)
+        return num_diffed, num_timeout, num_failed
+
     def _get_tests_from_build(self, build, *args, **kwargs):
-        """Get tests from CDash
+        """Get tests from CDash using GraphQL.
 
-        Returns
-        -------
-        list
-            list[i] is a dictionary describing the ith failed test
-
+        This replaces the old v1 ``viewTest.php`` endpoint.
         """
         skip_missing = kwargs.pop("skip_missing", False)
         include_details = kwargs.pop("include_details", True)
-        kwargs["buildid"] = str(build["id"])
-        query = urlencode(kwargs)
-        if args:
-            query = f"{'&'.join(args)}&{query}"
-        url = self.build_api_url(path="viewTest.php", query=query)
-        tests = server.get(url)
-        for i, test in enumerate(tests["tests"]):
-            if skip_missing and test["status"] == "Missing":
-                test = None
-            else:
-                test["site"] = build["site"]
-                test["siteid"] = build["siteid"]
-                test["build"] = build["buildname"]
-                test["time"] = float(test["execTimeFull"])
-                test["details_link"] = f"{self.baseurl}/{test.pop('detailsLink')}"
-                test["summary_link"] = f"{self.baseurl}/{test.pop('summaryLink')}"
-                test["compilername"] = build["compilername"]
-                test["compilerversion"] = build["compilerversion"]
-                test["build_type"] = build["build_type"]
-                q = urlencode({"buildtestid": test["buildtestid"]})
-                details_api_url = self.build_api_url(path="testDetails.php", query=q)
-                test["details_api_url"] = details_api_url
-                if include_details:
-                    self.fill_test_details(test)
-            # Replace with flattened test
-            tests["tests"][i] = test
-        return [_ for _ in tests["tests"] if _ is not None]
+
+        nodes = self.build_test_nodes(build["id"])
+        rows = [self.normalize_test_node(node, build) for node in nodes]
+
+        rows = [row for row in rows if legacy_filters_match(row, kwargs)]
+
+        if skip_missing:
+            rows = [row for row in rows if row["status"] != "Missing"]
+
+        if include_details:
+            for row in rows:
+                self.fill_test_details(row)
+
+        return rows
 
     def fill_test_details(self, test):
-        query = urlencode({"buildtestid": test["buildtestid"]})
-        url = self.build_api_url(path="testDetails.php", query=query)
-        data = server.get(url)
+        query = """
+        query TestDetails($testid: ID!) {
+        test(id: $testid) {
+            id
+            command
+            output
+            details
+            testMeasurements {
+            name
+            value
+            }
+        }
+        }
+        """
+
+        data = self.graphql(query, {"testid": str(test["buildtestid"])})
         details = data["test"]
-        test["command"] = details["command"]
-        test["revisionurl"] = details["update"]["revisionurl"]
-        for measurement in details["measurements"]:
+
+        test["command"] = details.get("command") or test.get("command", "")
+        test["output"] = details.get("output") or ""
+        test["details"] = details.get("details") or test.get("details", "")
+        test["revisionurl"] = ""
+
+        for measurement in details.get("testMeasurements") or []:
             key = "_".join(measurement["name"].split()).lower()
             test[key] = measurement["value"]
+
+    def build_summary_link(self, buildid: int | str | None) -> str:
+        return f"{self.baseurl}/buildSummary.php?buildid={buildid}"
+
+    def test_details_link(self, testid: int | str | None) -> str:
+        return f"{self.baseurl}/testDetails.php?buildtestid={testid}"
+
+    def graphql(self, query: str, variables: dict[str, object] | None = None) -> dict[str, Any]:
+        """Execute a CDash GraphQL query and return the response data."""
+        payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
+
+        request = Request(
+            f"{self.baseurl}/graphql",
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+
+        with no_proxy():
+            response = urlopen(request)  # nosec B310
+
+        document = json.load(response)
+
+        if errors := document.get("errors"):
+            messages = "; ".join(str(error.get("message", error)) for error in errors)
+            raise RuntimeError(f"CDash GraphQL query failed: {messages}")
+
+        data = document.get("data")
+        if data is None:
+            raise RuntimeError("CDash GraphQL response did not contain a 'data' object")
+
+        return data
+
+    def paginate(
+        self,
+        query: str,
+        variables: dict[str, object],
+        connection_path: tuple[str, ...],
+        *,
+        first: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Page through a Relay-style GraphQL connection and return node dictionaries."""
+        nodes: list[dict[str, Any]] = []
+        after: str | None = None
+
+        while True:
+            page_vars = dict(variables)
+            page_vars["first"] = first
+            page_vars["after"] = after
+
+            data = self.graphql(query, page_vars)
+
+            obj: Any = data
+            for key in connection_path:
+                obj = obj[key]
+
+            connection = obj
+            for edge in connection["edges"]:
+                nodes.append(edge["node"])
+
+            page_info = connection["pageInfo"]
+            if not page_info.get("hasNextPage"):
+                break
+
+            after = page_info.get("endCursor")
+            if not after:
+                break
+
+        return nodes
 
     @staticmethod
     def empty_test_data():
@@ -478,23 +694,125 @@ def urlescape(item):
 
 
 def find_build_type(configure, build):
-    m = re.search(r"-D\s?CMAKE_BUILD_TYPE=(?P<x>\w+)", configure["command"])
+    command = ""
+    if isinstance(configure, dict):
+        command = str(configure.get("command") or "")
+
+    buildname = str(build.get("buildname") or build.get("name") or "")
+
+    m = re.search(r"-D\s?CMAKE_BUILD_TYPE=(?P<x>\w+)", command)
     if m:
         return m.group("x")
-    m = re.search(r"-D\s?CMAKE_BUILD_TYPE:STRING=(?P<x>\w+)", configure["command"])
+
+    m = re.search(r"-D\s?CMAKE_BUILD_TYPE:STRING=(?P<x>\w+)", command)
     if m:
         return m.group("x")
-    m = re.search(r"build_type=(?P<x>\w+)", build["buildname"])
+
+    m = re.search(r"build_type=(?P<x>\w+)", buildname)
     if m:
         return m.group("x")
-    if " dbg " in build["buildname"]:
+
+    if " dbg " in buildname:
         return "Debug"
-    if " opt " in build["buildname"]:
+
+    if " opt " in buildname:
         return "Release"
-    m = re.search(r"AlegraNevada\/(?P<x>\w+)", build["buildname"])
+
+    m = re.search(r"AlegraNevada\/(?P<x>\w+)", buildname)
     if m:
         return m.group("x")
+
+    if build.get("buildType"):
+        return str(build["buildType"])
+
     return "RelWithDebInfo"
+
+
+def normalize_cdash_status(value: str) -> str:
+    text = str(value or "").replace("_", " ").strip().lower()
+    mapping = {
+        "passed": "Passed",
+        "failed": "Failed",
+        "not run": "Missing",
+        "notrun": "Missing",
+        "not_run": "Missing",
+        "missing": "Missing",
+    }
+    return mapping.get(text, text.title())
+
+
+def legacy_filters_match(row: dict[str, Any], filters: dict[str, Any]) -> bool:
+    filtercount = int(filters.get("filtercount", 0) or 0)
+    if filtercount <= 0:
+        return True
+
+    mode = str(filters.get("filtercombine", "and")).lower()
+    checks: list[bool] = []
+
+    for i in range(1, filtercount + 1):
+        field = filters.get(f"field{i}")
+        value = filters.get(f"value{i}")
+        comparison = filters.get(f"comparison{i}")
+
+        if comparison is None:
+            comparison = comparison_from_code(filters.get(f"compare{i}"))
+
+        checks.append(compare_value(row.get(str(field), ""), str(comparison), str(value)))
+
+    if mode == "or":
+        return any(checks)
+    return all(checks)
+
+
+def comparison_from_code(code: Any) -> str:
+    mapping = {
+        "41": "equal",
+        "42": "not equal",
+        "43": "greater than",
+        "44": "less than",
+        "61": "is",
+        "62": "is not",
+        "63": "contains",
+        "64": "does not contain",
+        "65": "endswith",
+    }
+    return mapping.get(str(code), "contains")
+
+
+def compare_value(actual: Any, comparison: str, expected: str) -> bool:
+    actual_s = str(actual)
+    comparison = comparison.lower()
+
+    if comparison in ("equal", "is"):
+        return actual_s == expected
+    if comparison in ("not equal", "is not"):
+        return actual_s != expected
+    if comparison == "contains":
+        return expected in actual_s
+    if comparison == "does not contain":
+        return expected not in actual_s
+    if comparison == "startswith":
+        return actual_s.startswith(expected)
+    if comparison == "endswith":
+        return actual_s.endswith(expected)
+    if comparison == "greater than":
+        try:
+            return float(actual_s) > float(expected)
+        except ValueError:
+            return False
+    if comparison == "less than":
+        try:
+            return float(actual_s) < float(expected)
+        except ValueError:
+            return False
+    return False
+
+
+def as_int(value: Any) -> int | str:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def test_build_type():

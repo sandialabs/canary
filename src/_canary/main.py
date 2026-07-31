@@ -183,10 +183,14 @@ def print_banner() -> None:
 
 
 def print_current_config() -> None:
+    logger = logging.get_logger(__name__)
     fh = io.StringIO()
-    config.dump(fh)
-    print("Current canary configuration:")
-    print(fh.getvalue())
+    try:
+        config.dump(fh)
+        print("Current canary configuration:")
+        print(fh.getvalue())
+    except Exception:
+        logger.debug("Exception occurred getting current canary configuration")
 
 
 def console_main() -> int:
