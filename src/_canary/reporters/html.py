@@ -487,10 +487,13 @@ document.addEventListener("DOMContentLoaded", () => {
         )
 
     def format_measurement(self, value: object) -> str:
+        scalar = (int, bool, str, float)
         if isinstance(value, float):
             return f"{value:.8g}"
         if isinstance(value, (int, bool, str)):
             return str(value)
+        if isinstance(value, dict) and all(isinstance(x, scalar) for x in value.values()):
+            return ", ".join(f"{k}={self.format_measurement(v)}" for k, v in value.items())
         try:
             return json.dumps(value, indent=2)
         except Exception:
