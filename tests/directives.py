@@ -538,34 +538,30 @@ if __name__ == '__main__':
     assert workspace.db.get_results()
 
 
-def test_skipif_directive(tmp_path, monkeypatch):
-    root = tmp_path / "skipif"
-    root.mkdir()
-
-    write(
-        root / "f1.pyt",
-        """\
-import os
+def test_skipif_directive(tmp_path):
+    T = """
 import sys
 import canary
-canary.directives.skipif(os.getenv('CANARY_BAZ') is not None, reason='just because')
+canary.directives.skipif({skip_value}, reason='just because')
 def test():
-    pass
+    {body}
 if __name__ == '__main__':
     sys.exit(test())
-""",
-    )
-
+"""
+    root: Path = tmp_path / "skipif"
+    root.mkdir()
+    write(root / "f1.pyt", T.format(skip_value="False", body="pass"))
     run_specs(root, expected_returncode=0)
     assert set(os.listdir(root / "TestResults")) == {".canary-view.json", "f1"}
 
-    root_skipped = tmp_path / "skipif_masked"
-    root_skipped.mkdir()
-    write(root_skipped / "f1.pyt", (root / "f1.pyt").read_text())
-
-    monkeypatch.setenv("CANARY_BAZ", "1")
-    with working_dir(root_skipped), canary.config.override():
-        workspace, specs = create_workspace_and_collect(root_skipped, on_options=["baz"])
+    root = tmp_path / "skipif_masked"
+    root.mkdir()
+    write(root / "f1.pyt", T.format(skip_value="True", body='assert 0, "should never run"'))
+    with working_dir(root), canary.config.override():
+        workspace, specs = create_workspace_and_collect(root)
+        assert len(specs) == 1
+        assert specs[0].mask
+        assert specs[0].mask.reason == "just because"
         with pytest.raises(StopExecution) as exc:
             workspace.run(specs, only="all")
         assert exc.value.exit_code == 7
