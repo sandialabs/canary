@@ -85,6 +85,7 @@ def canary_hpc_batch_runner(batch, backend) -> "HPCConnectDistRunner | None":
 
     if hasattr(batch, "hostname") and backend.name == "remote_subprocess":
         return HPCConnectDistRunner(backend)
+    return None
 
 
 @canary.hookimpl(tryfirst=True)

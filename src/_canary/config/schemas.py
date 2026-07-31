@@ -118,7 +118,7 @@ class EnvarSchema(Schema):
         kwargs["is_root_eval"] = False
         data = super().validate(data, **kwargs)
         if is_root_eval:
-            validated = {}
+            validated: dict[str, typing.Any] = {}
             for key, val in data.items():
                 name = key[7:].lower()
                 if name.startswith(("timeout_",)):

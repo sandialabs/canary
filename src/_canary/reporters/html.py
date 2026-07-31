@@ -904,6 +904,8 @@ def serve_html_report(entrypoint: Path | str, *, host: str = "127.0.0.1", port: 
 
     with http.server.ThreadingHTTPServer((host, port), handler) as server:
         bound_host, bound_port = server.server_address[:2]
+        if isinstance(bound_host, bytes):
+            bound_host = bound_host.decode("utf-8", errors="replace")
         url = f"http://{bound_host}:{bound_port}/index.html"
         print(f"HTML report served at {url}", flush=True)
 

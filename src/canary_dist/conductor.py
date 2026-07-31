@@ -122,8 +122,7 @@ class DistributedPoolConductor:
         parser.description = (
             "Batch jobs and run batches remotely across a distributed pool of machines."
         )
-        group = "distributed pool execution"
-        group = super(canary.Parser, parser).add_argument_group(group)
+        group = super(canary.Parser, parser).add_argument_group("distributed pool execution")
         DistributedPoolConductor.add_server_argument(group)
         group.add_argument(
             "--tags",

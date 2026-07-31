@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterator
 from typing import Literal
+from typing import cast
 
 from . import config
 from .job import Job
@@ -25,23 +26,28 @@ if TYPE_CHECKING:
     from .workspace import Session
     from .workspace import Workspace
 
+ViewWhen = Literal["always", "never", "on_success", "on_failure"]
+ViewOnly = Literal["all", "failed", "not_pass", "passed"]
+ViewMode = Literal["symlink", "hardlink", "copy"]
+
+
 logger = logging.get_logger(__name__)
 
 
 @dataclasses.dataclass
 class ViewSettings:
     name: str = "TestResults"
-    when: Literal["always", "never", "on_success", "on_failure"] = "always"
-    only: Literal["all", "failed", "not_pass", "passed"] = "all"
-    mode: Literal["symlink", "hardlink", "copy"] = "symlink"
+    when: ViewWhen = "always"
+    only: ViewOnly = "all"
+    mode: ViewMode = "symlink"
 
     @classmethod
     def default(cls) -> "ViewSettings":
         view_cfg = config.get("workspace:view") or {}
-        name = view_cfg.get("name") or "TestResults"
-        when = view_cfg.get("when") or "always"
-        only = view_cfg.get("only") or "all"
-        mode = view_cfg.get("mode") or "symlink"
+        name = str(view_cfg.get("name") or "TestResults")
+        when = cast(ViewWhen, view_cfg.get("when") or "always")
+        only = cast(ViewOnly, view_cfg.get("only") or "all")
+        mode = cast(ViewMode, view_cfg.get("mode") or "symlink")
         return ViewSettings(name=name, when=when, only=only, mode=mode)
 
     def __serialize__(self) -> dict[str, Any]:
@@ -443,7 +449,7 @@ class ViewManager:
             try:
                 if self.settings.always_disabled():
                     made_new = False
-                    return
+                    return None
                 view = ResultsView(root=self.workspace.root.parent, settings=self.settings)
                 # There should not normally be an existing view at this path after
                 # the backup rename. Keep this for robustness, e.g. changed view
@@ -457,6 +463,7 @@ class ViewManager:
                 else:
                     view.unlink(missing_ok=True)
                     made_new = False
+                    return None
             finally:
                 if made_new:
                     if bak_dir is not None:

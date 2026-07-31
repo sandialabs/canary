@@ -845,7 +845,7 @@ class Reporter:
 
     def add_table_columns(self, table: Table, columns: tuple[str, ...]) -> None:
         for name in columns:
-            kwds = {}
+            kwds: dict[str, Any] = {}
             if name == "Job":
                 kwds["overflow"] = "fold"
             elif name == "Details":
