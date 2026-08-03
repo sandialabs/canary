@@ -33,13 +33,9 @@ def enabled(report_type: str) -> bool:
     from .. import config
 
     reports = config.getoption("report")
-    if reports == []:
-        return False
-    elif reports is not None:
-        return "none" not in reports and report_type in reports
-    elif running_in_ci():
-        return False
-    return report_type == "html"
+    if reports is not None:
+        return bool(reports) and "none" not in reports and report_type in reports
+    return not running_in_ci() and report_type == "html"
 
 
 def running_in_ci() -> bool:
