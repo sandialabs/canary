@@ -1,3 +1,4 @@
+import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
@@ -31,8 +32,18 @@ def canary_cmdline_modifyargs(parser: "Parser", args: Namespace) -> None:
 def enabled(report_type: str) -> bool:
     from .. import config
 
-    reports = config.getoption("report") or ["html"]
-    return "none" not in reports and report_type in reports
+    reports = config.getoption("report")
+    if reports == []:
+        return False
+    elif reports is not None:
+        return "none" not in reports and report_type in reports
+    elif running_in_ci():
+        return False
+    return report_type == "html"
+
+
+def running_in_ci() -> bool:
+    return any(os.getenv(name) for name in ("GITHUB_ACTIONS", "GITLAB_CI", "CI"))
 
 
 class CanaryReporter:
