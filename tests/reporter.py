@@ -25,6 +25,8 @@ from _canary.workspace import Workspace
 
 @pytest.fixture(scope="module")
 def setup(tmp_path_factory):
+    from _canary import config
+
     root = tmp_path_factory.mktemp("canary-reporter")
 
     with working_dir(root):
@@ -44,7 +46,9 @@ if __name__ == "__main__":
 
         workspace = Workspace.create(root)
         specs = workspace.collect({str(root): []})
-        session = workspace.run(specs, only="all")
+        with config.override():
+            setattr(config.options, "report", ["html"])
+            session = workspace.run(specs, only="all")
 
         ns = SimpleNamespace(
             tmp_path=root,
