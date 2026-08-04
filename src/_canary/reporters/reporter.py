@@ -22,8 +22,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl
 def canary_cmdline_modifyargs(parser: "Parser", args: Namespace) -> None:
-    if hasattr(args, "report"):
-        report_formats = args.report or ["html"]
+    if report_formats := getattr(args, "report", None):
         if "none" in report_formats:
             report_formats = ["none"]
         args.report = report_formats
