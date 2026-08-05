@@ -58,6 +58,10 @@ extensions = [
 ]
 autodoc_member_order = "bysource"
 autodoc_default_options = {"ignore-module-all": True}
+autodoc_mock_imports = ["flux"]
+autodoc_typehints_format = "fully-qualified"
+python_use_unqualified_type_names = False
+autodoc_type_aliases = {"type": "builtins.type"}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

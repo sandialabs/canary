@@ -4,13 +4,13 @@
 
 
 
-.. _canary.select:
+.. _canary.reporters.markdown:
 
-select
-======
+markdown
+========
 
-.. automodule:: _canary.select
+.. automodule:: _canary.reporters.markdown
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: rules
+   :exclude-members: type

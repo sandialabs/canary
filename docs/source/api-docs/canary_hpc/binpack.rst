@@ -13,3 +13,4 @@ binpack
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: used, down, right

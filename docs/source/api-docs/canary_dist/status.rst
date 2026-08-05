@@ -4,13 +4,12 @@
 
 
 
-.. _canary.select:
+.. _canary_dist.status:
 
-select
+status
 ======
 
-.. automodule:: _canary.select
+.. automodule:: canary_dist.status
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: rules

@@ -28,6 +28,7 @@ _canary
    plugins/index
    queue
    queue_executor
+   reporters/index
    rerun
    resolve_dependency
    resource_pool/index

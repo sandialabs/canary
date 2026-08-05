@@ -14,7 +14,7 @@ Authors
 A total of 1 authors contributed 25 commits to this release.
 
 Pull requests referenced for 2026.04.16
---------------------------------------
+---------------------------------------
 
 * `#72 <https://github.com/sandialabs/canary/pull/72>`__
 * `#98 <https://github.com/sandialabs/canary/pull/98>`__

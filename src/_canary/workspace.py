@@ -893,10 +893,15 @@ class Workspace:
             except IndexError:
                 raise ValueError(f"{id}: no matching test job found in {self.root}")
         # Do the full (slow) lookup
+        candidates: list[Job] = []
         jobs = self.load_jobs()
         for job in jobs:
             if job.spec.matches(root):
                 return job
+            elif job.spec.matches(root, fuzzy=True):
+                candidates.append(job)
+        if candidates:
+            return candidates[0]
         raise ValueError(f"{root}: no matching test job found in {self.root}")
 
     def find_jobspec(self, root: str) -> "JobSpec":

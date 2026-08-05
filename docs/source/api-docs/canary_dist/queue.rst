@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.builtin.markdown:
+.. _canary_dist.queue:
 
-markdown
-========
+queue
+=====
 
-.. automodule:: _canary.plugins.builtin.markdown
+.. automodule:: canary_dist.queue
    :members:
    :undoc-members:
    :show-inheritance:

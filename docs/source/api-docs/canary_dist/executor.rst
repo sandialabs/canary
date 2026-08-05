@@ -4,13 +4,12 @@
 
 
 
-.. _canary.select:
+.. _canary_dist.executor:
 
-select
-======
+executor
+========
 
-.. automodule:: _canary.select
+.. automodule:: canary_dist.executor
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: rules

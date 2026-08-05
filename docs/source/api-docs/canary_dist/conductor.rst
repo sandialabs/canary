@@ -4,13 +4,12 @@
 
 
 
-.. _canary.select:
+.. _canary_dist.conductor:
 
-select
-======
+conductor
+=========
 
-.. automodule:: _canary.select
+.. automodule:: canary_dist.conductor
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: rules

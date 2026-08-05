@@ -30,6 +30,8 @@ class DistributedResourcePoolAdapter:
 
     Checkout returns a canary-core allocation object:
 
+    .. code-block:: python
+
         {
             "metadata": {
                 "source": "canary-dist",
@@ -200,6 +202,8 @@ class DistributedResourcePoolAdapter:
         """Checkout resources from the distributed server.
 
         Returns a canary-core allocation object:
+
+        .. code-block:: python
 
             {
                 "metadata": {...},

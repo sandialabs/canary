@@ -4,13 +4,12 @@
 
 
 
-.. _canary.select:
+.. _canary_dist.batchspec:
 
-select
-======
+batchspec
+=========
 
-.. automodule:: _canary.select
+.. automodule:: canary_dist.batchspec
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: rules

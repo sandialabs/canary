@@ -15,10 +15,10 @@ A multi-page HTML report of a test session can be generated after the session ha
     :ellipsis: 0
     :setup: rm -rf .canary TestResults
 
-.. command-output:: canary report html create
+.. command-output:: canary report html
     :nocache:
     :cwd: /examples
 
-.. command-output:: cat TestResults/canary-report.html
+.. command-output:: cat HTML/index.html
     :nocache:
     :cwd: /examples

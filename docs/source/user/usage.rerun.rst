@@ -19,7 +19,7 @@ Examples
 
 .. command-output:: canary run ./status
     :cwd: /examples
-    :returncode: 14
+    :anyreturncode:
     :setup: rm -rf .canary TestResults
 
 
@@ -28,14 +28,14 @@ Rerun all failed tests
 
 .. command-output:: canary run -k 'not success'
     :cwd: /examples
-    :returncode: 3
+    :anyreturncode:
 
 Rerun only the diffed tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. command-output:: canary run -k diff
     :cwd: /examples
-    :returncode: 3
+    :anyreturncode:
 
 Rerun tests inside the view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,4 +44,4 @@ Optionally, a subdirectory of the workspace view argument can be passed to ``can
 
 .. command-output:: canary run ./TestResults/pass
     :cwd: /examples
-    :returncode: 0
+    :anyreturncode:

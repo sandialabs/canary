@@ -2,9 +2,16 @@
 
    SPDX-License-Identifier: MIT
 
-plugins.subcommands.common
-==========================
+canary_dist
+===========
 
 .. toctree::
    :maxdepth: 1
 
+   adapter
+   batchexec
+   batchspec
+   conductor
+   executor
+   queue
+   status
