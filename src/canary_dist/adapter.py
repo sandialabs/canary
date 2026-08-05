@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 import yaml
 
 import canary
+from _canary.resource_pool.rpool import NodeRequest
 from _canary.resource_pool.rpool import Outcome
 from _canary.resource_pool.rpool import ResourceUnavailable
 
@@ -146,7 +147,11 @@ class DistributedResourcePoolAdapter:
 
     def accommodates_remote(self, case: canary.TestCase) -> Outcome:
         """Ask the server whether a case can be accommodated."""
-        p = self.curl("/accommodates", data={"resources": case.required_resources()})
+        try:
+            resources = _single_node_resources(case.required_resources())
+        except ResourceUnavailable as e:
+            return Outcome(False, reason=str(e))
+        p = self.curl("/accommodates", data={"resources": resources})
         data = self.parse_json_response(p)
         return Outcome(data["accommodates"], reason=data["reason"])
 
@@ -156,12 +161,12 @@ class DistributedResourcePoolAdapter:
         This is an approximation based on the resource counts read during
         adapter initialization. Actual checkout is server-authoritative.
         """
-        required_resources = [
-            member
-            for member in case.required_resources()
-            if member["type"] not in ("node", "nodes")
-        ]
-
+        request = case.required_resources()
+        if len(request) != 1:
+            return Outcome(
+                False, reason="Distributed resource pool does not support multi-node requests"
+            )
+        required_resources = request[0].resources
         for counts in self.resource_counts.values():
             slots_needed: Counter[str] = Counter()
             missing: set[str] = set()
@@ -191,7 +196,7 @@ class DistributedResourcePoolAdapter:
 
         return Outcome(False, reason="Resource requirements could not be accommodated")
 
-    def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, Any]:
+    def checkout(self, request: list[NodeRequest], **kwds: Any) -> dict[str, Any]:
         """Checkout resources from the distributed server.
 
         Returns a canary-core allocation object:
@@ -209,12 +214,8 @@ class DistributedResourcePoolAdapter:
         timeout: float = kwds.get("timeout", 60.0 * 30.0)
 
         # The distributed server does not support multi-node submission.
-        request_data = {
-            "resources": [member for member in request if member["type"] not in ("node", "nodes")],
-            "timeout": timeout,
-            "tags": tags,
-            "groups": groups,
-        }
+        resources = _single_node_resources(request)
+        request_data = {"resources": resources, "timeout": timeout, "tags": tags, "groups": groups}
 
         p = self.curl("/checkout", data=request_data)
         data = self.parse_json_response(p)
@@ -322,3 +323,9 @@ def _with_node(
             result[rtype].append(item)
 
     return result
+
+
+def _single_node_resources(request: list[NodeRequest]) -> list[dict[str, Any]]:
+    if len(request) != 1:
+        raise ResourceUnavailable("Distributed resource pool does not support multi-node requests")
+    return request[0].resources

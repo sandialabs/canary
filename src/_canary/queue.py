@@ -17,6 +17,7 @@ from .util import logging
 from .util.time import hhmmss
 
 if TYPE_CHECKING:
+    from .resource_pool.rpool import NodeRequest
     from .resource_pool.rpool import ResourcePool
 
 logger = logging.get_logger(__name__)
@@ -35,7 +36,7 @@ class HeapSlot:
     # Negative cost so that heapq is max-heap
     cost: float = field(init=False, repr=False)
     job: BaseJob = field(compare=False)
-    resources: list[dict[str, Any]] = field(compare=False, init=False, repr=False)
+    resources: list["NodeRequest"] = field(compare=False, init=False, repr=False)
 
     def __post_init__(self):
         self.cost = -self.job.cost()

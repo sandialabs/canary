@@ -29,6 +29,8 @@ from _canary.util.time import time_in_seconds
 from .status import BatchStatus
 
 if TYPE_CHECKING:
+    from _canary.resource_pool.rpool import NodeRequest
+
     from .batchexec import HPCConnectRunner
 
 logger = canary.get_logger(__name__)
@@ -55,8 +57,12 @@ class BatchSpec:
     def __len__(self) -> int:
         return len(self.jobs)
 
-    def required_resources(self) -> list[dict[str, Any]]:
-        return [{"type": "cpus", "slots": 1}]
+    def required_resources(self) -> list["NodeRequest"]:
+        from _canary.resource_pool.rpool import NodeRequest
+
+        node_request = NodeRequest()
+        node_request.add("cpus", 1)
+        return [node_request]
 
 
 class TestBatch(BaseJob):
@@ -234,7 +240,7 @@ class TestBatch(BaseJob):
         self._allocation["state"] = "inactive"
         return freed
 
-    def required_resources(self) -> list[dict[str, Any]]:
+    def required_resources(self) -> list["NodeRequest"]:
         return self.spec.required_resources()
 
     def dependency_batches_submitted(self) -> bool:

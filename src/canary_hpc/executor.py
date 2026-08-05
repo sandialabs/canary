@@ -52,27 +52,9 @@ class CanaryHPCExecutor:
         return session.returncode
 
     def modify_specs(self, specs: list[canary.JobSpec]) -> None:
-        # If a test requests nodes, fill in per-node resources so checkout
-        # reserves full nodes. Do not multiply by node_count here; topology-aware
-        # checkout applies the resource request independently to each node.
-        canonical_name = lambda s: f"{s}s" if not s.endswith("s") else s
-
-        counts: dict[str, int] = {}
-        for rtype in self.backend.resource_types():
-            name = canonical_name(rtype)
-            try:
-                counts[name] = self.backend.count_per_node(rtype)
-            except ValueError:
-                counts[name] = self.backend.count_per_node(name)
-
         for spec in specs:
             if spec.id not in self.jobs:
                 spec.mask = canary.Mask(True, reason=f"Job not in batch {self.batch}")
-
-            params = spec.parameters | spec.meta_parameters
-            if params.get("nodes"):
-                for rtype, count in counts.items():
-                    spec.meta_parameters.setdefault(rtype, count)
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:

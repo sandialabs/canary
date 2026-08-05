@@ -5,12 +5,16 @@
 import json
 import os
 from collections import Counter
+from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
 import canary_hpc.batchspec as bs
 from _canary.testexec import ExecutionSpace
 from _canary.util.serialize import serialize
+
+if TYPE_CHECKING:
+    from _canary.resource_pool.rpool import NodeRequest
 
 logger = canary.get_logger(__name__)
 
@@ -45,29 +49,38 @@ class TestBatch(bs.TestBatch):
     def gpus(self, arg: int) -> None:
         self._gpus = arg
 
-    def required_resources(self) -> list[dict[str, Any]]:
+    def required_resources(self) -> list["NodeRequest"]:
+        from _canary.resource_pool.rpool import NodeRequest
+
         # For distributed batches, request the maximum resources needed by any
         # single job in the batch. Jobs in the batch execute on one remote host.
         counts: Counter[str] = Counter()
 
         for job in self:
+            node_requests = job.required_resources()
+
+            if len(node_requests) != 1:
+                # This should normally be prevented during selection, but keep
+                # the failure mode explicit.
+                raise ValueError(
+                    f"Distributed execution does not support multi-node job {job.id[:7]}"
+                )
+
             local_counts: Counter[str] = Counter()
-            for member in job.required_resources():
-                rtype, slots = member["type"], int(member["slots"])
-                if rtype in ("node", "nodes"):
-                    continue
-                local_counts[rtype] += slots
+            for member in node_requests[0].resources:
+                rtype = member["type"]
+                local_counts[rtype] += int(member["slots"])
 
             for rtype, count in local_counts.items():
-                if count > counts[rtype]:
-                    counts[rtype] = count
+                counts[rtype] = max(counts[rtype], count)
 
         counts["cpus"] = max(counts["cpus"], self.cpus)
 
-        group: list[dict[str, Any]] = []
+        req = NodeRequest()
         for rtype, count in counts.items():
-            group.extend([{"type": rtype, "slots": 1} for _ in range(count)])
-        return group
+            req.add(rtype, count)
+
+        return [req]
 
     def assign_resources(self, allocation: dict[str, Any]) -> None:  # type: ignore[override]
         metadata = allocation.get("metadata", {})

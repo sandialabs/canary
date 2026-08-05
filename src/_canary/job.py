@@ -42,6 +42,7 @@ from .util.string import SimpleTemplate
 if TYPE_CHECKING:
     from .jobspec import JobSpec
     from .jobspec import Mask
+    from .resource_pool.rpool import NodeRequest
 
 logger = logging.get_logger(__name__)
 
@@ -209,7 +210,7 @@ class BaseJob(ABC):
         return False
 
     @abstractmethod
-    def required_resources(self) -> list[dict[str, Any]]: ...
+    def required_resources(self) -> list["NodeRequest"]: ...
 
     @abstractmethod
     def assign_resources(self, arg: dict[str, dict]) -> None: ...
@@ -527,13 +528,34 @@ class Job(BaseJob):
         self._allocation["state"] = "inactive"
         return freed
 
-    def required_resources(self) -> list[dict[str, Any]]:
-        reqd: list[dict[str, Any]] = []
+    def required_resources(self) -> list["NodeRequest"]:
+        from .resource_pool.rpool import NodeRequest
+
+        nodes = int(self.rparameters.get("nodes") or 1)
+        if nodes <= 0:
+            nodes = 1
+
+        requests = [NodeRequest() for _ in range(nodes)]
+
+        # Multi-node tests are treated as whole-node reservations.
+        # The per-node resource entries are minimum requirements for placement.
+        if nodes > 1:
+            for request in requests:
+                request.exclusive = True
+
         for name, value in self.rparameters.items():
             if name == "nodes":
                 continue
-            reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
-        return reqd
+
+            total = int(value)
+            if total <= 0:
+                continue
+
+            counts = split_count(total, nodes)
+            for request, count in zip(requests, counts):
+                request.add(name, count)
+
+        return requests
 
     def is_done(self) -> bool:
         return self.state.is_done()
@@ -802,38 +824,37 @@ class Job(BaseJob):
         return variables
 
     def get_resource_parameters_from_spec(self) -> dict[str, int]:
-        """Default parameters used to set up resources required by test job"""
         resource_types: set[str] = set(config.resource_manager.types())
         p = self.spec.parameters | self.spec.meta_parameters
         rparameters: dict[str, int] = {}
+
         for key in p.keys() & (resource_types | {"nodes"}):
             value = p[key]
             if not isinstance(value, int):
                 raise InvalidTypeError(key, value)
             rparameters[key] = value
-
-        # Make sure required resource parameters exist
-        cpus: int | None = rparameters.get("cpus")
-        gpus: int | None = rparameters.get("gpus")
-        nodes: int | None = rparameters.get("nodes")
-        rpcount = config.resource_manager.count_per_node
-        cpus_per_node: int = rpcount(type="cpu") or cpu_count()
-        gpus_per_node: int = rpcount(type="gpu") or 0
-        if nodes is not None:
-            if cpus is None:
-                cpus = nodes * cpus_per_node
-            if gpus is None:
-                gpus = nodes * gpus_per_node
-        else:
-            if cpus is None:
-                cpus = 1
-            if gpus is None:
-                gpus = 0
-            nodes = max(1, ceil_div(cpus, cpus_per_node))
-            if gpus_per_node > 0:
-                nodes = max(nodes, ceil_div(gpus, gpus_per_node))
-        assert cpus is not None and gpus is not None and nodes is not None
-        rparameters.update({"cpus": cpus, "gpus": gpus, "nodes": nodes})
+        nodes = rparameters.get("nodes")
+        if nodes is None:
+            nodes = 1
+            for rtype, count in rparameters.items():
+                if rtype == "nodes":
+                    continue
+                if count <= 0:
+                    continue
+                slots_per_node = config.resource_manager.slots_per_node(rtype)
+                # CPU fallback for normal local cases.
+                if slots_per_node <= 0 and rtype in ("cpu", "cpus"):
+                    slots_per_node = cpu_count()
+                # If the resource is unknown/unavailable, leave node count alone.
+                # ResourceCapacityRule / ResourcePool.accommodates() will report
+                # the actual insufficiency later.
+                if slots_per_node <= 0:
+                    continue
+                nodes = max(nodes, ceil_div(count, slots_per_node))
+        rparameters["nodes"] = nodes
+        # Preserve default CPU/GPU resource parameters.
+        rparameters.setdefault("cpus", 1)
+        rparameters.setdefault("gpus", 0)
         return rparameters
 
     def teardown(self) -> None:
@@ -961,6 +982,12 @@ def find_cache_dir(start: Path) -> Path | None:
 def ceil_div(a: int, b: int) -> int:
     assert b != 0, "denominator must not be 0"
     return (a + b - 1) // b
+
+
+def split_count(total: int, parts: int) -> list[int]:
+    assert parts > 0
+    q, r = divmod(total, parts)
+    return [q + 1 if i < r else q for i in range(parts)]
 
 
 class MissingSourceError(Exception):

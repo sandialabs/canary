@@ -54,8 +54,15 @@ class DistributedPoolConductor:
     def canary_select_modifyitems(self, selector: canary.Selector) -> None:
         width = canary.config.getoption("dist_batch_width") or 8
         for spec in selector.specs:
+            if spec.mask:
+                continue
             parameters = spec.parameters | spec.meta_parameters
-            if parameters.get("cpus", 1) > width:
+            if int(parameters.get("nodes", 1)) > 1:
+                spec.mask = canary.Mask.masked(
+                    "Distributed execution does not support multi-node tests"
+                )
+                continue
+            if int(parameters.get("cpus", 1)) > width:
                 spec.mask = canary.Mask.masked("Required number of CPUs exceeds batch width")
 
     @canary.hookimpl

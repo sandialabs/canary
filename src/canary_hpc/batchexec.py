@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 import dataclasses
 import json
-import math
 import os
 import shlex
 import signal
@@ -174,42 +173,18 @@ class HPCConnectRunner:
         return failures
 
     def nodes_required(self, batch: "TestBatch") -> int:
-        """Return number of scheduler nodes required to run jobs in batch."""
-        max_count_per_type: dict[str, int] = {}
-        explicit_nodes = 1
+        """Return number of scheduler nodes required to run jobs in batch.
 
+        With the NodeRequest layout, node count is explicit:
+
+            len(job.required_resources())
+
+        Canary is not doing sophisticated placement here. The batch allocation
+        must be large enough to run the largest node-shaped job in the batch.
+        """
+        node_count = 1
         for job in batch.jobs:
-            reqd_resources = job.required_resources()
-            total_slots_per_type: dict[str, int] = {}
-
-            for member in reqd_resources:
-                rtype = member["type"]
-                slots = int(member["slots"])
-
-                if rtype in ("node", "nodes"):
-                    explicit_nodes = max(explicit_nodes, slots)
-                    continue
-
-                rtype = _canonical_resource_type(rtype)
-                total_slots_per_type[rtype] = total_slots_per_type.get(rtype, 0) + slots
-
-            for rtype, count in total_slots_per_type.items():
-                max_count_per_type[rtype] = max(max_count_per_type.get(rtype, 0), count)
-
-        node_count = explicit_nodes
-
-        for rtype, count in max_count_per_type.items():
-            try:
-                count_per_node = self.backend.count_per_node(rtype)
-            except ValueError:
-                try:
-                    count_per_node = self.backend.count_per_node(_singular_resource_type(rtype))
-                except ValueError:
-                    continue
-
-            if count_per_node > 0:
-                node_count = max(node_count, int(math.ceil(count / count_per_node)))
-
+            node_count = max(node_count, len(job.required_resources()))
         return node_count
 
 

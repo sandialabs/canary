@@ -5,6 +5,7 @@
 from pathlib import Path
 from typing import Any
 
+from _canary.resource_pool.rpool import NodeRequest
 from _canary.status import Status
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
@@ -44,11 +45,11 @@ class FakeJob:
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
 
-    def required_resources(self) -> list[dict[str, Any]]:
-        request: list[dict[str, Any]] = []
-        request.extend({"type": "cpus", "slots": 1} for _ in range(self.cpus))
-        request.extend({"type": "gpus", "slots": 1} for _ in range(self.gpus))
-        return request
+    def required_resources(self) -> list[NodeRequest]:
+        request = NodeRequest()
+        request.add("cpus", self.cpus)
+        request.add("gpus", self.gpus)
+        return [request]
 
     def refresh(self) -> None:
         pass
@@ -150,8 +151,8 @@ def test_required_resources_uses_max_per_job_resources(tmp_path):
 
     request = batch.required_resources()
 
-    assert request.count({"type": "cpus", "slots": 1}) == 4
-    assert request.count({"type": "gpus", "slots": 1}) == 2
+    assert request[0].resources.count({"type": "cpus", "slots": 1}) == 4
+    assert request[0].resources.count({"type": "gpus", "slots": 1}) == 2
 
 
 def test_setup_writes_resource_pool_and_allocation(tmp_path):

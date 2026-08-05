@@ -7,9 +7,17 @@ from typing import Any
 
 import pytest
 
+from _canary.resource_pool.rpool import NodeRequest
 from _canary.resource_pool.rpool import ResourceUnavailable
 from canary_dist.adapter import DistributedResourcePoolAdapter
 from canary_dist.adapter import _with_node
+
+
+def counted_node_request(**counts: int) -> NodeRequest:
+    req = NodeRequest()
+    for rtype, count in counts.items():
+        req.add(rtype, count)
+    return req
 
 
 class FakeAdapter(DistributedResourcePoolAdapter):
@@ -136,7 +144,7 @@ def test_checkout_returns_core_allocation(monkeypatch):
         }
     )
 
-    allocation = adapter.checkout([{"type": "cpus", "slots": 1}], timeout=123.0)
+    allocation = adapter.checkout([counted_node_request(cpus=1)], timeout=123.0)
 
     assert allocation == {
         "metadata": {
@@ -173,7 +181,7 @@ def test_checkout_raises_when_server_reports_unavailable(monkeypatch):
     )
 
     with pytest.raises(ResourceUnavailable):
-        adapter.checkout([{"type": "cpus", "slots": 1}])
+        adapter.checkout([counted_node_request(cpus=1)])
 
 
 def test_checkin_uses_transaction_id():
