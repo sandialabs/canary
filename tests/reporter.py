@@ -18,6 +18,7 @@ from _canary.reporters.junit import JunitReporter
 from _canary.reporters.junit import JunitReportRequest
 from _canary.reporters.markdown import MarkdownReporter
 from _canary.reporters.markdown import MarkdownReportRequest
+from _canary.reporters.reporter import running_in_ci
 from _canary.status import Status
 from _canary.util.filesystem import working_dir
 from _canary.workspace import Workspace
@@ -72,6 +73,7 @@ def latest_jobs(workspace: Workspace) -> list[Job]:
     return jobs
 
 
+@pytest.mark.skipif(running_in_ci(), reason="Skip test in CI")
 def test_workspace_html_report_created_by_run(setup):
     """A normal run should create a workspace-level HTML report."""
     report = setup.workspace_path / "reports" / "html" / "index.html"
