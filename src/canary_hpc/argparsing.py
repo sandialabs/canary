@@ -15,8 +15,6 @@ from _canary.util.string import csvsplit
 from _canary.util.string import strip_quotes
 from _canary.util.time import time_in_seconds
 
-from . import binpack
-
 logger = canary.get_logger(__name__)
 
 
@@ -51,16 +49,20 @@ class CanaryHPCBatchExec(argparse.Action):
     def parse(value: str) -> dict[str, str]:
         spec: dict[str, str] = {}
         for arg in csvsplit(value):
-            if match := re.search(r"^backend[:=](.*)$", arg.lower()):
+            lowered = arg.lower()
+
+            if match := re.search(r"^backend[:=](.*)$", lowered):
                 spec["backend"] = match.group(1)
-            elif match := re.search(r"^batch[:=](.*)$", arg.lower()):
+            elif match := re.search(r"^batch[:=](.*)$", lowered):
                 spec["batch"] = match.group(1)
-            elif match := re.search(r"^job[:=](.*)$", arg.lower()):
+            elif match := re.search(r"^job[:=](.*)$", lowered):
                 spec["job"] = match.group(1)
+
         if "backend" not in spec:
             raise ValueError("Batch exec spec missing required key 'backend'")
         if "batch" not in spec:
             raise ValueError("Batch exec spec missing required key 'batch'")
+
         return spec
 
 
@@ -77,27 +79,37 @@ class CanaryHPCBatchSpec(argparse.Action):
     @staticmethod
     def parse(value: str) -> dict[str, Any]:
         spec: dict[str, Any] = {}
+
         for arg in csvsplit(value):
-            if match := re.search(r"^nodes[:=](any|same)$", arg.lower()):
+            lowered = arg.lower()
+
+            if match := re.search(r"^nodes[:=](any|same)$", lowered):
                 spec["nodes"] = match.group(1)
-            elif match := re.search(r"^layout[:=](flat|atomic)$", arg.lower()):
+
+            elif match := re.search(r"^layout[:=](flat|atomic)$", lowered):
                 spec["layout"] = match.group(1)
-            elif match := re.search(r"^count[:=]([-]?\d+)$", arg.lower()):
+
+            elif match := re.search(r"^count[:=]([-]?\d+)$", lowered):
                 count = int(match.group(1))
-                if count < 0:
-                    raise ValueError("count <= -1")
+                if count <= 0:
+                    raise ValueError("count <= 0")
                 spec["count"] = count
-            elif match := re.search(r"^count[:=]auto$", arg.lower()):
-                spec["count"] = binpack.BatchMode.AUTO
-            elif match := re.search(r"^count[:=]max$", arg.lower()):
-                spec["count"] = binpack.BatchMode.ONE_PER_BIN
-            elif match := re.search(r"^duration[:=](.*)$", arg.lower()):
+
+            elif re.search(r"^count[:=]max$", lowered):
+                spec["count"] = "max"
+
+            elif re.search(r"^count[:=]auto$", lowered):
+                raise ValueError("count=auto is no longer supported; use duration=T")
+
+            elif match := re.search(r"^duration[:=](.*)$", lowered):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:
                     raise ValueError("batch duration <= 0")
                 spec["duration"] = duration
+
             else:
                 raise ValueError(f"invalid batch spec arg: {arg}")
+
         return spec
 
     @staticmethod
@@ -114,30 +126,38 @@ class CanaryHPCBatchSpec(argparse.Action):
     - Comma-separated option=value pairs
     - Order does not matter
     - Unknown options/values are invalid
+    - Scheduler simulation width is computed by the HPC integration layer as:
+          node_count * cpus_per_node
+      It is not a user-facing batch-spec option.
 
     Options:
 
       count
           Controls how many batches are created.
 
-          count=auto
-              Partition tests into batches targeting duration=T per batch.
-              (Setting duration implies count=auto.)
-
           count=max
-              One test job per batch (maximum number of batches).
+              create the maximum number of batches allowed by the selected layout.
+
+              For layout=flat:
+                  one test job per batch.
+
+              For layout=atomic:
+                  one dependency-connected component per batch.
 
           count=N
-              N is [0-9]+. Partition test jobs into at most N batches.
+              N is [1-9][0-9]*. Partition test jobs into at most N batches.
 
       duration
-          Target approximate runtime per batch. Implies count=auto.
+          Target approximate simulated runtime per batch.
 
           duration=N
               N is [0-9]+ seconds.
 
           duration=<go-duration>
               Go duration syntax such as: 40s, 2h, 4h30m30s, 45m
+
+          Notes:
+              Duration-targeted packing is currently supported for layout=flat.
 
       layout
           Controls dependency rules within and between batches.
@@ -146,9 +166,11 @@ class CanaryHPCBatchSpec(argparse.Action):
               Jobs within a batch do NOT depend on each other.
               Batches MAY depend on other batches.
 
-          layout=atomic
-              Jobs within a batch MAY depend on each other.
-              Batches do NOT depend on other batches (each batch is independent).
+      layout=atomic
+          Jobs within a batch MAY depend on each other.
+          Batches do NOT depend on other batches.
+          Defaults to nodes=any,count=max if no count is supplied.
+          Duration-targeted atomic batching is not supported.
 
       nodes
           Controls whether tests in a batch must request the same node count.
@@ -161,22 +183,20 @@ class CanaryHPCBatchSpec(argparse.Action):
 
     Examples:
 
-      1) Time-targeted batching (typical)
+      1) Time-targeted batching
           layout=flat,nodes=same,duration=1800
-              Create batches of approximately 1800 seconds each.
-              (duration implies count=auto)
+              Create flat batches of approximately 1800 simulated seconds each.
 
-      2) Independent batches (no cross-batch dependencies)
-          layout=atomic,count=2
-              Partition into 2 independent batches.
+      2) Independent atomic batches
+          layout=atomic,nodes=any,count=2
+              Partition dependency-connected components into at most 2
+              independent batches.
 
-      3) One test per batch
+      3) One test/component per batch
           count=max
-              Run each job in its own batch.
 
       4) Limit the number of batches
           count=4
-              Partition jobs into at most 4 batches.
 
       5) Allow mixed node counts within a batch
           nodes=any,duration=30m
@@ -186,25 +206,46 @@ class CanaryHPCBatchSpec(argparse.Action):
 
     @staticmethod
     def validate_and_set_defaults(spec: dict) -> None:
-        if spec.get("duration") is None and spec.get("count") is None:
-            spec["duration"] = 30 * 60  # 30 minutes
-            spec["count"] = None
-        if "duration" not in spec:
-            spec["duration"] = None
-        if "count" not in spec:
-            spec["count"] = None
-        if "nodes" not in spec:
-            spec["nodes"] = "same"
-        if spec["nodes"] is None:
-            spec["nodes"] = "same"
-        if "layout" not in spec:
-            spec["layout"] = "flat"
+        spec.setdefault("duration", None)
+        spec.setdefault("count", None)
+        spec.setdefault("layout", None)
+        spec.setdefault("nodes", None)
+
         if spec["layout"] is None:
             spec["layout"] = "flat"
+
+        if spec["layout"] not in ("flat", "atomic"):
+            raise ValueError(f"batch spec: invalid layout value {spec['layout']!r}")
+
+        # Atomic defaults to nodes=any unless user explicitly gave nodes=same.
+        if spec["nodes"] is None:
+            spec["nodes"] = "any" if spec["layout"] == "atomic" else "same"
+
+        if spec["nodes"] not in ("any", "same"):
+            raise ValueError(f"batch spec: invalid nodes value {spec['nodes']!r}")
+
+        # Layout-aware default batching mode.
+        if spec["duration"] is None and spec["count"] is None:
+            if spec["layout"] == "atomic":
+                spec["count"] = "max"
+            else:
+                spec["duration"] = 30 * 60  # 30 minutes
+
         if spec["duration"] is not None and spec["count"] is not None:
             raise ValueError("batch spec: duration not allowed with count")
-        if spec["layout"] == "atomic" and spec["nodes"] == "same":
-            raise ValueError("batch spec: layout:atomic not allowed with nodes:same")
+
+        if spec["count"] is not None:
+            count = spec["count"]
+            if count != "max" and not isinstance(count, int):
+                raise ValueError(f"batch spec: invalid count value {count!r}")
+            if isinstance(count, int) and count <= 0:
+                raise ValueError("batch spec: count <= 0")
+
+        if spec["layout"] == "atomic" and spec["nodes"] != "any":
+            raise ValueError("batch spec: layout=atomic requires nodes=any")
+
+        if spec["duration"] is not None and spec["layout"] == "atomic":
+            raise ValueError("batch spec: duration-targeted atomic layout is not supported")
 
 
 class CanaryHPCResourceSetter(argparse.Action):
@@ -217,32 +258,41 @@ class CanaryHPCResourceSetter(argparse.Action):
             spec = getattr(namespace, dest, None) or CanaryHPCBatchSpec.defaults()
             spec.update(CanaryHPCBatchSpec.parse(raw))
             setattr(namespace, dest, spec)
+
         elif match := re.search(r"^exec=(.*)$", value):
             dest = "hpc_batchexec"
             raw = strip_quotes(match.group(1))
             spec = CanaryHPCBatchExec.parse(raw)
             setattr(namespace, dest, spec)
+
         elif match := re.search(r"^workers[:=](\d+)$", value):
             workers = int(match.group(1))
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
             setattr(namespace, "hpc_batch_workers", workers)
+
         elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", value):
             raw = match.group(2)
             setattr(namespace, "hpc_backend", raw)
+
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
-            if raw not in ("conservative", "agressive"):
+            if raw == "agressive":
+                raw = "aggressive"
+            if raw not in ("conservative", "aggressive"):
                 raise ValueError(f"Incorrect batch timeout choice: {raw}")
             setattr(namespace, "hpc_batch_timeout_strategy", raw)
+
         elif match := re.search(r"^queue_timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
             setattr(namespace, "hpc_queue_timeout", time_in_seconds(raw))
+
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
             dest = "hpc_scheduler_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
             opts.extend(CanaryHPCSchedulerArgs.parse(raw))
             setattr(namespace, dest, opts)
+
         else:
             raise ValueError(f"invalid batch value: {value!r}")

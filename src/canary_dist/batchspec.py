@@ -125,6 +125,8 @@ class TestBatch(bs.TestBatch):
             "session": self.session,
             "workspace": str(self.workspace.dir),
             "jobs": [job.id for job in self.jobs],
+            "estimated_runtime": self.runtime,
+            "schedule_metadata": getattr(self.spec, "schedule_metadata", {}),
             "status": serialize(self.status),
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),

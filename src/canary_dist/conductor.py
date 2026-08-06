@@ -18,6 +18,7 @@ from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
 from canary_hpc.batching import batch_jobs
+from canary_hpc.batching import set_batch_dependencies
 from canary_hpc.batchspec import BatchSpec
 
 from .adapter import DistributedResourcePoolAdapter
@@ -78,14 +79,30 @@ class DistributedPoolConductor:
 
         """
         width = canary.config.getoption("dist_batch_width") or 8
+        if width <= 0:
+            raise ValueError(f"dist batch width must be > 0, got {width}")
+
+        count = canary.config.getoption("dist_batch_count")
+        duration = canary.config.getoption("dist_batch_duration")
+
+        if count is None and duration is None:
+            duration = 10 * 60
+
+        workers = canary.config.getoption("dist_remote_workers")
+        if workers is not None:
+            workers = int(workers)
+
         batch_specs: list[BatchSpec] = batch_jobs(
             jobs=runner.jobs,
-            duration=canary.config.getoption("dist_batch_duration"),
+            duration=duration,
             width=width,
-            count=canary.config.getoption("dist_batch_count"),
+            workers=workers,
+            count=count,
             layout="flat",
             nodes="any",
         )
+
+        set_batch_dependencies(batch_specs)
         if not batch_specs:
             raise ValueError("No test batches generated")
         fmt = "[bold]Generated[/] %d batches from %d jobs"

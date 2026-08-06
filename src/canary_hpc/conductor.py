@@ -25,7 +25,10 @@ from _canary.util.time import time_in_seconds
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
+from .batching import allocate_partition_counts
 from .batching import batch_jobs
+from .batching import partition_jobs
+from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
 from .queue import ResourceQueue
@@ -69,6 +72,41 @@ class CanaryHPCConductor:
         setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
+    def backend_count_per_node(self, rtype: str) -> int:
+        """Return homogeneous backend resource count per node.
+
+        Tries both plural and singular resource type spellings.
+        """
+        candidates = [rtype]
+
+        if rtype.endswith("s"):
+            candidates.append(rtype[:-1])
+        else:
+            candidates.append(f"{rtype}s")
+
+        errors: list[str] = []
+
+        for candidate in candidates:
+            try:
+                count = int(self.backend.count_per_node(candidate))
+            except Exception as e:
+                errors.append(f"{candidate}: {e}")
+                continue
+
+            if count <= 0:
+                raise ValueError(
+                    f"Backend {self.backend.name!r} reports non-positive "
+                    f"{candidate}_per_node={count}"
+                )
+
+            return count
+
+        details = "; ".join(errors)
+        raise ValueError(
+            f"Could not determine {rtype!r} count per node for backend "
+            f"{self.backend.name!r}: {details}"
+        )
+
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: "Runner") -> bool:
         """Run each job in ``runner.jobs``.
@@ -83,13 +121,47 @@ class CanaryHPCConductor:
         batchspec = canary.config.getoption("hpc_batchspec")
         if not batchspec:
             raise ValueError("Cannot partition jobs: missing batching options")
-        batch_specs: list[BatchSpec] = batch_jobs(
+        cpus_per_node = self.backend_count_per_node("cpus")
+
+        workers = canary.config.getoption("hpc_batch_workers")
+        if workers is not None:
+            workers = int(workers)
+
+        partitions = partition_jobs(
             jobs=runner.jobs,
             layout=batchspec["layout"],
-            count=batchspec["count"],
-            duration=batchspec["duration"],
             nodes=batchspec["nodes"],
+            cpus_per_node=cpus_per_node,
         )
+        partition_counts = allocate_partition_counts(batchspec["count"], partitions)
+        batch_specs: list[BatchSpec] = []
+
+        for partition, partition_count in zip(partitions, partition_counts):
+            logger.debug(
+                "Batching partition %s: jobs=%d node_count=%d "
+                "cpus_per_node=%d width=%d count=%r duration=%r workers=%r",
+                partition.key,
+                len(partition.jobs),
+                partition.node_count,
+                partition.cpus_per_node,
+                partition.width,
+                partition_count,
+                batchspec["duration"],
+                workers,
+            )
+            batch_specs.extend(
+                batch_jobs(
+                    jobs=partition.jobs,
+                    width=partition.width,
+                    workers=workers,
+                    layout=batchspec["layout"],
+                    count=partition_count,
+                    duration=batchspec["duration"],
+                    nodes=batchspec["nodes"],
+                )
+            )
+        set_batch_dependencies(batch_specs)
+
         if not batch_specs:
             raise ValueError(
                 "No test batches generated (this should never happen, "
@@ -164,6 +236,7 @@ class CanaryHPCConductor:
             "--batch-workers",
             dest="hpc_batch_workers",
             metavar="WORKERS",
+            type=int,
             help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
         )
         parser.add_argument(

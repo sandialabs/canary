@@ -41,6 +41,8 @@ class BatchSpec:
     layout: str
     jobs: list[canary.Job]
     dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
+    estimated_runtime: float | None = None
+    schedule_metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
     rparameters: dict[str, int] = dataclasses.field(init=False)
@@ -152,13 +154,16 @@ class TestBatch(BaseJob):
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
     def find_approximate_runtime(self) -> float:
-        from .batching import packed_perimeter
+        """Return the batch runtime estimate."""
+        if self.spec.estimated_runtime is not None:
+            return float(self.spec.estimated_runtime)
 
         if len(self.jobs) == 1:
-            return self.jobs[0].runtime
-        _, height = packed_perimeter(self.jobs)
-        t = sum(c.runtime for c in self)
-        return float(min(height, t))
+            return float(self.jobs[0].runtime)
+
+        # Fallback for BatchSpec objects not produced by the schedule packer.
+        # Serial time is conservative
+        return float(sum(job.runtime for job in self.jobs))
 
     @cached_property
     def timeout_multiplier(self) -> float:
@@ -498,6 +503,8 @@ class TestBatch(BaseJob):
             "session": self.session,
             "workspace": str(self.workspace.dir),
             "jobs": [job.id for job in self],
+            "estimated_runtime": self.runtime,
+            "schedule_metadata": self.spec.schedule_metadata,
             "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),
