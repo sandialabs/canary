@@ -60,7 +60,8 @@ class CanaryHPCConductor:
         pluginmanager.register(self, "canary_hpc_conductor")
 
     def run(self, args: argparse.Namespace) -> int:
-        if n := int(args.hpc_batch_workers):
+        if args.hpc_batch_workers is not None:
+            n = int(args.hpc_batch_workers)
             if n > cpu_count():
                 logger.warning(f"--hpc-batch-workers={n} > cpu_count={cpu_count()}")
         batchspec = args.hpc_batchspec or CanaryHPCBatchSpec.defaults()
