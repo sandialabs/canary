@@ -376,3 +376,226 @@ def test_packers_attach_metadata() -> None:
     assert by_height[0].metadata["width"] == 2
     assert by_count[0].metadata["width"] == 2
     assert atomic[0].metadata["width"] == 2
+
+
+def make_large_flat_tasks(n: int) -> list[ScheduleTask]:
+    """Create a large mostly-flat task set with two topological levels.
+
+    The first group contains root tasks.  Some later tasks depend on one of
+    those roots, while others have only external dependencies that are ignored
+    by the packer.  This keeps the flat count requirement modest while still
+    exercising dependency handling.
+    """
+    roots = min(128, max(1, n))
+    tasks: list[ScheduleTask] = []
+
+    for i in range(roots):
+        tasks.append(
+            task(
+                f"root-{i}", width=1 + (i % 8), duration=5.0 + float(i % 31), priority=float(i % 97)
+            )
+        )
+
+    for i in range(roots, n):
+        dependencies = (f"root-{i % roots}",) if i % 7 == 0 else ("external",)
+
+        tasks.append(
+            task(
+                f"task-{i}",
+                width=1 + (i % 8),
+                duration=1.0 + float((i * 17) % 113),
+                dependencies=dependencies,
+                priority=float((i * 19) % 101),
+            )
+        )
+
+    return tasks
+
+
+def make_large_atomic_tasks(n: int) -> list[ScheduleTask]:
+    """Create many small dependency-connected components."""
+    tasks: list[ScheduleTask] = []
+
+    i = 0
+    component = 0
+
+    while i < n:
+        a = f"component-{component}-a"
+        b = f"component-{component}-b"
+        c = f"component-{component}-c"
+
+        tasks.append(
+            task(
+                a,
+                width=1 + (component % 4),
+                duration=2.0 + float(component % 17),
+                priority=float(component % 53),
+            )
+        )
+        i += 1
+
+        if i < n:
+            tasks.append(
+                task(
+                    b,
+                    width=1 + ((component + 1) % 4),
+                    duration=3.0 + float(component % 19),
+                    dependencies=(a,),
+                    priority=float((component * 3) % 53),
+                )
+            )
+            i += 1
+
+        if i < n:
+            tasks.append(
+                task(
+                    c,
+                    width=1 + ((component + 2) % 4),
+                    duration=1.0 + float(component % 23),
+                    dependencies=(b,),
+                    priority=float((component * 7) % 53),
+                )
+            )
+            i += 1
+
+        component += 1
+
+    return tasks
+
+
+def assert_all_tasks_packed_once(batches: list[ScheduledBatch], tasks: list[ScheduleTask]) -> None:
+    packed = [t.id for batch in batches for t in batch.tasks]
+    expected = [t.id for t in tasks]
+
+    assert len(packed) == len(expected)
+    assert set(packed) == set(expected)
+    assert len(set(packed)) == len(packed)
+
+
+def assert_flat_batches_have_no_internal_dependencies(batches: list[ScheduledBatch]) -> None:
+    for batch in batches:
+        ids = {t.id for t in batch.tasks}
+
+        for t in batch.tasks:
+            assert not any(dep_id in ids for dep_id in t.dependencies)
+
+
+def assert_batch_metadata(batches: list[ScheduledBatch], *, algorithm: str, width: int) -> None:
+    assert batches
+
+    for batch in batches:
+        assert batch.metadata["algorithm"] == algorithm
+        assert batch.metadata["width"] == width
+
+
+def test_pack_by_count_simulated_does_not_call_exact_simulator(monkeypatch) -> None:
+    tasks = make_large_flat_tasks(1000)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("pack_by_count_simulated should not call simulate_makespan")
+
+    monkeypatch.setitem(pack_by_count_simulated.__globals__, "simulate_makespan", fail)
+
+    batches = pack_by_count_simulated(tasks, width=16, count=16, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert_flat_batches_have_no_internal_dependencies(batches)
+    assert_batch_metadata(batches, algorithm="pack_by_count_simulated", width=16)
+
+
+def test_pack_to_height_simulated_does_not_call_exact_simulator(monkeypatch) -> None:
+    tasks = make_large_flat_tasks(1000)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("pack_to_height_simulated should not call simulate_makespan")
+
+    monkeypatch.setitem(pack_to_height_simulated.__globals__, "simulate_makespan", fail)
+
+    batches = pack_to_height_simulated(tasks, width=16, height=300.0, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert_flat_batches_have_no_internal_dependencies(batches)
+    assert_batch_metadata(batches, algorithm="pack_to_height_simulated", width=16)
+
+
+def test_pack_by_count_atomic_simulated_does_not_call_exact_simulator(monkeypatch) -> None:
+    tasks = make_large_atomic_tasks(1000)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("pack_by_count_atomic_simulated should not call simulate_makespan")
+
+    monkeypatch.setitem(pack_by_count_atomic_simulated.__globals__, "simulate_makespan", fail)
+
+    batches = pack_by_count_atomic_simulated(tasks, width=16, count=32, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert_batch_metadata(batches, algorithm="pack_by_count_atomic_simulated", width=16)
+
+
+def test_dependency_components_uses_caller_width_and_workers(monkeypatch) -> None:
+    tasks = [
+        task("a", width=2, duration=10.0),
+        task("b", width=2, duration=5.0, dependencies=("a",)),
+        task("c", width=1, duration=7.0),
+        task("d", width=1, duration=3.0, dependencies=("c",)),
+    ]
+
+    original = pack_by_count_atomic_simulated.__globals__["cheap_makespan"]
+    seen: list[tuple[int, int | None]] = []
+
+    def wrapped_cheap_makespan(*args, **kwargs):
+        seen.append((kwargs["width"], kwargs.get("workers")))
+        return original(*args, **kwargs)
+
+    monkeypatch.setitem(
+        pack_by_count_atomic_simulated.__globals__, "cheap_makespan", wrapped_cheap_makespan
+    )
+
+    batches = pack_by_count_atomic_simulated(tasks, width=8, count=2, workers=3)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert seen
+    assert all(width == 8 for width, _ in seen)
+    assert all(workers == 3 for _, workers in seen)
+
+
+def test_large_pack_by_count_simulated_30000_validity() -> None:
+    tasks = make_large_flat_tasks(30_000)
+
+    batches = pack_by_count_simulated(tasks, width=16, count=64, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert_flat_batches_have_no_internal_dependencies(batches)
+    assert len(batches) <= 64
+    assert_batch_metadata(batches, algorithm="pack_by_count_simulated", width=16)
+
+
+def test_large_pack_to_height_simulated_30000_validity() -> None:
+    tasks = make_large_flat_tasks(30_000)
+
+    batches = pack_to_height_simulated(tasks, width=16, height=5000.0, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert_flat_batches_have_no_internal_dependencies(batches)
+    assert_batch_metadata(batches, algorithm="pack_to_height_simulated", width=16)
+
+
+def test_large_pack_by_count_atomic_simulated_30000_validity() -> None:
+    tasks = make_large_atomic_tasks(30_000)
+
+    batches = pack_by_count_atomic_simulated(tasks, width=16, count=256, workers=8)
+
+    assert_all_tasks_packed_once(batches, tasks)
+    assert len(batches) <= 256
+    assert_batch_metadata(batches, algorithm="pack_by_count_atomic_simulated", width=16)
+
+
+def test_exact_simulator_still_works_after_packer_optimization() -> None:
+    tasks = [
+        task("a", width=2, duration=10.0),
+        task("b", width=2, duration=5.0),
+        task("c", width=1, duration=3.0, dependencies=("a",)),
+    ]
+
+    assert simulate_makespan(tasks, width=4, workers=None) == pytest.approx(13.0)
+    assert simulate_makespan(tasks, width=4, workers=1) == pytest.approx(18.0)

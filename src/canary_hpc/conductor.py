@@ -128,6 +128,12 @@ class CanaryHPCConductor:
         if workers is not None:
             workers = int(workers)
 
+        logger.info(
+            "[bold]Batching[/] %d jobs for submission to [bold]%s[/] backend",
+            len(runner.jobs),
+            self.backend.name,
+        )
+
         partitions = partition_jobs(
             jobs=runner.jobs,
             layout=batchspec["layout"],
@@ -171,7 +177,7 @@ class CanaryHPCConductor:
         if missing := {c.id for c in runner.jobs} - {c.id for b in batch_specs for c in b.jobs}:
             raise ValueError(f"Jobs missing from batches: {', '.join(missing)}")
         key = canary.string.pluralize("batch", n=len(batch_specs))
-        fmt = "[bold]Generated[/] %d test %s from %d jobs"
+        fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt % (len(batch_specs), key, len(runner.jobs)))
         root = runner.workspace.cache_dir / "canary-hpc"
         graph: dict[str, list[str]] = {}
