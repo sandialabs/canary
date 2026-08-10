@@ -255,3 +255,21 @@ def test_count_zero_invalid() -> None:
 
     with pytest.raises(ValueError, match="count <= 0"):
         parser.parse_args(["--batch-spec=count:0"])
+
+
+def test_batch_exact_estimate_parser() -> None:
+    parser = Parser()
+    CanaryHPCConductor.setup_parser(parser)
+
+    args = parser.parse_args(["--batch-exact-estimate"])
+
+    assert args.hpc_batch_exact_estimate is True
+
+
+def test_hpc_batch_exact_estimate_legacy_parser() -> None:
+    parser = Parser()
+    CanaryHPCConductor.setup_legacy_parser(parser)
+
+    args = parser.parse_args(["--hpc-batch-exact-estimate"])
+
+    assert args.hpc_batch_exact_estimate is True

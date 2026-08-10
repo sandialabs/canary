@@ -233,3 +233,73 @@ def test_set_batch_dependencies_global(generate_files, tmpdir):
         for spec in specs:
             for dep in spec.dependencies:
                 assert dep.id in spec_ids
+
+
+def test_partition_jobs_uses_resources_per_node_for_capacity(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs,
+            layout="flat",
+            nodes="any",
+            cpus_per_node=64,
+            resources_per_node={"cpus": 64, "gpus": 4},
+        )
+
+        assert partitions
+        for partition in partitions:
+            assert partition.resource_capacity["cpus"] == partition.width
+            assert partition.resource_capacity["gpus"] == 4 * partition.node_count
+
+
+def test_batch_jobs_exact_final_estimate_metadata(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        batches = batching.batch_jobs(
+            jobs=jobs,
+            width=64,
+            workers=None,
+            nodes="any",
+            layout="flat",
+            count=2,
+            duration=None,
+            exact_final_estimate=True,
+        )
+
+        assert batches
+        assert all(batch.schedule_metadata["exact_final_estimate"] is True for batch in batches)
+        assert all(batch.schedule_metadata["simulated_runtime"] is not None for batch in batches)
+
+
+def test_batch_jobs_preserves_schedule_metadata(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        batches = batching.batch_jobs(
+            jobs=jobs,
+            width=64,
+            workers=2,
+            nodes="any",
+            layout="flat",
+            count=2,
+            duration=None,
+            resource_capacity={"cpus": 64, "gpus": 4},
+            node_count=1,
+            exact_final_estimate=False,
+        )
+
+        assert batches
+
+        for batch in batches:
+            metadata = batch.schedule_metadata
+
+            assert metadata["estimated_runtime"] == batch.estimated_runtime
+            assert metadata["width"] == 64
+            assert metadata["workers"] == 2
+            assert metadata["resource_capacity"] == {"cpus": 64, "gpus": 4}
+            assert metadata["node_count"] == 1
+            assert metadata["exact_final_estimate"] is False
+            assert "cheap_runtime" in metadata
+            assert "simulated_runtime" in metadata

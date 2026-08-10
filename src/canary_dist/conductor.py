@@ -92,6 +92,9 @@ class DistributedPoolConductor:
         if workers is not None:
             workers = int(workers)
 
+        resource_capacity = self.dpool.max_capacity_by_type()
+        resource_capacity["cpus"] = int(width)
+
         batch_specs: list[BatchSpec] = batch_jobs(
             jobs=runner.jobs,
             duration=duration,
@@ -100,11 +103,14 @@ class DistributedPoolConductor:
             count=count,
             layout="flat",
             nodes="any",
+            resource_capacity=resource_capacity,
+            node_count=1,
+            exact_final_estimate=bool(canary.config.getoption("dist_batch_exact_estimate")),
         )
-
         set_batch_dependencies(batch_specs)
         if not batch_specs:
             raise ValueError("No test batches generated")
+
         fmt = "[bold]Generated[/] %d batches from %d jobs"
         logger.info(fmt % (len(batch_specs), len(runner.jobs)))
         root = runner.workspace.cache_dir / "canary-dist"
@@ -178,6 +184,18 @@ class DistributedPoolConductor:
             metavar="T",
             type=canary.time.time_in_seconds,
             help="Approximate test batch duration in seconds [default: 10m]",
+        )
+        group.add_argument(
+            "--batch-exact-estimate",
+            dest="dist_batch_exact_estimate",
+            action="store_true",
+            default=False,
+            help=(
+                "After forming distributed batches with cheap schedule estimates, "
+                "run an exact scalar scheduler simulation once per final batch to "
+                "refine the stored runtime estimate.  This is slower for very "
+                "large suites."
+            ),
         )
         group.add_argument(
             "-E",

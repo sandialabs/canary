@@ -24,6 +24,37 @@ from typing import Callable
 
 
 @dataclasses.dataclass(frozen=True)
+class ResourceAmount:
+    """A resource amount requested on one node."""
+
+    type: str
+    slots: int
+
+    def __post_init__(self) -> None:
+        if not self.type:
+            raise ValueError("resource type must be non-empty")
+        if self.slots <= 0:
+            raise ValueError("resource slots must be > 0")
+
+
+@dataclasses.dataclass(frozen=True)
+class NodeDemand:
+    """Resources requested on one node."""
+
+    resources: tuple[ResourceAmount, ...] = dataclasses.field(default_factory=tuple)
+    exclusive: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "resources", tuple(self.resources))
+
+    def count(self, rtype: str) -> int:
+        return sum(amount.slots for amount in self.resources if amount.type == rtype)
+
+    def total_slots(self) -> int:
+        return sum(amount.slots for amount in self.resources)
+
+
+@dataclasses.dataclass(frozen=True)
 class ScheduleTask:
     """A task to be placed in a scheduler batch."""
 
@@ -33,6 +64,7 @@ class ScheduleTask:
     dependencies: tuple[str, ...] = dataclasses.field(default_factory=tuple)
     priority: float | None = None
     payload: object | None = None
+    demands: tuple[NodeDemand, ...] = dataclasses.field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -45,6 +77,7 @@ class ScheduleTask:
             raise ValueError("duration must be >= 0")
 
         object.__setattr__(self, "dependencies", tuple(self.dependencies))
+        object.__setattr__(self, "demands", tuple(self.demands))
 
     def default_priority(self) -> float:
         return math.sqrt(float(self.width) ** 2 + float(self.duration) ** 2)
@@ -54,6 +87,34 @@ class ScheduleTask:
 
     def work(self) -> float:
         return float(self.width) * float(self.duration)
+
+    def node_count(self, exact: bool = False) -> int:
+        """Return the number of requested nodes."""
+        if not exact:
+            return max(1, len(self.demands))
+        # Return 0 for scalar-only tasks that do not carry generalized resource demands.
+        return len(self.demands)
+
+    def exclusive_node_count(self) -> int:
+        """Return number of explicitly exclusive node demands."""
+        return sum(1 for demand in self.demands if demand.exclusive)
+
+    def resource_work(self) -> dict[str, float]:
+        """Return resource-time work by resource type.
+
+        This is not used by the current scalar packer yet.  It is preparation
+        for resource-aware cheap makespan estimates.
+        """
+        work: dict[str, float] = {}
+
+        for demand in self.demands:
+            for amount in demand.resources:
+                work[amount.type] = work.get(amount.type, 0.0) + amount.slots * self.duration
+
+        if not work:
+            work["cpus"] = self.work()
+
+        return work
 
 
 @dataclasses.dataclass
@@ -112,13 +173,21 @@ class CheapMakespanStats:
     max_width: int = 0
     critical_path: float = 0.0
     count: int = 0
+    node_work: float = 0.0
+    resource_work: dict[str, float] = dataclasses.field(default_factory=dict)
 
     def add(self, task: ScheduleTask) -> None:
+        duration = float(task.duration)
+
         self.total_work += task.work()
-        self.total_duration += float(task.duration)
-        self.max_duration = max(self.max_duration, float(task.duration))
+        self.total_duration += duration
+        self.max_duration = max(self.max_duration, duration)
         self.max_width = max(self.max_width, int(task.width))
+        self.node_work += task.exclusive_node_count() * duration
         self.count += 1
+
+        for rtype, work in task.resource_work().items():
+            self.resource_work[rtype] = self.resource_work.get(rtype, 0.0) + work
 
     def add_many(self, tasks: Iterable[ScheduleTask], *, critical_path: float = 0.0) -> None:
         for task in tasks:
@@ -126,7 +195,14 @@ class CheapMakespanStats:
 
         self.critical_path = max(self.critical_path, float(critical_path))
 
-    def estimate(self, *, width: int, workers: int | None = None) -> float:
+    def estimate(
+        self,
+        *,
+        width: int,
+        workers: int | None = None,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
+    ) -> float:
         if width <= 0:
             raise ValueError(f"width={width!r} must be > 0")
 
@@ -142,17 +218,33 @@ class CheapMakespanStats:
                 f"available width is {width}"
             )
 
-        estimate = max(self.max_duration, self.total_work / float(width), self.critical_path)
+        bounds = [self.max_duration, self.total_work / float(width), self.critical_path]
 
         if workers is not None:
-            estimate = max(estimate, self.total_duration / float(workers))
+            bounds.append(self.total_duration / float(workers))
 
-        return estimate
+        bounds.extend(
+            self._resource_bounds(resource_capacity=resource_capacity, node_count=node_count)
+        )
+
+        return max(bounds)
 
     def estimate_with_task(
-        self, task: ScheduleTask, *, width: int, workers: int | None = None
+        self,
+        task: ScheduleTask,
+        *,
+        width: int,
+        workers: int | None = None,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
     ) -> float:
-        return self.estimate_with_tasks([task], width=width, workers=workers)
+        return self.estimate_with_tasks(
+            [task],
+            width=width,
+            workers=workers,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+        )
 
     def estimate_with_tasks(
         self,
@@ -161,7 +253,10 @@ class CheapMakespanStats:
         width: int,
         workers: int | None = None,
         critical_path: float = 0.0,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
     ) -> float:
+
         if width <= 0:
             raise ValueError(f"width={width!r} must be > 0")
 
@@ -172,12 +267,17 @@ class CheapMakespanStats:
         total_duration = self.total_duration
         max_duration = self.max_duration
         max_width = self.max_width
+        node_work = self.node_work
+        resource_work = dict(self.resource_work)
 
         for task in tasks:
             total_work += task.work()
             total_duration += float(task.duration)
             max_duration = max(max_duration, float(task.duration))
             max_width = max(max_width, int(task.width))
+            node_work += task.exclusive_node_count() * float(task.duration)
+            for rtype, work in task.resource_work().items():
+                resource_work[rtype] = resource_work.get(rtype, 0.0) + work
 
         if max_width > width:
             raise ValueError(
@@ -185,14 +285,49 @@ class CheapMakespanStats:
                 f"available width is {width}"
             )
 
-        estimate = max(
-            max_duration, total_work / float(width), self.critical_path, float(critical_path)
-        )
+        bounds = [max_duration, total_work / float(width), self.critical_path, float(critical_path)]
 
         if workers is not None:
-            estimate = max(estimate, total_duration / float(workers))
+            bounds.append(total_duration / float(workers))
 
-        return estimate
+        bounds.extend(
+            self._resource_bounds(
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+                resource_work=resource_work,
+                node_work=node_work,
+            )
+        )
+
+        return max(bounds)
+
+    def _resource_bounds(
+        self,
+        *,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
+        resource_work: dict[str, float] | None = None,
+        node_work: float | None = None,
+    ) -> list[float]:
+        bounds: list[float] = []
+
+        if node_count is not None:
+            if node_count <= 0:
+                raise ValueError(f"node_count={node_count!r} must be > 0")
+            work = self.node_work if node_work is None else node_work
+            bounds.append(work / float(node_count))
+
+        if resource_capacity is not None:
+            work_by_type = self.resource_work if resource_work is None else resource_work
+
+            for rtype, work in work_by_type.items():
+                capacity = int(resource_capacity.get(rtype, 0))
+                if capacity <= 0:
+                    bounds.append(float("inf"))
+                else:
+                    bounds.append(work / float(capacity))
+
+        return bounds
 
 
 def cheap_makespan(
@@ -202,6 +337,8 @@ def cheap_makespan(
     workers: int | None = None,
     critical_path: bool = True,
     validate: bool = True,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
 ) -> float:
     """Return a cheap lower-bound estimate of makespan.
 
@@ -230,7 +367,9 @@ def cheap_makespan(
     if critical_path:
         stats.critical_path = _critical_path_lower_bound(tasks)
 
-    return stats.estimate(width=width, workers=workers)
+    return stats.estimate(
+        width=width, workers=workers, resource_capacity=resource_capacity, node_count=node_count
+    )
 
 
 def simulate_makespan(
@@ -339,7 +478,14 @@ def simulate_makespan(
 
 
 def pack_to_height_simulated(
-    tasks: Sequence[ScheduleTask], *, width: int, height: float, workers: int | None = None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    height: float,
+    workers: int | None = None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
+    exact_final_estimate: bool = False,
 ) -> list[ScheduledBatch]:
     """Pack flat batches using a cheap target-height estimate.
 
@@ -360,12 +506,21 @@ def pack_to_height_simulated(
         return []
 
     _validate_tasks(tasks, width=width)
+    resource_capacity, node_count = _normalize_capacity_inputs(
+        tasks, width=width, resource_capacity=resource_capacity, node_count=node_count
+    )
 
     result: list[ScheduledBatch] = []
 
     for level in _topological_levels(tasks):
-        count = _estimate_count_for_height(level, width=width, height=height, workers=workers)
-
+        count = _estimate_count_for_height(
+            level,
+            width=width,
+            height=height,
+            workers=workers,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+        )
         result.extend(
             _pack_independent_by_count_cheap(
                 level,
@@ -373,7 +528,15 @@ def pack_to_height_simulated(
                 count=count,
                 workers=workers,
                 algorithm="pack_to_height_simulated",
-                extra_metadata={"layout": "flat", "target_height": float(height)},
+                extra_metadata={
+                    "layout": "flat",
+                    "target_height": float(height),
+                    "resource_capacity": dict(resource_capacity),
+                    "node_count": node_count,
+                },
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+                exact_final_estimate=exact_final_estimate,
             )
         )
 
@@ -381,7 +544,14 @@ def pack_to_height_simulated(
 
 
 def pack_by_count_simulated(
-    tasks: Sequence[ScheduleTask], *, width: int, count: int, workers: int | None = None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    count: int,
+    workers: int | None = None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
+    exact_final_estimate: bool = False,
 ) -> list[ScheduledBatch]:
     """Pack flat batches by count using cheap heap-based load balancing.
 
@@ -401,7 +571,9 @@ def pack_by_count_simulated(
         return []
 
     _validate_tasks(tasks, width=width)
-
+    resource_capacity, node_count = _normalize_capacity_inputs(
+        tasks, width=width, resource_capacity=resource_capacity, node_count=node_count
+    )
     levels = _topological_levels(tasks)
 
     if count < len(levels):
@@ -410,7 +582,14 @@ def pack_by_count_simulated(
         )
 
     count = min(count, len(tasks))
-    level_counts = _allocate_counts(count, levels, width=width, workers=workers)
+    level_counts = _allocate_counts(
+        count,
+        levels,
+        width=width,
+        workers=workers,
+        resource_capacity=resource_capacity,
+        node_count=node_count,
+    )
 
     result: list[ScheduledBatch] = []
 
@@ -422,7 +601,14 @@ def pack_by_count_simulated(
                 count=level_count,
                 workers=workers,
                 algorithm="pack_by_count_simulated",
-                extra_metadata={"layout": "flat"},
+                extra_metadata={
+                    "layout": "flat",
+                    "resource_capacity": dict(resource_capacity),
+                    "node_count": node_count,
+                },
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+                exact_final_estimate=exact_final_estimate,
             )
         )
 
@@ -430,7 +616,14 @@ def pack_by_count_simulated(
 
 
 def pack_by_count_atomic_simulated(
-    tasks: Sequence[ScheduleTask], *, width: int, count: int, workers: int | None = None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    count: int,
+    workers: int | None = None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
+    exact_final_estimate: bool = False,
 ) -> list[ScheduledBatch]:
     """Pack atomic batches by dependency-connected components.
 
@@ -451,14 +644,15 @@ def pack_by_count_atomic_simulated(
 
     _validate_tasks(tasks, width=width)
     _assert_acyclic(tasks)
+    resource_capacity, node_count = _normalize_capacity_inputs(
+        tasks, width=width, resource_capacity=resource_capacity, node_count=node_count
+    )
 
     components = _dependency_components(tasks, width=width, workers=workers)
-
     if not components:
         return []
 
     count = min(count, len(components))
-
     component_infos: list[_ComponentInfo] = []
 
     for component in components:
@@ -468,7 +662,13 @@ def pack_by_count_atomic_simulated(
             _ComponentInfo(
                 tasks=component,
                 estimated_runtime=cheap_makespan(
-                    component, width=width, workers=workers, critical_path=True, validate=False
+                    component,
+                    width=width,
+                    workers=workers,
+                    critical_path=True,
+                    validate=False,
+                    resource_capacity=resource_capacity,
+                    node_count=node_count,
                 ),
                 total_work=sum(task.work() for task in component),
                 total_duration=sum(float(task.duration) for task in component),
@@ -491,7 +691,14 @@ def pack_by_count_atomic_simulated(
     accums = [_BatchAccum() for _ in range(count)]
 
     heap: list[tuple[float, int, float, float, int]] = [
-        accums[i].heap_key(width=width, workers=workers, index=i) for i in range(count)
+        accums[i].heap_key(
+            width=width,
+            workers=workers,
+            index=i,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+        )
+        for i in range(count)
     ]
     heapq.heapify(heap)
 
@@ -502,7 +709,16 @@ def pack_by_count_atomic_simulated(
         accum.tasks.extend(component.tasks)
         accum.stats.add_many(component.tasks, critical_path=component.critical_path)
 
-        heapq.heappush(heap, accum.heap_key(width=width, workers=workers, index=batch_index))
+        heapq.heappush(
+            heap,
+            accum.heap_key(
+                width=width,
+                workers=workers,
+                index=batch_index,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+            ),
+        )
 
     result: list[ScheduledBatch] = []
 
@@ -510,9 +726,23 @@ def pack_by_count_atomic_simulated(
         if not accum.tasks:
             continue
 
-        estimated_runtime = cheap_makespan(
-            accum.tasks, width=width, workers=workers, critical_path=True, validate=False
+        cheap_runtime = cheap_makespan(
+            accum.tasks,
+            width=width,
+            workers=workers,
+            critical_path=True,
+            validate=False,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
         )
+
+        simulated_runtime: float | None = None
+
+        if exact_final_estimate:
+            simulated_runtime = simulate_makespan(accum.tasks, width=width, workers=workers)
+            estimated_runtime = max(cheap_runtime, simulated_runtime)
+        else:
+            estimated_runtime = cheap_runtime
 
         result.append(
             ScheduledBatch(
@@ -523,6 +753,11 @@ def pack_by_count_atomic_simulated(
                     "layout": "atomic",
                     "width": width,
                     "workers": workers,
+                    "resource_capacity": dict(resource_capacity),
+                    "node_count": node_count,
+                    "cheap_runtime": cheap_runtime,
+                    "simulated_runtime": simulated_runtime,
+                    "exact_final_estimate": exact_final_estimate,
                 },
             )
         )
@@ -536,7 +771,13 @@ class _BatchAccum:
     stats: CheapMakespanStats = dataclasses.field(default_factory=CheapMakespanStats)
 
     def heap_key(
-        self, *, width: int, workers: int | None, index: int
+        self,
+        *,
+        width: int,
+        workers: int | None,
+        index: int,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
     ) -> tuple[float, int, float, float, int]:
         """Return a stable heap key for choosing the least-loaded batch.
 
@@ -546,7 +787,12 @@ class _BatchAccum:
         when adding tasks that fit in parallel.
         """
         return (
-            self.stats.estimate(width=width, workers=workers),
+            self.stats.estimate(
+                width=width,
+                workers=workers,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+            ),
             self.stats.count,
             self.stats.total_work,
             self.stats.total_duration,
@@ -572,6 +818,9 @@ def _pack_independent_by_count_cheap(
     workers: int | None,
     algorithm: str,
     extra_metadata: dict[str, object] | None = None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
+    exact_final_estimate: bool = False,
 ) -> list[ScheduledBatch]:
     """Pack independent tasks into ``count`` batches using heap load balancing."""
 
@@ -598,7 +847,14 @@ def _pack_independent_by_count_cheap(
     accums = [_BatchAccum() for _ in range(count)]
 
     heap: list[tuple[float, int, float, float, int]] = [
-        accums[i].heap_key(width=width, workers=workers, index=i) for i in range(count)
+        accums[i].heap_key(
+            width=width,
+            workers=workers,
+            index=i,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+        )
+        for i in range(count)
     ]
     heapq.heapify(heap)
 
@@ -609,7 +865,16 @@ def _pack_independent_by_count_cheap(
         accum.tasks.append(task)
         accum.stats.add(task)
 
-        heapq.heappush(heap, accum.heap_key(width=width, workers=workers, index=batch_index))
+        heapq.heappush(
+            heap,
+            accum.heap_key(
+                width=width,
+                workers=workers,
+                index=batch_index,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+            ),
+        )
 
     result: list[ScheduledBatch] = []
 
@@ -617,9 +882,26 @@ def _pack_independent_by_count_cheap(
         if not accum.tasks:
             continue
 
-        estimated_runtime = accum.stats.estimate(width=width, workers=workers)
+        cheap_runtime = accum.stats.estimate(
+            width=width, workers=workers, resource_capacity=resource_capacity, node_count=node_count
+        )
 
-        metadata: dict[str, object] = {"algorithm": algorithm, "width": width, "workers": workers}
+        simulated_runtime: float | None = None
+
+        if exact_final_estimate:
+            simulated_runtime = simulate_makespan(accum.tasks, width=width, workers=workers)
+            estimated_runtime = max(cheap_runtime, simulated_runtime)
+        else:
+            estimated_runtime = cheap_runtime
+
+        metadata: dict[str, object] = {
+            "algorithm": algorithm,
+            "width": width,
+            "workers": workers,
+            "cheap_runtime": cheap_runtime,
+            "simulated_runtime": simulated_runtime,
+            "exact_final_estimate": exact_final_estimate,
+        }
 
         if extra_metadata:
             metadata.update(extra_metadata)
@@ -634,7 +916,13 @@ def _pack_independent_by_count_cheap(
 
 
 def _estimate_count_for_height(
-    tasks: Sequence[ScheduleTask], *, width: int, height: float, workers: int | None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    height: float,
+    workers: int | None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
 ) -> int:
     if not tasks:
         return 0
@@ -648,6 +936,24 @@ def _estimate_count_for_height(
     if workers is not None:
         count = max(count, math.ceil(total_duration / (float(workers) * float(height))))
 
+    if resource_capacity is not None:
+        resource_work: dict[str, float] = {}
+
+        for task in tasks:
+            for rtype, work in task.resource_work().items():
+                resource_work[rtype] = resource_work.get(rtype, 0.0) + work
+
+        for rtype, work in resource_work.items():
+            capacity = int(resource_capacity.get(rtype, 0))
+            if capacity <= 0:
+                count = len(tasks)
+                break
+            count = max(count, math.ceil(work / (float(capacity) * float(height))))
+
+    if node_count is not None:
+        node_work = sum(task.exclusive_node_count() * float(task.duration) for task in tasks)
+        count = max(count, math.ceil(node_work / (float(node_count) * float(height))))
+
     # A single over-target task is allowed and must live in one batch.
     if max_task_height > height:
         over_target = sum(1 for task in tasks if float(task.duration) > height)
@@ -657,7 +963,13 @@ def _estimate_count_for_height(
 
 
 def _allocate_counts(
-    count: int, levels: Sequence[Sequence[ScheduleTask]], *, width: int, workers: int | None
+    count: int,
+    levels: Sequence[Sequence[ScheduleTask]],
+    *,
+    width: int,
+    workers: int | None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
 ) -> list[int]:
     """Allocate a global count across topological levels.
 
@@ -683,7 +995,15 @@ def _allocate_counts(
         return allocations
 
     weights = [
-        cheap_makespan(level, width=width, workers=workers, critical_path=False, validate=False)
+        cheap_makespan(
+            level,
+            width=width,
+            workers=workers,
+            critical_path=False,
+            validate=False,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+        )
         for level in nonempty
     ]
 
@@ -914,3 +1234,90 @@ def _validate_tasks(tasks: Sequence[ScheduleTask], *, width: int) -> None:
             f"Tasks exceed available width: task {task.id!r} has width {task.width}, "
             f"available width is {width}"
         )
+
+
+def node_demand_from_request(request: object) -> NodeDemand:
+    """Convert a Canary NodeRequest-like object to a NodeDemand.
+
+    The input is expected to have:
+
+        request.resources
+        request.exclusive
+
+    where request.resources is a list of dictionaries containing ``type`` and
+    ``slots``.
+    """
+    counts: dict[str, int] = {}
+
+    for item in getattr(request, "resources"):
+        rtype = str(item["type"])
+        slots = int(item.get("slots", 1))
+        if slots <= 0:
+            continue
+        counts[rtype] = counts.get(rtype, 0) + slots
+
+    resources = tuple(
+        ResourceAmount(type=rtype, slots=slots) for rtype, slots in sorted(counts.items())
+    )
+
+    return NodeDemand(resources=resources, exclusive=bool(getattr(request, "exclusive", False)))
+
+
+def _infer_resource_capacity_from_tasks(
+    tasks: Sequence[ScheduleTask], *, width: int
+) -> dict[str, int]:
+    """Infer a conservative resource-capacity vector for cheap estimates.
+
+    This is a transition helper.
+
+    - CPU capacity is always the scalar ``width``.
+    - Other resource capacities are inferred as the maximum total request of
+      that resource by any single task.
+
+    This avoids assuming infinite GPUs/custom resources while preserving the
+    current scalar API.  A future step should replace this with capacities
+    derived from the actual ResourcePool or backend node description.
+    """
+    if width <= 0:
+        raise ValueError(f"width={width!r} must be > 0")
+
+    capacity: dict[str, int] = {"cpus": int(width)}
+
+    for task in tasks:
+        totals: dict[str, int] = {}
+
+        for demand in task.demands:
+            for amount in demand.resources:
+                totals[amount.type] = totals.get(amount.type, 0) + amount.slots
+
+        for rtype, slots in totals.items():
+            if rtype in ("cpu", "cpus"):
+                capacity["cpus"] = max(capacity["cpus"], int(width))
+            else:
+                capacity[rtype] = max(capacity.get(rtype, 0), int(slots))
+
+    return capacity
+
+
+def _infer_node_count_from_tasks(tasks: Sequence[ScheduleTask]) -> int:
+    """Infer node capacity from the largest task node demand."""
+    return max((task.node_count() for task in tasks), default=1)
+
+
+def _normalize_capacity_inputs(
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    resource_capacity: dict[str, int] | None,
+    node_count: int | None,
+) -> tuple[dict[str, int], int]:
+    if resource_capacity is None:
+        capacity = _infer_resource_capacity_from_tasks(tasks, width=width)
+    else:
+        capacity = dict(resource_capacity)
+        capacity.setdefault("cpus", int(width))
+
+    if node_count is None:
+        node_count = _infer_node_count_from_tasks(tasks)
+
+    return capacity, node_count

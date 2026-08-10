@@ -289,6 +289,23 @@ class DistributedResourcePoolAdapter:
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"Server returned non-JSON response: {p.stdout!r}") from exc
 
+    def max_capacity_by_type(self) -> dict[str, int]:
+        """Return max eligible per-machine capacity by resource type.
+
+        Distributed batches run on one remote host, so the relevant simulation
+        capacity is the largest per-host capacity available for each resource
+        type among currently eligible machines.
+        """
+        self.update_resource_counts()
+
+        capacity: dict[str, int] = {}
+
+        for counts in self.resource_counts.values():
+            for rtype, count in counts.items():
+                capacity[rtype] = max(capacity.get(rtype, 0), int(count))
+
+        return capacity
+
     def _machine_eligible(
         self,
         machine: dict[str, Any],

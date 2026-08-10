@@ -13,6 +13,7 @@ import canary
 
 from .batchspec import BatchSpec
 from .schedulepack import ScheduleTask
+from .schedulepack import node_demand_from_request
 from .schedulepack import pack_by_count_atomic_simulated
 from .schedulepack import pack_by_count_simulated
 from .schedulepack import pack_to_height_simulated
@@ -31,6 +32,7 @@ class JobPartition:
     node_count: int
     cpus_per_node: int
     width: int
+    resource_capacity: dict[str, int]
     key: str
     weight: float
 
@@ -41,6 +43,7 @@ def partition_jobs(
     layout: Literal["flat", "atomic"],
     nodes: Literal["any", "same"],
     cpus_per_node: int,
+    resources_per_node: dict[str, int] | None = None,
 ) -> list[JobPartition]:
     """Partition jobs into DAG-safe groups with explicit schedule widths.
 
@@ -65,6 +68,14 @@ def partition_jobs(
     if cpus_per_node <= 0:
         raise ValueError(f"{cpus_per_node=} must be > 0")
 
+    if resources_per_node is not None:
+        resources_per_node = dict(resources_per_node)
+        resources_per_node["cpus"] = cpus_per_node
+
+        for rtype, count in resources_per_node.items():
+            if int(count) < 0:
+                raise ValueError(f"resources_per_node[{rtype!r}] must be >= 0")
+
     if layout not in ("flat", "atomic"):
         raise ValueError(f"invalid layout: {layout!r}")
 
@@ -82,15 +93,19 @@ def partition_jobs(
 
         node_count = max(_job_node_count(job) for job in jobs)
         width = node_count * cpus_per_node
-
+        group = list(jobs)
+        resource_capacity = _partition_resource_capacity(
+            group, width=width, node_count=node_count, resources_per_node=resources_per_node
+        )
         return [
             JobPartition(
-                jobs=list(jobs),
+                jobs=group,
                 node_count=node_count,
                 cpus_per_node=cpus_per_node,
                 width=width,
+                resource_capacity=resource_capacity,
                 key=f"layout=atomic,nodes=any,node_count={node_count}",
-                weight=_partition_weight(jobs, width=width),
+                weight=_partition_weight(group, width=width),
             )
         ]
 
@@ -106,7 +121,9 @@ def partition_jobs(
             for node_count in sorted(by_node_count):
                 group = by_node_count[node_count]
                 width = node_count * cpus_per_node
-
+                resource_capacity = _partition_resource_capacity(
+                    group, width=width, node_count=node_count, resources_per_node=resources_per_node
+                )
                 partitions.append(
                     JobPartition(
                         jobs=group,
@@ -115,21 +132,26 @@ def partition_jobs(
                         width=width,
                         key=(f"layout=flat,nodes=same,level={level_index},node_count={node_count}"),
                         weight=_partition_weight(group, width=width),
+                        resource_capacity=resource_capacity,
                     )
                 )
 
         else:
             node_count = max(_job_node_count(job) for job in level_jobs)
             width = node_count * cpus_per_node
-
+            group = list(level_jobs)
+            resource_capacity = _partition_resource_capacity(
+                group, width=width, node_count=node_count, resources_per_node=resources_per_node
+            )
             partitions.append(
                 JobPartition(
-                    jobs=list(level_jobs),
+                    jobs=group,
                     node_count=node_count,
                     cpus_per_node=cpus_per_node,
                     width=width,
+                    resource_capacity=resource_capacity,
                     key=(f"layout=flat,nodes=any,level={level_index},node_count={node_count}"),
-                    weight=_partition_weight(level_jobs, width=width),
+                    weight=_partition_weight(group, width=width),
                 )
             )
 
@@ -242,6 +264,9 @@ def batch_jobs(
     layout: Literal["flat", "atomic"] = "flat",
     count: int | str | None = None,
     duration: float | None = None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
+    exact_final_estimate: bool = False,
 ) -> list[BatchSpec]:
     """Partition jobs into simulated-scheduler batches.
 
@@ -256,6 +281,17 @@ def batch_jobs(
     """
     if width <= 0:
         raise ValueError(f"{width=} must be > 0")
+
+    if resource_capacity is not None:
+        resource_capacity = dict(resource_capacity)
+        resource_capacity.setdefault("cpus", int(width))
+
+        for rtype, capacity in resource_capacity.items():
+            if int(capacity) <= 0:
+                raise ValueError(f"resource capacity for {rtype!r} must be > 0")
+
+    if node_count is not None and node_count <= 0:
+        raise ValueError(f"{node_count=} must be > 0")
 
     if layout not in ("flat", "atomic"):
         raise ValueError(f"invalid layout: {layout!r}")
@@ -295,7 +331,13 @@ def batch_jobs(
         )
 
         scheduled_batches = pack_to_height_simulated(
-            tasks, width=width, height=float(duration), workers=workers
+            tasks,
+            width=width,
+            height=float(duration),
+            workers=workers,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+            exact_final_estimate=exact_final_estimate,
         )
 
     else:
@@ -311,11 +353,23 @@ def batch_jobs(
 
         if layout == "atomic":
             scheduled_batches = pack_by_count_atomic_simulated(
-                tasks, width=width, count=count_value, workers=workers
+                tasks,
+                width=width,
+                count=count_value,
+                workers=workers,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+                exact_final_estimate=exact_final_estimate,
             )
         else:
             scheduled_batches = pack_by_count_simulated(
-                tasks, width=width, count=count_value, workers=workers
+                tasks,
+                width=width,
+                count=count_value,
+                workers=workers,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
+                exact_final_estimate=exact_final_estimate,
             )
 
     specs: list[BatchSpec] = []
@@ -331,16 +385,13 @@ def batch_jobs(
                 "estimated_runtime": scheduled_batch.estimated_runtime,
                 "width": width,
                 "workers": workers,
+                "resource_capacity": dict(resource_capacity)
+                if resource_capacity is not None
+                else None,
+                "node_count": node_count,
+                "exact_final_estimate": exact_final_estimate,
             },
         )
-
-        # BatchSpec is not slotted, so attach simulation metadata directly.
-        spec.estimated_runtime = scheduled_batch.estimated_runtime  # type: ignore[attr-defined]
-        spec.schedule_metadata = dict(scheduled_batch.metadata)  # type: ignore[attr-defined]
-        spec.schedule_metadata["estimated_runtime"] = scheduled_batch.estimated_runtime  # type: ignore[attr-defined]
-        spec.schedule_metadata["width"] = width  # type: ignore[attr-defined]
-        spec.schedule_metadata["workers"] = workers  # type: ignore[attr-defined]
-
         specs.append(spec)
 
     return specs
@@ -380,6 +431,9 @@ def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) 
     except Exception:
         priority = None
 
+    requests = job.required_resources()
+    demands = tuple(node_demand_from_request(request) for request in requests)
+
     return ScheduleTask(
         id=job.id,
         width=max(1, int(job.cpus)),
@@ -387,6 +441,7 @@ def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) 
         dependencies=dependencies,
         priority=priority,
         payload=job,
+        demands=demands,
     )
 
 
@@ -434,6 +489,58 @@ def _partition_weight(jobs: list["canary.Job"], *, width: int) -> float:
         max_runtime = max(max_runtime, runtime)
 
     return max(max_runtime, work / max(width, 1))
+
+
+def _partition_resource_capacity(
+    jobs: list["canary.Job"],
+    *,
+    width: int,
+    node_count: int,
+    resources_per_node: dict[str, int] | None = None,
+) -> dict[str, int]:
+    """Return a transition resource-capacity vector for a partition.
+
+    CPU capacity is the scalar simulation width.  Other resource capacities are
+    conservatively inferred as the maximum total demand of any single job in the
+    partition.
+
+    This keeps batching resource-aware without requiring backend resource
+    capacity plumbing yet.
+    """
+    capacity: dict[str, int] = {"cpus": int(width)}
+
+    if resources_per_node is not None:
+        for rtype, per_node_count in resources_per_node.items():
+            total = int(per_node_count) * int(node_count)
+            if total > 0:
+                if rtype in ("cpu", "cpus"):
+                    capacity["cpus"] = int(width)
+                else:
+                    capacity[rtype] = total
+        return capacity
+
+    # Transition fallback: infer non-CPU capacity from the maximum single-job
+    # demand in the partition.
+    for job in jobs:
+        totals: dict[str, int] = {}
+
+        for request in job.required_resources():
+            for item in request.resources:
+                rtype = str(item["type"])
+                slots = int(item.get("slots", 1))
+
+                if slots <= 0:
+                    continue
+
+                if rtype in ("cpu", "cpus"):
+                    continue
+
+                totals[rtype] = totals.get(rtype, 0) + slots
+
+        for rtype, slots in totals.items():
+            capacity[rtype] = max(capacity.get(rtype, 0), slots)
+
+    return capacity
 
 
 def _topological_job_levels(jobs: list["canary.Job"]) -> list[list["canary.Job"]]:

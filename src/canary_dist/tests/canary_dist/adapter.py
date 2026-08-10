@@ -199,3 +199,20 @@ def test_checkin_requires_transaction_id():
 
     with pytest.raises(ValueError, match="transaction_id"):
         adapter.checkin({"metadata": {}, "resources": {}})
+
+
+def test_max_capacity_by_type_uses_resource_counts(monkeypatch):
+    from canary_dist.adapter import DistributedResourcePoolAdapter
+
+    def fake_update(self):
+        self.resource_counts = {"host-a": {"cpus": 8, "gpus": 1}, "host-b": {"cpus": 16, "gpus": 4}}
+        self.resource_types = ["cpus", "gpus"]
+
+    monkeypatch.setattr(DistributedResourcePoolAdapter, "update_resource_counts", fake_update)
+    monkeypatch.setattr(
+        DistributedResourcePoolAdapter, "current_state", lambda self: {"database": {"machines": []}}
+    )
+
+    adapter = DistributedResourcePoolAdapter(server_url="http://server")
+
+    assert adapter.max_capacity_by_type() == {"cpus": 16, "gpus": 4}

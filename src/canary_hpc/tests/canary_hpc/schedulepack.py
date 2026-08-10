@@ -4,12 +4,43 @@
 
 import pytest
 
+from canary_hpc.schedulepack import NodeDemand
+from canary_hpc.schedulepack import ResourceAmount
 from canary_hpc.schedulepack import ScheduledBatch
 from canary_hpc.schedulepack import ScheduleTask
+from canary_hpc.schedulepack import cheap_makespan
 from canary_hpc.schedulepack import pack_by_count_atomic_simulated
 from canary_hpc.schedulepack import pack_by_count_simulated
 from canary_hpc.schedulepack import pack_to_height_simulated
 from canary_hpc.schedulepack import simulate_makespan
+
+
+def resource_task(
+    id: str,
+    *,
+    duration: float = 1.0,
+    cpus: int = 1,
+    gpus: int = 0,
+    custom: dict[str, int] | None = None,
+    priority: float | None = None,
+    dependencies: tuple[str, ...] = (),
+) -> ScheduleTask:
+    resources = [ResourceAmount(type="cpus", slots=cpus)]
+
+    if gpus:
+        resources.append(ResourceAmount(type="gpus", slots=gpus))
+
+    for rtype, slots in (custom or {}).items():
+        resources.append(ResourceAmount(type=rtype, slots=slots))
+
+    return ScheduleTask(
+        id=id,
+        width=cpus,
+        duration=duration,
+        dependencies=dependencies,
+        priority=priority,
+        demands=(NodeDemand(resources=tuple(resources)),),
+    )
 
 
 def task(
@@ -599,3 +630,250 @@ def test_exact_simulator_still_works_after_packer_optimization() -> None:
 
     assert simulate_makespan(tasks, width=4, workers=None) == pytest.approx(13.0)
     assert simulate_makespan(tasks, width=4, workers=1) == pytest.approx(18.0)
+
+
+def test_cheap_makespan_scalar_tasks_unchanged() -> None:
+    tasks = [
+        task("a", width=1, duration=10.0),
+        task("b", width=1, duration=10.0),
+        task("c", width=1, duration=10.0),
+        task("d", width=1, duration=10.0),
+    ]
+
+    assert cheap_makespan(tasks, width=2) == pytest.approx(20.0)
+
+
+def test_cheap_makespan_resource_capacity_gpu_bound() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_c", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_d", cpus=4, gpus=1, duration=10.0),
+    ]
+
+    estimate = cheap_makespan(tasks, width=64, resource_capacity={"cpus": 64, "gpus": 2})
+
+    assert estimate == pytest.approx(20.0)
+
+
+def test_cheap_makespan_resource_capacity_custom_resource_bound() -> None:
+    tasks = [
+        resource_task("a", cpus=1, duration=10.0, custom={"frombulators": 1}),
+        resource_task("b", cpus=1, duration=10.0, custom={"frombulators": 1}),
+        resource_task("c", cpus=1, duration=10.0, custom={"frombulators": 1}),
+    ]
+
+    estimate = cheap_makespan(
+        tasks, width=64, resource_capacity={"cpus": 64, "frombulators": 1}, node_count=1
+    )
+
+    assert estimate == pytest.approx(30.0)
+
+
+def test_cheap_makespan_node_count_bound() -> None:
+    tasks = [
+        ScheduleTask(
+            id="a",
+            width=1,
+            duration=10.0,
+            demands=(
+                NodeDemand(resources=(ResourceAmount(type="cpus", slots=1),), exclusive=True),
+                NodeDemand(resources=(ResourceAmount(type="cpus", slots=1),), exclusive=True),
+            ),
+        ),
+        ScheduleTask(
+            id="b",
+            width=1,
+            duration=10.0,
+            demands=(
+                NodeDemand(resources=(ResourceAmount(type="cpus", slots=1),), exclusive=True),
+                NodeDemand(resources=(ResourceAmount(type="cpus", slots=1),), exclusive=True),
+            ),
+        ),
+    ]
+
+    estimate = cheap_makespan(tasks, width=64, resource_capacity={"cpus": 64}, node_count=2)
+
+    assert estimate == pytest.approx(20.0)
+
+
+def test_cheap_makespan_resource_tasks_without_resource_capacity_use_scalar_bound() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+    ]
+
+    estimate = cheap_makespan(tasks, width=8)
+
+    assert estimate == pytest.approx(10.0)
+
+
+def test_cheap_makespan_node_count_does_not_bound_nonexclusive_tasks() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_c", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_d", cpus=4, gpus=1, duration=10.0),
+    ]
+
+    estimate = cheap_makespan(
+        tasks, width=64, resource_capacity={"cpus": 64, "gpus": 2}, node_count=1
+    )
+
+    assert estimate == pytest.approx(20.0)
+
+
+def test_pack_by_count_simulated_uses_gpu_capacity_in_estimate() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_c", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_d", cpus=4, gpus=1, duration=10.0),
+    ]
+
+    batches = pack_by_count_simulated(
+        tasks, width=64, count=2, resource_capacity={"cpus": 64, "gpus": 1}
+    )
+
+    assert len(batches) == 2
+    assert sorted(len(batch.tasks) for batch in batches) == [2, 2]
+    assert all(batch.estimated_runtime == pytest.approx(20.0) for batch in batches)
+
+    packed = set().union(*(set(batch.ids) for batch in batches))
+    assert packed == {"gpu_a", "gpu_b", "gpu_c", "gpu_d"}
+
+    assert all(batch.metadata["resource_capacity"]["gpus"] == 1 for batch in batches)
+
+
+def test_pack_by_count_simulated_mixes_cpu_only_with_gpu_tasks() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+        resource_task("cpu_a", cpus=8, gpus=0, duration=10.0),
+        resource_task("cpu_b", cpus=8, gpus=0, duration=10.0),
+    ]
+
+    batches = pack_by_count_simulated(
+        tasks, width=64, count=2, resource_capacity={"cpus": 64, "gpus": 1}
+    )
+
+    assert len(batches) == 2
+    assert sorted(len(batch.tasks) for batch in batches) == [2, 2]
+
+    for batch in batches:
+        batch_ids = set(batch.ids)
+
+        # With heap tie-breaking and equal durations, each batch should get one
+        # GPU task and one CPU-only task.
+        assert len(batch_ids & {"gpu_a", "gpu_b"}) == 1
+        assert len(batch_ids & {"cpu_a", "cpu_b"}) == 1
+
+        # GPU bound is 10s, CPU bound is low, max duration is 10s.
+        assert batch.estimated_runtime == pytest.approx(10.0)
+
+
+def test_pack_to_height_simulated_uses_gpu_capacity_for_batch_count() -> None:
+    tasks = [
+        resource_task("gpu_a", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_b", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_c", cpus=4, gpus=1, duration=10.0),
+        resource_task("gpu_d", cpus=4, gpus=1, duration=10.0),
+    ]
+
+    batches = pack_to_height_simulated(
+        tasks, width=64, height=20.0, resource_capacity={"cpus": 64, "gpus": 1}
+    )
+
+    assert len(batches) == 2
+    assert sorted(len(batch.tasks) for batch in batches) == [2, 2]
+    assert all(batch.estimated_runtime == pytest.approx(20.0) for batch in batches)
+
+
+def test_pack_by_count_atomic_simulated_uses_resource_capacity_for_components() -> None:
+    tasks = [
+        resource_task("a", cpus=4, gpus=1, duration=10.0),
+        resource_task("b", cpus=4, gpus=1, duration=10.0, dependencies=("a",)),
+        resource_task("c", cpus=4, gpus=1, duration=10.0),
+        resource_task("d", cpus=4, gpus=1, duration=10.0, dependencies=("c",)),
+    ]
+
+    batches = pack_by_count_atomic_simulated(
+        tasks, width=64, count=2, resource_capacity={"cpus": 64, "gpus": 1}
+    )
+
+    assert len(batches) == 2
+
+    batch_sets = {frozenset(batch.ids) for batch in batches}
+    assert batch_sets == {frozenset({"a", "b"}), frozenset({"c", "d"})}
+
+    # Each component has a dependency chain a->b or c->d, so critical path is 20s.
+    assert all(batch.estimated_runtime == pytest.approx(20.0) for batch in batches)
+
+
+def test_pack_by_count_simulated_default_exact_final_estimate_false() -> None:
+    tasks = [task("a", width=1, duration=10.0), task("b", width=1, duration=10.0)]
+
+    batches = pack_by_count_simulated(tasks, width=2, count=1)
+
+    assert len(batches) == 1
+    assert batches[0].metadata["exact_final_estimate"] is False
+    assert batches[0].metadata["simulated_runtime"] is None
+    assert batches[0].metadata["cheap_runtime"] == pytest.approx(batches[0].estimated_runtime)
+
+
+def test_pack_by_count_simulated_exact_final_estimate_opt_in() -> None:
+    tasks = [
+        task("a", width=1, duration=10.0),
+        task("b", width=1, duration=5.0, dependencies=("a",)),
+    ]
+
+    batches = pack_by_count_simulated(tasks, width=2, count=2, exact_final_estimate=True)
+
+    assert batches
+    assert all(batch.metadata["exact_final_estimate"] is True for batch in batches)
+    assert all(batch.metadata["simulated_runtime"] is not None for batch in batches)
+    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)
+
+
+def test_pack_by_count_simulated_exact_final_estimate_calls_simulator(monkeypatch) -> None:
+    tasks = [task("a", width=1, duration=10.0), task("b", width=1, duration=10.0)]
+
+    calls = []
+
+    def fake_simulate(tasks_arg, *, width, workers=None):
+        calls.append((list(tasks_arg), width, workers))
+        return 123.0
+
+    monkeypatch.setitem(pack_by_count_simulated.__globals__, "simulate_makespan", fake_simulate)
+
+    batches = pack_by_count_simulated(tasks, width=2, count=1, exact_final_estimate=True)
+
+    assert len(batches) == 1
+    assert calls
+    assert batches[0].metadata["simulated_runtime"] == pytest.approx(123.0)
+    assert batches[0].estimated_runtime == pytest.approx(123.0)
+
+
+def test_pack_by_count_atomic_simulated_exact_final_estimate_opt_in() -> None:
+    tasks = [
+        task("a", width=1, duration=10.0),
+        task("b", width=1, duration=5.0, dependencies=("a",)),
+    ]
+
+    batches = pack_by_count_atomic_simulated(tasks, width=2, count=1, exact_final_estimate=True)
+
+    assert len(batches) == 1
+    assert batches[0].metadata["exact_final_estimate"] is True
+    assert batches[0].metadata["simulated_runtime"] is not None
+    assert batches[0].estimated_runtime >= batches[0].metadata["cheap_runtime"]
+
+
+def test_pack_to_height_simulated_exact_final_estimate_opt_in() -> None:
+    tasks = [task("a", width=1, duration=10.0), task("b", width=1, duration=10.0)]
+
+    batches = pack_to_height_simulated(tasks, width=2, height=20.0, exact_final_estimate=True)
+
+    assert batches
+    assert all(batch.metadata["exact_final_estimate"] is True for batch in batches)
+    assert all(batch.metadata["simulated_runtime"] is not None for batch in batches)
+    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)
