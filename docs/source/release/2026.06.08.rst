@@ -16,23 +16,23 @@ Core execution model
 ^^^^^^^^^^^^^^^^^^^^
 
 * Migrated core execution terminology and types from **TestCase** to **Job** across the codebase.
-* Introduced :py:`_canary.job.BaseJob` and standardized queue/executor interactions around a job-phase lifecycle.
-* Backward compatibility is preserved: :py:`canary.TestCase`` remains available as an alias of :py:`canary.Job`, so most existing client code does not need to change.
+* Introduced :py:class:`_canary.job.BaseJob` and standardized queue/executor interactions around a job-phase lifecycle.
+* Backward compatibility is preserved: :py:class:`canary.TestCase`` remains available as an alias of :py:class:`canary.Job`, so most existing client code does not need to change.
 
 New spec pipeline and dependency resolution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Added :py:`_canary.ir.JobSpecIR` for generator outputs that contain unresolved dependency selectors.
-* Added :py:`_canary.jobspec.JobSpec` as the resolved, runnable spec format.
-* Added :py:`_canary.resolve_dependency` to resolve dependency patterns/selectors into concrete spec dependencies.
+* Added :py:class:`_canary.ir.JobSpecIR` for generator outputs that contain unresolved dependency selectors.
+* Added :py:class:`_canary.jobspec.JobSpec` as the resolved, runnable spec format.
+* Added :py:mod:`_canary.resolve_dependency` to resolve dependency patterns/selectors into concrete spec dependencies.
 
 Status system refactor
 ^^^^^^^^^^^^^^^^^^^^^^
 
 * Replaced legacy status tuple concepts with:
-  * :py:`_canary.status.Category` (PASS/FAIL/SKIP/CANCEL/NONE)
-  * :py:`_canary.status.Outcome` (SUCCESS/FAILED/TIMEOUT/…)
-  * Updated :py:`_canary.status.Status` API (``category/outcome/reason/code``).
+  * :py:class:`_canary.status.Category` (PASS/FAIL/SKIP/CANCEL/NONE)
+  * :py:class:`_canary.status.Outcome` (SUCCESS/FAILED/TIMEOUT/…)
+  * Updated :py:class:`_canary.status.Status` API (``category/outcome/reason/code``).
 * Updated return-code aggregation and reporting logic to use the new model.
 
 Persistence and DB updates
@@ -101,7 +101,7 @@ Detailed changes
 Core / execution model
 ^^^^^^^^^^^^^^^^^^^^^^
 
-* Added :py:`_canary.job.Job`, :py:`_canary.job.BaseJob`, :py:`_canary.job.JobPhase`, :py:`_canary.job.JobState`.
+* Added :py:class:`_canary.job.Job`, :py:class:`_canary.job.BaseJob`, :py:class:`_canary.job.JobPhase`, :py:class:`_canary.job.JobState`.
 * Updated conductor/executor/queue to operate on job phases and readiness rather than legacy testcase status states.
 * Updated job execution path:
   * robust setup/run/finish error handling;
@@ -110,7 +110,7 @@ Core / execution model
 Specs, dependency resolution, and persistence
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Added :py:`_canary.ir.JobSpecIR` and :py:`_canary.resolve_dependency.resolve`.
+* Added :py:class:`_canary.ir.JobSpecIR` and :py:func:`_canary.resolve_dependency.resolve`.
 * Updated generator system:
   * generators now emit JobSpecIR/JobSpec rather than legacy UnresolvedSpec/ResolvedSpec.
   * dependency resolution is handled in a dedicated module (with parallel resolution support).
@@ -122,7 +122,7 @@ Specs, dependency resolution, and persistence
 Status system refactor
 ^^^^^^^^^^^^^^^^^^^^^^
 
-* Implemented enum-based status model in :py:`_canary.status`.
+* Implemented enum-based status model in :py:class:`_canary.status`.
 * Updated reporters (JUnit/Markdown/HTML/email/GitLab) to group and display based on new status fields.
 * Updated returncode computation to use status category/outcome and job completion.
 
@@ -152,7 +152,7 @@ Plugins and integrations
 * YAML example generator updated:
   * uses schema validation;
   * emits ``command`` directly;
-  * template substitution via :py:`string.Template`.
+  * template substitution via :py:class:`string.Template`.
 
 HPC batching / canary_hpc
 ^^^^^^^^^^^^^^^^^^^^^^^^^

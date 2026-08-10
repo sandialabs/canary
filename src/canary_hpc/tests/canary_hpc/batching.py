@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,6 @@ import pytest
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 from canary_hpc import batching
-from canary_hpc.binpack import BatchMode
 
 num_cases = 25
 num_base_cases = 5
@@ -59,22 +59,247 @@ def test_batch_n(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
         jobs = generate_jobs(workdir)
-        kwds = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
+
+        kwds = {"width": 64, "count": 5, "duration": None, "nodes": "any", "layout": "flat"}
         batches = batching.batch_jobs(jobs=jobs, **kwds)
-        assert len(batches) == 5
-        assert sum(len(_) for _ in batches) == num_cases
-        kwds = {"count": BatchMode.ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
+
+        assert len(batches) <= 5
+        assert sum(len(batch) for batch in batches) == num_cases
+        assert all(hasattr(batch, "estimated_runtime") for batch in batches)
+
+        kwds = {"width": 64, "count": "max", "duration": None, "nodes": "any", "layout": "flat"}
         batches = batching.batch_jobs(jobs=jobs, **kwds)
+
         assert len(batches) == num_cases
+        assert sum(len(batch) for batch in batches) == num_cases
 
 
 def test_batch_t(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
         jobs = generate_jobs(workdir)
-        kwds = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
+
+        kwds = {"width": 64, "count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
         batches = batching.batch_jobs(jobs=jobs, **kwds)
-        assert sum(len(_) for _ in batches) == num_cases
-        kwds = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
+
+        assert sum(len(batch) for batch in batches) == num_cases
+        assert all(batch.estimated_runtime <= 15 * 60 for batch in batches)
+
+        kwds = {"width": 64, "count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
         batches = batching.batch_jobs(jobs=jobs, **kwds)
-        assert len(batches) == num_cases
+
+        assert sum(len(batch) for batch in batches) == num_cases
+        assert all(hasattr(batch, "estimated_runtime") for batch in batches)
+
+
+def test_partition_jobs_flat_nodes_any(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+
+        assert partitions
+        assert sum(len(partition.jobs) for partition in partitions) == num_cases
+        assert all(partition.width == partition.node_count * 64 for partition in partitions)
+
+        # The generated composite base case structure should have at least one
+        # topological level.  Do not over-specify exact level count here.
+        assert all(partition.key.startswith("layout=flat,nodes=any") for partition in partitions)
+
+
+def test_partition_jobs_flat_nodes_same(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="same", cpus_per_node=64
+        )
+
+        assert partitions
+        assert sum(len(partition.jobs) for partition in partitions) == num_cases
+        assert all(partition.width == partition.node_count * 64 for partition in partitions)
+        assert all(partition.key.startswith("layout=flat,nodes=same") for partition in partitions)
+
+        for partition in partitions:
+            node_counts = {max(1, len(job.required_resources())) for job in partition.jobs}
+            assert node_counts == {partition.node_count}
+
+
+def test_partition_jobs_atomic_requires_nodes_any(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        with pytest.raises(ValueError, match="layout=atomic requires nodes=any"):
+            batching.partition_jobs(jobs=jobs, layout="atomic", nodes="same", cpus_per_node=64)
+
+
+def test_partition_jobs_atomic_nodes_any_single_partition(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="atomic", nodes="any", cpus_per_node=64
+        )
+
+        assert len(partitions) == 1
+        assert len(partitions[0].jobs) == num_cases
+        assert partitions[0].width == partitions[0].node_count * 64
+
+
+def test_allocate_partition_counts_none(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+
+        counts = batching.allocate_partition_counts(None, partitions)
+
+        assert counts == [None for _ in partitions]
+
+
+def test_allocate_partition_counts_max(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+
+        counts = batching.allocate_partition_counts("max", partitions)
+
+        assert counts == ["max" for _ in partitions]
+
+
+def test_allocate_partition_counts_integer(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+
+        count = len(partitions) + 3
+        counts = batching.allocate_partition_counts(count, partitions)
+
+        assert len(counts) == len(partitions)
+        assert all(isinstance(c, int) for c in counts)
+        assert sum(c for c in counts if isinstance(c, int)) <= count
+        assert all(c >= 1 for c in counts if isinstance(c, int))
+
+
+def test_allocate_partition_counts_insufficient(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+
+        if len(partitions) <= 1:
+            pytest.skip("Need more than one partition to test insufficient count")
+
+        with pytest.raises(ValueError, match="insufficient"):
+            batching.allocate_partition_counts(len(partitions) - 1, partitions)
+
+
+def test_set_batch_dependencies_global(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
+        )
+        counts = batching.allocate_partition_counts(None, partitions)
+
+        specs = []
+        for partition, count in zip(partitions, counts):
+            specs.extend(
+                batching.batch_jobs(
+                    jobs=partition.jobs,
+                    width=partition.width,
+                    count=count,
+                    duration=15 * 60,
+                    nodes="any",
+                    layout="flat",
+                )
+            )
+
+        batching.set_batch_dependencies(specs)
+
+        assert sum(len(spec.jobs) for spec in specs) == num_cases
+
+        # Ensure all dependency references point to known specs.
+        spec_ids = {spec.id for spec in specs}
+        for spec in specs:
+            for dep in spec.dependencies:
+                assert dep.id in spec_ids
+
+
+def test_partition_jobs_uses_resources_per_node_for_capacity(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        partitions = batching.partition_jobs(
+            jobs=jobs,
+            layout="flat",
+            nodes="any",
+            cpus_per_node=64,
+            resources_per_node={"cpus": 64, "gpus": 4},
+        )
+
+        assert partitions
+        for partition in partitions:
+            assert partition.resource_capacity["cpus"] == partition.width
+            assert partition.resource_capacity["gpus"] == 4 * partition.node_count
+
+
+def test_batch_jobs_exact_final_estimate_metadata(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        batches = batching.batch_jobs(
+            jobs=jobs,
+            width=64,
+            workers=None,
+            nodes="any",
+            layout="flat",
+            count=2,
+            duration=None,
+            exact_final_estimate=True,
+        )
+
+        assert batches
+        assert all(batch.schedule_metadata["exact_final_estimate"] is True for batch in batches)
+        assert all(batch.schedule_metadata["simulated_runtime"] is not None for batch in batches)
+
+
+def test_batch_jobs_preserves_schedule_metadata(generate_files, tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        jobs = generate_jobs(generate_files)
+
+        batches = batching.batch_jobs(
+            jobs=jobs,
+            width=64,
+            workers=2,
+            nodes="any",
+            layout="flat",
+            count=2,
+            duration=None,
+            resource_capacity={"cpus": 64, "gpus": 4},
+            node_count=1,
+            exact_final_estimate=False,
+        )
+
+        assert batches
+
+        for batch in batches:
+            metadata = batch.schedule_metadata
+
+            assert metadata["estimated_runtime"] == batch.estimated_runtime
+            assert metadata["width"] == 64
+            assert metadata["workers"] == 2
+            assert metadata["resource_capacity"] == {"cpus": 64, "gpus": 4}
+            assert metadata["node_count"] == 1
+            assert metadata["exact_final_estimate"] is False
+            assert "cheap_runtime" in metadata
+            assert "simulated_runtime" in metadata

@@ -124,13 +124,6 @@ class Run(CanarySubcommand):
         group.add_argument("-e", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
         group.add_argument("--capture", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
         group.add_argument("--format", action=DeprecatedStoreAction, help=argparse.SUPPRESS)
-        parser.add_argument(
-            "--report",
-            default=None,
-            action="append",
-            choices={"html", "markdown", "none"},
-            help="Write final report in this format [default: html]",
-        )
         add_resource_arguments(parser)
         parser.add_argument(
             "runpaths",
@@ -155,12 +148,6 @@ class Run(CanarySubcommand):
             if not isinstance(request, ScanPathsRequest):
                 raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
             Workspace.remove(work_tree)
-
-        if args.report:
-            if "none" in args.report:
-                config.set("workspace:view:reports", ["none"], replace=True)
-            else:
-                config.set("workspace:view:reports", args.report, replace=True)
 
         workspace: Workspace
         try:

@@ -7,9 +7,17 @@ from typing import Any
 
 import pytest
 
+from _canary.resource_pool.rpool import NodeRequest
 from _canary.resource_pool.rpool import ResourceUnavailable
 from canary_dist.adapter import DistributedResourcePoolAdapter
 from canary_dist.adapter import _with_node
+
+
+def counted_node_request(**counts: int) -> NodeRequest:
+    req = NodeRequest()
+    for rtype, count in counts.items():
+        req.add(rtype, count)
+    return req
 
 
 class FakeAdapter(DistributedResourcePoolAdapter):
@@ -136,7 +144,7 @@ def test_checkout_returns_core_allocation(monkeypatch):
         }
     )
 
-    allocation = adapter.checkout([{"type": "cpus", "slots": 1}], timeout=123.0)
+    allocation = adapter.checkout([counted_node_request(cpus=1)], timeout=123.0)
 
     assert allocation == {
         "metadata": {
@@ -173,7 +181,7 @@ def test_checkout_raises_when_server_reports_unavailable(monkeypatch):
     )
 
     with pytest.raises(ResourceUnavailable):
-        adapter.checkout([{"type": "cpus", "slots": 1}])
+        adapter.checkout([counted_node_request(cpus=1)])
 
 
 def test_checkin_uses_transaction_id():
@@ -191,3 +199,20 @@ def test_checkin_requires_transaction_id():
 
     with pytest.raises(ValueError, match="transaction_id"):
         adapter.checkin({"metadata": {}, "resources": {}})
+
+
+def test_max_capacity_by_type_uses_resource_counts(monkeypatch):
+    from canary_dist.adapter import DistributedResourcePoolAdapter
+
+    def fake_update(self):
+        self.resource_counts = {"host-a": {"cpus": 8, "gpus": 1}, "host-b": {"cpus": 16, "gpus": 4}}
+        self.resource_types = ["cpus", "gpus"]
+
+    monkeypatch.setattr(DistributedResourcePoolAdapter, "update_resource_counts", fake_update)
+    monkeypatch.setattr(
+        DistributedResourcePoolAdapter, "current_state", lambda self: {"database": {"machines": []}}
+    )
+
+    adapter = DistributedResourcePoolAdapter(server_url="http://server")
+
+    assert adapter.max_capacity_by_type() == {"cpus": 16, "gpus": 4}

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+from typing import Any
 
 import pytest
 from schema import SchemaError
@@ -10,7 +11,56 @@ from schema import SchemaError
 import _canary.resource_pool.schemas as schemas
 from _canary.resource_pool import ResourcePool
 from _canary.resource_pool.rpool import EmptyResourcePoolError
+from _canary.resource_pool.rpool import NodeRequest
 from _canary.resource_pool.rpool import ResourceUnavailable
+
+
+def node_request(
+    resources: list[dict[str, Any]] | None = None, *, exclusive: bool = False
+) -> NodeRequest:
+    req = NodeRequest()
+    req.resources.extend(resources or [])
+    req.exclusive = exclusive
+    return req
+
+
+def counted_node_request(*, exclusive: bool = False, **counts: int) -> NodeRequest:
+    req = NodeRequest()
+    req.exclusive = exclusive
+    for rtype, count in counts.items():
+        req.add(rtype, count)
+    return req
+
+
+def test_node_request_add_and_count():
+    req = NodeRequest()
+
+    req.add("cpus", 4)
+    req.add("gpus", 2)
+    req.add("licenses", 0)
+
+    assert req.resources == [
+        {"type": "cpus", "slots": 1},
+        {"type": "cpus", "slots": 1},
+        {"type": "cpus", "slots": 1},
+        {"type": "cpus", "slots": 1},
+        {"type": "gpus", "slots": 1},
+        {"type": "gpus", "slots": 1},
+    ]
+
+    assert req.count("cpus") == 4
+    assert req.count("gpus") == 2
+    assert req.count("licenses") == 0
+
+
+def test_node_request_count_honors_slots():
+    req = NodeRequest()
+    req.resources.append({"type": "gpus", "slots": 2})
+    req.resources.append({"type": "gpus", "slots": 3})
+    req.resources.append({"type": "cpus", "slots": 4})
+
+    assert req.count("gpus") == 5
+    assert req.count("cpus") == 4
 
 
 def test_schema_rejects_flat_resource_pool_shorthand():
@@ -94,11 +144,17 @@ def test_single_node_accommodates():
         }
     )
 
-    assert rp.accommodates([{"type": "cpus", "slots": 2}, {"type": "gpus", "slots": 1}])
+    assert rp.accommodates(
+        [node_request([{"type": "cpus", "slots": 2}, {"type": "gpus", "slots": 1}])]
+    )
 
-    assert not rp.accommodates([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 1}])
+    assert not rp.accommodates(
+        [node_request([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 1}])]
+    )
 
-    assert not rp.accommodates([{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 2}])
+    assert not rp.accommodates(
+        [node_request([{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 2}])]
+    )
 
 
 def test_single_node_checkout_and_checkin():
@@ -127,12 +183,7 @@ def test_single_node_checkout_and_checkin():
         }
     )
 
-    request = [
-        {"type": "cpus", "slots": 1},
-        {"type": "cpus", "slots": 1},
-        {"type": "gpus", "slots": 1},
-        {"type": "gpus", "slots": 1},
-    ]
+    request = [counted_node_request(cpus=2, gpus=2)]
 
     acquired = rp.checkout(request)
 
@@ -195,7 +246,7 @@ def test_single_node_checkout_uses_node_local_resource_ids():
         }
     )
 
-    acquired = rp.checkout([{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}])
+    acquired = rp.checkout([counted_node_request(cpus=1, gpus=1)])
 
     assert acquired["resources"] == {
         "cpus": [{"node": "local", "id": "01", "slots": 1}],
@@ -204,7 +255,9 @@ def test_single_node_checkout_uses_node_local_resource_ids():
 
     rp.checkin(acquired)
 
-    acquired = rp.checkout([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}])
+    acquired = rp.checkout(
+        [node_request([{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}])]
+    )
 
     assert acquired["resources"] == {
         "cpus": [{"node": "local", "id": "ab", "slots": 3}],
@@ -222,7 +275,7 @@ def test_single_node_checkout_requires_colocation():
         }
     )
 
-    request = [{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]
+    request = [counted_node_request(cpus=1, gpus=1)]
 
     assert not rp.accommodates(request)
 
@@ -242,7 +295,7 @@ def test_multi_node_request_requires_allow_multinode():
         allow_multinode=False,
     )
 
-    request = [{"type": "nodes", "slots": 2}, {"type": "cpus", "slots": 1}]
+    request = [counted_node_request(cpus=1), counted_node_request(cpus=1)]
 
     assert not rp.accommodates(request)
 
@@ -275,15 +328,19 @@ def test_multi_node_accommodates():
     )
 
     assert rp.accommodates(
-        [{"type": "nodes", "slots": 2}, {"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]
+        [counted_node_request(cpus=1, gpus=1), counted_node_request(cpus=1, gpus=1)]
     )
 
     assert not rp.accommodates(
-        [{"type": "nodes", "slots": 3}, {"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]
+        [
+            counted_node_request(cpus=1, gpus=1),
+            counted_node_request(cpus=1, gpus=1),
+            counted_node_request(cpus=1, gpus=1),
+        ]
     )
 
     assert not rp.accommodates(
-        [{"type": "nodes", "slots": 2}, {"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 2}]
+        [counted_node_request(cpus=1, gpus=2), counted_node_request(cpus=1, gpus=2)]
     )
 
 
@@ -311,11 +368,7 @@ def test_multi_node_checkout_and_checkin():
         allow_multinode=True,
     )
 
-    request = [
-        {"type": "nodes", "slots": 2},
-        {"type": "cpus", "slots": 1},
-        {"type": "gpus", "slots": 1},
-    ]
+    request = [counted_node_request(cpus=1, gpus=1), counted_node_request(cpus=1, gpus=1)]
 
     acquired = rp.checkout(request)
 
@@ -345,7 +398,7 @@ def test_multi_node_checkout_and_checkin():
     }
 
 
-def test_multi_node_request_is_per_node():
+def test_multi_node_request_is_explicit_node_layout():
     rp = ResourcePool(
         {
             "additional_properties": {},
@@ -357,13 +410,77 @@ def test_multi_node_request_is_per_node():
         allow_multinode=True,
     )
 
-    acquired = rp.checkout([{"type": "nodes", "slots": 2}, {"type": "gpus", "slots": 1}])
+    request = [counted_node_request(gpus=1), counted_node_request(gpus=1)]
+
+    acquired = rp.checkout(request)
 
     assert acquired["resources"] == {
         "gpus": [{"node": "0", "id": "0", "slots": 1}, {"node": "1", "id": "0", "slots": 1}]
     }
 
-    assert not rp.accommodates([{"type": "nodes", "slots": 2}, {"type": "gpus", "slots": 1}])
+    assert not rp.accommodates(request)
+
+
+def test_multi_node_exclusive_checkout_consumes_whole_nodes():
+    rp = ResourcePool(
+        {
+            "additional_properties": {},
+            "nodes": [
+                {
+                    "id": "0",
+                    "resources": {
+                        "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
+                        "gpus": [{"id": "0", "slots": 1}],
+                    },
+                },
+                {
+                    "id": "1",
+                    "resources": {
+                        "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
+                        "gpus": [{"id": "0", "slots": 1}],
+                    },
+                },
+            ],
+        },
+        allow_multinode=True,
+    )
+
+    request = [
+        counted_node_request(cpus=1, exclusive=True),
+        counted_node_request(cpus=1, exclusive=True),
+    ]
+
+    acquired = rp.checkout(request)
+
+    assert acquired["resources"] == {
+        "cpus": [
+            {"node": "0", "id": "0", "slots": 2},
+            {"node": "0", "id": "1", "slots": 2},
+            {"node": "1", "id": "0", "slots": 2},
+            {"node": "1", "id": "1", "slots": 2},
+        ],
+        "gpus": [{"node": "0", "id": "0", "slots": 1}, {"node": "1", "id": "0", "slots": 1}],
+    }
+
+    assert rp.get_node("0").resources == {
+        "cpus": [{"id": "0", "slots": 0}, {"id": "1", "slots": 0}],
+        "gpus": [{"id": "0", "slots": 0}],
+    }
+    assert rp.get_node("1").resources == {
+        "cpus": [{"id": "0", "slots": 0}, {"id": "1", "slots": 0}],
+        "gpus": [{"id": "0", "slots": 0}],
+    }
+
+    rp.checkin(acquired)
+
+    assert rp.get_node("0").resources == {
+        "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
+        "gpus": [{"id": "0", "slots": 1}],
+    }
+    assert rp.get_node("1").resources == {
+        "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
+        "gpus": [{"id": "0", "slots": 1}],
+    }
 
 
 def test_count_and_slots_by_node():
@@ -443,7 +560,7 @@ def test_empty_resource_pool_errors():
     rp = ResourcePool()
 
     with pytest.raises(EmptyResourcePoolError):
-        rp.accommodates([{"type": "cpus", "slots": 1}])
+        rp.accommodates([counted_node_request(cpus=1)])
 
     with pytest.raises(EmptyResourcePoolError):
-        rp.checkout([{"type": "cpus", "slots": 1}])
+        rp.checkout([counted_node_request(cpus=1)])

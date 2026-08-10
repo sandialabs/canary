@@ -4,12 +4,13 @@
 
 
 
-.. _canary.directives:
+.. _canary.reporters.reporter:
 
-directives
-==========
+reporter
+========
 
-.. automodule:: canary.directives
+.. automodule:: _canary.reporters.reporter
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: type

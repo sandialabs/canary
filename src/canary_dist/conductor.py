@@ -18,6 +18,7 @@ from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
 from canary_hpc.batching import batch_jobs
+from canary_hpc.batching import set_batch_dependencies
 from canary_hpc.batchspec import BatchSpec
 
 from .adapter import DistributedResourcePoolAdapter
@@ -54,8 +55,15 @@ class DistributedPoolConductor:
     def canary_select_modifyitems(self, selector: canary.Selector) -> None:
         width = canary.config.getoption("dist_batch_width") or 8
         for spec in selector.specs:
+            if spec.mask:
+                continue
             parameters = spec.parameters | spec.meta_parameters
-            if parameters.get("cpus", 1) > width:
+            if int(parameters.get("nodes", 1)) > 1:
+                spec.mask = canary.Mask.masked(
+                    "Distributed execution does not support multi-node tests"
+                )
+                continue
+            if int(parameters.get("cpus", 1)) > width:
                 spec.mask = canary.Mask.masked("Required number of CPUs exceeds batch width")
 
     @canary.hookimpl
@@ -71,16 +79,38 @@ class DistributedPoolConductor:
 
         """
         width = canary.config.getoption("dist_batch_width") or 8
+        if width <= 0:
+            raise ValueError(f"dist batch width must be > 0, got {width}")
+
+        count = canary.config.getoption("dist_batch_count")
+        duration = canary.config.getoption("dist_batch_duration")
+
+        if count is None and duration is None:
+            duration = 10 * 60
+
+        workers = canary.config.getoption("dist_remote_workers")
+        if workers is not None:
+            workers = int(workers)
+
+        resource_capacity = self.dpool.max_capacity_by_type()
+        resource_capacity["cpus"] = int(width)
+
         batch_specs: list[BatchSpec] = batch_jobs(
             jobs=runner.jobs,
-            duration=canary.config.getoption("dist_batch_duration"),
+            duration=duration,
             width=width,
-            count=canary.config.getoption("dist_batch_count"),
+            workers=workers,
+            count=count,
             layout="flat",
             nodes="any",
+            resource_capacity=resource_capacity,
+            node_count=1,
+            exact_final_estimate=bool(canary.config.getoption("dist_batch_exact_estimate")),
         )
+        set_batch_dependencies(batch_specs)
         if not batch_specs:
             raise ValueError("No test batches generated")
+
         fmt = "[bold]Generated[/] %d batches from %d jobs"
         logger.info(fmt % (len(batch_specs), len(runner.jobs)))
         root = runner.workspace.cache_dir / "canary-dist"
@@ -122,8 +152,7 @@ class DistributedPoolConductor:
         parser.description = (
             "Batch jobs and run batches remotely across a distributed pool of machines."
         )
-        group = "distributed pool execution"
-        group = super(canary.Parser, parser).add_argument_group(group)
+        group = super(canary.Parser, parser).add_argument_group("distributed pool execution")
         DistributedPoolConductor.add_server_argument(group)
         group.add_argument(
             "--tags",
@@ -155,6 +184,18 @@ class DistributedPoolConductor:
             metavar="T",
             type=canary.time.time_in_seconds,
             help="Approximate test batch duration in seconds [default: 10m]",
+        )
+        group.add_argument(
+            "--batch-exact-estimate",
+            dest="dist_batch_exact_estimate",
+            action="store_true",
+            default=False,
+            help=(
+                "After forming distributed batches with cheap schedule estimates, "
+                "run an exact scalar scheduler simulation once per final batch to "
+                "refine the stored runtime estimate.  This is slower for very "
+                "large suites."
+            ),
         )
         group.add_argument(
             "-E",

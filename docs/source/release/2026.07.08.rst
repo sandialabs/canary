@@ -15,8 +15,8 @@ Highlights
 Topology-aware resource pools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Reworked :py:`_canary.resource_pool.ResourcePool` from a flat local inventory into a topology-aware resource model.
-* Added explicit node modeling through :py:`_canary.resource_pool.rpool.Node`.
+* Reworked :py:class:`_canary.resource_pool.ResourcePool` from a flat local inventory into a topology-aware resource model.
+* Added explicit node modeling through :py:class:`_canary.resource_pool.rpool.Node`.
 * Resource pools now use a canonical layout with:
   * global ``additional_properties``;
   * a list of ``nodes``;
@@ -32,8 +32,8 @@ Topology-aware resource pools
 Resource manager lifecycle
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Added :py:`_canary.resource_pool.manager.ResourceManager` to own the concrete resource pool for a configuration.
-* :py:`_canary.config.Config` now constructs and manages resource pools lazily through the resource manager.
+* Added :py:class:`_canary.resource_pool.manager.ResourceManager` to own the concrete resource pool for a configuration.
+* :py:class:`_canary.config.Config` now constructs and manages resource pools lazily through the resource manager.
 * Resource-manager state is included in configuration snapshots so subprocesses can reconstruct an already-discovered resource pool without rerunning discovery hooks.
 * Resource-pool construction is now split into:
   * ``canary_resource_pool_fill`` for initial pool creation;
@@ -58,7 +58,7 @@ Job allocation model
 * Job and batch allocation state now stores full allocation objects containing:
   * ``metadata``;
   * ``resources``.
-* :py:`_canary.job.Job.assign_resources` and :py:`_canary.job.Job.free_resources` now preserve the full allocation structure.
+* :py:func:`_canary.job.Job.assign_resources` and :py:func:`_canary.job.Job.free_resources` now preserve the full allocation structure.
 * CPU/GPU environment variables are derived from the checked-out resource allocation.
 * Job JSON serialization now records allocation data.
 * Added compatibility/error messaging for the removed global ``config.resource_pool`` access path, steering users toward plugin-manager resource-pool hooks.
@@ -66,16 +66,16 @@ Job allocation model
 View and reporting improvements
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Moved view management into a dedicated :py:`_canary.view` module.
-* Added :py:`_canary.view.ViewManager` for live, incremental view updates while jobs finish.
+* Moved view management into a dedicated :py:mod:`_canary.view` module.
+* Added :py:class:`_canary.view.ViewManager` for live, incremental view updates while jobs finish.
 * Added manifest-backed views:
-  * :py:`_canary.view.ViewManifest`;
-  * :py:`_canary.view.ViewManifestEntry`;
+  * :py:class:`_canary.view.ViewManifest`;
+  * :py:class:`_canary.view.ViewManifestEntry`;
   * per-view metadata under ``_canary``.
 * View updates are protected by a workspace-level lock to support concurrent or re-entrant updates.
 * Views now support configured report generation at finish/rebuild time.
 * Added ``--report`` support to ``canary run`` for selecting final view report formats.
-* Added :py:`_canary.hookspec.canary_view_report` for view-level report generation.
+* Added :py:func:`_canary.hookspec.canary_view_report` for view-level report generation.
 
 Reporter updates
 ^^^^^^^^^^^^^^^^
@@ -106,7 +106,7 @@ HPC batching and resource handling
   * backend name;
   * per-node resource counts;
   * node-local CPU/GPU/custom resources.
-* :py:`canary_hpc.batchspec.TestBatch` now stores and serializes full resource allocations.
+* :py:class:`canary_hpc.batchspec.TestBatch` now stores and serializes full resource allocations.
 * HPC batch checkout/checkin now operates on full allocation objects.
 * ``nodes`` resource requests are supported and can be expanded into per-node resources for batch execution.
 * Added validation that the active resource manager backend matches the requested HPC backend.
@@ -150,13 +150,13 @@ PYT directives and test metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * Added resource directives for ``.pyt`` tests:
-  * :py:`canary.directives.cpus`;
-  * :py:`canary.directives.gpus`;
-  * :py:`canary.directives.nodes`.
+  * :py:func:`canary.directives.cpus`;
+  * :py:func:`canary.directives.gpus`;
+  * :py:func:`canary.directives.nodes`.
 * Resource directives are stored as meta-parameters so they affect scheduling without changing parameterized test names.
-* Added support for PYT meta-parameters in generated :py:`_canary.ir.JobSpecIR` instances.
-* Added :py:`canary.directives.artifact(..., save_on=...)` spelling for artifact save policy.
-* Test instances now include spec attributes when converted through :py:`_canary.testinst`.
+* Added support for PYT meta-parameters in generated :py:class:`_canary.ir.JobSpecIR` instances.
+* Added :py:func:`canary.directives.artifact(..., save_on=...)` spelling for artifact save policy.
+* Test instances now include spec attributes when converted through :py:mod:`_canary.testinst`.
 * Composite/analyze-only handling now accounts for parameters and meta-parameters when building multi-instance parameter tables.
 
 Docs and examples
@@ -197,9 +197,9 @@ Detailed changes
 Resource pool / allocation model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Added :py:`_canary.resource_pool.manager.ResourceManager`.
-* Added :py:`_canary.resource_pool.rpool.Node`.
-* Reworked :py:`_canary.resource_pool.rpool.ResourcePool` to manage one or more nodes.
+* Added :py:class:`_canary.resource_pool.manager.ResourceManager`.
+* Added :py:class:`_canary.resource_pool.rpool.Node`.
+* Reworked :py:class:`_canary.resource_pool.rpool.ResourcePool` to manage one or more nodes.
 * Added node-aware methods:
   * ``node_ids``;
   * ``get_node``;
@@ -219,14 +219,14 @@ Resource pool / allocation model
   * per-node resource request interpretation;
   * allocation rollback on failed checkout;
   * aggregate resource views.
-* Added :py:`_canary.resource_pool.rpool.ResourceUnavailable` handling for unknown resources, unknown nodes, and heterogeneous per-node counts.
-* Added :py:`_canary.resource_pool.rpool.EmptyResourcePoolError` behavior for empty pools.
+* Added :py:class:`_canary.resource_pool.rpool.ResourceUnavailable` handling for unknown resources, unknown nodes, and heterogeneous per-node counts.
+* Added :py:class:`_canary.resource_pool.rpool.EmptyResourcePoolError` behavior for empty pools.
 * Resource-pool tests were expanded substantially for schema validation, checkout/checkin, colocated resources, multi-node requests, node counts, and error handling.
 
 Config and plugin hooks
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-* :py:`_canary.config.Config` now initializes a :py:`ResourceManager`.
+* :py:class:`_canary.config.Config` now initializes a :py:class:`ResourceManager`.
 * Configuration load/snapshot/restore paths now clear or restore resource-manager state.
 * Config snapshots include resource-manager state so subprocesses can use the resolved pool.
 * Removed the old direct global resource-pool behavior in favor of managed resource pools.
@@ -238,12 +238,12 @@ Config and plugin hooks
 Views and workspace behavior
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Added a dedicated :py:`_canary.view` module containing:
-  * :py:`ViewSettings`;
-  * :py:`ResultsView`;
-  * :py:`ViewManifest`;
-  * :py:`ViewManager`;
-  * :py:`ViewReportRequest`.
+* Added a dedicated :py:mod:`_canary.view` module containing:
+  * :py:class:`ViewSettings`;
+  * :py:class:`ResultsView`;
+  * :py:class:`ViewManifest`;
+  * :py:class:`ViewManager`;
+  * :py:class:`ViewReportRequest`.
 * Workspace run flow now starts a view manager before executing a session and finalizes it afterward.
 * Live job-finished events update the DB listener and synchronize the view.
 * View rebuild now uses the view manager and preserves/restores previous views on failure.
@@ -314,7 +314,7 @@ PYT and directives
 
 * Added PYT model support for meta-parameters.
 * Added resource-parameter handling for ``cpus``, ``gpus``, and ``nodes``.
-* Added public directive documentation for :py:`canary.directives.nodes`.
+* Added public directive documentation for :py:func:`canary.directives.nodes`.
 * Resource directives validate integer type and minimum value.
 * PYT lock emission now includes meta-parameters in generated IR.
 * Template substitution can use both parameters and meta-parameters.

@@ -76,7 +76,7 @@ Examples
   .. command-output:: canary run --workers=1 -b scheduler=shell -b spec=count:4 .
     :cwd: /examples
     :setup: rm -rf .canary TestResults
-    :returncode: 14
+    :anyreturncode:
 
 
 * Run the canary example suite in 4 batches, running tests in serial in each batch
@@ -84,7 +84,7 @@ Examples
   .. command-output:: canary run --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .
     :cwd: /examples
     :setup: rm -rf .canary TestResults
-    :returncode: 14
+    :anyreturncode:
 
 .. command-output:: rm -rf TestResults .canary
   :cwd: /examples

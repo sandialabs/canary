@@ -171,6 +171,8 @@ def fill_hpc_resource_pool(b: str) -> dict[str, Any]:
     need to know where the scheduler will physically place the job.
     """
 
+    backend: hpc_connect.Backend = hpc_connect.get_backend(b)
+
     def _canonical_resource_type(rtype: str) -> str:
         return rtype if rtype.endswith("s") else f"{rtype}s"
 
@@ -196,7 +198,6 @@ def fill_hpc_resource_pool(b: str) -> dict[str, Any]:
             except ValueError:
                 return 0
 
-    backend: hpc_connect.Backend = hpc_connect.get_backend(b)
     resource_types = {_canonical_resource_type(rtype) for rtype in backend.resource_types()}
     resource_types.update({"cpus", "gpus"})
     nodes: list[dict[str, Any]] = []

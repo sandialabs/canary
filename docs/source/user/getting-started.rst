@@ -54,6 +54,7 @@ A test is considered to have successfully completed if its exit code is ``0``.  
 .. command-output:: canary status
     :nocache:
     :cwd: /examples
+    :setup: canary run -w -k first ./basic/first
 
 By default, only failed tests appear in the output.  To see the results of each test in the session, including passed tests, pass ``-rA``:
 

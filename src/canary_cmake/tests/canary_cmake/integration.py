@@ -66,7 +66,7 @@ def test_cmake_integration(tmpdir):
             run.add_default_args("-r", "cpus:6", "-r", "gpus:0")
             run("-w", "--recurse-ctest", ".", debug=True)
             files = sorted(os.listdir("TestResults"))
-            assert set(files) == {"VIEW.TAG", "_canary", "summary.html", "baz", "foo", "spam"}
+            assert set(files) == {".canary-view.json", "baz", "foo", "spam"}
 
 
 f3 = fs.which("mpirun")
@@ -108,7 +108,7 @@ def test_cmake_integration_parallel(tmpdir):
                     print(open(file).read())
                 assert 0, "test failed"
             files = sorted(os.listdir("TestResults"))
-            assert set(files) == {"VIEW.TAG", "_canary", "summary.html", "foo.cpus=4"}
+            assert set(files) == {".canary-view.json", "foo.cpus=4"}
 
 
 f3 = fs.which("mpirun")

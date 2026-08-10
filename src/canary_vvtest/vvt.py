@@ -188,7 +188,7 @@ class VVTestAdapter:
 
     def f_DEPENDS_ON(self, arg: Directive) -> None:
         options = dict(arg.options or {})
-        expects = "+"
+        expects: int | str = "+"
         if expect := options.get("expect"):
             try:
                 expect = int(expect)

@@ -126,13 +126,10 @@ def _get_build_data(
         num_failed = b["test"]["fail"]
         if not num_failed:
             continue
-        diffed = server.get_failed_tests(b, skip_missing=True, fail_reason="Diffed")
-        timeout = server.get_failed_tests(b, skip_missing=True, fail_reason="Timeout")
-        num_diffed = len(diffed)
-        num_timeout = len(timeout)
+        num_diffed, num_timeout, num_failed_other = server.get_failed_test_category_counts(b)
         b["test"]["fail_diff"] = num_diffed
         b["test"]["fail_timeout"] = num_timeout
-        b["test"]["fail_fail"] = max(num_failed - num_diffed - num_timeout, 0)
+        b["test"]["fail_fail"] = num_failed_other
     return cdash_builds
 
 

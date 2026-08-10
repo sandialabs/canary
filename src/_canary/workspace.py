@@ -143,6 +143,9 @@ class Workspace:
         # Text logs
         self.logs_dir: Path
 
+        # Reports
+        self.reports_dir: Path
+
         self.db: WorkspaceDatabase
 
         self.canary_level: int
@@ -166,6 +169,7 @@ class Workspace:
         self.cache_dir = self.root / "cache"
         self.tmp_dir = self.root / "tmp"
         self.logs_dir = self.root / "logs"
+        self.reports_dir = self.root / "reports"
         self.canary_level = 0
         self.view_manager = None
         if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
@@ -298,6 +302,7 @@ class Workspace:
         self.cache_dir.mkdir(parents=True)
         self.tmp_dir.mkdir(parents=True)
         self.logs_dir.mkdir(parents=True)
+        self.reports_dir.mkdir(parents=True)
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
@@ -888,10 +893,15 @@ class Workspace:
             except IndexError:
                 raise ValueError(f"{id}: no matching test job found in {self.root}")
         # Do the full (slow) lookup
+        candidates: list[Job] = []
         jobs = self.load_jobs()
         for job in jobs:
             if job.spec.matches(root):
                 return job
+            elif job.spec.matches(root, fuzzy=True):
+                candidates.append(job)
+        if candidates:
+            return candidates[0]
         raise ValueError(f"{root}: no matching test job found in {self.root}")
 
     def find_jobspec(self, root: str) -> "JobSpec":

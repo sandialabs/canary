@@ -11,7 +11,6 @@ plugins.subcommands
    autodoc
    check
    collect
-   common/index
    config
    describe
    docs

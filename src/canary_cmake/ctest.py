@@ -17,7 +17,7 @@ import canary
 from _canary.generator import AbstractTestGenerator
 from _canary.status import Status
 
-warning_cache = set()
+warning_cache: set[str] = set()
 
 logger = canary.get_logger(__name__)
 

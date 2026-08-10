@@ -18,7 +18,6 @@ import re
 from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Hashable
 from typing import Iterable
 from typing import Type
 
@@ -33,7 +32,10 @@ from .util import logging
 if TYPE_CHECKING:
     from .job import Job
     from .jobspec import JobSpec
+    from .resource_pool.rpool import NodeRequest
 
+
+ResourceSetCacheKey = tuple[tuple[bool, tuple[tuple[str, int], ...]], ...]
 
 logger = logging.get_logger(__name__)
 
@@ -328,17 +330,14 @@ class ResourceCapacityRule(RuntimeRule):
 
     def __init__(self, priority: int = 0) -> None:
         super().__init__(priority=priority)
-        self.cache: dict[tuple[tuple[str, Any], ...], RuleOutcome] = {}
+        self.cache: dict[ResourceSetCacheKey, RuleOutcome] = {}
 
     @cached_property
     def default_reason(self) -> str:
         return "not enough resources"
 
-    def freeze_resource_set(
-        self, resource_set: list[dict[str, Any]]
-    ) -> tuple[tuple[str, Hashable], ...]:
-        frozen = [(r["type"], r["slots"]) for r in resource_set]
-        return tuple(sorted(frozen))
+    def freeze_resource_set(self, resource_set: list["NodeRequest"]) -> ResourceSetCacheKey:
+        return tuple(request.freeze() for request in resource_set)
 
     def __call__(self, job: "Job") -> RuleOutcome:
         resource_set = job.required_resources()

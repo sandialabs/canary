@@ -4,12 +4,13 @@
 
 
 
-.. _canary.plugins.builtin.json:
+.. _canary.reporters.html:
 
-json
+html
 ====
 
-.. automodule:: _canary.plugins.builtin.json
+.. automodule:: _canary.reporters.html
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: type

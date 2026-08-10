@@ -29,6 +29,8 @@ from _canary.util.time import time_in_seconds
 from .status import BatchStatus
 
 if TYPE_CHECKING:
+    from _canary.resource_pool.rpool import NodeRequest
+
     from .batchexec import HPCConnectRunner
 
 logger = canary.get_logger(__name__)
@@ -39,6 +41,8 @@ class BatchSpec:
     layout: str
     jobs: list[canary.Job]
     dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
+    estimated_runtime: float | None = None
+    schedule_metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
     rparameters: dict[str, int] = dataclasses.field(init=False)
@@ -55,8 +59,12 @@ class BatchSpec:
     def __len__(self) -> int:
         return len(self.jobs)
 
-    def required_resources(self) -> list[dict[str, Any]]:
-        return [{"type": "cpus", "slots": 1}]
+    def required_resources(self) -> list["NodeRequest"]:
+        from _canary.resource_pool.rpool import NodeRequest
+
+        node_request = NodeRequest()
+        node_request.add("cpus", 1)
+        return [node_request]
 
 
 class TestBatch(BaseJob):
@@ -85,7 +93,7 @@ class TestBatch(BaseJob):
         self.stdout = "canary-out.txt"
         self.runtime: float = self.find_approximate_runtime()
         self.state = JobState()
-        self._allocation: dict[str, dict] = {"metadata": {}, "resources": {}}
+        self._allocation: dict[str, Any] = {"metadata": {}, "resources": {}, "state": "inactive"}
         self.jobid: str | None = None
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
         self.dependencies: list["TestBatch"] = dependencies or []
@@ -146,13 +154,16 @@ class TestBatch(BaseJob):
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
     def find_approximate_runtime(self) -> float:
-        from .batching import packed_perimeter
+        """Return the batch runtime estimate."""
+        if self.spec.estimated_runtime is not None:
+            return float(self.spec.estimated_runtime)
 
         if len(self.jobs) == 1:
-            return self.jobs[0].runtime
-        _, height = packed_perimeter(self.jobs)
-        t = sum(c.runtime for c in self)
-        return float(min(height, t))
+            return float(self.jobs[0].runtime)
+
+        # Fallback for BatchSpec objects not produced by the schedule packer.
+        # Serial time is conservative
+        return float(sum(job.runtime for job in self.jobs))
 
     @cached_property
     def timeout_multiplier(self) -> float:
@@ -213,7 +224,7 @@ class TestBatch(BaseJob):
           }
 
         """
-        return self._allocation["resources"]
+        return {} if self._allocation["state"] == "inactive" else self._allocation["resources"]
 
     @property
     def allocation(self) -> dict[str, dict]:
@@ -222,20 +233,28 @@ class TestBatch(BaseJob):
     def assign_resources(self, arg: dict[str, dict]) -> None:
         self._allocation.clear()
         self._allocation.update(copy.deepcopy(arg))
+        self._allocation.setdefault("metadata", {})
+        self._allocation.setdefault("resources", {})
+        self._allocation["state"] = "active" if self._allocation["resources"] else "inactive"
 
     def free_resources(self) -> dict[str, dict]:
-        tmp = copy.deepcopy(self._allocation)
-        self._allocation.clear()
-        self._allocation.update({"metadata": {}, "resources": {}})
-        return tmp
+        if self._allocation.get("state") != "active":
+            return {"metadata": {}, "resources": {}}
+        freed = copy.deepcopy(self._allocation)
+        freed.pop("state")
+        self._allocation["state"] = "inactive"
+        return freed
 
-    def required_resources(self) -> list[dict[str, Any]]:
+    def required_resources(self) -> list["NodeRequest"]:
         return self.spec.required_resources()
 
     def dependency_batches_submitted(self) -> bool:
         return all(d.jobid is not None for d in self.dependencies)
 
     def dependency_batches_complete(self) -> bool:
+        return all(d.state.is_done() for d in self.dependencies)
+
+    def dependency_jobs_complete(self) -> bool:
         return all(all(c.state.is_done() for c in d.jobs) for d in self.dependencies)
 
     def refresh_readiness(self) -> None:
@@ -390,21 +409,43 @@ class TestBatch(BaseJob):
     def refresh(self) -> None:
         for job in self:
             job.refresh()
-        self.finalize_status_from_jobs()
+        self.finalize_status_from_child_jobs()
 
-    def finalize_status_from_jobs(self) -> None:
-        # If the batch already has an explicit infrastructure/preflight failure,
-        # do not overwrite its reason with a generic child-job summary.
+    def finalize_status_from_child_jobs(self) -> None:
+        now = time.time()
+        for job in self.jobs:
+            try:
+                job.refresh_readiness()
+            except Exception:
+                logger.debug("Failed to refresh readiness for %s", job.id[:7], exc_info=True)
+        unfinished = [job for job in self.jobs if not job.state.is_done() or job.status.is_unset()]
+        if unfinished:
+            for job in unfinished:
+                # refresh_readiness may have marked some jobs BLOCKED.
+                if job.state.is_done() and not job.status.is_unset():
+                    continue
+                job.state.phase = JobPhase.DONE
+                job.set_status(
+                    outcome="BROKEN", reason="Batch finished before job produced a final result"
+                )
+                if job.timekeeper.submitted < 0:
+                    job.timekeeper.submitted = (
+                        self.timekeeper.submitted if self.timekeeper.submitted > 0 else now
+                    )
+                if job.timekeeper.started < 0:
+                    job.timekeeper.started = now
+                if job.timekeeper.finished < 0:
+                    job.timekeeper.finished = now
+                try:
+                    job.save()
+                except Exception:
+                    logger.debug("Failed to save finalized child job %s", job.id[:7], exc_info=True)
         base = self.status.base
         if base.is_failure() and base.reason:
             return
-
-        unfinished = [job for job in self.jobs if not job.state.is_done() or job.status.is_unset()]
-
-        if unfinished:
+        if any(not job.state.is_done() or job.status.is_unset() for job in self.jobs):
             self.status.set_base(
-                outcome="FAILED",
-                reason=f"{len(unfinished)} job(s) in batch did not produce a final result",
+                outcome="FAILED", reason="One or more jobs in batch did not produce a final result"
             )
         elif all(job.status.is_success() for job in self.jobs):
             self.status.set_base(outcome="SUCCESS")
@@ -462,6 +503,8 @@ class TestBatch(BaseJob):
             "session": self.session,
             "workspace": str(self.workspace.dir),
             "jobs": [job.id for job in self],
+            "estimated_runtime": self.runtime,
+            "schedule_metadata": self.spec.schedule_metadata,
             "status": serialize(self.status)["base"],
             "timekeeper": serialize(self.timekeeper),
             "measurements": serialize(self.measurements),

@@ -19,6 +19,6 @@ A multi-page `markdown <https://en.wikipedia.org/wiki/Markdown>`_ report of a te
     :nocache:
     :cwd: /examples
 
-.. command-output:: cat TestResults/canary-report.md
+.. command-output:: cat MARKDOWN/index.md
     :nocache:
     :cwd: /examples

@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.builtin.junit:
+.. _canary_dist.batchexec:
 
-junit
-=====
+batchexec
+=========
 
-.. automodule:: _canary.plugins.builtin.junit
+.. automodule:: canary_dist.batchexec
    :members:
    :undoc-members:
    :show-inheritance:

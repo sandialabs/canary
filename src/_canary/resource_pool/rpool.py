@@ -257,6 +257,30 @@ class Node:
                     )
         self._recompute_slots()
 
+    def checkout_exclusive(self, request: list[dict[str, Any]]) -> dict[str, list[dict]]:
+        outcome = self.accommodates(request)
+        if not outcome:
+            raise ResourceUnavailable(outcome.reason or f"Node {self.id} cannot satisfy request")
+
+        acquired: dict[str, list[dict]] = {}
+
+        for rtype, instances in self.resources.items():
+            for instance in instances:
+                slots = int(instance.get("slots", 0))
+                if slots <= 0:
+                    continue
+
+                item = copy.deepcopy(instance)
+                item["slots"] = slots
+                item["node"] = self.id
+
+                acquired.setdefault(rtype, []).append(item)
+
+                instance["slots"] = 0
+
+        self._recompute_slots()
+        return acquired
+
     def pop(self, rtype: str) -> ResourceSpec | None:
         if rtype in self.resources:
             del self.slots_per_resource_type[rtype]
@@ -306,6 +330,37 @@ class Node:
         for instance in self.resources[rtype]:
             instance["slots"] *= factor
         self._recompute_slots()
+
+
+class NodeRequest:
+    __slots__ = ("resources", "exclusive")
+
+    def __init__(self) -> None:
+        self.resources: list[dict[str, Any]] = []
+        self.exclusive: bool = False
+
+    def add(self, type: str, count: int) -> None:
+        if count <= 0:
+            return
+        self.resources.extend({"type": type, "slots": 1} for _ in range(count))
+
+    def count(self, type: str) -> int:
+        count = 0
+        for item in self.resources:
+            if item["type"] == type:
+                count += int(item.get("slots", 1))
+        return count
+
+    def total_slots(self) -> int:
+        return sum(int(item.get("slots", 1)) for item in self.resources)
+
+    def freeze(self) -> tuple[bool, tuple[tuple[str, int], ...]]:
+        return (
+            self.exclusive,
+            tuple(
+                sorted((str(item["type"]), int(item.get("slots", 1))) for item in self.resources)
+            ),
+        )
 
 
 class ResourcePool:
@@ -458,6 +513,27 @@ class ResourcePool:
     def get_property(self, name: str) -> Any:
         return self.additional_properties.get(name)
 
+    def _place_node_requests(
+        self, requests: list[NodeRequest]
+    ) -> list[tuple[Node, NodeRequest]] | None:
+        available = list(self.nodes)
+        placements: list[tuple[Node, NodeRequest]] = []
+
+        # Place largest node-local requests first.
+        ordered = sorted(requests, key=lambda r: r.total_slots(), reverse=True)
+
+        for request in ordered:
+            candidates = [node for node in available if node.accommodates(request.resources)]
+
+            if not candidates:
+                return None
+
+            selected = max(candidates, key=lambda node: node.score(request.resources))
+            placements.append((selected, request))
+            available.remove(selected)
+
+        return placements
+
     def _resolve_type(self, rtype: str) -> str:
         if rtype in ("node", "nodes"):
             return "nodes"
@@ -522,7 +598,7 @@ class ResourcePool:
 
     def _split_node_request(self, request: ResourceRequest) -> tuple[int, ResourceRequest]:
         nodes_requested: int | None = None
-        resource_request: list[dict[str, Any]] = []
+        resource_request: ResourceRequest = []
 
         for item in request:
             rtype = item["type"]
@@ -533,45 +609,20 @@ class ResourcePool:
 
         return nodes_requested or 1, resource_request
 
-    def accommodates(self, request: ResourceRequest) -> Outcome:
-        """Determine if the resources for this test are available."""
+    def accommodates(self, request: list[NodeRequest]) -> Outcome:
         if self.empty():
             raise EmptyResourcePoolError
-
-        nodes_requested, per_node_request = self._split_node_request(request)
-
-        if nodes_requested <= 1:
-            reasons: list[str] = []
-            for node in self.nodes:
-                outcome = node.accommodates(per_node_request)
-                if outcome:
-                    return Outcome(True)
-                if outcome.reason:
-                    reasons.append(outcome.reason)
-            reason = "No single node can accommodate requested resources"
-            if logging.get_level() <= logging.DEBUG and reasons:
-                reason += ": " + "; ".join(reasons)
-            return Outcome(False, reason=reason)
-
-        if not self.allow_multinode:
+        if len(request) > 1 and not self.allow_multinode:
             return Outcome(
                 False,
                 reason="Multi-node allocation requested but this resource pool does not allow it",
             )
-
-        candidates = [node for node in self.nodes if node.accommodates(per_node_request)]
-        if len(candidates) < nodes_requested:
-            return Outcome(
-                False,
-                reason=(
-                    f"Requested {nodes_requested} nodes, but only {len(candidates)} "
-                    "can accommodate the per-node resource request"
-                ),
-            )
-
+        placements = self._place_node_requests(request)
+        if placements is None:
+            return Outcome(False, reason=f"Could not place request on {len(request)} node(s)")
         return Outcome(True)
 
-    def checkout(self, request: ResourceRequest, **kwds: Any) -> ResourceAllocation:
+    def checkout(self, request: list[NodeRequest], **kwds: Any) -> ResourceAllocation:
         """Returns resources available to the test.
 
         Returned resources have the form:
@@ -594,10 +645,38 @@ class ResourcePool:
         """
         if self.empty():
             raise EmptyResourcePoolError
-        nodes_requested, per_node_request = self._split_node_request(request)
-        if nodes_requested <= 1:
-            return self._checkout_single_node(per_node_request)
-        return self._checkout_multi_node(nodes_requested, per_node_request)
+
+        if len(request) > 1 and not self.allow_multinode:
+            raise ResourceUnavailable(
+                "Multi-node allocation requested but this resource pool does not allow it"
+            )
+
+        placements = self._place_node_requests(request)
+        if placements is None:
+            raise ResourceUnavailable(f"Could not place request on {len(request)} node(s)")
+
+        acquired: dict[str, list[dict]] = {}
+        checked_out: list[tuple[Node, dict[str, list[dict]]]] = []
+
+        try:
+            for node, node_request in placements:
+                if node_request.exclusive:
+                    node_acquired = node.checkout_exclusive(node_request.resources)
+                else:
+                    node_acquired = node.checkout(node_request.resources)
+
+                checked_out.append((node, node_acquired))
+
+                for rtype, rspecs in node_acquired.items():
+                    acquired.setdefault(rtype, []).extend(rspecs)
+
+        except Exception:
+            for node, node_acquired in checked_out:
+                node.checkin(node_acquired)
+            raise
+
+        self._log_acquired(acquired)
+        return {"metadata": {}, "resources": acquired}
 
     def _checkout_single_node(self, request: ResourceRequest) -> ResourceAllocation:
         candidates = [node for node in self.nodes if node.accommodates(request)]

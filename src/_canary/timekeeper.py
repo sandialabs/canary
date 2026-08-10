@@ -59,7 +59,7 @@ class Timekeeper:
         return -1.0
 
     def duration(self) -> float:
-        if self.finished > 0:
+        if self.started > 0 and self.finished > 0:
             return self.finished - self.started
         return -1.0
 

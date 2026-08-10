@@ -93,8 +93,8 @@ class MergeRequest:
         self, failed_cases: dict[str, list["canary.Job"]], cdash_build_url: str | None = None
     ) -> None:
         fp = io.StringIO()
-        job = re.sub(":(build|test|report)", "", self.job_name)
-        fp.write(f"Merge request pipeline `{escape_markdown(job)}` failed\n\n")
+        pipeline_name = re.sub(":(build|test|report)", "", self.job_name)
+        fp.write(f"Merge request pipeline `{escape_md(pipeline_name)}` failed\n\n")
 
         num_failed = sum(len(jobs) for jobs in failed_cases.values())
         sec = "<h3>Failed test summary</h3>"
@@ -126,8 +126,8 @@ class MergeRequest:
 
     def report_success(self, cdash_build_url: str | None = None) -> None:
         fp = io.StringIO()
-        job = re.sub(":(build|test|report)", "", self.job_name)
-        fp.write(f"Merge request pipeline `{escape_markdown(job)}` finished successfully\n\n")
+        pipeline_name = re.sub(":(build|test|report)", "", self.job_name)
+        fp.write(f"Merge request pipeline `{escape_md(pipeline_name)}` finished successfully\n\n")
 
         if cdash_build_url is not None:
             fp.write(f"See the [CDash entry]({cdash_build_url}) for details.\n\n")
@@ -153,7 +153,7 @@ def escape_table_cell(value: object) -> str:
     )
 
 
-def escape_markdown(value: object) -> str:
+def escape_md(value: object) -> str:
     return str(value).replace("\\", "\\\\").replace("`", "\\`").replace("\n", " ")
 
 

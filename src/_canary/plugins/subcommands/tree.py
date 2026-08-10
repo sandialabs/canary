@@ -77,7 +77,7 @@ def tree(
     def is_results_dir(p):
         if os.path.exists(os.path.join(p, "WORKSPACE.TAG")):
             return True
-        if os.path.exists(os.path.join(p, "VIEW.TAG")):
+        if os.path.exists(os.path.join(p, ".canary-view.json")):
             return True
         return False
 

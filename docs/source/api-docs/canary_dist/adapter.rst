@@ -4,12 +4,12 @@
 
 
 
-.. _canary.plugins.builtin.html:
+.. _canary_dist.adapter:
 
-html
-====
+adapter
+=======
 
-.. automodule:: _canary.plugins.builtin.html
+.. automodule:: canary_dist.adapter
    :members:
    :undoc-members:
    :show-inheritance:

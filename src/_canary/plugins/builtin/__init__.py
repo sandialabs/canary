@@ -6,24 +6,8 @@ from . import archive
 from . import capture
 from . import cli
 from . import email
-from . import html
-from . import json
-from . import junit
-from . import markdown
 from . import post_clean
 from . import repeat
 from . import testcase_generator
 
-plugins = [
-    archive,
-    capture,
-    cli,
-    email,
-    html,
-    json,
-    junit,
-    markdown,
-    post_clean,
-    repeat,
-    testcase_generator,
-]
+plugins = [archive, capture, cli, email, post_clean, repeat, testcase_generator]

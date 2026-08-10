@@ -14,19 +14,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from ... import config
-from ...hookspec import hookimpl
-from ...util import json_helper as json
-from ...util import logging
-from ...util.filesystem import mkdirp
-from ..types import CanaryReporter
+from .. import config
+from ..hookspec import hookimpl
+from ..util import logging
+from ..util.filesystem import mkdirp
+from .reporter import CanaryReporter
+from .reporter import enabled
 
 if TYPE_CHECKING:
-    from ...config.argparsing import Parser
-    from ...job import Job
-    from ...view import ViewManifestEntry
-    from ...view import ViewReportRequest
-    from ...workspace import Workspace
+    from ..config.argparsing import Parser
+    from ..job import Job
+    from ..runtest import Runner
+    from ..workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -50,18 +49,16 @@ def canary_reporter() -> CanaryReporter:
     return JunitReportCommand()
 
 
-@hookimpl
-def canary_view_report(request: "ViewReportRequest") -> None:
-    """Create a JUnit XML report for a completed view snapshot."""
-    if "junit" not in request.formats:
+@hookimpl(trylast=True)
+def canary_runtests_report(runner: "Runner") -> None:
+    """Create a JUNIT report for a completed jobs."""
+    if not enabled("junit"):
         return
 
     reporter = JunitReporter()
-    jobs = reporter.load_view_jobs(request)
-
-    output_root = request.output_dir or request.view.metadata_dir / "reports"
+    ws = runner.workspace
     junit_request = JunitReportRequest(
-        workspace=request.workspace, jobs=jobs, output=output_root / JunitReporter.default_output
+        workspace=ws, jobs=runner.jobs, output=ws.reports_dir / JunitReporter.default_output
     )
 
     reporter.write(junit_request)
@@ -99,7 +96,7 @@ class JunitReportCommand(CanaryReporter):
         return 0
 
     def run_create(self, args: Namespace) -> None:
-        from ...workspace import Workspace
+        from ..workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
@@ -147,32 +144,6 @@ class JunitReporter:
         rel = os.path.relpath(output, config.invocation_dir)
         logger.info(f"JUnit report written to {rel}")
         return output
-
-    def load_view_jobs(self, request: "ViewReportRequest") -> list["Job"]:
-        """Load jobs represented by the current view manifest.
-
-        The manifest is treated as authoritative for the view snapshot.
-        """
-        manifest = request.view.load_manifest()
-        jobs: list["Job"] = []
-
-        for entry in manifest.entries.values():
-            job = self.load_job_from_entry(entry)
-            if job is not None:
-                jobs.append(job)
-
-        return jobs
-
-    def load_job_from_entry(self, entry: "ViewManifestEntry") -> "Job | None":
-        lockfile = Path(entry.source) / "testcase.lock"
-        if not lockfile.exists():
-            logger.warning(f"{lockfile}: testcase lock not found; skipping report entry")
-            return None
-        try:
-            return json.loads(lockfile.read_text())
-        except Exception:
-            logger.exception(f"{lockfile}: failed to load testcase lock")
-            return None
 
 
 def get_root_name() -> str:

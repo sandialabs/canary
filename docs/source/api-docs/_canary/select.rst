@@ -13,3 +13,4 @@ select
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: rules

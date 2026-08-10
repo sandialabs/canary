@@ -2,9 +2,14 @@
 
    SPDX-License-Identifier: MIT
 
-canary_nvidia
-=============
+reporters
+=========
 
 .. toctree::
    :maxdepth: 1
 
+   html
+   json
+   junit
+   markdown
+   reporter

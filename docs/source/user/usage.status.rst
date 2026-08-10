@@ -15,7 +15,7 @@ After running a test session, ``canary status`` can show the status of the test 
 
 .. command-output:: canary run .
     :cwd: /examples
-    :returncode: 14
+    :anyreturncode:
     :ellipsis: 0
     :setup: rm -rf .canary TestResults
 

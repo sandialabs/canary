@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
-    from .view import ViewReportRequest
     from .workspace import Session
 
 
@@ -147,10 +146,6 @@ def canary_sessionstart(session: "Session") -> None: ...
 
 @hookspec
 def canary_sessionfinish(session: "Session") -> None: ...
-
-
-@hookspec
-def canary_view_report(request: "ViewReportRequest") -> None: ...
 
 
 # -------------------------------------------------------------------------

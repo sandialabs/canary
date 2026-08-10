@@ -13,10 +13,6 @@ plugins.builtin
    capture
    cli
    email
-   html
-   json
-   junit
-   markdown
    post_clean
    repeat
    testcase_generator

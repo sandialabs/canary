@@ -38,24 +38,3 @@ class CanarySubcommand:
 
     def execute(self, args: Namespace) -> int:
         raise NotImplementedError
-
-
-class CanaryReporter:
-    """Canary report command descriptor.
-
-    Simple reporters should implement:
-
-        canary report <type>
-
-    Complex reporters, such as CDash, may override setup_parser and
-    run_from_args to provide their own subcommands.
-    """
-
-    type: str
-    description: str
-
-    def setup_parser(self, parser: "Parser") -> None:
-        pass
-
-    def run_from_args(self, args: Namespace) -> int:
-        raise NotImplementedError

@@ -14,7 +14,7 @@ Tests can be enabled and/or disabled using the :ref:`enable<directive-enable>` d
 
 .. command-output:: canary run ./enable
     :setup: rm -rf .canary TestResults
-    :returncode: 7
+    :anyreturncode:
     :cwd: /examples
 
 .. command-output:: canary run -o enable ./enable

@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
 def assert_testresults_contains_basic_tests(n: int = 12) -> None:
     dirs = os.listdir("TestResults")
-    expected = ["VIEW.TAG", "_canary", "summary.html"] + [f"test_{i}" for i in range(n)]
+    expected = [".canary-view.json"] + [f"test_{i}" for i in range(n)]
     assert sorted(expected) == sorted(dirs)
 
 

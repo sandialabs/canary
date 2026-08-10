@@ -30,7 +30,6 @@ parameter values and emits one spec per combination:
 .. literalinclude:: /static/yaml_generator.py
    :language: python
    :pyobject: YAMLTestGenerator.lock
-   :emphasize-lines: 18-33
 
 For each combination, the plugin sets ``spec.parameters`` and expands the script lines using the
 parameter values.

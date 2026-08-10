@@ -25,13 +25,80 @@ from _canary.util.time import time_in_seconds
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
+from .batching import allocate_partition_counts
 from .batching import batch_jobs
+from .batching import partition_jobs
+from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
 from .queue import ResourceQueue
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
+
+
+def create_batch_specs(
+    *,
+    jobs: list["canary.Job"],
+    batchspec: dict[str, object],
+    cpus_per_node: int,
+    workers: int | None,
+    resources_per_node: dict[str, int] | None = None,
+    exact_final_estimate: bool = False,
+) -> list[BatchSpec]:
+    """Create BatchSpec objects from jobs using the HPC batching policy.
+
+    This helper is intentionally side-effect light so conductor batching can be
+    tested without submitting to a backend.
+    """
+    partitions = partition_jobs(
+        jobs=jobs,
+        layout=batchspec["layout"],  # type: ignore[arg-type]
+        nodes=batchspec["nodes"],  # type: ignore[arg-type]
+        cpus_per_node=cpus_per_node,
+        resources_per_node=resources_per_node,
+    )
+
+    partition_counts = allocate_partition_counts(
+        batchspec["count"],  # type: ignore[arg-type]
+        partitions,
+    )
+
+    batch_specs: list[BatchSpec] = []
+
+    for partition, partition_count in zip(partitions, partition_counts):
+        logger.debug(
+            "Batching partition %s: jobs=%d node_count=%d "
+            "cpus_per_node=%d width=%d resources=%r count=%r duration=%r workers=%r",
+            partition.key,
+            len(partition.jobs),
+            partition.node_count,
+            partition.cpus_per_node,
+            partition.width,
+            partition.resource_capacity,
+            partition_count,
+            batchspec["duration"],
+            workers,
+        )
+
+        batch_specs.extend(
+            batch_jobs(
+                jobs=partition.jobs,
+                width=partition.width,
+                workers=workers,
+                layout=batchspec["layout"],  # type: ignore[arg-type]
+                count=partition_count,
+                duration=batchspec["duration"],  # type: ignore[arg-type]
+                nodes=batchspec["nodes"],  # type: ignore[arg-type]
+                resource_capacity=partition.resource_capacity,
+                node_count=partition.node_count,
+                exact_final_estimate=exact_final_estimate,
+            )
+        )
+
+    set_batch_dependencies(batch_specs)
+
+    return batch_specs
 
 
 class CanaryHPCConductor:
@@ -57,7 +124,8 @@ class CanaryHPCConductor:
         pluginmanager.register(self, "canary_hpc_conductor")
 
     def run(self, args: argparse.Namespace) -> int:
-        if n := args.hpc_batch_workers:
+        if args.hpc_batch_workers is not None:
+            n = int(args.hpc_batch_workers)
             if n > cpu_count():
                 logger.warning(f"--hpc-batch-workers={n} > cpu_count={cpu_count()}")
         batchspec = args.hpc_batchspec or CanaryHPCBatchSpec.defaults()
@@ -68,6 +136,77 @@ class CanaryHPCConductor:
             console_style["live_columns"] = "Job,ID,Status,Queued,Elapsed,Rank"
         setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
+
+    def backend_count_per_node(self, rtype: str) -> int:
+        """Return homogeneous backend resource count per node.
+
+        Tries both plural and singular resource type spellings.
+        """
+        candidates = [rtype]
+
+        if rtype.endswith("s"):
+            candidates.append(rtype[:-1])
+        else:
+            candidates.append(f"{rtype}s")
+
+        errors: list[str] = []
+
+        for candidate in candidates:
+            try:
+                count = int(self.backend.count_per_node(candidate))
+            except Exception as e:
+                errors.append(f"{candidate}: {e}")
+                continue
+
+            if count <= 0:
+                raise ValueError(
+                    f"Backend {self.backend.name!r} reports non-positive "
+                    f"{candidate}_per_node={count}"
+                )
+
+            return count
+
+        details = "; ".join(errors)
+        raise ValueError(
+            f"Could not determine {rtype!r} count per node for backend "
+            f"{self.backend.name!r}: {details}"
+        )
+
+    def backend_resources_per_node(self) -> dict[str, int]:
+        """Return homogeneous resource capacities per backend node.
+
+        CPU capacity is required.  Other resource types are included when they
+        are available and homogeneous across backend nodes.
+        """
+        resources: dict[str, int] = {}
+
+        resources["cpus"] = self.backend_count_per_node("cpus")
+
+        # Prefer resource-manager types because they include plugin-provided
+        # resources known to Canary.
+        rtypes: set[str] = set()
+        try:
+            rtypes.update(canary.config.resource_manager.types())
+        except Exception:
+            logger.debug("Could not query Canary resource manager types", exc_info=True)
+
+        # Ensure common resource types are considered.
+        rtypes.update({"cpus", "gpus"})
+
+        for rtype in sorted(rtypes):
+            if rtype in ("cpu", "cpus"):
+                continue
+
+            try:
+                count = self.backend_count_per_node(rtype)
+            except Exception:
+                logger.debug("Skipping backend resource type %r", rtype, exc_info=True)
+                continue
+
+            if count > 0:
+                resources[rtype] = int(count)
+
+        return resources
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: "Runner") -> bool:
@@ -83,13 +222,28 @@ class CanaryHPCConductor:
         batchspec = canary.config.getoption("hpc_batchspec")
         if not batchspec:
             raise ValueError("Cannot partition jobs: missing batching options")
-        batch_specs: list[BatchSpec] = batch_jobs(
-            jobs=runner.jobs,
-            layout=batchspec["layout"],
-            count=batchspec["count"],
-            duration=batchspec["duration"],
-            nodes=batchspec["nodes"],
+
+        workers = canary.config.getoption("hpc_batch_workers")
+        if workers is not None:
+            workers = int(workers)
+
+        logger.info(
+            "[bold]Batching[/] %d jobs for submission to [bold]%s[/] backend",
+            len(runner.jobs),
+            self.backend.name,
         )
+        resources_per_node = self.backend_resources_per_node()
+        cpus_per_node = resources_per_node["cpus"]
+
+        batch_specs = create_batch_specs(
+            jobs=runner.jobs,
+            batchspec=batchspec,
+            cpus_per_node=cpus_per_node,
+            workers=workers,
+            resources_per_node=resources_per_node,
+            exact_final_estimate=bool(canary.config.getoption("hpc_batch_exact_estimate")),
+        )
+
         if not batch_specs:
             raise ValueError(
                 "No test batches generated (this should never happen, "
@@ -98,7 +252,7 @@ class CanaryHPCConductor:
         if missing := {c.id for c in runner.jobs} - {c.id for b in batch_specs for c in b.jobs}:
             raise ValueError(f"Jobs missing from batches: {', '.join(missing)}")
         key = canary.string.pluralize("batch", n=len(batch_specs))
-        fmt = "[bold]Generated[/] %d test %s from %d jobs"
+        fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt % (len(batch_specs), key, len(runner.jobs)))
         root = runner.workspace.cache_dir / "canary-hpc"
         graph: dict[str, list[str]] = {}
@@ -164,6 +318,7 @@ class CanaryHPCConductor:
             "--batch-workers",
             dest="hpc_batch_workers",
             metavar="WORKERS",
+            type=int,
             help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
         )
         parser.add_argument(
@@ -173,6 +328,17 @@ class CanaryHPCConductor:
             choices=("aggressive", "conservative"),
             help="Estimate batch runtime (queue time) conservatively or aggressively "
             "[alias: -b timeout=STRATEGY] [default: aggressive]",
+        )
+        parser.add_argument(
+            "--batch-exact-estimate",
+            dest="hpc_batch_exact_estimate",
+            action="store_true",
+            default=False,
+            help=(
+                "After forming batches with cheap schedule estimates, run an exact "
+                "scalar scheduler simulation once per final batch to refine the "
+                "stored runtime estimate.  This is slower for very large suites."
+            ),
         )
         parser.add_argument(
             "--queue-timeout",

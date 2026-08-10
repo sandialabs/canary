@@ -37,8 +37,8 @@ from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
-from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
+from _canary.reporters.reporter import CanaryReporter
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule

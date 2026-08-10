@@ -15,6 +15,7 @@ from .rpool import make_resource_pool
 if TYPE_CHECKING:
     from ..config import Config as CanaryConfig
     from ..job import Job
+    from .rpool import NodeRequest
 
 
 class ResourceManager:
@@ -100,18 +101,32 @@ class ResourceManager:
         except ResourceUnavailable:
             return 0
 
-    def accommodates(self, case_or_request: "Job | list[dict[str, Any]]") -> Outcome:
+    def accommodates(self, case_or_request: "Job | list[NodeRequest]") -> Outcome:
         from ..job import Job
 
-        request: list[dict[str, Any]]
+        request: list["NodeRequest"]
         if isinstance(case_or_request, Job):
             request = case_or_request.required_resources()
         else:
             request = case_or_request
         return self.get_pool().accommodates(request)
 
-    def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, dict]:
+    def checkout(self, request: list["NodeRequest"], **kwds: Any) -> dict[str, dict]:
         return self.get_pool().checkout(request, **kwds)
 
     def checkin(self, allocation: dict[str, dict]) -> None:
         self.get_pool().checkin(allocation)
+
+    def slots_per_node(self, type: str) -> int:
+        try:
+            by_node = self.get_pool().slots_by_node(type)
+        except ResourceUnavailable:
+            return 0
+
+        values = set(by_node.values())
+        if not values:
+            return 0
+        if len(values) > 1:
+            raise ResourceUnavailable(f"Resource {type!r} has heterogeneous slots per node")
+
+        return values.pop()

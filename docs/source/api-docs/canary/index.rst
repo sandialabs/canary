@@ -8,6 +8,4 @@ canary
 .. toctree::
    :maxdepth: 1
 
-   directives
    patterns
-   tools/index
