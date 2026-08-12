@@ -31,6 +31,8 @@ def canary_cmdline_modifyargs(parser: "Parser", args: Namespace) -> None:
 def enabled(report_type: str) -> bool:
     from .. import config
 
+    if os.getenv("CANARY_LEVEL", "0") != "0":
+        return False
     reports = config.getoption("report")
     if reports is not None:
         return bool(reports) and "none" not in reports and report_type in reports

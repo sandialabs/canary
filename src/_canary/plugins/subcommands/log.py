@@ -28,12 +28,20 @@ class Log(CanarySubcommand):
     description = "Show the session or a job's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
             "-e",
             "--error",
             default=False,
             action="store_true",
             help="Display test stderr if it exists",
+        )
+        group.add_argument(
+            "-l",
+            "--lock",
+            default=False,
+            action="store_true",
+            help="Display test lockfile if it exists",
         )
         parser.add_argument(
             "--raw",
@@ -52,6 +60,8 @@ class Log(CanarySubcommand):
             if job.stderr is None:
                 return None
             return job.workspace.joinpath(job.stderr)
+        elif args.lock:
+            return job.workspace.joinpath("testcase.lock")
         else:
             return job.workspace.joinpath(job.stdout)
 
