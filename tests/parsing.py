@@ -13,8 +13,6 @@ from _canary.config.argparsing import Parser
 from _canary.config.argparsing import make_argument_parser
 from _canary.config.argparsing import safe_loads
 
-ci_env = os.getenv("CI") is not None
-
 
 def test_config_args():
 
@@ -165,17 +163,33 @@ def test_helpformatter_split_lines_pad_and_wrapping(monkeypatch: pytest.MonkeyPa
     assert any("wrap" in l for l in lines)
 
 
-@pytest.mark.skipif(ci_env, reason="Skip in CI")
+import re
+
+
 def test_helpformatter_usage_renders():
     parser = make_argument_parser()
+
     # ensure our formatter class is actually in use
     assert isinstance(parser._get_formatter(), HelpFormatter)
 
     usage = parser.format_usage()
     assert usage.startswith("usage: canary")
-    # sanity: includes known short flags
-    assert "[-v]" in usage
-    assert "[-q]" in usage
+
+    # argparse versions may render short flags individually:
+    #   [-v] [-q]
+    # or compact them:
+    #   [-hvqd]
+    assert _usage_has_short_flag(usage, "v")
+    assert _usage_has_short_flag(usage, "q")
+
+
+def _usage_has_short_flag(usage: str, flag: str) -> bool:
+    # Individual form, e.g. [-v]
+    if f"[-{flag}]" in usage:
+        return True
+
+    # Compact argparse form, e.g. [-hvqd]
+    return bool(re.search(rf"\[-[A-Za-z]*{re.escape(flag)}[A-Za-z]*\]", usage))
 
 
 def test_parser_remove_argument_by_optstring_and_dest():

@@ -41,6 +41,7 @@ test_paths = (
     "src/canary_amd/tests",
     "src/canary_cmake/tests",
     "src/canary_dist/tests",
+    "src/canary_flux/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
     "src/canary_nvidia/tests",
@@ -279,11 +280,13 @@ def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
     command: list[str]
+    use_local_packages: bool = False
     if ty := shutil.which("ty"):
         command = [ty, "check", *args]
-        d = Path(site.getusersitepackages())
-        if d.exists():
-            command.insert(2, f"--extra-search-path={d}")
+        if use_local_packages:
+            d = Path(site.getusersitepackages())
+            if d.exists():
+                command.insert(2, f"--extra-search-path={d}")
         d = Path(str(ir.files("hpc_connect"))).parent
         if d.name == "src" and d.exists():
             command.insert(2, f"--extra-search-path={d}")

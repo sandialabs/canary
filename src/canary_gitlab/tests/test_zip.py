@@ -4,6 +4,8 @@
 
 import os
 import zipfile
+from typing import Any
+from typing import cast
 
 from canary_gitlab import gitlab
 
@@ -16,7 +18,7 @@ def make_zip_with_traversal(zip_path):
         z.writestr("../evil.txt", "evil content")
 
 
-def test_zip_slip_extraction(tmp_path):
+def test_zip_slip_extraction(tmp_path, monkeypatch):
     # Create a zip with traversal
     zip_path = tmp_path / "test.zip"
     make_zip_with_traversal(str(zip_path))
@@ -36,7 +38,11 @@ def test_zip_slip_extraction(tmp_path):
     # Monkeypatch urlopen in gitlab module
     import canary_gitlab.gitlab as gitlab_mod
 
-    gitlab_mod.urlopen = lambda req: DummyResponse()  # type: ignore[invalid-assignment]
+    def fake_urlopen(req: object) -> DummyResponse:
+        return DummyResponse()
+
+    monkeypatch.setattr(gitlab_mod, "urlopen", cast(Any, fake_urlopen))
+
     # Call get_job_artifacts, which will extract the zip
     outdir = tmp_path / "out"
     os.makedirs(outdir, exist_ok=True)

@@ -4,8 +4,10 @@
 
 import difflib
 import filecmp
+import importlib
 import os
 import sys
+from typing import Any
 
 from ..error import diff_exit_status
 
@@ -83,8 +85,8 @@ def encode(string_like):
 def img_diff(file1: str, file2: str, rtol: float = 1e-4) -> None:
     """Diff two images"""
     try:
-        import numpy as np  # type: ignore[import-not-found]
-        from imageio import imread  # type: ignore[import-not-found]
+        np: Any = importlib.import_module("numpy")
+        imread: Any = importlib.import_module("imageio").imread
     except ImportError as e:
         raise RuntimeError("img_diff requires optional dependencies: numpy, imageio") from e
 
@@ -108,7 +110,7 @@ def img_diff(file1: str, file2: str, rtol: float = 1e-4) -> None:
 def to_grayscale(arr):
     """If arr is a color image (3D array), convert it to grayscale (2D array)."""
     try:
-        import numpy as np  # type: ignore[import-not-found]
+        np: Any = importlib.import_module("numpy")
     except ImportError as e:
         raise RuntimeError("to_grayscale requires optional dependencies: numpy") from e
 

@@ -165,7 +165,7 @@ def get_plugin_name(plugin: Any) -> str:
 gpu_select_schema = Schema(
     {
         Optional("backend", default={"default": None}): {
-            Optional("default", default=None): Or(str, None)  # type: ignore[arg-type]
+            Optional("default", default=None): Or(str, type(None))
         },
         Optional(".runtime"): {Optional("backend", default=None): object},
     },

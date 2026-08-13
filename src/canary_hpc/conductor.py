@@ -8,7 +8,9 @@ import threading
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
+from typing import Literal
 from typing import Sequence
+from typing import cast
 
 import hpc_connect
 
@@ -51,18 +53,18 @@ def create_batch_specs(
     This helper is intentionally side-effect light so conductor batching can be
     tested without submitting to a backend.
     """
+
+    layout = cast(Literal["flat", "atomic"], batchspec["layout"])
+    nodes = cast(Literal["any", "same"], batchspec["nodes"])
     partitions = partition_jobs(
         jobs=jobs,
-        layout=batchspec["layout"],  # type: ignore[arg-type]
-        nodes=batchspec["nodes"],  # type: ignore[arg-type]
+        layout=layout,
+        nodes=nodes,
         cpus_per_node=cpus_per_node,
         resources_per_node=resources_per_node,
     )
 
-    partition_counts = allocate_partition_counts(
-        batchspec["count"],  # type: ignore[arg-type]
-        partitions,
-    )
+    partition_counts = allocate_partition_counts(cast(int | None, batchspec["count"]), partitions)
 
     batch_specs: list[BatchSpec] = []
 
@@ -81,15 +83,16 @@ def create_batch_specs(
             workers,
         )
 
+        duration = cast(float | None, batchspec["duration"])
         batch_specs.extend(
             batch_jobs(
                 jobs=partition.jobs,
                 width=partition.width,
                 workers=workers,
-                layout=batchspec["layout"],  # type: ignore[arg-type]
+                layout=layout,
                 count=partition_count,
-                duration=batchspec["duration"],  # type: ignore[arg-type]
-                nodes=batchspec["nodes"],  # type: ignore[arg-type]
+                duration=duration,
+                nodes=nodes,
                 resource_capacity=partition.resource_capacity,
                 node_count=partition.node_count,
                 exact_final_estimate=exact_final_estimate,

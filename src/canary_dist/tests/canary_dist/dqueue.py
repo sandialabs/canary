@@ -4,6 +4,7 @@
 
 import threading
 from typing import Any
+from typing import cast
 
 from canary_dist.queue import ResourceQueue
 
@@ -31,7 +32,7 @@ class FakeBatch:
 
 def test_queue_done_checkins_full_allocation():
     rpool = FakeResourcePool()
-    q = ResourceQueue(threading.Lock(), resource_pool=rpool)  # type: ignore[arg-type]
+    q = ResourceQueue(threading.Lock(), resource_pool=cast(Any, rpool))
 
     allocation = {
         "metadata": {"source": "distributed", "transaction_id": "tx-1"},
@@ -41,7 +42,7 @@ def test_queue_done_checkins_full_allocation():
     batch = FakeBatch(allocation)
     q._busy[batch.id] = batch  # type: ignore[assignment]
 
-    q.done(batch)  # type: ignore[arg-type]
+    q.done(cast(Any, batch))
 
     assert rpool.checked_in == [allocation]
     assert batch.id not in q._busy
