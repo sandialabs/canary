@@ -93,3 +93,97 @@ class Timekeeper:
         self.started = fn(d["started"]).timestamp()
         self.finished = fn(d["finished"]).timestamp()
         return self
+
+
+@dataclass
+class PhaseTimer:
+    """
+    Named split timer.
+
+    A split is a named interval.  For example:
+
+        Queued:  submitted -> started
+        Running: started -> finished
+
+    The active phase can report live time.  Completed phases report fixed time.
+    """
+
+    stamp: float = -1.0
+    current: str | None = None
+    split_times: dict[str, float] = field(default_factory=dict)
+    split_order: list[str] = field(default_factory=list)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "stamp": self.stamp,
+            "current": self.current,
+            "split_times": self.split_times,
+            "split_order": self.split_order,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "PhaseTimer":
+        obj = cls()
+        obj.stamp = d["stamp"]
+        obj.current = d["current"]
+        obj.split_times = d["split_times"]
+        obj.split_order = d["split_order"]
+        return obj
+
+    def start(self, name: str, *, at: float | None = None) -> None:
+        self.split_times.clear()
+        self.split_order.clear()
+        self.current = name
+        self.stamp = time.time() if at is None else float(at)
+
+    def transition(self, next_name: str, *, at: float | None = None) -> None:
+        now = time.time() if at is None else float(at)
+
+        if self.current is None or self.stamp < 0:
+            self.start(next_name, at=now)
+            return
+
+        self._record(self.current, max(0.0, now - self.stamp))
+        self.current = next_name
+        self.stamp = now
+
+    def stop(self, *, at: float | None = None) -> None:
+        if self.current is None or self.stamp < 0:
+            return
+
+        now = time.time() if at is None else float(at)
+        self._record(self.current, max(0.0, now - self.stamp))
+        self.current = None
+        self.stamp = now
+
+    def _record(self, name: str, duration: float) -> None:
+        if name not in self.split_times:
+            self.split_order.append(name)
+            self.split_times[name] = 0.0
+        self.split_times[name] += duration
+
+    def value(self, name: str, *, live: bool = True) -> float:
+        value = self.split_times.get(name, -1.0)
+
+        if live and self.current == name and self.stamp > 0:
+            current_value = max(0.0, time.time() - self.stamp)
+            if value < 0:
+                return current_value
+            return value + current_value
+
+        return value
+
+    def total(
+        self, names: list[str] | tuple[str, ...] | None = None, *, live: bool = True
+    ) -> float:
+        names = list(names or self.split_order)
+        total = 0.0
+        found = False
+
+        for name in names:
+            value = self.value(name, live=live)
+            if value >= 0:
+                total += value
+                found = True
+
+        return total if found else -1.0

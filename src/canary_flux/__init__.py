@@ -113,15 +113,20 @@ class FluxRun:
         Run().setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
+        from _canary.plugins.subcommands.run import Run
+
         logger.info(
             "[bold]Flux run requested[/]: nodes=%s, queue_timeout=%ss, time_limit=%ss",
             args.flux_nodes if args.flux_nodes is not None else "auto",
             args.flux_queue_timeout,
             args.flux_time_limit,
         )
-
-        from _canary.plugins.subcommands.run import Run
-
+        console_style = canary.config.getoption("console_style") or {}
+        if "live_columns" not in console_style:
+            console_style["live_columns"] = (
+                "Job,ID,Status,Queued,Startup,Running,Teardown,Elapsed,Rank"
+            )
+        setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
 

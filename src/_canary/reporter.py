@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import dataclasses
-import os
-import shutil
 import sys
 import threading
 import time
@@ -62,36 +60,196 @@ class ReporterExecutorProtocol(Protocol):
 
 
 class Reporter:
+    metadata_columns = {"Job", "ID", "Status", "Rank", "Details"}
+    total_time_columns = {"Elapsed", "Time"}
+
     def __init__(self, executor: ReporterExecutorProtocol) -> None:
         self.executor = executor
         style = config.getoption("console_style") or {}
         self.namefmt = style.get("name", "short")
+
         self.live_columns: tuple[str, ...]
         if "live_columns" in style:
-            cols = style["live_columns"]
-            self.live_columns = tuple(cols.split(","))
+            self.live_columns = tuple(col.strip() for col in style["live_columns"].split(","))
         else:
-            self.live_columns = ("Job", "ID", "Status", "Elapsed", "Rank")
-        self.final_columns: tuple[str, ...] = ("Job", "ID", "Status", "Elapsed", "Details")
+            self.live_columns = ("Job", "ID", "Status", "Running", "Elapsed", "Rank")
         self.validate_columns(self.live_columns)
+
+        self.final_columns: tuple[str, ...]
+        if "final_columns" in style:
+            self.final_columns = tuple(col.strip() for col in style["final_columns"].split(","))
+        else:
+            self.final_columns = ("Job", "ID", "Status", "Running", "Elapsed", "Details")
         self.validate_columns(self.final_columns)
 
+    def timing_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
+        """
+        Return configured timing columns.
+
+        Any non-metadata column is considered a timer phase column, except
+        Elapsed, which is computed as the total of the other timing columns.
+        """
+        return tuple(col for col in columns if col not in self.metadata_columns)
+
+    def elapsed_phase_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
+        """
+        Return timing phase columns included in Elapsed.
+
+        Elapsed is not itself a phase; it is the total of the other timing
+        columns in the configured column set.
+        """
+        return tuple(
+            col for col in self.timing_columns(columns) if col not in self.total_time_columns
+        )
+
+    def slot_time_for_column(
+        self, slot: "ExecutionSlot", column: str, columns: tuple[str, ...]
+    ) -> float:
+        if column in self.total_time_columns:
+            phases = tuple(
+                col for col in self.timing_columns(columns) if col not in self.total_time_columns
+            )
+            return slot.total_time(phases or None)
+
+        return slot.phase_time(column)
+
+    def job_time_for_column(self, job: BaseJob, column: str) -> float:
+        """
+        Return persisted timing for a finished job.
+
+        This reads job.measurements["timing"] or job.measurements["flux_timing"]
+        if available. Falls back to job.timekeeper for Running/Elapsed.
+        """
+        # Prefer a generic timing measurement if present.
+        value = self._job_measurement(job, "timing", column)
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        # Backward/current Flux measurement name.
+        value = self._job_measurement(job, "flux_timing", column)
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        # Also support lower-case/snake-case keys from existing flux_timing.
+        keymap = {
+            "Queued": "queue_time",
+            "Startup": "startup_time",
+            "Running": "execution_time",
+            "Teardown": "teardown_time",
+            "Elapsed": "elapsed_time",
+        }
+        if column in keymap:
+            value = self._job_measurement(job, "flux_timing", keymap[column])
+            if isinstance(value, (int, float)):
+                return float(value)
+
+        if column == "Running":
+            return job.timekeeper.duration()
+
+        if column == "Elapsed":
+            return job.timekeeper.duration()
+
+        if column == "Queued":
+            return job.timekeeper.queued()
+
+        return -1.0
+
+    def _job_measurement(self, job: BaseJob, *path: str) -> Any:
+        measurements = getattr(job, "measurements", None)
+        if measurements is None:
+            return None
+
+        data: Any
+        if hasattr(measurements, "data"):
+            data = measurements.data
+        else:
+            data = measurements
+
+        for key in path:
+            if not isinstance(data, dict):
+                return None
+            data = data.get(key)
+
+        return data
+
+    def row_values_for_slot(
+        self, slot: "ExecutionSlot", columns: tuple[str, ...], *, status: str, details: str = ""
+    ) -> dict[str, str]:
+        values: dict[str, str] = {
+            "job": slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
+            "id": slot.job.id[:7],
+            "status": status,
+            "rank": f"{slot.qrank}/{slot.qsize}",
+            "details": details,
+        }
+
+        for column in self.timing_columns(columns):
+            values[column.lower()] = fmt_secs(self.slot_time_for_column(slot, column, columns))
+
+        return values
+
+    def row_values_for_job(
+        self, job: BaseJob, columns: tuple[str, ...], *, details: str | None = None
+    ) -> dict[str, str]:
+        values: dict[str, str] = {
+            "job": job.display_name(style="rich", resolve=self.namefmt == "long"),
+            "id": job.id[:7],
+            "status": job.status.display_name(style="rich"),
+            "rank": "",
+            "details": details if details is not None else (job.status.reason or ""),
+        }
+
+        for column in self.timing_columns(columns):
+            values[column.lower()] = fmt_secs(self.job_time_for_column(job, column))
+
+        return values
+
+    def row_values_for_pending_job(self, job: BaseJob, columns: tuple[str, ...]) -> dict[str, str]:
+        values: dict[str, str] = {
+            "job": job.display_name(style="rich", resolve=self.namefmt == "long"),
+            "id": job.id[:7],
+            "status": "[magenta]PENDING[/]",
+            "rank": "",
+            "details": "",
+        }
+
+        for column in self.timing_columns(columns):
+            values[column.lower()] = "NA"
+
+        return values
+
+    def add_table_row_from_values(
+        self, table: Table, columns: tuple[str, ...], values: dict[str, str]
+    ) -> None:
+        table.add_row(*(values.get(name.lower(), "") for name in columns))
+
+    def format_row_values(self, columns: tuple[str, ...], values: dict[str, str]) -> list[str]:
+        return [values.get(name.lower(), "") for name in columns]
+
     def validate_columns(self, columns: tuple[str, ...]) -> None:
-        choices = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Rank", "Details")
         for col in columns:
-            if col not in choices:
-                s = ",".join(choices)
-                raise ValueError(f"Illegal column name: {col}, choose from {s}")
+            if col in self.metadata_columns:
+                continue
+            if col in self.total_time_columns:
+                continue
+            # Any other valid identifier-like label is treated as a timing phase.
+            normalized = col.replace("_", "").replace("-", "")
+            if not normalized.isalnum():
+                raise ValueError(f"Illegal column name: {col!r}")
 
     def add_table_columns(self, table: Table, columns: tuple[str, ...]) -> None:
         for name in columns:
             kwds: dict[str, Any] = {}
+
             if name == "Job":
                 kwds["overflow"] = "fold"
             elif name == "Details":
                 kwds["overflow"] = "ellipsis"
-            elif name in ("Queued", "Elapsed", "Running"):
+            elif name in self.timing_columns(columns):
                 kwds["justify"] = "right"
+            elif name == "Rank":
+                kwds["justify"] = "right"
+
             table.add_column(name, **kwds)
 
     def add_table_row(self, table: Table, columns: tuple[str, ...], **kwargs: str) -> None:
@@ -112,16 +270,8 @@ class Reporter:
         for job in jobs:
             if job.status.is_success():
                 continue
-            self.add_table_row(
-                table,
-                self.final_columns,
-                job=job.display_name(style="rich", resolve=self.namefmt == "long"),
-                id=job.id[:7],
-                status=job.status.display_name(style="rich"),
-                elapsed=fmt_secs(job.timekeeper.duration()),
-                queued=fmt_secs(job.timekeeper.queued()),
-                details=job.status.reason or "",
-            )
+            values = self.row_values_for_job(job, self.final_columns)
+            self.add_table_row_from_values(table, self.final_columns, values)
         if not table.row_count:
             n = len(jobs)
             return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
@@ -200,61 +350,46 @@ class LiveReporter(Reporter):
         decay_window = 8.0  # seconds to keep finished visible
         max_finished = 5  # hard cap
 
-        recent_finished = [s for s in xtor.finished.values() if now - s.finished < decay_window]
-
-        # Most recent first
-        recent_finished.sort(key=lambda s: s.finished, reverse=True)
+        recent_finished = [
+            s for s in xtor.finished.values() if now - s.finished_at() < decay_window
+        ]
+        recent_finished.sort(key=lambda s: s.finished_at(), reverse=True)
         for slot in recent_finished[:max_finished]:
             if rows_used >= max_rows:
                 break
-            self.add_table_row(
-                table,
+
+            values = self.row_values_for_slot(
+                slot,
                 self.live_columns,
-                job=slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-                id=slot.job.id[:7],
                 status=slot.job.status.display_name(style="rich"),
-                queued=fmt_secs(slot.queued()),
-                elapsed=fmt_secs(slot.elapsed()),
-                rank=f"{slot.qrank}/{slot.qsize}",
+                details=slot.job.status.reason or "",
             )
+            self.add_table_row_from_values(table, self.live_columns, values)
             rows_used += 1
 
         # ---------------------------------------------------------
         # 2) RUNNING (longest-running first for stability)
         # ---------------------------------------------------------
-        running = sorted(xtor.running.values(), key=lambda s: s.running(), reverse=True)
+        running = sorted(xtor.running.values(), key=lambda s: s.total_time(), reverse=True)
         for slot in running:
             if rows_used >= max_rows:
                 break
-            self.add_table_row(
-                table,
-                self.live_columns,
-                job=slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-                id=slot.job.id[:7],
-                status="[green]RUNNING[/]",
-                queued=fmt_secs(slot.queued()),
-                elapsed=fmt_secs(slot.elapsed()),
-                rank=f"{slot.qrank}/{slot.qsize}",
-            )
+
+            values = self.row_values_for_slot(slot, self.live_columns, status="[green]RUNNING[/]")
+            self.add_table_row_from_values(table, self.live_columns, values)
             rows_used += 1
 
         # ---------------------------------------------------------
         # 3) SUBMITTED
         # ---------------------------------------------------------
         submitted = sorted(xtor.submitted.values(), key=lambda s: s.qrank)
+
         for slot in submitted:
             if rows_used >= max_rows:
                 break
-            self.add_table_row(
-                table,
-                self.live_columns,
-                job=slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-                id=slot.job.id[:7],
-                status="[cyan]SUBMITTED[/]",
-                queued=fmt_secs(slot.elapsed()),
-                elapsed=fmt_secs(slot.elapsed()),
-                rank=f"{slot.qrank}/{slot.qsize}",
-            )
+
+            values = self.row_values_for_slot(slot, self.live_columns, status="[cyan]SUBMITTED[/]")
+            self.add_table_row_from_values(table, self.live_columns, values)
             rows_used += 1
 
         # ---------------------------------------------------------
@@ -264,16 +399,9 @@ class LiveReporter(Reporter):
             for job in xtor.queue.pending():
                 if rows_used >= max_rows:
                     break
-                self.add_table_row(
-                    table,
-                    self.live_columns,
-                    job=job.display_name(style="rich", resolve=self.namefmt == "long"),
-                    id=job.id[:7],
-                    status="[magenta]PENDING[/]",
-                    queued="NA",
-                    elapsed="NA",
-                    rank="",
-                )
+
+                values = self.row_values_for_pending_job(job, self.live_columns)
+                self.add_table_row_from_values(table, self.live_columns, values)
                 rows_used += 1
 
         if not table.row_count:
@@ -285,29 +413,30 @@ class LiveReporter(Reporter):
 class EventReporter(Reporter):
     def __init__(self, executor: ReporterExecutorProtocol) -> None:
         super().__init__(executor)
+
+        self.event_columns: tuple[str, ...] = ("Job", "ID", "Status", "Time", "Rank")
+        self.validate_columns(self.event_columns)
+
         self.table = StaticTable()
-        maxnamelen: int = -1
-        for s in executor.queue._heap:
-            name = s.job.display_name(resolve=self.namefmt == "long")
-            maxnamelen = max(maxnamelen, len(name))
-        if var := os.getenv("COLUMNS"):
-            columns = int(var)
-        else:
-            columns = shutil.get_terminal_size().columns
-        n = 8
-        used = maxnamelen + 4 * 8
-        avail = columns - used
-        if avail < 0:
-            n = 4
-            status_width = 15
-        else:
-            status_width = min(max(avail, 30), 45)
-        self.table.add_column("Job", width=maxnamelen)
-        self.table.add_column("ID", width=n)
-        self.table.add_column("Status", width=status_width)
-        # self.table.add_column("Queued", width=n, align="right")
-        self.table.add_column("Elapsed", width=n, align="right")
-        self.table.add_column("Rank", width=n, align="right")
+
+        maxnamelen = max(
+            (len(s.job.display_name(resolve=self.namefmt == "long")) for s in executor.queue._heap),
+            default=len("Job"),
+        )
+
+        for col in self.event_columns:
+            if col == "Job":
+                self.table.add_column(col, width=maxnamelen)
+            elif col == "ID":
+                self.table.add_column(col, width=8)
+            elif col == "Status":
+                self.table.add_column(col, width=15)
+            elif col == "Rank":
+                self.table.add_column(col, width=8, align="right")
+            elif col in self.timing_columns(self.event_columns):
+                self.table.add_column(col, width=8, align="right")
+            else:
+                self.table.add_column(col, width=10)
 
     def __enter__(self):
         self.executor.add_listener(self.on_event)
@@ -329,40 +458,25 @@ class EventReporter(Reporter):
             case _:
                 return
 
+    def render_event_row(self, slot: "ExecutionSlot", *, status: str, details: str = "") -> Text:
+        values = self.row_values_for_slot(slot, self.event_columns, status=status, details=details)
+        row = self.format_row_values(self.event_columns, values)
+        return self.table.render_row(row)
+
     def on_job_submit(self, slot: "ExecutionSlot") -> None:
-        row = [
-            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-            slot.job.id[:7],
-            "[cyan]SUBMITTED[/]",
-            # "",
-            "",
-            f"{slot.qrank}/{slot.qsize}",
-        ]
-        text = self.table.render_row(row)
+        text = self.render_event_row(slot, status="[cyan]SUBMITTED[/]")
         logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_start(self, slot: "ExecutionSlot") -> None:
-        row = [
-            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-            slot.job.id[:7],
-            "[blue]STARTED[/]",
-            # fmt_secs(slot.queued()),
-            "",
-            f"{slot.qrank}/{slot.qsize}",
-        ]
-        text = self.table.render_row(row)
+        text = self.render_event_row(slot, status="[blue]STARTED[/]")
         logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_finish(self, slot: "ExecutionSlot") -> None:
-        row = [
-            slot.job.display_name(style="rich", resolve=self.namefmt == "long"),
-            slot.job.id[:7],
-            slot.job.status.display_name(style="rich"),
-            # fmt_secs(slot.queued()),
-            fmt_secs(slot.elapsed()),
-            f"{slot.qrank}/{slot.qsize}",
-        ]
-        text = self.table.render_row(row)
+        text = self.render_event_row(
+            slot,
+            status=slot.job.status.display_name(style="rich"),
+            details=slot.job.status.reason or "",
+        )
         logger.info(text.markup, extra={"prefix": ""})
 
 

@@ -20,41 +20,6 @@ from _canary.util.misc import boolean
 logger = canary.get_logger(__name__)
 
 
-class FluxExecutionSlot(ExecutionSlot):
-    """
-    ExecutionSlot with Flux-specific timing semantics.
-
-    For Flux:
-      - submitted/spawned represent parent-side submission time.
-      - started represents when Flux says the job started, or when the child
-        testcase.lock reports test start.
-      - elapsed means actual runtime only.
-      - queued means time waiting before start.
-    """
-
-    def queued(self) -> float:
-        base = self.submitted if self.submitted > 0 else self.spawned
-
-        if self.started > 0:
-            return self.started - base
-
-        return time.time() - base
-
-    def elapsed(self) -> float:
-        if self.started < 0:
-            return -1.0
-
-        end = self.finished if self.finished >= 0 else time.time()
-        return end - self.started
-
-    def running(self) -> float:
-        if self.started < 0:
-            return -1.0
-
-        end = self.finished if self.finished >= 0 else time.time()
-        return end - self.started
-
-
 class FluxReporterQueue:
     """
     Minimal queue facade for _canary.queue_executor.LiveReporter/EventReporter.
@@ -200,6 +165,8 @@ class FluxDirectExecutor:
                     progress |= self._poll_finished()
                     progress |= self._finalize_blocked_jobs()
 
+                    self._refresh_running_jobs()
+
                     if not progress:
                         if self.pending and not self.futures:
                             self._finalize_stuck_pending_jobs()
@@ -212,7 +179,7 @@ class FluxDirectExecutor:
 
         return 0
 
-    def _ready_jobs(self) -> list["canary.Job"]:
+    def _ready_jobs(self) -> list[canary.Job]:
         ready: list[canary.Job] = []
 
         for job in list(self.pending.values()):
@@ -241,12 +208,8 @@ class FluxDirectExecutor:
             self.pending.pop(job.id, None)
 
             self._qrank += 1
-            slot = FluxExecutionSlot(
-                job=job,
-                qrank=self._qrank,
-                qsize=self._qsize,
-                spawned=time.time(),
-                worker_id=self._qrank,
+            slot = ExecutionSlot(
+                job=job, qrank=self._qrank, qsize=self._qsize, worker_id=self._qrank
             )
 
             self.slots_by_id[job.id] = slot
@@ -279,7 +242,7 @@ class FluxDirectExecutor:
 
         return submitted_any
 
-    def _submit_workspace(self, job: "canary.Job") -> Path:
+    def _submit_workspace(self, job: canary.Job) -> Path:
         root = self.runner.workspace.cache_dir / "canary-flux" / self.runner.session / "jobs"
         return root / job.id
 
@@ -288,7 +251,7 @@ class FluxDirectExecutor:
             return True
         return len(self.futures) < self.max_submitted
 
-    def _hpc_jobspec(self, job: "canary.Job") -> Any:
+    def _hpc_jobspec(self, job: canary.Job) -> Any:
         import hpc_connect
 
         submit_workspace = self._submit_workspace(job)
@@ -314,7 +277,7 @@ class FluxDirectExecutor:
             submit_args=submit_args,
         )
 
-    def _canary_flux_exec_command(self, job: "canary.Job") -> str:
+    def _canary_flux_exec_command(self, job: canary.Job) -> str:
         import shlex
 
         workspace_anchor = self.runner.workspace.root.parent
@@ -329,7 +292,7 @@ class FluxDirectExecutor:
         return shlex.join(args)
 
     def _child_environment(
-        self, job: "canary.Job", *, submit_workspace: Path
+        self, job: canary.Job, *, submit_workspace: Path
     ) -> dict[str, str | None]:
         env: dict[str, str | None] = {}
 
@@ -350,19 +313,16 @@ class FluxDirectExecutor:
     def _mark_submitted(self, slot: ExecutionSlot) -> None:
         job = slot.job
         now = time.time()
-
-        slot.submitted = now
+        # Restart Queued at actual Flux submission time.
+        slot.timer.start("Queued", at=now)
         job.timekeeper.submitted = now
         job.on_submitted()
-
         self.submitted[job.id] = slot
         self.queue.mark_submitted(job)
-
         try:
             job.save()
         except Exception:
             logger.debug("Failed to save submitted job %s", job.id[:7], exc_info=True)
-
         self.notify_listeners("job_submitted", slot)
 
     def _mark_started_by_id(self, job_id: str) -> None:
@@ -375,8 +335,11 @@ class FluxDirectExecutor:
         job = slot.job
         now = time.time()
 
-        slot.started = now
-        job.timekeeper.started = now
+        # Queued -> Startup.
+        if slot.timer.current == "Queued":
+            slot.timer.transition("Startup", at=now)
+
+        # This is scheduler-running state, not actual command start.
         job.on_started()
 
         self.submitted.pop(job.id, None)
@@ -394,13 +357,11 @@ class FluxDirectExecutor:
         job = slot.job
         now = time.time()
 
-        slot.submitted = now
-        slot.started = now
-        slot.finished = now
-
-        job.timekeeper.submitted = now
-        job.timekeeper.started = now
+        slot.timer.stop(at=now)
         job.timekeeper.finished = now
+        if job.timekeeper.submitted < 0:
+            job.timekeeper.submitted = now
+
         job.on_finished()
         job.set_status(outcome="ERROR", reason=f"Flux submission failed: {exc!r}")
 
@@ -490,13 +451,8 @@ class FluxDirectExecutor:
 
             self._qrank += 1
             now = time.time()
-            slot = ExecutionSlot(
-                job=job, qrank=self._qrank, qsize=self._qsize, spawned=now, worker_id=-1
-            )
-
-            slot.submitted = now
-            slot.started = now
-            slot.finished = now
+            slot = ExecutionSlot(job=job, qrank=self._qrank, qsize=self._qsize, worker_id=-1)
+            slot.timer.stop(at=now)
 
             if job.timekeeper.submitted < 0:
                 job.timekeeper.submitted = now
@@ -534,13 +490,8 @@ class FluxDirectExecutor:
             self.pending.pop(job.id, None)
 
             self._qrank += 1
-            slot = ExecutionSlot(
-                job=job, qrank=self._qrank, qsize=self._qsize, spawned=now, worker_id=-1
-            )
-
-            slot.submitted = now
-            slot.started = now
-            slot.finished = now
+            slot = ExecutionSlot(job=job, qrank=self._qrank, qsize=self._qsize, worker_id=-1)
+            slot.timer.stop(at=now)
 
             job.timekeeper.submitted = now
             job.timekeeper.started = now
@@ -592,7 +543,7 @@ class FluxDirectExecutor:
                 logger.debug("Failed to attach Flux proc_info to %s", job.id[:7], exc_info=True)
 
             try:
-                self._write_proc_info(cast("canary.Job", job), proc_info)
+                self._write_proc_info(cast(canary.Job, job), proc_info)
             except Exception:
                 logger.debug("Failed to write Flux proc_info for %s", job.id[:7], exc_info=True)
 
@@ -605,30 +556,12 @@ class FluxDirectExecutor:
         elif rc not in (0, None) and job.status.is_unset():
             job.set_status(outcome="ERROR", reason=f"canary flux exec exited with code {rc}")
 
-        now = time.time()
-
-        # Preserve start time from the child lock file if available.
-        if slot.started < 0 and job.timekeeper.started > 0:
-            slot.started = job.timekeeper.started
-
-        # If no start callback ever fired, make elapsed accounting sane.
-        if slot.started < 0:
-            slot.started = job.timekeeper.started if job.timekeeper.started > 0 else now
-
-        slot.finished = now
-
-        if job.timekeeper.submitted < 0:
-            job.timekeeper.submitted = slot.submitted if slot.submitted > 0 else now
-        if job.timekeeper.started < 0:
-            job.timekeeper.started = slot.started
-        if job.timekeeper.finished < 0:
-            job.timekeeper.finished = now
-
         # Ensure phase is terminal in parent memory. This is what dependents'
         # Dependency.is_done() will see.
         job.on_finished()
 
         self._sync_finished_slot_times_from_job(slot)
+        self._record_flux_timing(cast(canary.Job, job), slot)
 
         self.submitted.pop(job.id, None)
         self.running.pop(job.id, None)
@@ -645,37 +578,26 @@ class FluxDirectExecutor:
         # result writes.
         self.notify_listeners("job_finished", slot)
 
-    def _sync_finished_slot_times_from_job(self, slot: ExecutionSlot) -> None:
-        """
-        Sync slot timing from the child's testcase.lock without destroying
-        Flux queue-time information.
+    def _record_flux_timing(self, job: canary.Job, slot: ExecutionSlot) -> None:
+        phases = ("Queued", "Startup", "Running", "Teardown")
 
-        FluxExecutionSlot.elapsed() uses started/finished for actual runtime,
-        while queued() uses submitted/spawned -> started.
-        """
-        job = slot.job
-        tk = job.timekeeper
+        timing = {
+            "phases": {name: slot.phase_time(name, live=False) for name in phases},
+            "elapsed": slot.total_time(phases, live=False),
+        }
 
-        if tk.submitted > 0:
-            slot.submitted = tk.submitted
+        # Optional flat keys for compatibility/convenience.
+        timing.update(
+            {
+                "queue_time": slot.phase_time("Queued", live=False),
+                "startup_time": slot.phase_time("Startup", live=False),
+                "execution_time": slot.phase_time("Running", live=False),
+                "teardown_time": slot.phase_time("Teardown", live=False),
+                "elapsed_time": slot.total_time(phases, live=False),
+            }
+        )
 
-        if tk.started > 0:
-            slot.started = tk.started
-
-        if tk.finished > 0:
-            slot.finished = tk.finished
-        else:
-            slot.finished = time.time()
-
-        if slot.started < 0:
-            slot.started = slot.finished
-
-        if job.timekeeper.submitted < 0:
-            job.timekeeper.submitted = slot.submitted if slot.submitted > 0 else slot.spawned
-        if job.timekeeper.started < 0:
-            job.timekeeper.started = slot.started
-        if job.timekeeper.finished < 0:
-            job.timekeeper.finished = slot.finished
+        job.measurements.update({"flux_timing": timing})
 
     def _record_flux_jobid(self, job_id: str, flux_jobid: str) -> None:
         """
@@ -704,7 +626,7 @@ class FluxDirectExecutor:
         except Exception:
             logger.debug("Failed to save Flux jobid for %s", job_id[:7], exc_info=True)
 
-    def _write_proc_info(self, job: "canary.Job", proc_info: dict[str, Any]) -> None:
+    def _write_proc_info(self, job: canary.Job, proc_info: dict[str, Any]) -> None:
         """
         Write Flux scheduler/process metadata to the Flux submit workspace.
 
@@ -720,3 +642,30 @@ class FluxDirectExecutor:
 
         with job.workspace.openfile("procinfo.json", "w") as fh:
             json.dump(data, fh, indent=2, sort_keys=True)
+
+    def _refresh_running_jobs(self) -> None:
+        for slot in list(self.running.values()):
+            job = slot.job
+
+            try:
+                job.refresh()
+            except Exception:
+                logger.debug("Failed to refresh running job %s", job.id[:7], exc_info=True)
+            else:
+                tk = job.timekeeper
+                # Startup -> Running when the child command starts.
+                if tk.started > 0 and slot.timer.current in ("Queued", "Startup"):
+                    slot.timer.transition("Running", at=tk.started)
+                # Running -> Teardown if the child has already finished but the
+                # future has not yet been reaped by the parent.
+                if tk.finished > 0 and slot.timer.current == "Running":
+                    slot.timer.transition("Teardown", at=tk.finished)
+
+    def _sync_finished_slot_times_from_job(self, slot: ExecutionSlot) -> None:
+        job = slot.job
+        tk = job.timekeeper
+        if tk.started > 0 and slot.timer.current in ("Queued", "Startup"):
+            slot.timer.transition("Running", at=tk.started)
+        if tk.finished > 0 and slot.timer.current == "Running":
+            slot.timer.transition("Teardown", at=tk.finished)
+        slot.timer.stop(at=time.time())

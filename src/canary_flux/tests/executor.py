@@ -139,29 +139,28 @@ class FakeJob:
         self.measurements[name] = value
 
 
-def test_flux_execution_slot_elapsed_na_until_started():
+def test_execution_slot_queued_live_until_started():
     job = FakeJob("j1")
 
-    slot = ex.FluxExecutionSlot(
-        job=cast(Any, job), qrank=1, qsize=1, spawned=time.time(), worker_id=1
-    )
+    slot = ex.ExecutionSlot(job=cast(Any, job), qrank=1, qsize=1, worker_id=1)
 
-    assert slot.elapsed() == -1.0
-    assert slot.running() == -1.0
-    assert slot.queued() >= 0.0
+    assert slot.phase_time("Running") == -1.0
+    assert slot.total_time(("Running",)) == -1.0
+    assert slot.phase_time("Queued") >= 0.0
 
 
-def test_flux_execution_slot_elapsed_runtime_after_started():
+def test_execution_slot_running_after_started():
     job = FakeJob("j1")
 
-    slot = ex.FluxExecutionSlot(job=cast(Any, job), qrank=1, qsize=1, spawned=100.0, worker_id=1)
-    slot.submitted = 100.0
-    slot.started = 110.0
-    slot.finished = 115.5
+    slot = ex.ExecutionSlot(job=cast(Any, job), qrank=1, qsize=1, worker_id=1)
 
-    assert slot.queued() == 10.0
-    assert slot.elapsed() == 5.5
-    assert slot.running() == 5.5
+    slot.timer.start("Queued", at=100.0)
+    slot.on_started(110.0)
+    slot.on_finished(115.5)
+
+    assert slot.phase_time("Queued", live=False) == 10.0
+    assert slot.phase_time("Running", live=False) == 5.5
+    assert slot.total_time(("Queued", "Running"), live=False) == 15.5
 
 
 def test_reporter_queue_tracks_states():
@@ -295,13 +294,24 @@ def test_mark_finished_uses_job_timing_for_slot(monkeypatch, tmp_path):
     runner = FakeRunner([job], tmp_path)
     xtor = ex.FluxDirectExecutor(runner)
 
-    slot = ex.FluxExecutionSlot(job=cast(Any, job), qrank=1, qsize=1, spawned=100.0, worker_id=1)
-    slot.submitted = 100.0
+    # Avoid filesystem/proc-info side effects in this unit test.
+    monkeypatch.setattr(xtor, "_write_proc_info", lambda job, proc_info: None)
+
+    # Parent observes future completion at 110.
+    monkeypatch.setattr(ex.time, "time", lambda: 110.0)
+
+    slot = ex.ExecutionSlot(job=cast(Any, job), qrank=1, qsize=1, worker_id=1)
+
+    # Simulate Flux lifecycle before _mark_finished:
+    # submitted at 100, Flux started at 101.
+    slot.timer.start("Queued", at=100.0)
+    slot.timer.transition("Startup", at=101.0)
 
     xtor.slots_by_id[job.id] = slot
     xtor.running[job.id] = slot
 
-    job.timekeeper.submitted = 101.0
+    # Child testcase.lock timing.
+    job.timekeeper.submitted = 100.0
     job.timekeeper.started = 102.0
     job.timekeeper.finished = 107.0
     job.status.set(outcome="SUCCESS", code=0)
@@ -309,6 +319,18 @@ def test_mark_finished_uses_job_timing_for_slot(monkeypatch, tmp_path):
     xtor._mark_finished(job.id, rc=0, exc=None, proc_info={"jobid": "flux1"})
 
     assert job.id in xtor.finished
-    assert slot.elapsed() == 5.0
-    assert slot.queued() == 1.0
+
+    assert slot.phase_time("Queued", live=False) == 1.0
+    assert slot.phase_time("Startup", live=False) == 1.0
+    assert slot.phase_time("Running", live=False) == 5.0
+    assert slot.phase_time("Teardown", live=False) == 3.0
+    assert slot.total_time(("Queued", "Startup", "Running", "Teardown"), live=False) == 10.0
+
     assert job.measurements["flux"] == {"jobid": "flux1"}
+
+    timing = job.measurements["flux_timing"]
+    assert timing["queue_time"] == 1.0
+    assert timing["startup_time"] == 1.0
+    assert timing["execution_time"] == 5.0
+    assert timing["teardown_time"] == 3.0
+    assert timing["elapsed_time"] == 10.0
