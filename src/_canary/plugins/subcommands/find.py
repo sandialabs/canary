@@ -19,7 +19,6 @@ from ...error import StopExecution
 from ...generate import Generator
 from ...hookspec import hookimpl
 from ...select import Selector
-from ...util import graph
 from ...util import json_helper as json
 from ...util import logging
 from ...util.serialize import serialize
@@ -142,11 +141,11 @@ def pprint_keywords(specs: list["JobSpec"]) -> None:
 
 
 def pprint_graph(specs: list["JobSpec"]) -> None:
-    file = io.StringIO()
-    graph.print(specs, file=file, style="rich")
+    from _canary.jobspec_graph import format_spec_graph
+
     console = rich.console.Console()
     with console.pager():
-        console.print(file.getvalue())
+        console.print(format_spec_graph(specs), markup=False)
 
 
 def pprint(specs: list["JobSpec"]) -> None:

@@ -163,6 +163,7 @@ def test_safeload_raises_after_retries(tmp_path: Path):
 
 def test_safesave_supports_canary_serializable_object(tmp_path):
     from _canary.jobspec import Mask
+
     path = tmp_path / "state.json"
     state = Mask.masked("because")
 

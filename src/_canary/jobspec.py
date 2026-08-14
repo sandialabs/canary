@@ -5,6 +5,7 @@
 import dataclasses
 import hashlib
 import itertools
+import sys
 import threading
 from functools import cached_property
 from functools import lru_cache
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import MutableSequence
+from typing import TextIO
 
 from . import config
 from .util import logging
@@ -238,6 +240,38 @@ class JobSpec:
         exec_path = Path(d.pop("exec_path"))
         view_path = Path(d.pop("view_path"))
         return cls(file_root=root, file_path=path, exec_path=exec_path, view_path=view_path, **d)
+
+    def print(
+        self,
+        level: int = -1,
+        file: TextIO = sys.stdout,
+        indent: str = "",
+        style: str = "none",
+        end: bool = False,
+    ):
+        """Given a list of test specs, print a visual tree structure"""
+        space = "    "
+        branch = "│   "
+        tee = "├── "
+        last = "└── "
+
+        def inner(spec: "JobSpec", prefix: str = "", level=-1):
+            if not level:
+                return  # 0, stop iterating
+            dependencies = spec.dependencies
+            pointers = [tee] * (len(dependencies) - 1) + [last]
+            for pointer, dependency in zip(pointers, dependencies):
+                if dependency.spec.dependencies:
+                    yield prefix + pointer + dependency.spec.display_name(style=style)
+                    extension = branch if pointer == tee else space
+                    yield from inner(dependency.spec, prefix=prefix + extension, level=level - 1)
+                else:
+                    yield prefix + pointer + dependency.spec.display_name(style=style)
+
+        file.write(f"{tee if not end else last}{indent}{self.display_name(style=style)}\n")
+        iterator = inner(self, level=level)
+        for line in iterator:
+            file.write(f"{branch}{indent}{line}\n")
 
     def add_artifact(
         self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"

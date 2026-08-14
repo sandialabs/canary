@@ -7,8 +7,8 @@ from pathlib import Path
 from _canary.job import Job
 from _canary.jobspec import JobSpec
 from _canary.rules import RerunRule
-from _canary.rules import RuntimeRule
 from _canary.rules import RuleOutcome
+from _canary.rules import RuntimeRule
 from _canary.select import RuntimeSelector
 from _canary.testexec import ExecutionSpace
 
@@ -31,10 +31,7 @@ class RejectByName(RuntimeRule):
 
 def make_job(tmp_path: Path, name: str) -> Job:
     spec = JobSpec(
-        file_root=tmp_path,
-        file_path=Path(f"{name}.pyt"),
-        family=name,
-        id=(name[0] * 64)[:64],
+        file_root=tmp_path, file_path=Path(f"{name}.pyt"), family=name, id=(name[0] * 64)[:64]
     )
     space = ExecutionSpace(root=tmp_path / "sessions" / "s1", path=Path(name), session="s1")
     return Job(spec=spec, workspace=space)

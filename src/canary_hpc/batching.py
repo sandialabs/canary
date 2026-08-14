@@ -5,7 +5,6 @@
 import dataclasses
 import math
 from collections import defaultdict
-from graphlib import TopologicalSorter
 from typing import Literal
 from typing import cast
 
@@ -545,38 +544,10 @@ def _partition_resource_capacity(
 
 def _topological_job_levels(jobs: list["canary.Job"]) -> list[list["canary.Job"]]:
     """Return global topological ready levels for jobs."""
-    lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
-    job_ids = set(lookup)
+    from _canary.job_graph import make_job_graph
 
-    graph: dict[str, list[str]] = {}
-
-    for job in jobs:
-        graph[job.id] = [dep.job.id for dep in job.dependencies if dep.job.id in job_ids]
-
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-
-    levels: list[list[canary.Job]] = []
-
-    while ts.is_active():
-        ready_ids = list(ts.get_ready())
-        ready_jobs = [lookup[job_id] for job_id in ready_ids]
-
-        ready_jobs.sort(key=_job_priority_key, reverse=True)
-
-        levels.append(ready_jobs)
-        ts.done(*ready_ids)
-
-    return levels
-
-
-def _job_priority_key(job: "canary.Job") -> tuple[float, float, int, str]:
-    try:
-        cost = float(job.cost())
-    except Exception:
-        cost = math.sqrt(float(job.cpus) ** 2 + float(job.runtime) ** 2)
-
-    return (cost, float(job.runtime), int(job.cpus), str(job.id))
+    graph = make_job_graph(jobs)
+    return [list(level) for level in graph.levels]
 
 
 class BatchNotFound(Exception):

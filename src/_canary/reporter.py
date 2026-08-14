@@ -72,14 +72,14 @@ class Reporter:
         if "live_columns" in style:
             self.live_columns = tuple(col.strip() for col in style["live_columns"].split(","))
         else:
-            self.live_columns = ("Job", "ID", "Status", "Running", "Elapsed", "Rank")
+            self.live_columns = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Rank")
         self.validate_columns(self.live_columns)
 
         self.final_columns: tuple[str, ...]
         if "final_columns" in style:
             self.final_columns = tuple(col.strip() for col in style["final_columns"].split(","))
         else:
-            self.final_columns = ("Job", "ID", "Status", "Running", "Elapsed", "Details")
+            self.final_columns = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Details")
         self.validate_columns(self.final_columns)
 
     def timing_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:

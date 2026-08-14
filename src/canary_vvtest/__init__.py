@@ -35,7 +35,7 @@ class VVTestSpecGenerator(canary.AbstractSpecGenerator):
         import os
 
         from _canary.generate import resolve
-        from _canary.util import graph
+        from _canary.jobspec_graph import print_spec_graph
         from _canary.util.field import Field
         from _canary.util.string import pluralize
 
@@ -71,7 +71,7 @@ class VVTestSpecGenerator(canary.AbstractSpecGenerator):
             opts = ", ".join(on_options or [])
             file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
             try:
-                graph.print(resolved, file=file)
+                print_spec_graph(resolved, file=file)
             except Exception:  # nosec B110
                 pass
         except Exception:
