@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 import _canary.util.testing as testing
+from _canary.util import json_helper
 from _canary.util.json_helper import Encoder
 from _canary.util.json_helper import object_hook
 
@@ -134,3 +135,27 @@ def test_jobspec(tmp_path: Path):
         print(dumps(job))
         jj = roundtrip(job)
         assert jj == job
+
+
+def test_safesave_and_safeload_roundtrip(tmp_path: Path):
+    path = tmp_path / "nested" / "state.json"
+    state = {"a": 1, "b": {"c": [1, 2, 3]}}
+
+    json_helper.safesave(str(path), state)
+
+    assert path.exists()
+    assert json_helper.safeload(str(path)) == state
+
+
+def test_safesave_removes_tmp_file(tmp_path: Path):
+    path = tmp_path / "state.json"
+    json_helper.safesave(str(path), {"ok": True})
+
+    assert not (tmp_path / ".state.json.tmp").exists()
+
+
+def test_safeload_raises_after_retries(tmp_path: Path):
+    missing = tmp_path / "missing.json"
+
+    with pytest.raises(json_helper.FailedToLoadError):
+        json_helper.safeload(str(missing), attempts=1)

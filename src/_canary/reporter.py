@@ -146,11 +146,11 @@ class Reporter:
         if column == "Running":
             return job.timekeeper.duration()
 
-        if column == "Elapsed":
-            return job.timekeeper.duration()
-
         if column == "Queued":
             return job.timekeeper.queued()
+
+        if column in self.total_time_columns:
+            return job.timekeeper.duration()
 
         return -1.0
 

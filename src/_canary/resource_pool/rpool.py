@@ -400,13 +400,21 @@ class ResourcePool:
       is interpreted as per-node.
     """
 
-    __slots__ = ("additional_properties", "nodes", "_node_index", "_allow_multinode")
+    __slots__ = (
+        "additional_properties",
+        "nodes",
+        "_node_index",
+        "_allow_multinode",
+        "_slot_capacity",
+    )
 
     def __init__(self, pool: dict[str, Any] | None = None, allow_multinode: bool = True) -> None:
         self.additional_properties: dict[str, Any] = {}
         self.nodes: list[Node] = []
         self._node_index: dict[str, Node] = {}
         self._allow_multinode = allow_multinode
+        self._slot_capacity: dict[tuple[str, str, str], int | float] = {}
+        self._refresh_slot_capacity()
         if pool:
             self.fill(pool)
 
@@ -646,6 +654,8 @@ class ResourcePool:
         if self.empty():
             raise EmptyResourcePoolError
 
+        self._refresh_slot_capacity()
+
         if len(request) > 1 and not self.allow_multinode:
             raise ResourceUnavailable(
                 "Multi-node allocation requested but this resource pool does not allow it"
@@ -725,31 +735,66 @@ class ResourcePool:
         self._log_acquired(acquired)
         return {"metadata": {}, "resources": acquired}
 
-    def checkin(self, allocation: ResourceAllocation) -> None:
-        checked_in: Counter[str] = Counter()
+    def checkin(self, allocation: dict[str, dict]) -> None:
+        self._refresh_slot_capacity()
 
-        for rtype, rspecs in allocation["resources"].items():
-            by_node: dict[str, list[dict]] = {}
-            for rspec in rspecs:
-                if "node" not in rspec:
-                    raise ValueError(f"Checked-in resource is missing node field: {rspec!r}")
-                node_id = str(rspec["node"])
-                by_node.setdefault(node_id, []).append(rspec)
+        resources = allocation.get("resources")
+        if not isinstance(resources, dict):
+            raise ValueError("allocation missing resources mapping")
 
-            for node_id, node_rspecs in by_node.items():
-                try:
-                    node = self._node_index[node_id]
-                except KeyError:
+        operations: list[tuple[dict[str, Any], int | float]] = []
+
+        for rtype, returned in resources.items():
+            if not isinstance(returned, list):
+                raise ValueError(f"allocation resources for {rtype!r} must be a list")
+
+            for item in returned:
+                if not isinstance(item, dict):
+                    raise ValueError(f"malformed allocation resource entry: {item!r}")
+
+                if "node" not in item:
+                    raise ValueError(f"allocation resource entry missing node: {item!r}")
+                if "id" not in item:
+                    raise ValueError(f"allocation resource entry missing id: {item!r}")
+                if "slots" not in item:
+                    raise ValueError(f"allocation resource entry missing slots: {item!r}")
+
+                node_id = str(item["node"])
+                rid = str(item["id"])
+                slots = item["slots"]
+
+                if not isinstance(slots, (int, float)):
+                    raise TypeError(f"allocation resource slots must be numeric: {item!r}")
+                if slots <= 0:
+                    raise ValueError(f"allocation resource slots must be > 0: {item!r}")
+
+                node, instance = self._find_resource_instance(node_id=node_id, rtype=rtype, rid=rid)
+
+                key = self._capacity_key(node.id, rtype, rid)
+                capacity = self._slot_capacity.get(key)
+
+                if capacity is None:
                     raise ValueError(
-                        f"Attempting to checkin resource for unknown node {node_id!r}"
-                    ) from None
-                node.checkin({rtype: node_rspecs})
-                checked_in[rtype] += sum(int(rspec["slots"]) for rspec in node_rspecs)
+                        f"missing slot capacity for resource {rtype!r}:{rid!r} on node {node_id!r}"
+                    )
 
-        if logging.get_level() <= logging.DEBUG:
-            for rtype, n in checked_in.items():
-                key = rtype[:-1] if n == 1 and rtype.endswith("s") else rtype
-                logger.debug(f"Checked in {n} {key}")
+                current_slots = instance.get("slots", 0)
+
+                if current_slots + slots > capacity:
+                    raise ValueError(
+                        f"checkin would overfill resource {rtype!r}:{rid!r} "
+                        f"on node {node_id!r}: current={current_slots}, "
+                        f"returning={slots}, capacity={capacity}"
+                    )
+
+                operations.append((instance, slots))
+
+        # Mutate only after all entries validate.
+        for instance, slots in operations:
+            instance["slots"] = instance.get("slots", 0) + slots
+
+        for node in self.nodes:
+            node._recompute_slots()
 
     def _log_acquired(self, acquired: dict[str, list[dict]]) -> None:
         if logging.get_level() > logging.DEBUG:
@@ -832,6 +877,40 @@ class ResourcePool:
         for node in self.nodes:
             if node.has_resource(rtype):
                 node.multiply_slots_per_resource(rtype, factor)
+
+    def _capacity_key(self, node_id: str, rtype: str, rid: str) -> tuple[str, str, str]:
+        return (str(node_id), str(rtype), str(rid))
+
+    def _refresh_slot_capacity(self) -> None:
+        """
+        Record the maximum configured slot capacity observed for each resource
+        instance.
+
+        This should be called before checkout/checkin validation. It is safe to
+        call repeatedly; capacity only increases if the configured pool was updated.
+        """
+        for node in self.nodes:
+            for rtype, instances in node.resources.items():
+                for instance in instances:
+                    rid = str(instance["id"])
+                    slots = instance.get("slots", 1)
+                    key = self._capacity_key(node.id, rtype, rid)
+                    old = self._slot_capacity.get(key)
+                    self._slot_capacity[key] = slots if old is None else max(old, slots)
+
+    def _find_resource_instance(
+        self, *, node_id: str, rtype: str, rid: str
+    ) -> tuple[Any, dict[str, Any]]:
+        node = self.get_node(node_id)
+
+        if rtype not in node.resources:
+            raise ValueError(f"unknown resource type {rtype!r} on node {node_id!r}")
+
+        for instance in node.resources[rtype]:
+            if str(instance["id"]) == str(rid):
+                return node, instance
+
+        raise ValueError(f"unknown resource id {rid!r} for resource {rtype!r} on node {node_id!r}")
 
 
 def make_resource_pool(config: "CanaryConfig") -> ResourcePool:

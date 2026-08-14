@@ -176,14 +176,17 @@ class PhaseTimer:
     def total(
         self, names: list[str] | tuple[str, ...] | None = None, *, live: bool = True
     ) -> float:
-        names = list(names or self.split_order)
+        if names is None:
+            phase_names = list(self.split_order)
+            if self.current is not None and self.current not in phase_names:
+                phase_names.append(self.current)
+        else:
+            phase_names = list(names)
         total = 0.0
         found = False
-
-        for name in names:
+        for name in phase_names:
             value = self.value(name, live=live)
             if value >= 0:
                 total += value
                 found = True
-
         return total if found else -1.0
