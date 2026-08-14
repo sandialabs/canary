@@ -189,9 +189,14 @@ class ResultsView:
     def update(self, jobs: list[Job]) -> bool:
         if not self.settings.is_enabled(jobs):
             return False
+
         if not self.exists():
             self.make(exist_ok=True)
-        manifest = self.load_manifest()
+            manifest = self.load_manifest()
+            self.save_manifest(manifest)
+        else:
+            manifest = self.load_manifest()
+
         changed = False
         for job in jobs:
             if self.sync(job, manifest=manifest, save=False):
@@ -455,7 +460,6 @@ class ViewManager:
                 # the backup rename. Keep this for robustness, e.g. changed view
                 # name or stale partial directory.
                 view.unlink(missing_ok=True)
-                view.make()
                 if view.update(jobs):
                     self.view = view
                     made_new = True

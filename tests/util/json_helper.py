@@ -159,3 +159,14 @@ def test_safeload_raises_after_retries(tmp_path: Path):
 
     with pytest.raises(json_helper.FailedToLoadError):
         json_helper.safeload(str(missing), attempts=1)
+
+
+def test_safesave_supports_canary_serializable_object(tmp_path):
+    from _canary.jobspec import Mask
+    path = tmp_path / "state.json"
+    state = Mask.masked("because")
+
+    json_helper.safesave(path, state)
+
+    out = json_helper.loads(path.read_text())
+    assert out == state

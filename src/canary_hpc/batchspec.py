@@ -5,7 +5,6 @@ import argparse
 import copy
 import dataclasses
 import datetime
-import json
 import math
 import time
 from functools import cached_property
@@ -16,6 +15,7 @@ from typing import cast
 
 import hpc_connect
 
+import _canary.util.json_helper as json
 import canary
 from _canary.job import BaseJob
 from _canary.job import JobPhase
@@ -519,8 +519,7 @@ class TestBatch(BaseJob):
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
         cfg["allocation"] = serialize(self.allocation)
-        with open(self.lockfile, "w") as fh:
-            json.dump(cfg, fh, indent=2)
+        json.safesave(self.lockfile, cfg)
         for job in self:
             job.save()
 

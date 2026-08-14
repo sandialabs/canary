@@ -867,8 +867,7 @@ class Job(BaseJob):
             logger.debug("Failed to cache last run", exc_info=True)
 
     def save(self) -> None:
-        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        self.lockfile.write_text(json.dumps(self, indent=2))
+        json.safesave(self.lockfile, self)
 
     def read_output(self, compress: bool = False) -> str:
         if self.status.is_skipped():

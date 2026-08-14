@@ -70,14 +70,17 @@ def loads(*args, **kwargs):
     return json.loads(*args, object_hook=object_hook, **kwargs)
 
 
-def safesave(file: str, state: dict[str, Any]) -> None:
-    dirname, basename = os.path.split(file)
+def safesave(file: str | os.PathLike[str], state: Any, *, indent: int | None = 2) -> None:
+    path = os.fspath(file)
+    dirname, basename = os.path.split(path)
     tmp = os.path.join(dirname, f".{basename}.tmp")
+
     mkdirp(dirname)
+
     try:
         with open(tmp, "w") as fh:
-            json.dump(state, fh, indent=2)
-        os.replace(tmp, file)
+            dump(state, fh, indent=indent)
+        os.replace(tmp, path)
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
