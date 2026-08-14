@@ -4,6 +4,7 @@
 
 import argparse
 import copy
+import io
 import os
 import re
 from collections import Counter
@@ -12,14 +13,17 @@ from typing import Any
 
 import yaml
 
+from .. import config
 from ..hookspec import hookimpl
 from ..util import cpu_count
 from ..util import logging
+from .rpool import Outcome
 from .schemas import resource_pool_schema
 
 if TYPE_CHECKING:
     from ..config import Config as CanaryConfig
     from ..config.argparsing import Parser
+    from ..job import Job
     from .rpool import ResourcePool
 
 
@@ -78,6 +82,33 @@ def fill_default_node_local_pool(config: "CanaryConfig") -> dict[str, Any]:
     resources["gpus"] = [{"id": str(j), "slots": 1} for j in range(gpus)]
     pool: dict[str, Any] = {"additional_properties": {}, "nodes": [local]}
     return pool
+
+
+@hookimpl(trylast=True)
+def canary_resource_pool_accommodates(case: "Job") -> Outcome:
+    return config.resource_manager.get_pool().accommodates(case.required_resources())
+
+
+@hookimpl(trylast=True)
+def canary_resource_pool_count(type: "str") -> int:
+    return config.resource_manager.get_pool().count(type)
+
+
+@hookimpl(trylast=True)
+def canary_resource_pool_count_per_node(type: "str") -> int:
+    return config.resource_manager.get_pool().count(type)
+
+
+@hookimpl(trylast=True)
+def canary_resource_pool_types() -> list[str]:
+    return config.resource_manager.get_pool().types
+
+
+@hookimpl(trylast=True)
+def canary_resource_pool_describe() -> str:
+    fp = io.StringIO()
+    config.resource_manager.get_pool().dump(fp)
+    return fp.getvalue()
 
 
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")

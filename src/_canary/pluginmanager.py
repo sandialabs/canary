@@ -25,7 +25,6 @@ class CanaryPluginManager(pluggy.PluginManager):
 
     def register_builtins(self):
         from . import collect
-        from . import conductor
         from . import generate
         from . import launcher
         from . import reporters
@@ -46,7 +45,6 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")
-        self.register(conductor.CanaryConductor(), "builtin.conductor")
         self.register(generate, "builtin.generate")
         self.register(gpu_select, "builtin.gpu_select")
         self.register(filter, "builtin.filter")
