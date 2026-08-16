@@ -55,20 +55,32 @@ def generate_jobs(dirname):
     return jobs
 
 
+def batching_spec(
+    *,
+    layout: str = "flat",
+    nodes: str = "any",
+    count: int | None = None,
+    duration: float | None = None,
+) -> batching.BatchingSpec:
+    return batching.BatchingSpec.with_defaults(
+        layout=layout, nodes=nodes, count=count, duration=duration
+    )
+
+
 def test_batch_n(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
         jobs = generate_jobs(workdir)
 
-        kwds = {"width": 64, "count": 5, "duration": None, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_jobs(jobs=jobs, **kwds)
+        spec = batching_spec(layout="flat", nodes="any", count=5)
+        batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
         assert len(batches) <= 5
         assert sum(len(batch) for batch in batches) == num_cases
         assert all(hasattr(batch, "estimated_runtime") for batch in batches)
 
-        kwds = {"width": 64, "count": "max", "duration": None, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_jobs(jobs=jobs, **kwds)
+        spec = batching_spec(layout="flat", nodes="any", count=batching.MAX_COUNT)
+        batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
         assert len(batches) == num_cases
         assert sum(len(batch) for batch in batches) == num_cases
@@ -79,14 +91,14 @@ def test_batch_t(generate_files, tmpdir):
         workdir = generate_files
         jobs = generate_jobs(workdir)
 
-        kwds = {"width": 64, "count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
-        batches = batching.batch_jobs(jobs=jobs, **kwds)
+        spec = batching_spec(layout="flat", nodes="any", duration=15 * 60)
+        batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
         assert sum(len(batch) for batch in batches) == num_cases
         assert all(batch.estimated_runtime <= 15 * 60 for batch in batches)
 
-        kwds = {"width": 64, "count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
-        batches = batching.batch_jobs(jobs=jobs, **kwds)
+        spec = batching_spec(layout="flat", nodes="same", duration=15 * 60)
+        batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
         assert sum(len(batch) for batch in batches) == num_cases
         assert all(hasattr(batch, "estimated_runtime") for batch in batches)
@@ -105,7 +117,7 @@ def test_partition_jobs_flat_nodes_any(generate_files, tmpdir):
         assert all(partition.width == partition.node_count * 64 for partition in partitions)
 
         # The generated composite base case structure should have at least one
-        # topological level.  Do not over-specify exact level count here.
+        # topological level. Do not over-specify exact level count here.
         assert all(partition.key.startswith("layout=flat,nodes=any") for partition in partitions)
 
 
@@ -167,9 +179,9 @@ def test_allocate_partition_counts_max(generate_files, tmpdir):
             jobs=jobs, layout="flat", nodes="any", cpus_per_node=64
         )
 
-        counts = batching.allocate_partition_counts("max", partitions)
+        counts = batching.allocate_partition_counts(batching.MAX_COUNT, partitions)
 
-        assert counts == ["max" for _ in partitions]
+        assert counts == [batching.MAX_COUNT for _ in partitions]
 
 
 def test_allocate_partition_counts_integer(generate_files, tmpdir):
@@ -213,16 +225,12 @@ def test_set_batch_dependencies_global(generate_files, tmpdir):
 
         specs = []
         for partition, count in zip(partitions, counts):
-            specs.extend(
-                batching.batch_jobs(
-                    jobs=partition.jobs,
-                    width=partition.width,
-                    count=count,
-                    duration=15 * 60,
-                    nodes="any",
-                    layout="flat",
-                )
-            )
+            if count is None:
+                spec = batching_spec(layout="flat", nodes="any", duration=15 * 60)
+            else:
+                spec = batching_spec(layout="flat", nodes="any", count=count)
+
+            specs.extend(batching.batch_jobs(jobs=partition.jobs, width=partition.width, spec=spec))
 
         batching.set_batch_dependencies(specs)
 
@@ -257,15 +265,9 @@ def test_batch_jobs_exact_final_estimate_metadata(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         jobs = generate_jobs(generate_files)
 
+        spec = batching_spec(layout="flat", nodes="any", count=2)
         batches = batching.batch_jobs(
-            jobs=jobs,
-            width=64,
-            workers=None,
-            nodes="any",
-            layout="flat",
-            count=2,
-            duration=None,
-            exact_final_estimate=True,
+            jobs=jobs, width=64, workers=None, spec=spec, exact_final_estimate=True
         )
 
         assert batches
@@ -277,14 +279,12 @@ def test_batch_jobs_preserves_schedule_metadata(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         jobs = generate_jobs(generate_files)
 
+        spec = batching_spec(layout="flat", nodes="any", count=2)
         batches = batching.batch_jobs(
             jobs=jobs,
             width=64,
             workers=2,
-            nodes="any",
-            layout="flat",
-            count=2,
-            duration=None,
+            spec=spec,
             resource_capacity={"cpus": 64, "gpus": 4},
             node_count=1,
             exact_final_estimate=False,

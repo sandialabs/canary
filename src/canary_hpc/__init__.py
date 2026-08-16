@@ -30,14 +30,19 @@ logger = canary.get_logger(__name__)
 
 @canary.hookimpl
 def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace) -> None:
-    """Do some post configuration checks"""
+    """Do post-parse HPC argument normalization."""
     backend = getattr(args, "hpc_backend", None)
+
     if backend is not None and args.command == "run":
-        # Run with the HPC conductor
+        # Run with the HPC conductor.
         args.command, args.hpc_cmd = "hpc", "run"
-        if not hasattr(args, "hpc_batchspec"):
-            # no batchspec was passed on the command line, so set the defaults
-            args.hpc_batchspec = CanaryHPCBatchSpec.defaults()
+
+        raw_batchspec = getattr(args, "hpc_batchspec", None)
+
+        if raw_batchspec is None:
+            raw_batchspec = CanaryHPCBatchSpec.defaults()
+
+        args.hpc_batchspec = CanaryHPCBatchSpec.validate_and_set_defaults(raw_batchspec)
 
 
 @canary.hookimpl

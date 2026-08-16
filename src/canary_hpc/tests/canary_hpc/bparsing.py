@@ -2,274 +2,227 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
+
 import pytest
 
-from _canary.config.argparsing import Parser as CanaryParser
+from canary_hpc.argparsing import CanaryHPCBatchExec
 from canary_hpc.argparsing import CanaryHPCBatchSpec
-from canary_hpc.conductor import CanaryHPCConductor
+from canary_hpc.argparsing import CanaryHPCResourceSetter
+from canary_hpc.argparsing import CanaryHPCSchedulerArgs
+from canary_hpc.batching import MAX_COUNT
+from canary_hpc.batching import BatchingSpec
+from canary_hpc.batching import CountTarget
+from canary_hpc.batching import DurationTarget
 
 
-class Parser(CanaryParser):
-    def add_argument(self, *args, **kwargs):
-        kwargs.pop("group", None)
-        kwargs.pop("command", None)
-        return super().add_argument(*args, **kwargs)
-
-
-def make_legacy_parser():
-    parser = Parser()
-    CanaryHPCConductor.setup_legacy_parser(parser)
-    return parser
-
-
-def validate(args):
-    spec = getattr(args, "hpc_batchspec", None) or {}
-    CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-    setattr(args, "hpc_batchspec", spec)
-    return args
-
-
-def test_parsing_0():
-    parser = Parser()
-    CanaryHPCConductor.setup_legacy_parser(parser)
-    args = parser.parse_args(
-        [
-            "--hpc-scheduler-args=--account=XYZ123",
-            "--hpc-scheduler-args=--licenses=pscratch",
-            "--hpc-scheduler-args=--foo=bar,--baz=spam",
-            "--hpc-scheduler-args=--a=b,-c d",
-            "--hpc-scheduler-args=--clusters='spam,baz'",
-            "--hpc-scheduler-args=--clusters='horse,fly',--licenses='foo,bar'",
-        ]
-    )
-    assert args.hpc_scheduler_args == [
-        "--account=XYZ123",
-        "--licenses=pscratch",
-        "--foo=bar",
-        "--baz=spam",
-        "--a=b",
-        "-c d",
-        "--clusters='spam,baz'",
-        "--clusters='horse,fly'",
-        "--licenses='foo,bar'",
+def test_scheduler_args_parse() -> None:
+    assert CanaryHPCSchedulerArgs.parse("--queue=foo,--account=bar") == [
+        "--queue=foo",
+        "--account=bar",
     ]
 
-    args = parser.parse_args(["--hpc-batch-spec=count:1"])
-    assert args.hpc_batchspec["count"] == 1
 
-    args = parser.parse_args(["--hpc-batch-spec=duration:1"])
-    assert args.hpc_batchspec["duration"] == 1.0
+def test_batch_exec_parse() -> None:
+    spec = CanaryHPCBatchExec.parse("backend=slurm,batch=sbatch,job=srun")
 
-    args = parser.parse_args(["--hpc-batch-spec=layout:atomic"])
-    assert args.hpc_batchspec["layout"] == "atomic"
+    assert spec == {"backend": "slurm", "batch": "sbatch", "job": "srun"}
 
-    args = parser.parse_args(["--hpc-batch-spec=layout:flat"])
-    assert args.hpc_batchspec["layout"] == "flat"
 
+def test_batch_exec_parse_requires_backend() -> None:
+    with pytest.raises(ValueError, match="backend"):
+        CanaryHPCBatchExec.parse("batch=sbatch")
+
+
+def test_batch_exec_parse_requires_batch() -> None:
+    with pytest.raises(ValueError, match="batch"):
+        CanaryHPCBatchExec.parse("backend=slurm")
+
+
+def test_batch_spec_parse_duration() -> None:
+    spec = CanaryHPCBatchSpec.parse("layout=flat,nodes=same,duration=30m")
+
+    assert spec == {"layout": "flat", "nodes": "same", "duration": 1800.0}
+
+
+def test_batch_spec_parse_count() -> None:
+    spec = CanaryHPCBatchSpec.parse("layout=flat,nodes=any,count=4")
+
+    assert spec == {"layout": "flat", "nodes": "any", "count": 4}
+
+
+def test_batch_spec_parse_count_max() -> None:
+    spec = CanaryHPCBatchSpec.parse("layout=atomic,nodes=any,count=max")
+
+    assert spec == {"layout": "atomic", "nodes": "any", "count": MAX_COUNT}
+
+
+def test_batch_spec_parse_rejects_count_auto() -> None:
     with pytest.raises(ValueError, match="count=auto"):
-        parser.parse_args(["--hpc-batch-spec=count:auto"])
-
-    args = parser.parse_args(["--hpc-batch-spec=count:max"])
-    assert args.hpc_batchspec["count"] == "max"
-
-    args = parser.parse_args(["--hpc-backend=local"])
-    validate(args)
-
-    assert args.hpc_backend == "local"
-    assert args.hpc_batchspec["layout"] == "flat"
-    assert args.hpc_batchspec["duration"] == 60 * 30
-    assert args.hpc_batchspec["nodes"] == "same"
+        CanaryHPCBatchSpec.parse("count=auto")
 
 
-def test_parsing_1():
-    parser = Parser()
-    CanaryHPCConductor.setup_parser(parser)
-    args = parser.parse_args(
-        [
-            "--scheduler-args=--account=XYZ123",
-            "--scheduler-args=--licenses=pscratch",
-            "--scheduler-args=--foo=bar,--baz=spam",
-            "--scheduler-args=--a=b,-c d",
-            "--scheduler-args=--clusters='spam,baz'",
-            "--scheduler-args=--clusters='horse,fly',--licenses='foo,bar'",
-        ]
-    )
-    assert args.hpc_scheduler_args == [
-        "--account=XYZ123",
-        "--licenses=pscratch",
-        "--foo=bar",
-        "--baz=spam",
-        "--a=b",
-        "-c d",
-        "--clusters='spam,baz'",
-        "--clusters='horse,fly'",
-        "--licenses='foo,bar'",
-    ]
-
-    args = parser.parse_args(["--batch-spec=count:1"])
-    assert args.hpc_batchspec["count"] == 1
-
-    args = parser.parse_args(["--batch-spec=duration:1"])
-    assert args.hpc_batchspec["duration"] == 1.0
-
-    args = parser.parse_args(["--batch-spec=layout:atomic"])
-    assert args.hpc_batchspec["layout"] == "atomic"
-
-    args = parser.parse_args(["--batch-spec=layout:flat"])
-    assert args.hpc_batchspec["layout"] == "flat"
-
-    with pytest.raises(ValueError, match="count=auto"):
-        parser.parse_args(["--batch-spec=count:auto"])
-
-    args = parser.parse_args(["--batch-spec=count:max"])
-    assert args.hpc_batchspec["count"] == "max"
-
-    args = parser.parse_args(["--backend=shell"])
-    validate(args)
-
-    assert args.hpc_backend == "shell"
-    assert args.hpc_batchspec["layout"] == "flat"
-    assert args.hpc_batchspec["duration"] == 60 * 30
-    assert args.hpc_batchspec["nodes"] == "same"
+def test_batch_spec_parse_rejects_nonpositive_count() -> None:
+    with pytest.raises(ValueError, match="count <= 0"):
+        CanaryHPCBatchSpec.parse("count=0")
 
 
-def test_parsing_legacy():
-    parser = Parser()
-    CanaryHPCConductor.setup_legacy_parser(parser)
-    args = parser.parse_args(
-        [
-            "-b",
-            "option=--account=XYZ123",
-            "-b",
-            "option=--licenses=pscratch",
-            "-b",
-            "option=--foo=bar,--baz=spam",
-            "-b",
-            "option=--a=b,-c d",
-            "-b",
-            "option=--clusters='spam,baz'",
-            "-b",
-            "option=--clusters='horse,fly',--licenses='foo,bar'",
-        ]
-    )
-    assert args.hpc_scheduler_args == [
-        "--account=XYZ123",
-        "--licenses=pscratch",
-        "--foo=bar",
-        "--baz=spam",
-        "--a=b",
-        "-c d",
-        "--clusters='spam,baz'",
-        "--clusters='horse,fly'",
-        "--licenses='foo,bar'",
-    ]
-
-    args = parser.parse_args(["-b", "spec=count:1"])
-    assert args.hpc_batchspec["count"] == 1
-
-    args = parser.parse_args(["-b", "spec=duration:1"])
-    assert args.hpc_batchspec["duration"] == 1.0
-
-    args = parser.parse_args(["-b", "spec=layout:atomic"])
-    assert args.hpc_batchspec["layout"] == "atomic"
-
-    args = parser.parse_args(["-b", "spec=layout:flat"])
-    assert args.hpc_batchspec["layout"] == "flat"
-
-    with pytest.raises(ValueError, match="count=auto"):
-        parser.parse_args(["-b", "spec=count:auto"])
-
-    args = parser.parse_args(["-b", "spec=count:max"])
-    assert args.hpc_batchspec["count"] == "max"
-
-    args = parser.parse_args(["-b", "backend=shell"])
-    validate(args)
-
-    assert args.hpc_backend == "shell"
-    assert args.hpc_batchspec["layout"] == "flat"
-    assert args.hpc_batchspec["duration"] == 60 * 30
-    assert args.hpc_batchspec["nodes"] == "same"
+def test_batch_spec_parse_rejects_nonpositive_duration() -> None:
+    with pytest.raises(ValueError, match="duration"):
+        CanaryHPCBatchSpec.parse("duration=0")
 
 
-def test_atomic_defaults_to_nodes_any_and_count_max() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic")
-
-    CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-
-    assert spec["layout"] == "atomic"
-    assert spec["nodes"] == "any"
-    assert spec["count"] == "max"
-    assert spec["duration"] is None
+def test_batch_spec_parse_rejects_unknown_arg() -> None:
+    with pytest.raises(ValueError, match="invalid batch spec arg"):
+        CanaryHPCBatchSpec.parse("spam=eggs")
 
 
-def test_atomic_count_max_valid() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic,count=max")
+def test_batch_spec_validate_defaults_flat() -> None:
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(None)
 
-    CanaryHPCBatchSpec.validate_and_set_defaults(spec)
+    assert isinstance(spec, BatchingSpec)
+    assert spec.layout == "flat"
+    assert spec.node_policy == "same"
+    assert isinstance(spec.target, DurationTarget)
+    assert spec.duration == 30 * 60.0
+    assert spec.count is None
 
-    assert spec["layout"] == "atomic"
-    assert spec["nodes"] == "any"
-    assert spec["count"] == "max"
-    assert spec["duration"] is None
+
+def test_batch_spec_validate_defaults_atomic() -> None:
+    raw = {"layout": "atomic", "nodes": None, "count": None, "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+    assert isinstance(spec, BatchingSpec)
+    assert spec.layout == "atomic"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == MAX_COUNT
+    assert spec.duration is None
 
 
-def test_atomic_nodes_same_invalid() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic,nodes=same,count=2")
+def test_batch_spec_validate_duration_target() -> None:
+    raw = {"layout": "flat", "nodes": "same", "count": None, "duration": 120.0}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+    assert spec.layout == "flat"
+    assert spec.node_policy == "same"
+    assert isinstance(spec.target, DurationTarget)
+    assert spec.duration == 120.0
+    assert spec.count is None
+
+
+def test_batch_spec_validate_count_target() -> None:
+    raw = {"layout": "flat", "nodes": "any", "count": 3, "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+    assert spec.layout == "flat"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == 3
+    assert spec.duration is None
+
+
+def test_batch_spec_validate_count_max_target() -> None:
+    raw = {"layout": "atomic", "nodes": "any", "count": "max", "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+    assert spec.layout == "atomic"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == MAX_COUNT
+
+
+def test_batch_spec_validate_rejects_duration_and_count() -> None:
+    raw = {"layout": "flat", "nodes": "same", "count": 2, "duration": 120.0}
+
+    with pytest.raises(ValueError, match="duration.*count|count.*duration"):
+        CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+
+def test_batch_spec_validate_rejects_atomic_nodes_same() -> None:
+    raw = {"layout": "atomic", "nodes": "same", "count": "max", "duration": None}
 
     with pytest.raises(ValueError, match="layout=atomic requires nodes=any"):
-        CanaryHPCBatchSpec.validate_and_set_defaults(spec)
+        CanaryHPCBatchSpec.validate_and_set_defaults(raw)
 
 
-def test_atomic_nodes_any_count_valid() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic,nodes=any,count=2")
-
-    CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-
-    assert spec["layout"] == "atomic"
-    assert spec["nodes"] == "any"
-    assert spec["count"] == 2
-    assert spec["duration"] is None
-
-
-def test_atomic_count_valid_with_implicit_nodes_any() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic,count=2")
-
-    CanaryHPCBatchSpec.validate_and_set_defaults(spec)
-
-    assert spec["layout"] == "atomic"
-    assert spec["nodes"] == "any"
-    assert spec["count"] == 2
-    assert spec["duration"] is None
-
-
-def test_duration_atomic_invalid() -> None:
-    spec = CanaryHPCBatchSpec.parse("layout=atomic,nodes=any,duration=30m")
+def test_batch_spec_validate_rejects_atomic_duration() -> None:
+    raw = {"layout": "atomic", "nodes": "any", "count": None, "duration": 120.0}
 
     with pytest.raises(ValueError, match="duration-targeted atomic"):
-        CanaryHPCBatchSpec.validate_and_set_defaults(spec)
+        CanaryHPCBatchSpec.validate_and_set_defaults(raw)
 
 
-def test_count_zero_invalid() -> None:
-    parser = Parser()
-    CanaryHPCConductor.setup_parser(parser)
+def test_hpc_resource_setter_workers() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
 
-    with pytest.raises(ValueError, match="count <= 0"):
-        parser.parse_args(["--batch-spec=count:0"])
+    ns = parser.parse_args(["-b", "workers=7"])
 
-
-def test_batch_exact_estimate_parser() -> None:
-    parser = Parser()
-    CanaryHPCConductor.setup_parser(parser)
-
-    args = parser.parse_args(["--batch-exact-estimate"])
-
-    assert args.hpc_batch_exact_estimate is True
+    assert ns.hpc_batch_workers == 7
 
 
-def test_hpc_batch_exact_estimate_legacy_parser() -> None:
-    parser = Parser()
-    CanaryHPCConductor.setup_legacy_parser(parser)
+def test_hpc_resource_setter_rejects_nonpositive_workers() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
 
-    args = parser.parse_args(["--hpc-batch-exact-estimate"])
+    with pytest.raises(ValueError, match="workers"):
+        parser.parse_args(["-b", "workers=0"])
 
-    assert args.hpc_batch_exact_estimate is True
+
+def test_batch_spec_argparse_action_stores_raw_batchspec_dict() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch", action=CanaryHPCBatchSpec, dest="hpc_batchspec")
+
+    ns = parser.parse_args(["--batch", "layout=flat,nodes=any,duration=10m"])
+
+    assert ns.hpc_batchspec == {"nodes": "any", "layout": "flat", "count": None, "duration": 600.0}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(ns.hpc_batchspec)
+
+    assert isinstance(spec, BatchingSpec)
+    assert spec.layout == "flat"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, DurationTarget)
+    assert spec.duration == 600.0
+    assert spec.count is None
+
+
+def test_batch_spec_argparse_action_merges_repeated_values() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch", action=CanaryHPCBatchSpec, dest="hpc_batchspec")
+
+    ns = parser.parse_args(["--batch", "layout=flat,nodes=same", "--batch", "count=2"])
+
+    assert ns.hpc_batchspec == {"nodes": "same", "layout": "flat", "count": 2, "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(ns.hpc_batchspec)
+
+    assert isinstance(spec, BatchingSpec)
+    assert spec.layout == "flat"
+    assert spec.node_policy == "same"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == 2
+    assert spec.duration is None
+
+
+def test_hpc_resource_setter_spec_stores_raw_batchspec_dict() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+
+    ns = parser.parse_args(["-b", "spec=layout=flat,nodes=any,count=3"])
+
+    assert ns.hpc_batchspec == {"nodes": "any", "layout": "flat", "count": 3, "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(ns.hpc_batchspec)
+
+    assert isinstance(spec, BatchingSpec)
+    assert spec.layout == "flat"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == 3
+    assert spec.duration is None

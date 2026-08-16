@@ -5,12 +5,11 @@ import argparse
 import logging
 import os
 import threading
+from collections.abc import Mapping
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
-from typing import Literal
 from typing import Sequence
-from typing import cast
 
 import hpc_connect
 
@@ -27,8 +26,11 @@ from _canary.util.time import time_in_seconds
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
+from .batching import BatchingSpec
+from .batching import CountTarget
 from .batching import allocate_partition_counts
 from .batching import batch_jobs
+from .batching import normalize_batching_spec
 from .batching import partition_jobs
 from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
@@ -42,7 +44,7 @@ logger = canary.get_logger(__name__)
 def create_batch_specs(
     *,
     jobs: list["canary.Job"],
-    batchspec: dict[str, object],
+    batchspec: BatchingSpec | Mapping[str, Any] | None,
     cpus_per_node: int,
     workers: int | None,
     resources_per_node: dict[str, int] | None = None,
@@ -53,25 +55,31 @@ def create_batch_specs(
     This helper is intentionally side-effect light so conductor batching can be
     tested without submitting to a backend.
     """
+    import dataclasses
 
-    layout = cast(Literal["flat", "atomic"], batchspec["layout"])
-    nodes = cast(Literal["any", "same"], batchspec["nodes"])
+    spec = normalize_batching_spec(batchspec)
+
     partitions = partition_jobs(
         jobs=jobs,
-        layout=layout,
-        nodes=nodes,
+        layout=spec.layout,
+        nodes=spec.node_policy,
         cpus_per_node=cpus_per_node,
         resources_per_node=resources_per_node,
     )
 
-    partition_counts = allocate_partition_counts(cast(int | None, batchspec["count"]), partitions)
+    partition_counts = allocate_partition_counts(spec.count, partitions)
 
     batch_specs: list[BatchSpec] = []
 
     for partition, partition_count in zip(partitions, partition_counts):
+        if partition_count is None:
+            partition_spec = spec
+        else:
+            partition_spec = dataclasses.replace(spec, target=CountTarget(partition_count))
+
         logger.debug(
             "Batching partition %s: jobs=%d node_count=%d "
-            "cpus_per_node=%d width=%d resources=%r count=%r duration=%r workers=%r",
+            "cpus_per_node=%d width=%d resources=%r count=%r target=%r workers=%r",
             partition.key,
             len(partition.jobs),
             partition.node_count,
@@ -79,20 +87,16 @@ def create_batch_specs(
             partition.width,
             partition.resource_capacity,
             partition_count,
-            batchspec["duration"],
+            partition_spec.duration,
             workers,
         )
 
-        duration = cast(float | None, batchspec["duration"])
         batch_specs.extend(
             batch_jobs(
                 jobs=partition.jobs,
                 width=partition.width,
                 workers=workers,
-                layout=layout,
-                count=partition_count,
-                duration=duration,
-                nodes=nodes,
+                spec=partition_spec,
                 resource_capacity=partition.resource_capacity,
                 node_count=partition.node_count,
                 exact_final_estimate=exact_final_estimate,
@@ -127,12 +131,13 @@ class CanaryHPCConductor:
         pluginmanager.register(self, "canary_hpc_conductor")
 
     def run(self, args: argparse.Namespace) -> int:
-        if args.hpc_batch_workers is not None:
+        if getattr(args, "hpc_batch_workers", None) is not None:
             n = int(args.hpc_batch_workers)
             if n > cpu_count():
                 logger.warning(f"--hpc-batch-workers={n} > cpu_count={cpu_count()}")
-        batchspec = args.hpc_batchspec or CanaryHPCBatchSpec.defaults()
-        CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
+        raw_batchspec = getattr(args, "hpc_batchspec", None)
+        batchspec = CanaryHPCBatchSpec.validate_and_set_defaults(raw_batchspec)
+        args.hpc_batchspec = batchspec
         setattr(canary.config.options, "hpc_batchspec", batchspec)
         console_style = canary.config.getoption("console_style") or {}
         if "live_columns" not in console_style:
@@ -378,8 +383,18 @@ class LegacyParserAdapter:
         return self.parser.parse_args(args)
 
 
-class KeyboardQuit(Exception):
-    pass
+def standalone_resource_pool() -> ResourcePool:
+    """Create standalone resource pool, only used to schedule local batch
+    submission workers. It is not the HPC test resource pool.
+    """
+    my_cpus = [{"id": str(j), "slots": 1} for j in range(cpu_count())]
+    rpool = ResourcePool(
+        {
+            "additional_properties": {"source": "canary_hpc_conductor"},
+            "nodes": [{"id": os.uname().nodename, "resources": {"cpus": my_cpus, "gpus": []}}],
+        }
+    )
+    return rpool
 
 
 class BatchExecutor:
