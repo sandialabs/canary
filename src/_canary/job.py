@@ -923,24 +923,24 @@ class Job(BaseJob):
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration() >= 0 and self.status.is_success():
+            if self.timekeeper.running() >= 0 and self.status.is_success():
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})
                 if t:
                     # Welford's single pass online algorithm to update statistics
                     count, mean, variance = t["count"], t["mean"], t["variance"]
-                    delta = self.timekeeper.duration() - mean
+                    delta = self.timekeeper.running() - mean
                     mean += delta / (count + 1)
                     M2 = variance * count
-                    delta2 = self.timekeeper.duration() - mean
+                    delta2 = self.timekeeper.running() - mean
                     M2 += delta * delta2
                     variance = M2 / (count + 1)
-                    minimum = min(t["min"], self.timekeeper.duration())
-                    maximum = max(t["max"], self.timekeeper.duration())
+                    minimum = min(t["min"], self.timekeeper.running())
+                    maximum = max(t["max"], self.timekeeper.running())
                 else:
                     variance = 0.0
-                    mean = minimum = maximum = self.timekeeper.duration()
+                    mean = minimum = maximum = self.timekeeper.running()
                 t["mean"] = mean
                 t["min"] = minimum
                 t["max"] = maximum

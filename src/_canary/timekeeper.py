@@ -58,9 +58,19 @@ class Timekeeper:
             return self.started - self.submitted
         return -1.0
 
+    def running(self) -> float:
+        if self.started > 0 and self.finished > 0:
+            return self.finished - self.started
+        return -1.0
+
     def duration(self) -> float:
         if self.started > 0 and self.finished > 0:
             return self.finished - self.started
+        return -1.0
+
+    def total(self) -> float:
+        if self.submitted > 0 and self.finished > 0:
+            return self.finished - self.submitted
         return -1.0
 
     def reset(self) -> None:

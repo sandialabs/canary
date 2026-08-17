@@ -125,11 +125,6 @@ class Reporter:
         if isinstance(value, (int, float)):
             return float(value)
 
-        # Backward/current Flux measurement name.
-        value = self._job_measurement(job, "flux_timing", column)
-        if isinstance(value, (int, float)):
-            return float(value)
-
         # Also support lower-case/snake-case keys from existing flux_timing.
         keymap = {
             "Queued": "queue_time",
@@ -144,13 +139,13 @@ class Reporter:
                 return float(value)
 
         if column == "Running":
-            return job.timekeeper.duration()
+            return job.timekeeper.running()
 
         if column == "Queued":
             return job.timekeeper.queued()
 
         if column in self.total_time_columns:
-            return job.timekeeper.duration()
+            return job.timekeeper.total()
 
         return -1.0
 

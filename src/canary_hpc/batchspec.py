@@ -306,8 +306,9 @@ class TestBatch(BaseJob):
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
-            queue.put({"event": "job_submitted", "timestamp": time.time()})
-            self.timekeeper.submitted = time.time()
+            submitted_at = time.time()
+            self.timekeeper.submitted = submitted_at
+            queue.put({"event": "job_submitted", "timestamp": submitted_at})
             try:
                 rc = runner.execute(self, queue=queue)
             finally:
@@ -389,7 +390,7 @@ class TestBatch(BaseJob):
             job.state.phase = JobPhase.DONE
             job.set_status(outcome="BROKEN", reason=job_reason)
             if job.timekeeper.submitted < 0:
-                job.timekeeper.submitted = self.timekeeper.submitted
+                job.timekeeper.submitted = now
             if job.timekeeper.started < 0:
                 job.timekeeper.started = now
             if job.timekeeper.finished < 0:
@@ -409,6 +410,10 @@ class TestBatch(BaseJob):
     def refresh(self) -> None:
         for job in self:
             job.refresh()
+            if self.timekeeper.submitted > 0:
+                job.timekeeper.submitted = self.timekeeper.submitted
+            if job.timekeeper.started > 0 and job.timekeeper.started < self.timekeeper.started:
+                job.timekeeper.started = self.timekeeper.started
         self.finalize_status_from_child_jobs()
 
     def finalize_status_from_child_jobs(self) -> None:

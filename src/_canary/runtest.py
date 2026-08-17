@@ -154,27 +154,24 @@ class JobExecutor:
     def __call__(self, job: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
         from .status import Status
 
-        def record_event(event: str, t: float) -> None:
-            queue.put({"event": f"job_{event}", "timestamp": t})
-            setattr(job.timekeeper, event, t)
-
         def mark_broken(phase: str, e: Exception) -> None:
             r = f"{e.__class__.__name__}({', '.join(repr(_) for _ in e.args)})"
             job.status = Status.BROKEN(reason=r)
             logger.debug(f"Failed to {phase} {job}", exc_info=e)
             job.save()
 
-        record_event("submitted", time.time())
+        queue.put({"event": "job_submitted", "timestamp": time.time()})
         try:
             config.pluginmanager.hook.canary_runteststart(case=job)
         except Exception as e:
             mark_broken("setup", e)
             return
 
-        record_event("started", time.time())
+        queue.put({"event": "job_started", "timestamp": time.time()})
         try:
             config.pluginmanager.hook.canary_runtest(case=job)
-            job.timekeeper.finished = time.time()
+            if job.timekeeper.finished < 0:
+                job.timekeeper.finished = time.time()
         except Exception as e:
             mark_broken("run", e)
             return
@@ -312,7 +309,7 @@ def print_footer(runner: Runner, title: str) -> None:
 
 
 def print_durations(jobs: list["Job"], N: int) -> None:
-    jobs.sort(key=lambda x: x.timekeeper.duration())
+    jobs.sort(key=lambda x: x.timekeeper.running())
     ix = list(range(len(jobs)))
     if N > 0:
         ix = ix[-N:]
@@ -320,7 +317,7 @@ def print_durations(jobs: list["Job"], N: int) -> None:
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = jobs[i].timekeeper.duration()
+        duration = jobs[i].timekeeper.running()
         if duration < 0:
             continue
         name = jobs[i].display_name(style="rich")
