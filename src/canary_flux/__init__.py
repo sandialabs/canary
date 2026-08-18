@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import math
 import os
 from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
+from _canary.config.argparsing import append_option_help
 from _canary.hookspec import hookimpl
+from _canary.util.rich import bold
 from _canary.util.time import time_in_seconds
 
 if TYPE_CHECKING:
@@ -75,31 +78,6 @@ class FluxRun:
             help="Minimum number of nodes to request for the Flux allocation [default: auto]",
         )
         group.add_argument(
-            "--queue-timeout",
-            dest="flux_queue_timeout",
-            type=time_in_seconds,
-            default=1200,
-            metavar="T",
-            help="Maximum time to wait for the Flux allocation to start [default: 1200s]",
-        )
-        group.add_argument(
-            "--time-limit",
-            dest="flux_time_limit",
-            type=time_in_seconds,
-            default=3600,
-            metavar="T",
-            help="Flux allocation time limit [default: 3600s]",
-        )
-        group.add_argument(
-            "--max-submitted",
-            dest="flux_max_submitted",
-            type=int,
-            default=0,
-            metavar="N",
-            help="Maximum number of simultaneously submitted inner Flux jobs; 0 means unlimited",
-        )
-
-        group.add_argument(
             "--submit-arg",
             dest="flux_submit_args",
             action="append",
@@ -107,10 +85,29 @@ class FluxRun:
             metavar="ARG",
             help="Additional argument passed to inner Flux/hpc_connect job submission; may be repeated",
         )
+        group.add_argument(
+            "--allocation-arg",
+            dest="flux_alloc_args",
+            action="append",
+            default=None,
+            metavar="ARG",
+            help="Additional argument passed to Flux/hpc_connect allocation request; may be repeated",
+        )
 
         from _canary.plugins.subcommands.run import Run
 
         Run().setup_parser(parser)
+        append_option_help(
+            parser,
+            "--timeout",
+            f"""\n
+Flux timeout types:\n\n
+• type={bold("queue")}, maximum time to wait for the Flux allocation or submitted Flux job to
+      start before treating it as timed out.\n\n
+• type={bold("allocation")}, walltime requested for the outer Flux allocation.\n\n
+""",
+            marker="Flux timeout types:",
+        )
 
     def execute(self, args: argparse.Namespace) -> int:
         from _canary.plugins.subcommands.run import Run
@@ -118,8 +115,8 @@ class FluxRun:
         logger.info(
             "[bold]Flux run requested[/]: nodes=%s, queue_timeout=%ss, time_limit=%ss",
             args.flux_nodes if args.flux_nodes is not None else "auto",
-            args.flux_queue_timeout,
-            args.flux_time_limit,
+            allocation_queue_timeout(),
+            allocation_time_limit(),
         )
         console_style = canary.config.getoption("console_style") or {}
         if "live_columns" not in console_style:
@@ -141,9 +138,7 @@ class FluxExec:
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
         parser.set_defaults(banner=False, flux_exec=True, flux_direct_run=False)
-
         parser.add_argument("--session", required=True, help="Run the job in this session")
-
         parser.add_argument("spec", help="Run this spec ID")
 
     def execute(self, args: argparse.Namespace) -> int:
@@ -166,16 +161,16 @@ def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
     import hpc_connect
 
     backend = hpc_connect.get_backend("flux")
-    node_count = _flux_node_count(backend)
     resources_per_node = _flux_resources_per_node(backend)
     nodes: list[dict[str, Any]] = []
+    node_count: int = int(canary.config.getoption("flux_nodes") or backend.node_count)
     for i in range(node_count):
         resources: dict[str, list[dict[str, Any]]] = {}
         for rtype, count in sorted(resources_per_node.items()):
             resources[rtype] = _resource_specs(count, rtype=rtype)
         nodes.append({"id": str(i), "resources": resources})
     pool = {
-        "allow_multinode": node_count > 1,
+        "allow_multinode": True,
         "additional_properties": {
             "source": "canary_flux",
             "backend": backend.name,
@@ -184,25 +179,22 @@ def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
         },
         "nodes": nodes,
     }
-    logger.debug("Created Flux resource pool from backend %s: %r", backend.name, pool)
+    logger.debug("Created Flux resource pool from backend %s", backend.name)
     return pool
 
 
 @hookimpl(tryfirst=True)
 def canary_runtests(runner: "Runner") -> bool | None:
-    if not canary.config.getoption("flux_direct_run", False):
-        return None
-
     from hpcc_flux.allocation import FluxAllocation
 
     from .executor import FluxDirectExecutor
 
-    node_count = _allocation_node_count(runner.jobs)
-    queue_timeout = float(canary.config.getoption("flux_queue_timeout") or 1200)
-    time_limit = float(canary.config.getoption("flux_time_limit") or 3600)
-    for job in runner.jobs:
-        if (t := job.total_timeout()) > time_limit:
-            time_limit = t
+    if not canary.config.getoption("flux_direct_run", False):
+        return None
+
+    node_count = allocation_node_count(runner.jobs)
+    queue_timeout = allocation_queue_timeout()
+    time_limit = allocation_time_limit()
 
     logger.info(
         "[bold]Starting[/] Flux allocation for %d jobs: nodes=%d, "
@@ -213,67 +205,50 @@ def canary_runtests(runner: "Runner") -> bool | None:
         time_limit,
     )
 
-    with FluxAllocation(
-        nodes=node_count, time_limit=time_limit, queue_timeout=queue_timeout
-    ) as allocation:
-        logger.info(
-            "[bold]Flux allocation active[/]: jobid=%s uri=%s", allocation.jobid, allocation.uri
-        )
-        logger.info("[bold]FLUX_URI[/]: %s", os.environ.get("FLUX_URI"))
-
+    alloc_args: list[str] = []
+    if time_limit:
+        alloc_args.append(f"--time-limit={minutes(time_limit)}")
+    if extra_alloc_args := canary.config.getoption("flux_alloc_args"):
+        alloc_args.extend(extra_alloc_args)
+    allocation = FluxAllocation(nodes=node_count)
+    with allocation.open(alloc_args, timeout=queue_timeout) as alloc:
+        logger.info("[bold]Flux allocation active[/]: jobid=%s uri=%s", alloc.jobid, alloc.uri)
         executor = FluxDirectExecutor(runner)
         executor.run()
-
     logger.info("[bold]Flux allocation closed[/]")
 
     return True
 
 
-def _allocation_node_count(jobs: list["canary.Job"]) -> int:
-    requested = canary.config.getoption("flux_nodes")
-    cli_nodes = int(requested) if requested is not None else 0
-    job_nodes = 1
-    for job in jobs:
-        job_nodes = max(job_nodes, len(job.required_resources()))
-    return max(cli_nodes, job_nodes, 1)
+def allocation_queue_timeout() -> float:
+    return canary.config.get_timeout_option("queue") or 1200.0
 
 
-def _flux_node_count(backend: Any) -> int:
-    """
-    Best-effort node-count discovery from the root Flux backend.
-    """
-    for method_name in ("count", "resource_count"):
-        method = getattr(backend, method_name, None)
-        if method is None:
-            continue
-
-        for rtype in ("nodes", "node"):
-            n = 0
+def allocation_time_limit() -> float:
+    # Return the allocation time limit in seconds
+    if t := canary.config.get_timeout_option("allocation"):
+        return float(t)
+    if alloc_args := canary.config.getoption("flux_alloc_args"):
+        p = argparse.ArgumentParser()
+        p.add_argument("--time-limit", "-t", dest="qtime")
+        a, _ = p.parse_known_args(alloc_args)
+        if a.qtime:
             try:
-                n = int(method(rtype))
-            except Exception as e:
-                logger.debug(
-                    "Flux backend %s(%r) node-count query failed: %s", method_name, rtype, e
-                )
+                return float(a.qtime) * 60.0
+            except:
+                return time_in_seconds(a.qtime)
+    if t := canary.config.get_timeout_option("session"):
+        return float(t)
+    return 3600.0
 
-            if n > 0:
-                return n
 
-    for name in ("FLUX_RESOURCE_NNODES", "FLUX_JOB_NNODES"):
-        value = os.getenv(name)
-        if not value:
-            continue
-
-        n = 0
-        try:
-            n = int(value)
-        except ValueError as e:
-            logger.debug("Invalid %s=%r: %s", name, value, e)
-
-        if n > 0:
-            return n
-
-    return 1
+def allocation_node_count(jobs: list["canary.Job"]) -> int:
+    node_count = canary.config.resource_manager.count("nodes")
+    for job in jobs:
+        job_node_count = len(job.required_resources())
+        if job_node_count > node_count:
+            raise ValueError(f"{job=} requires more nodes than exist in this flux resource pool")
+    return node_count
 
 
 def _flux_resources_per_node(backend: Any) -> dict[str, int]:
@@ -389,6 +364,11 @@ def flux_exec(args: argparse.Namespace) -> int:
 
         pm.canary_runtest(case=job)
 
+        import json
+
+        with job.workspace.openfile("env.json", "w") as fh:
+            json.dump(dict(os.environ), fh, indent=2)
+
         job.timekeeper.finished = time.time()
 
     finally:
@@ -411,11 +391,11 @@ def assign_flux_resources(job: "canary.Job") -> None:
     """
     resources: dict[str, list[dict]] = {}
 
-    gpu_ids = _visible_gpu_ids()
-    if gpu_ids:
+    if dinfo := _device_info():
         resources["gpus"] = [
-            {"node": os.getenv("FLUX_JOB_ID", "0"), "id": gpu_id, "slots": 1} for gpu_id in gpu_ids
+            {"node": os.getenv("FLUX_JOB_ID", "0"), "id": id, "slots": 1} for id in dinfo.ids
         ]
+        job.variables[dinfo.varname] = ",".join(dinfo.ids)
 
     # Optional simple CPU placeholder. If tests rely on CANARY_CPU_IDS, we can
     # improve this using Flux-provided cpuset information later.
@@ -423,12 +403,11 @@ def assign_flux_resources(job: "canary.Job") -> None:
     resources["cpus"] = [
         {"node": os.getenv("FLUX_JOB_ID", "0"), "id": str(i), "slots": 1} for i in range(cpus)
     ]
-
     job.assign_resources(
         {
             "metadata": {
                 "source": "canary_flux",
-                "flux_job_id": os.getenv("FLUX_JOB_ID"),
+                "flux_jobid": os.getenv("FLUX_JOB_ID"),
                 "flux_uri": os.getenv("FLUX_URI"),
             },
             "resources": resources,
@@ -436,7 +415,7 @@ def assign_flux_resources(job: "canary.Job") -> None:
     )
 
 
-def _visible_gpu_ids() -> list[str]:
+def _device_info() -> argparse.Namespace | None:
     for name in (
         "CUDA_VISIBLE_DEVICES",
         "ROCR_VISIBLE_DEVICES",
@@ -445,5 +424,11 @@ def _visible_gpu_ids() -> list[str]:
     ):
         value = os.getenv(name)
         if value:
-            return [item.strip() for item in value.split(",") if item.strip()]
-    return []
+            return argparse.Namespace(
+                varname=name, ids=[item.strip() for item in value.split(",") if item.strip()]
+            )
+    return None
+
+
+def minutes(seconds: float) -> float:
+    return math.ceil(float(seconds) / 60.0)

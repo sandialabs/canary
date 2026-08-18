@@ -370,6 +370,10 @@ class Workspace:
         selector = select.RuntimeSelector(jobs, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
+        if timeout := config.get_timeout_option("session"):
+            if fac := config.get_timeout_option("multiplier"):
+                timeout *= fac
+            selector.add_rule(rules.SessionTimeoutRule(timeout=timeout))
         selector.run()
 
         # At this point, test jobs have been reconstructed and, if previous results exist,

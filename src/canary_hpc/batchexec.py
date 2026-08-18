@@ -74,7 +74,7 @@ class HPCConnectRunner:
 
     def scheduler_args(self) -> list[str]:
         options: list[str] = []
-        if args := canary.config.getoption("hpc_scheduler_args"):
+        if args := canary.config.getoption("hpc_submit_args"):
             options.extend(args)
         return options
 

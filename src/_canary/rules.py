@@ -415,5 +415,23 @@ class RerunRule(RuntimeRule):
             raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
 
 
+class SessionTimeoutRule(RuntimeRule):
+    def __init__(self, timeout: float, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.timeout = timeout
+
+    def __repr__(self) -> str:
+        return f"TimeoutRule(timeout={self.timeout})"
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "runtime of job exceeds session timeout"
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        if job.total_timeout() < self.timeout:
+            return RuleOutcome(ok=True)
+        return RuleOutcome.failed(self.default_reason)
+
+
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
     return any(element in test_elements for element in elements)

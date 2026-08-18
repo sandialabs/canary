@@ -27,6 +27,8 @@ class CanaryHPCSchedulerArgs(argparse.Action):
     @staticmethod
     def defaults() -> list[str]:
         options: list[str] = []
+        if arg := os.getenv("CANARY_HPC_SUBMIT_ARGS"):
+            options.extend(shlex.split(arg))
         if arg := os.getenv("CANARY_HPC_SCHEDULER_ARGS"):
             options.extend(shlex.split(arg))
         return options
@@ -283,7 +285,7 @@ class CanaryHPCResourceSetter(argparse.Action):
             setattr(namespace, "hpc_queue_timeout", time_in_seconds(raw))
 
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
-            dest = "hpc_scheduler_args"
+            dest = "hpc_submit_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
             opts.extend(CanaryHPCSchedulerArgs.parse(raw))

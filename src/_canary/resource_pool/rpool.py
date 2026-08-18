@@ -627,7 +627,11 @@ class ResourcePool:
             )
         placements = self._place_node_requests(request)
         if placements is None:
-            return Outcome(False, reason=f"Could not place request on {len(request)} node(s)")
+            return Outcome(
+                False,
+                reason=f"Cannot accomodate request requiring {len(request)} node(s) "
+                f"from resource pool with {len(self.nodes)} node(s)",
+            )
         return Outcome(True)
 
     def checkout(self, request: list[NodeRequest], **kwds: Any) -> ResourceAllocation:
@@ -663,7 +667,10 @@ class ResourcePool:
 
         placements = self._place_node_requests(request)
         if placements is None:
-            raise ResourceUnavailable(f"Could not place request on {len(request)} node(s)")
+            raise ResourceUnavailable(
+                f"Cannot checkout a request requiring {len(request)} node(s) "
+                f"from resource pool with {len(self.nodes)} node(s)"
+            )
 
         acquired: dict[str, list[dict]] = {}
         checked_out: list[tuple[Node, dict[str, list[dict]]]] = []

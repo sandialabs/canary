@@ -76,6 +76,7 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
 class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs) -> None:
         positionals_title = kwargs.pop("positionals_title", None)
+        kwargs.setdefault("formatter_class", HelpFormatter)
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommand_objects: dict[str, "CanarySubcommand"] = {}
@@ -146,6 +147,10 @@ class Parser(argparse.ArgumentParser):
         arg_strings = super()._read_args_from_files(arg_strings)
         self.argv = arg_strings
         return arg_strings
+
+    def add_subparsers(self, *args, **kwargs):
+        kwargs.setdefault("parser_class", type(self))
+        return super().add_subparsers(*args, **kwargs)
 
     def add_command(self, command: "CanarySubcommand", add_help_override: bool = False) -> None:
         """Add one subcommand to this parser."""
@@ -450,3 +455,38 @@ def add_parser_help(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "-h", "--help", action=argparse._HelpAction, help="Show this help message and exit."
     )
+
+
+def find_option_action(parser: argparse.ArgumentParser, option: str) -> argparse.Action | None:
+    for action in parser._actions:
+        if option in action.option_strings:
+            return action
+    return None
+
+
+def append_option_help(
+    parser: argparse.ArgumentParser, option: str, extra: str, *, marker: str | None = None
+) -> None:
+    action = find_option_action(parser, option)
+
+    if action is None:
+        raise ValueError(f"Could not find parser option {option!r}")
+
+    if action.help is argparse.SUPPRESS:
+        return
+
+    marker = marker or extra.strip()
+
+    # Avoid duplicate appends if setup_parser is called more than once.
+    if isinstance(action.help, str) and marker in action.help:
+        return
+
+    base = "" if action.help is None else str(action.help).rstrip()
+    action.help = f"{base}\n\n{extra.strip()}"
+
+
+class CanarySubParsersAction(argparse._SubParsersAction):
+    def add_parser(self, *args, **kwargs):
+        kwargs["formatter_class"] = HelpFormatter
+        p = self.add_parser(*args, **kwargs)
+        return p

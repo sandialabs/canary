@@ -122,7 +122,7 @@ class FluxDirectExecutor:
         self.slots_by_id: dict[str, ExecutionSlot] = {}
 
         self.live_reporting = self._should_live_report()
-        self.max_submitted = int(canary.config.getoption("flux_max_submitted") or 0)
+        self.workers = int(canary.config.getoption("workers") or -1)
 
         self._qrank = 0
         self._qsize = len(runner.jobs)
@@ -151,8 +151,8 @@ class FluxDirectExecutor:
 
         reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
 
+        self.add_listener(self._sync_view_on_finish)
         backend_name = canary.config.getoption("flux_backend") or "flux"
-        logger.info("FLUX_URI before hpc_connect.get_backend: %s", os.environ.get("FLUX_URI"))
         backend = hpc_connect.get_backend(backend_name)
         submitter = backend.submission_manager()
 
@@ -176,6 +176,7 @@ class FluxDirectExecutor:
 
         finally:
             self._cancel_remaining()
+            self.remove_listener(self._sync_view_on_finish)
 
         return 0
 
@@ -247,9 +248,9 @@ class FluxDirectExecutor:
         return root / job.id
 
     def _can_submit_more(self) -> bool:
-        if self.max_submitted <= 0:
+        if self.workers <= 0:
             return True
-        return len(self.futures) < self.max_submitted
+        return len(self.futures) < self.workers
 
     def _hpc_jobspec(self, job: canary.Job) -> Any:
         import hpc_connect
@@ -405,7 +406,7 @@ class FluxDirectExecutor:
                 try:
                     proc_info = future.proc_info(timeout=0)
                 except Exception as e:
-                    proc_info = {"proc_info_error": repr(e)}
+                    proc_info = {"exception": repr(e)}
                     logger.debug("Failed to read proc_info for %s", job_id[:7], exc_info=True)
 
             self._mark_finished(job_id, rc=rc, exc=exc, proc_info=proc_info)
@@ -547,14 +548,19 @@ class FluxDirectExecutor:
             except Exception:
                 logger.debug("Failed to write Flux proc_info for %s", job.id[:7], exc_info=True)
 
-        # If the Flux future itself failed, prefer that reason.
+        failure_reason = self._proc_info_failure_reason(proc_info)
+
         if exc is not None:
             job.set_status(outcome="ERROR", reason=f"Flux job failed: {exc!r}")
 
-        # If the child command returned nonzero but did not leave a Canary status,
-        # synthesize an ERROR.
         elif rc not in (0, None) and job.status.is_unset():
-            job.set_status(outcome="ERROR", reason=f"canary flux exec exited with code {rc}")
+            if failure_reason:
+                job.set_status(outcome="ERROR", reason=f"Flux job failed: {failure_reason}")
+            else:
+                job.set_status(outcome="ERROR", reason=f"canary flux exec exited with code {rc}")
+
+        elif failure_reason and job.status.is_unset():
+            job.set_status(outcome="ERROR", reason=f"Flux job failed: {failure_reason}")
 
         # Ensure phase is terminal in parent memory. This is what dependents'
         # Dependency.is_done() will see.
@@ -661,6 +667,37 @@ class FluxDirectExecutor:
                 if tk.finished > 0 and slot.timer.current == "Running":
                     slot.timer.transition("Teardown", at=tk.finished)
 
+    def _proc_info_failure_reason(self, proc_info: dict[str, Any] | None) -> str | None:
+        if not proc_info:
+            return None
+
+        errors = proc_info.get("hpc_connect_errors")
+        if isinstance(errors, list) and errors:
+            parts: list[str] = []
+
+            for item in errors:
+                if not isinstance(item, dict):
+                    parts.append(repr(item))
+                    continue
+
+                kind = item.get("kind", "error")
+                message = item.get("message") or item.get("repr") or repr(item)
+                parts.append(f"{kind}: {message}")
+
+            return "; ".join(parts)
+
+        flux_exception = proc_info.get("exception")
+        if isinstance(flux_exception, dict) and flux_exception.get("occurred"):
+            etype = flux_exception.get("type") or "FluxException"
+            note = flux_exception.get("note") or ""
+            return f"{etype}: {note}".strip()
+
+        error = proc_info.get("error")
+        if isinstance(error, str) and error:
+            return error
+
+        return None
+
     def _sync_finished_slot_times_from_job(self, slot: ExecutionSlot) -> None:
         job = slot.job
         tk = job.timekeeper
@@ -669,3 +706,16 @@ class FluxDirectExecutor:
         if tk.finished > 0 and slot.timer.current == "Running":
             slot.timer.transition("Teardown", at=tk.finished)
         slot.timer.stop(at=time.time())
+
+    def _sync_view_on_finish(self, event: str, slot: ExecutionSlot) -> None:
+        if event != "job_finished":
+            return
+
+        view_manager = getattr(self.runner.workspace, "view_manager", None)
+        if view_manager is None:
+            return
+
+        try:
+            view_manager.sync(cast(canary.Job, slot.job))
+        except Exception:
+            logger.exception("Failed to sync Flux job %s to results view", slot.job.id[:7])

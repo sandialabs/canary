@@ -306,8 +306,9 @@ class CanaryHPCConductor:
             help="Submit batches to this HPC scheduler [alias: -b backend=BACKEND] [default: None]",
         )
         parser.add_argument(
+            "--submit-arg",
             "--scheduler-args",
-            dest="hpc_scheduler_args",
+            dest="hpc_submit_args",
             metavar="ARGS",
             action=CanaryHPCSchedulerArgs,
             help="Comma separated list of options to pass directly "
@@ -354,7 +355,7 @@ class CanaryHPCConductor:
             metavar="T",
             type=time_in_seconds,
             default=30 * 60,
-            help="Maximum time to wait in queue [alias: -b queue_timeout=T] [default: 30min]",
+            help=argparse.SUPPRESS,
         )
 
     @staticmethod

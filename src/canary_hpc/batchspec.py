@@ -167,9 +167,8 @@ class TestBatch(BaseJob):
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        if cli_timeouts := canary.config.getoption("timeout"):
-            if t := cli_timeouts.get("multiplier"):
-                return float(t)
+        if t := canary.config.get_timeout_option("multiplier"):
+            return float(t)
         elif t := canary.config.get("run:timeout:multiplier"):
             return float(t)
         return 1.0
@@ -181,16 +180,17 @@ class TestBatch(BaseJob):
     @property
     def queue_timeout(self) -> float:
         four_hours = 4.0 * 60.0 * 60.0
-        return canary.config.getoption("hpc_queue_timeout") or four_hours
+        timeout = canary.config.get_timeout_option("queue")
+        return timeout or canary.config.getoption("hpc_queue_timeout") or four_hours
 
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
 
     def estimated_runtime(self) -> float:
-        if scheduler_args := canary.config.getoption("hpc_scheduler_args"):
+        if submit_args := canary.config.getoption("hpc_submit_args"):
             p = argparse.ArgumentParser()
             p.add_argument("--time", "--time-limit", dest="qtime")
-            a, _ = p.parse_known_args(scheduler_args)
+            a, _ = p.parse_known_args(submit_args)
             if a.qtime:
                 return time_in_seconds(a.qtime)
         if len(self.jobs) == 1:
