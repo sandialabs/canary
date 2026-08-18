@@ -17,6 +17,7 @@ from typing import MutableSequence
 from typing import TextIO
 
 from . import config
+from .util import cpu_count
 from .util import logging
 from .util.string import stringify
 
@@ -241,6 +242,40 @@ class JobSpec:
         view_path = Path(d.pop("view_path"))
         return cls(file_root=root, file_path=path, exec_path=exec_path, view_path=view_path, **d)
 
+    def compute_resource_parameters(self) -> dict[str, int]:
+        resource_types: set[str] = set(config.resource_manager.types())
+        p = self.parameters | self.meta_parameters
+        rparameters: dict[str, int] = {}
+        for key in p.keys() & (resource_types | {"nodes"}):
+            value = p[key]
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+            rparameters[key] = value
+        nodes = rparameters.get("nodes")
+        if nodes is None:
+            nodes = 1
+            for rtype, count in rparameters.items():
+                if rtype == "nodes":
+                    continue
+                if count <= 0:
+                    continue
+                slots_per_node = config.resource_manager.slots_per_node(rtype)
+                # CPU fallback for normal local cases.
+                if slots_per_node <= 0 and rtype in ("cpu", "cpus"):
+                    slots_per_node = cpu_count()
+                # If the resource is unknown/unavailable, leave node count alone.
+                # ResourceCapacityRule / ResourcePool.accommodates() will report
+                # the actual insufficiency later.
+                if slots_per_node <= 0:
+                    continue
+                nodes = max(nodes, ceil_div(count, slots_per_node))
+        rparameters["nodes"] = nodes
+        # Preserve default CPU/GPU resource parameters.
+        rparameters.setdefault("cpus", 1)
+        rparameters.setdefault("gpus", 0)
+        return rparameters
+
+
     def print(
         self,
         level: int = -1,
@@ -279,6 +314,10 @@ class JobSpec:
         a = Artifact(pattern=pattern, when=when)
         if a not in self.artifacts:
             self.artifacts.append(a)
+
+    @cached_property
+    def rparameters(self) -> dict[str, int]:
+        return self.compute_resource_parameters()
 
     @cached_property
     def file(self) -> Path:
@@ -482,3 +521,14 @@ def default_timeout(keywords: list[str]) -> float:
     if t := config.get("run:timeout:all"):
         return float(t)
     return float(config.get("run:timeout:default"))
+
+
+def ceil_div(a: int, b: int) -> int:
+    assert b != 0, "denominator must not be 0"
+    return (a + b - 1) // b
+
+
+class InvalidTypeError(Exception):
+    def __init__(self, name, value):
+        class_name = value.__class__.__name__
+        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")

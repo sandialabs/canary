@@ -193,7 +193,7 @@ class ParameterRule(Rule):
     def __call__(self, spec: "JobSpec") -> RuleOutcome:
         match = when.when(
             {"parameters": self.parameter_expr},
-            parameters=spec.parameters | spec.meta_parameters,  # ty: ignore[unsupported-operator]
+            parameters=spec.parameters | spec.meta_parameters | spec.rparameters,  # ty: ignore[unsupported-operator]
         )
         if match:
             return RuleOutcome(True)
