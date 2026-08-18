@@ -163,7 +163,7 @@ def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
     backend = hpc_connect.get_backend("flux")
     resources_per_node = _flux_resources_per_node(backend)
     nodes: list[dict[str, Any]] = []
-    node_count: int = int(canary.config.getoption("flux_nodes") or backend.node_count)
+    node_count: int = int(config.getoption("flux_nodes") or backend.node_count)
     for i in range(node_count):
         resources: dict[str, list[dict[str, Any]]] = {}
         for rtype, count in sorted(resources_per_node.items()):

@@ -76,6 +76,13 @@ class Check(CanarySubcommand):
         parser.add_argument("-e", nargs=0, action=Action, help="run examples test")
         parser.add_argument("-d", nargs=0, action=Action, help="make docs")
         parser.add_argument("-v", action="store_true", help="verbose")
+        parser.add_argument(
+            "--local-packages",
+            choices={"yes", "no"},
+            default="no" if "VIRTUAL_ENV" in os.environ else "yes",
+            dest="use_local_packages",
+            help="Add local site-packages to search path when running type checker",
+        )
 
     def execute(self, args: argparse.Namespace) -> int:
         global stdout
@@ -189,7 +196,7 @@ class Check(CanarySubcommand):
     def type_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
             pm = logger.progress_monitor(f"Type checking source in {self.root}/src")
-            typecheck("./src")
+            typecheck("./src", use_local_packages=args.use_local_packages == "yes")
             pm.done()
 
     def run_tests(self, args: argparse.Namespace):
@@ -276,11 +283,11 @@ def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    use_local_packages: bool = bool(kwargs.pop("use_local_packages", True))
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
     command: list[str]
-    use_local_packages: bool = False
     if ty := shutil.which("ty"):
         command = [ty, "check", *args]
         if use_local_packages:

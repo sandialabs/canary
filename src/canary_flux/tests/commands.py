@@ -59,6 +59,8 @@ def test_flux_run_parser_defaults_and_time_parsing(monkeypatch):
 
     class FakeRun:
         def setup_parser(self, parser):
+            parser.add_argument("--timeout", action="append", default=None)
+            parser.add_argument("--workers", type=int)
             parser.add_argument("paths", nargs="*")
 
     import _canary.plugins.subcommands.run as run_mod
@@ -70,10 +72,10 @@ def test_flux_run_parser_defaults_and_time_parsing(monkeypatch):
 
     args = parser.parse_args(
         [
-            "--queue-timeout=20m",
-            "--time-limit=1h",
+            "--timeout=queue=20m",
+            "--timeout=allocation=1h",
             "--nodes=3",
-            "--max-submitted=7",
+            "--workers=7",
             "--submit-arg=--foo",
             "--submit-arg=--bar",
             "some/path",
@@ -81,10 +83,9 @@ def test_flux_run_parser_defaults_and_time_parsing(monkeypatch):
     )
 
     assert args.flux_direct_run is True
-    assert args.flux_queue_timeout == 1200
-    assert args.flux_time_limit == 3600
+    assert set(args.timeout) == {"queue=20m", "allocation=1h"}
     assert args.flux_nodes == 3
-    assert args.flux_max_submitted == 7
+    assert args.workers == 7
     assert args.flux_submit_args == ["--foo", "--bar"]
     assert args.paths == ["some/path"]
 

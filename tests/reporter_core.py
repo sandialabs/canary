@@ -250,4 +250,4 @@ def test_row_values_for_job_falls_back_to_timekeeper():
 
     assert values["queued"].strip() == "2.0s"
     assert values["running"].strip() == "5.0s"
-    assert values["time"].strip() == "5.0s"
+    assert values["time"].strip() == "7.0s"

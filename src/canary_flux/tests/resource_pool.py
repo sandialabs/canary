@@ -6,6 +6,8 @@ import types
 from typing import Any
 from typing import cast
 
+import pytest
+
 import canary_flux
 
 
@@ -24,6 +26,10 @@ class FakeBackend:
         self._counts = counts or {"cpus": 8, "gpus": 2}
         self._resource_types = resource_types or ["cpus", "gpus"]
         self._node_count = node_count
+
+    @property
+    def node_count(self) -> int:
+        return self._node_count
 
     def resource_types(self):
         return list(self._resource_types)
@@ -90,7 +96,7 @@ def test_resource_helpers_pluralization():
     assert canary_flux._singular_resource_type("gpu") == "gpu"
 
 
-def test_allocation_node_count_uses_max_cli_or_job(monkeypatch):
+def test_allocation_node_count_uses_resource_manager_node_count(monkeypatch):
     class FakeJob:
         def __init__(self, n):
             self.n = n
@@ -98,20 +104,25 @@ def test_allocation_node_count_uses_max_cli_or_job(monkeypatch):
         def required_resources(self):
             return [object() for _ in range(self.n)]
 
+    class FakeResourceManager:
+        def count(self, name):
+            assert name == "nodes"
+            return 4
+
     class FakeConfig:
+        resource_manager = FakeResourceManager()
+
         def getoption(self, name, default=None):
-            if name == "flux_nodes":
-                return 4
             return default
 
     monkeypatch.setattr(canary_flux.canary, "config", FakeConfig())
 
     jobs = [FakeJob(1), FakeJob(2), FakeJob(3)]
 
-    assert canary_flux._allocation_node_count(cast(Any, jobs)) == 4
+    assert canary_flux.allocation_node_count(cast(Any, jobs)) == 4
 
 
-def test_allocation_node_count_uses_job_max_when_cli_none(monkeypatch):
+def test_allocation_node_count_raises_when_job_exceeds_resource_pool(monkeypatch):
     class FakeJob:
         def __init__(self, n):
             self.n = n
@@ -119,12 +130,23 @@ def test_allocation_node_count_uses_job_max_when_cli_none(monkeypatch):
         def required_resources(self):
             return [object() for _ in range(self.n)]
 
+        def __repr__(self):
+            return f"FakeJob(n={self.n})"
+
+    class FakeResourceManager:
+        def count(self, name):
+            assert name == "nodes"
+            return 4
+
     class FakeConfig:
+        resource_manager = FakeResourceManager()
+
         def getoption(self, name, default=None):
-            return None if name == "flux_nodes" else default
+            return default
 
     monkeypatch.setattr(canary_flux.canary, "config", FakeConfig())
 
     jobs = [FakeJob(1), FakeJob(5), FakeJob(2)]
 
-    assert canary_flux._allocation_node_count(cast(Any, jobs)) == 5
+    with pytest.raises(ValueError, match="requires more nodes"):
+        canary_flux.allocation_node_count(cast(Any, jobs))

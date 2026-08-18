@@ -19,6 +19,7 @@ from typing import Callable
 from typing import ClassVar
 from typing import Generator
 from typing import Literal
+from typing import cast
 
 import canary
 import canary_pyt.pyt as pyt
@@ -87,7 +88,7 @@ class VVTestAdapter:
         self.m.add_keywords(*arg.argument.split(), when=arg.when)
 
     def f_SOURCES(self, arg: Directive) -> None:
-        action: ActionT = arg.name if arg.name in ("copy", "link") else "none"
+        action: ActionT = cast(ActionT, arg.name if arg.name in ("copy", "link") else "none")
         assert action in ("copy", "link", "none")
         kwds = dict(arg.options or {})
         if "rename" in kwds:

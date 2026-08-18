@@ -146,7 +146,9 @@ def test_log(setup, monkeypatch):
     monkeypatch.setattr(log_module, "page_text", lambda text: None)
 
     with working_dir(setup.results_path), canary.config.override():
-        args = argparse.Namespace(error=False, lock=False, raw=False, testspec=setup.f_a1_id)
+        args = argparse.Namespace(
+            error=False, workspace_file=None, raw=False, testspec=setup.f_a1_id
+        )
         assert Log().execute(args) == 0
 
 
