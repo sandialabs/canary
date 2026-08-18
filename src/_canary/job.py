@@ -32,7 +32,6 @@ from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
-from .util import cpu_count
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str

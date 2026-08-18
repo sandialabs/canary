@@ -275,7 +275,6 @@ class JobSpec:
         rparameters.setdefault("gpus", 0)
         return rparameters
 
-
     def print(
         self,
         level: int = -1,
