@@ -656,10 +656,11 @@ class Job(BaseJob):
         xstatus = self.spec.xstatus
         try:
             if self.is_runnable():
+                self.timekeeper.start()
                 with self.workspace.openfile(self.stdout, "a") as fh:
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
-                with self.workspace.enter(), self.timekeeper.timeit():
+                with self.workspace.enter():
                     self.state.phase = JobPhase.RUNNING
                     self.save()
                     code = self.launcher.run(job=self)
@@ -696,6 +697,7 @@ class Job(BaseJob):
                 fp.write(reason)
             self.status.set(outcome="ERROR", reason=reason)
         finally:
+            self.timekeeper.stop()
             self.state.phase = JobPhase.DONE
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             self.save()
@@ -796,9 +798,11 @@ class Job(BaseJob):
             code=obj.status.code,
         )
         self.state.phase = obj.state.phase
-        self.timekeeper.submitted = obj.timekeeper.submitted
+        self.timekeeper.opened = obj.timekeeper.opened
+        self.timekeeper.launched = obj.timekeeper.launched
         self.timekeeper.started = obj.timekeeper.started
         self.timekeeper.finished = obj.timekeeper.finished
+        self.timekeeper.closed = obj.timekeeper.closed
 
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
         env[config.CONFIG_ENV_CFG64] = config.serialize()

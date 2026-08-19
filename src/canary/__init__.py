@@ -42,6 +42,7 @@ from _canary.reporters.reporter import CanaryReporter
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule
+from _canary.runtest import Runner
 from _canary.select import RuntimeSelector
 from _canary.select import Selector
 from _canary.testcase import TestCase
@@ -86,6 +87,7 @@ __all__ = [
     "Config",
     "Selector",
     "Rule",
+    "Runner",
     "RuntimeSelector",
     "RuntimeRule",
     "RuleOutcome",

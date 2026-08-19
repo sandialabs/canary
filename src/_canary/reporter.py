@@ -60,8 +60,8 @@ class ReporterExecutorProtocol(Protocol):
 
 
 class Reporter:
+    timing_columns = {"Queued", "Startup", "Running", "Teardown", "Elapsed", "Done"}
     metadata_columns = {"Job", "ID", "Status", "Rank", "Details"}
-    total_time_columns = {"Elapsed", "Time"}
 
     def __init__(self, executor: ReporterExecutorProtocol) -> None:
         self.executor = executor
@@ -82,72 +82,20 @@ class Reporter:
             self.final_columns = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Details")
         self.validate_columns(self.final_columns)
 
-    def timing_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
-        """
-        Return configured timing columns.
-
-        Any non-metadata column is considered a timer phase column, except
-        Elapsed, which is computed as the total of the other timing columns.
-        """
-        return tuple(col for col in columns if col not in self.metadata_columns)
-
-    def elapsed_phase_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
-        """
-        Return timing phase columns included in Elapsed.
-
-        Elapsed is not itself a phase; it is the total of the other timing
-        columns in the configured column set.
-        """
-        return tuple(
-            col for col in self.timing_columns(columns) if col not in self.total_time_columns
-        )
-
-    def slot_time_for_column(
-        self, slot: "ExecutionSlot", column: str, columns: tuple[str, ...]
-    ) -> float:
-        if column in self.total_time_columns:
-            phases = tuple(
-                col for col in self.timing_columns(columns) if col not in self.total_time_columns
-            )
-            return slot.total_time(phases or None)
-
-        return slot.phase_time(column)
-
     def job_time_for_column(self, job: BaseJob, column: str) -> float:
-        """
-        Return persisted timing for a finished job.
-
-        This reads job.measurements["timing"] or job.measurements["flux_timing"]
-        if available. Falls back to job.timekeeper for Running/Elapsed.
-        """
-        # Prefer a generic timing measurement if present.
-        value = self._job_measurement(job, "timing", column)
-        if isinstance(value, (int, float)):
-            return float(value)
-
-        # Also support lower-case/snake-case keys from existing flux_timing.
-        keymap = {
-            "Queued": "queue_time",
-            "Startup": "startup_time",
-            "Running": "execution_time",
-            "Teardown": "teardown_time",
-            "Elapsed": "elapsed_time",
-        }
-        if column in keymap:
-            value = self._job_measurement(job, "flux_timing", keymap[column])
-            if isinstance(value, (int, float)):
-                return float(value)
-
-        if column == "Running":
-            return job.timekeeper.running()
-
         if column == "Queued":
-            return job.timekeeper.queued()
-
-        if column in self.total_time_columns:
-            return job.timekeeper.total()
-
-        return -1.0
+            return job.timekeeper.queued(live=True)
+        elif column == "Startup":
+            return job.timekeeper.startup(live=True)
+        elif column == "Running":
+            return job.timekeeper.running(live=True)
+        elif column == "Teardown":
+            return job.timekeeper.teardown(live=True)
+        elif column == "Elapsed":
+            return job.timekeeper.elapsed(live=True)
+        elif column == "Done":
+            return job.timekeeper.total(live=True)
+        raise ValueError(f"Unknown column {column}")
 
     def _job_measurement(self, job: BaseJob, *path: str) -> Any:
         measurements = getattr(job, "measurements", None)
@@ -178,8 +126,8 @@ class Reporter:
             "details": details,
         }
 
-        for column in self.timing_columns(columns):
-            values[column.lower()] = fmt_secs(self.slot_time_for_column(slot, column, columns))
+        for column in self.timing_columns:
+            values[column.lower()] = fmt_secs(self.job_time_for_column(slot.job, column))
 
         return values
 
@@ -194,7 +142,7 @@ class Reporter:
             "details": details if details is not None else (job.status.reason or ""),
         }
 
-        for column in self.timing_columns(columns):
+        for column in self.timing_columns:
             values[column.lower()] = fmt_secs(self.job_time_for_column(job, column))
 
         return values
@@ -208,7 +156,7 @@ class Reporter:
             "details": "",
         }
 
-        for column in self.timing_columns(columns):
+        for column in self.timing_columns:
             values[column.lower()] = "NA"
 
         return values
@@ -225,7 +173,7 @@ class Reporter:
         for col in columns:
             if col in self.metadata_columns:
                 continue
-            if col in self.total_time_columns:
+            if col in self.timing_columns:
                 continue
             # Any other valid identifier-like label is treated as a timing phase.
             normalized = col.replace("_", "").replace("-", "")
@@ -240,7 +188,7 @@ class Reporter:
                 kwds["overflow"] = "fold"
             elif name == "Details":
                 kwds["overflow"] = "ellipsis"
-            elif name in self.timing_columns(columns):
+            elif name in self.timing_columns:
                 kwds["justify"] = "right"
             elif name == "Rank":
                 kwds["justify"] = "right"
@@ -346,9 +294,9 @@ class LiveReporter(Reporter):
         max_finished = 5  # hard cap
 
         recent_finished = [
-            s for s in xtor.finished.values() if now - s.finished_at() < decay_window
+            s for s in xtor.finished.values() if now - s.job.timekeeper.finished < decay_window
         ]
-        recent_finished.sort(key=lambda s: s.finished_at(), reverse=True)
+        recent_finished.sort(key=lambda s: s.job.timekeeper.finished, reverse=True)
         for slot in recent_finished[:max_finished]:
             if rows_used >= max_rows:
                 break
@@ -365,7 +313,7 @@ class LiveReporter(Reporter):
         # ---------------------------------------------------------
         # 2) RUNNING (longest-running first for stability)
         # ---------------------------------------------------------
-        running = sorted(xtor.running.values(), key=lambda s: s.total_time(), reverse=True)
+        running = sorted(xtor.running.values(), key=lambda s: s.job.timekeeper.total(live=True), reverse=True)
         for slot in running:
             if rows_used >= max_rows:
                 break
@@ -428,7 +376,7 @@ class EventReporter(Reporter):
                 self.table.add_column(col, width=15)
             elif col == "Rank":
                 self.table.add_column(col, width=8, align="right")
-            elif col in self.timing_columns(self.event_columns):
+            elif col in self.timing_columns:
                 self.table.add_column(col, width=8, align="right")
             else:
                 self.table.add_column(col, width=10)

@@ -2,201 +2,191 @@
 #
 # SPDX-License-Identifier: MIT
 
-import datetime
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
-from typing import Generator
 
 
 @dataclass
 class Timekeeper:
-    submitted: float = field(default=-1.0, init=False)
+    """
+    Track the lifecycle timestamps for a job.
+
+    The canonical lifecycle is:
+
+        opened -> launched -> started -> finished -> closed
+
+    The corresponding reporting phases are:
+
+        Queued   = launched - opened
+        Startup  = started  - launched
+        Running  = finished - started
+        Teardown = closed   - finished
+        Elapsed  = closed   - opened
+
+    Meanings:
+
+    - opened:
+        Parent opened/submitted the job to an execution backend.
+
+    - launched:
+        The backend launched the child-side execution process
+        (for example, ``canary flux exec`` or ``canary hpc exec``).
+
+    - started:
+        The actual Canary job/test execution started in the child.
+
+    - finished:
+        The actual Canary job/test execution finished in the child.
+
+    - closed:
+        The child-side execution process returned control to the parent.
+
+    For local/non-HPC execution, missing intermediate timestamps are filled so
+    existing semantics remain useful:
+
+        launched defaults to started
+        closed defaults to finished
+    """
+
+    opened: float = field(default=-1.0, init=False)
+    launched: float = field(default=-1.0, init=False)
     started: float = field(default=-1.0, init=False)
     finished: float = field(default=-1.0, init=False)
-    mark: float = field(default=-1.0, init=False, repr=False)
+    closed: float = field(default=-1.0, init=False)
 
     def __serialize__(self) -> dict[str, Any]:
         return {
-            "submitted": self.submitted,
+            "opened": self.opened,
+            "launched": self.launched,
             "started": self.started,
             "finished": self.finished,
-            "mark": self.mark,
+            "closed": self.closed,
         }
 
     @classmethod
     def __deserialize__(cls, d: dict[str, Any]) -> "Timekeeper":
         obj = cls()
-        obj.submitted = float(d["submitted"])
-        obj.started = float(d["started"])
-        obj.finished = float(d["finished"])
-        obj.mark = float(d["mark"])
+
+        # Backward compatibility with older serialized Timekeeper objects.
+        old_submitted = float(d.get("submitted", -1.0))
+        old_started = float(d.get("started", -1.0))
+        old_finished = float(d.get("finished", -1.0))
+
+        obj.opened = float(d.get("opened", old_submitted))
+        obj.launched = float(d.get("launched", old_started))
+        obj.started = old_started
+        obj.finished = old_finished
+        obj.closed = float(d.get("closed", old_finished))
+
+        obj._fill_defaults()
         return obj
 
-    def start(self) -> None:
-        self.started = time.time()
-        if self.submitted < 0:
-            self.submitted = self.started
+    @property
+    def submitted(self) -> float:
+        return self.opened
 
-    def stop(self) -> None:
-        self.finished = time.time()
+    def open(self, at: float | None = None) -> None:
+        self.opened = time.time() if at is None else float(at)
 
-    @contextmanager
-    def timeit(self) -> Generator["Timekeeper", None, None]:
-        try:
-            self.start()
-            yield self
-        finally:
-            self.stop()
+    def launch(self, at: float | None = None) -> None:
+        self.launched = time.time() if at is None else float(at)
+        if self.opened < 0:
+            self.opened = self.launched
 
-    def queued(self) -> float:
-        if self.started > 0:
-            if self.submitted < 0:
-                self.submitted = self.started
-            return self.started - self.submitted
-        return -1.0
+    def start(self, at: float | None = None) -> None:
+        self.started = time.time() if at is None else float(at)
+        if self.opened < 0:
+            self.opened = self.started
+        if self.launched < 0:
+            self.launched = self.started
 
-    def running(self) -> float:
-        if self.started > 0 and self.finished > 0:
-            return self.finished - self.started
-        return -1.0
+    def stop(self, at: float | None = None) -> None:
+        self.finished = time.time() if at is None else float(at)
+        if self.started < 0:
+            self.started = self.finished
+        if self.launched < 0:
+            self.launched = self.started
+        if self.opened < 0:
+            self.opened = self.launched
 
-    def duration(self) -> float:
-        if self.started > 0 and self.finished > 0:
-            return self.finished - self.started
-        return -1.0
+    def close(self, at: float | None = None) -> None:
+        self.closed = time.time() if at is None else float(at)
+        if self.finished < 0:
+            self.finished = self.closed
+        if self.started < 0:
+            self.started = self.finished
+        if self.launched < 0:
+            self.launched = self.started
+        if self.opened < 0:
+            self.opened = self.launched
 
-    def total(self) -> float:
-        if self.submitted > 0 and self.finished > 0:
-            return self.finished - self.submitted
-        return -1.0
+    def queued(self, *, live: bool = False) -> float:
+        return delta(self.opened, self.launched, live=live)
+
+    def startup(self, *, live: bool = False) -> float:
+        return delta(self.launched, self.started, live=live)
+
+    def running(self, *, live: bool = False) -> float:
+        return delta(self.started, self.finished, live=live)
+
+    def teardown(self, *, live: bool = False) -> float:
+        return delta(self.finished, self.closed, live=live)
+
+    def duration(self, *, live: bool = False) -> float:
+        """Backward-compatible alias for actual test execution time."""
+        return self.running(live=live)
+
+    def total(self, *, live: bool = False) -> float:
+        return delta(self.opened, self.closed, live=live)
+
+    def elapsed(self, *, live: bool = False) -> float:
+        return self.total(live=live)
 
     def reset(self) -> None:
-        self.submitted = -1.0
+        self.opened = -1.0
+        self.launched = -1.0
         self.started = -1.0
         self.finished = -1.0
+        self.closed = -1.0
 
-    def update(self, *, started: float, finished: float, submitted: float = -1.0) -> None:
-        self.submitted = submitted
-        self.started = started
-        self.finished = finished
+    def update(
+        self,
+        *,
+        opened: float = -1.0,
+        launched: float = -1.0,
+        started: float = -1.0,
+        finished: float = -1.0,
+        closed: float = -1.0,
+        submitted: float = -1.0,
+    ) -> None:
+        # ``submitted`` is accepted for backward compatibility.
+        self.opened = float(opened if opened >= 0 else submitted)
+        self.launched = float(launched)
+        self.started = float(started)
+        self.finished = float(finished)
+        self.closed = float(closed)
+        self._fill_defaults()
 
-    def isoformat(self, what: str) -> str:
-        t: float = getattr(self, what)
-        return datetime.datetime.fromtimestamp(t).isoformat(timespec="microseconds")
-
-    @classmethod
-    def from_dict(cls, d: dict[str, float]) -> "Timekeeper":
-        self = cls()
-        self.submitted = float(d["submitted"])
-        self.started = float(d["started"])
-        self.finished = float(d["finished"])
-        return self
-
-    @classmethod
-    def from_isoformated_times(cls, d: dict[str, str]) -> "Timekeeper":
-        self = cls()
-        fn = datetime.datetime.fromisoformat
-        self.submitted = fn(d["submitted"]).timestamp()
-        self.started = fn(d["started"]).timestamp()
-        self.finished = fn(d["finished"]).timestamp()
-        return self
+    def _fill_defaults(self) -> None:
+        # Local/non-HPC defaults and old-state compatibility.
+        if self.launched < 0 and self.started > 0:
+            self.launched = self.started
+        if self.closed < 0 and self.finished > 0:
+            self.closed = self.finished
+        if self.opened < 0:
+            if self.launched > 0:
+                self.opened = self.launched
+            elif self.started > 0:
+                self.opened = self.started
 
 
-@dataclass
-class PhaseTimer:
-    """
-    Named split timer.
-
-    A split is a named interval.  For example:
-
-        Queued:  submitted -> started
-        Running: started -> finished
-
-    The active phase can report live time.  Completed phases report fixed time.
-    """
-
-    stamp: float = -1.0
-    current: str | None = None
-    split_times: dict[str, float] = field(default_factory=dict)
-    split_order: list[str] = field(default_factory=list)
-
-    def __serialize__(self) -> dict[str, Any]:
-        return {
-            "stamp": self.stamp,
-            "current": self.current,
-            "split_times": self.split_times,
-            "split_order": self.split_order,
-        }
-
-    @classmethod
-    def __deserialize__(cls, d: dict[str, Any]) -> "PhaseTimer":
-        obj = cls()
-        obj.stamp = d["stamp"]
-        obj.current = d["current"]
-        obj.split_times = d["split_times"]
-        obj.split_order = d["split_order"]
-        return obj
-
-    def start(self, name: str, *, at: float | None = None) -> None:
-        self.split_times.clear()
-        self.split_order.clear()
-        self.current = name
-        self.stamp = time.time() if at is None else float(at)
-
-    def transition(self, next_name: str, *, at: float | None = None) -> None:
-        now = time.time() if at is None else float(at)
-
-        if self.current is None or self.stamp < 0:
-            self.start(next_name, at=now)
-            return
-
-        self._record(self.current, max(0.0, now - self.stamp))
-        self.current = next_name
-        self.stamp = now
-
-    def stop(self, *, at: float | None = None) -> None:
-        if self.current is None or self.stamp < 0:
-            return
-
-        now = time.time() if at is None else float(at)
-        self._record(self.current, max(0.0, now - self.stamp))
-        self.current = None
-        self.stamp = now
-
-    def _record(self, name: str, duration: float) -> None:
-        if name not in self.split_times:
-            self.split_order.append(name)
-            self.split_times[name] = 0.0
-        self.split_times[name] += duration
-
-    def value(self, name: str, *, live: bool = True) -> float:
-        value = self.split_times.get(name, -1.0)
-
-        if live and self.current == name and self.stamp > 0:
-            current_value = max(0.0, time.time() - self.stamp)
-            if value < 0:
-                return current_value
-            return value + current_value
-
-        return value
-
-    def total(
-        self, names: list[str] | tuple[str, ...] | None = None, *, live: bool = True
-    ) -> float:
-        if names is None:
-            phase_names = list(self.split_order)
-            if self.current is not None and self.current not in phase_names:
-                phase_names.append(self.current)
-        else:
-            phase_names = list(names)
-        total = 0.0
-        found = False
-        for name in phase_names:
-            value = self.value(name, live=live)
-            if value >= 0:
-                total += value
-                found = True
-        return total if found else -1.0
+def delta(start: float, stop: float, *, live: bool = False) -> float:
+    if start <= 0:
+        return -1.0
+    if stop > 0:
+        return stop - start
+    if live:
+        return time.time() - start
+    return -1.0

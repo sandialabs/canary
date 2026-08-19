@@ -142,6 +142,10 @@ def default_runtests(runner: Runner) -> bool:
         raise
     executor = JobExecutor()
     max_workers = config.getoption("workers") or -1
+    now = time.time()
+    for job in runner.jobs:
+        if job.timekeeper.opened < 0:
+            job.timekeeper.open(at=now)
     with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
         ex.add_listener(runner.workspace.testcase_done_callback)
         ex.run()
@@ -160,7 +164,10 @@ class JobExecutor:
             logger.debug(f"Failed to {phase} {job}", exc_info=e)
             job.save()
 
-        queue.put({"event": "job_submitted", "timestamp": time.time()})
+        if job.timekeeper.launched < 0:
+            now = time.time()
+            job.timekeeper.launch(at=now)
+        queue.put({"event": "job_launched", "timestamp": job.timekeeper.launched})
         try:
             config.pluginmanager.hook.canary_runteststart(case=job)
         except Exception as e:
@@ -171,7 +178,8 @@ class JobExecutor:
         try:
             config.pluginmanager.hook.canary_runtest(case=job)
             if job.timekeeper.finished < 0:
-                job.timekeeper.finished = time.time()
+                now = time.time()
+                job.timekeeper.close(at=now)
         except Exception as e:
             mark_broken("run", e)
             return

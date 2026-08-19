@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 import math
 import os
+import time
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -219,6 +221,9 @@ def canary_runtests(runner: "Runner") -> bool | None:
     if extra_alloc_args := canary.config.getoption("flux_alloc_args"):
         alloc_args.extend(extra_alloc_args)
     allocation = FluxAllocation(nodes=node_count)
+    now = time.time()
+    for job in runner.jobs:
+        job.timekeeper.open(at=now)
     with allocation.open(alloc_args, timeout=queue_timeout) as alloc:
         logger.info("[bold]Flux allocation active[/]: jobid=%s uri=%s", alloc.jobid, alloc.uri)
         executor = FluxDirectExecutor(runner)
@@ -362,23 +367,12 @@ def flux_exec(args: argparse.Namespace) -> int:
     pm = config.pluginmanager.hook
 
     try:
-        now = time.time()
-        job.timekeeper.submitted = now
-
         pm.canary_runteststart(case=job)
-
-        now = time.time()
-        job.timekeeper.started = now
-
         pm.canary_runtest(case=job)
-
-        import json
-
         with job.workspace.openfile("env.json", "w") as fh:
             json.dump(dict(os.environ), fh, indent=2)
-
-        job.timekeeper.finished = time.time()
-
+        if job.timekeeper.finished < 0:
+            job.timekeeper.stop(at=time.time())
     finally:
         pm.canary_runtest_finish(case=job)
         job.save()
