@@ -165,7 +165,7 @@ def test_execution_slot_running_after_started():
 
 def test_reporter_queue_tracks_states():
     jobs = [FakeJob("a"), FakeJob("b")]
-    q = ex.FluxReporterQueue(cast(Any, jobs))
+    q = ex.FluxDirectQueue(cast(Any, jobs))
 
     assert [j.id for j in q.pending()] == ["a", "b"]
     assert len(q.jobs()) == 2
@@ -228,7 +228,7 @@ def test_ready_jobs_only_returns_ready(monkeypatch, tmp_path):
     assert [job.id for job in result] == ["ready"]
 
 
-def test_submit_ready_jobs_only_submits_ready(monkeypatch, tmp_path):
+def test_submit_ready_jobs_only_submits_ready_with_popen(monkeypatch, tmp_path):
     monkeypatch.setattr(ex.canary, "config", FakeConfig())
 
     ready = FakeJob("ready", ready=True)
@@ -239,19 +239,33 @@ def test_submit_ready_jobs_only_submits_ready(monkeypatch, tmp_path):
 
     submitted = []
 
-    class FakeFuture:
+    class FakeProcess:
         jobid = "flux123"
+        submitted = 123.0
+        started = -1.0
+        returncode = None
+        completion_info = None
 
-        def add_jobstart_callback(self, fn):
+        def poll(self):
+            return None
+
+        def cancel(self):
             pass
 
-        def add_jobid_callback(self, fn):
+        def capture_completion_info(self):
             pass
 
     class FakeSubmitter:
-        def submit(self, spec, exclusive=False):
+        def popen(self, spec, exclusive=False):
             submitted.append((spec, exclusive))
-            return FakeFuture()
+            return FakeProcess()
+
+    events = []
+
+    def listener(event, slot):
+        events.append((event, slot.job.id))
+
+    xtor.add_listener(listener)
 
     monkeypatch.setattr(xtor, "_hpc_jobspec", lambda job: SimpleNamespace(name=job.id))
 
@@ -261,8 +275,19 @@ def test_submit_ready_jobs_only_submits_ready(monkeypatch, tmp_path):
     assert len(submitted) == 1
     assert submitted[0][0].name == "ready"
     assert submitted[0][1] is False
+
     assert "ready" not in xtor.pending
     assert "not-ready" in xtor.pending
+
+    assert "ready" in xtor.procs
+    assert xtor.procs["ready"].proc.jobid == "flux123"
+
+    assert "ready" in xtor.submitted
+    assert "ready" not in xtor.running
+    assert "ready" not in xtor.finished
+
+    assert [j.id for j in xtor.queue.pending()] == ["not-ready"]
+    assert events == [("job_submitted", "ready")]
 
 
 def test_finalize_blocked_jobs_queues_parent_side(monkeypatch, tmp_path):

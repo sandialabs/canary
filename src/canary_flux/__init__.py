@@ -93,6 +93,14 @@ class FluxRun:
             metavar="ARG",
             help="Additional argument passed to Flux/hpc_connect allocation request; may be repeated",
         )
+        group.add_argument(
+            "--max-concurrent-jobs",
+            dest="flux_max_concurrent_jobs",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Maximum number of concurrent jobs to commit to flux [default: 50]",
+        )
 
         from _canary.plugins.subcommands.run import Run
 
