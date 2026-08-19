@@ -9,7 +9,6 @@ from graphlib import TopologicalSorter
 from typing import Callable
 from typing import Generator
 from typing import Sequence
-from typing import cast
 
 import canary
 
@@ -186,7 +185,7 @@ def pack_by_count(
     sizes: list[float] = []
     groups: list[list[Block]] = []
     while ts.is_active():
-        ready = cast(list[Block], list(ts.get_ready()))
+        ready = list(ts.get_ready())
         new_groups: list[list[Block]] = [ready] if grouper is None else list(grouper(ready))
         validate_partition(ready, new_groups)
         groups.extend(new_groups)

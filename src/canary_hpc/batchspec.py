@@ -5,7 +5,6 @@ import argparse
 import copy
 import dataclasses
 import datetime
-import json
 import math
 import time
 from functools import cached_property
@@ -16,6 +15,7 @@ from typing import cast
 
 import hpc_connect
 
+import _canary.util.json_helper as json
 import canary
 from _canary.job import BaseJob
 from _canary.job import JobPhase
@@ -167,9 +167,8 @@ class TestBatch(BaseJob):
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        if cli_timeouts := canary.config.getoption("timeout"):
-            if t := cli_timeouts.get("multiplier"):
-                return float(t)
+        if t := canary.config.get_timeout_option("multiplier"):
+            return float(t)
         elif t := canary.config.get("run:timeout:multiplier"):
             return float(t)
         return 1.0
@@ -181,16 +180,17 @@ class TestBatch(BaseJob):
     @property
     def queue_timeout(self) -> float:
         four_hours = 4.0 * 60.0 * 60.0
-        return canary.config.getoption("hpc_queue_timeout") or four_hours
+        timeout = canary.config.get_timeout_option("queue")
+        return timeout or canary.config.getoption("hpc_queue_timeout") or four_hours
 
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
 
     def estimated_runtime(self) -> float:
-        if scheduler_args := canary.config.getoption("hpc_scheduler_args"):
+        if submit_args := canary.config.getoption("hpc_submit_args"):
             p = argparse.ArgumentParser()
             p.add_argument("--time", "--time-limit", dest="qtime")
-            a, _ = p.parse_known_args(scheduler_args)
+            a, _ = p.parse_known_args(submit_args)
             if a.qtime:
                 return time_in_seconds(a.qtime)
         if len(self.jobs) == 1:
@@ -306,8 +306,9 @@ class TestBatch(BaseJob):
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
-            queue.put({"event": "job_submitted", "timestamp": time.time()})
-            self.timekeeper.submitted = time.time()
+            submitted_at = time.time()
+            self.timekeeper.submitted = submitted_at
+            queue.put({"event": "job_submitted", "timestamp": submitted_at})
             try:
                 rc = runner.execute(self, queue=queue)
             finally:
@@ -389,7 +390,7 @@ class TestBatch(BaseJob):
             job.state.phase = JobPhase.DONE
             job.set_status(outcome="BROKEN", reason=job_reason)
             if job.timekeeper.submitted < 0:
-                job.timekeeper.submitted = self.timekeeper.submitted
+                job.timekeeper.submitted = now
             if job.timekeeper.started < 0:
                 job.timekeeper.started = now
             if job.timekeeper.finished < 0:
@@ -409,6 +410,10 @@ class TestBatch(BaseJob):
     def refresh(self) -> None:
         for job in self:
             job.refresh()
+            if self.timekeeper.submitted > 0:
+                job.timekeeper.submitted = self.timekeeper.submitted
+            if job.timekeeper.started > 0 and job.timekeeper.started < self.timekeeper.started:
+                job.timekeeper.started = self.timekeeper.started
         self.finalize_status_from_child_jobs()
 
     def finalize_status_from_child_jobs(self) -> None:
@@ -519,8 +524,7 @@ class TestBatch(BaseJob):
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
         cfg["allocation"] = serialize(self.allocation)
-        with open(self.lockfile, "w") as fh:
-            json.dump(cfg, fh, indent=2)
+        json.safesave(self.lockfile, cfg)
         for job in self:
             job.save()
 

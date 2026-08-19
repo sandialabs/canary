@@ -11,7 +11,7 @@ from ....util import logging
 from ....util.rich import bold
 from ....util.time import time_in_seconds
 
-__all__ = ["add_filter_arguments", "add_work_tree_arguments", "add_resource_arguments"]
+__all__ = ["add_filter_arguments", "add_resource_arguments"]
 
 
 if TYPE_CHECKING:
@@ -61,29 +61,13 @@ def add_resource_arguments(parser: "Parser") -> None:
         type=int,
         help="Execute the test session asynchronously using a pool of at most N workers",
     )
-    group.add_argument(
-        "--timeout",
-        action=TimeoutResource,
-        metavar="type=T",
-        help=f"Set the timeout for {bold('type')} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n"
-        f"• type={bold('session')}, the timeout T is applied to the entire test session.\n\n"
-        f"• type={bold('multiplier')}, the multiplier T is applied to each test's timeout.\n\n"
-        f"• type={bold('all')}, the timeout T is applied to all jobs.\n\n"
-        f"• type={bold('batch')}, choices for T are 'conservative' to use a conservative "
-        "estimate for batch timeouts (queue times) or 'aggressive'.\n\n"
-        f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.\n\n"
-        "For example, --timeout fast=2 would apply a timeout of 2 seconds to all tests having "
-        "the 'fast' keyword; common types are fast, long, default, and ctest. ",
-    )
+    TimeoutResource.setup_parser(group)
     group.add_argument(
         "--no-incremental",
         action="store_true",
         default=False,
         help="Don't use the .canary_cache to infer job runtimes",
     )
-    group.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
-    group.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
-    group.add_argument("--timeout-multiplier", action=TimeoutResource, help=argparse.SUPPRESS)
 
 
 class TimeoutResource(argparse.Action):
@@ -101,8 +85,8 @@ class TimeoutResource(argparse.Action):
             type = "*"
             value = time_in_seconds(values)
         else:
-            if match := re.search(r"^(\*|\w*)[:=](.*)$", values):
-                type = match.group(1).lower()
+            if match := re.search(r"^(\*|[\w-]+)[:=](.*)$", values):
+                type = match.group(1).lower().replace("-", "_")
                 value = time_in_seconds(match.group(2))
                 if type == "all":
                     type = "*"
@@ -111,6 +95,26 @@ class TimeoutResource(argparse.Action):
         timeouts = getattr(args, "timeout", None) or {}
         timeouts[type] = value
         setattr(args, "timeout", timeouts)
+
+    @staticmethod
+    def helppage() -> str:
+        text = f"""Set the timeout for {bold("type")} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n
+• type={bold("session")}, the timeout T is applied to the entire test session.\n
+• type={bold("multiplier")}, the multiplier T is applied to each test's timeout.\n
+• type={bold("all")}, the timeout T is applied to all jobs.\n
+Otherwise, a timeout of T is applied to tests having keyword {bold("type")}.  Eg,
+{bold("--timeout fast=2")} would apply a timeout of 2 seconds to all tests having
+the 'fast' keyword; common types are fast, long, default, and ctest."""
+        return text
+
+    @staticmethod
+    def setup_parser(p: "Parser | argparse._ArgumentGroup", flag: str = "--timeout") -> None:
+        p.add_argument(
+            flag, action=TimeoutResource, metavar="type=T", help=TimeoutResource.helppage()
+        )
+        p.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+        p.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+        p.add_argument("--timeout-multiplier", action=TimeoutResource, help=argparse.SUPPRESS)
 
 
 def filter_cases_by_path(jobs: list["Job"], pathspec: str) -> list["Job"]:

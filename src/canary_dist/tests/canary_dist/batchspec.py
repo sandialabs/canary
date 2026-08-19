@@ -4,6 +4,7 @@
 
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 from _canary.resource_pool.rpool import NodeRequest
 from _canary.status import Status
@@ -62,7 +63,9 @@ class FakeJob:
 
 
 def make_batch(tmp_path: Path, jobs: list[FakeJob]) -> DistBatch:
-    spec = BatchSpec(layout="flat", jobs=jobs)  # type: ignore[arg-type]
+    from _canary.job import Job
+
+    spec = BatchSpec(layout="flat", jobs=cast(list[Job], jobs))
     workspace = ExecutionSpace(root=tmp_path, path=Path("batch"))
     return DistBatch(spec=spec, workspace=workspace)
 

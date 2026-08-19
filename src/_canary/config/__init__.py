@@ -39,6 +39,13 @@ def load_snapshot(snapshot: dict[str, typing.Any]) -> None:
     _config = Config.from_snapshot(snapshot)
 
 
+def get_timeout_option(name: str, default: float | None = None) -> float | None:
+    ensure_loaded()
+    assert _config is not None
+    timeouts = _config.getoption("timeout") or {}
+    return timeouts.get(name, default)
+
+
 def __getattr__(name: str) -> typing.Any:
     global _config
     if _config is None:

@@ -1,9 +1,45 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
+"""Test-session execution hooks and reporting.
+
+This module contains Canary's default implementation of the test execution
+phase.  A :class:`Runner` represents one session's runnable jobs and provides
+session timing and return-code aggregation.  The public
+:func:`canary_runtests` function drives the hook lifecycle for a session:
+
+* ``canary_runtests_start``
+* ``canary_runtests``
+* ``canary_runtests_report``
+
+The default ``canary_runtests`` hook implementation, :func:`default_runtests`,
+executes jobs through :class:`~_canary.queue_executor.ResourceQueueExecutor`.
+Jobs are placed into a :class:`~_canary.queue.ResourceQueue` backed by the
+resource pool owned by ``config.resource_manager``.  Completed jobs are reported
+back to the workspace via the executor listener mechanism so result persistence
+and live view updates remain centralized in the parent process.
+
+Individual job execution is handled by :class:`JobExecutor`, which runs the
+per-job hook sequence:
+
+* ``canary_runteststart``
+* ``canary_runtest``
+* ``canary_runtest_finish``
+
+The module also provides the built-in per-job hook wrappers that call
+``Job.setup()``, ``Job.run()``, and ``Job.finish()``, plus console reporting
+hooks for short summaries, duration reporting, and the final session footer.
+
+Alternative execution backends, such as HPC or Flux integrations, may override
+the ``canary_runtests`` hook.  The default implementation is registered with
+``trylast=True`` so plugin-provided runners can take precedence.
+"""
+
 import dataclasses
 import io
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -15,8 +51,10 @@ import rich
 
 from . import config
 from .hookspec import hookimpl
+from .queue import ResourceQueue
 from .util import glyphs
 from .util import logging
+from .util.multiprocessing import SimpleQueue
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 
@@ -28,28 +66,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-def canary_runtests(runner: "Runner", listeners: list[Callable[..., None]] | None = None) -> None:
-    pm = config.pluginmanager.hook
-    try:
-        logger.info(f"[bold]Starting[/] session {runner.session}")
-        pm.canary_runtests_start(runner=runner)
-        with runner.timeit():
-            pm.canary_runtests(runner=runner)
-    except TimeoutError:
-        logger.error(f"Session timed out after {(time.time() - runner.start):.2f} s.")
-        raise
-    except Exception:
-        logger.exception("Unhandled exception in canary_runtests")
-        raise
-    finally:
-        logger.info(
-            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
-            f"with returncode {runner.returncode}"
-        )
-        pm.canary_runtests_report(runner=runner)
-    return
+global_lock = threading.Lock()
 
 
 @dataclasses.dataclass
@@ -78,6 +95,92 @@ class Runner:
     @property
     def cases(self) -> list["Job"]:
         return self.jobs
+
+
+def canary_runtests(runner: Runner, listeners: list[Callable[..., None]] | None = None) -> None:
+    pm = config.pluginmanager.hook
+    try:
+        logger.info(f"[bold]Starting[/] session {runner.session}")
+        pm.canary_runtests_start(runner=runner)
+        with runner.timeit():
+            pm.canary_runtests(runner=runner)
+    except TimeoutError:
+        logger.error(f"Session timed out after {(time.time() - runner.start):.2f} s.")
+        raise
+    except Exception:
+        logger.exception("Unhandled exception in canary_runtests")
+        raise
+    finally:
+        logger.info(
+            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
+            f"with returncode {runner.returncode}"
+        )
+        pm.canary_runtests_report(runner=runner)
+    return
+
+
+@hookimpl(trylast=True, specname="canary_runtests")
+def default_runtests(runner: Runner) -> bool:
+    """Run each test jobs in ``jobs``.
+
+    Args:
+      jobs: test jobs to run
+
+    Returns:
+      The session returncode (0 for success)
+
+    """
+    from .queue_executor import ResourceQueueExecutor
+
+    try:
+        rpool = config.resource_manager.get_pool()
+        queue = ResourceQueue(lock=global_lock, resource_pool=rpool)
+        queue.put(*runner.jobs)  # type: ignore
+        queue.prepare()
+    except Exception:
+        logger.exception("Unable to create resource queue")
+        raise
+    executor = JobExecutor()
+    max_workers = config.getoption("workers") or -1
+    with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+        ex.add_listener(runner.workspace.testcase_done_callback)
+        ex.run()
+    return True
+
+
+class JobExecutor:
+    """Class for running ``AbstractJob``."""
+
+    def __call__(self, job: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
+        from .status import Status
+
+        def mark_broken(phase: str, e: Exception) -> None:
+            r = f"{e.__class__.__name__}({', '.join(repr(_) for _ in e.args)})"
+            job.status = Status.BROKEN(reason=r)
+            logger.debug(f"Failed to {phase} {job}", exc_info=e)
+            job.save()
+
+        queue.put({"event": "job_submitted", "timestamp": time.time()})
+        try:
+            config.pluginmanager.hook.canary_runteststart(case=job)
+        except Exception as e:
+            mark_broken("setup", e)
+            return
+
+        queue.put({"event": "job_started", "timestamp": time.time()})
+        try:
+            config.pluginmanager.hook.canary_runtest(case=job)
+            if job.timekeeper.finished < 0:
+                job.timekeeper.finished = time.time()
+        except Exception as e:
+            mark_broken("run", e)
+            return
+
+        try:
+            config.pluginmanager.hook.canary_runtest_finish(case=job)
+        except Exception as e:
+            logger.debug(f"Failed to teardown {job}", exc_info=e)
+            return
 
 
 @hookimpl(wrapper=True)
@@ -172,7 +275,7 @@ def runtests_footer(runner: Runner) -> None:
         print_footer(runner, "Session done")
 
 
-def print_footer(runner: "Runner", title: str) -> None:
+def print_footer(runner: Runner, title: str) -> None:
     """Return a short, high-level, summary of test results"""
     from . import status
 
@@ -206,7 +309,7 @@ def print_footer(runner: "Runner", title: str) -> None:
 
 
 def print_durations(jobs: list["Job"], N: int) -> None:
-    jobs.sort(key=lambda x: x.timekeeper.duration())
+    jobs.sort(key=lambda x: x.timekeeper.running())
     ix = list(range(len(jobs)))
     if N > 0:
         ix = ix[-N:]
@@ -214,7 +317,7 @@ def print_durations(jobs: list["Job"], N: int) -> None:
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = jobs[i].timekeeper.duration()
+        duration = jobs[i].timekeeper.running()
         if duration < 0:
             continue
         name = jobs[i].display_name(style="rich")

@@ -28,12 +28,29 @@ class Log(CanarySubcommand):
     description = "Show the session or a job's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
             "-e",
             "--error",
             default=False,
             action="store_true",
             help="Display test stderr if it exists",
+        )
+        group.add_argument(
+            "-l",
+            "--lock",
+            dest="workspace_file",
+            action="store_const",
+            const="testcase.lock",
+            default=None,
+            help="Display test lockfile if it exists; equivalent to -f testcase.lock",
+        )
+        group.add_argument(
+            "-f",
+            "--file",
+            dest="workspace_file",
+            metavar="PATH",
+            help="Display PATH from the test's workspace",
         )
         parser.add_argument(
             "--raw",
@@ -47,13 +64,14 @@ class Log(CanarySubcommand):
             help="Test name or TEST_ID.  If not given, the session log will be shown",
         )
 
-    def get_logfile(self, job: "Job", args: argparse.Namespace) -> Path | None:
+    def get_file_from_workspace(self, job: "Job", args: argparse.Namespace) -> Path | None:
         if args.error:
             if job.stderr is None:
                 return None
             return job.workspace.joinpath(job.stderr)
-        else:
-            return job.workspace.joinpath(job.stdout)
+        if args.workspace_file:
+            return job.workspace.joinpath(args.workspace_file)
+        return job.workspace.joinpath(job.stdout)
 
     def execute(self, args: argparse.Namespace) -> int:
         workspace = Workspace.load()
@@ -71,7 +89,7 @@ class Log(CanarySubcommand):
             raise ValueError(f"no log file found in {workspace.root}")
 
         job = workspace.find(job=args.testspec)
-        f = self.get_logfile(job, args)
+        f = self.get_file_from_workspace(job, args)
         if f:
             display_file(f)
         return 0

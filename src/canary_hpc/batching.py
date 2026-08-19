@@ -5,7 +5,8 @@
 import dataclasses
 import math
 from collections import defaultdict
-from graphlib import TopologicalSorter
+from collections.abc import Mapping
+from typing import Any
 from typing import Literal
 from typing import cast
 
@@ -21,7 +22,147 @@ from .schedulepack import pack_to_height_simulated
 logger = canary.get_logger(__name__)
 
 
-PartitionCount = int | str | None
+PartitionCount = int | None
+BatchLayout = Literal["flat", "atomic"]
+NodePolicy = Literal["same", "any"]
+MAX_COUNT = -1
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class DurationTarget:
+    seconds: float
+
+    def __post_init__(self) -> None:
+        if isinstance(self.seconds, bool) or not isinstance(self.seconds, (int, float)):
+            raise TypeError(f"duration must be numeric, got {type(self.seconds).__name__}")
+        if self.seconds <= 0:
+            raise ValueError(f"duration must be > 0, got {self.seconds!r}")
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"seconds": self.seconds}
+
+    @classmethod
+    def __deserialize__(cls, arg: dict[str, Any]) -> "DurationTarget":
+        return DurationTarget(seconds=float(arg["seconds"]))
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CountTarget:
+    """Batch by count.
+
+    ``count == MAX_COUNT`` means "maximum number of batches".
+    """
+
+    count: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.count, bool) or not isinstance(self.count, int):
+            raise TypeError(f"count must be an integer, got {self.count!r}")
+        if self.count == MAX_COUNT:
+            return
+        if self.count <= 0:
+            raise ValueError(f"count must be > 0 or MAX_COUNT, got {self.count!r}")
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    @classmethod
+    def __deserialize__(cls, arg: dict[str, Any]) -> "CountTarget":
+        return CountTarget(count=int(arg["count"]))
+
+    @classmethod
+    def max(cls) -> "CountTarget":
+        return cls(MAX_COUNT)
+
+
+BatchTarget = DurationTarget | CountTarget
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BatchingSpec:
+    layout: BatchLayout
+    node_policy: NodePolicy
+    target: BatchTarget
+
+    def __post_init__(self) -> None:
+        if self.layout not in ("flat", "atomic"):
+            raise ValueError(f"batch spec: invalid layout value {self.layout!r}")
+
+        if self.node_policy not in ("same", "any"):
+            raise ValueError(f"batch spec: invalid nodes value {self.node_policy!r}")
+
+        if self.layout == "atomic" and self.node_policy != "any":
+            raise ValueError("batch spec: layout=atomic requires nodes=any")
+
+        if self.layout == "atomic" and isinstance(self.target, DurationTarget):
+            raise ValueError("batch spec: duration-targeted atomic layout is not supported")
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"layout": self.layout, "node_policy": self.node_policy, "target": self.target}
+
+    @classmethod
+    def __deserialize__(cls, arg: dict[str, Any]) -> "BatchingSpec":
+        return BatchingSpec(
+            layout=arg["layout"], node_policy=arg["node_policy"], target=arg["target"]
+        )
+
+    @classmethod
+    def with_defaults(
+        cls,
+        *,
+        nodes: NodePolicy | None = None,
+        layout: BatchLayout | None = None,
+        count: int | Literal["max"] | None = None,
+        duration: float | None = None,
+    ) -> "BatchingSpec":
+        """Create a validated batching spec from parser-style fields.
+
+        ``count='max'`` is normalized to ``CountTarget(MAX_COUNT)``.
+        """
+        resolved_layout: BatchLayout = layout or "flat"
+
+        if nodes is None:
+            resolved_nodes: NodePolicy = "any" if resolved_layout == "atomic" else "same"
+        else:
+            resolved_nodes = nodes
+
+        if count is not None and duration is not None:
+            raise ValueError("batch spec: duration not allowed with count")
+
+        if count is not None:
+            target: BatchTarget
+            if count == "max":
+                target = CountTarget.max()
+            else:
+                target = CountTarget(count)
+        elif duration is not None:
+            target = DurationTarget(float(duration))
+        elif resolved_layout == "atomic":
+            target = CountTarget.max()
+        else:
+            target = DurationTarget(30 * 60.0)
+
+        return cls(layout=resolved_layout, node_policy=resolved_nodes, target=target)
+
+    @property
+    def nodes(self) -> NodePolicy:
+        """Parser-compatible alias for ``node_policy``."""
+        return self.node_policy
+
+    @property
+    def count(self) -> int | None:
+        if isinstance(self.target, CountTarget):
+            return self.target.count
+        return None
+
+    @property
+    def duration(self) -> float | None:
+        if isinstance(self.target, DurationTarget):
+            return self.target.seconds
+        return None
+
+    def count_is_max(self) -> bool:
+        return self.count == MAX_COUNT
 
 
 @dataclasses.dataclass(frozen=True)
@@ -159,35 +300,16 @@ def partition_jobs(
 
 
 def allocate_partition_counts(
-    count: int | str | None, partitions: list[JobPartition]
-) -> list[PartitionCount]:
-    """Allocate a global count spec across DAG/resource partitions.
-
-    Returns one count value per partition.
-
-    Rules:
-
-    - ``count is None``:
-      duration-targeted batching.  Return ``None`` for each partition.
-
-    - ``count == "max"``:
-      return ``"max"`` for each partition.
-
-    - ``count == N``:
-      allocate at most ``N`` total count across partitions using a proportional
-      allocation based on partition weight.
-
-    Every non-empty partition needs at least one count.  Therefore, if integer
-    ``count`` is smaller than the number of partitions, this function raises.
-    """
+    count: int | None, partitions: list[JobPartition]
+) -> list[int | None]:
     if not partitions:
         return []
 
     if count is None:
         return [None for _ in partitions]
 
-    if count == "max":
-        return ["max" for _ in partitions]
+    if count == MAX_COUNT:
+        return [MAX_COUNT for _ in partitions]
 
     if not isinstance(count, int):
         raise ValueError(f"invalid count value: {count!r}")
@@ -260,10 +382,7 @@ def batch_jobs(
     jobs: list["canary.Job"],
     width: int,
     workers: int | None = None,
-    nodes: Literal["any", "same"] = "same",
-    layout: Literal["flat", "atomic"] = "flat",
-    count: int | str | None = None,
-    duration: float | None = None,
+    spec: BatchingSpec,
     resource_capacity: dict[str, int] | None = None,
     node_count: int | None = None,
     exact_final_estimate: bool = False,
@@ -293,27 +412,6 @@ def batch_jobs(
     if node_count is not None and node_count <= 0:
         raise ValueError(f"{node_count=} must be > 0")
 
-    if layout not in ("flat", "atomic"):
-        raise ValueError(f"invalid layout: {layout!r}")
-
-    if nodes not in ("any", "same"):
-        raise ValueError(f"invalid nodes value: {nodes!r}")
-
-    if duration is None and count is None:
-        duration = 30 * 60  # 30 minute default
-
-    if duration is not None and count is not None:
-        raise ValueError("duration and count are mutually exclusive")
-
-    if duration is not None and duration <= 0:
-        raise ValueError("duration must be > 0")
-
-    if duration is not None and layout == "atomic":
-        raise ValueError("duration-targeted atomic layout is not supported")
-
-    if layout == "atomic" and nodes != "any":
-        raise ValueError("layout=atomic requires nodes=any")
-
     if not jobs:
         return []
 
@@ -322,10 +420,10 @@ def batch_jobs(
     lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
     tasks = [_schedule_task_from_job(job, lookup) for job in jobs]
 
-    if duration is not None:
+    if isinstance(spec.target, DurationTarget):
         logger.debug(
             "Batching jobs using simulated duration target=%s width=%s workers=%s",
-            duration,
+            spec.target.seconds,
             width,
             workers,
         )
@@ -333,7 +431,7 @@ def batch_jobs(
         scheduled_batches = pack_to_height_simulated(
             tasks,
             width=width,
-            height=float(duration),
+            height=spec.target.seconds,
             workers=workers,
             resource_capacity=resource_capacity,
             node_count=node_count,
@@ -341,17 +439,17 @@ def batch_jobs(
         )
 
     else:
-        count_value = _normalize_count(count, ntasks=len(tasks))
-
+        assert isinstance(spec.target, CountTarget)
+        count_value = _normalize_count(spec.target.count, ntasks=len(tasks))
         logger.debug(
             "Batching jobs using simulated count=%s width=%s workers=%s layout=%s",
             count_value,
             width,
             workers,
-            layout,
+            spec.layout,
         )
 
-        if layout == "atomic":
+        if spec.layout == "atomic":
             scheduled_batches = pack_by_count_atomic_simulated(
                 tasks,
                 width=width,
@@ -372,12 +470,12 @@ def batch_jobs(
                 exact_final_estimate=exact_final_estimate,
             )
 
-    specs: list[BatchSpec] = []
+    batchspecs: list[BatchSpec] = []
 
     for scheduled_batch in scheduled_batches:
         spec_jobs = [lookup[task.id] for task in scheduled_batch.tasks]
-        spec = BatchSpec(
-            layout=layout,
+        batchspec = BatchSpec(
+            layout=spec.layout,
             jobs=spec_jobs,
             estimated_runtime=scheduled_batch.estimated_runtime,
             schedule_metadata={
@@ -392,9 +490,17 @@ def batch_jobs(
                 "exact_final_estimate": exact_final_estimate,
             },
         )
-        specs.append(spec)
+        batchspecs.append(batchspec)
 
-    return specs
+    return batchspecs
+
+
+def normalize_batching_spec(batchspec: BatchingSpec | Mapping[str, Any] | None) -> BatchingSpec:
+    if isinstance(batchspec, BatchingSpec):
+        return batchspec
+    if batchspec is None:
+        return BatchingSpec.with_defaults()
+    return BatchingSpec.with_defaults(**batchspec)
 
 
 def set_batch_dependencies(specs: list[BatchSpec]) -> None:
@@ -445,19 +551,9 @@ def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) 
     )
 
 
-def _normalize_count(count: int | str | None, *, ntasks: int) -> int:
-    if count is None:
-        raise ValueError("count is required when duration is not supplied")
-
-    if count == "max":
-        return max(ntasks, 1)
-
-    if not isinstance(count, int):
-        raise ValueError(f"invalid count value: {count!r}")
-
+def _normalize_count(count: int, *, ntasks: int) -> int:
     if count <= 0:
-        raise ValueError("count must be > 0")
-
+        return max(ntasks, 1)
     return count
 
 
@@ -545,38 +641,10 @@ def _partition_resource_capacity(
 
 def _topological_job_levels(jobs: list["canary.Job"]) -> list[list["canary.Job"]]:
     """Return global topological ready levels for jobs."""
-    lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
-    job_ids = set(lookup)
+    from _canary.job_graph import make_job_graph
 
-    graph: dict[str, list[str]] = {}
-
-    for job in jobs:
-        graph[job.id] = [dep.job.id for dep in job.dependencies if dep.job.id in job_ids]
-
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-
-    levels: list[list[canary.Job]] = []
-
-    while ts.is_active():
-        ready_ids = list(ts.get_ready())
-        ready_jobs = [lookup[job_id] for job_id in ready_ids]
-
-        ready_jobs.sort(key=_job_priority_key, reverse=True)
-
-        levels.append(ready_jobs)
-        ts.done(*ready_ids)
-
-    return levels
-
-
-def _job_priority_key(job: "canary.Job") -> tuple[float, float, int, str]:
-    try:
-        cost = float(job.cost())
-    except Exception:
-        cost = math.sqrt(float(job.cpus) ** 2 + float(job.runtime) ** 2)
-
-    return (cost, float(job.runtime), int(job.cpus), str(job.id))
+    graph = make_job_graph(jobs)
+    return [list(level) for level in graph.levels]
 
 
 class BatchNotFound(Exception):

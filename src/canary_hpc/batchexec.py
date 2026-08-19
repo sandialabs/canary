@@ -74,7 +74,7 @@ class HPCConnectRunner:
 
     def scheduler_args(self) -> list[str]:
         options: list[str] = []
-        if args := canary.config.getoption("hpc_scheduler_args"):
+        if args := canary.config.getoption("hpc_submit_args"):
             options.extend(args)
         return options
 
@@ -224,6 +224,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             jobid = batch.jobid = future.jobid
             queue.put({"event": "job_updated", "timestamp": time.time(), "attrs": {"jobid": jobid}})
 
+        def write_procinfo(future: hpc_connect.futures.Future):
+            with open("procinfo.json", "w") as fh:
+                json.dump(future.proc_info(), fh, indent=2)
+
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)
         if failures := self.validate_batch(batch):
@@ -249,6 +253,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             future = self.submit(batch)
             future.add_jobstart_callback(set_starttime)
             future.add_jobid_callback(set_jobid)
+            future.add_done_callback(write_procinfo)
 
             with self.handle_signals([future], batch):
                 poll = max(1.0, getattr(future, "_polling_interval", 1.0))

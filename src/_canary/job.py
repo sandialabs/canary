@@ -32,7 +32,6 @@ from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
-from .util import cpu_count
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
@@ -283,7 +282,7 @@ class Job(BaseJob):
         super().__init__()
         self.spec = spec
         self.workspace = workspace
-        self.rparameters = self.get_resource_parameters_from_spec()
+        self.rparameters = self.spec.rparameters
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
         self._mask: Mask | None = None
@@ -823,40 +822,6 @@ class Job(BaseJob):
         variables["PATH"] = t.substitute(os.environ, missing="")
         return variables
 
-    def get_resource_parameters_from_spec(self) -> dict[str, int]:
-        resource_types: set[str] = set(config.resource_manager.types())
-        p = self.spec.parameters | self.spec.meta_parameters
-        rparameters: dict[str, int] = {}
-
-        for key in p.keys() & (resource_types | {"nodes"}):
-            value = p[key]
-            if not isinstance(value, int):
-                raise InvalidTypeError(key, value)
-            rparameters[key] = value
-        nodes = rparameters.get("nodes")
-        if nodes is None:
-            nodes = 1
-            for rtype, count in rparameters.items():
-                if rtype == "nodes":
-                    continue
-                if count <= 0:
-                    continue
-                slots_per_node = config.resource_manager.slots_per_node(rtype)
-                # CPU fallback for normal local cases.
-                if slots_per_node <= 0 and rtype in ("cpu", "cpus"):
-                    slots_per_node = cpu_count()
-                # If the resource is unknown/unavailable, leave node count alone.
-                # ResourceCapacityRule / ResourcePool.accommodates() will report
-                # the actual insufficiency later.
-                if slots_per_node <= 0:
-                    continue
-                nodes = max(nodes, ceil_div(count, slots_per_node))
-        rparameters["nodes"] = nodes
-        # Preserve default CPU/GPU resource parameters.
-        rparameters.setdefault("cpus", 1)
-        rparameters.setdefault("gpus", 0)
-        return rparameters
-
     def teardown(self) -> None:
         pass
 
@@ -867,8 +832,7 @@ class Job(BaseJob):
             logger.debug("Failed to cache last run", exc_info=True)
 
     def save(self) -> None:
-        self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        self.lockfile.write_text(json.dumps(self, indent=2))
+        json.safesave(self.lockfile, self)
 
     def read_output(self, compress: bool = False) -> str:
         if self.status.is_skipped():
@@ -924,24 +888,24 @@ class Job(BaseJob):
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()
             history[name] = history.get(name, 0) + 1
-            if self.timekeeper.duration() >= 0 and self.status.is_success():
+            if self.timekeeper.running() >= 0 and self.status.is_success():
                 count: int = 0
                 metrics = cache.setdefault("metrics", {})
                 t = metrics.setdefault("time", {})
                 if t:
                     # Welford's single pass online algorithm to update statistics
                     count, mean, variance = t["count"], t["mean"], t["variance"]
-                    delta = self.timekeeper.duration() - mean
+                    delta = self.timekeeper.running() - mean
                     mean += delta / (count + 1)
                     M2 = variance * count
-                    delta2 = self.timekeeper.duration() - mean
+                    delta2 = self.timekeeper.running() - mean
                     M2 += delta * delta2
                     variance = M2 / (count + 1)
-                    minimum = min(t["min"], self.timekeeper.duration())
-                    maximum = max(t["max"], self.timekeeper.duration())
+                    minimum = min(t["min"], self.timekeeper.running())
+                    maximum = max(t["max"], self.timekeeper.running())
                 else:
                     variance = 0.0
-                    mean = minimum = maximum = self.timekeeper.duration()
+                    mean = minimum = maximum = self.timekeeper.running()
                 t["mean"] = mean
                 t["min"] = minimum
                 t["max"] = maximum
@@ -979,11 +943,6 @@ def find_cache_dir(start: Path) -> Path | None:
     return None
 
 
-def ceil_div(a: int, b: int) -> int:
-    assert b != 0, "denominator must not be 0"
-    return (a + b - 1) // b
-
-
 def split_count(total: int, parts: int) -> list[int]:
     assert parts > 0
     q, r = divmod(total, parts)
@@ -992,9 +951,3 @@ def split_count(total: int, parts: int) -> list[int]:
 
 class MissingSourceError(Exception):
     pass
-
-
-class InvalidTypeError(Exception):
-    def __init__(self, name, value):
-        class_name = value.__class__.__name__
-        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")

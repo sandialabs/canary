@@ -75,6 +75,14 @@ class FakeJob:
     def cost(self) -> float:
         return (self.cpus**2 + self.runtime**2) ** 0.5
 
+    @property
+    def fullname(self) -> str:
+        return self.id
+
+    @property
+    def name(self) -> str:
+        return self.id
+
 
 def fake_conductor(*, counts: dict[str, int], failures: set[str] | None = None):
     from canary_hpc.conductor import CanaryHPCConductor

@@ -20,6 +20,7 @@ from typing import Callable
 from typing import Iterable
 from typing import Literal
 from typing import Sequence
+from typing import cast
 
 from . import cpu_count
 from . import logging
@@ -73,12 +74,13 @@ def default_start_method() -> str:
 
 
 def recommended_start_method() -> StartMethod:
-    """
-    Mirror your initialize() logic but just *return* the recommendation
-    (does not mutate global state).
-    """
-    if var := os.getenv("CANARY_MULTIPROCESSING_START_METHOD"):
-        return var  # type: ignore[return-value]
+    if var := os.getenv("CANARY_START_METHOD"):
+        if var in ("fork", "forkserver", "spawn"):
+            return cast(StartMethod, var)
+        raise ValueError(
+            "Invalid CANARY_START_METHOD={!r}; expected one of "
+            "'fork', 'forkserver', or 'spawn'".format(var)
+        )
     # Prefer forkserver on Linux when send_handle is available (same as initialize()).
     if multiprocessing.reduction.HAVE_SEND_HANDLE and sys.platform != "darwin":
         return "forkserver"

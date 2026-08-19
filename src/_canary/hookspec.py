@@ -141,6 +141,10 @@ def canary_configure(config: "CanaryConfig") -> None:
 
 
 @hookspec
+def canary_finish(config: "CanaryConfig") -> None: ...
+
+
+@hookspec
 def canary_sessionstart(session: "Session") -> None: ...
 
 

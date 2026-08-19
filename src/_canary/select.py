@@ -73,7 +73,9 @@ from schema import Schema
 from . import config
 from .config.argparsing import Parser
 from .hookspec import hookimpl
+from .job_graph import make_job_graph
 from .jobspec import Mask
+from .jobspec_graph import make_spec_graph
 from .rules import Rule
 from .rules import RuntimeRule
 from .util import json_helper as json
@@ -187,11 +189,8 @@ class Selector:
         # Propagate masks
         queue = deque([spec for spec in self.specs if spec.mask])
         spec_map: dict[str, "JobSpec"] = {spec.id: spec for spec in self.specs}
-        # Precompute reverse graph
-        dependents: dict[str, list[str]] = {s.id: [] for s in self.specs}
-        for s in self.specs:
-            for dep in s.dependencies:
-                dependents[dep.spec.id].append(s.id)
+        graph = make_spec_graph(self.specs)
+        dependents = graph.dependents_by_id
         while queue:
             masked = queue.popleft()
             for child_id in dependents[masked.id]:
@@ -311,11 +310,8 @@ class RuntimeSelector:
         # Propagate skipped/broken tests
         queue = deque([c for c in self.jobs if c.mask and c.is_runnable()])
         job_map: dict[str, "Job"] = {job.id: job for job in self.jobs}
-        # Precompute reverse graph
-        dependents: dict[str, list[str]] = {job.id: [] for job in self.jobs}
-        for job in self.jobs:
-            for dep in job.spec.dependencies:
-                dependents.setdefault(dep.spec.id, []).append(job.id)
+        graph = make_job_graph(self.jobs)
+        dependents = graph.dependents_by_id
         while queue:
             excluded = queue.popleft()
             for child_id in dependents[excluded.id]:

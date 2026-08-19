@@ -15,6 +15,9 @@ from _canary.util.string import csvsplit
 from _canary.util.string import strip_quotes
 from _canary.util.time import time_in_seconds
 
+from .batching import MAX_COUNT
+from .batching import BatchingSpec
+
 logger = canary.get_logger(__name__)
 
 
@@ -24,6 +27,8 @@ class CanaryHPCSchedulerArgs(argparse.Action):
     @staticmethod
     def defaults() -> list[str]:
         options: list[str] = []
+        if arg := os.getenv("CANARY_HPC_SUBMIT_ARGS"):
+            options.extend(shlex.split(arg))
         if arg := os.getenv("CANARY_HPC_SCHEDULER_ARGS"):
             options.extend(shlex.split(arg))
         return options
@@ -72,9 +77,28 @@ class CanaryHPCBatchSpec(argparse.Action):
         return {"nodes": None, "layout": None, "count": None, "duration": None}
 
     def __call__(self, parser, namespace, value, option_string=None):
-        spec = getattr(namespace, self.dest, None) or self.defaults()
+        current = getattr(namespace, self.dest, None)
+
+        if current is None:
+            spec = self.defaults()
+        elif isinstance(current, dict):
+            spec = dict(current)
+        else:
+            raise TypeError(f"unexpected {self.dest} type: {type(current).__name__}")
+
         spec.update(self.parse(strip_quotes(value)))
         setattr(namespace, self.dest, spec)
+
+    @staticmethod
+    def validate_and_set_defaults(spec: dict[str, Any] | BatchingSpec | None) -> BatchingSpec:
+        if isinstance(spec, BatchingSpec):
+            return spec
+
+        data = CanaryHPCBatchSpec.defaults()
+        if spec is not None:
+            data.update(spec)
+
+        return BatchingSpec.with_defaults(**data)
 
     @staticmethod
     def parse(value: str) -> dict[str, Any]:
@@ -96,7 +120,7 @@ class CanaryHPCBatchSpec(argparse.Action):
                 spec["count"] = count
 
             elif re.search(r"^count[:=]max$", lowered):
-                spec["count"] = "max"
+                spec["count"] = MAX_COUNT
 
             elif re.search(r"^count[:=]auto$", lowered):
                 raise ValueError("count=auto is no longer supported; use duration=T")
@@ -204,58 +228,31 @@ class CanaryHPCBatchSpec(argparse.Action):
               in the same batch."""
         return description
 
-    @staticmethod
-    def validate_and_set_defaults(spec: dict) -> None:
-        spec.setdefault("duration", None)
-        spec.setdefault("count", None)
-        spec.setdefault("layout", None)
-        spec.setdefault("nodes", None)
-
-        if spec["layout"] is None:
-            spec["layout"] = "flat"
-
-        if spec["layout"] not in ("flat", "atomic"):
-            raise ValueError(f"batch spec: invalid layout value {spec['layout']!r}")
-
-        # Atomic defaults to nodes=any unless user explicitly gave nodes=same.
-        if spec["nodes"] is None:
-            spec["nodes"] = "any" if spec["layout"] == "atomic" else "same"
-
-        if spec["nodes"] not in ("any", "same"):
-            raise ValueError(f"batch spec: invalid nodes value {spec['nodes']!r}")
-
-        # Layout-aware default batching mode.
-        if spec["duration"] is None and spec["count"] is None:
-            if spec["layout"] == "atomic":
-                spec["count"] = "max"
-            else:
-                spec["duration"] = 30 * 60  # 30 minutes
-
-        if spec["duration"] is not None and spec["count"] is not None:
-            raise ValueError("batch spec: duration not allowed with count")
-
-        if spec["count"] is not None:
-            count = spec["count"]
-            if count != "max" and not isinstance(count, int):
-                raise ValueError(f"batch spec: invalid count value {count!r}")
-            if isinstance(count, int) and count <= 0:
-                raise ValueError("batch spec: count <= 0")
-
-        if spec["layout"] == "atomic" and spec["nodes"] != "any":
-            raise ValueError("batch spec: layout=atomic requires nodes=any")
-
-        if spec["duration"] is not None and spec["layout"] == "atomic":
-            raise ValueError("batch spec: duration-targeted atomic layout is not supported")
-
 
 class CanaryHPCResourceSetter(argparse.Action):
-    """Set all options from -b option.  This is kept for backward compatibility"""
+    """Set all options from -b option. This is kept for backward compatibility."""
 
     def __call__(self, parser, namespace, value, option_string=None):
         if match := re.search(r"^spec=(.*)$", value):
             dest = "hpc_batchspec"
             raw = strip_quotes(match.group(1))
-            spec = getattr(namespace, dest, None) or CanaryHPCBatchSpec.defaults()
+
+            current = getattr(namespace, dest, None)
+            if current is None:
+                spec = CanaryHPCBatchSpec.defaults()
+            elif isinstance(current, dict):
+                spec = dict(current)
+            elif isinstance(current, BatchingSpec):
+                # This should be rare if normalization happens later.
+                spec = {
+                    "nodes": current.node_policy,
+                    "layout": current.layout,
+                    "count": current.count,
+                    "duration": current.duration,
+                }
+            else:
+                raise TypeError(f"unexpected {dest} type: {type(current).__name__}")
+
             spec.update(CanaryHPCBatchSpec.parse(raw))
             setattr(namespace, dest, spec)
 
@@ -288,7 +285,7 @@ class CanaryHPCResourceSetter(argparse.Action):
             setattr(namespace, "hpc_queue_timeout", time_in_seconds(raw))
 
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
-            dest = "hpc_scheduler_args"
+            dest = "hpc_submit_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
             opts.extend(CanaryHPCSchedulerArgs.parse(raw))

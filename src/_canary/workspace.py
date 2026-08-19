@@ -53,7 +53,6 @@ from .util import logging
 from .util.filesystem import async_rmtree
 from .util.filesystem import force_remove
 from .util.filesystem import write_directory_tag
-from .util.graph import static_order
 from .util.names import unique_random_name
 from .view import ResultsView
 from .view import ViewManager
@@ -371,6 +370,10 @@ class Workspace:
         selector = select.RuntimeSelector(jobs, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
+        if timeout := config.get_timeout_option("session"):
+            if fac := config.get_timeout_option("multiplier"):
+                timeout *= fac
+            selector.add_rule(rules.SessionTimeoutRule(timeout=timeout))
         selector.run()
 
         # At this point, test jobs have been reconstructed and, if previous results exist,
@@ -689,10 +692,13 @@ class Workspace:
         Returns:
             A list of Job objects in static dependency order.
         """
+        from .jobspec_graph import make_spec_graph
+
         lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
         specs = self.db.load_specs(ids, include_upstreams=True)
-        for spec in static_order(specs):
+        graph = make_spec_graph(specs)
+        for spec in graph.topo_order():
             if mine := latest.get(spec.id):
                 deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
                 space = ExecutionSpace(
@@ -779,10 +785,13 @@ class Workspace:
         Returns:
             A list of constructed Job objects.
         """
+        from .jobspec_graph import make_spec_graph
+
         lookup: dict[str, Job] = {}
         jobs: list[Job] = []
         latest = self.db.get_results([spec.id for spec in specs])
-        for spec in static_order(specs):
+        graph = make_spec_graph(specs)
+        for spec in graph.topo_order():
             deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
             job: Job
             if spec.id in latest:

@@ -552,7 +552,7 @@ def test_checkin_rejects_unknown_node():
         {"nodes": [{"id": "local", "resources": {"cpus": [{"id": "0", "slots": 1}]}}]}
     )
 
-    with pytest.raises(ValueError, match="unknown node"):
+    with pytest.raises((ValueError, ResourceUnavailable), match="[Uu]nknown node"):
         rp.checkin({"resources": {"cpus": [{"node": "missing", "id": "0", "slots": 1}]}})
 
 

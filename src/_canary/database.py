@@ -18,6 +18,7 @@ from . import jobspec
 from .job import JobPhase
 from .job import JobState
 from .jobspec import JobSpec
+from .jobspec_graph import make_spec_graph
 from .status import Status
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -322,7 +323,8 @@ class WorkspaceDatabase:
         edges = self.get_edges(ids)
         for spec_id, dep_id in edges:
             specs[spec_id].dependencies[imap[spec_id][dep_id]].spec = specs[dep_id]
-        return list(specs.values())
+        graph = make_spec_graph(list(specs.values()))
+        return list(graph.topo_order())
 
     def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
         if not ids:

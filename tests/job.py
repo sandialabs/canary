@@ -306,3 +306,16 @@ def test_job_dependency_graph_roundtrip_json(repo: Path, space, tmp_path):
     assert isinstance(out, Job)
     assert out.dependencies[0].when == "on_success"
     assert out.dependencies[0].job.id == job_a.id
+
+
+def test_job_save_uses_atomic_tmp_cleanup(spec: JobSpec, space):
+    job = Job(spec=spec, workspace=space)
+    job.status.set(outcome="SUCCESS")
+
+    job.save()
+
+    assert job.lockfile.exists()
+    assert not (job.lockfile.parent / f".{job.lockfile.name}.tmp").exists()
+
+    loaded = json.loads(job.lockfile.read_text())
+    assert loaded.id == job.id

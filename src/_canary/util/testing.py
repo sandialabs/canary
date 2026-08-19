@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from .graph import static_order
-
 if TYPE_CHECKING:
     from ..job import Job
     from ..jobspec import JobSpec
@@ -69,6 +67,7 @@ def generate_random_jobs(
 ) -> list["Job"]:
     from ..job import Dependency
     from ..job import Job
+    from ..jobspec_graph import make_spec_graph
     from ..testexec import ExecutionSpace
 
     session = root / "session"
@@ -77,7 +76,8 @@ def generate_random_jobs(
     specs = generate_random_jobspecs(
         root=root, count=count, max_params=max_params, max_rows=max_rows
     )
-    for spec in static_order(specs):
+    graph = make_spec_graph(specs)
+    for spec in graph.topo_order():
         deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
         space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
         job: Job = Job(spec=spec, workspace=space, dependencies=deps)

@@ -193,7 +193,7 @@ class ParameterRule(Rule):
     def __call__(self, spec: "JobSpec") -> RuleOutcome:
         match = when.when(
             {"parameters": self.parameter_expr},
-            parameters=spec.parameters | spec.meta_parameters,  # ty: ignore[unsupported-operator]
+            parameters=spec.parameters | spec.meta_parameters | spec.rparameters,  # ty: ignore[unsupported-operator]
         )
         if match:
             return RuleOutcome(True)
@@ -413,6 +413,24 @@ class RerunRule(RuntimeRule):
             return RuleOutcome(ok=False, reason=f"previous result = {job.status.category!r}")
         else:
             raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
+
+
+class SessionTimeoutRule(RuntimeRule):
+    def __init__(self, timeout: float, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.timeout = timeout
+
+    def __repr__(self) -> str:
+        return f"TimeoutRule(timeout={self.timeout})"
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "runtime of job exceeds session timeout"
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        if job.total_timeout() < self.timeout:
+            return RuleOutcome(ok=True)
+        return RuleOutcome.failed(self.default_reason)
 
 
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:

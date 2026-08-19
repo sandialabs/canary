@@ -17,6 +17,7 @@ from _canary.queue_executor import ResourceQueueExecutor
 from _canary.runtest import Runner
 from _canary.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
+from canary_hpc.batching import BatchingSpec
 from canary_hpc.batching import batch_jobs
 from canary_hpc.batching import set_batch_dependencies
 from canary_hpc.batchspec import BatchSpec
@@ -72,21 +73,12 @@ class DistributedPoolConductor:
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, runner: Runner) -> bool:
-        """Run each test job in ``jobs``.
-
-        Returns:
-        The session returncode (0 for success)
-
-        """
+        """Run each test job in batches across the distributed pool."""
         width = canary.config.getoption("dist_batch_width") or 8
         if width <= 0:
             raise ValueError(f"dist batch width must be > 0, got {width}")
 
-        count = canary.config.getoption("dist_batch_count")
-        duration = canary.config.getoption("dist_batch_duration")
-
-        if count is None and duration is None:
-            duration = 10 * 60
+        batching_spec = make_dist_batching_spec()
 
         workers = canary.config.getoption("dist_remote_workers")
         if workers is not None:
@@ -97,24 +89,24 @@ class DistributedPoolConductor:
 
         batch_specs: list[BatchSpec] = batch_jobs(
             jobs=runner.jobs,
-            duration=duration,
             width=width,
             workers=workers,
-            count=count,
-            layout="flat",
-            nodes="any",
+            spec=batching_spec,
             resource_capacity=resource_capacity,
             node_count=1,
             exact_final_estimate=bool(canary.config.getoption("dist_batch_exact_estimate")),
         )
+
         set_batch_dependencies(batch_specs)
         if not batch_specs:
             raise ValueError("No test batches generated")
 
         fmt = "[bold]Generated[/] %d batches from %d jobs"
         logger.info(fmt % (len(batch_specs), len(runner.jobs)))
+
         root = runner.workspace.cache_dir / "canary-dist"
         batches: list[TestBatch] = []
+
         for batch_spec in batch_specs:
             path = f"batches/{batch_spec.id[:7]}"
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
@@ -122,17 +114,21 @@ class DistributedPoolConductor:
             if width > batch.cpus:
                 batch.cpus = width
             batches.append(batch)
+
         try:
             queue = ResourceQueue(global_lock, resource_pool=self.dpool)  # type: ignore
             queue.put(*batches)  # type: ignore
             queue.prepare()
-        except:
+        except Exception:
             logger.exception("failed")
             raise
+
         executor = DistExecutor()
         max_workers = canary.config.getoption("workers") or -1
+
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.run(backend=self.backend.name)
+
         return True
 
     @staticmethod
@@ -221,6 +217,20 @@ class DistributedPoolConductor:
                 "canary dist: missing required argument --server-url or CANARY_DIST_SERVER_URL"
             )
 
+        count = getattr(args, "dist_batch_count", None)
+        duration = getattr(args, "dist_batch_duration", None)
+
+        if count is not None and duration is not None:
+            raise ValueError(
+                "canary dist: --batch-count and --batch-duration are mutually exclusive"
+            )
+
+        if count is not None and int(count) <= 0:
+            raise ValueError("canary dist: --batch-count must be > 0")
+
+        if duration is not None and float(duration) <= 0:
+            raise ValueError("canary dist: --batch-duration must be > 0")
+
 
 def export_splitter(arg: str) -> dict[str, Any]:
     export: dict[str, str] = {}
@@ -253,3 +263,13 @@ class DistExecutor:
         backend = hpc_connect.get_backend(backend_name)
         batch.setup()
         batch.run(backend=backend, queue=queue)
+
+
+def make_dist_batching_spec() -> BatchingSpec:
+    count = canary.config.getoption("dist_batch_count")
+    duration = canary.config.getoption("dist_batch_duration")
+
+    if count is None and duration is None:
+        duration = 10 * 60
+
+    return BatchingSpec.with_defaults(layout="flat", nodes="any", count=count, duration=duration)

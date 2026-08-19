@@ -12,7 +12,9 @@ from typing import Any
 import hpc_connect
 
 import canary
+from _canary.config.argparsing import append_option_help
 from _canary.plugins.subcommands.run import Run
+from _canary.util.rich import bold
 
 from .argparsing import CanaryHPCBatchSpec
 from .conductor import CanaryHPCConductor
@@ -30,14 +32,19 @@ logger = canary.get_logger(__name__)
 
 @canary.hookimpl
 def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace) -> None:
-    """Do some post configuration checks"""
+    """Do post-parse HPC argument normalization."""
     backend = getattr(args, "hpc_backend", None)
+
     if backend is not None and args.command == "run":
-        # Run with the HPC conductor
+        # Run with the HPC conductor.
         args.command, args.hpc_cmd = "hpc", "run"
-        if not hasattr(args, "hpc_batchspec"):
-            # no batchspec was passed on the command line, so set the defaults
-            args.hpc_batchspec = CanaryHPCBatchSpec.defaults()
+
+        raw_batchspec = getattr(args, "hpc_batchspec", None)
+
+        if raw_batchspec is None:
+            raw_batchspec = CanaryHPCBatchSpec.defaults()
+
+        args.hpc_batchspec = CanaryHPCBatchSpec.validate_and_set_defaults(raw_batchspec)
 
 
 @canary.hookimpl
@@ -68,6 +75,15 @@ class HPC(canary.CanarySubcommand):
 
         p = subparsers.add_parser("run", help="Batch jobs and submit to HPC scheduler")
         Run().setup_parser(p)
+        append_option_help(
+            p,
+            "--timeout",
+            f"""\n
+Slurm timeout types:\n\n
+• type={bold("queue")}, maximum time to wait in the slurm queue before treating it as timed out.
+""",
+            marker="Flux timeout types:",
+        )
         group = p.add_argument_group(title="Batched execution options")
         CanaryHPCConductor.setup_parser(group)
 

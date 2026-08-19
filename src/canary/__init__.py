@@ -51,7 +51,6 @@ from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
-from _canary.util import graph
 from _canary.util import logging
 from _canary.util import module
 from _canary.util import rich as color
