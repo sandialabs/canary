@@ -33,6 +33,10 @@ def jobs_by_name(workspace: Workspace) -> dict[str, canary.Job]:
     return {job.name: job for job in workspace.load_jobs()}
 
 
+def started_at(job: canary.Job) -> float:
+    return job.timekeeper._started
+
+
 def test_rerun_not_pass_reruns_failed_but_not_success(tmp_path):
     root = tmp_path / "rerun-not-pass"
     root.mkdir()
@@ -78,8 +82,8 @@ if __name__ == "__main__":
     assert jobs1["pass_case"].status.is_success()
     assert jobs1["maybe_fail"].status.outcome.name == "FAILED"
 
-    pass_started_1 = jobs1["pass_case"].timekeeper.started
-    fail_started_1 = jobs1["maybe_fail"].timekeeper.started
+    pass_started_1 = started_at(jobs1["pass_case"])
+    fail_started_1 = started_at(jobs1["maybe_fail"])
 
     # Fix the failing test.
     time.sleep(0.01)
@@ -93,8 +97,8 @@ if __name__ == "__main__":
     assert jobs2["maybe_fail"].status.is_success()
 
     # The passing job should not have rerun; the failed job should have.
-    assert jobs2["pass_case"].timekeeper.started == pass_started_1
-    assert jobs2["maybe_fail"].timekeeper.started > fail_started_1
+    assert started_at(jobs2["pass_case"]) == pass_started_1
+    assert started_at(jobs2["maybe_fail"]) > fail_started_1
 
 
 def test_rerun_all_reruns_successful_jobs(tmp_path):
@@ -118,7 +122,7 @@ if __name__ == "__main__":
 
     session1 = run_specs(workspace, specs, only="all")
     jobs1 = jobs_by_name(workspace)
-    started_1 = jobs1["case"].timekeeper.started
+    started_1 = started_at(jobs1["case"])
 
     time.sleep(0.01)
 
@@ -127,7 +131,7 @@ if __name__ == "__main__":
 
     assert session1.returncode == 0
     assert session2.returncode == 0
-    assert jobs2["case"].timekeeper.started > started_1
+    assert started_at(jobs2["case"]) > started_1
 
 
 def test_rerun_failed_includes_blocked_downstream_after_upstream_fixed(tmp_path):
@@ -232,7 +236,7 @@ if __name__ == "__main__":
     jobs2 = jobs_by_name(workspace)
 
     assert session2.returncode == 0
-    assert jobs2["a"].timekeeper.started == jobs1["a"].timekeeper.started
+    assert started_at(jobs2["a"]) == started_at(jobs1["a"])
     assert jobs2["b"].status.is_success()
 
 
@@ -271,8 +275,8 @@ if __name__ == "__main__":
     jobs1 = jobs_by_name(workspace)
 
     assert session1.returncode == 0
-    a_started_1 = jobs1["a"].timekeeper.started
-    b_started_1 = jobs1["b"].timekeeper.started
+    a_started_1 = started_at(jobs1["a"])
+    b_started_1 = started_at(jobs1["b"])
 
     time.sleep(0.05)
     a.write_text(
@@ -290,8 +294,8 @@ if __name__ == "__main__":
     jobs2 = jobs_by_name(workspace)
 
     assert session2.returncode == 0
-    assert jobs2["a"].timekeeper.started > a_started_1
-    assert jobs2["b"].timekeeper.started == b_started_1
+    assert started_at(jobs2["a"]) > a_started_1
+    assert started_at(jobs2["b"]) == b_started_1
 
 
 def test_rerun_changed_runs_modified_spec_not_downstream_for_direct_workspace_run(tmp_path):
@@ -333,8 +337,8 @@ if __name__ == "__main__":
     jobs1 = jobs_by_name(workspace)
 
     assert session1.returncode == 0
-    upstream_started_1 = jobs1["upstream"].timekeeper.started
-    downstream_started_1 = jobs1["downstream"].timekeeper.started
+    upstream_started_1 = started_at(jobs1["upstream"])
+    downstream_started_1 = started_at(jobs1["downstream"])
 
     time.sleep(0.05)
     upstream.write_text(
@@ -352,12 +356,12 @@ if __name__ == "__main__":
     jobs2 = jobs_by_name(workspace)
 
     assert session2.returncode == 0
-    assert jobs2["upstream"].timekeeper.started > upstream_started_1
+    assert started_at(jobs2["upstream"]) > upstream_started_1
 
     # Direct Workspace.run(..., only="changed") applies RuntimeSelector rules
     # to the supplied jobs and does not compute downstream closure. The CLI
     # rerun path is responsible for dependency-closure expansion.
-    assert jobs2["downstream"].timekeeper.started == downstream_started_1
+    assert started_at(jobs2["downstream"]) == downstream_started_1
 
 
 @pytest.mark.skipif(True, reason="Rerun closure still being worked on")
@@ -400,8 +404,8 @@ if __name__ == "__main__":
     jobs1 = jobs_by_name(workspace)
 
     assert session1.returncode == 0
-    upstream_started_1 = jobs1["upstream"].timekeeper.started
-    downstream_started_1 = jobs1["downstream"].timekeeper.started
+    upstream_started_1 = started_at(jobs1["upstream"])
+    downstream_started_1 = started_at(jobs1["downstream"])
 
     time.sleep(0.05)
     upstream.write_text(
@@ -419,5 +423,5 @@ if __name__ == "__main__":
     jobs2 = jobs_by_name(workspace)
 
     assert session2.returncode == 0
-    assert jobs2["upstream"].timekeeper.started > upstream_started_1
-    assert jobs2["downstream"].timekeeper.started > downstream_started_1
+    assert started_at(jobs2["upstream"]) > upstream_started_1
+    assert started_at(jobs2["downstream"]) > downstream_started_1

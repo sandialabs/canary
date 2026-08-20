@@ -217,7 +217,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         def set_starttime(future: hpc_connect.futures.Future):
             nonlocal started_at
             started_at = time.time()
-            batch.timekeeper.started = started_at
+            batch.on_start(at=started_at)
             queue.put({"event": "job_started", "timestamp": started_at})
 
         def set_jobid(future: hpc_connect.futures.Future):
@@ -244,7 +244,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             batch.fail_preflight(reason, child_reasons=child_reasons)
             return 1
 
-        submitted_at = batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
+        tk = batch.timekeeper
+        submitted_at = tk._submitted if tk._submitted > 0 else time.time()
         queue_deadline = submitted_at + batch.queue_timeout
 
         run_timeout = float(batch.timeout * batch.timeout_multiplier)
@@ -261,8 +262,11 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                 while True:
                     # Done?
                     if future.done():
+                        now = time.time()
                         rc = future.result()
                         logger.debug(f"Finished {batch} with exit code {rc}")
+                        batch.on_stop(at=now)
+                        queue.put({"event": "job_stopped", "timestamp": now})
                         return rc
 
                     now = time.time()
@@ -292,7 +296,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                     except TimeoutError:
                         continue
                     else:
+                        now = time.time()
                         logger.debug(f"Finished {batch} with exit code {rc}")
+                        batch.on_stop(at=now)
+                        queue.put({"event": "job_stopped", "timestamp": now})
                         return rc
 
     def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:

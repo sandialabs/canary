@@ -132,8 +132,8 @@ def test_handle_job_timeout_closes_slot_and_marks_timeout() -> None:
     assert job.id not in executor.running
     assert queue.done_jobs == [job]
     assert events[-1][0] == "job_finished"
-    assert slot.timer.current is None
-    assert slot.total_time(live=False) >= 0.0
+    assert job.timekeeper._finished > 0
+    assert job.timekeeper.total(live=False) >= 0.0
 
 
 def test_handle_job_died_with_signal_marks_error() -> None:
@@ -160,7 +160,7 @@ def test_handle_job_died_with_signal_marks_error() -> None:
     assert job.id not in executor.running
     assert queue.done_jobs == [job]
     assert events[-1][0] == "job_finished"
-    assert slot.timer.current is None
+    assert job.timekeeper._finished > 0
 
 
 def test_handle_job_died_with_exitcode_marks_error() -> None:
@@ -183,6 +183,7 @@ def test_handle_job_died_with_exitcode_marks_error() -> None:
     assert job.id in executor.finished
     assert job.id not in executor.submitted
     assert queue.done_jobs == [job]
+    assert job.timekeeper._finished > 0
 
 
 def test_terminate_all_marks_inflight_jobs_cancelled() -> None:
@@ -208,7 +209,7 @@ def test_terminate_all_marks_inflight_jobs_cancelled() -> None:
     assert queue.done_jobs == [job]
     assert queue.cleared == "CANCELLED"
     assert events[-1][0] == "job_finished"
-    assert slot.timer.current is None
+    assert job.timekeeper._finished > 0
 
 
 def test_terminate_all_marks_inflight_jobs_error_for_non_interrupt() -> None:
@@ -230,3 +231,4 @@ def test_terminate_all_marks_inflight_jobs_error_for_non_interrupt() -> None:
     assert job.id in executor.finished
     assert queue.done_jobs == [job]
     assert queue.cleared == "ERROR"
+    assert job.timekeeper._finished > 0

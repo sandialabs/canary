@@ -28,11 +28,14 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
 
         def set_starttime(future):
             nonlocal started_at
-            now = time.time()
-            started_at = now
-            batch.timekeeper.started = now
+            started_at = time.time()
+            batch.on_start(at=started_at)
             queue.put(
-                {"event": "job_started", "timestamp": now, "host": getattr(batch, "hostname", None)}
+                {
+                    "event": "job_started",
+                    "timestamp": started_at,
+                    "host": getattr(batch, "hostname", None),
+                }
             )
 
         def set_jobid(future):
@@ -49,9 +52,8 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             future.add_jobstart_callback(set_starttime)
             future.add_jobid_callback(set_jobid)
 
-            submitted_at = (
-                batch.timekeeper.submitted if batch.timekeeper.submitted > 0 else time.time()
-            )
+            tk = batch.timekeeper
+            submitted_at = tk._submitted if tk._submitted > 0 else time.time()
             queue_deadline = submitted_at + batch.queue_timeout
             run_timeout = float(batch.estimated_runtime() * batch.timeout_multiplier)
             poll = max(1.0, getattr(future, "_polling_interval", 1.0))
@@ -87,7 +89,10 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
                     except TimeoutError:
                         continue
                     else:
+                        now = time.time()
                         logger.debug(f"Finished {batch} with exit code {rc}")
+                        batch.on_stop(at=now)
+                        queue.put({"event": "job_stopped", "timestamp": now})
                         return rc
 
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:  # type: ignore[override]

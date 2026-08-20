@@ -20,7 +20,6 @@ from .job import JobState
 from .jobspec import JobSpec
 from .jobspec_graph import make_spec_graph
 from .status import Status
-from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.multiprocessing import FSQueue
@@ -159,9 +158,7 @@ class WorkspaceDatabase:
             status_outcome TEXT,
             status_reason TEXT,
             status_code INTEGER,
-            submitted REAL,
-            started REAL,
-            finished REAL,
+            timekeeper TEXT,
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
             )"""
@@ -357,9 +354,7 @@ class WorkspaceDatabase:
             job.status.outcome.name,
             job.status.reason or "",
             job.status.code,
-            job.timekeeper.submitted,
-            job.timekeeper.started,
-            job.timekeeper.finished,
+            json.dumps_min(job.timekeeper),
             json.dumps_min(job.measurements),
         )
         return row
@@ -384,8 +379,8 @@ class WorkspaceDatabase:
         INSERT OR REPLACE INTO results (
           spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
           job_state, status_category, status_outcome, status_reason, status_code,
-          submitted, started, finished, measurements
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          timekeeper, measurements
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         with self.connection:
             self.connection.executemany(sql, rows)
@@ -451,10 +446,8 @@ class WorkspaceDatabase:
         d["status"] = Status.from_dict(
             {"category": row[8], "outcome": row[9], "reason": row[10], "code": row[11]}
         )
-        d["timekeeper"] = Timekeeper.from_dict(
-            {"submitted": row[12], "started": row[13], "finished": row[14]}
-        )
-        d["measurements"] = json.loads(row[15])
+        d["timekeeper"] = json.loads(row[12])
+        d["measurements"] = json.loads(row[13])
         return d
 
     def put_selection(self, tag: str, specs: list["JobSpec"], **meta: Any) -> None:
@@ -600,7 +593,7 @@ class WorkspaceDatabase:
         latest_results AS (
           SELECT
             r.spec_id,
-            r.finished,
+            r.timekeeper,
             r.status_category,
             r.status_outcome,
             r.status_reason,
@@ -614,7 +607,7 @@ class WorkspaceDatabase:
           s.spec_id,
           sm.source,
           sm.view,
-          lr.finished,
+          lr.timekeeper,
           lr.status_category,
           lr.status_outcome,
           lr.status_reason,
@@ -630,7 +623,7 @@ class WorkspaceDatabase:
         rows = self.connection.execute(sql, params).fetchall()
         candidates: list[PartialSpec] = []
         for row in rows:
-            start: float = row[3]
+            start: float = self._timekeeper_started_at(row[3])
             c = PartialSpec(
                 id=row[0],
                 file=Path(row[1]),
@@ -660,6 +653,23 @@ class WorkspaceDatabase:
         """  # nosec B608
         rows = self.connection.execute(sql, prefixes).fetchall()
         return [row[0] for row in rows]
+
+    def _timekeeper_started_at(self, text: str | None) -> float:
+        if not text:
+            return -1.0
+        try:
+            tk = json.loads(text)
+        except Exception:
+            return -1.0
+        for name in ("_started", "_submitted", "_finished"):
+            value = getattr(tk, name, -1.0)
+            try:
+                value = float(value)
+            except Exception:
+                value = -1.0
+            if value > 0:
+                return value
+        return -1.0
 
 
 class ResultListener(threading.Thread):

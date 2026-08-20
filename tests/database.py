@@ -41,9 +41,16 @@ def make_random_specs():
 def make_session():
     def factory(root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5):
         jobs = generate_random_jobs(root, count=count, max_params=max_params, max_rows=max_rows)
-        for job in jobs:
-            with job.timekeeper.timeit():
-                job.status.set(category="PASS", outcome="SUCCESS")
+        for i, job in enumerate(jobs):
+            base = float(10 + i)
+            job.timekeeper.open(at=base)
+            job.timekeeper.stage(at=base + 0.1)
+            job.timekeeper.start(at=base + 0.2)
+            job.timekeeper.stop(at=base + 0.8)
+            job.timekeeper.close(at=base + 1.0)
+            job.status.set(category="PASS", outcome="SUCCESS")
+            if job.workspace.session is None:
+                job.workspace.session = "session"
         session = SimpleNamespace(name="session", jobs=jobs)
         return session
 
@@ -184,10 +191,15 @@ def test_result_history(db: WorkspaceDatabase, make_session):
         job.workspace.session = "s1"
     db.put_results(*session.jobs)
 
-    for job in session.jobs:
-        with job.timekeeper.timeit():
-            job.status.set(category="PASS", outcome="SUCCESS")
-            job.workspace.session = "s2"
+    for i, job in enumerate(session.jobs):
+        base = float(100 + i)
+        job.timekeeper.open(at=base)
+        job.timekeeper.stage(at=base + 0.1)
+        job.timekeeper.start(at=base + 0.2)
+        job.timekeeper.stop(at=base + 0.8)
+        job.timekeeper.close(at=base + 1.0)
+        job.status.set(category="PASS", outcome="SUCCESS")
+        job.workspace.session = "s2"
     db.put_results(*session.jobs)
 
     spec_id = session.jobs[0].id

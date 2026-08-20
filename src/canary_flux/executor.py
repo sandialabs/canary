@@ -5,19 +5,134 @@
 import os
 import sys
 import time
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from typing import Callable
+from typing import Protocol
 from typing import cast
 
 import canary
 from _canary.queue_executor import ExecutionSlot
 from _canary.reporter import EventReporter
 from _canary.reporter import LiveReporter
+from _canary.timekeeper import Timekeeper
 from _canary.util.misc import boolean
 
 logger = canary.get_logger(__name__)
+
+
+import canary
+
+
+class RunnerLike(Protocol):
+    jobs: list[canary.Job]
+    session: str
+    workspace: Any
+
+
+@dataclass
+class FluxJob:
+    """
+    Lightweight reporter-facing wrapper around an inner Canary Job.
+
+    The inner job remains authoritative for execution, dependency state,
+    status, persistence, database updates, and view updates.
+
+    This object's Timekeeper tracks the outer Flux JobSpecV1 lifecycle:
+
+      open   -> allocation requested
+      stage  -> individual Flux JobSpecV1 submitted
+      start  -> Flux job-start callback
+      stop   -> inner Canary job finished
+      finish -> parent observed Flux future result
+    """
+
+    inner: canary.Job
+    allocation_requested_at: float = -1.0
+    allocation_granted_at: float = -1.0
+    flux_jobid: str | None = None
+    timekeeper: Timekeeper = field(default_factory=Timekeeper)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+    def __post_init__(self):
+        if self.allocation_granted_at > 0:
+            self.on_submit(at=self.allocation_granted_at)
+
+    @property
+    def id(self) -> str:
+        return self.inner.id
+
+    @property
+    def status(self) -> Any:
+        return self.inner.status
+
+    @status.setter
+    def status(self, value: Any) -> None:
+        self.inner.status = value
+
+    @property
+    def state(self) -> Any:
+        return self.inner.state
+
+    @property
+    def measurements(self) -> Any:
+        return self.inner.measurements
+
+    def display_name(self, **kwargs: Any) -> str:
+        return self.inner.display_name(**kwargs)
+
+    def set_status(
+        self,
+        category: str | None = None,
+        outcome: str | None = None,
+        reason: str | None = None,
+        code: int = -1,
+    ) -> None:
+        self.inner.set_status(category=category, outcome=outcome, reason=reason, code=code)
+
+    def save(self) -> None:
+        self.inner.save()
+
+    def refresh(self) -> None:
+        self.inner.refresh()
+
+    def is_runnable(self) -> bool:
+        return self.inner.is_runnable()
+
+    def is_ready(self) -> bool:
+        return self.inner.is_ready()
+
+    def is_done(self) -> bool:
+        return self.inner.is_done()
+
+    def total_timeout(self) -> float:
+        return self.inner.total_timeout()
+
+    def on_submit(self, at: float | None = None) -> None:
+        self.timekeeper.open(at=at)
+
+    def on_stage(self, at: float | None = None) -> None:
+        self.timekeeper.stage(at=at)
+
+    def on_start(self, at: float | None = None) -> None:
+        self.timekeeper.start(at=at)
+
+    def on_stop(self, at: float | None = None) -> None:
+        self.timekeeper.stop(at=at)
+
+    def on_finish(self, at: float | None = None) -> None:
+        self.timekeeper.close(at=at)
+
+
+def inner_job(job: canary.BaseJob | FluxJob) -> canary.Job:
+    if isinstance(job, FluxJob):
+        return job.inner
+    return cast(canary.Job, job)
 
 
 class FluxReporterQueue:
@@ -28,7 +143,8 @@ class FluxReporterQueue:
     It only provides the queue-shaped methods/attributes the reporters expect.
     """
 
-    def __init__(self, jobs: list[canary.BaseJob]) -> None:
+    def __init__(self, jobs: list[FluxJob]) -> None:
+        self._jobs = list(jobs)
         self._jobs = list(jobs)
         self._pending_ids: set[str] = {job.id for job in jobs}
         self._submitted_ids: set[str] = set()
@@ -38,22 +154,22 @@ class FluxReporterQueue:
         # EventReporter.__init__ inspects executor.queue._heap to size columns.
         self._heap = [SimpleNamespace(job=job) for job in jobs]
 
-    def jobs(self) -> list[canary.BaseJob]:
+    def jobs(self) -> list[FluxJob]:
         return list(self._jobs)
 
-    def pending(self) -> list[canary.BaseJob]:
+    def pending(self) -> list[FluxJob]:
         return [job for job in self._jobs if job.id in self._pending_ids]
 
-    def mark_submitted(self, job: canary.BaseJob) -> None:
+    def mark_submitted(self, job: FluxJob) -> None:
         self._pending_ids.discard(job.id)
         self._submitted_ids.add(job.id)
 
-    def mark_started(self, job: canary.BaseJob) -> None:
+    def mark_started(self, job: FluxJob) -> None:
         self._pending_ids.discard(job.id)
         self._submitted_ids.discard(job.id)
         self._running_ids.add(job.id)
 
-    def mark_finished(self, job: canary.BaseJob) -> None:
+    def mark_finished(self, job: FluxJob) -> None:
         self._pending_ids.discard(job.id)
         self._submitted_ids.discard(job.id)
         self._running_ids.discard(job.id)
@@ -105,10 +221,29 @@ class FluxDirectExecutor:
     This reuses the reporter-facing shape from ResourceQueueExecutor.
     """
 
-    def __init__(self, runner: "canary.Runner") -> None:
+    def __init__(
+        self,
+        runner: RunnerLike,
+        *,
+        allocation_requested_at: float = -1.0,
+        allocation_granted_at: float = -1.0,
+    ) -> None:
         self.runner = runner
-        self.queue = FluxReporterQueue(runner.jobs)
+        self.allocation_requested_at = allocation_requested_at
+        self.allocation_granted_at = allocation_granted_at
 
+        self.flux_jobs: dict[str, FluxJob] = {
+            job.id: FluxJob(
+                inner=job,
+                allocation_requested_at=allocation_requested_at,
+                allocation_granted_at=allocation_granted_at,
+            )
+            for job in runner.jobs
+        }
+
+        self.queue = FluxReporterQueue(list(self.flux_jobs.values()))
+
+        # Scheduling and dependency readiness still use real Canary jobs.
         self.pending: dict[str, canary.Job] = {job.id: job for job in runner.jobs}
 
         self.submitted: dict[str, ExecutionSlot] = {}
@@ -209,11 +344,15 @@ class FluxDirectExecutor:
             self.pending.pop(job.id, None)
 
             self._qrank += 1
+
+            flux_job = self.flux_jobs[job.id]
             slot = ExecutionSlot(
-                job=job, qrank=self._qrank, qsize=self._qsize, worker_id=self._qrank
+                job=cast(Any, flux_job), qrank=self._qrank, qsize=self._qsize, worker_id=self._qrank
             )
 
             self.slots_by_id[job.id] = slot
+
+            self._mark_submitted(slot)
 
             try:
                 future = submitter.submit(self._hpc_jobspec(job), exclusive=False)
@@ -224,12 +363,11 @@ class FluxDirectExecutor:
                 continue
 
             self.futures[future] = job.id
-            self._mark_submitted(slot)
             submitted_any = True
 
             try:
                 future.add_jobstart_callback(
-                    lambda fut, job_id=job.id: self._mark_started_by_id(job_id)
+                    lambda fut, job_id=job.id: self._mark_flux_started_by_id(job_id)
                 )
             except AttributeError:
                 pass
@@ -312,64 +450,53 @@ class FluxDirectExecutor:
         return env
 
     def _mark_submitted(self, slot: ExecutionSlot) -> None:
-        job = slot.job
-        now = time.time()
-        # Restart Queued at actual Flux submission time.
-        slot.timer.start("Queued", at=now)
-        job.timekeeper.submitted = now
-        job.on_submitted()
+        flux_job = cast(FluxJob, slot.job)
+        job = flux_job.inner
+        jobspec_submitted_at = time.time()
+        slot.on_stage(at=jobspec_submitted_at)
         self.submitted[job.id] = slot
-        self.queue.mark_submitted(job)
+        self.queue.mark_submitted(flux_job)
         try:
+            job.add_measurement("flux_jobspec_submitted_at", jobspec_submitted_at)
             job.save()
         except Exception:
             logger.debug("Failed to save submitted job %s", job.id[:7], exc_info=True)
         self.notify_listeners("job_submitted", slot)
 
-    def _mark_started_by_id(self, job_id: str) -> None:
+    def _mark_flux_started_by_id(self, job_id: str) -> None:
         slot = self.slots_by_id.get(job_id)
         if slot is None:
             return
-        if job_id in self.running:
+        flux_job = cast(FluxJob, slot.job)
+        job = flux_job.inner
+        # Already marked as Flux-started.
+        if flux_job.timekeeper._started > 0:
             return
-
-        job = slot.job
         now = time.time()
-
-        # Queued -> Startup.
-        if slot.timer.current == "Queued":
-            slot.timer.transition("Startup", at=now)
-
-        # This is scheduler-running state, not actual command start.
-        job.on_started()
-
+        slot.on_start(at=now)
         self.submitted.pop(job.id, None)
         self.running[job.id] = slot
-        self.queue.mark_started(job)
-
+        self.queue.mark_started(flux_job)
         try:
+            job.add_measurement("flux_job_started_at", now)
             job.save()
         except Exception:
-            logger.debug("Failed to save started job %s", job.id[:7], exc_info=True)
-
+            logger.debug("Failed to save Flux-started job %s", job_id[:7], exc_info=True)
         self.notify_listeners("job_started", slot)
 
     def _mark_submission_failed(self, slot: ExecutionSlot, exc: BaseException) -> None:
-        job = slot.job
+        flux_job = cast(FluxJob, slot.job)
+        job = flux_job.inner
+
         now = time.time()
-
-        slot.timer.stop(at=now)
-        job.timekeeper.finished = now
-        if job.timekeeper.submitted < 0:
-            job.timekeeper.submitted = now
-
-        job.on_finished()
+        slot.on_finish(at=now)
+        job.on_finish(at=now)
         job.set_status(outcome="ERROR", reason=f"Flux submission failed: {exc!r}")
 
         self.submitted.pop(job.id, None)
         self.running.pop(job.id, None)
         self.finished[job.id] = slot
-        self.queue.mark_finished(job)
+        self.queue.mark_finished(flux_job)
 
         try:
             job.save()
@@ -452,21 +579,18 @@ class FluxDirectExecutor:
 
             self._qrank += 1
             now = time.time()
-            slot = ExecutionSlot(job=job, qrank=self._qrank, qsize=self._qsize, worker_id=-1)
-            slot.timer.stop(at=now)
 
-            if job.timekeeper.submitted < 0:
-                job.timekeeper.submitted = now
-            if job.timekeeper.started < 0:
-                job.timekeeper.started = now
-            if job.timekeeper.finished < 0:
-                job.timekeeper.finished = now
+            flux_job = self.flux_jobs[job.id]
+            slot = ExecutionSlot(
+                job=cast(Any, flux_job), qrank=self._qrank, qsize=self._qsize, worker_id=-1
+            )
 
-            job.on_finished()
+            slot.on_finish(at=now)
+            job.on_finish(at=now)
 
             self.slots_by_id[job.id] = slot
             self.finished[job.id] = slot
-            self.queue.mark_finished(job)
+            self.queue.mark_finished(flux_job)
 
             try:
                 job.save()
@@ -491,20 +615,21 @@ class FluxDirectExecutor:
             self.pending.pop(job.id, None)
 
             self._qrank += 1
-            slot = ExecutionSlot(job=job, qrank=self._qrank, qsize=self._qsize, worker_id=-1)
-            slot.timer.stop(at=now)
 
-            job.timekeeper.submitted = now
-            job.timekeeper.started = now
-            job.timekeeper.finished = now
-            job.on_finished()
+            flux_job = self.flux_jobs[job.id]
+            slot = ExecutionSlot(
+                job=cast(Any, flux_job), qrank=self._qrank, qsize=self._qsize, worker_id=-1
+            )
+
+            slot.on_finish(at=now)
+            job.on_finish(at=now)
             job.set_status(
                 outcome="BROKEN", reason="Job never became ready and no Flux jobs remain running"
             )
 
             self.slots_by_id[job.id] = slot
             self.finished[job.id] = slot
-            self.queue.mark_finished(job)
+            self.queue.mark_finished(flux_job)
 
             try:
                 job.save()
@@ -527,7 +652,8 @@ class FluxDirectExecutor:
         proc_info: dict[str, Any] | None = None,
     ) -> None:
         slot = self.slots_by_id[job_id]
-        job = slot.job
+        flux_job = cast(FluxJob, slot.job)
+        job = flux_job.inner
 
         # Pull authoritative status/state/timekeeper/measurements from testcase.lock
         # written by child `canary flux exec`.
@@ -536,15 +662,19 @@ class FluxDirectExecutor:
         except Exception:
             logger.debug("Failed to refresh finished job %s", job.id[:7], exc_info=True)
 
+        # If the inner Canary lifecycle finished before the Flux future was reaped,
+        # record that boundary before closing the FluxJob.
+        if job.timekeeper._finished > 0 and flux_job.timekeeper._stopped < 0:
+            slot.on_stop(at=job.timekeeper._finished)
+            self.notify_listeners("job_stopped", slot)
+
+        returned_at = time.time()
+        slot.on_finish(at=returned_at)
+
         # Attach Flux scheduler/process metadata, if available.
         if proc_info:
             try:
-                job.measurements.update({"flux": proc_info})
-            except Exception:
-                logger.debug("Failed to attach Flux proc_info to %s", job.id[:7], exc_info=True)
-
-            try:
-                self._write_proc_info(cast(canary.Job, job), proc_info)
+                self._write_proc_info(job, proc_info)
             except Exception:
                 logger.debug("Failed to write Flux proc_info for %s", job.id[:7], exc_info=True)
 
@@ -564,15 +694,14 @@ class FluxDirectExecutor:
 
         # Ensure phase is terminal in parent memory. This is what dependents'
         # Dependency.is_done() will see.
-        job.on_finished()
+        job.on_finish(at=returned_at)
 
-        self._sync_finished_slot_times_from_job(slot)
-        self._record_flux_timing(cast(canary.Job, job), slot)
+        self._record_flux_timing(job, flux_job, proc_info=proc_info)
 
         self.submitted.pop(job.id, None)
         self.running.pop(job.id, None)
         self.finished[job.id] = slot
-        self.queue.mark_finished(job)
+        self.queue.mark_finished(flux_job)
 
         try:
             job.save()
@@ -584,26 +713,84 @@ class FluxDirectExecutor:
         # result writes.
         self.notify_listeners("job_finished", slot)
 
-    def _record_flux_timing(self, job: canary.Job, slot: ExecutionSlot) -> None:
-        phases = ("Queued", "Startup", "Running", "Teardown")
+    def _record_flux_timing(
+        self, job: canary.Job, flux_job: FluxJob, *, proc_info: dict[str, Any] | None = None
+    ) -> None:
+        inner_tk = job.timekeeper
+        flux_tk = flux_job.timekeeper
 
-        timing = {
-            "phases": {name: slot.phase_time(name, live=False) for name in phases},
-            "elapsed": slot.total_time(phases, live=False),
+        allocation_requested_at = flux_job.allocation_requested_at
+        allocation_granted_at = flux_job.allocation_granted_at
+
+        jobspec_submitted_at = flux_tk._staged
+        flux_started_at = flux_tk._started
+        inner_opened_at = inner_tk._submitted
+        inner_started_at = inner_tk._started
+        inner_stopped_at = inner_tk._stopped
+        inner_finished_at = inner_tk._finished
+        flux_finished_at = flux_tk._finished
+
+        launch_seconds = duration(flux_started_at, inner_opened_at)
+        return_seconds = duration(inner_finished_at, flux_finished_at)
+        return_after_inner_stop_seconds = duration(inner_stopped_at, flux_finished_at)
+
+        flux: dict[str, Any] = {}
+
+        if proc_info:
+            flux["proc_info"] = proc_info
+
+        if flux_job.flux_jobid:
+            flux["jobid"] = flux_job.flux_jobid
+
+        flux["timing"] = {
+            "allocation": {
+                "requested_at": allocation_requested_at,
+                "granted_at": allocation_granted_at,
+                "wait_seconds": duration(allocation_requested_at, allocation_granted_at),
+            },
+            "jobspec_v1": {
+                "submitted_at": jobspec_submitted_at,
+                "flux_started_at": flux_started_at,
+                "inner_opened_at": inner_opened_at,
+                "inner_started_at": inner_started_at,
+                "inner_stopped_at": inner_stopped_at,
+                "inner_finished_at": inner_finished_at,
+                "flux_finished_at": flux_finished_at,
+            },
+            "durations": {
+                # Reporter-facing FluxJob phases
+                "allocation_request_to_jobspec_submit_seconds": flux_tk.pending(live=False),
+                "jobspec_submit_to_flux_start_seconds": flux_tk.staging(live=False),
+                "flux_start_to_inner_finish_seconds": flux_tk.running(live=False),
+                "inner_finish_to_flux_return_seconds": flux_tk.finishing(live=False),
+                "flux_jobspec_total_seconds": flux_tk.total(live=False),
+                # Split out allocation and pre-submit delay.
+                "allocation_wait_seconds": duration(allocation_requested_at, allocation_granted_at),
+                "allocation_granted_to_jobspec_submit_seconds": duration(
+                    allocation_granted_at, jobspec_submitted_at
+                ),
+                # Inner Canary lifecycle durations.
+                "flux_start_to_inner_open_seconds": duration(flux_started_at, inner_opened_at),
+                "flux_start_to_inner_start_seconds": duration(flux_started_at, inner_started_at),
+                "inner_total_seconds": inner_tk.total(live=False),
+                "inner_pending_seconds": inner_tk.pending(live=False),
+                "inner_staging_seconds": inner_tk.staging(live=False),
+                "inner_command_seconds": inner_tk.running(live=False),
+                "inner_finishing_seconds": inner_tk.finishing(live=False),
+                # Alternate return overhead boundary using inner command stop.
+                "inner_stop_to_flux_return_seconds": return_after_inner_stop_seconds,
+            },
         }
 
-        # Optional flat keys for compatibility/convenience.
-        timing.update(
-            {
-                "queue_time": slot.phase_time("Queued", live=False),
-                "startup_time": slot.phase_time("Startup", live=False),
-                "execution_time": slot.phase_time("Running", live=False),
-                "teardown_time": slot.phase_time("Teardown", live=False),
-                "elapsed_time": slot.total_time(phases, live=False),
-            }
-        )
+        flux["overhead"] = {
+            # Primary Flux JobSpecV1 overheads outside the inner Canary lifecycle.
+            "launch_seconds": launch_seconds,
+            "return_seconds": return_seconds,
+            "return_after_inner_stop_seconds": return_after_inner_stop_seconds,
+            "total_external_seconds": sum_positive(launch_seconds, return_seconds),
+        }
 
-        job.measurements.update({"flux_timing": timing})
+        job.measurements.update({"flux": flux})
 
     def _record_flux_jobid(self, job_id: str, flux_jobid: str) -> None:
         """
@@ -619,15 +806,12 @@ class FluxDirectExecutor:
         if not flux_jobid or flux_jobid == "unset":
             return
 
-        job = slot.job
+        flux_job = cast(FluxJob, slot.job)
+        job = flux_job.inner
+        flux_job.flux_jobid = flux_jobid
 
         try:
             job.add_measurement("flux_jobid", flux_jobid)
-        except Exception:
-            logger.debug("Failed to record Flux jobid for %s", job_id[:7], exc_info=True)
-            return
-
-        try:
             job.save()
         except Exception:
             logger.debug("Failed to save Flux jobid for %s", job_id[:7], exc_info=True)
@@ -651,21 +835,18 @@ class FluxDirectExecutor:
 
     def _refresh_running_jobs(self) -> None:
         for slot in list(self.running.values()):
-            job = slot.job
+            flux_job = cast(FluxJob, slot.job)
+            job = flux_job.inner
 
             try:
                 job.refresh()
             except Exception:
                 logger.debug("Failed to refresh running job %s", job.id[:7], exc_info=True)
-            else:
-                tk = job.timekeeper
-                # Startup -> Running when the child command starts.
-                if tk.started > 0 and slot.timer.current in ("Queued", "Startup"):
-                    slot.timer.transition("Running", at=tk.started)
-                # Running -> Teardown if the child has already finished but the
-                # future has not yet been reaped by the parent.
-                if tk.finished > 0 and slot.timer.current == "Running":
-                    slot.timer.transition("Teardown", at=tk.finished)
+                continue
+
+            if job.timekeeper._finished > 0 and flux_job.timekeeper._stopped < 0:
+                slot.on_stop(at=job.timekeeper._finished)
+                self.notify_listeners("job_stopped", slot)
 
     def _proc_info_failure_reason(self, proc_info: dict[str, Any] | None) -> str | None:
         if not proc_info:
@@ -698,15 +879,6 @@ class FluxDirectExecutor:
 
         return None
 
-    def _sync_finished_slot_times_from_job(self, slot: ExecutionSlot) -> None:
-        job = slot.job
-        tk = job.timekeeper
-        if tk.started > 0 and slot.timer.current in ("Queued", "Startup"):
-            slot.timer.transition("Running", at=tk.started)
-        if tk.finished > 0 and slot.timer.current == "Running":
-            slot.timer.transition("Teardown", at=tk.finished)
-        slot.timer.stop(at=time.time())
-
     def _sync_view_on_finish(self, event: str, slot: ExecutionSlot) -> None:
         if event != "job_finished":
             return
@@ -715,7 +887,22 @@ class FluxDirectExecutor:
         if view_manager is None:
             return
 
+        job = inner_job(slot.job)
+
         try:
-            view_manager.sync(cast(canary.Job, slot.job))
+            view_manager.sync(job)
         except Exception:
-            logger.exception("Failed to sync Flux job %s to results view", slot.job.id[:7])
+            logger.exception("Failed to sync Flux job %s to results view", job.id[:7])
+
+
+def duration(start: float, stop: float) -> float:
+    if start <= 0 or stop <= 0:
+        return -1.0
+    return max(0.0, stop - start)
+
+
+def sum_positive(*values: float) -> float:
+    good = [value for value in values if value >= 0.0]
+    if not good:
+        return -1.0
+    return sum(good)

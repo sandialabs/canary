@@ -61,7 +61,7 @@ class ReporterExecutorProtocol(Protocol):
 
 class Reporter:
     metadata_columns = {"Job", "ID", "Status", "Rank", "Details"}
-    total_time_columns = {"Elapsed", "Time"}
+    timing_columns = {"Pending", "Staging", "Queued", "Running", "Finishing", "Elapsed", "Total"}
 
     def __init__(self, executor: ReporterExecutorProtocol) -> None:
         self.executor = executor
@@ -72,100 +72,36 @@ class Reporter:
         if "live_columns" in style:
             self.live_columns = tuple(col.strip() for col in style["live_columns"].split(","))
         else:
-            self.live_columns = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Rank")
+            self.live_columns = ("Job", "ID", "Status", "Running", "Rank")
         self.validate_columns(self.live_columns)
 
         self.final_columns: tuple[str, ...]
         if "final_columns" in style:
             self.final_columns = tuple(col.strip() for col in style["final_columns"].split(","))
         else:
-            self.final_columns = ("Job", "ID", "Status", "Queued", "Running", "Elapsed", "Details")
+            self.final_columns = ("Job", "ID", "Status", "Total", "Details")
         self.validate_columns(self.final_columns)
-
-    def timing_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
-        """
-        Return configured timing columns.
-
-        Any non-metadata column is considered a timer phase column, except
-        Elapsed, which is computed as the total of the other timing columns.
-        """
-        return tuple(col for col in columns if col not in self.metadata_columns)
-
-    def elapsed_phase_columns(self, columns: tuple[str, ...]) -> tuple[str, ...]:
-        """
-        Return timing phase columns included in Elapsed.
-
-        Elapsed is not itself a phase; it is the total of the other timing
-        columns in the configured column set.
-        """
-        return tuple(
-            col for col in self.timing_columns(columns) if col not in self.total_time_columns
-        )
-
-    def slot_time_for_column(
-        self, slot: "ExecutionSlot", column: str, columns: tuple[str, ...]
-    ) -> float:
-        if column in self.total_time_columns:
-            phases = tuple(
-                col for col in self.timing_columns(columns) if col not in self.total_time_columns
-            )
-            return slot.total_time(phases or None)
-
-        return slot.phase_time(column)
 
     def job_time_for_column(self, job: BaseJob, column: str) -> float:
         """
         Return persisted timing for a finished job.
 
-        This reads job.measurements["timing"] or job.measurements["flux_timing"]
-        if available. Falls back to job.timekeeper for Running/Elapsed.
         """
-        # Prefer a generic timing measurement if present.
-        value = self._job_measurement(job, "timing", column)
-        if isinstance(value, (int, float)):
-            return float(value)
-
-        # Also support lower-case/snake-case keys from existing flux_timing.
-        keymap = {
-            "Queued": "queue_time",
-            "Startup": "startup_time",
-            "Running": "execution_time",
-            "Teardown": "teardown_time",
-            "Elapsed": "elapsed_time",
-        }
-        if column in keymap:
-            value = self._job_measurement(job, "flux_timing", keymap[column])
-            if isinstance(value, (int, float)):
-                return float(value)
-
-        if column == "Running":
-            return job.timekeeper.running()
-
-        if column == "Queued":
-            return job.timekeeper.queued()
-
-        if column in self.total_time_columns:
-            return job.timekeeper.total()
-
+        tk = job.timekeeper
+        match column:
+            case "Pending" | "Queued":
+                return tk.pending(live=True)
+            case "Staging" | "Startup":
+                return tk.staging(live=True)
+            case "Running":
+                return tk.running(live=True)
+            case "Finishing" | "Teardown":
+                return tk.finishing(live=True)
+            case "Total":
+                return tk.total(live=True)
+            case "Elapsed":
+                return tk.elapsed(live=True)
         return -1.0
-
-    def _job_measurement(self, job: BaseJob, *path: str) -> Any:
-        measurements = getattr(job, "measurements", None)
-        if measurements is None:
-            return None
-
-        data: Any
-        if hasattr(measurements, "data"):
-            data = measurements.data
-        else:
-            data = measurements
-
-        for key in path:
-            if not isinstance(data, dict):
-                return None
-            data = data.get(key)
-
-        return data
 
     def row_values_for_slot(
         self, slot: "ExecutionSlot", columns: tuple[str, ...], *, status: str, details: str = ""
@@ -178,8 +114,8 @@ class Reporter:
             "details": details,
         }
 
-        for column in self.timing_columns(columns):
-            values[column.lower()] = fmt_secs(self.slot_time_for_column(slot, column, columns))
+        for column in self.timing_columns:
+            values[column.lower()] = fmt_secs(self.job_time_for_column(slot.job, column))
 
         return values
 
@@ -194,7 +130,7 @@ class Reporter:
             "details": details if details is not None else (job.status.reason or ""),
         }
 
-        for column in self.timing_columns(columns):
+        for column in self.timing_columns:
             values[column.lower()] = fmt_secs(self.job_time_for_column(job, column))
 
         return values
@@ -208,7 +144,7 @@ class Reporter:
             "details": "",
         }
 
-        for column in self.timing_columns(columns):
+        for column in self.timing_columns:
             values[column.lower()] = "NA"
 
         return values
@@ -225,7 +161,7 @@ class Reporter:
         for col in columns:
             if col in self.metadata_columns:
                 continue
-            if col in self.total_time_columns:
+            if col in self.timing_columns:
                 continue
             # Any other valid identifier-like label is treated as a timing phase.
             normalized = col.replace("_", "").replace("-", "")
@@ -240,7 +176,7 @@ class Reporter:
                 kwds["overflow"] = "fold"
             elif name == "Details":
                 kwds["overflow"] = "ellipsis"
-            elif name in self.timing_columns(columns):
+            elif name in self.timing_columns:
                 kwds["justify"] = "right"
             elif name == "Rank":
                 kwds["justify"] = "right"
@@ -346,9 +282,9 @@ class LiveReporter(Reporter):
         max_finished = 5  # hard cap
 
         recent_finished = [
-            s for s in xtor.finished.values() if now - s.finished_at() < decay_window
+            s for s in xtor.finished.values() if now - s.job.timekeeper._stopped < decay_window
         ]
-        recent_finished.sort(key=lambda s: s.finished_at(), reverse=True)
+        recent_finished.sort(key=lambda s: s.job.timekeeper._stopped, reverse=True)
         for slot in recent_finished[:max_finished]:
             if rows_used >= max_rows:
                 break
@@ -365,7 +301,9 @@ class LiveReporter(Reporter):
         # ---------------------------------------------------------
         # 2) RUNNING (longest-running first for stability)
         # ---------------------------------------------------------
-        running = sorted(xtor.running.values(), key=lambda s: s.total_time(), reverse=True)
+        running = sorted(
+            xtor.running.values(), key=lambda s: s.job.timekeeper.total(), reverse=True
+        )
         for slot in running:
             if rows_used >= max_rows:
                 break
@@ -428,7 +366,7 @@ class EventReporter(Reporter):
                 self.table.add_column(col, width=15)
             elif col == "Rank":
                 self.table.add_column(col, width=8, align="right")
-            elif col in self.timing_columns(self.event_columns):
+            elif col in self.timing_columns:
                 self.table.add_column(col, width=8, align="right")
             else:
                 self.table.add_column(col, width=10)
@@ -446,8 +384,12 @@ class EventReporter(Reporter):
         match event:
             case "job_submitted":
                 self.on_job_submit(args[0])
+            case "job_staged":
+                self.on_job_stage(args[0])
             case "job_started":
                 self.on_job_start(args[0])
+            case "job_stopped":
+                self.on_job_stop(args[0])
             case "job_finished":
                 self.on_job_finish(args[0])
             case _:
@@ -462,8 +404,16 @@ class EventReporter(Reporter):
         text = self.render_event_row(slot, status="[cyan]SUBMITTED[/]")
         logger.info(text.markup, extra={"prefix": ""})
 
+    def on_job_stage(self, slot: "ExecutionSlot") -> None:
+        text = self.render_event_row(slot, status="[blue]STAGED[/]")
+        logger.info(text.markup, extra={"prefix": ""})
+
     def on_job_start(self, slot: "ExecutionSlot") -> None:
         text = self.render_event_row(slot, status="[blue]STARTED[/]")
+        logger.info(text.markup, extra={"prefix": ""})
+
+    def on_job_stop(self, slot: "ExecutionSlot") -> None:
+        text = self.render_event_row(slot, status="[blue]STOPPED[/]")
         logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_finish(self, slot: "ExecutionSlot") -> None:

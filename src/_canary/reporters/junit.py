@@ -204,7 +204,7 @@ class JunitDocument(xdom.Document):
         testcase = self.create_element("testcase")
         testcase.setAttribute("name", job.display_name())
         testcase.setAttribute("classname", get_classname(job))
-        testcase.setAttribute("time", str(job.timekeeper.duration()))
+        testcase.setAttribute("time", str(job.timekeeper.running()))
         testcase.setAttribute("file", getattr(job, "relpath", str(job.spec.file_path)))
 
         if job.status.is_failure():
@@ -248,14 +248,14 @@ def gather_statistics(jobs: list["Job"]) -> SimpleNamespace:
             stats.num_error += 1
 
         if job.state.is_done():
-            t = job.timekeeper.started
+            t = job.timekeeper._started
             if started_on is None:
                 if t > 0:
                     started_on = datetime.fromtimestamp(t)
             elif t > 0 and datetime.fromtimestamp(t) < started_on:
                 started_on = datetime.fromtimestamp(t)
 
-            t = job.timekeeper.finished
+            t = job.timekeeper._stopped
             if finished_on is None:
                 if t > 0:
                     finished_on = datetime.fromtimestamp(t)

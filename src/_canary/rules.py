@@ -393,7 +393,7 @@ class RerunRule(RuntimeRule):
         elif self.strategy == "all":
             return RuleOutcome(ok=True)
         elif self.strategy == "changed":
-            t = job.timekeeper.started
+            t = job.timekeeper._started
             if t < 0 or job.spec.file.stat().st_mtime > t:
                 return RuleOutcome(ok=True)
             return RuleOutcome(ok=False, reason="job spec has not changed since last run")

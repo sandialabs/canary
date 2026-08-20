@@ -24,7 +24,6 @@ from .queue import Empty
 from .queue import ResourceQueue
 from .reporter import EventReporter
 from .reporter import LiveReporter
-from .timekeeper import PhaseTimer
 from .util import logging
 from .util import multiprocessing as mp
 from .util.misc import boolean
@@ -32,7 +31,7 @@ from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 
-EventTypes = Literal["job_submitted", "job_started", "job_finished"]
+EventTypes = Literal["job_submitted", "job_staged", "job_started", "job_stopped", "job_finished"]
 
 
 @dataclasses.dataclass
@@ -41,51 +40,21 @@ class ExecutionSlot:
     qrank: int
     qsize: int
     worker_id: int
-    timer: PhaseTimer = dataclasses.field(default_factory=PhaseTimer)
 
-    def __post_init__(self) -> None:
-        # Default local-executor lifecycle:
-        #
-        #   Queued  = slot creation/submission -> job started
-        #   Running = job started -> job finished
-        #
-        # Other executors may replace or extend the timer phases.
-        self.timer.start("Queued")
+    def on_submit(self, at: float | None = None) -> None:
+        self.job.on_submit(at=at)
 
-    def on_submitted(self, at: float | None = None) -> None:
-        t = time.time() if at is None else float(at)
-        self.job.timekeeper.submitted = t
-        self.job.on_submitted()
+    def on_stage(self, at: float | None = None) -> None:
+        self.job.on_stage(at=at)
 
-        # Keep Queued anchored at the first meaningful submit time if the slot
-        # was created before actual submission.
-        if self.timer.current is None:
-            self.timer.start("Queued", at=t)
+    def on_start(self, at: float | None = None) -> None:
+        self.job.on_start(at=at)
 
-    def on_started(self, at: float | None = None) -> None:
-        t = time.time() if at is None else float(at)
-        self.job.timekeeper.started = t
-        self.job.on_started()
-        self.timer.transition("Running", at=t)
+    def on_stop(self, at: float | None = None) -> None:
+        self.job.on_stop(at=at)
 
-    def on_finished(self, at: float | None = None) -> None:
-        t = time.time() if at is None else float(at)
-        self.job.timekeeper.finished = t
-        self.job.on_finished()
-        self.timer.stop(at=t)
-
-    def phase_time(self, name: str, *, live: bool = True) -> float:
-        return self.timer.value(name, live=live)
-
-    def total_time(
-        self, names: list[str] | tuple[str, ...] | None = None, *, live: bool = True
-    ) -> float:
-        return self.timer.total(names, live=live)
-
-    def finished_at(self) -> float:
-        if self.timer.current is None and self.timer.stamp > 0:
-            return self.timer.stamp
-        return -1.0
+    def on_finish(self, at: float | None = None) -> None:
+        self.job.on_finish(at=at)
 
 
 class JobFunctor:
@@ -584,14 +553,24 @@ class ResourceQueueExecutor:
 
         if event := payload.get("event"):
             if event == "job_submitted":
-                slot.on_submitted(float(payload["timestamp"]))
+                slot.on_submit(float(payload["timestamp"]))
+                self.notify_listeners(event, slot)
+                return
+
+            if event == "job_staged":
+                slot.on_stage(float(payload["timestamp"]))
                 self.notify_listeners(event, slot)
                 return
 
             if event == "job_started":
-                slot.on_started(float(payload["timestamp"]))
+                slot.on_start(float(payload["timestamp"]))
                 self.running[job_id] = slot
                 self.submitted.pop(job_id, None)
+                self.notify_listeners(event, slot)
+                return
+
+            if event == "job_stopped":
+                slot.on_stop(float(payload["timestamp"]))
                 self.notify_listeners(event, slot)
                 return
 
@@ -619,7 +598,7 @@ class ResourceQueueExecutor:
                         logger.debug("job.save failed: %s", e)
                 finally:
                     finished_at = float(payload.get("timestamp", time.time()))
-                    slot.on_finished(finished_at)
+                    slot.on_finish(finished_at)
                     self.finished[job_id] = slot
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
@@ -685,14 +664,7 @@ class ResourceQueueExecutor:
             slot.job.refresh()
         except Exception as e:
             logger.debug("job.refresh failed during abnormal finish: %s", e)
-        if slot.job.timekeeper.submitted < 0:
-            slot.on_submitted(now)
-
-        if slot.job.timekeeper.started < 0:
-            slot.on_started(
-                slot.job.timekeeper.submitted if slot.job.timekeeper.submitted > 0 else now
-            )
-        slot.on_finished(now)
+        slot.on_finish(now)
         slot.job.set_status(outcome=outcome, reason=reason, code=code)
         try:
             slot.job.save()
@@ -843,17 +815,8 @@ class ResourceQueueExecutor:
             slot.job.refresh()
         except Exception as e:
             logger.debug("job.refresh failed during abnormal close: %s", e)
-
-        if slot.job.timekeeper.submitted < 0:
-            slot.on_submitted(now)
-
-        if slot.job.timekeeper.started < 0:
-            start = slot.job.timekeeper.submitted if slot.job.timekeeper.submitted > 0 else now
-            slot.on_started(start)
-
-        slot.on_finished(now)
+        slot.on_finish(now)
         slot.job.set_status(outcome=outcome, reason=reason, code=code)
-
         try:
             slot.job.save()
         except Exception as e:

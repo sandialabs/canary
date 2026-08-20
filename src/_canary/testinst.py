@@ -151,8 +151,8 @@ def from_job(job: "Job") -> TestInstance:
     sources: dict[str, list[tuple[str, str | None]]] = {}
     for asset in job.spec.assets:
         sources.setdefault(asset.action, []).append((str(asset.src), asset.dst))
-    start = job.timekeeper.started
-    stop = job.timekeeper.finished
+    start = job.timekeeper._started
+    stop = job.timekeeper._stopped
     instance = cls(
         file_root=str(job.spec.file_root),
         file_path=str(job.spec.file_path),
