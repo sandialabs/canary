@@ -244,14 +244,16 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             batch.fail_preflight(reason, child_reasons=child_reasons)
             return 1
 
-        tk = batch.timekeeper
-        submitted_at = tk._submitted if tk._submitted > 0 else time.time()
-        queue_deadline = submitted_at + batch.queue_timeout
-
         run_timeout = float(batch.timeout * batch.timeout_multiplier)
-
         with batch.workspace.enter():
             future = self.submit(batch)
+
+            staged_at = time.time()
+            batch.on_stage(at=staged_at)
+            queue.put({"event": "job_staged", "timestamp": staged_at})
+
+            queue_deadline = staged_at + batch.queue_timeout
+
             future.add_jobstart_callback(set_starttime)
             future.add_jobid_callback(set_jobid)
             future.add_done_callback(write_procinfo)

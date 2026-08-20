@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
-from _canary.config.argparsing import append_option_help
 from _canary.hookspec import hookimpl
 from _canary.util.rich import bold
 from _canary.util.time import time_in_seconds
@@ -95,7 +94,7 @@ class FluxRun:
             help="Additional argument passed to inner Flux/hpc_connect job submission; may be repeated",
         )
         group.add_argument(
-            "--allocation-arg",
+            "--alloc-arg",
             dest="flux_alloc_args",
             action="append",
             default=None,
@@ -106,16 +105,20 @@ class FluxRun:
         from _canary.plugins.subcommands.run import Run
 
         Run().setup_parser(parser)
-        append_option_help(
-            parser,
+
+        parser.update_argument(
+            "--workers",
+            help="Maximum number concurrent jobs to submit to the flux allocation [default: None]",
+        )
+        parser.update_argument(
             "--timeout",
-            f"""\n
+            type=str,
+            help=f"""%(orig)s\n\n\n
 Flux timeout types:\n\n
 • type={bold("queue")}, maximum time to wait for the Flux allocation or submitted Flux job to
       start before treating it as timed out.\n\n
-• type={bold("allocation")}, walltime requested for the outer Flux allocation.\n\n
+• type={bold("allocation")}, walltime requested for the outer Flux allocation.
 """,
-            marker="Flux timeout types:",
         )
 
     def execute(self, args: argparse.Namespace) -> int:
@@ -127,12 +130,6 @@ Flux timeout types:\n\n
             allocation_queue_timeout(),
             allocation_time_limit(),
         )
-        console_style = canary.config.getoption("console_style") or {}
-        if "live_columns" not in console_style:
-            console_style["live_columns"] = (
-                "Job,ID,Status,Queued,Startup,Running,Teardown,Elapsed,Rank"
-            )
-        setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
 
@@ -232,6 +229,7 @@ def canary_runtests(runner: "Runner") -> bool | None:
 
             executor = FluxDirectExecutor(
                 runner,
+                time_limit=time_limit,
                 allocation_requested_at=allocation_requested_at,
                 allocation_granted_at=allocation_granted_at,
             )

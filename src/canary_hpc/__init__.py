@@ -12,7 +12,6 @@ from typing import Any
 import hpc_connect
 
 import canary
-from _canary.config.argparsing import append_option_help
 from _canary.plugins.subcommands.run import Run
 from _canary.util.rich import bold
 
@@ -75,14 +74,12 @@ class HPC(canary.CanarySubcommand):
 
         p = subparsers.add_parser("run", help="Batch jobs and submit to HPC scheduler")
         Run().setup_parser(p)
-        append_option_help(
-            p,
+        p.update_argument(
             "--timeout",
-            f"""\n
+            help=f"""\n
 Slurm timeout types:\n\n
 • type={bold("queue")}, maximum time to wait in the slurm queue before treating it as timed out.
 """,
-            marker="Flux timeout types:",
         )
         group = p.add_argument_group(title="Batched execution options")
         CanaryHPCConductor.setup_parser(group)

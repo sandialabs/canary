@@ -59,10 +59,6 @@ class FluxJob:
     def __getattr__(self, name: str) -> Any:
         return getattr(self.inner, name)
 
-    def __post_init__(self):
-        if self.allocation_granted_at > 0:
-            self.on_submit(at=self.allocation_granted_at)
-
     @property
     def id(self) -> str:
         return self.inner.id
@@ -225,10 +221,12 @@ class FluxDirectExecutor:
         self,
         runner: RunnerLike,
         *,
+        time_limit: float = -1.0,
         allocation_requested_at: float = -1.0,
         allocation_granted_at: float = -1.0,
     ) -> None:
         self.runner = runner
+        self.time_limit = time_limit
         self.allocation_requested_at = allocation_requested_at
         self.allocation_granted_at = allocation_granted_at
 
@@ -257,7 +255,7 @@ class FluxDirectExecutor:
         self.slots_by_id: dict[str, ExecutionSlot] = {}
 
         self.live_reporting = self._should_live_report()
-        self.workers = int(canary.config.getoption("workers") or -1)
+        self.max_concurrent_jobs = int(canary.config.getoption("workers") or -1)
 
         self._qrank = 0
         self._qsize = len(runner.jobs)
@@ -284,12 +282,18 @@ class FluxDirectExecutor:
 
         self.started_on = time.time()
 
-        reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
-
+        reporter = (
+            LiveReporter(self, live_columns="jixpsrfew")
+            if self.live_reporting
+            else EventReporter(self)
+        )
         self.add_listener(self._sync_view_on_finish)
         backend_name = canary.config.getoption("flux_backend") or "flux"
         backend = hpc_connect.get_backend(backend_name)
         submitter = backend.submission_manager()
+
+        for flux_job in self.flux_jobs.values():
+            flux_job.on_submit()
 
         try:
             with reporter:
@@ -308,6 +312,9 @@ class FluxDirectExecutor:
                             break
 
                         time.sleep(0.25)
+
+                    if (self.time_limit > 0) and (self.started_on + self.time_limit < time.time()):
+                        raise TimeoutError("Session time has expired")
 
         finally:
             self._cancel_remaining()
@@ -386,9 +393,9 @@ class FluxDirectExecutor:
         return root / job.id
 
     def _can_submit_more(self) -> bool:
-        if self.workers <= 0:
+        if self.max_concurrent_jobs <= 0:
             return True
-        return len(self.futures) < self.workers
+        return len(self.futures) < self.max_concurrent_jobs
 
     def _hpc_jobspec(self, job: canary.Job) -> Any:
         import hpc_connect

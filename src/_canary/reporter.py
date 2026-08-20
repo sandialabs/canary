@@ -63,14 +63,20 @@ class Reporter:
     metadata_columns = {"Job", "ID", "Status", "Rank", "Details"}
     timing_columns = {"Pending", "Staging", "Queued", "Running", "Finishing", "Elapsed", "Total"}
 
-    def __init__(self, executor: ReporterExecutorProtocol) -> None:
+    def __init__(
+        self, executor: ReporterExecutorProtocol, live_columns: str | Sequence[str] | None = None
+    ) -> None:
         self.executor = executor
         style = config.getoption("console_style") or {}
         self.namefmt = style.get("name", "short")
 
         self.live_columns: tuple[str, ...]
-        if "live_columns" in style:
-            self.live_columns = tuple(col.strip() for col in style["live_columns"].split(","))
+        if live_columns is not None:
+            self.live_columns = self.expand_column_name_shortcuts(list(live_columns))
+        elif "live_columns" in style:
+            self.live_columns = self.expand_column_name_shortcuts(
+                [col.strip() for col in style["live_columns"].split(",")]
+            )
         else:
             self.live_columns = ("Job", "ID", "Status", "Running", "Rank")
         self.validate_columns(self.live_columns)
@@ -208,10 +214,42 @@ class Reporter:
             return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
         return Group(table, footer)
 
+    def expand_column_name_shortcuts(self, args: Sequence[str]) -> tuple[str, ...]:
+        column_names: list[str] = []
+        for arg in args:
+            match arg.lower():
+                case "j" | "job":
+                    column_names.append("Job")
+                case "i" | "id":
+                    column_names.append("ID")
+                case "x" | "status":
+                    column_names.append("Status")
+                case "w" | "rank":
+                    column_names.append("Rank")
+                case "d" | "details":
+                    column_names.append("Details")
+                case "p" | "pending":
+                    column_names.append("Pending")
+                case "s" | "staging":
+                    column_names.append("Staging")
+                case "q" | "queued":
+                    column_names.append("Queued")
+                case "r" | "running":
+                    column_names.append("Running")
+                case "f" | "finishing":
+                    column_names.append("Finishing")
+                case "e" | "elapsed":
+                    column_names.append("Elapsed")
+                case "t" | "total":
+                    column_names.append("Total")
+                case _:
+                    raise ValueError(f"Unknown column name: {arg}")
+        return tuple(column_names)
+
 
 class LiveReporter(Reporter):
-    def __init__(self, executor: ReporterExecutorProtocol) -> None:
-        super().__init__(executor)
+    def __init__(self, executor: ReporterExecutorProtocol, **kwargs: Any) -> None:
+        super().__init__(executor, **kwargs)
         console = Console(file=sys.stdout, force_terminal=True)
         self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
         self._filter = logging.MuteConsoleFilter()

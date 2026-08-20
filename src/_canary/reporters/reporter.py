@@ -16,7 +16,7 @@ def canary_addoption(parser: "Parser") -> None:
         action="append",
         command=("run",),
         choices={"html", "markdown", "junit", "json", "none"},
-        help="Write final report in this format [default: html]",
+        help="Write final report in this format [default: none]",
     )
 
 
@@ -36,7 +36,8 @@ def enabled(report_type: str) -> bool:
     reports = config.getoption("report")
     if reports is not None:
         return bool(reports) and "none" not in reports and report_type in reports
-    return not running_in_ci() and report_type == "html"
+    return False
+    # return not running_in_ci() and report_type == "html"
 
 
 def running_in_ci() -> bool:

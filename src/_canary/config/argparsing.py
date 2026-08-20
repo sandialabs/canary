@@ -250,6 +250,18 @@ class Parser(argparse.ArgumentParser):
                 raise KeyError(f"Unknown subcommand {name}. Available: {choices}") from e
         return current
 
+    def update_argument(self, option: str, **kwargs: Any) -> None:
+        action = find_option_action(self, option)
+        if action is None:
+            raise ValueError(f"Could not find parser option {option!r}")
+        for key, val in kwargs.items():
+            if not hasattr(action, key):
+                continue
+            orig = getattr(action, key)
+            if isinstance(orig, str) and isinstance(val, str):
+                val = val % {"orig": orig}
+            setattr(action, key, val)
+
     @staticmethod
     def add_main_epilog(parser: "Parser") -> None:
         epilog = """\
@@ -462,27 +474,6 @@ def find_option_action(parser: argparse.ArgumentParser, option: str) -> argparse
         if option in action.option_strings:
             return action
     return None
-
-
-def append_option_help(
-    parser: argparse.ArgumentParser, option: str, extra: str, *, marker: str | None = None
-) -> None:
-    action = find_option_action(parser, option)
-
-    if action is None:
-        raise ValueError(f"Could not find parser option {option!r}")
-
-    if action.help is argparse.SUPPRESS:
-        return
-
-    marker = marker or extra.strip()
-
-    # Avoid duplicate appends if setup_parser is called more than once.
-    if isinstance(action.help, str) and marker in action.help:
-        return
-
-    base = "" if action.help is None else str(action.help).rstrip()
-    action.help = f"{base}\n\n{extra.strip()}"
 
 
 class CanarySubParsersAction(argparse._SubParsersAction):
