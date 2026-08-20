@@ -306,14 +306,15 @@ class TestBatch(BaseJob):
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
-            submitted_at = time.time()
-            self.timekeeper.submitted = submitted_at
-            queue.put({"event": "job_submitted", "timestamp": submitted_at})
+            now = time.time()
+            self.on_submit(at=now)
+            queue.put({"event": "job_submitted", "timestamp": now})
             try:
                 rc = runner.execute(self, queue=queue)
             finally:
-                if self.timekeeper.finished < 0:
-                    self.timekeeper.finished = time.time()
+                now = time.time()
+                self.timekeeper.maybe_close(at=now)
+                queue.put({"event": "job_finished", "timestamp": now})
         except Exception as e:
             logger.exception(f"Failed to run batch {self}")
             failure_reason = f"Batch execution failed: {e}"
@@ -345,6 +346,8 @@ class TestBatch(BaseJob):
                 job.status = Status.BROKEN(reason=f"{job.state=} after execution of batch")
             elif job.state.is_running():
                 job.status = Status.CANCELLED(reason=f"{job.state=} after execution of batch")
+            elif job.state.is_finishing():
+                job.status = Status.CANCELLED(reason=f"{job.state=} after execution of batch")
             data[job.id] = {"status": job.status, "timekeeper": job.timekeeper, "state": job.state}
         return data
 
@@ -363,9 +366,7 @@ class TestBatch(BaseJob):
             if st := mydata.get("state"):
                 self.state.phase = st.phase
             if timekeeper := mydata.get("timekeeper"):
-                self.timekeeper.submitted = timekeeper.submitted
-                self.timekeeper.started = timekeeper.started
-                self.timekeeper.finished = timekeeper.finished
+                self.timekeeper.sync(timekeeper)
         for job in self.jobs:
             if d := data.get(job.id):
                 job.setstate(d)
@@ -373,11 +374,7 @@ class TestBatch(BaseJob):
 
     def fail_preflight(self, reason: str, *, child_reasons: dict[str, str] | None = None) -> None:
         now = time.time()
-        if self.timekeeper.submitted < 0:
-            self.timekeeper.submitted = now
-        if self.timekeeper.started < 0:
-            self.timekeeper.started = now
-        self.timekeeper.finished = now
+        self.timekeeper.close(at=now)
         self.state.phase = JobPhase.DONE
         self.status.set_base(outcome="FAILED", reason=reason)
         child_reasons = child_reasons or {}
@@ -389,12 +386,7 @@ class TestBatch(BaseJob):
                 job_reason = f"Batch was not submitted because preflight failed: {reason}"
             job.state.phase = JobPhase.DONE
             job.set_status(outcome="BROKEN", reason=job_reason)
-            if job.timekeeper.submitted < 0:
-                job.timekeeper.submitted = now
-            if job.timekeeper.started < 0:
-                job.timekeeper.started = now
-            if job.timekeeper.finished < 0:
-                job.timekeeper.finished = now
+            job.timekeeper.close(at=now)
             try:
                 job.save()
             except Exception:
@@ -410,10 +402,6 @@ class TestBatch(BaseJob):
     def refresh(self) -> None:
         for job in self:
             job.refresh()
-            if self.timekeeper.submitted > 0:
-                job.timekeeper.submitted = self.timekeeper.submitted
-            if job.timekeeper.started > 0 and job.timekeeper.started < self.timekeeper.started:
-                job.timekeeper.started = self.timekeeper.started
         self.finalize_status_from_child_jobs()
 
     def finalize_status_from_child_jobs(self) -> None:
@@ -433,14 +421,7 @@ class TestBatch(BaseJob):
                 job.set_status(
                     outcome="BROKEN", reason="Batch finished before job produced a final result"
                 )
-                if job.timekeeper.submitted < 0:
-                    job.timekeeper.submitted = (
-                        self.timekeeper.submitted if self.timekeeper.submitted > 0 else now
-                    )
-                if job.timekeeper.started < 0:
-                    job.timekeeper.started = now
-                if job.timekeeper.finished < 0:
-                    job.timekeeper.finished = now
+                job.timekeeper.maybe_close(at=now)
                 try:
                     job.save()
                 except Exception:
@@ -475,14 +456,14 @@ class TestBatch(BaseJob):
         """Return total, running, and time in queue"""
 
         def started(job):
-            t = job.timekeeper.started
+            t = job.timekeeper._started
             return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
         def finished(job):
-            t = job.timekeeper.finished
+            t = job.timekeeper._finished
             return None if t < 0 else datetime.datetime.fromtimestamp(t)
 
-        total_duration = self.timekeeper.duration()
+        total_duration = self.timekeeper.total()
         duration: float | None = total_duration if total_duration > 0 else None
         running: float | None = None
         time_in_queue: float | None = None

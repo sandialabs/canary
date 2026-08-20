@@ -160,27 +160,39 @@ class JobExecutor:
             logger.debug(f"Failed to {phase} {job}", exc_info=e)
             job.save()
 
-        queue.put({"event": "job_submitted", "timestamp": time.time()})
+        job.timekeeper.reset()
+
+        now = time.time()
+        queue.put({"event": "job_submitted", "timestamp": now})
+
+        now = time.time()
+        queue.put({"event": "job_staged", "timestamp": now})
         try:
             config.pluginmanager.hook.canary_runteststart(case=job)
         except Exception as e:
             mark_broken("setup", e)
             return
 
-        queue.put({"event": "job_started", "timestamp": time.time()})
+        now = time.time()
+        queue.put({"event": "job_started", "timestamp": now})
         try:
             config.pluginmanager.hook.canary_runtest(case=job)
-            if job.timekeeper.finished < 0:
-                job.timekeeper.finished = time.time()
+            job.timekeeper.maybe_stop()
         except Exception as e:
             mark_broken("run", e)
             return
 
+        now = time.time()
+        queue.put({"event": "job_stopped", "timestamp": now})
         try:
             config.pluginmanager.hook.canary_runtest_finish(case=job)
+            job.timekeeper.close(at=now)
+            job.save()
         except Exception as e:
             logger.debug(f"Failed to teardown {job}", exc_info=e)
             return
+
+        queue.put({"event": "job_finished", "timestamp": now})
 
 
 @hookimpl(wrapper=True)

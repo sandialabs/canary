@@ -48,8 +48,9 @@ logger = logging.get_logger(__name__)
 
 class JobPhase(str, Enum):
     PENDING = "PENDING"
-    SUBMITTED = "SUBMITTED"
+    STAGING = "STAGING"
     RUNNING = "RUNNING"
+    FINISHING = "FINISHING"
     DONE = "DONE"
 
     def __serialize__(self) -> dict[str, Any]:
@@ -132,10 +133,13 @@ class JobState:
         return self.phase == JobPhase.PENDING
 
     def is_submitted(self) -> bool:
-        return self.phase == JobPhase.SUBMITTED
+        return self.phase == JobPhase.PENDING
 
     def is_running(self) -> bool:
         return self.phase == JobPhase.RUNNING
+
+    def is_finishing(self) -> bool:
+        return self.phase == JobPhase.FINISHING
 
     def is_done(self) -> bool:
         return self.phase == JobPhase.DONE
@@ -236,14 +240,25 @@ class BaseJob(ABC):
             raise ValueError(f"not enqueuable: phase={self.state.phase}")
 
     # ---- lifecycle hooks (called by queue) ----
-    def on_submitted(self) -> None:
-        self.state.phase = JobPhase.SUBMITTED
+    def on_submit(self, at: float | None = None) -> None:
+        self.timekeeper.maybe_open(at=at)
+        self.state.phase = JobPhase.PENDING
 
-    def on_started(self) -> None:
+    def on_stage(self, at: float | None = None) -> None:
+        self.state.phase = JobPhase.STAGING
+        self.timekeeper.maybe_stage(at=at)
+
+    def on_start(self, at: float | None = None) -> None:
         self.state.phase = JobPhase.RUNNING
+        self.timekeeper.maybe_start(at=at)
 
-    def on_finished(self) -> None:
+    def on_stop(self, at: float | None = None) -> None:
+        self.state.phase = JobPhase.FINISHING
+        self.timekeeper.maybe_stop(at=at)
+
+    def on_finish(self, at: float | None = None) -> None:
         self.state.phase = JobPhase.DONE
+        self.timekeeper.maybe_close(at=at)
 
     # ---- executor integration ----
     @abstractmethod
@@ -619,6 +634,7 @@ class Job(BaseJob):
         self.create_workspace()
 
     def setup(self) -> None:
+        self.timekeeper.stage()
         self.workspace.remove(missing_ok=True)
         self.create_workspace()
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
@@ -656,14 +672,16 @@ class Job(BaseJob):
         xstatus = self.spec.xstatus
         try:
             if self.is_runnable():
+                self.timekeeper.start()
                 with self.workspace.openfile(self.stdout, "a") as fh:
                     prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
                     fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
-                with self.workspace.enter(), self.timekeeper.timeit():
+                with self.workspace.enter():
                     self.state.phase = JobPhase.RUNNING
                     self.save()
                     code = self.launcher.run(job=self)
                     self.update_status_from_exit_code(code=code)
+                self.timekeeper.stop()
         except KeyboardInterrupt:
             self.status = Status.INTERRUPTED()
         except SystemExit as e:
@@ -720,9 +738,7 @@ class Job(BaseJob):
                 code=status.code,
             )
         if timekeeper := data.get("timekeeper"):
-            self.timekeeper.submitted = timekeeper.submitted
-            self.timekeeper.started = timekeeper.started
-            self.timekeeper.finished = timekeeper.finished
+            self.timekeeper.sync(timekeeper)
         if measurements := data.get("measurements"):
             self.measurements.update(measurements.data)
         if st := data.get("state"):
@@ -796,9 +812,7 @@ class Job(BaseJob):
             code=obj.status.code,
         )
         self.state.phase = obj.state.phase
-        self.timekeeper.submitted = obj.timekeeper.submitted
-        self.timekeeper.started = obj.timekeeper.started
-        self.timekeeper.finished = obj.timekeeper.finished
+        self.timekeeper.sync(obj.timekeeper)
 
     def set_runtime_env(self, env: MutableMapping[str, str]) -> None:
         env[config.CONFIG_ENV_CFG64] = config.serialize()
@@ -883,7 +897,7 @@ class Job(BaseJob):
                 cache = json.loads(file.read_text())["cache"]
             history = cache.setdefault("history", {})
             fn = datetime.datetime.fromtimestamp
-            dt = fn(self.timekeeper.started) if self.timekeeper.started > 0 else None
+            dt = fn(self.timekeeper._started) if self.timekeeper._started > 0 else None
             if dt is not None:
                 history["last_run"] = dt.strftime("%c")
             name = self.status.category.lower()

@@ -5,6 +5,7 @@
 import argparse
 import math
 import os
+import time
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -26,6 +27,14 @@ logger = canary.get_logger(__name__)
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Flux())
+
+
+@hookimpl
+def canary_runtest_finish(case: "canary.Job") -> None:
+    import json
+
+    with case.workspace.openfile("env.json", "w") as fh:
+        json.dump(dict(os.environ), fh, indent=2)
 
 
 class Flux(canary.CanarySubcommand):
@@ -210,11 +219,27 @@ def canary_runtests(runner: "Runner") -> bool | None:
         alloc_args.append(f"--time-limit={minutes(time_limit)}")
     if extra_alloc_args := canary.config.getoption("flux_alloc_args"):
         alloc_args.extend(extra_alloc_args)
+
+    allocation_requested_at = time.time()
+    allocation_granted_at: float = -1.0
     allocation = FluxAllocation(nodes=node_count)
-    with allocation.open(alloc_args, timeout=queue_timeout) as alloc:
-        logger.info("[bold]Flux allocation active[/]: jobid=%s uri=%s", alloc.jobid, alloc.uri)
-        executor = FluxDirectExecutor(runner)
-        executor.run()
+    pm = logger.progress_monitor("[bold]Waiting[/] for Flux allocation")
+    try:
+        with allocation.open(alloc_args, timeout=queue_timeout) as alloc:
+            pm.done()
+            allocation_granted_at = time.time()
+            logger.info("[bold]Flux allocation active[/]: jobid=%s uri=%s", alloc.jobid, alloc.uri)
+
+            executor = FluxDirectExecutor(
+                runner,
+                allocation_requested_at=allocation_requested_at,
+                allocation_granted_at=allocation_granted_at,
+            )
+            executor.run()
+    finally:
+        if allocation_granted_at < 0:
+            pm.done(status="failed")
+
     logger.info("[bold]Flux allocation closed[/]")
 
     return True
@@ -354,29 +379,19 @@ def flux_exec(args: argparse.Namespace) -> int:
     pm = config.pluginmanager.hook
 
     try:
-        now = time.time()
-        job.timekeeper.submitted = now
-
+        job.timekeeper.reset()
+        job.on_submit(at=time.time())
         pm.canary_runteststart(case=job)
-
-        now = time.time()
-        job.timekeeper.started = now
-
         pm.canary_runtest(case=job)
-
-        import json
-
-        with job.workspace.openfile("env.json", "w") as fh:
-            json.dump(dict(os.environ), fh, indent=2)
-
-        job.timekeeper.finished = time.time()
-
     finally:
-        pm.canary_runtest_finish(case=job)
-        job.save()
+        try:
+            pm.canary_runtest_finish(case=job)
+        finally:
+            job.on_finish(at=time.time())
+            job.save()
 
-        # Key difference from `canary exec`: write to FSQueue, not SQLite.
-        workspace.db.queue.put(job)
+            # Key difference from `canary exec`: write to FSQueue, not SQLite.
+            workspace.db.queue.put(job)
 
     # Return a useful process code. Canary Status already encodes outcome.
     return int(job.status.code if job.status.code is not None else 0)

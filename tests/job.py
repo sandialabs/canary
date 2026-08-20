@@ -17,13 +17,15 @@ from _canary.jobspec import JobSpec
 from _canary.jobspec import Mask
 from _canary.jobspec import SpecDependency
 from _canary.status import Status
+from _canary.timekeeper import Timekeeper
 from _canary.util import json_helper as json
 
 
 def test_jobphase_values() -> None:
     assert JobPhase.PENDING.value == "PENDING"
-    assert JobPhase.SUBMITTED.value == "SUBMITTED"
+    assert JobPhase.STAGING.value == "STAGING"
     assert JobPhase.RUNNING.value == "RUNNING"
+    assert JobPhase.FINISHING.value == "FINISHING"
     assert JobPhase.DONE.value == "DONE"
 
 
@@ -57,11 +59,11 @@ def test_basejob_is_abstract() -> None:
 def test_basejob_default_phase_transitions() -> None:
 
     class DummyJob(BaseJob):
-        # Satisfy BaseJob abstract interface as loosely as possible for this test.
         id = "dummy"
 
         def __init__(self) -> None:
             self.state = JobState()
+            self.timekeeper = Timekeeper()
 
         def cost(self) -> float:
             return 1.0
@@ -103,10 +105,10 @@ def test_basejob_default_phase_transitions() -> None:
     job = DummyJob()
     assert job.state.phase == JobPhase.PENDING
 
-    job.on_started()
+    job.on_start()
     assert job.state.phase == JobPhase.RUNNING
 
-    job.on_finished()
+    job.on_finish()
     assert job.state.phase == JobPhase.DONE
 
 
@@ -116,6 +118,7 @@ def test_basejob_validate_enqueuable_rejects_running_or_done() -> None:
 
         def __init__(self, phase: JobPhase) -> None:
             self.state = JobState(phase=phase)
+            self.timekeeper = Timekeeper()
 
         def cost(self) -> float:
             return 1.0
@@ -222,10 +225,10 @@ def test_jobphase_roundtrip_json():
 
 
 def test_jobstate_roundtrip_json():
-    st = JobState(phase=JobPhase.SUBMITTED)
+    st = JobState(phase=JobPhase.STAGING)
     out = json.loads(json.dumps(st))
     assert out == st
-    assert out.phase == JobPhase.SUBMITTED
+    assert out.phase == JobPhase.STAGING
 
 
 def test_measurements_roundtrip_json():
@@ -267,9 +270,11 @@ def test_job_roundtrip_json_includes_base_state(spec: JobSpec, space):
     job.state.phase = JobPhase.RUNNING
     job.status.set(category="PASS", outcome="SUCCESS", reason=None, code=0)
     job.measurements.add_measurement("x", 2)
-    job.timekeeper.submitted = 1.0
-    job.timekeeper.started = 2.0
-    job.timekeeper.finished = 3.0
+    job.timekeeper.open(at=1.0)
+    job.timekeeper.stage(at=1.5)
+    job.timekeeper.start(at=2.0)
+    job.timekeeper.stop(at=2.5)
+    job.timekeeper.close(at=3.0)
     job.variables["FOO"] = "BAR"
     job._allocation = {"metadata": {}, "resources": {"cpus": [{"id": "0", "slots": 1}]}}
 
@@ -279,7 +284,7 @@ def test_job_roundtrip_json_includes_base_state(spec: JobSpec, space):
     assert out.state.phase == JobPhase.RUNNING
     assert out.status.category == job.status.category
     assert out.measurements.data["x"] == 2
-    assert out.timekeeper.finished == 3.0
+    assert out.timekeeper._finished == 3.0
     assert out.variables["FOO"] == "BAR"
     assert out.resources == {"cpus": [{"id": "0", "slots": 1}]}
 

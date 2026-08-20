@@ -2,201 +2,144 @@
 #
 # SPDX-License-Identifier: MIT
 
-import datetime
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
-from typing import Generator
 
 
 @dataclass
 class Timekeeper:
-    submitted: float = field(default=-1.0, init=False)
-    started: float = field(default=-1.0, init=False)
-    finished: float = field(default=-1.0, init=False)
-    mark: float = field(default=-1.0, init=False, repr=False)
+    """
+    Track the lifecycle timestamps for a job.
+
+    The canonical lifecycle is:
+
+        submitted -> staged -> started -> stopped -> returned
+
+    The corresponding reporting phases are:
+
+        Pending   = staged   - submitted
+        Setup     = started  - staged
+        Running   = stopped  - started
+        Teardown  = returned - stopped
+        Elapsed   = now      - submitted
+
+    """
+
+    _submitted: float = field(default=-1.0, init=False)
+    _staged: float = field(default=-1.0, init=False)
+    _started: float = field(default=-1.0, init=False)
+    _stopped: float = field(default=-1.0, init=False)
+    _finished: float = field(default=-1.0, init=False)
 
     def __serialize__(self) -> dict[str, Any]:
-        return {
-            "submitted": self.submitted,
-            "started": self.started,
-            "finished": self.finished,
-            "mark": self.mark,
-        }
+        return dict(vars(self))
 
     @classmethod
     def __deserialize__(cls, d: dict[str, Any]) -> "Timekeeper":
         obj = cls()
-        obj.submitted = float(d["submitted"])
-        obj.started = float(d["started"])
-        obj.finished = float(d["finished"])
-        obj.mark = float(d["mark"])
+        for var, val in d.items():
+            setattr(obj, var, val)
         return obj
 
-    def start(self) -> None:
-        self.started = time.time()
-        if self.submitted < 0:
-            self.submitted = self.started
+    def open(self, at: float | None = None) -> None:
+        self.reset()
+        self._submitted = time.time() if at is None else float(at)
 
-    def stop(self) -> None:
-        self.finished = time.time()
+    def maybe_open(self, at: float | None = None) -> None:
+        if self._submitted < 0:
+            self.open(at=at)
 
-    @contextmanager
-    def timeit(self) -> Generator["Timekeeper", None, None]:
-        try:
-            self.start()
-            yield self
-        finally:
-            self.stop()
+    def stage(self, at: float | None = None) -> None:
+        self._staged = time.time() if at is None else float(at)
+        if self._submitted < 0:
+            self._submitted = self._staged
 
-    def queued(self) -> float:
-        if self.started > 0:
-            if self.submitted < 0:
-                self.submitted = self.started
-            return self.started - self.submitted
-        return -1.0
+    def maybe_stage(self, at: float | None = None) -> None:
+        if self._staged < 0:
+            self.stage(at=at)
 
-    def running(self) -> float:
-        if self.started > 0 and self.finished > 0:
-            return self.finished - self.started
-        return -1.0
+    def start(self, at: float | None = None) -> None:
+        self._started = time.time() if at is None else float(at)
+        if self._submitted < 0:
+            self._submitted = self._started
+        if self._staged < 0:
+            self._staged = self._submitted
 
-    def duration(self) -> float:
-        if self.started > 0 and self.finished > 0:
-            return self.finished - self.started
-        return -1.0
+    def maybe_start(self, at: float | None = None) -> None:
+        if self._started < 0:
+            self.start(at=at)
 
-    def total(self) -> float:
-        if self.submitted > 0 and self.finished > 0:
-            return self.finished - self.submitted
-        return -1.0
+    def stop(self, at: float | None = None) -> None:
+        self._stopped = time.time() if at is None else float(at)
+        if self._submitted < 0:
+            self._submitted = self._stopped
+        if self._staged < 0:
+            self._staged = self._stopped
+        if self._started < 0:
+            self._started = self._stopped
+
+    def maybe_stop(self, at: float | None = None) -> None:
+        if self._stopped < 0:
+            self.stop(at=at)
+
+    def close(self, at: float | None = None) -> None:
+        self._finished = time.time() if at is None else float(at)
+        if self._submitted < 0:
+            self._submitted = self._finished
+        if self._staged < 0:
+            self._staged = self._finished
+        if self._started < 0:
+            self._started = self._finished
+        if self._stopped < 0:
+            self._stopped = self._finished
+
+    def maybe_close(self, at: float | None = None) -> None:
+        if self._finished < 0:
+            self.close(at=at)
+
+    finish = close
+
+    def pending(self, *, live: bool = False) -> float:
+        return delta(self._submitted, self._staged, live=live)
+
+    def staging(self, *, live: bool = False) -> float:
+        return delta(self._staged, self._started, live=live)
+
+    def running(self, *, live: bool = False) -> float:
+        return delta(self._started, self._stopped, live=live)
+
+    duration = running
+
+    def finishing(self, *, live: bool = False) -> float:
+        return delta(self._stopped, self._finished, live=live)
+
+    def total(self, *, live: bool = False) -> float:
+        return delta(self._submitted, self._finished, live=live)
+
+    def elapsed(self, *, live: bool = False) -> float:
+        return self.total(live=live)
 
     def reset(self) -> None:
-        self.submitted = -1.0
-        self.started = -1.0
-        self.finished = -1.0
+        for var in vars(self):
+            setattr(self, var, -1.0)
 
-    def update(self, *, started: float, finished: float, submitted: float = -1.0) -> None:
-        self.submitted = submitted
-        self.started = started
-        self.finished = finished
+    def update(self, **kwargs: float) -> None:
+        # ``submitted`` and ``launched`` are accepted for backward compatibility.
+        for key, val in kwargs.items():
+            setattr(self, key, float(val))
 
-    def isoformat(self, what: str) -> str:
-        t: float = getattr(self, what)
-        return datetime.datetime.fromtimestamp(t).isoformat(timespec="microseconds")
-
-    @classmethod
-    def from_dict(cls, d: dict[str, float]) -> "Timekeeper":
-        self = cls()
-        self.submitted = float(d["submitted"])
-        self.started = float(d["started"])
-        self.finished = float(d["finished"])
-        return self
-
-    @classmethod
-    def from_isoformated_times(cls, d: dict[str, str]) -> "Timekeeper":
-        self = cls()
-        fn = datetime.datetime.fromisoformat
-        self.submitted = fn(d["submitted"]).timestamp()
-        self.started = fn(d["started"]).timestamp()
-        self.finished = fn(d["finished"]).timestamp()
-        return self
+    def sync(self, other: "Timekeeper") -> None:
+        for var, value in vars(other).items():
+            setattr(self, var, float(value))
 
 
-@dataclass
-class PhaseTimer:
-    """
-    Named split timer.
-
-    A split is a named interval.  For example:
-
-        Queued:  submitted -> started
-        Running: started -> finished
-
-    The active phase can report live time.  Completed phases report fixed time.
-    """
-
-    stamp: float = -1.0
-    current: str | None = None
-    split_times: dict[str, float] = field(default_factory=dict)
-    split_order: list[str] = field(default_factory=list)
-
-    def __serialize__(self) -> dict[str, Any]:
-        return {
-            "stamp": self.stamp,
-            "current": self.current,
-            "split_times": self.split_times,
-            "split_order": self.split_order,
-        }
-
-    @classmethod
-    def __deserialize__(cls, d: dict[str, Any]) -> "PhaseTimer":
-        obj = cls()
-        obj.stamp = d["stamp"]
-        obj.current = d["current"]
-        obj.split_times = d["split_times"]
-        obj.split_order = d["split_order"]
-        return obj
-
-    def start(self, name: str, *, at: float | None = None) -> None:
-        self.split_times.clear()
-        self.split_order.clear()
-        self.current = name
-        self.stamp = time.time() if at is None else float(at)
-
-    def transition(self, next_name: str, *, at: float | None = None) -> None:
-        now = time.time() if at is None else float(at)
-
-        if self.current is None or self.stamp < 0:
-            self.start(next_name, at=now)
-            return
-
-        self._record(self.current, max(0.0, now - self.stamp))
-        self.current = next_name
-        self.stamp = now
-
-    def stop(self, *, at: float | None = None) -> None:
-        if self.current is None or self.stamp < 0:
-            return
-
-        now = time.time() if at is None else float(at)
-        self._record(self.current, max(0.0, now - self.stamp))
-        self.current = None
-        self.stamp = now
-
-    def _record(self, name: str, duration: float) -> None:
-        if name not in self.split_times:
-            self.split_order.append(name)
-            self.split_times[name] = 0.0
-        self.split_times[name] += duration
-
-    def value(self, name: str, *, live: bool = True) -> float:
-        value = self.split_times.get(name, -1.0)
-
-        if live and self.current == name and self.stamp > 0:
-            current_value = max(0.0, time.time() - self.stamp)
-            if value < 0:
-                return current_value
-            return value + current_value
-
-        return value
-
-    def total(
-        self, names: list[str] | tuple[str, ...] | None = None, *, live: bool = True
-    ) -> float:
-        if names is None:
-            phase_names = list(self.split_order)
-            if self.current is not None and self.current not in phase_names:
-                phase_names.append(self.current)
-        else:
-            phase_names = list(names)
-        total = 0.0
-        found = False
-        for name in phase_names:
-            value = self.value(name, live=live)
-            if value >= 0:
-                total += value
-                found = True
-        return total if found else -1.0
+def delta(start: float, stop: float, *, live: bool = False) -> float:
+    if start <= 0:
+        return -1.0
+    if stop > 0:
+        return stop - start
+    if live:
+        return time.time() - start
+    return -1.0

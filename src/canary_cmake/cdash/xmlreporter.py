@@ -275,7 +275,7 @@ class CDashXMLReporter:
             results = doc.createElement("Results")
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
-            duration = max(0.0, job.timekeeper.duration())
+            duration = max(0.0, job.timekeeper.running())
             add_named_measurement(results, "Command Line", command, type="cdata")
             add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
@@ -492,9 +492,9 @@ class TestData:
             self.status |= 2**2
 
     def add_job(self, job: "canary.Job") -> None:
-        if job.timekeeper.started > 0 and job.timekeeper.finished > 0:
-            start = job.timekeeper.started
-            finish = job.timekeeper.finished
+        if job.timekeeper._started > 0 and job.timekeeper._finished > 0:
+            start = job.timekeeper._started
+            finish = job.timekeeper._finished
             if start < self.start:
                 self.start = start
             if finish > self.stop:

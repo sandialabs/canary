@@ -60,15 +60,13 @@ class Exec(CanarySubcommand):
         namefmt = style.get("name", "short")
         display_name = job.display_name(style="rich", resolve=namefmt == "long")
         try:
-            now = time.time()
-            job.timekeeper.submitted = now
+            job.timekeeper.open()
             rich.print(f"{display_name}: [blue]STARTING[/]")
+            job.on_stage(at=time.time())
             pm.canary_runteststart(case=job)
-            now = time.time()
-            job.timekeeper.started = now
             rich.print(f"{display_name}: [blue]RUNNING[/]")
             pm.canary_runtest(case=job)
-            job.timekeeper.finished = time.time()
+            job.timekeeper.close()
         finally:
             st = job.status.display_name(style="rich")
             rich.print(f"{display_name}: {st}")

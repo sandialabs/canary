@@ -30,7 +30,7 @@ def test_downstream_ready_after_upstream_success(tmp_path):
     assert not downstream.is_ready()
 
     upstream.status.set(outcome="SUCCESS")
-    upstream.on_finished()
+    upstream.on_finish()
 
     downstream.refresh_readiness()
 
@@ -44,7 +44,7 @@ def test_downstream_blocked_after_upstream_failure(tmp_path):
     downstream.dependencies.append(Dependency(job=upstream, when="on_success"))
 
     upstream.status.set(outcome="FAILED", reason="synthetic failure")
-    upstream.on_finished()
+    upstream.on_finish()
 
     downstream.refresh_readiness()
 
@@ -59,7 +59,7 @@ def test_downstream_always_ready_after_upstream_failure(tmp_path):
     downstream.dependencies.append(Dependency(job=upstream, when="always"))
 
     upstream.status.set(outcome="FAILED", reason="synthetic failure")
-    upstream.on_finished()
+    upstream.on_finish()
 
     downstream.refresh_readiness()
 
@@ -73,7 +73,7 @@ def test_downstream_ready_for_expected_diff(tmp_path):
     downstream.dependencies.append(Dependency(job=upstream, when="DIFFED"))
 
     upstream.status.set(outcome="DIFFED")
-    upstream.on_finished()
+    upstream.on_finish()
 
     downstream.refresh_readiness()
 
@@ -89,7 +89,7 @@ def test_dependency_chain_blocks_transitively(tmp_path):
     c.dependencies.append(Dependency(job=b, when="on_success"))
 
     a.status.set(outcome="FAILED", reason="synthetic failure")
-    a.on_finished()
+    a.on_finish()
 
     b.refresh_readiness()
     assert b.state.is_done()

@@ -7,8 +7,6 @@ from typing import Any
 from typing import Callable
 from typing import cast
 
-import pytest
-
 from _canary.job import BaseJob
 from _canary.job import JobState
 from _canary.queue_executor import ExecutionSlot
@@ -67,8 +65,6 @@ class DummyJob(BaseJob):
         return
 
     def display_name(self, **kwargs: Any) -> str:
-        if kwargs.get("style") == "rich":
-            return self.name
         return self.name
 
     def set_status(
@@ -121,40 +117,22 @@ def make_slot() -> ExecutionSlot:
     job = DummyJob(name="myjob")
     slot = ExecutionSlot(job=cast(BaseJob, job), qrank=2, qsize=5, worker_id=0)
 
-    slot.timer.start("Queued", at=10.0)
-    slot.timer.transition("Startup", at=11.0)
-    slot.timer.transition("Running", at=14.0)
-    slot.timer.transition("Teardown", at=20.0)
-    slot.timer.stop(at=21.0)
+    slot.on_submit(at=10.0)
+    slot.on_stage(at=11.0)
+    slot.on_start(at=14.0)
+    slot.on_stop(at=20.0)
+    slot.on_finish(at=21.0)
 
     return slot
 
 
-def test_reporter_timing_columns_are_non_metadata() -> None:
+def test_reporter_timing_columns_are_known() -> None:
     job = DummyJob()
     reporter = Reporter(DummyExecutor([job]))
 
-    columns = ("Job", "ID", "Status", "Queued", "Startup", "Running", "Teardown", "Time", "Rank")
-
-    assert reporter.timing_columns(columns) == ("Queued", "Startup", "Running", "Teardown", "Time")
-
-
-def test_reporter_time_column_totals_all_phases_when_no_explicit_phase_columns() -> None:
-    job = DummyJob()
-    reporter = Reporter(DummyExecutor([job]))
-    slot = make_slot()
-
-    # With only Time configured, it should total all recorded phases.
-    assert reporter.slot_time_for_column(slot, "Time", ("Job", "Time")) == pytest.approx(11.0)
-
-
-def test_reporter_time_column_totals_configured_phase_columns() -> None:
-    job = DummyJob()
-    reporter = Reporter(DummyExecutor([job]))
-    slot = make_slot()
-
-    columns = ("Job", "Queued", "Running", "Time")
-    assert reporter.slot_time_for_column(slot, "Time", columns) == pytest.approx(7.0)
+    assert {"Queued", "Staging", "Running", "Finishing", "Total", "Elapsed"} <= set(
+        reporter.timing_columns
+    )
 
 
 def test_reporter_row_values_for_slot_are_column_driven() -> None:
@@ -162,30 +140,42 @@ def test_reporter_row_values_for_slot_are_column_driven() -> None:
     reporter = Reporter(DummyExecutor([job]))
     slot = make_slot()
 
-    columns = ("Job", "ID", "Status", "Queued", "Startup", "Running", "Teardown", "Time", "Rank")
+    columns = ("Job", "ID", "Status", "Queued", "Staging", "Running", "Finishing", "Total", "Rank")
     values = reporter.row_values_for_slot(slot, columns, status="[green]RUNNING[/]")
 
     assert values["job"] == "myjob"
     assert values["id"] == "aaaaaaaa"[:7]
     assert values["status"] == "[green]RUNNING[/]"
     assert values["queued"].strip().endswith("s")
-    assert values["startup"].strip().endswith("s")
+    assert values["staging"].strip().endswith("s")
     assert values["running"].strip().endswith("s")
-    assert values["teardown"].strip().endswith("s")
-    assert values["time"].strip().endswith("s")
+    assert values["finishing"].strip().endswith("s")
+    assert values["total"].strip().endswith("s")
     assert values["rank"] == "2/5"
+
+
+def test_reporter_slot_timing_values_from_timekeeper() -> None:
+    reporter = Reporter(DummyExecutor([DummyJob()]))
+    slot = make_slot()
+    values = reporter.row_values_for_slot(slot, ("Job",), status="RUNNING")
+
+    assert values["queued"].strip() == "1.0s"
+    assert values["staging"].strip() == "3.0s"
+    assert values["running"].strip() == "6.0s"
+    assert values["finishing"].strip() == "1.0s"
+    assert values["total"].strip() == "11.0s"
 
 
 def test_reporter_pending_rows_mark_timing_columns_na() -> None:
     job = DummyJob(name="pending")
     reporter = Reporter(DummyExecutor([job]))
 
-    columns = ("Job", "ID", "Status", "Queued", "Running", "Time", "Rank")
+    columns = ("Job", "ID", "Status", "Queued", "Running", "Total", "Rank")
     values = reporter.row_values_for_pending_job(job, columns)
 
     assert values["queued"] == "NA"
     assert values["running"] == "NA"
-    assert values["time"] == "NA"
+    assert values["total"] == "NA"
     assert values["status"] == "[magenta]PENDING[/]"
 
 
@@ -197,7 +187,7 @@ def test_event_reporter_uses_compact_event_columns() -> None:
     assert [col.header for col in reporter.table.columns] == list(reporter.event_columns)
 
 
-def test_event_reporter_renders_event_row_with_time() -> None:
+def test_event_reporter_renders_event_row() -> None:
     job = DummyJob(name="event")
     reporter = EventReporter(DummyExecutor([job]))
     slot = make_slot()
@@ -210,44 +200,23 @@ def test_event_reporter_renders_event_row_with_time() -> None:
     assert "2/5" in rendered
 
 
-def test_row_values_for_job_uses_generic_timing_measurements():
+def test_row_values_for_job_falls_back_to_timekeeper():
     job = DummyJob(name="bad")
     job.status.set(outcome="FAILED", reason="boom")
-    job.measurements["timing"] = {
-        "Queued": 1.0,
-        "Startup": 2.0,
-        "Running": 3.0,
-        "Teardown": 4.0,
-        "Time": 10.0,
-    }
+    job.timekeeper.open(at=1.0)
+    job.timekeeper.stage(at=3.0)
+    job.timekeeper.start(at=4.0)
+    job.timekeeper.stop(at=8.0)
+    job.timekeeper.close(at=10.0)
 
     reporter = Reporter(DummyExecutor([job]))
-    columns = ("Job", "ID", "Status", "Queued", "Startup", "Running", "Teardown", "Time", "Details")
+    columns = ("Job", "ID", "Status", "Queued", "Running", "Total", "Details")
 
     values = reporter.row_values_for_job(job, columns)
 
     assert values["job"] == "bad"
     assert values["status"].endswith("[/]") or "FAIL" in values["status"]
-    assert values["queued"].strip() == "1.0s"
-    assert values["startup"].strip() == "2.0s"
-    assert values["running"].strip() == "3.0s"
-    assert values["teardown"].strip() == "4.0s"
-    assert values["time"].strip() == "10.0s"
-    assert values["details"] == "boom"
-
-
-def test_row_values_for_job_falls_back_to_timekeeper():
-    job = DummyJob(name="bad")
-    job.status.set(outcome="FAILED", reason="boom")
-    job.timekeeper.submitted = 1.0
-    job.timekeeper.started = 3.0
-    job.timekeeper.finished = 8.0
-
-    reporter = Reporter(DummyExecutor([job]))
-    columns = ("Job", "ID", "Status", "Queued", "Running", "Time", "Details")
-
-    values = reporter.row_values_for_job(job, columns)
-
     assert values["queued"].strip() == "2.0s"
-    assert values["running"].strip() == "5.0s"
-    assert values["time"].strip() == "7.0s"
+    assert values["running"].strip() == "4.0s"
+    assert values["total"].strip() == "9.0s"
+    assert values["details"] == "boom"
