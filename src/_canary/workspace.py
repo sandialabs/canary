@@ -45,6 +45,7 @@ from .generate import Generator
 from .generator import AbstractTestGenerator
 from .job import Dependency
 from .job import Job
+from .job import Measurements
 from .runtest import Runner
 from .runtest import canary_runtests
 from .testexec import ExecutionSpace
@@ -75,6 +76,9 @@ class Session:
     name: str
     jobs: list[Job]
     prefix: Path
+    measurements: Measurements = dataclasses.field(default_factory=Measurements)
+    job_ids: list[str] = dataclasses.field(default_factory=list)
+
     returncode: int = dataclasses.field(init=False, default=-1)
     started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
     finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
@@ -85,28 +89,82 @@ class Session:
         Raises:
             ValueError: If any job in the session is unexpectedly masked.
         """
+        if not self.job_ids:
+            self.job_ids = [job.id for job in self.jobs]
+
         for job in self.jobs:
             if job.mask:
                 raise ValueError(f"{job}: unexpectedly masked test job")
 
-    def run(self, workspace: "Workspace") -> None:
-        """Executes the session's jobs using a Runner.
+    @property
+    def lockfile(self) -> Path:
+        return self.prefix / "session.lock"
 
-        Args:
-            workspace: The Workspace instance providing the environment.
+    def add_measurement(self, name: str, value: Any) -> None:
+        """Add or update a session-level measurement.
 
-        Raises:
-            StopExecution: If no runnable jobs are found.
+        This mirrors the user/plugin-facing job measurement API. Session hooks
+        can call this to record workflow, environment, scheduler, agent, or
+        reporting metadata.
         """
+        self.measurements.add_measurement(name, value)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "job_ids": [job.id for job in self.jobs] if self.jobs else list(self.job_ids),
+            "prefix": str(self.prefix),
+            "returncode": self.returncode,
+            "started_on": self.started_on.isoformat(),
+            "finished_on": self.finished_on.isoformat(),
+            "measurements": self.measurements,
+        }
+
+    @classmethod
+    def __deserialize__(cls, data: dict[str, Any]) -> "Session":
+        session = cls(
+            name=str(data["name"]),
+            jobs=[],
+            prefix=Path(data["prefix"]),
+            measurements=data.get("measurements") or Measurements(),
+            job_ids=[str(job_id) for job_id in data.get("job_ids", [])],
+        )
+
+        session.returncode = int(data.get("returncode", -1))
+
+        started_on = data.get("started_on")
+        if started_on:
+            session.started_on = datetime.datetime.fromisoformat(started_on)
+
+        finished_on = data.get("finished_on")
+        if finished_on:
+            session.finished_on = datetime.datetime.fromisoformat(finished_on)
+
+        return session
+
+    def save(self) -> None:
+        """Write this session manifest to ``session.lock``."""
+        self.prefix.mkdir(parents=True, exist_ok=True)
+        json.safesave(self.lockfile, self)
+
+    @property
+    def cases(self) -> list["Job"]:
+        return self.jobs
+
+    def run(self, workspace: "Workspace") -> None:
         self.prefix.mkdir(parents=True, exist_ok=True)
         ready = [job for job in self.jobs if job.is_runnable()]
         runner = Runner(ready, self.name, workspace=workspace)
+
         if not ready:
             exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
             raise StopExecution("no jobs to run", exit_code=exit_code)
+
         starting_dir = os.getcwd()
         try:
             self.started_on = datetime.datetime.now()
+            self.save()
+
             os.chdir(str(self.prefix))
             canary_runtests(runner=runner)
         except Exception:
@@ -116,6 +174,7 @@ class Session:
             self.finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
             self.returncode = runner.returncode
+            self.save()
 
 
 class Workspace:
@@ -397,6 +456,7 @@ class Workspace:
         s = Session(name=session_dir.name, prefix=session_dir, jobs=ready)
         if not reuse_session:
             config.pluginmanager.hook.canary_sessionstart(session=s)
+            s.save()
 
         # We need to take great care to only write results into the database from the parent process
         # On the parent process, create a results listener that looks for results in the spool.
@@ -430,6 +490,7 @@ class Workspace:
                 self.register_view(view)
         if not reuse_session:
             config.pluginmanager.hook.canary_sessionfinish(session=s)
+            s.save()
         self.register_latest_session(s)
         return s
 

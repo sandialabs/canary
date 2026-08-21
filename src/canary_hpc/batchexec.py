@@ -214,17 +214,17 @@ class HPCConnectBatchRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
         started_at: float = -1.0
 
-        def set_starttime(future: hpc_connect.futures.Future):
+        def set_starttime(future: hpc_connect.futures.FutureProtocol):
             nonlocal started_at
             started_at = time.time()
             batch.on_start(at=started_at)
             queue.put({"event": "job_started", "timestamp": started_at})
 
-        def set_jobid(future: hpc_connect.futures.Future):
+        def set_jobid(future: hpc_connect.futures.FutureProtocol):
             jobid = batch.jobid = future.jobid
             queue.put({"event": "job_updated", "timestamp": time.time(), "attrs": {"jobid": jobid}})
 
-        def write_procinfo(future: hpc_connect.futures.Future):
+        def write_procinfo(future: hpc_connect.futures.FutureProtocol):
             with open("procinfo.json", "w") as fh:
                 json.dump(future.proc_info(), fh, indent=2)
 
@@ -304,7 +304,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                         queue.put({"event": "job_stopped", "timestamp": now})
                         return rc
 
-    def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:
+    def submit(self, batch: "TestBatch") -> hpc_connect.futures.FutureProtocol:
         variables = self.rc_environ(batch)
         invocation = self.canary_invocation(batch)
         node_count = self.nodes_required(batch)

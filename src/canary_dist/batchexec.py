@@ -119,7 +119,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
                 continue
             yield (key, val)
 
-    def submit(self, batch: "TestBatch") -> hpc_connect.futures.Future:
+    def submit(self, batch: "TestBatch") -> hpc_connect.futures.FutureProtocol:
         assert self.backend.name == "remote_subprocess"
 
         variables = self.rc_environ(batch)
