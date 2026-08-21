@@ -68,6 +68,7 @@ scripts.canary = "canary:console_main"
 scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
+canary_cdash = "canary_cdash"
 canary_cmake = "canary_cmake"
 canary_dist = "canary_dist"
 canary_flux = "canary_flux"
@@ -94,7 +95,6 @@ lint.per-file-ignores."src/_canary/plugins/*/__init__.py" = [ "F401", "F403", "F
 lint.per-file-ignores."src/_canary/plugins/__init__.py" = [ "F401", "F403", "F405" ]
 lint.per-file-ignores."src/_canary/third_party/*.py" = [ "F401", "F403", "F405" ]
 lint.per-file-ignores."src/canary/__init__.py" = [ "F401" ]
-lint.per-file-ignores."src/canary_cmake/third_party/*.py" = [ "F401", "F403", "F405" ]
 lint.isort.force-single-line = true
 
 [tool.check-wheel-contents]
@@ -108,6 +108,7 @@ max_supported_python = "3.14"
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
+    "src/canary_cdash/tests",
     "src/canary_cmake/tests",
     "src/canary_dist/tests",
     "src/canary_gitlab/tests",
@@ -131,7 +132,7 @@ output = "coverage.xml"
 branch = true
 omit = [ "*/third_party/*" ]
 source = [ "_canary" ]
-command_line = "-m pytest ./tests ./src/canary_cmake/tests ./src/canary_dist/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
+command_line = "-m pytest ./tests ./src/canary_cdash/tests ./src/canary_cmake/tests ./src/canary_dist/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
 
 [tool.coverage.html]
 directory = "html.cov"

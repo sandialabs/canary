@@ -4,9 +4,7 @@
 
 import argparse
 import os
-from pathlib import Path
 from typing import Any
-from typing import Generator
 
 from schema import Optional
 from schema import Schema
@@ -14,7 +12,6 @@ from schema import Schema
 import canary
 from _canary.util import cpu_count
 
-from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
 from .ctest import finish_ctest
 from .ctest import read_resource_specs
@@ -117,63 +114,6 @@ class MapToShowCapture(argparse.Action):
         setattr(args, self.dest, True)
 
 
-class CDashHooks:
-    @canary.hookspec
-    def canary_cdash_labels_for_subproject(self) -> list[str] | None:
-        """Return a list of subproject labels to be added to Test.xml reports"""
-        ...
-
-    @canary.hookspec(firstresult=True)
-    def canary_cdash_subproject_label(self, case: "canary.Job") -> str | None:
-        """Return a subproject label for ``case`` that will be added in Test.xml reports"""
-        ...
-
-    @canary.hookspec(firstresult=True)
-    def canary_cdash_labels(self, case: "canary.Job") -> list[str] | None:
-        """Return CDash labels for ``case``"""
-        ...
-
-    @canary.hookspec
-    def canary_cdash_artifacts(self, case: "canary.Job") -> list[dict[str, str]] | None:
-        """Return artifacts to transmit to CDash"""
-        ...
-
-    @canary.hookspec(firstresult=True)
-    def canary_cdash_name(self, case: "canary.Job") -> str | None:
-        """Return the name to use on CDash"""
-        ...
-
-    @canary.hookspec
-    def canary_cdash_named_measurements(self, case: "canary.Job") -> dict[str, Any] | None:
-        """Return measurements to post to CDash"""
-        ...
-
-
-@canary.hookimpl
-def canary_reporter() -> canary.CanaryReporter:
-    return CDashReporter()
-
-
-@canary.hookimpl
-def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
-    pluginmanager.add_hookspecs(CDashHooks)
-
-
-@canary.hookimpl(trylast=True)
-def canary_cdash_labels(case: canary.Job) -> list[str]:
-    """Default implementation: return the test case's keywords"""
-    return list(case.spec.keywords)
-
-
-@canary.hookimpl(trylast=True)
-def canary_cdash_name(case: canary.Job) -> str:
-    """Default implementation: return the test case's keywords"""
-    if not case.spec.parameters:
-        return case.spec.family
-    s_params = case.spec.s_params()
-    return f"{case.spec.family}[{s_params}]"
-
-
 @canary.hookimpl(tryfirst=True)
 def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
     f = config.getoption("canary_cmake_resource_spec_file")
@@ -197,38 +137,6 @@ def canary_resource_pool_fill(config: canary.Config) -> dict[str, Any] | None:
         "additional_properties": {"ctest": {"resource_spec_file": os.path.abspath(f)}},
         "nodes": [{"id": os.uname().nodename, "resources": ctest_resources}],
     }
-
-
-def to_str_path(x: object) -> str:
-    if isinstance(x, (str, Path)):
-        return str(x)
-    raise TypeError("file must be str or Path")
-
-
-@canary.hookimpl(wrapper=True)
-def canary_cdash_artifacts(case: canary.Job) -> Generator[None, list[str], list[str]]:
-    result = yield
-    candidates: set[str] = {a for b in result for a in b if b}
-    artifacts: list[str] = []
-    for candidate in candidates:
-        f = Path(candidate)
-        if f.exists():
-            artifacts.append(f.absolute().as_posix())
-        elif case.workspace.joinpath(f).exists():
-            artifacts.append(case.workspace.joinpath(f).as_posix())
-    return artifacts
-
-
-@canary.hookimpl(wrapper=True)
-def canary_cdash_named_measurements(
-    case: canary.Job,
-) -> Generator[None, list[dict[str, Any]], dict[str, Any]]:
-    measurements: dict[str, Any] = {}
-    result = yield
-    for item in result:
-        if item:
-            measurements.update(item)
-    return measurements
 
 
 cmake_schema = Schema(

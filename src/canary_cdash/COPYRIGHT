@@ -1,0 +1,27 @@
+Intellectual Property Notice
+----------------------------
+
+canary_cmake is licensed under the MIT license.
+
+SPDX usage
+------------
+
+Individual files contain SPDX tags instead of the full license text.
+This enables machine processing of license information based on the SPDX
+License Identifiers that are available here: https://spdx.org/licenses/
+
+Files that are dual-licensed as Apache-2.0 OR MIT contain the following
+text in the license header:
+
+    SPDX-License-Identifier: MIT
+
+External Packages
+-----------------
+
+canary_cmake bundles some external packages in canary_cmake/third_party. These packages are covered
+by various permissive licenses. A summary listing follows. See the license included with each
+package for full details.
+
+PackageName: ctest_log_parser
+PackageHomePage: https://github.com/Kitware/CMake
+PackageLicenseDeclared: BSD-3-Clause

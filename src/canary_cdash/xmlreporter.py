@@ -381,7 +381,7 @@ class CDashXMLReporter:
             import xmlschema  # type: ignore
         except ImportError:
             return
-        dir = str(ir.files("canary_cmake").joinpath("cdash/validators"))
+        dir = str(ir.files("canary_cdash").joinpath("validators"))
         with canary.filesystem.working_dir(dir):
             xml_schema = xmlschema.XMLSchema(schema)
             xml_schema.validate(file)

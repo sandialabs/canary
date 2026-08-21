@@ -40,6 +40,7 @@ test_paths = (
     "tests",
     "src/canary_amd/tests",
     "src/canary_cmake/tests",
+    "src/canary_cdash/tests",
     "src/canary_dist/tests",
     "src/canary_flux/tests",
     "src/canary_gitlab/tests",
