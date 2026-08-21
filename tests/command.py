@@ -14,6 +14,8 @@ from _canary.plugins.subcommands.describe import Describe
 from _canary.plugins.subcommands.find import Find
 from _canary.plugins.subcommands.location import Location
 from _canary.plugins.subcommands.log import Log
+from _canary.plugins.subcommands.query import Query
+from _canary.plugins.subcommands.query import query_json
 from _canary.plugins.subcommands.status import Status
 from _canary.plugins.subcommands.tree import Tree
 from _canary.util.filesystem import working_dir
@@ -221,3 +223,130 @@ def test_tree():
 
     args = argparse.Namespace(a=False, d=False, exclude_results=False, directory=examples)
     assert Tree().execute(args) == 0
+
+
+def run_query(*, jobid=None, session=None, query=".", terse=False) -> int:
+    args = argparse.Namespace(jobid=jobid, session=session, query=query, terse=terse)
+    return Query().execute(args)
+
+
+def test_query_job_whole_lock_file(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(jobid=setup.f_a1_id)
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert rc == 0
+    assert data["spec"]["id"] == setup.f_a1_id
+
+
+def test_query_job_field(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(jobid=setup.f_a1_id, query=".spec.id")
+
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert json.loads(captured.out) == setup.f_a1_id
+
+
+def test_query_job_nested_field(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(jobid=setup.f_a1_id, query=".status")
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert rc == 0
+    assert isinstance(data, dict)
+    assert "category" in data
+    assert "outcome" in data
+
+
+def test_query_session_whole_lock_file(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(session=setup.session.name)
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert rc == 0
+    assert data["name"] == setup.session.name
+    assert setup.f_a1_id in data["job_ids"]
+
+
+def test_query_session_field(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(session=setup.session.name, query=".name")
+
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert json.loads(captured.out) == setup.session.name
+
+
+def test_query_session_list_index(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(session=setup.session.name, query=".job_ids[0]")
+
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert isinstance(json.loads(captured.out), str)
+
+
+def test_query_latest_session_whole_lock_file_is_json(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(session="latest")
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert rc == 0
+    assert "name" in data
+    assert "job_ids" in data
+
+
+def test_query_terse_outputs_single_line_json(setup, capsys):
+    import json
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = run_query(session=setup.session.name, query=".", terse=True)
+
+    captured = capsys.readouterr()
+    out = captured.out
+
+    assert rc == 0
+    assert out.endswith("\n")
+    assert "\n" not in out.rstrip("\n")
+    data = json.loads(out)
+    assert data["name"] == setup.session.name
+
+
+def test_query_missing_key_reports_available_keys():
+    data = {"alpha": 1, "beta": {"gamma": 2}}
+
+    with pytest.raises(KeyError) as exc:
+        query_json(data, ".missing")
+
+    message = str(exc.value)
+
+    assert "No such key" in message
+    assert "missing" in message
+    assert "alpha" in message
+    assert "beta" in message

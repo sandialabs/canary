@@ -18,6 +18,7 @@ from . import info
 from . import init
 from . import location
 from . import log
+from . import query
 from . import rebaseline
 from . import report
 from . import rm
@@ -45,6 +46,7 @@ plugins = [
     init,
     location,
     log,
+    query,
     rebaseline,
     report,
     rm,
