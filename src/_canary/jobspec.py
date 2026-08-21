@@ -5,6 +5,7 @@
 import dataclasses
 import hashlib
 import itertools
+import re
 import sys
 import threading
 from functools import cached_property
@@ -192,6 +193,8 @@ class JobSpec:
             kwds = self.parameters | self.meta_parameters
             kwds.pop("runtime", None)
             self.id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
+        else:
+            validate_spec_id(self.id)
         if self.exec_path == NULL_PATH:
             self.exec_path = self.file_path.parent / self.name
         self.exec_path = Path(self.exec_path)
@@ -525,6 +528,21 @@ def default_timeout(keywords: list[str]) -> float:
 def ceil_div(a: int, b: int) -> int:
     assert b != 0, "denominator must not be 0"
     return (a + b - 1) // b
+
+
+def validate_spec_id(id: str) -> str:
+    _spec_id_regex = re.compile(r"^[A-Za-z0-9_.:=+/\-]+$")
+    if not isinstance(id, str):
+        raise TypeError(f"JobSpec id expected str, got {type(id).__name__}")
+    value = id.strip()
+    if not value:
+        raise ValueError("JobSpec id must be non-empty")
+    if not _spec_id_regex.fullmatch(value):
+        raise ValueError(
+            "JobSpec id may only contain letters, digits, and these characters: "
+            "_.:=+/-; got {!r}".format(id)
+        )
+    return value
 
 
 class InvalidTypeError(Exception):

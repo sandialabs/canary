@@ -1279,6 +1279,66 @@ def source(name: str, *, when: WhenType | None = None) -> None:
     """
 
 
+def set_id(id: str, *, when: WhenType | None = None) -> None:
+    """Set an explicit SHA-like ID, or ID template, for this test.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import canary
+       canary.directives.set_id("deadbeef")
+
+    For parameterized tests, the ID may be a template expanded with parameter
+    values:
+
+    .. code-block:: python
+
+       import canary
+       canary.directives.parameterize("p", [1, 2])
+       canary.directives.set_id("deadbeef{p}")
+
+    which generates IDs ``deadbeef1`` and ``deadbeef2``.
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``id``: Explicit test ID or ID template. After expansion, the ID must be
+      hexadecimal with optional underscores and at least 8 characters long.
+    * ``when``: Restrict processing of the directive to this condition
+
+    Template Expansion
+    ------------------
+
+    Templates may reference test parameters and meta-parameters using either
+    ``str.format`` syntax or ``string.Template`` syntax:
+
+    .. code-block:: python
+
+       canary.directives.set_id("deadbeef{p}")
+       canary.directives.set_id("deadbeef${P}")
+
+    Parameter names are available in both their original and uppercase forms.
+    For composite/analyze parent cases, parameter template values are expanded
+    as empty strings.
+
+    Notes
+    -----
+
+    Expanded IDs must match ``[0-9a-f_]{8,64}`` after lower-casing. Explicit
+    IDs must be unique across the generated test suite. Duplicate IDs are
+    detected during generation.
+
+    This directive is intended for tests that need stable externally referenced
+    IDs.
+    """
+
+
 def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """Set an attribute on the test
 

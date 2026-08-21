@@ -312,3 +312,155 @@ def test_sources_glob_multiple_matches_with_dst_warns_and_ignores_dst(
     ]
     assert all(a.dst is None for a in assets)
     assert any("matched" in r.message and "dst=" in r.message for r in caplog.records)
+
+
+def test_set_id_sets_explicit_jobspec_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef")
+
+    specs = lock_model(m)
+
+    assert len(specs) == 1
+    assert specs[0].id == "deadbeef"
+
+
+def test_set_id_normalizes_uppercase_to_lowercase(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("DEADBEEF")
+
+    specs = lock_model(m)
+
+    assert specs[0].id == "deadbeef"
+
+
+def test_set_id_rejects_empty_template(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+
+    with pytest.raises(ValueError):
+        m.set_id("")
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "abc1234",  # too short
+        "dead-beef",  # punctuation
+        "dead beef",  # whitespace
+        "ghijklmn",  # not hex
+        "x" * 65,  # too long / not hex
+    ],
+)
+def test_set_id_rejects_invalid_expanded_ids(tmp_path: Path, bad_id: str) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id(bad_id)
+
+    with pytest.raises(ValueError):
+        lock_model(m)
+
+
+def test_set_id_when_condition(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef", when={"options": "stable"})
+
+    specs_without = lock_model(m, on_options=[])
+    specs_with = lock_model(m, on_options=["stable"])
+
+    assert specs_without[0].id != "deadbeef"
+    assert specs_with[0].id == "deadbeef"
+
+
+def test_set_id_template_expands_parameters(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef{p}")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+
+    specs = lock_model(m)
+
+    assert sorted(s.id for s in specs) == ["deadbeef1", "deadbeef2"]
+
+
+def test_set_id_template_expands_uppercase_parameter_alias(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef${P}")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+
+    specs = lock_model(m)
+
+    assert sorted(s.id for s in specs) == ["deadbeef1", "deadbeef2"]
+
+
+def test_set_id_template_expands_meta_parameters(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef{cpus}")
+    m.set_resource_parameter("cpus", 4)
+
+    specs = lock_model(m)
+
+    assert specs[0].id == "deadbeef4"
+
+
+def test_set_id_template_rejects_invalid_expanded_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef{p}")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", ["nothex"]))
+
+    with pytest.raises(ValueError, match="expanded to an invalid ID"):
+        lock_model(m)
+
+
+def test_set_id_template_rejects_duplicate_expanded_ids(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+
+    with pytest.raises(ValueError, match="duplicate ID"):
+        lock_model(m)
+
+
+def test_adapter_apply_set_id_from_loader(tmp_path: Path) -> None:
+    text = """
+import canary
+canary.directives.set_id("deadbeef")
+"""
+    f = make_test_file(tmp_path, "t.pyt", text=text)
+    m = PYTModel(str(tmp_path), "t.pyt")
+    calls = PYTLoader(file=f).parse()
+
+    PYTAdapter(m).apply(calls)
+    specs = lock_model(m)
+
+    assert specs[0].id == "deadbeef"
+
+
+def test_set_id_allows_underscores(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("dead_beef")
+
+    specs = lock_model(m)
+
+    assert specs[0].id == "dead_beef"
+
+
+def test_set_id_template_expands_parameters_with_underscores(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("dead_beef_{p}")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+
+    specs = lock_model(m)
+
+    assert sorted(s.id for s in specs) == ["dead_beef_1", "dead_beef_2"]
+
+
+def test_set_id_template_expands_parent_analyze_with_blank_parameters(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef{p}")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+    m.set_analyze(flag="--analyze")
+
+    specs = lock_model(m)
+
+    children = [s for s in specs if not s.attributes.get("multicase")]
+    parent = [s for s in specs if s.attributes.get("multicase") is True][0]
+
+    assert sorted(s.id for s in children) == ["deadbeef1", "deadbeef2"]
+    assert parent.id == "deadbeef"

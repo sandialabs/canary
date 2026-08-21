@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -74,21 +73,16 @@ def latest_jobs(workspace: Workspace) -> list[Job]:
 
 
 @pytest.mark.skipif(running_in_ci(), reason="Skip test in CI")
-def test_workspace_html_report_created_by_run(setup):
-    """A normal run should create a workspace-level HTML report."""
+def test_workspace_html_report_not_created_by_default(setup):
     report = setup.workspace_path / "reports" / "html" / "index.html"
     total = setup.workspace_path / "reports" / "html" / "Total.html"
     manifest = setup.workspace_path / "reports" / "html" / "manifest.json"
     summary = setup.tmp_path / "Canary.html"
 
-    assert report.exists()
-    assert total.exists()
-    assert manifest.exists()
-    assert summary.exists()
-
-    if summary.is_symlink():
-        target = os.readlink(summary)
-        assert target == os.path.join(".canary", "reports", "html", "index.html")
+    assert not report.exists()
+    assert not total.exists()
+    assert not manifest.exists()
+    assert not summary.exists()
 
 
 def test_junit_report(setup):

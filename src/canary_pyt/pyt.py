@@ -5,6 +5,7 @@ import errno
 import glob
 import inspect
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -76,6 +77,11 @@ class RecordedDirectiveCall:
     kwargs: dict[str, Any]
     file: str | None = None
     line: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class IDSpec:
+    template: str
 
 
 class DirectiveRecorder:
@@ -152,6 +158,7 @@ class PYTModel:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = self.file.stem
 
+        self.id: Field[IDSpec, IDSpec | None] = Field.make(reducer.LAST)
         self.families: Field[str, list[str]] = Field(reducer=reducer.IDENTITY)
         self.parameter_sets: Field[ParameterSet, list[ParameterSet]] = Field(
             reducer=reducer.IDENTITY
@@ -258,6 +265,40 @@ class PYTModel:
                 raise TypeError("baseline: both 'src' and 'dst' are required arguments")
             b = BaselineCopyAction(src=Path(src), dst=dst)
         self.baseline.add(b, when=when)
+
+    def set_id(self, id: str, when: WhenType | None = None) -> None:
+        self.id.add(IDSpec(template=validate_user_id_template(id)), when=when)
+
+    def get_id(
+        self,
+        family: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        meta_parameters: dict[str, Any] | None = None,
+        on_options: list[str] | None = None,
+    ) -> str | None:
+        id_spec = self.id.eval(family=family, parameters=parameters, on_options=on_options)
+        if id_spec is None:
+            return None
+
+        kw = self._sub_kwds(family, parameters, meta_parameters=meta_parameters)
+        expanded = self.safe_substitute(id_spec.template, **kw)
+        return validate_expanded_user_id(expanded)
+
+    def get_parent_id(
+        self,
+        family: str | None = None,
+        psets: list[ParameterSet] | None = None,
+        on_options: list[str] | None = None,
+    ) -> str | None:
+        blank_parameters: dict[str, Any] = {}
+
+        for pset in psets or []:
+            for key in pset.keys:
+                blank_parameters[key] = ""
+
+        return self.get_id(
+            family=family, parameters=blank_parameters, meta_parameters=None, on_options=on_options
+        )
 
     def set_exclusive(self, when: WhenType | None = None) -> None:
         self.exclusive.add(True, when=when)
@@ -562,6 +603,9 @@ class PYTAdapter:
 
     f_name = f_testname
 
+    def f_set_id(self, id: str, *, when: WhenType | None = None) -> None:
+        self.m.set_id(id, when=when)
+
     def f_keywords(self, *args: str, when: WhenType | None = None) -> None:
         self.m.add_keywords(*args, when=when)
 
@@ -738,6 +782,7 @@ class PYTLockEmitter:
             if not param_dicts:
                 param_dicts = [{}]
 
+            explicit_ids: list[str] = []
             test_mask: str | None = None
             my_irs: list[JobSpecIR] = []
 
@@ -757,8 +802,14 @@ class PYTLockEmitter:
                 baseline = model.get_baseline(family, parameters, on_options=on_options, subs=kw)
                 assets = model.get_sources(family, parameters, on_options=on_options, subs=kw)
                 deps = model.get_dependencies(family, parameters, on_options=on_options, subs=kw)
+                explicit_id = model.get_id(
+                    family, parameters, meta_parameters=meta_params, on_options=on_options
+                )
+                if explicit_id is not None:
+                    explicit_ids.append(explicit_id)
 
                 ir = JobSpecIR(
+                    id=explicit_id,
                     file_root=Path(model.root),
                     file_path=Path(model.path),
                     family=family,
@@ -810,6 +861,11 @@ class PYTLockEmitter:
                     raise ValueError(
                         "Generation of composite base job requires at least one parameter"
                     )
+                parent_explicit_id = model.get_parent_id(
+                    family=family, psets=psets, on_options=on_options
+                )
+                if parent_explicit_id is not None:
+                    explicit_ids.append(parent_explicit_id)
 
                 modules = model.get_modules(family, parameters=None, on_options=on_options)
                 deps = [
@@ -825,6 +881,7 @@ class PYTLockEmitter:
                 parent = JobSpecIR(
                     file_root=Path(model.root),
                     file_path=Path(model.path),
+                    id=parent_explicit_id,
                     family=family,
                     baseline=[],
                     owners=model.owners,
@@ -877,6 +934,7 @@ class PYTLockEmitter:
 
                 my_irs.append(parent)
 
+            check_duplicate_explicit_ids(model.file, explicit_ids)
             irs.extend(my_irs)
 
         return irs
@@ -992,3 +1050,33 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
         raise ValueError(f"{prefix}['expects']: invalid value: {expects!r} (must be > 0)")
 
     return DependencySelector(pattern=job, expects=expects, when=when)
+
+
+def validate_user_id_template(id: str) -> str:
+    if not isinstance(id, str):
+        raise TypeError(f"set_id expected str, got {type(id).__name__}")
+    template = id.strip()
+    if not template:
+        raise ValueError("set_id expected a non-empty ID template")
+    return template
+
+
+def validate_expanded_user_id(id: str) -> str:
+    _user_id_regex = re.compile(r"^[0-9a-f_]{8,64}$")
+    normalized = id.strip().lower()
+    if not _user_id_regex.fullmatch(normalized):
+        raise ValueError(
+            "set_id expanded to an invalid ID. Expected a SHA-like hexadecimal "
+            f"identifier with optional underscores and length 8..64; got {id!r}"
+        )
+    return normalized
+
+
+def duplicate_values(values: list[str]) -> list[str]:
+    return sorted({value for value in values if values.count(value) > 1})
+
+
+def check_duplicate_explicit_ids(file: Path, ids: list[str]) -> None:
+    duplicates = duplicate_values(ids)
+    if duplicates:
+        raise ValueError(f"{file}: set_id generated duplicate ID(s): {', '.join(duplicates)}")
