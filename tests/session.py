@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any
 from typing import cast
 
-from _canary.job import Measurements
-from _canary.util import json_helper as json
 from _canary.workspace import Session
 
 
@@ -42,14 +40,14 @@ def test_session_add_measurement(tmp_path: Path) -> None:
     assert session.measurements.data["score"] == 42
 
 
-def test_session_serialize_stores_job_ids_not_jobs(tmp_path: Path) -> None:
+def test_session_to_lock_data_stores_job_ids_not_jobs(tmp_path: Path) -> None:
     session = make_session(tmp_path)
     session.returncode = 0
     session.started_on = datetime.datetime(2026, 8, 20, 12, 0, 0)
     session.finished_on = datetime.datetime(2026, 8, 20, 12, 1, 30)
     session.add_measurement("workflow", "agentic")
 
-    data = session.__serialize__()
+    data = session.to_lock_data()
 
     assert data["name"] == "session-1"
     assert data["prefix"] == str(tmp_path / "sessions" / "session-1")
@@ -59,55 +57,24 @@ def test_session_serialize_stores_job_ids_not_jobs(tmp_path: Path) -> None:
     assert data["returncode"] == 0
     assert data["started_on"] == "2026-08-20T12:00:00"
     assert data["finished_on"] == "2026-08-20T12:01:30"
-    assert isinstance(data["measurements"], Measurements)
-    assert data["measurements"].data["workflow"] == "agentic"
+    assert data["measurements"] == {"workflow": "agentic"}
 
 
-def test_session_deserialize_roundtrip_direct_dict(tmp_path: Path) -> None:
-    data = {
-        "name": "session-1",
-        "prefix": str(tmp_path / "sessions" / "session-1"),
-        "job_ids": ["a" * 64, "b" * 64],
-        "returncode": 7,
-        "started_on": "2026-08-20T12:00:00",
-        "finished_on": "2026-08-20T12:01:30",
-        "measurements": Measurements(data={"agent": "sandi", "attempts": 3}),
-    }
-
-    session = Session.__deserialize__(data)
-
-    assert session.name == "session-1"
-    assert session.jobs == []
-    assert session.job_ids == ["a" * 64, "b" * 64]
-    assert session.prefix == tmp_path / "sessions" / "session-1"
-    assert session.returncode == 7
-    assert session.started_on == datetime.datetime(2026, 8, 20, 12, 0, 0)
-    assert session.finished_on == datetime.datetime(2026, 8, 20, 12, 1, 30)
-    assert session.measurements.data == {"agent": "sandi", "attempts": 3}
-
-
-def test_session_json_roundtrip(tmp_path: Path) -> None:
+def test_session_to_lock_data_includes_argv_and_config(tmp_path: Path, monkeypatch) -> None:
     session = make_session(tmp_path)
-    session.returncode = 0
-    session.started_on = datetime.datetime(2026, 8, 20, 12, 0, 0)
-    session.finished_on = datetime.datetime(2026, 8, 20, 12, 1, 30)
-    session.add_measurement("agent", {"name": "sandi"})
 
-    text = json.dumps(session)
-    out = json.loads(text)
+    monkeypatch.setattr("sys.argv", ["canary", "run", "default"])
 
-    assert isinstance(out, Session)
-    assert out.name == session.name
-    assert out.jobs == []
-    assert out.job_ids == session.job_ids
-    assert out.prefix == session.prefix
-    assert out.returncode == 0
-    assert out.started_on == session.started_on
-    assert out.finished_on == session.finished_on
-    assert out.measurements.data == {"agent": {"name": "sandi"}}
+    data = session.to_lock_data()
+
+    assert data["argv"] == ["canary", "run", "default"]
+    assert "config" in data
+    assert isinstance(data["config"], dict)
 
 
-def test_session_save_writes_session_lock(tmp_path: Path) -> None:
+def test_session_save_writes_plain_json_manifest(tmp_path: Path) -> None:
+    import json
+
     session = make_session(tmp_path)
     session.returncode = 3
     session.started_on = datetime.datetime(2026, 8, 20, 12, 0, 0)
@@ -119,14 +86,17 @@ def test_session_save_writes_session_lock(tmp_path: Path) -> None:
     lockfile = session.prefix / "session.lock"
     assert lockfile.exists()
 
-    out = json.loads(lockfile.read_text())
+    data = json.loads(lockfile.read_text())
 
-    assert isinstance(out, Session)
-    assert out.name == "session-1"
-    assert out.jobs == []
-    assert out.job_ids == ["a" * 64, "b" * 64]
-    assert out.returncode == 3
-    assert out.measurements.data["scheduler"] == {"queue_wait": 12.5}
+    assert data["name"] == "session-1"
+    assert data["job_ids"] == ["a" * 64, "b" * 64]
+    assert data["returncode"] == 3
+    assert data["started_on"] == "2026-08-20T12:00:00"
+    assert data["finished_on"] == "2026-08-20T12:01:30"
+    assert data["measurements"]["scheduler"] == {"queue_wait": 12.5}
+    assert "config" in data
+    assert "argv" in data
+    assert "__type__" not in data
 
 
 def test_session_save_creates_prefix_directory(tmp_path: Path) -> None:
@@ -138,3 +108,27 @@ def test_session_save_creates_prefix_directory(tmp_path: Path) -> None:
 
     assert session.prefix.exists()
     assert (session.prefix / "session.lock").exists()
+
+
+def test_session_load_lock_data_from_file(tmp_path: Path) -> None:
+    session = make_session(tmp_path)
+    session.returncode = 9
+    session.add_measurement("agent", "sandi")
+    session.save()
+
+    data = Session.load_lock_data(session.prefix / "session.lock")
+
+    assert data["name"] == "session-1"
+    assert data["returncode"] == 9
+    assert data["measurements"]["agent"] == "sandi"
+
+
+def test_session_load_lock_data_from_directory(tmp_path: Path) -> None:
+    session = make_session(tmp_path)
+    session.returncode = 4
+    session.save()
+
+    data = Session.load_lock_data(session.prefix)
+
+    assert data["name"] == "session-1"
+    assert data["returncode"] == 4

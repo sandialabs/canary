@@ -26,6 +26,7 @@ import dataclasses
 import datetime
 import fnmatch
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -109,43 +110,35 @@ class Session:
         """
         self.measurements.add_measurement(name, value)
 
-    def __serialize__(self) -> dict[str, Any]:
+    def to_lock_data(self) -> dict[str, Any]:
+        """Return the session.lock manifest.
+
+        This is intentionally a manifest, not a full Session serialization.
+        Jobs are represented by ID only; authoritative job state lives in each
+        testcase.lock and in the workspace database.
+        """
         return {
             "name": self.name,
-            "job_ids": [job.id for job in self.jobs] if self.jobs else list(self.job_ids),
             "prefix": str(self.prefix),
+            "job_ids": [job.id for job in self.jobs],
             "returncode": self.returncode,
             "started_on": self.started_on.isoformat(),
             "finished_on": self.finished_on.isoformat(),
-            "measurements": self.measurements,
+            "argv": list(sys.argv),
+            "config": config.snapshot(),
+            "measurements": dict(self.measurements.data),
         }
 
-    @classmethod
-    def __deserialize__(cls, data: dict[str, Any]) -> "Session":
-        session = cls(
-            name=str(data["name"]),
-            jobs=[],
-            prefix=Path(data["prefix"]),
-            measurements=data.get("measurements") or Measurements(),
-            job_ids=[str(job_id) for job_id in data.get("job_ids", [])],
-        )
-
-        session.returncode = int(data.get("returncode", -1))
-
-        started_on = data.get("started_on")
-        if started_on:
-            session.started_on = datetime.datetime.fromisoformat(started_on)
-
-        finished_on = data.get("finished_on")
-        if finished_on:
-            session.finished_on = datetime.datetime.fromisoformat(finished_on)
-
-        return session
-
     def save(self) -> None:
-        """Write this session manifest to ``session.lock``."""
+        """Write session.lock as plain JSON."""
         self.prefix.mkdir(parents=True, exist_ok=True)
-        json.safesave(self.lockfile, self)
+        json.safesave(self.lockfile, self.to_lock_data(), indent=2)
+
+    @staticmethod
+    def load_lock_data(path: str | Path) -> dict[str, Any]:
+        path = Path(path)
+        lockfile = path / "session.lock" if path.is_dir() else path
+        return json.loads(lockfile.read_text())
 
     @property
     def cases(self) -> list["Job"]:
