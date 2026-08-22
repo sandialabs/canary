@@ -4,6 +4,7 @@
 
 import argparse
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -350,3 +351,68 @@ def test_query_missing_key_reports_available_keys():
     assert "missing" in message
     assert "alpha" in message
     assert "beta" in message
+
+
+
+def find_lockfiles_followlinks(path: Path) -> list[Path]:
+    import os
+
+    lockfiles: list[Path] = []
+    for root, dirs, files in os.walk(path, followlinks=True):
+        if "testcase.lock" in files:
+            lockfiles.append(Path(root) / "testcase.lock")
+    return lockfiles
+
+
+def test_rebaseline_from_directory(tmpdir):
+
+    def check_success(cp):
+        assert cp.returncode == 0, (
+            f"command failed with returncode={cp.returncode}\n"
+            f"stdout:\n{getattr(cp, 'stdout', '')}\n"
+            f"stderr:\n{getattr(cp, 'stderr', '')}\n"
+        )
+
+    def find_lockfiles_followlinks(path: Path) -> list[Path]:
+        import os
+
+        lockfiles: list[Path] = []
+        for root, dirs, files in os.walk(path, followlinks=True):
+            if "testcase.lock" in files:
+                lockfiles.append(Path(root) / "testcase.lock")
+        return lockfiles
+
+    with working_dir(tmpdir.strpath, create=True):
+        Path("test_rebaseline.pyt").write_text(
+            "\n".join(
+                [
+                    "import pathlib",
+                    "import canary",
+                    "",
+                    "canary.directives.baseline(src='actual.txt', dst='expected.txt')",
+                    "",
+                    "pathlib.Path('actual.txt').write_text('original\\n')",
+                    "",
+                ]
+            )
+        )
+        Path("expected.txt").write_text("old baseline\n")
+
+        cp = CanaryCommand("init")(".")
+        check_success(cp)
+
+        cp = CanaryCommand("run")("-w", ".")
+        check_success(cp)
+
+        lockfiles = find_lockfiles_followlinks(Path("TestResults"))
+        assert len(lockfiles) == 1
+
+        result_dir = lockfiles[0].parent
+        actual = result_dir / "actual.txt"
+        assert actual.exists()
+        actual.write_text("new baseline\n")
+
+        cp = CanaryCommand("rebaseline")("TestResults")
+        check_success(cp)
+
+        assert Path("expected.txt").read_text() == "new baseline\n"
