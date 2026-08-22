@@ -353,7 +353,6 @@ def test_query_missing_key_reports_available_keys():
     assert "beta" in message
 
 
-
 def find_lockfiles_followlinks(path: Path) -> list[Path]:
     import os
 

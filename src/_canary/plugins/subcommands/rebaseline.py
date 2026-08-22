@@ -5,7 +5,6 @@
 import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import Iterable
 
 from ...hookspec import hookimpl
 from ...rules import KeywordRule
@@ -117,9 +116,7 @@ def load_job_from_lockfile(path: Path) -> "Job":
     return job
 
 
-def filter_jobs_by_keywords(
-    jobs: list["Job"], keyword_exprs: list[str] | None
-) -> list["Job"]:
+def filter_jobs_by_keywords(jobs: list["Job"], keyword_exprs: list[str] | None) -> list["Job"]:
     if not keyword_exprs:
         return jobs
 
