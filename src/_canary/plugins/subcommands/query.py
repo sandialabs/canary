@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -18,9 +19,14 @@ if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
 
+CAPABILITY_DATA_PACKAGE = "canary"
+CAPABILITY_DATA_DIR = "data"
+CAPABILITY_DATASET = "capabilities"
+
+
 class Query(CanarySubcommand):
     name = "query"
-    description = "Query Canary job/session lock files"
+    description = "Query Canary job/session lock files or static capability data"
 
     def setup_parser(self, parser: "Parser") -> None:
         group = parser.add_mutually_exclusive_group(required=True)
@@ -34,29 +40,45 @@ class Query(CanarySubcommand):
             metavar="SESSION",
             help="Query the session.lock for SESSION",
         )
+        group.add_argument(
+            "-c",
+            "--capabilities",
+            dest="capabilities",
+            metavar="CAPABILITY",
+            help=(
+                "Query Canary's static capability database. "
+                "'-c all' or '-c capabilities' prints the whole database. "
+                "Other values are shortcuts into the database, for example "
+                "'-c overview' is equivalent to '-c capabilities .overview'."
+            ),
+        )
         parser.add_argument("--terse", action="store_true", help="Print compact single-line JSON")
         parser.add_argument(
             "query",
             nargs="?",
             default=".",
-            help="Query expression. If omitted, emit the whole lock file.",
+            help="Query expression. If omitted, emit the whole selected JSON object.",
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        workspace = Workspace.load()
+        if args.capabilities:
+            data = query_capabilities(args.capabilities, args.query)
 
-        if args.jobid:
-            lockfile = self.job_lockfile(workspace, args.jobid)
         else:
-            lockfile = self.session_lockfile(workspace, args.session)
+            workspace = Workspace.load()
 
-        data = json.loads(lockfile.read_text())
-        result = query_json(data, args.query)
+            if args.jobid:
+                lockfile = self.job_lockfile(workspace, args.jobid)
+            else:
+                lockfile = self.session_lockfile(workspace, args.session)
+
+            data = json.loads(lockfile.read_text())
+            data = query_json(data, args.query)
 
         if args.terse:
-            json.dump(result, sys.stdout, separators=(",", ":"))
+            json.dump(data, sys.stdout, separators=(",", ":"))
         else:
-            json.dump(result, sys.stdout, indent=2)
+            json.dump(data, sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0
 
@@ -98,6 +120,78 @@ class Query(CanarySubcommand):
             raise ValueError(f"{session!r}: ambiguous session prefix; matches: {names}")
 
         return matches[0]
+
+
+def load_capability_dataset() -> Any:
+    """
+    Load Canary's static capability database.
+
+    Canary currently ships exactly one static capability database:
+    ``canary/data/capabilities.json``.
+
+    The command-line ``-c`` selector is intentionally not a dataset selector.
+    It is a capability selector:
+
+    - ``-c all`` prints the whole capabilities database.
+    - ``-c capabilities`` also prints the whole capabilities database.
+    - ``-c overview`` is a shortcut for ``-c capabilities .overview``.
+    - ``-c hooks.post`` is a shortcut for ``-c capabilities .hooks.post``.
+    """
+    path = (
+        resources.files(CAPABILITY_DATA_PACKAGE)
+        .joinpath(CAPABILITY_DATA_DIR)
+        .joinpath(f"{CAPABILITY_DATASET}.json")
+    )
+
+    if not path.is_file():
+        raise CapabilityDatasetNotFoundError(path)
+
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def query_capabilities(selector: str, query: str = ".") -> Any:
+    """
+    Query Canary's static capability database.
+
+    Args:
+        selector:
+            Capability selector from ``-c``. ``all`` and ``capabilities`` select
+            the whole database. Any other selector is interpreted as a shortcut
+            path into the database.
+        query:
+            Optional additional query path. For shortcut selectors, the query
+            is appended below the selected shortcut path.
+
+    Examples:
+        ``query_capabilities("all")`` returns the full database.
+
+        ``query_capabilities("capabilities", ".overview")`` returns
+        ``.overview``.
+
+        ``query_capabilities("overview")`` returns ``.overview``.
+
+        ``query_capabilities("hooks.post")`` returns ``.hooks.post``.
+
+        ``query_capabilities("hooks", ".post")`` returns ``.hooks.post``.
+    """
+    data = load_capability_dataset()
+    selector = selector.strip()
+    query = query.strip()
+
+    if not selector:
+        raise ValueError("Capability selector must be non-empty")
+
+    if selector in ("all", CAPABILITY_DATASET):
+        return query_json(data, query)
+
+    shortcut = selector if selector.startswith(".") else f".{selector}"
+
+    if query and query != ".":
+        suffix = query[1:] if query.startswith(".") else query
+        if suffix:
+            shortcut = f"{shortcut}.{suffix}"
+
+    return query_json(data, shortcut)
 
 
 def query_json(data: Any, query: str) -> Any:
@@ -225,6 +319,12 @@ def parse_bracket(query: str, i: int) -> tuple[str | int, int]:
         return value, j + 1
 
     raise ValueError(f"Invalid bracket expression in query: {query!r}")
+
+
+class CapabilityDatasetNotFoundError(FileNotFoundError):
+    def __init__(self, path: Any) -> None:
+        self.path = path
+        super().__init__(f"Canary capability database not found: {path}")
 
 
 @hookimpl

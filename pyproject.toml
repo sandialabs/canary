@@ -83,7 +83,7 @@ canary_pyt = "canary_pyt"
 include-package-data = true
 
 [tool.setuptools.package-data]
-canary = ["py.typed", "examples/**"]
+canary = ["py.typed", "examples/**", "data/*.json"]
 _canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg"]
 canary_cdash = ["validators/*.xsd"]
 canary_cmake = ["Canary.cmake", "tests/**/CTestTestfile.cmake"]

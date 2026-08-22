@@ -101,6 +101,7 @@ The ``when`` expression recognizes the following conditions:
 from typing import Any
 from typing import Sequence
 
+# from typing_extensions import deprecated
 from _canary import enums
 from _canary.ir import DependencySelector
 
@@ -108,6 +109,7 @@ WhenType = str | dict[str, str]
 DependencyType = str | dict[str, Any] | DependencySelector
 
 
+# @deprecated("canary.directives.artifact is deprecated; use canary_pyt.directives.artifact")
 def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always") -> None:
     """Save ``file`` as an artifact.  This directive is not used by the test directly.  Reporters
     can save a test's artifacts at their destination.  For instance, the artifacts may submitted to
