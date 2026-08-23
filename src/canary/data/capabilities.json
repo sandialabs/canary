@@ -1,0 +1,853 @@
+{
+  "schema_version": "1.0.0",
+  "dataset": "capabilities",
+  "audience": "AI coding agents and automation tools that need to discover how to use Canary without loading the full documentation corpus.",
+  "format": {
+    "type": "static_json",
+    "query_command": "canary query -c capabilities [query]",
+    "query_language": "Canary query path syntax: whole object with '.', dotted object keys, bracketed object keys, and list indexes. This is not jq.",
+    "progressive_disclosure": "Top-level objects are compact indexes. Query deeper paths for operational details."
+  },
+  "overview": {
+    "what_is_canary": "Canary is a Python-based workflow and test execution framework for defining, scheduling, running, and inspecting computational jobs across environments ranging from developer laptops to HPC systems.",
+    "core_model": "Canary core executes Job objects. It does not require one universal job-definition file format. Job generators interpret user-facing definitions and emit JobSpecIR or JobSpec objects. Canary resolves dependencies, constructs Jobs for a Session, schedules them with resources, runs them, and persists results.",
+    "when_to_use": [
+      "Run computational tests or simulations with structured status, logs, artifacts, and measurements.",
+      "Define parameter sweeps and dependency-aware workflows.",
+      "Execute jobs locally, under HPC batching integrations, or through extension-provided execution backends.",
+      "Expose structured results to scripts, CI systems, reports, or AI agents."
+    ],
+    "major_concepts": {
+      "job_generator": "Interprets an input representation such as .pyt, .vvt, CTest metadata, YAML, or another domain-specific format and emits JobSpecIR or JobSpec objects.",
+      "jobspec": "A resolved description of a job: identity, command, parameters, resources, dependencies, assets, artifacts, and metadata.",
+      "job": "A concrete session execution object constructed from a JobSpec and consumed by Canary's scheduler/executor.",
+      "session": "A persistent execution run containing jobs, session metadata, measurements, and a session.lock manifest.",
+      "workspace": "A persistent .canary directory containing specs, sessions, logs, cache, reports, a SQLite index, and temporary state.",
+      "resource_pool": "Topology-aware model of available resources, organized by nodes and resource instances with slots.",
+      "query": "A lightweight JSON path query command for job locks, session locks, and static capability datasets."
+    },
+    "start_here": {
+      "write_a_test": ".tests.authoring",
+      "run_work": ".execution.local",
+      "inspect_results": ".query",
+      "add_post_processing": ".hooks.post",
+      "write_a_generator": ".plugins.generators",
+      "agentic_workflows": ".agent_workflows"
+    },
+    "common_agent_queries": [
+      "canary query -c capabilities .overview",
+      "canary query -c capabilities .tests.authoring",
+      "canary query -c capabilities .execution.local",
+      "canary query -c capabilities .hooks.post",
+      "canary query -c capabilities .query.examples",
+      "canary query -c capabilities .agent_workflows"
+    ]
+  },
+  "concepts": {
+    "pipeline": {
+      "summary": "Canary separates user-facing job definitions from execution. Generators create specs; the workspace resolves and stores specs; sessions construct jobs; the executor runs jobs and persists results.",
+      "stages": [
+        {
+          "name": "definition",
+          "description": "A user writes or supplies a job definition in a format understood by an installed generator."
+        },
+        {
+          "name": "generation",
+          "description": "A Job Generator emits JobSpecIR or JobSpec objects."
+        },
+        {
+          "name": "dependency_resolution",
+          "description": "Dependency selectors are resolved into concrete SpecDependency edges."
+        },
+        {
+          "name": "selection",
+          "description": "Rules filter or mask specs by keyword, parameters, owner, regex, path, IDs, resources, or rerun state."
+        },
+        {
+          "name": "session_construction",
+          "description": "A Workspace constructs Job objects from JobSpec objects for a Session."
+        },
+        {
+          "name": "execution",
+          "description": "A resource-aware queue schedules runnable jobs. Launchers execute job commands and update status, timekeeper, and measurements."
+        },
+        {
+          "name": "persistence",
+          "description": "Job lock files, session lock files, artifacts, logs, and a SQLite index persist execution state."
+        }
+      ],
+      "important_distinction": "Canary core does not parse every supported job-definition format. Generators own input formats; Canary core owns execution of Jobs."
+    },
+    "jobspec_job_generator": {
+      "JobSpecIR": {
+        "purpose": "Intermediate generator output that may contain unresolved dependency selectors.",
+        "created_by": "Job Generators.",
+        "resolved_to": "JobSpec after dependency resolution.",
+        "public_extension_api": true
+      },
+      "JobSpec": {
+        "purpose": "Resolved job specification with concrete dependency edges.",
+        "contains": [
+          "id",
+          "file_root",
+          "file_path",
+          "family",
+          "parameters",
+          "meta_parameters",
+          "dependencies",
+          "keywords",
+          "assets",
+          "artifacts",
+          "environment",
+          "command",
+          "timeout",
+          "resource-related parameters"
+        ]
+      },
+      "Job": {
+        "purpose": "Concrete execution object in a Session.",
+        "constructed_by": "Workspace.construct_jobs or Workspace.load_jobs.",
+        "contains_runtime_state": [
+          "status",
+          "state phase",
+          "timekeeper",
+          "measurements",
+          "workspace",
+          "resource allocation",
+          "dependencies as Job objects"
+        ]
+      },
+      "Generator": {
+        "purpose": "Discovers/interprets user job definitions and emits specs.",
+        "reference_implementation": "The Python job definition package, commonly exposed through .pyt files, is the reference generator implementation."
+      }
+    },
+    "lifecycle": {
+      "job_phases": [
+        "PENDING",
+        "STAGING",
+        "RUNNING",
+        "FINISHING",
+        "DONE"
+      ],
+      "status_model": {
+        "category": "Broad category such as PASS, FAIL, SKIP, CANCEL, or NONE.",
+        "outcome": "Specific outcome such as SUCCESS, FAILED, DIFFED, TIMEOUT, SKIPPED, BLOCKED, ERROR, BROKEN, XFAIL, XDIFF, CANCELLED, or INTERRUPTED.",
+        "reason": "Human-readable reason, usually populated for non-success outcomes.",
+        "code": "Exit code or framework-assigned code."
+      },
+      "timekeeper": {
+        "timestamps": [
+          "_submitted",
+          "_staged",
+          "_started",
+          "_stopped",
+          "_finished"
+        ],
+        "durations": [
+          "pending",
+          "staging",
+          "running",
+          "finishing",
+          "total"
+        ]
+      }
+    },
+    "persistence": {
+      "summary": "Persistence is hybrid. SQLite is an index/result/state store. Lock files and the filesystem are authoritative for detailed serialized job/session state and artifacts.",
+      "sqlite": "workspace.sqlite3 stores specs, spec metadata, dependencies, selections, selection metadata, and latest/history result rows.",
+      "job_lock": "Each executed job writes testcase.lock in its execution directory.",
+      "session_lock": "Each session writes session.lock in its session directory.",
+      "artifacts": "Outputs, linked/copied assets, logs, and artifacts live in job work directories and optionally in views or reports.",
+      "result_spool": "Completed jobs are spooled through a filesystem queue so the parent process can write results to SQLite."
+    }
+  },
+  "tests": {
+    "summary": "Canary tests are jobs produced by generators. The reference authoring format is provided by the Python job definition package, but other generators may define other input formats.",
+    "authoring": {
+      "reference_format": "Python job definitions are commonly written as .pyt files interpreted by the canary_pyt generator.",
+      "minimal_pattern": [
+        "Place generator directives at module scope.",
+        "Place executable test logic in a function.",
+        "Guard executable code with if __name__ == '__main__'.",
+        "Exit with code 0 for success or use Canary exceptions/exit statuses for structured outcomes."
+      ],
+      "minimal_example": [
+        "import sys",
+        "import canary",
+        "",
+        "canary.directives.keywords('smoke')",
+        "",
+        "def test() -> int:",
+        "    return 0",
+        "",
+        "if __name__ == '__main__':",
+        "    sys.exit(test())"
+      ],
+      "important_distinction": "This Python format is a generator-provided format, not a requirement imposed by Canary core."
+    },
+    "directives": {
+      "purpose": "Directives communicate generation-time information to a generator.",
+      "reference": "Use canary query -c capabilities .commands.reference and generated directive reference pages for exact syntax.",
+      "common": {
+        "keywords": "Attach labels used for selection.",
+        "parameterize": "Generate multiple job instances from parameter values.",
+        "depends_on": "Declare dependencies by name, pattern, or structured selector.",
+        "timeout": "Set job timeout.",
+        "copy": "Copy an asset into the execution directory.",
+        "link": "Symlink an asset into the execution directory.",
+        "artifact": "Declare files to preserve or report.",
+        "cpus": "Set fixed CPU resource requirement without creating a named parameter variation.",
+        "gpus": "Set fixed GPU resource requirement without creating a named parameter variation.",
+        "nodes": "Set fixed node count requirement.",
+        "xfail": "Mark job as expected to fail.",
+        "xdiff": "Mark job as expected to diff.",
+        "skipif": "Skip jobs conditionally with a reason.",
+        "set_id": "Assign stable explicit IDs for generated specs."
+      }
+    },
+    "parameters": {
+      "purpose": "Parameters create job variants, participate in naming, and may define resource requirements when names match resource types.",
+      "resource_parameters": [
+        "cpus",
+        "gpus",
+        "nodes",
+        "any parameter name matching a resource type in the resource pool"
+      ],
+      "common_mistakes": [
+        "Using a resource-like parameter without defining that resource type in the resource pool.",
+        "Assuming cpus(arg) changes the job display name; fixed resource directives set meta-parameters and do not create named variants.",
+        "Duplicating keys between parameters and meta_parameters."
+      ]
+    },
+    "assets_and_artifacts": {
+      "assets": "Files or directories staged into the job workspace by copy, link, or none actions.",
+      "artifacts": "Files collected or exposed after execution depending on status.",
+      "default_artifacts_for_python_jobs": [
+        "testcase.lock",
+        "canary-out.txt",
+        "the input job definition file"
+      ]
+    },
+    "expected_outcomes": {
+      "success": "Exit code 0 maps to SUCCESS.",
+      "failed": "Unhandled nonzero exit codes usually map to FAILED.",
+      "skipped": "Use Canary skip exit status or TestSkipped.",
+      "diffed": "Use Canary diff exit status or TestDiffed.",
+      "timeout": "A job exceeding its timeout is marked TIMEOUT.",
+      "xfail": "Expected nonzero exit is marked XFAIL when configured.",
+      "xdiff": "Expected diff is marked XDIFF when configured."
+    }
+  },
+  "workflows": {
+    "summary": "A Canary workflow is a dependency-aware collection of generated jobs executed within a session.",
+    "authoring": {
+      "steps": [
+        "Choose or implement a generator for the job-definition format.",
+        "Write job definitions with commands, parameters, resources, dependencies, assets, and artifacts.",
+        "Collect/generate specs into a workspace.",
+        "Select jobs by paths, tags, keywords, parameters, owners, regex, or IDs.",
+        "Run selected jobs in a session.",
+        "Inspect structured results, logs, artifacts, and reports."
+      ]
+    },
+    "dependency_workflows": {
+      "description": "Dependencies allow jobs to run only after upstream jobs complete with required outcomes.",
+      "default_dependency_condition": "on_success",
+      "other_conditions": [
+        "on_failure",
+        "always",
+        "status/category expressions supported by Dependency.is_satisfied"
+      ],
+      "rerun_closure": "Rerun logic includes downstream jobs that depend on selected roots and may include upstream jobs masked as already satisfied."
+    },
+    "post_processing": {
+      "description": "Post-processing can be implemented inside a generated job, as a composite/analysis job, or in post-test/session hooks.",
+      "recommended_for_agents": "Emit structured measurements with Job.add_measurement or Session.add_measurement so post-processing results can be queried without log scraping."
+    },
+    "common_patterns": {
+      "local_development": [
+        "canary run PATH",
+        "canary status",
+        "canary log JOBID",
+        "canary query -j JOBID measurements"
+      ],
+      "persistent_selection": [
+        "canary collect -r PATH",
+        "canary select TAG",
+        "canary run TAG"
+      ],
+      "rerun_failed": [
+        "canary run TAG --only failed",
+        "canary run TAG --only not_pass"
+      ],
+      "single_job_reproduction": [
+        "canary exec JOBID",
+        "canary location JOBID",
+        "canary log JOBID"
+      ]
+    }
+  },
+  "jobs": {
+    "summary": "A Job is a concrete execution object in a session. It wraps a JobSpec, an ExecutionSpace, dependency Job objects, status, lifecycle state, timekeeper, measurements, variables, and resource allocation.",
+    "important_fields": {
+      "id": "Stable spec/job identifier.",
+      "spec": "Resolved JobSpec.",
+      "workspace": "ExecutionSpace with root, relative path, and session.",
+      "dependencies": "List of Dependency objects pointing to upstream Jobs.",
+      "status": "Status category/outcome/reason/code.",
+      "state": "JobState phase.",
+      "timekeeper": "Lifecycle timestamps and duration helpers.",
+      "measurements": "Structured key/value data recorded during execution.",
+      "variables": "Runtime environment variables passed to the job."
+    },
+    "measurement_api": {
+      "method": "Job.add_measurement(name, value)",
+      "storage": "Serialized into testcase.lock and result records.",
+      "query_example": "canary query -j JOBID measurements.data.<name>"
+    },
+    "readiness": {
+      "is_ready": "True when all dependencies are done and satisfied.",
+      "is_runnable": "False when done, skipped, or permanently blocked by failed dependency criteria.",
+      "blocked": "A job can be marked BLOCKED when a dependency finishes with an outcome that does not satisfy its dependency condition."
+    }
+  },
+  "sessions": {
+    "summary": "A Session is a persistent execution run containing jobs, session name, prefix directory, measurements, job IDs, start/finish timestamps, and return code.",
+    "lock_file": "session.lock",
+    "measurement_api": {
+      "method": "Session.add_measurement(name, value)",
+      "query_example": "canary query -s latest measurements.<name>"
+    },
+    "lifecycle": {
+      "start_hook": "canary_sessionstart(session)",
+      "finish_hook": "canary_sessionfinish(session)",
+      "run": "Session.run constructs a Runner for runnable jobs and invokes canary_runtests."
+    },
+    "latest": "The workspace refs/latest file points to the latest session directory."
+  },
+  "resources": {
+    "summary": "Canary uses a topology-aware ResourcePool to prevent oversubscription and to assign runtime resource IDs to jobs.",
+    "schema": {
+      "root_keys": [
+        "allow_multinode",
+        "additional_properties",
+        "nodes"
+      ],
+      "node_keys": [
+        "id",
+        "additional_properties",
+        "resources"
+      ],
+      "resource_instance_keys": [
+        "id",
+        "slots",
+        "properties"
+      ],
+      "example": {
+        "resource_pool": {
+          "allow_multinode": true,
+          "additional_properties": {},
+          "nodes": [
+            {
+              "id": "node-0",
+              "resources": {
+                "cpus": [
+                  {
+                    "id": "0",
+                    "slots": 1
+                  },
+                  {
+                    "id": "1",
+                    "slots": 1
+                  }
+                ],
+                "gpus": [
+                  {
+                    "id": "0",
+                    "slots": 1,
+                    "properties": {
+                      "vendor": "UNKNOWN"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "job_requests": {
+      "source": "Job.required_resources returns a list of NodeRequest objects derived from JobSpec resource parameters.",
+      "nodes": "A nodes parameter greater than 1 creates multiple per-node requests and treats multi-node jobs as whole-node reservations.",
+      "cpus_default": 1,
+      "gpus_default": 0
+    },
+    "runtime_environment": {
+      "pattern": "CANARY_<RESOURCE_SINGULAR>_IDS",
+      "examples": [
+        "CANARY_CPU_IDS",
+        "CANARY_GPU_IDS"
+      ],
+      "template_expansion": "Existing job variables may use %(cpu_ids)s or %(gpu_ids)s style placeholders that are expanded after resource assignment."
+    },
+    "commands": {
+      "show_pool": "canary config show resource_pool",
+      "override_count": "canary run -r cpus=8 -r gpus=1 PATH",
+      "resource_pool_file": "canary run --resource-pool-file FILE.yaml PATH",
+      "oversubscribe": "canary run --oversubscribe cpus=2 PATH"
+    }
+  },
+  "dependencies": {
+    "summary": "Dependencies are declared by generators as selectors and resolved into concrete SpecDependency edges between JobSpecs.",
+    "selector": {
+      "type": "DependencySelector",
+      "fields": {
+        "pattern": "Name, full name, file path, ID, or glob pattern to match.",
+        "expects": "Expected match count: '+', '?', '*', or a positive integer.",
+        "when": "Condition required for dependent job to run."
+      }
+    },
+    "conditions": {
+      "on_success": "Dependency status category must be PASS.",
+      "on_failure": "Dependency status category must be FAIL.",
+      "always": "Dependency only needs to be done.",
+      "*": "Alias for always in some generator inputs.",
+      "expression": "Other strings may be evaluated as simple status/category expressions."
+    },
+    "common_mistakes": [
+      "Using an ambiguous dependency pattern.",
+      "Forgetting that dependencies match generated job names after parameter expansion.",
+      "Expecting a downstream job to run when an upstream dependency failed but the condition is on_success."
+    ]
+  },
+  "execution": {
+    "local": {
+      "summary": "Local execution uses a ResourceQueue and ResourceQueueExecutor to run jobs in worker processes while respecting dependencies and resource capacity.",
+      "primary_command": "canary run PATH_OR_TAG",
+      "single_job_command": "canary exec JOBID",
+      "workers": "The --workers option controls the maximum process pool size, but resource availability may further limit concurrency.",
+      "launcher": "The default launcher runs the job command as a subprocess in the job workspace."
+    },
+    "hpc": {
+      "summary": "HPC execution is provided by extension packages and typically batches jobs for submission through hpc_connect.",
+      "details_query": "canary query -c capabilities .plugins.hpc"
+    },
+    "timeouts": {
+      "job_timeout": "Job.total_timeout applies configured multipliers to the JobSpec timeout.",
+      "session_timeout": "A session timeout may terminate all in-flight jobs.",
+      "launcher_timeout": "The default subprocess launcher kills the process group on timeout."
+    }
+  },
+  "query": {
+    "summary": "canary query inspects JSON data from job locks, session locks, or static capability datasets.",
+    "selectors": {
+      "-j, --job": "Query testcase.lock for a job found by ID or matching spec.",
+      "-s, --session": "Query session.lock for a session name or prefix; latest is supported.",
+      "-c, --capabilities": "Query a named static capability dataset, such as capabilities."
+    },
+    "syntax": {
+      ".": "Return the whole object.",
+      "foo.bar": "Access nested object keys.",
+      ".foo.bar": "Leading dot is optional.",
+      "array[0]": "Access list index.",
+      "object['key with spaces']": "Access quoted key.",
+      "object[\"key.with.dots\"]": "Access quoted key containing punctuation."
+    },
+    "examples": {
+      "whole_capabilities": "canary query -c capabilities",
+      "overview": "canary query -c capabilities .overview",
+      "post_hooks": "canary query -c capabilities .hooks.post",
+      "whole_job": "canary query -j JOBID",
+      "job_measurements": "canary query -j JOBID measurements.data",
+      "one_measurement": "canary query -j JOBID measurements.data.max_stress",
+      "latest_session": "canary query -s latest",
+      "session_measurement": "canary query -s latest measurements.campaign"
+    },
+    "not_jq": "The query language is intentionally small. It does not support filters, pipes, recursive descent, expressions, or transformations."
+  },
+  "hooks": {
+    "summary": "Canary extensions use pluggy hooks to add commands, generators, resource behavior, launchers, runtime behavior, reports, measurements, and lifecycle actions.",
+    "registration": {
+      "entry_point_group": "canary",
+      "plugin_manager": "_canary.pluginmanager.CanaryPluginManager",
+      "marker": "canary.hookimpl or _canary.hookspec.hookimpl"
+    },
+    "pre": {
+      "canary_sessionstart": {
+        "purpose": "Runs when a new session starts.",
+        "arguments": [
+          "session"
+        ],
+        "agent_use": "Attach session-level structured metadata with session.add_measurement."
+      },
+      "canary_runteststart": {
+        "purpose": "Runs during job setup before the job command executes.",
+        "arguments": [
+          "case"
+        ],
+        "default_behavior": "The built-in wrapper calls case.setup() and then saves the job.",
+        "agent_use": "Prepare generated inputs, validate preconditions, or record setup metadata."
+      }
+    },
+    "post": {
+      "canary_runtest": {
+        "purpose": "Runs the test body or launcher for a Job.",
+        "arguments": [
+          "case"
+        ],
+        "default_behavior": "The built-in wrapper calls case.run() and saves the job.",
+        "agent_use": "Can be extended for custom execution behavior, but launchers are usually preferable for changing process execution."
+      },
+      "canary_runtest_finish": {
+        "purpose": "Runs after the test execution phase and before the job is finally saved.",
+        "arguments": [
+          "case"
+        ],
+        "default_behavior": "The built-in wrapper calls case.finish() and saves the job.",
+        "agent_use": "Inspect outputs, perform post-processing, add measurements, and attach metadata."
+      },
+      "canary_runtests_report": {
+        "purpose": "Runs after a test session to generate reports or summaries.",
+        "arguments": [
+          "runner"
+        ],
+        "agent_use": "Create machine-readable reports or summarize structured measurements."
+      },
+      "canary_sessionfinish": {
+        "purpose": "Runs after a non-reused session finishes.",
+        "arguments": [
+          "session"
+        ],
+        "agent_use": "Add final session metadata, archive outputs, notify external systems, or trigger follow-on automation."
+      }
+    },
+    "generation": {
+      "canary_collectstart": "Register job generator classes with the collector.",
+      "canary_generate_modifyitems": "Inspect or mutate generated JobSpecs before they are stored or run.",
+      "canary_generate_report": "Report generation results."
+    },
+    "selection": {
+      "canary_select_modifyitems": "Modify selected specs.",
+      "canary_rtselect_modifyitems": "Modify runtime-selected jobs."
+    },
+    "execution": {
+      "canary_runtests": "Override or provide a test-session execution backend.",
+      "canary_runtest_launcher": "Return a Launcher for an individual Job.",
+      "canary_runteststart": "Setup phase for one Job.",
+      "canary_runtest": "Execution phase for one Job.",
+      "canary_runtest_finish": "Finish/post-processing phase for one Job."
+    },
+    "resources": {
+      "canary_resource_pool_fill": "Create the initial resource-pool specification.",
+      "canary_resource_pool_update": "Mutate or augment a ResourcePool before use.",
+      "canary_resource_pool_accommodates": "Determine whether a Job can be accommodated.",
+      "canary_resource_pool_types": "Return available resource types."
+    },
+    "measurement_examples": {
+      "job": [
+        "def canary_runtest_finish(case):",
+        "    case.add_measurement('max_stress', value)"
+      ],
+      "session": [
+        "def canary_sessionstart(session):",
+        "    session.add_measurement('campaign', 'run-001')"
+      ]
+    }
+  },
+  "results": {
+    "summary": "Canary records status, lifecycle timing, measurements, logs, artifacts, views, and reports.",
+    "status_categories": [
+      "PASS",
+      "FAIL",
+      "SKIP",
+      "CANCEL",
+      "NONE"
+    ],
+    "common_outcomes": [
+      "SUCCESS",
+      "FAILED",
+      "DIFFED",
+      "TIMEOUT",
+      "SKIPPED",
+      "BLOCKED",
+      "ERROR",
+      "BROKEN",
+      "XFAIL",
+      "XDIFF",
+      "CANCELLED",
+      "INTERRUPTED",
+      "NONE"
+    ],
+    "logs": {
+      "stdout_default": "canary-out.txt",
+      "stderr_default": "stderr is combined with stdout unless configured otherwise",
+      "command": "canary log JOBID"
+    },
+    "views": {
+      "default_name": "TestResults",
+      "modes": [
+        "symlink",
+        "hardlink",
+        "copy",
+        "none"
+      ],
+      "purpose": "Expose latest results in a user-facing tree."
+    },
+    "reports": {
+      "json": "Machine-readable JSON report.",
+      "junit": "JUnit XML report for CI systems.",
+      "html": "Static HTML report with job pages and file browser.",
+      "markdown": "Markdown report for lightweight summaries."
+    }
+  },
+  "commands": {
+    "summary": "Use generated command reference pages for exact syntax. This object provides agent-oriented command selection guidance.",
+    "reference": "Run canary query -c capabilities .commands.<name> for concise purpose and common use.",
+    "run": {
+      "purpose": "Collect/select and execute jobs.",
+      "typical": [
+        "canary run PATH",
+        "canary run TAG",
+        "canary run JOBID",
+        "canary run PATH -- ARGUMENTS_FOR_TEST_SCRIPT"
+      ]
+    },
+    "collect": {
+      "purpose": "Find generators and cache generated specs in a workspace.",
+      "typical": [
+        "canary collect -r PATH"
+      ]
+    },
+    "select": {
+      "purpose": "Create, rename, delete, or derive tagged selections.",
+      "typical": [
+        "canary select TAG -k EXPRESSION"
+      ]
+    },
+    "find": {
+      "purpose": "Discover and display generated specs without necessarily storing/running them.",
+      "typical": [
+        "canary find -r PATH",
+        "canary find -g -r PATH"
+      ]
+    },
+    "status": {
+      "purpose": "Inspect job status in a workspace.",
+      "typical": [
+        "canary status",
+        "canary status -rA"
+      ]
+    },
+    "log": {
+      "purpose": "Display session or job log files.",
+      "typical": [
+        "canary log JOBID"
+      ]
+    },
+    "location": {
+      "purpose": "Print input, log, working, or source locations for a job/spec.",
+      "typical": [
+        "canary location JOBID",
+        "canary location -l JOBID"
+      ]
+    },
+    "query": {
+      "purpose": "Query job locks, session locks, or static capability datasets as JSON.",
+      "typical": [
+        "canary query -j JOBID .measurements",
+        "canary query -s latest .measurements",
+        "canary query -c capabilities .overview"
+      ]
+    },
+    "exec": {
+      "purpose": "Execute a single job directly.",
+      "typical": [
+        "canary exec JOBID"
+      ]
+    },
+    "report": {
+      "purpose": "Create reports from stored Canary results.",
+      "typical": [
+        "canary report json",
+        "canary report junit",
+        "canary report html"
+      ]
+    },
+    "config": {
+      "purpose": "Inspect and update configuration.",
+      "typical": [
+        "canary config show",
+        "canary config show resource_pool"
+      ]
+    }
+  },
+  "plugins": {
+    "summary": "Canary functionality is extended with pluggy plugins registered through the existing canary entry point group.",
+    "entry_point_group": "canary",
+    "generators": {
+      "purpose": "Add support for new job-definition formats.",
+      "interfaces": [
+        "AbstractSpecGenerator",
+        "canary_collectstart",
+        "canary_testcase_generator"
+      ],
+      "outputs": [
+        "JobSpecIR",
+        "JobSpec"
+      ],
+      "reference": "canary_pyt"
+    },
+    "commands": {
+      "purpose": "Add CLI subcommands.",
+      "interfaces": [
+        "CanarySubcommand",
+        "canary_addcommand"
+      ]
+    },
+    "configuration": {
+      "purpose": "Add configuration sections and command-line options.",
+      "interfaces": [
+        "canary_addconfig",
+        "canary_addoption",
+        "canary_configure"
+      ]
+    },
+    "launchers": {
+      "purpose": "Control how a job command is executed.",
+      "interfaces": [
+        "Launcher",
+        "canary_runtest_launcher"
+      ]
+    },
+    "resources": {
+      "purpose": "Provide or modify resource-pool behavior.",
+      "interfaces": [
+        "canary_resource_pool_fill",
+        "canary_resource_pool_update",
+        "canary_resource_pool_accommodates"
+      ]
+    },
+    "reporters": {
+      "purpose": "Generate structured reports from jobs and sessions.",
+      "interfaces": [
+        "CanaryReporter",
+        "canary_reporter",
+        "canary_runtests_report"
+      ]
+    },
+    "documentation": {
+      "purpose": "Extension packages can provide docs by including a docs/index.rst directory inside the package associated with a canary entry point.",
+      "build_mechanism": "The docs build script discovers canary entry points, checks for docs/index.rst, creates include stubs, and includes them in the Sphinx build."
+    },
+    "hpc": {
+      "purpose": "Batch jobs and submit them to HPC schedulers through hpc_connect.",
+      "important_objects": [
+        "BatchingSpec",
+        "BatchSpec",
+        "TestBatch",
+        "HPCConnectRunner"
+      ]
+    }
+  },
+  "agent_workflows": {
+    "summary": "Agents can use Canary as a structured execution and observation layer for code development, testing, simulation, and post-processing.",
+    "principles": [
+      "Use Canary commands to execute work instead of manually orchestrating subprocesses when dependencies, resources, persistence, or reports matter.",
+      "Prefer structured measurements over log scraping.",
+      "Use canary query to retrieve state and measurements.",
+      "Use hooks or generator metadata to attach domain-specific data.",
+      "Use selections and rerun strategies to minimize repeated work."
+    ],
+    "basic_loop": [
+      "Write or modify job definitions.",
+      "Run canary run PATH or canary run TAG.",
+      "Inspect status with canary status.",
+      "Query structured data with canary query.",
+      "Use measurements and statuses to decide next action."
+    ],
+    "measurement_loop": [
+      "A test or hook records a measurement using Job.add_measurement.",
+      "A session hook records workflow metadata using Session.add_measurement.",
+      "The agent queries the measurement with canary query.",
+      "The agent uses the result to update code, inputs, or workflow state."
+    ],
+    "recommended_queries": [
+      "canary query -c capabilities .overview",
+      "canary query -c capabilities .hooks.post",
+      "canary query -j JOBID measurements.data",
+      "canary query -s latest measurements",
+      "canary query -s latest job_ids"
+    ],
+    "common_mistakes": [
+      "Scraping canary-out.txt for data that could be emitted as a structured measurement.",
+      "Assuming .pyt is the only way to define jobs.",
+      "Ignoring dependency outcomes when interpreting skipped or blocked jobs.",
+      "Assuming SQLite contains every artifact or full serialized job state.",
+      "Changing resource requirements without checking the resource pool."
+    ]
+  },
+  "files": {
+    "workspace_layout": {
+      ".canary/workspace.sqlite3": "SQLite index/result/state store.",
+      ".canary/sessions/<session>/session.lock": "Session manifest and session-level state.",
+      ".canary/sessions/<session>/<job-path>/testcase.lock": "Serialized job state.",
+      ".canary/logs": "JSON log files.",
+      ".canary/reports": "Generated reports.",
+      ".canary/cache": "Runtime caches and view metadata.",
+      ".canary/tmp": "Temporary files including result spool data."
+    },
+    "static_capabilities": {
+      "installed_location": "canary package data under data/capabilities.json",
+      "query": "canary query -c capabilities"
+    }
+  },
+  "apis": {
+    "jobs": [
+      "canary.Job",
+      "_canary.job.Job",
+      "_canary.jobspec.JobSpec",
+      "_canary.ir.JobSpecIR"
+    ],
+    "generators": [
+      "_canary.generator.AbstractSpecGenerator",
+      "_canary.generate.Generator"
+    ],
+    "workspace": [
+      "_canary.workspace.Workspace",
+      "_canary.workspace.Session",
+      "_canary.database.WorkspaceDatabase"
+    ],
+    "resources": [
+      "_canary.resource_pool.rpool.ResourcePool",
+      "_canary.resource_pool.rpool.Node",
+      "_canary.resource_pool.rpool.NodeRequest",
+      "_canary.resource_pool.manager.ResourceManager"
+    ],
+    "hooks": [
+      "_canary.hookspec"
+    ],
+    "reports": [
+      "_canary.reporters.reporter.CanaryReporter"
+    ],
+    "measurements": [
+      "_canary.job.Measurements",
+      "_canary.job.Job.add_measurement",
+      "_canary.workspace.Session.add_measurement"
+    ]
+  },
+  "limitations": {
+    "query": [
+      "The query command is intentionally lightweight and not a jq-compatible query engine.",
+      "It reads JSON-like lock or static dataset objects and applies simple path selection."
+    ],
+    "capabilities_database": [
+      "The capabilities database is static and may summarize behavior rather than describe every option.",
+      "Generated command/directive reference remains the authority for exact command-line and directive syntax.",
+      "Python API docs remain the authority for full method signatures."
+    ],
+    "documentation": [
+      "Extension documentation is included only for installed packages that have a canary entry point and a docs/index.rst file."
+    ]
+  }
+}
