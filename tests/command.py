@@ -226,8 +226,10 @@ def test_tree():
     assert Tree().execute(args) == 0
 
 
-def run_query(*, jobid=None, session=None, query=".", terse=False) -> int:
-    args = argparse.Namespace(jobid=jobid, session=session, query=query, terse=terse)
+def run_query(*, jobid=None, session=None, capability=None, query=".", terse=False) -> int:
+    args = argparse.Namespace(
+        jobid=jobid, session=session, capability=capability, query=query, terse=terse
+    )
     return Query().execute(args)
 
 

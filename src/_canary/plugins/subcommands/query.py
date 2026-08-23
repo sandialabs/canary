@@ -19,11 +19,6 @@ if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
 
-CAPABILITY_DATA_PACKAGE = "canary"
-CAPABILITY_DATA_DIR = "data"
-CAPABILITY_DATASET = "capabilities"
-
-
 class Query(CanarySubcommand):
     name = "query"
     description = "Query Canary job/session lock files or static capability data"
@@ -42,8 +37,8 @@ class Query(CanarySubcommand):
         )
         group.add_argument(
             "-c",
-            "--capabilities",
-            dest="capabilities",
+            "--capability",
+            dest="capability",
             metavar="CAPABILITY",
             help=(
                 "Query Canary's static capability database. "
@@ -61,8 +56,8 @@ class Query(CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        if args.capabilities:
-            data = query_capabilities(args.capabilities, args.query)
+        if args.capability:
+            data = query_capabilities(args.capability, args.query)
 
         else:
             workspace = Workspace.load()
@@ -137,15 +132,9 @@ def load_capability_dataset() -> Any:
     - ``-c overview`` is a shortcut for ``-c capabilities .overview``.
     - ``-c hooks.post`` is a shortcut for ``-c capabilities .hooks.post``.
     """
-    path = (
-        resources.files(CAPABILITY_DATA_PACKAGE)
-        .joinpath(CAPABILITY_DATA_DIR)
-        .joinpath(f"{CAPABILITY_DATASET}.json")
-    )
-
+    path = resources.files("canary").joinpath("data").joinpath("capabilities.json")
     if not path.is_file():
         raise CapabilityDatasetNotFoundError(path)
-
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -181,7 +170,7 @@ def query_capabilities(selector: str, query: str = ".") -> Any:
     if not selector:
         raise ValueError("Capability selector must be non-empty")
 
-    if selector in ("all", CAPABILITY_DATASET):
+    if selector in ("all", "capabilties"):
         return query_json(data, query)
 
     shortcut = selector if selector.startswith(".") else f".{selector}"
