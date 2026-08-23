@@ -60,8 +60,10 @@ import canary
 
 canary.directives.keywords("smoke")
 
+
 def test() -> int:
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(test())
