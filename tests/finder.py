@@ -61,9 +61,9 @@ def test_skipif(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\ncanary.directives.skipif(True, reason='Because')")
+            fh.write("import canary_pyt\ncanary_pyt.directives.skipif(True, reason='Because')")
         with open("b.pyt", "w") as fh:
-            fh.write("import canary\ncanary.directives.skipif(False, reason='Because')")
+            fh.write("import canary_pyt\ncanary_pyt.directives.skipif(False, reason='Because')")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len(specs) == 2
@@ -74,9 +74,9 @@ def test_keywords(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\ncanary.directives.keywords('a', 'b', 'c', 'd', 'e')")
+            fh.write("import canary_pyt\ncanary_pyt.directives.keywords('a', 'b', 'c', 'd', 'e')")
         with open("b.pyt", "w") as fh:
-            fh.write("import canary\ncanary.directives.keywords('e', 'f', 'g', 'h', 'i')")
+            fh.write("import canary_pyt\ncanary_pyt.directives.keywords('e', 'f', 'g', 'h', 'i')")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     final = select_specs(specs, keyword_exprs=["a and i"])
@@ -95,8 +95,8 @@ def test_parameterize_1(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 3
@@ -111,9 +111,9 @@ def test_parameterize_2(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-            fh.write("canary.directives.parameterize('n', [10,11,12])\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("canary_pyt.directives.parameterize('n', [10,11,12])\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 9
@@ -128,8 +128,10 @@ def test_parameterize_3(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
+            fh.write("import canary_pyt\n")
+            fh.write(
+                "canary_pyt.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n"
+            )
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators, on_options=["xxx"])
     assert len([spec for spec in specs if not spec.mask]) == 2
@@ -152,8 +154,8 @@ def test_cpu_count(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('cpus', [1, 4, 8, 32])\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with canary.config.override():
         canary.config.pluginmanager.register(Hook(42), "myhook")
         generators = collect.find_generators_in_path(workdir)
@@ -190,12 +192,12 @@ def test_dep_specs(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.depends_on('b/g.n=1')\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.depends_on('b/g.n=1')\n")
         mkdirp("b")
         with open("b/g.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('n', [1, 2, 3])\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.parameterize('n', [1, 2, 3])\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 4
@@ -210,10 +212,10 @@ def test_analyze(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-            fh.write("canary.directives.parameterize('n', [10,11,12])\n")
-            fh.write("canary.directives.generate_composite_base_case()\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("canary_pyt.directives.parameterize('n', [10,11,12])\n")
+            fh.write("canary_pyt.directives.generate_composite_base_case()\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 10
@@ -226,8 +228,8 @@ def test_enable(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.enable(True, when=\"options='baz and spam'\")\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.enable(True, when=\"options='baz and spam'\")\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators, on_options=["baz"])
     assert len([spec for spec in specs if not spec.mask]) == 0
@@ -240,11 +242,11 @@ def test_enable_names(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.name('foo')\n")
-            fh.write("canary.directives.name('baz')\n")
-            fh.write("canary.directives.name('spam')\n")
-            fh.write('canary.directives.enable(False, when="testname=foo")\n')
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.name('foo')\n")
+            fh.write("canary_pyt.directives.name('baz')\n")
+            fh.write("canary_pyt.directives.name('spam')\n")
+            fh.write('canary_pyt.directives.enable(False, when="testname=foo")\n')
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 2
@@ -255,13 +257,13 @@ def test_pyt_generator(tmpdir):
         with open("test.pyt", "w") as fh:
             fh.write(
                 """
-import canary
-canary.directives.name('baz')
-canary.directives.generate_composite_base_case()
-canary.directives.owner('me')
-canary.directives.keywords('test', 'unit')
-canary.directives.parameterize('cpus', (1, 2), when="options='baz'")
-canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
+import canary_pyt
+canary_pyt.directives.name('baz')
+canary_pyt.directives.generate_composite_base_case()
+canary_pyt.directives.owner('me')
+canary_pyt.directives.keywords('test', 'unit')
+canary_pyt.directives.parameterize('cpus', (1, 2), when="options='baz'")
+canary_pyt.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
         with config.override():
@@ -297,10 +299,10 @@ def test_many_composite(tmpdir):
     with working_dir(workdir, create=True):
         for name in names:
             with open(f"{name}.pyt", "w") as fh:
-                fh.write("import canary\n")
-                fh.write("canary.directives.keywords('long')\n")
-                fh.write(f"canary.directives.parameterize({name!r}, list(range(4)))\n")
-                fh.write("canary.directives.generate_composite_base_case()\n")
+                fh.write("import canary_pyt\n")
+                fh.write("canary_pyt.directives.keywords('long')\n")
+                fh.write(f"canary_pyt.directives.parameterize({name!r}, list(range(4)))\n")
+                fh.write("canary_pyt.directives.generate_composite_base_case()\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len(specs) == len(names) * 5

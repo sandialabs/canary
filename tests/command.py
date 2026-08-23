@@ -33,7 +33,8 @@ def setup(tmp_path_factory):
             fh.write(
                 """\
 import canary
-canary.directives.parameterize('a', (1, 2, 3, 4, 5, 6, 7, 8))
+import canary_pyt
+canary_pyt.directives.parameterize('a', (1, 2, 3, 4, 5, 6, 7, 8))
 def test():
     self = canary.get_instance()
     if self.parameters.a == 2:
@@ -53,7 +54,8 @@ if __name__ == "__main__":
             fh.write(
                 """\
 import canary
-canary.directives.parameterize('a', (1, 2))
+import canary_pyt
+canary_pyt.directives.parameterize('a', (1, 2))
 def test():
     self = canary.get_instance()
     if self.parameters.a == 2:
@@ -67,8 +69,9 @@ if __name__ == "__main__":
             fh.write(
                 """\
 import canary
-canary.directives.generate_composite_base_case()
-canary.directives.parameterize('a', (1, 2))
+import canary_pyt
+canary_pyt.directives.generate_composite_base_case()
+canary_pyt.directives.parameterize('a', (1, 2))
 def test(job):
     pass
 if __name__ == "__main__":
@@ -389,8 +392,9 @@ def test_rebaseline_from_directory(tmpdir):
                 [
                     "import pathlib",
                     "import canary",
+                    "import canary_pyt",
                     "",
-                    "canary.directives.baseline(src='actual.txt', dst='expected.txt')",
+                    "canary_pyt.directives.baseline(src='actual.txt', dst='expected.txt')",
                     "",
                     "pathlib.Path('actual.txt').write_text('original\\n')",
                     "",

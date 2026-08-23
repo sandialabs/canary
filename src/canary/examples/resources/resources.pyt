@@ -4,9 +4,9 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.parameterize("cpus,gpus", [(1, 1), (4, 4), (1000, 1000)])
+canary_pyt.directives.parameterize("cpus,gpus", [(1, 1), (4, 4), (1000, 1000)])
 
 
 def test():

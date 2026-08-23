@@ -70,8 +70,8 @@ def write_basic_tests(n: int = 12) -> None:
             fh.write(
                 """\
 import sys
-import canary
-canary.directives.keywords('long')
+import canary_pyt
+canary_pyt.directives.keywords('long')
 def test():
     pass
 if __name__ == '__main__':

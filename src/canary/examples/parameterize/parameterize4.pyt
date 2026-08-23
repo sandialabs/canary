@@ -5,9 +5,10 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize("a,b", [(1, 1e5), (2, 1e6), (3, 1e7)])
-canary.directives.parameterize("cpus", (4, 8))
+canary_pyt.directives.parameterize("a,b", [(1, 1e5), (2, 1e6), (3, 1e7)])
+canary_pyt.directives.parameterize("cpus", (4, 8))
 
 
 def test():

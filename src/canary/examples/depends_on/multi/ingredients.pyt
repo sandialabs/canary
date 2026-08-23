@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize("type", ("eggs", "ham", "lettuce", "bacon", "tomato"))
+canary_pyt.directives.parameterize("type", ("eggs", "ham", "lettuce", "bacon", "tomato"))
 
 
 def test():

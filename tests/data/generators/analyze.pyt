@@ -1,10 +1,11 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize("a", (0, 1))
-canary.directives.parameterize("b", (4, 5))
-canary.directives.analyze()
+canary_pyt.directives.parameterize("a", (0, 1))
+canary_pyt.directives.parameterize("b", (4, 5))
+canary_pyt.directives.analyze()
 
 
 def test():

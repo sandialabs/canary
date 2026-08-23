@@ -68,8 +68,8 @@ def canary_cdash_labels_for_subproject():
     with open("baz.pyt", "w") as fh:
         fh.write("""\
 import sys
-import canary
-canary.directives.keywords('baz')
+import canary_pyt
+canary_pyt.directives.keywords('baz')
 def test():
     return 0
 if __name__ == '__main__':
@@ -78,8 +78,8 @@ if __name__ == '__main__':
     with open("foo.pyt", "w") as fh:
         fh.write("""\
 import sys
-import canary
-canary.directives.keywords('foo')
+import canary_pyt
+canary_pyt.directives.keywords('foo')
 def test():
     return 0
 if __name__ == '__main__':

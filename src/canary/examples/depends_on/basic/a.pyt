@@ -2,4 +2,4 @@
 #
 # SPDX-License-Identifier: MIT
 
-# canary.directives.parameterize("breakfast", ("spam", "eggs", "ham"))
+# canary_pyt.directives.parameterize("breakfast", ("spam", "eggs", "ham"))

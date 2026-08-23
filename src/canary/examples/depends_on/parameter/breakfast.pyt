@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import canary
+import canary_pyt
 
-canary.directives.parameterize("dish", ("eggs", "ham", "spam"))
+canary_pyt.directives.parameterize("dish", ("eggs", "ham", "spam"))

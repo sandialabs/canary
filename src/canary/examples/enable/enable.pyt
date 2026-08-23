@@ -4,9 +4,9 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.enable(when="options=enable")
+canary_pyt.directives.enable(when="options=enable")
 
 
 def test():

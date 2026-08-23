@@ -43,18 +43,18 @@ class Autodoc(CanarySubcommand):
 
 
 def autodoc_directives(dest: str) -> None:
-    import canary.directives
+    import canary_pyt.directives
 
     all_directives = []
-    for name in dir(canary.directives):
-        attr = getattr(canary.directives, name)
+    for name in dir(canary_pyt.directives):
+        attr = getattr(canary_pyt.directives, name)
         if isinstance(attr, types.FunctionType) and attr.__doc__ and attr not in all_directives:
             all_directives.append(attr)
     names = sorted([fun.__name__ for fun in all_directives])
     with open(os.path.join(dest, "directives.rst"), "w") as fh:
         fh.write(".. _test-directives:\n\n")
         fh.write("Test Directives\n===============\n\n")
-        fh.write(".. automodule:: canary.directives\n\n")
+        fh.write(".. automodule:: canary_pyt.directives\n\n")
         fh.write(".. toctree::\n   :maxdepth: 1\n\n")
         for name in names:
             fh.write(f"   {name}<directives.{name}>\n")
@@ -63,7 +63,7 @@ def autodoc_directives(dest: str) -> None:
         with open(os.path.join(dest, f"directives.{name}.rst"), "w") as fh:
             fh.write(f".. _directive-{name.replace('_', '-')}:\n\n")
             fh.write(f"{name}\n{'=' * len(name)}\n\n")
-            fh.write(f".. autofunction:: canary.directives.{name}\n")
+            fh.write(f".. autofunction:: canary_pyt.directives.{name}\n")
 
 
 def autodoc_commands(dest: str) -> None:

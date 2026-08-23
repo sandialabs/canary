@@ -6,9 +6,10 @@ import os
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize("a", [1, 2, 3])
-canary.directives.generate_composite_base_case()
+canary_pyt.directives.parameterize("a", [1, 2, 3])
+canary_pyt.directives.generate_composite_base_case()
 
 
 def run_parameterized_case(case: canary.TestInstance) -> None:

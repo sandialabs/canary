@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-import canary
+import canary_pyt
 
-canary.directives.copy("test.base.out")
-canary.directives.baseline(src="test.out", dst="test.base.out")
+canary_pyt.directives.copy("test.base.out")
+canary_pyt.directives.baseline(src="test.out", dst="test.base.out")
 
 
 def test():

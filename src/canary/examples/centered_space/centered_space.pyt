@@ -7,10 +7,13 @@ import os
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.analyze()
-canary.directives.keywords("centered_space")
-canary.directives.parameterize("a,b", [(0, 5, 2), (0, 1, 2)], type=canary.centered_parameter_space)
+canary_pyt.directives.analyze()
+canary_pyt.directives.keywords("centered_space")
+canary_pyt.directives.parameterize(
+    "a,b", [(0, 5, 2), (0, 1, 2)], type=canary.centered_parameter_space
+)
 
 
 def test():

@@ -1,8 +1,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.set_attribute(example=True)
+canary_pyt.directives.set_attribute(example=True)
 
 
 def test():

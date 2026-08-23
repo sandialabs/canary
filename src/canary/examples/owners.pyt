@@ -1,8 +1,8 @@
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.owners("canary-developers")
+canary_pyt.directives.owners("canary-developers")
 
 
 def test():

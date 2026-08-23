@@ -5,10 +5,10 @@
 import sys
 import time
 
-import canary
+import canary_pyt
 
-canary.directives.keywords("fast")
-canary.directives.timeout(2.0)
+canary_pyt.directives.keywords("fast")
+canary_pyt.directives.timeout(2.0)
 
 
 def test():

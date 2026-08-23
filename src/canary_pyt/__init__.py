@@ -7,10 +7,21 @@ from typing import Any
 from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
 
+from . import directives
 from .pyt import PYTAdapter
 from .pyt import PYTLoader
 from .pyt import PYTLockEmitter
 from .pyt import PYTModel
+
+__all__ = ["directives", "FILE_SCANNING"]
+
+# Constant that's True when file scanning, but False here.
+FILE_SCANNING = False
+
+
+def set_file_scanning(value: bool):
+    global FILE_SCANNING
+    FILE_SCANNING = value
 
 
 class PYTSpecGenerator(AbstractSpecGenerator):

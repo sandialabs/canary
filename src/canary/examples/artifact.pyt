@@ -1,8 +1,8 @@
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.artifact("summary.txt", save_on="always")
+canary_pyt.directives.artifact("summary.txt", save_on="always")
 
 
 def test():

@@ -1,8 +1,8 @@
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.skipif(True, reason="intentional skipif example")
+canary_pyt.directives.skipif(True, reason="intentional skipif example")
 
 
 def test():

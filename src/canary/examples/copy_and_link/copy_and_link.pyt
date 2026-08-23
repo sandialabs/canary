@@ -4,11 +4,11 @@
 
 import os
 
-import canary
+import canary_pyt
 
-canary.directives.copy("copy.txt")
-canary.directives.link("link.txt")
-canary.directives.copy("${NAME}.*.txt")
+canary_pyt.directives.copy("copy.txt")
+canary_pyt.directives.link("link.txt")
+canary_pyt.directives.copy("${NAME}.*.txt")
 
 
 def test():

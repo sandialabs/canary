@@ -5,10 +5,11 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.depends_on("ingredients.type=bacon")
-canary.directives.depends_on("ingredients.type=lettuce")
-canary.directives.depends_on("ingredients.type=tomato")
+canary_pyt.directives.depends_on("ingredients.type=bacon")
+canary_pyt.directives.depends_on("ingredients.type=lettuce")
+canary_pyt.directives.depends_on("ingredients.type=tomato")
 
 
 def blt() -> int:

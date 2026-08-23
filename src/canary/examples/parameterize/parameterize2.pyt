@@ -5,8 +5,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize("a,b", [(1, 2), (5, 6)])
+canary_pyt.directives.parameterize("a,b", [(1, 2), (5, 6)])
 
 
 def test():

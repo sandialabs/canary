@@ -38,9 +38,9 @@ class WhenResult:
 class When:
     """Implements the ``when=`` logic that controls the conditions under which a directive is run
 
-    ``canary`` directives can be run depending on the options passed to ``canary`` on the command
+    ``canary_pyt`` directives can be run depending on the options passed to ``canary_pyt`` on the command
     line.  E.g., a test may be parameterized on ``a`` only if run linux:
-    ``canary.directives.parameterize('a', (1, 2, 3), when='platforms=linux')``.  This
+    ``canary_pyt.directives.parameterize('a', (1, 2, 3), when='platforms=linux')``.  This
     ``parameterize`` instance will only be active on ``linux`` platforms.
 
     Args:
@@ -60,8 +60,8 @@ class When:
 
     Examples:
 
-    >>> import canary
-    >>> canary.directives.parameterize('gpus', (1, 4), when='platform=linux')
+    >>> import canary_pyt
+    >>> canary_pyt.directives.parameterize('gpus', (1, 4), when='platform=linux')
 
     """
 

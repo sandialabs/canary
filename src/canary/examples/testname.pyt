@@ -1,9 +1,10 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.testname("alpha")
-canary.directives.testname("beta")
+canary_pyt.directives.testname("alpha")
+canary_pyt.directives.testname("beta")
 
 
 def test():

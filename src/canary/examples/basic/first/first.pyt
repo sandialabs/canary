@@ -4,9 +4,9 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.keywords("basic")
+canary_pyt.directives.keywords("basic")
 
 
 def add(a: int, b: int) -> int:

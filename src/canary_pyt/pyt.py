@@ -946,18 +946,19 @@ class PYTLoader:
 
     def parse(self) -> list[RecordedDirectiveCall]:
         import canary
-        from _canary import set_file_scanning
+        import canary_pyt
 
         recorder = DirectiveRecorder(target=None, record_location=True)
         try:
-            set_file_scanning(True)
+            canary_pyt.set_file_scanning(True)
             with monkeypatch.context() as mp:
-                mp.setattr(canary, "directives", recorder)
+                mp.setattr(canary_pyt, "directives", recorder)
+                mp.setattr(canary, "directives", recorder)  # backward compatible
                 with open(self.file) as fp:
                     code = compile(fp.read(), self.file.as_posix(), "exec")
                 exec(code, {"__name__": "__load__", "__file__": self.file.as_posix()})  # nosec
         finally:
-            set_file_scanning(False)
+            canary_pyt.set_file_scanning(False)
 
         return recorder.recorded_calls
 

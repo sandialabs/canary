@@ -4,10 +4,10 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.keywords("fast")
-canary.directives.xfail(code=23)
+canary_pyt.directives.keywords("fast")
+canary_pyt.directives.xfail(code=23)
 
 
 def test():

@@ -5,8 +5,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.parameterize(
+canary_pyt.directives.parameterize(
     "a,b", [(0, 5), (6, 10)], samples=4, type=canary.random_parameter_space
 )
 

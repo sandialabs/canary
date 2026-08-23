@@ -5,8 +5,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.depends_on("ingredients.type=*")
+canary_pyt.directives.depends_on("ingredients.type=*")
 
 
 def blt() -> int:

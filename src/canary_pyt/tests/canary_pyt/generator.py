@@ -177,9 +177,9 @@ def test_xfail_sets_code(tmp_path: Path) -> None:
 
 def test_pyt_loader_records_directives(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.keywords("fast", "nightly")
-canary.directives.timeout("3s")
+import canary_pyt
+canary_pyt.directives.keywords("fast", "nightly")
+canary_pyt.directives.timeout("3s")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     calls = PYTLoader(file=f).parse()
@@ -192,10 +192,10 @@ canary.directives.timeout("3s")
 
 def test_adapter_apply_populates_model_from_calls(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.testname("a")
-canary.directives.parameterize("p", [1,2])
-canary.directives.keywords("k1")
+import canary_pyt
+canary_pyt.directives.testname("a")
+canary_pyt.directives.parameterize("p", [1,2])
+canary_pyt.directives.keywords("k1")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     m = PYTModel(str(tmp_path), "t.pyt")
@@ -419,8 +419,8 @@ def test_set_id_template_rejects_duplicate_expanded_ids(tmp_path: Path) -> None:
 
 def test_adapter_apply_set_id_from_loader(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.set_id("deadbeef")
+import canary_pyt
+canary_pyt.directives.set_id("deadbeef")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     m = PYTModel(str(tmp_path), "t.pyt")

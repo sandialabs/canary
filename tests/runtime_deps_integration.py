@@ -30,8 +30,8 @@ def test_downstream_blocks_when_success_dependency_fails(tmp_path):
     write(
         root / "upstream.pyt",
         """\
-import canary
 import sys
+import canary
 
 def test():
     raise canary.TestFailed("synthetic upstream failure")
@@ -44,10 +44,10 @@ if __name__ == "__main__":
     write(
         root / "downstream.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on("upstream")
+canary_pyt.directives.depends_on("upstream")
 
 def test():
     raise AssertionError("downstream should not run")
@@ -74,8 +74,8 @@ def test_downstream_runs_when_dependency_is_always(tmp_path):
     write(
         root / "upstream.pyt",
         """\
-import canary
 import sys
+import canary
 
 def test():
     raise canary.TestFailed("synthetic upstream failure")
@@ -88,10 +88,10 @@ if __name__ == "__main__":
     write(
         root / "downstream.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on({"job": "upstream", "when": "always"})
+canary_pyt.directives.depends_on({"job": "upstream", "when": "always"})
 
 def test():
     with open("downstream-ran.txt", "w") as fh:
@@ -132,10 +132,10 @@ if __name__ == "__main__":
     write(
         root / "downstream.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on({"job": "upstream", "when": "DIFFED"})
+canary_pyt.directives.depends_on({"job": "upstream", "when": "DIFFED"})
 
 def test():
     pass
@@ -161,8 +161,8 @@ def test_blocking_is_transitive(tmp_path):
     write(
         root / "a.pyt",
         """\
-import canary
 import sys
+import canary
 
 def test():
     raise canary.TestFailed("synthetic failure")
@@ -175,10 +175,10 @@ if __name__ == "__main__":
     write(
         root / "b.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on("a")
+canary_pyt.directives.depends_on("a")
 
 def test():
     raise AssertionError("b should not run")
@@ -191,10 +191,10 @@ if __name__ == "__main__":
     write(
         root / "c.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on("b")
+canary_pyt.directives.depends_on("b")
 
 def test():
     raise AssertionError("c should not run")
@@ -223,8 +223,8 @@ def test_blocked_jobs_are_persisted_to_database(tmp_path):
     write(
         root / "upstream.pyt",
         """\
-import canary
 import sys
+import canary
 
 def test():
     raise canary.TestFailed("synthetic upstream failure")
@@ -237,10 +237,10 @@ if __name__ == "__main__":
     write(
         root / "downstream.pyt",
         """\
-import canary
 import sys
+import canary_pyt
 
-canary.directives.depends_on("upstream")
+canary_pyt.directives.depends_on("upstream")
 
 def test():
     raise AssertionError("downstream should not run")

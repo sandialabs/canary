@@ -75,9 +75,7 @@ def test_query_capabilities_nested_shortcut(capsys):
 
 
 def test_query_capabilities_shortcut_plus_query_suffix(capsys):
-    rc = Query().execute(
-        namespace(capability="hooks", query=".post.canary_runtest_finish.purpose")
-    )
+    rc = Query().execute(namespace(capability="hooks", query=".post.canary_runtest_finish.purpose"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)

@@ -5,9 +5,10 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.keywords("basic", "second")
-canary.directives.link("add.py")
+canary_pyt.directives.keywords("basic", "second")
+canary_pyt.directives.link("add.py")
 
 
 def test():

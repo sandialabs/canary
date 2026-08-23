@@ -161,9 +161,9 @@ if __name__ == "__main__":
         root / "downstream.pyt",
         """\
 import sys
-import canary
+import canary_pyt
 
-canary.directives.depends_on("upstream")
+canary_pyt.directives.depends_on("upstream")
 
 def test():
     pass
@@ -319,9 +319,9 @@ if __name__ == "__main__":
         root / "downstream.pyt",
         """\
 import sys
-import canary
+import canary_pyt
 
-canary.directives.depends_on("upstream")
+canary_pyt.directives.depends_on("upstream")
 
 def test():
     pass
@@ -386,9 +386,9 @@ if __name__ == "__main__":
         root / "downstream.pyt",
         """\
 import sys
-import canary
+import canary_pyt
 
-canary.directives.depends_on("upstream")
+canary_pyt.directives.depends_on("upstream")
 
 def test():
     pass

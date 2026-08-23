@@ -5,9 +5,10 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.keywords("fast")
-canary.directives.xfail()
+canary_pyt.directives.keywords("fast")
+canary_pyt.directives.xfail()
 
 
 def test():

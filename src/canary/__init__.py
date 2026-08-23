@@ -186,10 +186,10 @@ get_testcase = get_job
 
 
 def __getattr__(name):
-    import _canary
+    import canary_pyt
 
     if name == "FILE_SCANNING":
-        return _canary.FILE_SCANNING
+        return canary_pyt.FILE_SCANNING
     elif name == "test":
         test = type("Test", (), {"instance": get_instance()})()
         return test

@@ -5,8 +5,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.depends_on({"job": "willfail", "when": "on_failure"})
+canary_pyt.directives.depends_on({"job": "willfail", "when": "on_failure"})
 
 
 def depends_on_willfail() -> int:

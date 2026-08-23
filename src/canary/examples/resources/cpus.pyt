@@ -4,9 +4,9 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.cpus(4)
+canary_pyt.directives.cpus(4)
 
 
 def test():

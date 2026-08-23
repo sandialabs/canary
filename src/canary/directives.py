@@ -7,7 +7,7 @@ Before running a test, ``canary`` reads the test file looking for "test
 directives".   Test directives are instructions for how to setup and allocate
 resources needed by the test.  The ``.pyt`` and ``.vvt`` file types use
 different directive styles.  In the ``.pyt`` file type, directives are python
-commands contained in the ``canary.directives`` namespace.  In the ``.vvt`` file
+commands contained in the ``canary_pyt.directives`` namespace.  In the ``.vvt`` file
 type, text directives are preceded with ``#VVT:`` and ``canary`` will stop
 processing further ``#VVT:`` directives once the first non-comment
 non-whitespace line has been reached in the test script.
@@ -18,8 +18,8 @@ The general format for a directive is
 
 .. code-block:: python
 
-   import canary
-   canary.directives.directive_name(*args, **kwargs)
+   import canary_pyt
+   canary_pyt.directives.directive_name(*args, **kwargs)
 
 ``.vvt``:
 
@@ -57,23 +57,23 @@ when the directive is activated.  For example, to restrict a directive to be act
 
 .. code-block:: python
 
-   import canary
-   canary.directives.directive_name(*args, when='platforms=linux')
+   import canary_pyt
+   canary_pyt.directives.directive_name(*args, when='platforms=linux')
 
 or, to restrict processing to ``linux`` platforms and when the user has defined the ``opt`` option
 (by passing ``-o opt`` on the command line), add the following:
 
 .. code-block:: python
 
-   import canary
-   canary.directives.directive_name(*args, when='platforms=linux options=opt')
+   import canary_pyt
+   canary_pyt.directives.directive_name(*args, when='platforms=linux options=opt')
 
 ``when`` also accepts a ``dict``, so the previous example can be expressed equivalently as
 
 .. code-block:: python
 
-   import canary
-   canary.directives.directive_name(*args, when={"platforms": "linux", "options": "opt"})
+   import canary_pyt
+   canary_pyt.directives.directive_name(*args, when={"platforms": "linux", "options": "opt"})
 
 The ``when`` expression recognizes the following conditions:
 
@@ -122,8 +122,8 @@ def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always"
 
     .. code-block:: python
 
-       import canary
-       canary.directives.artifact(file, *, when=..., save_on=...)
+       import canary_pyt
+       canary_pyt.directives.artifact(file, *, when=..., save_on=...)
 
     ``.vvt``: ``NA``
 
@@ -150,11 +150,12 @@ def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always"
 
     .. code-block:: python
 
-       import canary
-       canary.directives.artifacts("file.txt", when="platforms='not darwin'", save_on="success")
+       import canary_pyt
+       canary_pyt.directives.artifacts("file.txt", when="platforms='not darwin'", save_on="success")
     """
 
 
+# @deprecated("canary.directives.baseline is deprecated; use canary_pyt.directives.baseline")
 def baseline(
     *,
     src: str | None = None,
@@ -171,9 +172,9 @@ def baseline(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.baseline(src, dst, when=...)
-       canary.directives.baseline(flag=..., when=...)
+       import canary_pyt
+       canary_pyt.directives.baseline(src, dst, when=...)
+       canary_pyt.directives.baseline(flag=..., when=...)
 
     ``.vvt``:
 
@@ -205,8 +206,8 @@ def baseline(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.baseline("file.exo", "file.base_exo", when="platforms='not darwin'")
+       import canary_pyt
+       canary_pyt.directives.baseline("file.exo", "file.base_exo", when="platforms='not darwin'")
 
     .. code-block:: python
 
@@ -224,6 +225,7 @@ def baseline(
     """
 
 
+# @deprecated("canary.directives.copy is deprecated; use canary_pyt.directives.copy")
 def copy(
     *files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None
 ) -> None:
@@ -236,9 +238,9 @@ def copy(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.copy(*files, when=...)
-       canary.directives.copy(src=..., dst=..., when=...)
+       import canary_pyt
+       canary_pyt.directives.copy(*files, when=...)
+       canary_pyt.directives.copy(src=..., dst=..., when=...)
 
     ``.vvt``:
 
@@ -275,8 +277,8 @@ def copy(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.copy("input.txt", "helper.py")
+       import canary_pyt
+       canary_pyt.directives.copy("input.txt", "helper.py")
 
     .. code-block:: python
 
@@ -289,9 +291,9 @@ def copy(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.copy(src="file1.txt", dst="file1_copy.txt")
-       canary.directives.copy(src="file2.txt", dst="file2_copy.txt")
+       import canary_pyt
+       canary_pyt.directives.copy(src="file1.txt", dst="file1_copy.txt")
+       canary_pyt.directives.copy(src="file2.txt", dst="file2_copy.txt")
 
     .. code-block:: python
 
@@ -304,10 +306,10 @@ def copy(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.parameterize("breakfast", ("spam", "eggs"))
-       canary.directives.copy("spam.txt", when={"parameters": "breakfast=spam"})
-       canary.directives.copy("eggs.txt", when={"parameters": "breakfast=eggs"})
+       import canary_pyt
+       canary_pyt.directives.parameterize("breakfast", ("spam", "eggs"))
+       canary_pyt.directives.copy("spam.txt", when={"parameters": "breakfast=spam"})
+       canary_pyt.directives.copy("eggs.txt", when={"parameters": "breakfast=eggs"})
 
     .. code-block:: python
 
@@ -318,6 +320,7 @@ def copy(
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.depends_on is deprecated; use canary_pyt.directives.depends_on")
 def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> None:
     """
     Require that test ``arg`` run before this test.
@@ -329,10 +332,10 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
 
     .. code:: python
 
-       import canary
-       canary.directives.depends_on(name, when=...)
-       canary.directives.depends_on({"job": name, "when": ..., "expects": ...}, when=...)
-       canary.directives.depends_on([{"job": name, "when": ..., "expects": ...}], when=...)
+       import canary_pyt
+       canary_pyt.directives.depends_on(name, when=...)
+       canary_pyt.directives.depends_on({"job": name, "when": ..., "expects": ...}, when=...)
+       canary_pyt.directives.depends_on([{"job": name, "when": ..., "expects": ...}], when=...)
 
     ``.vvt``:
 
@@ -372,8 +375,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     .. code-block:: python
 
        # spam.pyt
-       import canary
-       canary.directives.depends_on("baz")
+       import canary_pyt
+       canary_pyt.directives.depends_on("baz")
 
        def test():
            self = canary.testinstance
@@ -401,8 +404,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     .. code-block:: python
 
        # spam.pyt
-       import canary
-       canary.directives.depends_on({"job": "baz", "when": "always"})
+       import canary_pyt
+       canary_pyt.directives.depends_on({"job": "baz", "when": "always"})
 
        def test():
            self = canary.testinstance
@@ -430,8 +433,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     .. code-block:: python
 
        # spam.pyt
-       import canary
-       canary.directives.depends_on("baz.cpus=1")
+       import canary_pyt
+       canary_pyt.directives.depends_on("baz.cpus=1")
 
        def test():
            self = canary.testinstance
@@ -453,6 +456,7 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.exclusive is deprecated; use canary_pyt.directives.exclusive")
 def exclusive(*, when: WhenType | None = None) -> None:
     """Do not run this test in parallel with any other test.
 
@@ -463,8 +467,8 @@ def exclusive(*, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.exclusive(*, when=...)
+       import canary_pyt
+       canary_pyt.directives.exclusive(*, when=...)
 
     ``.vvt``: ``NA``
 
@@ -487,11 +491,12 @@ def exclusive(*, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.exclusive(when="platforms='not darwin'")
+       import canary_pyt
+       canary_pyt.directives.exclusive(when="platforms='not darwin'")
     """
 
 
+# @deprecated("canary.directives.generate_composite_base_case is deprecated; use canary_pyt.directives.generate_composite_base_case")
 def generate_composite_base_case(
     *, when: WhenType | None = None, flag: str | None = None, script: str | None = None
 ) -> None:
@@ -513,8 +518,8 @@ def generate_composite_base_case(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.generate_composite_base_case(*, flag=None, script=None, when=...)
+       import canary_pyt
+       canary_pyt.directives.generate_composite_base_case(*, flag=None, script=None, when=...)
 
     ``.vvt``:
 
@@ -550,9 +555,9 @@ def generate_composite_base_case(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
-       canary.directives.parameterize("a,b", [(1, 2), (3, 4)])
+       import canary_pyt
+       canary_pyt.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
+       canary_pyt.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
     .. code-block:: python
 
@@ -572,9 +577,9 @@ def generate_composite_base_case(
        import argparse
        import sys
 
-       import canary
-       canary.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
-       canary.directives.parameterize("a,b", [(1, 2), (3, 4)])
+       import canary_pyt
+       canary_pyt.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
+       canary_pyt.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 
        def test() -> int:
@@ -600,6 +605,7 @@ def generate_composite_base_case(
 analyze = generate_composite_base_case
 
 
+# @deprecated("canary.directives.enable is deprecated; use canary_pyt.directives.enable")
 def enable(*args: bool, when: WhenType | None = None) -> None:
     """
     Explicitly mark a test to be enabled (or not)
@@ -611,8 +617,8 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.enable(arg, when=...)
+       import canary_pyt
+       canary_pyt.directives.enable(arg, when=...)
 
     ``.vvt``:
 
@@ -640,8 +646,8 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.enable(False)
+       import canary_pyt
+       canary_pyt.directives.enable(False)
 
     .. code-block:: python
 
@@ -653,8 +659,8 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.enable(True, when="platforms='not ATS'")
+       import canary_pyt
+       canary_pyt.directives.enable(True, when="platforms='not ATS'")
 
     .. code-block:: python
 
@@ -666,19 +672,19 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.enable(True, when="testname=foo platform='Darwin or Linux'")
-       canary.directives.enable(True, when="platform='not Windows' options='not debug'")
-       canary.directives.enable(False, when="testname=foo")
+       import canary_pyt
+       canary_pyt.directives.enable(True, when="testname=foo platform='Darwin or Linux'")
+       canary_pyt.directives.enable(True, when="platform='not Windows' options='not debug'")
+       canary_pyt.directives.enable(False, when="testname=foo")
 
     The above examples are equivalent to:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.enable(True, when={"testname": "foo", "platform": "Darwin or Linux"})
-       canary.directives.enable(True, when={"platform": "not Windows", "options": "not debug"})
-       canary.directives.enable(False, when={"testname": "foo"})
+       import canary_pyt
+       canary_pyt.directives.enable(True, when={"testname": "foo", "platform": "Darwin or Linux"})
+       canary_pyt.directives.enable(True, when={"platform": "not Windows", "options": "not debug"})
+       canary_pyt.directives.enable(False, when={"testname": "foo"})
 
     The ``vvt`` equivalent are
 
@@ -691,6 +697,7 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.include is deprecated; use canary_pyt.directives.include")
 def include(file: str, *, when: WhenType | None = None) -> None:
     r"""Include the contents of ``file`` at the point where the directive appears.
 
@@ -736,6 +743,7 @@ def include(file: str, *, when: WhenType | None = None) -> None:
     """
 
 
+# @deprecated("canary.directives.keywords is deprecated; use canary_pyt.directives.keywords")
 def keywords(*args: str, when: WhenType | None = None) -> None:
     """Mark a test with keywords.  The main use of test keywords is to filter a
     set of tests, such as selecting which tests to run.
@@ -747,8 +755,8 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.keywords(*args, when=...)
+       import canary_pyt
+       canary_pyt.directives.keywords(*args, when=...)
 
     ``.vvt``:
 
@@ -779,8 +787,8 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
 
       .. code-block::
 
-         import canary
-         canary.directives.parameterize("meshsize", (0.1, 0.01, 0.001))
+         import canary_pyt
+         canary_pyt.directives.parameterize("meshsize", (0.1, 0.01, 0.001))
 
       would have "meshsize" as a keyword.
     * The results of running the test are added as keywords. The result strings are
@@ -797,8 +805,8 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.keywords("3D", "mhd", "circuit")
+       import canary_pyt
+       canary_pyt.directives.keywords("3D", "mhd", "circuit")
 
     .. code-block:: python
 
@@ -808,8 +816,8 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.keywords("3D", "mhd", when="testname=spam parameters='cpus>1'")
+       import canary_pyt
+       canary_pyt.directives.keywords("3D", "mhd", when="testname=spam parameters='cpus>1'")
 
     .. code-block:: python
 
@@ -817,6 +825,7 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
     """
 
 
+# @deprecated("canary.directives.link is deprecated; use canary_pyt.directives.link")
 def link(
     *files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None
 ) -> None:
@@ -829,9 +838,9 @@ def link(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.link(*files, when=...)
-       canary.directives.link(src=..., dst=..., when=...)
+       import canary_pyt
+       canary_pyt.directives.link(*files, when=...)
+       canary_pyt.directives.link(src=..., dst=..., when=...)
 
     ``.vvt``:
 
@@ -868,8 +877,8 @@ def link(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.link("input.txt", "helper.py")
+       import canary_pyt
+       canary_pyt.directives.link("input.txt", "helper.py")
 
     .. code-block:: python
 
@@ -882,9 +891,9 @@ def link(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.link(src="file1.txt", dst="file1_link.txt")
-       canary.directives.link(src="file2.txt", dst="file2_link.txt")
+       import canary_pyt
+       canary_pyt.directives.link(src="file1.txt", dst="file1_link.txt")
+       canary_pyt.directives.link(src="file2.txt", dst="file2_link.txt")
 
     .. code-block:: python
 
@@ -893,6 +902,7 @@ def link(
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.owners is deprecated; use canary_pyt.directives.owners")
 def owners(*args: str) -> None:
     """Specify a test's owner[s]
 
@@ -903,8 +913,8 @@ def owners(*args: str) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.owners("name1", "name2", ...)
+       import canary_pyt
+       canary_pyt.directives.owners("name1", "name2", ...)
 
     ``.vvt``: ``NA``
 
@@ -919,6 +929,7 @@ def owners(*args: str) -> None:
 owner = owners
 
 
+# @deprecated("canary.directives.parameterize is deprecated; use canary_pyt.directives.parameterize")
 def parameterize(
     names: str | Sequence[str],
     values: Sequence[Sequence[Any] | Any],
@@ -938,8 +949,8 @@ def parameterize(
 
     .. code-block:: python
 
-       import canary
-       canary.directives.parametrize(argnames, argvalues, when=..., type=None)
+       import canary_pyt
+       canary_pyt.directives.parametrize(argnames, argvalues, when=..., type=None)
 
 
     ``.vvt``:
@@ -993,7 +1004,7 @@ def parameterize(
     .. code-block:: python
 
        # test1
-       canary.directives.parameterize("cpus", (4, 8, 12, 32))
+       canary_pyt.directives.parameterize("cpus", (4, 8, 12, 32))
 
     ``test1.vvt``:
 
@@ -1019,7 +1030,7 @@ def parameterize(
     .. code-block:: python
 
        # test1
-       canary.directives.parameterize("a,b", ((1, 2), (3, 4), (5, 6)))
+       canary_pyt.directives.parameterize("a,b", ((1, 2), (3, 4), (5, 6)))
 
     ``test1.vvt``:
 
@@ -1046,8 +1057,8 @@ def parameterize(
     .. code-block:: python
 
        # test1
-       canary.directives.parameterize("a,b", [("a1", "b1"), ("a2", "b2")])
-       canary.directives.parameterize("x", ["x1", "x2"])
+       canary_pyt.directives.parameterize("a,b", [("a1", "b1"), ("a2", "b2")])
+       canary_pyt.directives.parameterize("x", ["x1", "x2"])
 
     results in the following test invocations:
 
@@ -1062,6 +1073,7 @@ def parameterize(
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.cpus is deprecated; use canary_pyt.directives.cpus")
 def cpus(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many CPUs
 
@@ -1072,8 +1084,8 @@ def cpus(arg: int, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.cpus(arg, when=...)
+       import canary_pyt
+       canary_pyt.directives.cpus(arg, when=...)
 
 
     ``.vvt``: ``NA``
@@ -1102,6 +1114,7 @@ def cpus(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.nodes is deprecated; use canary_pyt.directives.nodes")
 def nodes(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many nodes
 
@@ -1112,8 +1125,8 @@ def nodes(arg: int, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.nodes(arg, when=...)
+       import canary_pyt
+       canary_pyt.directives.nodes(arg, when=...)
 
 
     ``.vvt``: ``NA``
@@ -1142,6 +1155,7 @@ def nodes(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.gpus is deprecated; use canary_pyt.directives.gpus")
 def gpus(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many GPUs
 
@@ -1152,8 +1166,8 @@ def gpus(arg: int, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.gpus(arg, when=...)
+       import canary_pyt
+       canary_pyt.directives.gpus(arg, when=...)
 
 
     ``.vvt``: ``NA``
@@ -1182,6 +1196,7 @@ def gpus(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
+# @deprecated("canary.directives.preload is deprecated; use canary_pyt.directives.preload")
 def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> None:
     """Load shell shell script before test execution
 
@@ -1192,8 +1207,8 @@ def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> 
 
     .. code-block:: python
 
-       import canary
-       canary.directives.preload(arg, *, when=..., source=False):
+       import canary_pyt
+       canary_pyt.directives.preload(arg, *, when=..., source=False):
 
     ``.vvt``:
 
@@ -1210,6 +1225,7 @@ def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> 
     """
 
 
+# @deprecated("canary.directives.load_module is deprecated; use canary_pyt.directives.load_module")
 def load_module(name: str, *, use: str | None = None, when: WhenType | None = None) -> None:
     """Load a module before a test is executed.
 
@@ -1220,8 +1236,8 @@ def load_module(name: str, *, use: str | None = None, when: WhenType | None = No
 
     .. code:: python
 
-       import canary
-       canary.directives.load_module(name, when=..., use=...)
+       import canary_pyt
+       canary_pyt.directives.load_module(name, when=..., use=...)
 
     ``.vvt``: ``NA``
 
@@ -1238,14 +1254,15 @@ def load_module(name: str, *, use: str | None = None, when: WhenType | None = No
     .. code:: python
 
        import sys
-       import canary
-       canary.directives.load_module("gcc")
+       import canary_pyt
+       canary_pyt.directives.load_module("gcc")
 
     will load the ``gcc`` module before the test is executed.
 
     """
 
 
+# @deprecated("canary.directives.source is deprecated; use canary_pyt.directives.source")
 def source(name: str, *, when: WhenType | None = None) -> None:
     """Source a shell rc file before a test is executed.
 
@@ -1256,8 +1273,8 @@ def source(name: str, *, when: WhenType | None = None) -> None:
 
     .. code:: python
 
-       import canary
-       canary.directives.source(name, when=...)
+       import canary_pyt
+       canary_pyt.directives.source(name, when=...)
 
     ``.vvt``: ``NA``
 
@@ -1273,14 +1290,15 @@ def source(name: str, *, when: WhenType | None = None) -> None:
     .. code:: python
 
        import sys
-       import canary
-       canary.directives.source("setup-env.sh")
+       import canary_pyt
+       canary_pyt.directives.source("setup-env.sh")
 
     will source the ``setup-env.sh`` file before the test is executed.
 
     """
 
 
+# @deprecated("canary.directives.set_id is deprecated; use canary_pyt.directives.set_id")
 def set_id(id: str, *, when: WhenType | None = None) -> None:
     """Set an explicit SHA-like ID, or ID template, for this test.
 
@@ -1291,17 +1309,17 @@ def set_id(id: str, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.set_id("deadbeef")
+       import canary_pyt
+       canary_pyt.directives.set_id("deadbeef")
 
     For parameterized tests, the ID may be a template expanded with parameter
     values:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.parameterize("p", [1, 2])
-       canary.directives.set_id("deadbeef{p}")
+       import canary_pyt
+       canary_pyt.directives.parameterize("p", [1, 2])
+       canary_pyt.directives.set_id("deadbeef{p}")
 
     which generates IDs ``deadbeef1`` and ``deadbeef2``.
 
@@ -1322,8 +1340,8 @@ def set_id(id: str, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       canary.directives.set_id("deadbeef{p}")
-       canary.directives.set_id("deadbeef${P}")
+       canary_pyt.directives.set_id("deadbeef{p}")
+       canary_pyt.directives.set_id("deadbeef${P}")
 
     Parameter names are available in both their original and uppercase forms.
     For composite/analyze parent cases, parameter template values are expanded
@@ -1341,6 +1359,7 @@ def set_id(id: str, *, when: WhenType | None = None) -> None:
     """
 
 
+# @deprecated("canary.directives.set_attribute is deprecated; use canary_pyt.directives.set_attribute")
 def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """Set an attribute on the test
 
@@ -1351,8 +1370,8 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
 
     .. code:: python
 
-       import canary
-       canary.directives.set_attribute(*, when=..., **attributes)
+       import canary_pyt
+       canary_pyt.directives.set_attribute(*, when=..., **attributes)
 
     ``.vvt``: ``NA``
 
@@ -1368,14 +1387,15 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     .. code:: python
 
        import sys
-       import canary
-       canary.directives.set_attribute(program="program_name")
+       import canary_pyt
+       canary_pyt.directives.set_attribute(program="program_name")
 
     will set the attribute ``program`` on the job with value "program_name".
 
     """
 
 
+# @deprecated("canary.directives.filter_warnings is deprecated; use canary_pyt.directives.filter_warnings")
 def filter_warnings(arg: bool) -> None:
     """Don't write warnings to the console when scanning files.
 
@@ -1386,8 +1406,8 @@ def filter_warnings(arg: bool) -> None:
 
     .. code:: python
 
-       import canary
-       canary.directives.filter_warnings(arg)
+       import canary_pyt
+       canary_pyt.directives.filter_warnings(arg)
 
     ``.vvt``:
 
@@ -1412,8 +1432,8 @@ def filter_warnings(arg: bool) -> None:
     .. code:: python
 
        import sys
-       import canary
-       canary.directives.filter_warnings(True)
+       import canary_pyt
+       canary_pyt.directives.filter_warnings(True)
 
     .. code:: python
 
@@ -1428,6 +1448,7 @@ def filter_warnings(arg: bool) -> None:
     """
 
 
+# @deprecated("canary.directives.skipif is deprecated; use canary_pyt.directives.skipif")
 def skipif(arg: bool, *, reason: str) -> None:
     """Conditionally skip tests
 
@@ -1438,8 +1459,8 @@ def skipif(arg: bool, *, reason: str) -> None:
 
     .. code:: python
 
-       import canary
-       canary.directives.skipif(arg, *, reason)
+       import canary_pyt
+       canary_pyt.directives.skipif(arg, *, reason)
 
     ``.vvt``:
 
@@ -1465,8 +1486,8 @@ def skipif(arg: bool, *, reason: str) -> None:
     .. code:: python
 
        import sys
-       import canary
-       canary.directives.skipif(
+       import canary_pyt
+       canary_pyt.directives.skipif(
            sys.platform == "Darwin", reason="Test does not run on Apple"
        )
 
@@ -1501,14 +1522,17 @@ def skipif(arg: bool, *, reason: str) -> None:
     """
 
 
+# @deprecated("canary.directives.sources is deprecated; use canary_pyt.directives.sources")
 def sources(*args: str, when: WhenType | None = None) -> None:
     pass
 
 
+# @deprecated("canary.directives.stages is deprecated; use canary_pyt.directives.stages")
 def stages(*args: str) -> None:
     pass
 
 
+# @deprecated("canary.directives.testname is deprecated; use canary_pyt.directives.testname")
 def testname(arg: str) -> None:
     """Set the name of a test to one different from the filename and/or define
     multiple test names (multiple test instances) in the same file.
@@ -1520,8 +1544,8 @@ def testname(arg: str) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.name(arg)
+       import canary_pyt
+       canary_pyt.directives.name(arg)
 
     ``.vvt``:
 
@@ -1541,8 +1565,8 @@ def testname(arg: str) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.testname("spam")
+       import canary_pyt
+       canary_pyt.directives.testname("spam")
        ...
 
     a test instance with name "spam" would be created, even though the file is
@@ -1557,9 +1581,9 @@ def testname(arg: str) -> None:
 
     .. code:: python
 
-       import canary
-       canary.directives.testname("foo")
-       canary.directives.testname("bar")
+       import canary_pyt
+       canary_pyt.directives.testname("foo")
+       canary_pyt.directives.testname("bar")
 
        def test():
            self = canary.get_instance()
@@ -1591,6 +1615,7 @@ def testname(arg: str) -> None:
 name = testname
 
 
+# @deprecated("canary.directives.timeout is deprecated; use canary_pyt.directives.timeout")
 def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
     """Specify a timeout value for a test
 
@@ -1601,8 +1626,8 @@ def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.timeout(arg, when=...)
+       import canary_pyt
+       canary_pyt.directives.timeout(arg, when=...)
 
     ``.vvt``:
 
@@ -1632,7 +1657,7 @@ def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
 
     The timeout for a test is determined based on the following rules:
 
-    * if the test has an explicit timeout set by ``canary.directives.timeout``, use it;
+    * if the test has an explicit timeout set by ``canary_pyt.directives.timeout``, use it;
     * if the test has a keyword that appears in the ``test:timeout:`` configuration section,
       use it;
     * otherwise, use a the default timeout.
@@ -1640,6 +1665,7 @@ def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
     """
 
 
+# @deprecated("canary.directives.xdiff is deprecated; use canary_pyt.directives.xdiff")
 def xdiff(*, when: WhenType | None = None) -> None:
     """The test is expected to diff.
 
@@ -1650,8 +1676,8 @@ def xdiff(*, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.xdiff(when=...)
+       import canary_pyt
+       canary_pyt.directives.xdiff(when=...)
 
     Parameters
     ----------
@@ -1670,6 +1696,7 @@ def xdiff(*, when: WhenType | None = None) -> None:
     """
 
 
+# @deprecated("canary.directives.xfail is deprecated; use canary_pyt.directives.xfail")
 def xfail(*, code: int = -1, when: WhenType | None = None) -> None:
     """The test is expected to fail (return with a non-zero exit code).  If
     ``code > 0`` and the exit code is not ``code``, the test will be considered
@@ -1682,8 +1709,8 @@ def xfail(*, code: int = -1, when: WhenType | None = None) -> None:
 
     .. code-block:: python
 
-       import canary
-       canary.directives.xfail(code=-1, when=...)
+       import canary_pyt
+       canary_pyt.directives.xfail(code=-1, when=...)
 
     Parameters
     ----------

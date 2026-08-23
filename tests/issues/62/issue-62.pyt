@@ -4,12 +4,12 @@
 
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.enable(False, when='parameters="Letter=c"')
-canary.directives.keywords("fast", when='parameters="Letter=a"')
-canary.directives.keywords("enable_test")
-canary.directives.parameterize("Letter", ("a", "b", "c"))
+canary_pyt.directives.enable(False, when='parameters="Letter=c"')
+canary_pyt.directives.keywords("fast", when='parameters="Letter=a"')
+canary_pyt.directives.keywords("enable_test")
+canary_pyt.directives.parameterize("Letter", ("a", "b", "c"))
 
 
 def main():

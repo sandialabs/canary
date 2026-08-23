@@ -141,17 +141,17 @@ def generate_random_test_files(
             cache.append(name)
             fp = io.StringIO()
             fp.write("#/usr/bin/env python3\n")
-            fp.write("import canary\n")
+            fp.write("import canary_pyt\n")
             if kws:
-                fp.write(f"canary.directives.keywords({', '.join(repr(kw) for kw in kws)})\n")
+                fp.write(f"canary_pyt.directives.keywords({', '.join(repr(kw) for kw in kws)})\n")
             if params:
                 p_names = ",".join(params.keys())
                 p_values = list(zip(*params.values()))
-                fp.write(f"canary.directives.parameterize('{p_names}', {p_values})\n")
+                fp.write(f"canary_pyt.directives.parameterize('{p_names}', {p_values})\n")
                 cache.extend(generate_spec_names(name, p_names, p_values))
 
             if deps:
-                fp.write("\n".join(f"canary.directives.depends_on({dep!r})" for dep in deps))
+                fp.write("\n".join(f"canary_pyt.directives.depends_on({dep!r})" for dep in deps))
 
             (root / fname).write_text(fp.getvalue())
 

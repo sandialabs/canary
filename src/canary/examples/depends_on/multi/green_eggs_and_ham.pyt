@@ -5,9 +5,10 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.depends_on("ingredients.type=eggs")
-canary.directives.depends_on("ingredients.type=ham")
+canary_pyt.directives.depends_on("ingredients.type=eggs")
+canary_pyt.directives.depends_on("ingredients.type=ham")
 
 
 def green_eggs_and_ham() -> int:

@@ -5,8 +5,9 @@
 import sys
 
 import canary
+import canary_pyt
 
-canary.directives.depends_on("breakfast.dish=spam")
+canary_pyt.directives.depends_on("breakfast.dish=spam")
 
 
 def lunch() -> int:

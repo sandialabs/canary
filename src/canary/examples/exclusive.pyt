@@ -1,8 +1,8 @@
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.exclusive()
+canary_pyt.directives.exclusive()
 
 
 def test():
