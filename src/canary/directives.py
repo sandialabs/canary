@@ -101,7 +101,8 @@ The ``when`` expression recognizes the following conditions:
 from typing import Any
 from typing import Sequence
 
-# from typing_extensions import deprecated
+from typing_extensions import deprecated
+
 from _canary import enums
 from _canary.ir import DependencySelector
 
@@ -109,7 +110,7 @@ WhenType = str | dict[str, str]
 DependencyType = str | dict[str, Any] | DependencySelector
 
 
-# @deprecated("canary.directives.artifact is deprecated; use canary_pyt.directives.artifact")
+@deprecated("canary.directives.artifact is deprecated; use canary_pyt.directives.artifact")
 def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always") -> None:
     """Save ``file`` as an artifact.  This directive is not used by the test directly.  Reporters
     can save a test's artifacts at their destination.  For instance, the artifacts may submitted to
@@ -155,7 +156,7 @@ def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always"
     """
 
 
-# @deprecated("canary.directives.baseline is deprecated; use canary_pyt.directives.baseline")
+@deprecated("canary.directives.baseline is deprecated; use canary_pyt.directives.baseline")
 def baseline(
     *,
     src: str | None = None,
@@ -225,7 +226,7 @@ def baseline(
     """
 
 
-# @deprecated("canary.directives.copy is deprecated; use canary_pyt.directives.copy")
+@deprecated("canary.directives.copy is deprecated; use canary_pyt.directives.copy")
 def copy(
     *files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None
 ) -> None:
@@ -320,7 +321,7 @@ def copy(
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.depends_on is deprecated; use canary_pyt.directives.depends_on")
+@deprecated("canary.directives.depends_on is deprecated; use canary_pyt.directives.depends_on")
 def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> None:
     """
     Require that test ``arg`` run before this test.
@@ -456,7 +457,7 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.exclusive is deprecated; use canary_pyt.directives.exclusive")
+@deprecated("canary.directives.exclusive is deprecated; use canary_pyt.directives.exclusive")
 def exclusive(*, when: WhenType | None = None) -> None:
     """Do not run this test in parallel with any other test.
 
@@ -496,7 +497,9 @@ def exclusive(*, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.generate_composite_base_case is deprecated; use canary_pyt.directives.generate_composite_base_case")
+@deprecated(
+    "canary.directives.generate_composite_base_case is deprecated; use canary_pyt.directives.generate_composite_base_case"
+)
 def generate_composite_base_case(
     *, when: WhenType | None = None, flag: str | None = None, script: str | None = None
 ) -> None:
@@ -605,7 +608,7 @@ def generate_composite_base_case(
 analyze = generate_composite_base_case
 
 
-# @deprecated("canary.directives.enable is deprecated; use canary_pyt.directives.enable")
+@deprecated("canary.directives.enable is deprecated; use canary_pyt.directives.enable")
 def enable(*args: bool, when: WhenType | None = None) -> None:
     """
     Explicitly mark a test to be enabled (or not)
@@ -697,7 +700,7 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.include is deprecated; use canary_pyt.directives.include")
+@deprecated("canary.directives.include is deprecated; use canary_pyt.directives.include")
 def include(file: str, *, when: WhenType | None = None) -> None:
     r"""Include the contents of ``file`` at the point where the directive appears.
 
@@ -743,7 +746,7 @@ def include(file: str, *, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.keywords is deprecated; use canary_pyt.directives.keywords")
+@deprecated("canary.directives.keywords is deprecated; use canary_pyt.directives.keywords")
 def keywords(*args: str, when: WhenType | None = None) -> None:
     """Mark a test with keywords.  The main use of test keywords is to filter a
     set of tests, such as selecting which tests to run.
@@ -825,7 +828,7 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.link is deprecated; use canary_pyt.directives.link")
+@deprecated("canary.directives.link is deprecated; use canary_pyt.directives.link")
 def link(
     *files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None
 ) -> None:
@@ -902,7 +905,7 @@ def link(
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.owners is deprecated; use canary_pyt.directives.owners")
+@deprecated("canary.directives.owners is deprecated; use canary_pyt.directives.owners")
 def owners(*args: str) -> None:
     """Specify a test's owner[s]
 
@@ -929,7 +932,7 @@ def owners(*args: str) -> None:
 owner = owners
 
 
-# @deprecated("canary.directives.parameterize is deprecated; use canary_pyt.directives.parameterize")
+@deprecated("canary.directives.parameterize is deprecated; use canary_pyt.directives.parameterize")
 def parameterize(
     names: str | Sequence[str],
     values: Sequence[Sequence[Any] | Any],
@@ -1073,7 +1076,7 @@ def parameterize(
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.cpus is deprecated; use canary_pyt.directives.cpus")
+@deprecated("canary.directives.cpus is deprecated; use canary_pyt.directives.cpus")
 def cpus(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many CPUs
 
@@ -1114,7 +1117,7 @@ def cpus(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.nodes is deprecated; use canary_pyt.directives.nodes")
+@deprecated("canary.directives.nodes is deprecated; use canary_pyt.directives.nodes")
 def nodes(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many nodes
 
@@ -1155,7 +1158,7 @@ def nodes(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.gpus is deprecated; use canary_pyt.directives.gpus")
+@deprecated("canary.directives.gpus is deprecated; use canary_pyt.directives.gpus")
 def gpus(arg: int, *, when: WhenType | None = None) -> None:
     """This test requires this many GPUs
 
@@ -1196,7 +1199,7 @@ def gpus(arg: int, *, when: WhenType | None = None) -> None:
     """  # noqa: E501
 
 
-# @deprecated("canary.directives.preload is deprecated; use canary_pyt.directives.preload")
+@deprecated("canary.directives.preload is deprecated; use canary_pyt.directives.preload")
 def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> None:
     """Load shell shell script before test execution
 
@@ -1225,7 +1228,7 @@ def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> 
     """
 
 
-# @deprecated("canary.directives.load_module is deprecated; use canary_pyt.directives.load_module")
+@deprecated("canary.directives.load_module is deprecated; use canary_pyt.directives.load_module")
 def load_module(name: str, *, use: str | None = None, when: WhenType | None = None) -> None:
     """Load a module before a test is executed.
 
@@ -1262,7 +1265,7 @@ def load_module(name: str, *, use: str | None = None, when: WhenType | None = No
     """
 
 
-# @deprecated("canary.directives.source is deprecated; use canary_pyt.directives.source")
+@deprecated("canary.directives.source is deprecated; use canary_pyt.directives.source")
 def source(name: str, *, when: WhenType | None = None) -> None:
     """Source a shell rc file before a test is executed.
 
@@ -1298,7 +1301,7 @@ def source(name: str, *, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.set_id is deprecated; use canary_pyt.directives.set_id")
+@deprecated("canary.directives.set_id is deprecated; use canary_pyt.directives.set_id")
 def set_id(id: str, *, when: WhenType | None = None) -> None:
     """Set an explicit SHA-like ID, or ID template, for this test.
 
@@ -1359,7 +1362,9 @@ def set_id(id: str, *, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.set_attribute is deprecated; use canary_pyt.directives.set_attribute")
+@deprecated(
+    "canary.directives.set_attribute is deprecated; use canary_pyt.directives.set_attribute"
+)
 def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """Set an attribute on the test
 
@@ -1395,7 +1400,9 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """
 
 
-# @deprecated("canary.directives.filter_warnings is deprecated; use canary_pyt.directives.filter_warnings")
+@deprecated(
+    "canary.directives.filter_warnings is deprecated; use canary_pyt.directives.filter_warnings"
+)
 def filter_warnings(arg: bool) -> None:
     """Don't write warnings to the console when scanning files.
 
@@ -1448,7 +1455,7 @@ def filter_warnings(arg: bool) -> None:
     """
 
 
-# @deprecated("canary.directives.skipif is deprecated; use canary_pyt.directives.skipif")
+@deprecated("canary.directives.skipif is deprecated; use canary_pyt.directives.skipif")
 def skipif(arg: bool, *, reason: str) -> None:
     """Conditionally skip tests
 
@@ -1522,17 +1529,17 @@ def skipif(arg: bool, *, reason: str) -> None:
     """
 
 
-# @deprecated("canary.directives.sources is deprecated; use canary_pyt.directives.sources")
+@deprecated("canary.directives.sources is deprecated; use canary_pyt.directives.sources")
 def sources(*args: str, when: WhenType | None = None) -> None:
     pass
 
 
-# @deprecated("canary.directives.stages is deprecated; use canary_pyt.directives.stages")
+@deprecated("canary.directives.stages is deprecated; use canary_pyt.directives.stages")
 def stages(*args: str) -> None:
     pass
 
 
-# @deprecated("canary.directives.testname is deprecated; use canary_pyt.directives.testname")
+@deprecated("canary.directives.testname is deprecated; use canary_pyt.directives.testname")
 def testname(arg: str) -> None:
     """Set the name of a test to one different from the filename and/or define
     multiple test names (multiple test instances) in the same file.
@@ -1615,7 +1622,7 @@ def testname(arg: str) -> None:
 name = testname
 
 
-# @deprecated("canary.directives.timeout is deprecated; use canary_pyt.directives.timeout")
+@deprecated("canary.directives.timeout is deprecated; use canary_pyt.directives.timeout")
 def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
     """Specify a timeout value for a test
 
@@ -1665,7 +1672,7 @@ def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.xdiff is deprecated; use canary_pyt.directives.xdiff")
+@deprecated("canary.directives.xdiff is deprecated; use canary_pyt.directives.xdiff")
 def xdiff(*, when: WhenType | None = None) -> None:
     """The test is expected to diff.
 
@@ -1696,7 +1703,7 @@ def xdiff(*, when: WhenType | None = None) -> None:
     """
 
 
-# @deprecated("canary.directives.xfail is deprecated; use canary_pyt.directives.xfail")
+@deprecated("canary.directives.xfail is deprecated; use canary_pyt.directives.xfail")
 def xfail(*, code: int = -1, when: WhenType | None = None) -> None:
     """The test is expected to fail (return with a non-zero exit code).  If
     ``code > 0`` and the exit code is not ``code``, the test will be considered
