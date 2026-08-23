@@ -37,7 +37,6 @@ from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
 from _canary.main import console_main
 from _canary.pluginmanager import CanaryPluginManager
-from _canary.plugins.types import CanarySubcommand
 from _canary.reporters.reporter import CanaryReporter
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
@@ -45,6 +44,7 @@ from _canary.rules import RuntimeRule
 from _canary.runtest import Runner
 from _canary.select import RuntimeSelector
 from _canary.select import Selector
+from _canary.subcommands.base import CanarySubcommand
 from _canary.testcase import TestCase
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance

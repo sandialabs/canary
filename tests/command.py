@@ -10,15 +10,15 @@ from types import SimpleNamespace
 import pytest
 
 import canary
-from _canary.plugins.subcommands.config import show_config
-from _canary.plugins.subcommands.describe import Describe
-from _canary.plugins.subcommands.find import Find
-from _canary.plugins.subcommands.location import Location
-from _canary.plugins.subcommands.log import Log
-from _canary.plugins.subcommands.query import Query
-from _canary.plugins.subcommands.query import query_json
-from _canary.plugins.subcommands.status import Status
-from _canary.plugins.subcommands.tree import Tree
+from _canary.subcommands.config import show_config
+from _canary.subcommands.describe import Describe
+from _canary.subcommands.find import Find
+from _canary.subcommands.location import Location
+from _canary.subcommands.log import Log
+from _canary.subcommands.query import Query
+from _canary.subcommands.query import query_json
+from _canary.subcommands.status import Status
+from _canary.subcommands.tree import Tree
 from _canary.util.filesystem import working_dir
 from _canary.util.testing import CanaryCommand
 from _canary.workspace import Workspace
@@ -147,7 +147,7 @@ def test_location_4(setup):
 
 
 def test_log(setup, monkeypatch):
-    from _canary.plugins.subcommands import log as log_module
+    from _canary.subcommands import log as log_module
 
     monkeypatch.setattr(log_module, "page_text", lambda text: None)
 

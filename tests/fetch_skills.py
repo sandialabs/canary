@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from _canary.plugins.subcommands.fetch import Fetch
-from _canary.plugins.subcommands.fetch import UnknownSkillError
-from _canary.plugins.subcommands.fetch import fetch_all_skills
-from _canary.plugins.subcommands.fetch import fetch_skill
-from _canary.plugins.subcommands.fetch import get_skill_resource
-from _canary.plugins.subcommands.fetch import list_bundled_skills
+from _canary.subcommands.fetch import Fetch
+from _canary.subcommands.fetch import UnknownSkillError
+from _canary.subcommands.fetch import fetch_all_skills
+from _canary.subcommands.fetch import fetch_skill
+from _canary.subcommands.fetch import get_skill_resource
+from _canary.subcommands.fetch import list_bundled_skills
 
 EXPECTED_SKILLS = {
     "canary-orientation",

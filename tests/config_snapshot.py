@@ -10,9 +10,9 @@ import pytest
 import _canary.util.json_helper as json
 from _canary import config
 from _canary.config.argparsing import make_argument_parser
-from _canary.plugins.subcommands.run import RequestBuilder
-from _canary.plugins.subcommands.run import RequestNode
-from _canary.plugins.subcommands.run import ScanPathsRequest
+from _canary.subcommands.run import RequestBuilder
+from _canary.subcommands.run import RequestNode
+from _canary.subcommands.run import ScanPathsRequest
 
 
 def assert_json_serializable(obj: Any) -> None:

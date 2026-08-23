@@ -10,8 +10,6 @@ from typing import Type
 
 import pluggy
 
-from .plugins.types import CanarySubcommand
-
 if TYPE_CHECKING:
     from .collect import Collector
     from .config.argparsing import Parser
@@ -25,6 +23,7 @@ if TYPE_CHECKING:
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
+    from .subcommands.base import CanarySubcommand
     from .workspace import Session
 
 
@@ -116,7 +115,7 @@ def canary_cmdline_modifyargs(parser: "Parser", args: argparse.Namespace) -> Non
 
 
 @hookspec
-def canary_subcommand() -> CanarySubcommand:
+def canary_subcommand() -> "CanarySubcommand":
     """DEPRECATED: use canary_addcommand"""
     raise NotImplementedError
 

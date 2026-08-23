@@ -12,9 +12,9 @@ from typing import Any
 import hpc_connect
 
 import canary
-from _canary.plugins.subcommands.run import Run
 from _canary.queue_executor import ResourceQueueExecutor
 from _canary.runtest import Runner
+from _canary.subcommands.run import Run
 from _canary.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
 from canary_hpc.batching import BatchingSpec

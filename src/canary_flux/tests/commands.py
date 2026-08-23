@@ -63,7 +63,7 @@ def test_flux_run_parser_defaults_and_time_parsing(monkeypatch):
             parser.add_argument("--workers", type=int)
             parser.add_argument("paths", nargs="*")
 
-    import _canary.plugins.subcommands.run as run_mod
+    import _canary.subcommands.run as run_mod
 
     monkeypatch.setattr(run_mod, "Run", FakeRun)
 

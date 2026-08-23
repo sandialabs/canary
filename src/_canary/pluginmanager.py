@@ -26,25 +26,23 @@ class CanaryPluginManager(pluggy.PluginManager):
     def register_builtins(self):
         from . import collect
         from . import generate
+        from . import hooks
         from . import launcher
         from . import reporters
         from . import runtest
         from . import select
-        from .plugins import builtin
-        from .plugins import subcommands
+        from . import subcommands
         from .resource_pool import gpu_select
         from .resource_pool import hooks as rp_hooks
 
         for subcommand in subcommands.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
             self.register(subcommand, name=f"command.{name}")
-        for p in builtin.plugins:
-            name = getname(p)
-            self.register(p, f"builtin.{name}")
         for p in reporters.plugins:
             name = getname(p)
             self.register(p, f"builtin.{name}")
         self.register(collect, "builtin.collect")
+        self.register(hooks, "builtin.hooks")
         self.register(generate, "builtin.generate")
         self.register(gpu_select, "builtin.gpu_select")
         self.register(filter, "builtin.filter")

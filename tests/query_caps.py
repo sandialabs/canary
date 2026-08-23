@@ -8,11 +8,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from _canary.plugins.subcommands import query as query_mod
-from _canary.plugins.subcommands.query import Query
-from _canary.plugins.subcommands.query import load_capability_dataset
-from _canary.plugins.subcommands.query import query_capabilities
-from _canary.plugins.subcommands.query import query_json
+from _canary.subcommands import query as query_mod
+from _canary.subcommands.query import Query
+from _canary.subcommands.query import load_capability_dataset
+from _canary.subcommands.query import query_capabilities
+from _canary.subcommands.query import query_json
 
 
 def namespace(**kwargs):

@@ -24,7 +24,7 @@ from .util.rich import set_color_when
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .plugins.types import CanarySubcommand
+    from .subcommands.base import CanarySubcommand
 
 
 reraise: bool = False

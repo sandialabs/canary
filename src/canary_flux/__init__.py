@@ -102,7 +102,7 @@ class FluxRun:
             help="Additional argument passed to Flux/hpc_connect allocation request; may be repeated",
         )
 
-        from _canary.plugins.subcommands.run import Run
+        from _canary.subcommands.run import Run
 
         Run().setup_parser(parser)
 
@@ -122,7 +122,7 @@ Flux timeout types:\n\n
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        from _canary.plugins.subcommands.run import Run
+        from _canary.subcommands.run import Run
 
         logger.info(
             "[bold]Flux run requested[/]: nodes=%s, queue_timeout=%ss, time_limit=%ss",

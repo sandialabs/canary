@@ -12,7 +12,7 @@ from typing import Any
 import hpc_connect
 
 import canary
-from _canary.plugins.subcommands.run import Run
+from _canary.subcommands.run import Run
 from _canary.util.rich import bold
 
 from .argparsing import CanaryHPCBatchSpec
