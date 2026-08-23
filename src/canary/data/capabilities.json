@@ -750,6 +750,28 @@
       ]
     }
   },
+  "skills": {
+    "summary": "Canary ships small agent-facing skills as installed package data. Skills provide procedural guidance and point agents to targeted capability queries. The capabilities database remains the detailed factual reference.",
+    "installed_location": "canary package data under skills/<skill-name>/SKILL.md",
+    "fetch_command": {
+      "list": "canary fetch skills --list",
+      "fetch_all": "canary fetch skills",
+      "fetch_one": "canary fetch skills <skill-name>"
+    },
+    "intended_agent_flow": [
+      "Use a Canary skill for procedural guidance.",
+      "When detailed facts are needed, query canary query -c TOPIC.",
+      "Prefer targeted topics such as overview, tests, hooks.post, query, resources, plugins, or agent_workflows.",
+      "Use canary query -c all only when broad knowledge of the entire capability database is required."
+    ],
+    "bundled_skills": {
+      "canary-orientation": "General orientation: what Canary is, when to use it, and where to query for more detail.",
+      "canary-test-authoring": "Authoring and modifying Canary tests/job definitions.",
+      "canary-run-debug": "Running jobs, inspecting status, querying state, and debugging failures.",
+      "canary-workflows-results": "Workflow orchestration, structured measurements, post-processing, and reports.",
+      "canary-extension-development": "Developing generators, hooks, plugins, launchers, reporters, resource integrations, and extension docs."
+    }
+  },
   "agent_workflows": {
     "summary": "Agents can use Canary as a structured execution and observation layer for code development, testing, simulation, and post-processing.",
     "principles": [
@@ -799,7 +821,16 @@
     },
     "static_capabilities": {
       "installed_location": "canary package data under data/capabilities.json",
-      "query": "canary query -c capabilities"
+      "query": "canary query -c all",
+      "shortcut_examples": [
+        "canary query -c overview",
+        "canary query -c tests",
+        "canary query -c hooks.post"
+      ]
+    },
+    "skills": {
+      "installed_location": "canary package data under skills/<skill-name>/SKILL.md",
+      "fetch": "canary fetch skills"
     }
   },
   "apis": {
