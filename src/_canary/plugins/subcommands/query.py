@@ -170,7 +170,7 @@ def query_capabilities(selector: str, query: str = ".") -> Any:
     if not selector:
         raise ValueError("Capability selector must be non-empty")
 
-    if selector in ("all", "capabilties"):
+    if selector in ("all", "capabilities"):
         return query_json(data, query)
 
     shortcut = selector if selector.startswith(".") else f".{selector}"

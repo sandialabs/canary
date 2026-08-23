@@ -16,7 +16,7 @@ from _canary.plugins.subcommands.query import query_json
 
 
 def namespace(**kwargs):
-    defaults = {"jobid": None, "session": None, "capabilities": None, "query": ".", "terse": False}
+    defaults = {"jobid": None, "session": None, "capability": None, "query": ".", "terse": False}
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
 
@@ -30,7 +30,7 @@ def test_load_capabilities_database():
 
 
 def test_query_capabilities_all_shortcut(capsys):
-    rc = Query().execute(namespace(capabilities="all"))
+    rc = Query().execute(namespace(capability="all"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -40,7 +40,7 @@ def test_query_capabilities_all_shortcut(capsys):
 
 
 def test_query_capabilities_dataset_name_still_prints_whole_database(capsys):
-    rc = Query().execute(namespace(capabilities="capabilities"))
+    rc = Query().execute(namespace(capability="capabilities"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -49,7 +49,7 @@ def test_query_capabilities_dataset_name_still_prints_whole_database(capsys):
 
 
 def test_query_capabilities_dataset_name_with_explicit_query(capsys):
-    rc = Query().execute(namespace(capabilities="capabilities", query=".overview"))
+    rc = Query().execute(namespace(capability="capabilities", query=".overview"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -58,7 +58,7 @@ def test_query_capabilities_dataset_name_with_explicit_query(capsys):
 
 
 def test_query_capabilities_overview_shortcut(capsys):
-    rc = Query().execute(namespace(capabilities="overview"))
+    rc = Query().execute(namespace(capability="overview"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -67,7 +67,7 @@ def test_query_capabilities_overview_shortcut(capsys):
 
 
 def test_query_capabilities_nested_shortcut(capsys):
-    rc = Query().execute(namespace(capabilities="hooks.post"))
+    rc = Query().execute(namespace(capability="hooks.post"))
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -76,7 +76,7 @@ def test_query_capabilities_nested_shortcut(capsys):
 
 def test_query_capabilities_shortcut_plus_query_suffix(capsys):
     rc = Query().execute(
-        namespace(capabilities="hooks", query=".post.canary_runtest_finish.purpose")
+        namespace(capability="hooks", query=".post.canary_runtest_finish.purpose")
     )
 
     assert rc == 0
