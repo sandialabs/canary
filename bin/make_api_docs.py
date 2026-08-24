@@ -226,7 +226,7 @@ if __name__ == "__main__":
             "_canary.reporters.markdown": ["type"],
             "_canary.reporters.reporter": ["type"],
         },
-        no_index_modules=["_canary.resource_pool.rpool", "_canary.plugins.subcommands.status"],
+        no_index_modules=["_canary.resource_pool.rpool", "_canary.subcommands.status"],
     )
 
     maker.add_package(

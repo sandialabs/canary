@@ -8,5 +8,4 @@ canary_cmake
 .. toctree::
    :maxdepth: 1
 
-   cdash/index
    ctest

@@ -8,6 +8,7 @@ hpcc_flux
 .. toctree::
    :maxdepth: 1
 
-   backend
+   allocation
    discover
-   process
+   py/index
+   shell/index

@@ -39,11 +39,13 @@ The test file ``first.pyt`` defines a function that adds two numbers and verifie
 
 To run the test, navigate to the examples directory and run ``canary run -k first ./basic`` which tells ``canary`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
 
-.. command-output:: canary -d run -k first ./basic/first
-    :cwd: /examples
-    :setup: rm -rf .canary TestResults
+.. doc-run::
+   :before_script: [copy-examples]
+   :script: [canary run -k first ./basic/first]
+   :cwd: /examples
 
-A test is considered to have successfully completed if its exit code is ``0``.  See :ref:`basics-status` for more details on test statuses.
+A test is considered to have successfully completed if its exit code is ``0``.  See
+:ref:`basics-status` for more details on test statuses.
 
 .. note::
 
@@ -51,16 +53,17 @@ A test is considered to have successfully completed if its exit code is ``0``.  
 
 ``canary`` creates an isolated workspace at the start of each run inside the ``.canary`` folder.  All inputs, intermediate files, and outputs are contained within the workspace.  Once test execution completes, a "view" of the most recent results is created in the ``TestResults`` directory.  Details of the latest results are seen by :ref:`canary status<canary-status>`:
 
-.. command-output:: canary status
-    :nocache:
-    :cwd: /examples
-    :setup: canary run -w -k first ./basic/first
+.. doc-run::
+   :before_script: [copy-examples, canary run -k first ./basic/first]
+   :script: [canary status]
+   :cwd: /examples
 
 By default, only failed tests appear in the output.  To see the results of each test in the session, including passed tests, pass ``-rA``:
 
-.. command-output:: canary status -rA
-    :nocache:
-    :cwd: /examples
+.. doc-run::
+   :before_script: [copy-examples, canary run -k first ./basic/first]
+   :script: [canary status -rA]
+   :cwd: /examples
 
 .. _getting-started-second:
 
@@ -84,18 +87,17 @@ This test introduces two new features:
 
 To run the test, navigate to the examples folder and run:
 
-.. command-output:: canary run -k second ./basic/second
-    :cwd: /examples
+.. doc-run::
+   :before_script: [copy-examples]
+   :script: [canary run ./basic/second]
+   :cwd: /examples
 
 Inspecting test output
 ----------------------
 
 When a test is run, its output is captured to the file ``canary-out.txt`` in its execution directory.  The :ref:`canary log<canary-log>` command can find and print the contents of this file to the console:
 
-.. command-output:: canary log second
-    :cwd: /examples
-
-
-.. command-output:: rm -rf .canary TestResults
-    :silent:
-    :cwd: /examples
+.. doc-run::
+   :before_script: [copy-examples, canary run ./basic/second]
+   :script: [canary log second]
+   :cwd: /examples

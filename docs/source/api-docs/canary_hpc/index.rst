@@ -16,4 +16,5 @@ canary_hpc
    conductor
    executor
    queue
+   schedulepack
    status

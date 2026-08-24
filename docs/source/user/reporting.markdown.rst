@@ -9,16 +9,8 @@ Multi-page markdown report
 
 A multi-page `markdown <https://en.wikipedia.org/wiki/Markdown>`_ report of a test session can be generated after the session has completed:
 
-.. command-output:: canary run ./basic
-    :cwd: /examples
-    :nocache:
-    :setup: rm -rf .canary TestResults
-    :ellipsis: 0
-
-.. command-output:: canary report markdown create
-    :nocache:
-    :cwd: /examples
-
-.. command-output:: cat MARKDOWN/index.md
-    :nocache:
-    :cwd: /examples
+.. doc-run::
+   :before_script: [copy-examples]
+   :script: [canary run ./basic, canary report markdown create, cat MARKDOWN/index.md]
+   :cwd: /examples
+   :ellipsis: [0, null, null]

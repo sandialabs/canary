@@ -9,7 +9,6 @@ _canary
    :maxdepth: 1
 
    collect
-   conductor
    config/index
    database
    enums
@@ -17,17 +16,20 @@ _canary
    expression
    generate
    generator
+   hooks
    hookspec
    ir
    job
+   job_graph
    jobspec
+   jobspec_graph
    launcher
    main
    paramset
    pluginmanager
-   plugins/index
    queue
    queue_executor
+   reporter
    reporters/index
    rerun
    resolve_dependency
@@ -36,6 +38,7 @@ _canary
    runtest
    select
    status
+   subcommands/index
    testcase
    testexec
    testinst

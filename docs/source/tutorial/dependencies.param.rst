@@ -20,7 +20,7 @@ The test ``lunch`` depends on ``breakfast``, but only when ``dish="spam"``:
 .. literalinclude:: /examples/depends_on/parameter/lunch.pyt
     :language: python
 
-.. command-output:: canary run ./depends_on/parameter
+.. doc-run::
+    :before_script: [copy-examples]
+    :script: [canary run ./depends_on/parameter]
     :cwd: /examples
-    :nocache:
-    :setup: rm -rf .canary TestResults

@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import canary
 
@@ -47,14 +48,16 @@ release = canary.version
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
+sys.path.insert(0, str(Path(__file__).parent / "extensions"))
 extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_design",
-    "_canary.third_party.programoutput",
-    "_canary.third_party.imagesvg",
+    "sphinxext.programoutput",
+    "sphinxext.docrun",
+    "sphinxext.imagesvg",
 ]
 autodoc_member_order = "bysource"
 autodoc_default_options = {"ignore-module-all": True}
