@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-from . import autodoc
 from . import check
 from . import collect
+from . import commands
 from . import config
 from . import describe
 from . import docs
@@ -30,9 +30,9 @@ from . import tree
 from . import view
 
 plugins = [
-    autodoc,
     check,
     collect,
+    commands,
     config,
     describe,
     docs,
