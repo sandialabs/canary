@@ -59,7 +59,7 @@ class ModuleSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class AnalyzeSpec:
+class AggregateSpec:
     flag: str | None = None
     script: str | None = None
     requires: str = "success"
@@ -180,7 +180,7 @@ class PYTModel:
             reducer=reducer.IDENTITY
         )
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
-        self.analyze: Field[AnalyzeSpec, AnalyzeSpec | None] = Field.make(reducer.LAST)
+        self.aggregate: Field[AggregateSpec, AggregateSpec | None] = Field.make(reducer.LAST)
         self.preload: Field[str, str | None] = Field.make(reducer.LAST)
         self.enable: Field[bool, list[bool]] = Field(reducer=reducer.IDENTITY)
         self.skip_reason: Field[str, str | None] = Field.make(reducer.LAST)
@@ -203,6 +203,9 @@ class PYTModel:
         return sorted(option_expressions)
 
     # ----------------------------- add_* API -----------------------------
+
+    def add_description(self, arg: str) -> None:
+        pass
 
     def add_family(self, name: str, when: WhenType | None = None) -> None:
         self.families.add(name, when=when)
@@ -323,14 +326,14 @@ class PYTModel:
         if value:
             self.filter_warnings = True
 
-    def set_analyze(
+    def set_aggregate(
         self,
         when: WhenType | None = None,
         flag: str | None = None,
         script: str | None = None,
         requires: str = "success",
     ) -> None:
-        self.analyze.add(AnalyzeSpec(flag=flag, script=script, requires=requires), when=when)
+        self.aggregate.add(AggregateSpec(flag=flag, script=script, requires=requires), when=when)
 
     def set_xfail(self, when: WhenType | None = None, code: int = -1) -> None:
         self.xstatus.add(XstatusSpec(code=code), when=when)
@@ -547,10 +550,10 @@ class PYTModel:
         xs = self.xstatus.eval(family=family, parameters=parameters, on_options=on_options)
         return xs.code if xs is not None else 0
 
-    def get_analyze(
+    def get_aggregate(
         self, family: str | None = None, on_options: list[str] | None = None
-    ) -> AnalyzeSpec | None:
-        return self.analyze.eval(family=family, parameters=None, on_options=on_options)
+    ) -> AggregateSpec | None:
+        return self.aggregate.eval(family=family, parameters=None, on_options=on_options)
 
     def get_meta_parameters(
         self,
@@ -598,6 +601,9 @@ class PYTAdapter:
                 raise AttributeError(f"Unknown directive {c.name!r}")
             fn(*c.args, **c.kwargs)
 
+    def f_description(self, arg: str) -> None:
+        self.m.add_description(arg)
+
     def f_testname(self, arg: str) -> None:
         self.m.add_family(arg)
 
@@ -624,7 +630,7 @@ class PYTAdapter:
         values: list[Sequence[Any] | Any],
         *,
         when: WhenType | None = None,
-        type: enums.enums = enums.list_parameter_space,
+        type: "enums.enums" = enums.list_parameter_space,
         samples: int = 10,
         random_seed: float = 1234.0,
     ) -> None:
@@ -741,6 +747,16 @@ class PYTAdapter:
     def f_xfail(self, *, code: int = -1, when: WhenType | None = None) -> None:
         self.m.set_xfail(code=code, when=when)
 
+    def f_aggregate(
+        self,
+        *,
+        when: WhenType | None = None,
+        flag: str | None = None,
+        script: str | None = None,
+        requires: str = "success",
+    ) -> None:
+        self.m.set_aggregate(when=when, flag=flag, script=script, requires=requires)
+
     def f_generate_composite_base_case(
         self,
         *,
@@ -749,7 +765,7 @@ class PYTAdapter:
         script: str | None = None,
         requires: str = "success",
     ) -> None:
-        self.m.set_analyze(when=when, flag=flag, script=script, requires=requires)
+        self.m.set_aggregate(when=when, flag=flag, script=script, requires=requires)
 
     def f_analyze(
         self,
@@ -761,7 +777,7 @@ class PYTAdapter:
     ) -> None:
         if script is None and flag is None:
             flag = "--analyze"
-        self.m.set_analyze(when=when, flag=flag, script=script, requires=requires)
+        self.m.set_aggregate(when=when, flag=flag, script=script, requires=requires)
 
 
 class PYTLockEmitter:
@@ -854,8 +870,8 @@ class PYTLockEmitter:
 
                 my_irs.append(ir)
 
-            analyze = model.get_analyze(family, on_options=on_options)
-            if analyze is not None:
+            aggregate = model.get_aggregate(family, on_options=on_options)
+            if aggregate is not None:
                 psets = model.parameter_sets.eval(family=family, on_options=on_options)
                 if not any(psets):
                     raise ValueError(
@@ -869,7 +885,7 @@ class PYTLockEmitter:
 
                 modules = model.get_modules(family, parameters=None, on_options=on_options)
                 deps = [
-                    DependencySelector(pattern=d.id, expects=1, when=analyze.requires)
+                    DependencySelector(pattern=d.id, expects=1, when=aggregate.requires)
                     for d in my_irs
                 ]
 
@@ -902,10 +918,10 @@ class PYTLockEmitter:
                 parent.add_artifact(parent.file.name)
                 if parent.stderr is not None:
                     parent.add_artifact(parent.stderr)
-                if analyze.flag:
-                    parent.command = [sys.executable, os.path.basename(model.path), analyze.flag]
-                elif analyze.script:
-                    script = analyze.script
+                if aggregate.flag:
+                    parent.command = [sys.executable, os.path.basename(model.path), aggregate.flag]
+                elif aggregate.script:
+                    script = aggregate.script
                     if os.path.exists(script):
                         f = Path(script).absolute()
                     else:

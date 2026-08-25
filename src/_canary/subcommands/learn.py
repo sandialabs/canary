@@ -259,7 +259,7 @@ Tips:
 def build_capabilities_tree() -> dict[str, Any]:
     """Build the runtime aggregate capabilities tree.
 
-    Every provider contributes a document with a namespace. The aggregate shape is:
+    Every provider contributes a document with a namespace. The aggregate shape is::
 
         {
           "core": {...},
@@ -269,6 +269,7 @@ def build_capabilities_tree() -> dict[str, Any]:
 
     Providers may be backed by static JSON, dynamic Python dictionaries,
     introspection, or future external systems.
+
     """
     tree: dict[str, Any] = {}
     payloads = config.pluginmanager.hook.canary_capabilities()
@@ -290,7 +291,7 @@ def build_capabilities_tree() -> dict[str, Any]:
 def build_skills_tree() -> dict[str, Any]:
     """Build the runtime aggregate skills tree.
 
-    Every provider contributes a document with a namespace. The aggregate shape is:
+    Every provider contributes a document with a namespace. The aggregate shape is::
 
         {
           "core": {...},
@@ -300,6 +301,7 @@ def build_skills_tree() -> dict[str, Any]:
 
     Providers may be backed by static JSON, dynamic Python dictionaries,
     introspection, or future external systems.
+
     """
     tree: dict[str, Any] = {}
     payloads = config.pluginmanager.hook.canary_skills()

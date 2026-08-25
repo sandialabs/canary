@@ -1,0 +1,52 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
+.. _tutorial-basic-second:
+
+A second test
+=============
+
+This example introduces two common patterns:
+
+* staging an input file into the test working directory with :func:`canary.directives.link`; and
+* running an external program using :class:`~_canary.util.executable.Executable`.
+
+The test file
+-------------
+
+In this example, the external program ``add.py`` adds two numbers and prints the result to
+standard output. The test links ``add.py`` into the working directory, executes it, and checks the
+output for correctness:
+
+.. literalinclude:: /examples/basic/second/second.pyt
+   :language: python
+
+Running the test
+----------------
+
+From the ``examples`` directory, run only tests with the ``second`` keyword:
+
+.. doc-run::
+    :before_script: [copy-examples]
+    :script: canary run -k second ./basic
+    :cwd: /examples
+
+Here, ``-k`` filters the session to tests matching the given keyword expression.
+
+Inspecting test output
+----------------------
+
+When a test runs, its captured console output is written to ``canary-out.txt`` in the test's
+working directory. The :ref:`canary log <canary-log>` command locates and prints that file:
+
+.. doc-run::
+    :before_script: [copy-examples, canary run -k second ./basic]
+    :script: [canary log second]
+    :cwd: /examples
+
+Contents of ``add.py``
+----------------------
+
+.. literalinclude:: /examples/basic/second/add.py
+   :language: python

@@ -92,7 +92,7 @@ if __name__ == "__main__":
                 """\
 import canary
 import canary_pyt
-canary_pyt.directives.generate_composite_base_case()
+canary_pyt.directives.aggregate()
 canary_pyt.directives.parameterize('a', (1, 2))
 def test(job):
     pass

@@ -1,4 +1,0 @@
-source/user/commands.*
-source/user/directives.*
-source/.cache
-build

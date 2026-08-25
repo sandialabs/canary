@@ -79,7 +79,7 @@ class Check(CanarySubcommand):
         parser.add_argument("-v", action="store_true", help="verbose")
         parser.add_argument(
             "--local-packages",
-            choices={"yes", "no"},
+            choices=("yes", "no"),
             default="no" if "VIRTUAL_ENV" in os.environ else "yes",
             dest="use_local_packages",
             help="Add local site-packages to search path when running type checker",
@@ -144,14 +144,16 @@ class Check(CanarySubcommand):
 
     def format_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            pm = logger.progress_monitor(f"Formatting examples in {self.root}/src/canary/examples")
-            paths = Check.find_pyt_files("./src/canary/examples")
+            pm = logger.progress_monitor(
+                f"Formatting examples in {self.root}/src/canary/docs/examples"
+            )
+            paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff("format", *paths)
-            ruff("format", "./src/canary/examples")
+            ruff("format", "./src/canary")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs/source/static")
-            ruff("format", "./docs/source/static")
+            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs")
+            ruff("format", "./docs")
             pm.done()
 
             pm = logger.progress_monitor(f"Formatting tests in {self.root}/tests")
@@ -165,13 +167,15 @@ class Check(CanarySubcommand):
     def lint_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
             pm = logger.progress_monitor(
-                f"Lint checking examples in {self.root}/src/canary/examples"
+                f"Lint checking examples in {self.root}/src/canary/docs/examples"
             )
-            paths = Check.find_pyt_files("./src/canary/examples")
+            paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff_check(*paths)
-            ruff_check("./src/canary/examples")
+            ruff_check("./src/canary/docs")
             ruff_check("./docs")
             ruff_check("./bin")
+            paths = Check.find_pyt_files("./docs")
+            ruff_check(*paths)
             pm.done()
 
             pm = logger.progress_monitor(
