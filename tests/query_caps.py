@@ -16,7 +16,15 @@ from _canary.subcommands.query import query_json
 
 
 def namespace(**kwargs):
-    defaults = {"jobid": None, "session": None, "capability": None, "query": ".", "terse": False}
+    defaults = {
+        "jobid": None,
+        "skill": None,
+        "markdown": None,
+        "session": None,
+        "capability": None,
+        "query": ".",
+        "terse": False,
+    }
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
 

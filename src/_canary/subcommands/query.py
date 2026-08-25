@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
+import yaml
+
 from ..hookspec import hookimpl
 from ..workspace import Workspace
 from .base import CanarySubcommand
@@ -47,7 +49,27 @@ class Query(CanarySubcommand):
                 "'-c overview' is equivalent to '-c capabilities .overview'."
             ),
         )
+        group.add_argument(
+            "-k",
+            "--skill",
+            dest="skill",
+            metavar="SKILL",
+            help=(
+                "Query Canary's static skills database. "
+                "'--skill all' prints all skills. '--skill list' lists skill names "
+                "Otherwise, SKILL is interpreted as a skill name."
+            ),
+        )
         parser.add_argument("--terse", action="store_true", help="Print compact single-line JSON")
+        parser.add_argument(
+            "--markdown",
+            metavar="PATH",
+            help=(
+                "Write selected skill as Markdown. "
+                "For a single skill, PATH is a Markdown file. "
+                "For '--skill all', PATH must be a directory."
+            ),
+        )
         parser.add_argument(
             "query",
             nargs="?",
@@ -57,16 +79,23 @@ class Query(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.capability:
+            if args.markdown:
+                raise ValueError("--markdown is only valid with --skill")
             data = query_capabilities(args.capability, args.query)
 
+        elif args.skill:
+            data = query_skills(args.skill, args.query)
+            if args.markdown:
+                write_skill_markdown(args.skill, data, Path(args.markdown))
+                return 0
         else:
+            if args.markdown:
+                raise ValueError("--markdown is only valid with --skill")
             workspace = Workspace.load()
-
             if args.jobid:
                 lockfile = self.job_lockfile(workspace, args.jobid)
             else:
                 lockfile = self.session_lockfile(workspace, args.session)
-
             data = json.loads(lockfile.read_text())
             data = query_json(data, args.query)
 
@@ -135,7 +164,7 @@ def load_capability_dataset() -> Any:
     path = resources.files("canary").joinpath("data").joinpath("capabilities.json")
     if not path.is_file():
         raise CapabilityDatasetNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))["capabilities"]
 
 
 def query_capabilities(selector: str, query: str = ".") -> Any:
@@ -310,10 +339,156 @@ def parse_bracket(query: str, i: int) -> tuple[str | int, int]:
     raise ValueError(f"Invalid bracket expression in query: {query!r}")
 
 
+def load_skill_dataset() -> Any:
+    """
+    Load Canary's static skills database.
+
+    Canary ships one static skills database:
+
+        canary/data/skills.json
+
+    Expected shape:
+
+        {
+          "skill-name": {
+            "name": "skill-name",
+            "description": "...",
+            "body": "..."
+          }
+        }
+    """
+    path = resources.files("canary").joinpath("data").joinpath("skills.json")
+    if not path.is_file():
+        raise SkillDatasetNotFoundError(path)
+    return json.loads(path.read_text(encoding="utf-8"))["skills"]
+
+
+def query_skills(selector: str, query: str = ".") -> Any:
+    """
+    Query Canary's static skills database.
+
+    Args:
+        selector:
+            Skill selector from ``--skill``. ``all`` selects the whole database.
+            Any other selector is interpreted as a skill name.
+        query:
+            Optional query path below the selected skill.
+
+    Examples:
+        ``query_skills("all")`` returns the full skills database.
+
+        ``query_skills("canary-workflows-results")`` returns that skill object.
+
+        ``query_skills("canary-workflows-results", ".description")`` returns
+        the selected skill's description.
+
+        ``query_skills("canary-workflows-results", "body")`` returns the
+        selected skill's Markdown body.
+    """
+    data = load_skill_dataset()
+    selector = selector.strip()
+    query = query.strip()
+
+    if not selector:
+        raise ValueError("Skill selector must be non-empty")
+
+    if selector == "all":
+        return query_json(data, query)
+
+    if selector == "list":
+        return list(data.keys())
+
+    try:
+        skill = data[selector]
+    except KeyError:
+        raise KeyError(format_missing_key_message(selector, data)) from None
+
+    return query_json(skill, query)
+
+
+def write_skill_markdown(selector: str, data: Any, path: Path) -> None:
+    """
+    Write selected skill data as Markdown.
+
+    If selector is "all", data should be the entire skills object and path must
+    be a directory. Each skill is written as NAME.md.
+
+    If selector is a single skill, data should be a skill object and path is the
+    output Markdown file.
+    """
+    if selector == "all":
+        if not isinstance(data, dict):
+            raise TypeError("--skill all must resolve to an object when writing Markdown")
+
+        path.mkdir(parents=True, exist_ok=True)
+
+        for name, skill in data.items():
+            if not isinstance(skill, dict):
+                raise TypeError(f"Skill {name!r} is not an object")
+            markdown = skill_to_markdown(skill)
+            output = path / f"{name}.md"
+            output.write_text(markdown, encoding="utf-8")
+
+        return
+
+    if not isinstance(data, dict):
+        raise TypeError(
+            "--markdown requires the selected skill object. "
+            "Do not combine --markdown with a field query such as '.body'."
+        )
+
+    markdown = skill_to_markdown(data)
+
+    if path.exists() and path.is_dir():
+        name = data.get("name", selector)
+        path = path / f"{name}.md"
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(markdown, encoding="utf-8")
+
+
+def skill_to_markdown(skill: dict[str, Any]) -> str:
+    """
+    Convert a skill JSON object back to SKILL.md-style Markdown.
+    """
+    body = skill.get("body", "")
+
+    if not isinstance(body, str):
+        raise ValueError("Skill object must contain a string field: body")
+
+    frontmatter = {key: value for key, value in skill.items() if key != "body"}
+
+    name = frontmatter.get("name")
+    description = frontmatter.get("description")
+
+    if not isinstance(name, str) or not name:
+        raise ValueError("Skill object must contain a non-empty string field: name")
+
+    if not isinstance(description, str):
+        raise ValueError("Skill object must contain a string field: description")
+
+    frontmatter_text = yaml.safe_dump(
+        frontmatter, sort_keys=False, allow_unicode=True, default_flow_style=False
+    ).rstrip()
+
+    markdown = f"---\n{frontmatter_text}\n---\n\n{body}"
+
+    if not markdown.endswith("\n"):
+        markdown += "\n"
+
+    return markdown
+
+
 class CapabilityDatasetNotFoundError(FileNotFoundError):
     def __init__(self, path: Any) -> None:
         self.path = path
         super().__init__(f"Canary capability database not found: {path}")
+
+
+class SkillDatasetNotFoundError(FileNotFoundError):
+    def __init__(self, path: Any) -> None:
+        self.path = path
+        super().__init__(f"Canary skills database not found: {path}")
 
 
 @hookimpl
