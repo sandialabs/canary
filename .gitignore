@@ -58,3 +58,10 @@ testcases.lock
 canary_distributed.*
 pool.json
 transactions.jsons
+
+.claude/
+.codex/
+.opencode-workspace/
+.venv/
+diff.txt
+docs-prompt.md

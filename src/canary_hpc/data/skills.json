@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "extension": "hpc",
+  "skills": {
+    "canary-hpc-batching": {
+      "name": "canary-hpc-batching",
+      "description": "Use this skill when running Canary jobs through an HPC backend with batching.",
+      "body": "# Canary HPC batching\n\n## First actions\n\n```console\ncanary query -c ext.hpc.overview\ncanary query -c ext.hpc.batching\ncanary query -c ext.hpc.execution\n```\n\n## What this extension does\n\nThe HPC extension groups Canary jobs into batches and submits those batches through `hpc_connect`.\n\n## Common batch concepts\n\n- `layout=flat`: jobs within a batch are independent.\n- `layout=atomic`: dependency-connected components are kept together.\n- `nodes=same`: partition jobs by required node count.\n- `nodes=any`: allow mixed node counts within a batch.\n- `duration=T`: target approximate runtime per batch.\n- `count=N`: create at most N batches.\n- `count=max`: maximize batch count.\n\n## Typical workflow\n\n```console\ncanary hpc run --backend BACKEND --batch-spec duration=30m PATH\n```\n\nor using legacy run options:\n\n```console\ncanary run --hpc-backend BACKEND PATH\n```\n\n## Debugging tips\n\n- Query `canary query -c resources` for the core resource model.\n- Check generated batch workspaces under the HPC cache directory.\n- Inspect `batch.lock` and child `testcase.lock` files.\n- Ensure backend resource counts match the jobs' requested resources.\n"
+    }
+  }
+}

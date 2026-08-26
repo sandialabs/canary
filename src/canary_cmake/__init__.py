@@ -11,6 +11,7 @@ from schema import Schema
 
 import canary
 from _canary.util import cpu_count
+from _canary.util.query_data import load_query_data
 
 from .ctest import CTestTestGenerator
 from .ctest import finish_ctest
@@ -36,6 +37,16 @@ def canary_collect_modifyitems(collector: canary.Collector) -> None:
             paths.sort(key=lambda p: (p.split(os.sep), p))
             for path in paths[1:]:
                 collector.remove_file(root, path)
+
+
+@canary.hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_cmake.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_cmake.data", "skills.json")
 
 
 @canary.hookimpl

@@ -6,6 +6,7 @@ from typing import Any
 
 from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
+from _canary.util.query_data import load_query_data
 
 from . import directives
 from .pyt import PYTAdapter
@@ -14,6 +15,7 @@ from .pyt import PYTLockEmitter
 from .pyt import PYTModel
 
 __all__ = ["directives", "FILE_SCANNING"]
+
 
 # Constant that's True when file scanning, but False here.
 FILE_SCANNING = False
@@ -98,3 +100,13 @@ class PYTSpecGenerator(AbstractSpecGenerator):
 @hookimpl
 def canary_collectstart(collector) -> None:
     collector.add_generator(PYTSpecGenerator)
+
+
+@hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_pyt.data", "capabilities.json")
+
+
+@hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_pyt.data", "skills.json")

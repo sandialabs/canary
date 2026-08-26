@@ -1,0 +1,94 @@
+{
+  "schema_version": "2.0.0",
+  "extension": "pyt",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_pyt extension provides the reference Python-based job definition format for Canary, commonly written as .pyt files.",
+      "file_patterns": [
+        "*.pyt"
+      ],
+      "generator": "PYTSpecGenerator",
+      "model": "PYTModel",
+      "loader": "PYTLoader",
+      "adapter": "PYTAdapter",
+      "emitter": "PYTLockEmitter"
+    },
+    "authoring": {
+      "minimal_pattern": [
+        "Place canary_pyt or canary directives at module scope.",
+        "Place executable test logic in functions.",
+        "Guard runtime execution with if __name__ == '__main__'.",
+        "Exit with 0 for success or raise/use Canary failure helpers for structured outcomes."
+      ],
+      "minimal_example": [
+        "import sys",
+        "import canary",
+        "",
+        "canary.directives.keywords('smoke')",
+        "",
+        "def test() -> int:",
+        "    return 0",
+        "",
+        "if __name__ == '__main__':",
+        "    sys.exit(test())"
+      ]
+    },
+    "directives": {
+      "summary": "Directives are generation-time declarations captured by the .pyt loader and converted into JobSpecIR objects.",
+      "common": {
+        "testname": "Set one or more generated test families.",
+        "name": "Alias for testname.",
+        "keywords": "Attach keywords used for selection.",
+        "owners": "Attach owner metadata.",
+        "timeout": "Set job timeout.",
+        "parameterize": "Generate job variants from parameter values.",
+        "cpus": "Set fixed CPU requirement without creating a named parameter variant.",
+        "gpus": "Set fixed GPU requirement without creating a named parameter variant.",
+        "nodes": "Set fixed node requirement without creating a named parameter variant.",
+        "depends_on": "Declare dependencies by name, pattern, or DependencySelector-like dictionary.",
+        "copy": "Copy source files or directories into the job workspace.",
+        "link": "Symlink source files or directories into the job workspace.",
+        "sources": "Declare source files without staging them.",
+        "artifact": "Declare result artifacts.",
+        "baseline": "Declare rebaseline actions.",
+        "exclusive": "Prevent concurrent execution with other jobs.",
+        "load_module": "Load an environment module before execution.",
+        "source": "Source an rc file before execution.",
+        "set_id": "Set a stable explicit ID or ID template.",
+        "set_attribute": "Attach arbitrary metadata.",
+        "enable": "Enable or disable generated jobs conditionally.",
+        "skipif": "Skip jobs conditionally with a reason.",
+        "xfail": "Mark expected nonzero exit.",
+        "xdiff": "Mark expected diff outcome.",
+        "generate_composite_base_case": "Create an analysis/composite job depending on parameterized jobs.",
+        "analyze": "Alias for generate_composite_base_case."
+      }
+    },
+    "parameters": {
+      "summary": "parameterize() creates named job variants. cpus(), gpus(), and nodes() set fixed resource requirements without changing the generated display name.",
+      "resource_parameter_names": [
+        "cpus",
+        "gpus",
+        "nodes"
+      ],
+      "parameter_space_types": [
+        "list_parameter_space",
+        "centered_parameter_space",
+        "random_parameter_space"
+      ],
+      "common_mistakes": [
+        "Using cpus() when named variants such as cpus=8 are desired; use parameterize('cpus', ...) instead.",
+        "Duplicating a key between parameters and meta_parameters.",
+        "Expecting top-level runtime code to be ignored during scan unless it is guarded."
+      ]
+    },
+    "dependencies": {
+      "summary": "depends_on() supports strings, dictionaries, lists, and DependencySelector objects.",
+      "dictionary_keys": {
+        "job": "Dependency name, ID, or pattern.",
+        "when": "Dependency condition such as on_success, on_failure, always, or an outcome expression.",
+        "expects": "Expected match count: '+', '?', '*', or a positive integer."
+      }
+    }
+  }
+}

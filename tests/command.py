@@ -231,7 +231,14 @@ def test_tree():
 
 def run_query(*, jobid=None, session=None, capability=None, query=".", terse=False) -> int:
     args = argparse.Namespace(
-        jobid=jobid, session=session, capability=capability, query=query, terse=terse
+        jobid=jobid,
+        skill=None,
+        markdown=None,
+        list_keys=None,
+        session=session,
+        capability=capability,
+        query=query,
+        terse=terse,
     )
     return Query().execute(args)
 

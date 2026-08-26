@@ -8,6 +8,7 @@ import sys
 import typing
 
 import canary
+from _canary.util.query_data import load_query_data
 
 from .vvt import VVTestAdapter
 from .vvt import VVTestLoader
@@ -147,6 +148,16 @@ def canary_addoption(parser: "canary.Parser") -> None:
         "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
         "test is run.",
     )
+
+
+@canary.hookimpl
+def canary_capabilities() -> dict[str, typing.Any] | None:
+    return load_query_data("canary_vvtest.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict[str, typing.Any] | None:
+    return load_query_data("canary_vvtest.data", "skills.json")
 
 
 def set_vvtest_exec_path(spec: "canary.JobSpec") -> None:

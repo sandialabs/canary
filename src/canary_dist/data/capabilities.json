@@ -1,0 +1,35 @@
+{
+  "schema_version": "2.0.0",
+  "extension": "dist",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_dist extension provides a distributed resource-pool adapter that checks out resources from a remote server and translates them into Canary's topology-aware allocation model."
+    },
+    "adapter": {
+      "class": "DistributedResourcePoolAdapter",
+      "server_url": "Remote distributed resource-pool server URL.",
+      "capabilities": [
+        "Query server status.",
+        "Filter eligible machines by tags and groups.",
+        "Translate server machines into Canary ResourcePool nodes.",
+        "Check out resources from the server.",
+        "Check in resources by transaction ID.",
+        "Report maximum eligible per-machine capacity by resource type."
+      ]
+    },
+    "allocation": {
+      "metadata": {
+        "source": "canary-dist",
+        "server_url": "Server URL.",
+        "hostname": "Remote host selected by the server.",
+        "transaction_id": "Server-side checkout transaction."
+      },
+      "resources": "Returned resources include Canary node identity."
+    },
+    "limitations": [
+      "The distributed server adapter does not support multi-node requests.",
+      "Actual checkout is server-authoritative.",
+      "Local accommodates checks are approximations based on cached eligible resource counts."
+    ]
+  }
+}

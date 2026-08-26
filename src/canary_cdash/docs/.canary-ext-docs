@@ -1,0 +1,6 @@
+{
+  "extension": "canary_cdash",
+  "title": "CDash Reporting",
+  "description": " reporting extension for CDash integration",
+  "category": "Reporting"
+}

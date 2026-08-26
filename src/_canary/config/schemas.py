@@ -143,3 +143,88 @@ environment_variable_schema = EnvarSchema(
     },
     ignore_extra_keys=True,
 )
+
+# -------------------------------------------------------------------------
+# Query capability / skill schemas
+# -------------------------------------------------------------------------
+
+
+def _non_empty_string(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    value = value.strip()
+    if not value:
+        raise ValueError("expected non-empty string")
+    return value
+
+
+def _query_namespace(value: object) -> str:
+    """Validate a query namespace component such as an extension name.
+
+    Extension namespaces are used as query path components under ``ext``.
+    Keep the character set conservative so selectors such as
+    ``ext.pyt.overview`` remain unambiguous.
+    """
+    text = _non_empty_string(value)
+    if not text.replace("_", "").replace("-", "").isalnum():
+        raise ValueError(
+            "query namespace must contain only letters, digits, underscores, "
+            f"and hyphens; got {value!r}"
+        )
+    return text
+
+
+json_scalar_schema = Or(str, int, float, bool, type(None))
+
+# Recursive JSON-like data.  The schema package does not make recursive schemas
+# especially elegant, so for capability payloads we validate only that the root
+# payload is a dict.  Individual nested values remain JSON-compatible by
+# construction because they are loaded from JSON or returned by trusted plugins.
+query_payload_schema = dict
+
+
+skill_schema = Schema(
+    {
+        "name": And(str, Use(_non_empty_string)),
+        "description": And(str, Use(_non_empty_string)),
+        "body": str,
+        Optional(str): object,
+    },
+    ignore_extra_keys=False,
+)
+
+
+skills_payload_schema = Schema({str: skill_schema})
+
+
+query_document_base_schema = {"schema_version": And(str, Use(_non_empty_string))}
+
+
+core_capabilities_schema = Schema(
+    {**query_document_base_schema, "capabilities": query_payload_schema}, ignore_extra_keys=False
+)
+
+
+extension_capabilities_schema = Schema(
+    {
+        **query_document_base_schema,
+        "extension": And(str, Use(_query_namespace)),
+        "capabilities": query_payload_schema,
+    },
+    ignore_extra_keys=False,
+)
+
+
+core_skills_schema = Schema(
+    {**query_document_base_schema, "skills": skills_payload_schema}, ignore_extra_keys=False
+)
+
+
+extension_skills_schema = Schema(
+    {
+        **query_document_base_schema,
+        "extension": And(str, Use(_query_namespace)),
+        "skills": skills_payload_schema,
+    },
+    ignore_extra_keys=False,
+)

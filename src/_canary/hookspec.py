@@ -139,6 +139,66 @@ def canary_configure(config: "CanaryConfig") -> None:
     """
 
 
+# -------------------------------------------------------------------------
+# Query data hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_capabilities() -> dict[str, Any] | None:
+    """Return a Canary capabilities document contributed by this plugin.
+
+    The returned object should match one of the query capability schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary capabilities are loaded from package data. Extension plugins
+    should return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "extension": "pyt",
+          "capabilities": {
+            "overview": {...},
+            ...
+          }
+        }
+
+    The extension namespace is inserted under ``capabilities.ext.<extension>``
+    by ``canary query``.
+
+    Return ``None`` if the plugin does not contribute capabilities.
+    """
+
+
+@hookspec
+def canary_skills() -> dict[str, Any] | None:
+    """Return a Canary skills document contributed by this plugin.
+
+    The returned object should match one of the query skill schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary skills are loaded from package data. Extension plugins should
+    return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "extension": "pyt",
+          "skills": {
+            "canary-pyt-authoring": {
+              "name": "canary-pyt-authoring",
+              "description": "...",
+              "body": "..."
+            }
+          }
+        }
+
+    The extension namespace is inserted under ``skills.ext.<extension>`` by
+    ``canary query``.
+
+    Return ``None`` if the plugin does not contribute skills.
+    """
+
+
 @hookspec
 def canary_finish(config: "CanaryConfig") -> None: ...
 

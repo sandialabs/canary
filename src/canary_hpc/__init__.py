@@ -13,6 +13,7 @@ import hpc_connect
 
 import canary
 from _canary.subcommands.run import Run
+from _canary.util.query_data import load_query_data
 from _canary.util.rich import bold
 
 from .argparsing import CanaryHPCBatchSpec
@@ -62,6 +63,16 @@ def canary_addoption(parser: "canary.Parser") -> None:
 @canary.hookimpl
 def canary_addcommand(parser: canary.Parser) -> None:
     parser.add_command(HPC())
+
+
+@canary.hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_hpc.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_hpc.data", "skills.json")
 
 
 class HPC(canary.CanarySubcommand):

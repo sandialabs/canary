@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "extension": "vvtest",
+  "skills": {
+    "canary-vvtest-migration": {
+      "name": "canary-vvtest-migration",
+      "description": "Use this skill when running or migrating VVTest .vvt tests through Canary.",
+      "body": "# Using VVTest files with Canary\n\n## First actions\n\n```console\ncanary query -c ext.vvtest.overview\ncanary query -c ext.vvtest.directives\ncanary query -c ext.vvtest.compatibility\n```\n\n## Key points\n\n- Canary discovers `.vvt` files through the canary_vvtest generator.\n- Leading `#VVT:` directives are parsed during generation.\n- `#VVT::` continues the previous directive line.\n- Canary writes `vvtest_util.py` into the job workspace before execution.\n- The `np`, `ndevice`, and `nnode` parameters map to Canary CPU, GPU, and node resource parameters.\n\n## Typical workflow\n\n```console\ncanary find path/to/tests\ncanary run path/to/tests\ncanary status\ncanary log JOBID\n```\n"
+    }
+  }
+}
