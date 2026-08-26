@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "extension": "hpc",
+  "namespace": "hpc",
   "skills": {
     "canary-hpc-batching": {
       "name": "canary-hpc-batching",

@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "extension": "pyt",
+  "namespace": "pyt",
   "capabilities": {
     "overview": {
       "summary": "The canary_pyt extension provides the reference Python-based job definition format for Canary, commonly written as .pyt files.",

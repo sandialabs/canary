@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "extension": "cmake",
+  "namespace": "cmake",
   "capabilities": {
     "overview": {
       "summary": "The canary_cmake extension provides CMake and CTest integration. It can generate Canary jobs from CTestTestfile.cmake files and provides CMake helper functions for generating .pyt tests.",

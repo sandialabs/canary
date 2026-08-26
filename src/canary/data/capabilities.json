@@ -1,5 +1,6 @@
 {
   "schema_version": "2.0.0",
+  "namespace": "core",
   "capabilities": {
     "overview": {
       "what_is_canary": "Canary is a Python-based workflow and test execution framework for defining, scheduling, running, and inspecting computational jobs across environments ranging from developer laptops to HPC systems.",

@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "extension": "dist",
+  "namespace": "dist",
   "capabilities": {
     "overview": {
       "summary": "The canary_dist extension provides a distributed resource-pool adapter that checks out resources from a remote server and translates them into Canary's topology-aware allocation model."

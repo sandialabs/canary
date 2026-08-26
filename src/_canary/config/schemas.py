@@ -34,7 +34,6 @@ def log_level_name(arg: typing.Any) -> str:
     if isinstance(arg, str):
         level_name = arg.upper()
         if level_name not in logging_levels:
-            s = ", ".join(logging_levels)
             raise SchemaError(
                 f"Wrong log level {level_name!r}, choose from {', '.join(logging_levels)}"
             )
@@ -145,7 +144,7 @@ environment_variable_schema = EnvarSchema(
 )
 
 # -------------------------------------------------------------------------
-# Query capability / skill schemas
+# Learn capability / skill provider schemas
 # -------------------------------------------------------------------------
 
 
@@ -158,17 +157,21 @@ def _non_empty_string(value: object) -> str:
     return value
 
 
-def _query_namespace(value: object) -> str:
-    """Validate a query namespace component such as an extension name.
+def _learn_namespace(value: object) -> str:
+    """Validate a learn-data provider namespace.
 
-    Extension namespaces are used as query path components under ``ext``.
-    Keep the character set conservative so selectors such as
-    ``ext.pyt.overview`` remain unambiguous.
+    Provider namespaces are used as top-level query path components, e.g.
+
+        core.overview
+        pyt.directives
+        hpc.batching
+
+    Keep the character set conservative so selectors remain unambiguous.
     """
     text = _non_empty_string(value)
     if not text.replace("_", "").replace("-", "").isalnum():
         raise ValueError(
-            "query namespace must contain only letters, digits, underscores, "
+            "learn namespace must contain only letters, digits, underscores, "
             f"and hyphens; got {value!r}"
         )
     return text
@@ -197,34 +200,17 @@ skill_schema = Schema(
 skills_payload_schema = Schema({str: skill_schema})
 
 
-query_document_base_schema = {"schema_version": And(str, Use(_non_empty_string))}
+query_document_base_schema = {
+    "schema_version": And(str, Use(_non_empty_string)),
+    "namespace": And(str, Use(_learn_namespace)),
+}
 
 
-core_capabilities_schema = Schema(
+capabilities_provider_schema = Schema(
     {**query_document_base_schema, "capabilities": query_payload_schema}, ignore_extra_keys=False
 )
 
 
-extension_capabilities_schema = Schema(
-    {
-        **query_document_base_schema,
-        "extension": And(str, Use(_query_namespace)),
-        "capabilities": query_payload_schema,
-    },
-    ignore_extra_keys=False,
-)
-
-
-core_skills_schema = Schema(
+skills_provider_schema = Schema(
     {**query_document_base_schema, "skills": skills_payload_schema}, ignore_extra_keys=False
-)
-
-
-extension_skills_schema = Schema(
-    {
-        **query_document_base_schema,
-        "extension": And(str, Use(_query_namespace)),
-        "skills": skills_payload_schema,
-    },
-    ignore_extra_keys=False,
 )

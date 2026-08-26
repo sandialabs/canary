@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "extension": "vvtest",
+  "namespace": "vvtest",
   "capabilities": {
     "overview": {
       "summary": "The canary_vvtest extension provides a generator for VVTest .vvt files.",

@@ -156,7 +156,7 @@ def canary_capabilities() -> dict[str, Any] | None:
 
         {
           "schema_version": "2.0.0",
-          "extension": "pyt",
+          "namespace": "pyt",
           "capabilities": {
             "overview": {...},
             ...
@@ -182,7 +182,7 @@ def canary_skills() -> dict[str, Any] | None:
 
         {
           "schema_version": "2.0.0",
-          "extension": "pyt",
+          "namespace": "pyt",
           "skills": {
             "canary-pyt-authoring": {
               "name": "canary-pyt-authoring",

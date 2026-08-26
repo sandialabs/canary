@@ -43,6 +43,8 @@ EXPECTED_CORE_SKILLS = {
     "canary-extension-development",
 }
 
+EXPECTED_CORE_SKILL_PATHS = {f"core.{name}" for name in EXPECTED_CORE_SKILLS}
+
 
 @pytest.fixture(scope="module")
 def setup(tmp_path_factory):
@@ -180,34 +182,34 @@ class FakePluginManager:
         self.hook = FakeHook(capabilities=capabilities, skills=skills)
 
 
-def fake_capabilities_payload(extension: str = "fake"):
+def fake_capabilities_payload(namespace: str = "fake"):
     return {
         "schema_version": "2.0.0",
-        "extension": extension,
+        "namespace": namespace,
         "capabilities": {
             "overview": {
-                "summary": f"{extension} extension overview",
-                "details": {"kind": extension, "enabled": True},
+                "summary": f"{namespace} namespace overview",
+                "details": {"kind": namespace, "enabled": True},
             },
-            "commands": {"run": {"purpose": f"run {extension} jobs"}},
+            "commands": {"run": {"purpose": f"run {namespace} jobs"}},
         },
     }
 
 
-def fake_skills_payload(extension: str = "fake"):
+def fake_skills_payload(namespace: str = "fake"):
     return {
         "schema_version": "2.0.0",
-        "extension": extension,
+        "namespace": namespace,
         "skills": {
-            f"canary-{extension}-authoring": {
-                "name": f"canary-{extension}-authoring",
-                "description": f"Author {extension} jobs.",
-                "body": f"# Authoring {extension} jobs\n\nUse this skill for {extension} jobs.\n",
+            f"canary-{namespace}-authoring": {
+                "name": f"canary-{namespace}-authoring",
+                "description": f"Author {namespace} jobs.",
+                "body": f"# Authoring {namespace} jobs\n\nUse this skill for {namespace} jobs.\n",
             },
-            f"canary-{extension}-debug": {
-                "name": f"canary-{extension}-debug",
-                "description": f"Debug {extension} jobs.",
-                "body": f"# Debugging {extension} jobs\n\nUse this skill to debug {extension} jobs.\n",
+            f"canary-{namespace}-debug": {
+                "name": f"canary-{namespace}-debug",
+                "description": f"Debug {namespace} jobs.",
+                "body": f"# Debugging {namespace} jobs\n\nUse this skill to debug {namespace} jobs.\n",
             },
         },
     }
@@ -480,11 +482,10 @@ def test_build_capabilities_tree_contains_core_keys():
     data = build_capabilities_tree()
 
     assert isinstance(data, dict)
-    assert "overview" in data
-    assert "hooks" in data
-    assert "query" in data
-    assert "ext" in data
-    assert isinstance(data["ext"], dict)
+    assert "core" in data
+    assert "overview" in data["core"]
+    assert "hooks" in data["core"]
+    assert "query" in data["core"]
 
 
 def test_learn_capability_root_command(capsys):
@@ -493,14 +494,14 @@ def test_learn_capability_root_command(capsys):
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
 
-    assert "overview" in out
-    assert "hooks" in out
-    assert "query" in out
-    assert "ext" in out
+    assert "core" in out
+    assert "overview" in out["core"]
+    assert "hooks" in out["core"]
+    assert "query" in out["core"]
 
 
 def test_learn_capability_overview_command(capsys):
-    rc = run_learn_capabilities(query="overview")
+    rc = run_learn_capabilities(query="core.overview")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -510,7 +511,7 @@ def test_learn_capability_overview_command(capsys):
 
 
 def test_learn_capability_nested_command(capsys):
-    rc = run_learn_capabilities(query="hooks.post")
+    rc = run_learn_capabilities(query="core.hooks.post")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -522,7 +523,7 @@ def test_learn_capability_missing_key_reports_available_keys():
     data = build_capabilities_tree()
 
     with pytest.raises(KeyError) as exc:
-        query_json(data, "does_not_exist")
+        query_json(data, "core.does_not_exist")
 
     message = str(exc.value)
     assert "does_not_exist" in message
@@ -536,19 +537,16 @@ def test_learn_capability_list_root(capsys):
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert "overview" in out
-    assert "hooks" in out
-    assert "query" in out
-    assert "ext" in out
+    assert "core" in out
 
 
-def test_learn_capability_list_ext_is_valid_even_without_extensions(capsys):
-    rc = run_learn_capabilities(query="ext", list_keys=True)
+def test_learn_capability_list_core(capsys):
+    rc = run_learn_capabilities(query="core", list_keys=True)
 
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert isinstance(out, list)
+    assert "core.commands" in out
 
 
 def test_learn_capability_no_query_prints_help(capsys):
@@ -559,8 +557,7 @@ def test_learn_capability_no_query_prints_help(capsys):
 
     assert "Canary capability queries" in out
     assert "canary learn capabilities QUERY" in out
-    assert "Top-level capability keys" in out
-    assert "overview" in out
+    assert "core" in out
 
 
 def test_learn_capability_no_query_with_list_lists_root(capsys):
@@ -569,8 +566,7 @@ def test_learn_capability_no_query_with_list_lists_root(capsys):
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert "overview" in out
-    assert "hooks" in out
+    assert "core" in out
 
 
 # -------------------------------------------------------------------------
@@ -583,27 +579,26 @@ def test_plugin_capabilities_are_aggregated_under_ext(monkeypatch):
 
     data = build_capabilities_tree()
 
-    assert "ext" in data
-    assert "fake" in data["ext"]
-    assert data["ext"]["fake"]["overview"]["summary"] == "fake extension overview"
+    assert "fake" in data
+    assert data["fake"]["overview"]["summary"] == "fake namespace overview"
 
 
 def test_learn_plugin_capability_command(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, capabilities=[fake_capabilities_payload("fake")])
 
-    rc = run_learn_capabilities(query="ext.fake.overview")
+    rc = run_learn_capabilities(query="fake.overview")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
 
-    assert out["summary"] == "fake extension overview"
+    assert out["summary"] == "fake namespace overview"
     assert out["details"]["kind"] == "fake"
 
 
 def test_learn_plugin_capability_nested_field(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, capabilities=[fake_capabilities_payload("fake")])
 
-    rc = run_learn_capabilities(query="ext.fake.overview.details.kind")
+    rc = run_learn_capabilities(query="fake.overview.details.kind")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -617,25 +612,25 @@ def test_learn_plugin_capability_list_ext(monkeypatch, capsys):
         capabilities=[fake_capabilities_payload("alpha"), fake_capabilities_payload("beta")],
     )
 
-    rc = run_learn_capabilities(query="ext", list_keys=True)
+    rc = run_learn_capabilities(query=".", list_keys=True)
 
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert "ext.alpha" in out
-    assert "ext.beta" in out
+    assert "alpha" in out
+    assert "beta" in out
 
 
 def test_learn_plugin_capability_list_extension(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, capabilities=[fake_capabilities_payload("fake")])
 
-    rc = run_learn_capabilities(query="ext.fake", list_keys=True)
+    rc = run_learn_capabilities(query="fake", list_keys=True)
 
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert "ext.fake.overview" in out
-    assert "ext.fake.commands" in out
+    assert "fake.overview" in out
+    assert "fake.commands" in out
 
 
 def test_duplicate_plugin_capability_namespace_raises(monkeypatch):
@@ -647,17 +642,17 @@ def test_duplicate_plugin_capability_namespace_raises(monkeypatch):
     with pytest.raises(ValueError) as exc:
         build_capabilities_tree()
 
-    assert "Duplicate Canary capabilities extension namespace: fake" in str(exc.value)
+    assert "Duplicate Canary capabilities namespace: fake" in str(exc.value)
 
 
 def test_list_capability_paths_lists_only_child_objects(monkeypatch):
     install_fake_learn_plugin(monkeypatch, capabilities=[fake_capabilities_payload("fake")])
 
     data = build_capabilities_tree()
-    paths = list_capability_paths(data, "ext.fake.overview")
+    paths = list_capability_paths(data, "fake.overview")
 
-    assert "ext.fake.overview.details" in paths
-    assert "ext.fake.overview.summary" not in paths
+    assert "fake.overview.details" in paths
+    assert "fake.overview.summary" not in paths
 
 
 # -------------------------------------------------------------------------
@@ -669,16 +664,15 @@ def test_build_skills_tree_contains_core_skills():
     data = build_skills_tree()
 
     assert isinstance(data, dict)
-    assert EXPECTED_CORE_SKILLS <= set(data)
-    assert "ext" in data
-    assert isinstance(data["ext"], dict)
+    assert "core" in data
+    assert EXPECTED_CORE_SKILLS <= set(data["core"])
 
 
 def test_each_core_skill_has_expected_shape():
     data = build_skills_tree()
 
     for name in EXPECTED_CORE_SKILLS:
-        skill = query_json(data, name)
+        skill = query_json(data, f"core.{name}")
 
         assert isinstance(skill, dict)
         assert skill["name"] == name
@@ -689,7 +683,7 @@ def test_each_core_skill_has_expected_shape():
 
 
 def test_learn_specific_skill_command(capsys):
-    rc = run_learn_skills(query="canary-run-debug")
+    rc = run_learn_skills(query="core.canary-run-debug")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -699,7 +693,7 @@ def test_learn_specific_skill_command(capsys):
 
 
 def test_learn_specific_skill_field_with_full_skill_query(capsys):
-    rc = run_learn_skills(query="canary-run-debug.description")
+    rc = run_learn_skills(query="core.canary-run-debug.description")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -712,7 +706,7 @@ def test_learn_unknown_skill_raises_clear_error():
     data = build_skills_tree()
 
     with pytest.raises(KeyError) as exc:
-        query_json(data, "does-not-exist")
+        query_json(data, "core.does-not-exist")
 
     message = str(exc.value)
     assert "does-not-exist" in message
@@ -726,7 +720,8 @@ def test_learn_skill_root_command(capsys):
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
 
-    assert EXPECTED_CORE_SKILLS <= set(out)
+    assert "core" in out
+    assert EXPECTED_CORE_SKILLS <= set(out["core"])
 
 
 def test_learn_skill_list_root(capsys):
@@ -735,7 +730,7 @@ def test_learn_skill_list_root(capsys):
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert EXPECTED_CORE_SKILLS <= set(out)
+    assert EXPECTED_CORE_SKILL_PATHS <= set(out)
 
 
 def test_learn_skill_no_query_prints_help(capsys):
@@ -747,7 +742,7 @@ def test_learn_skill_no_query_prints_help(capsys):
     assert "Canary skill queries" in out
     assert "canary learn skills QUERY" in out
     assert "Available skills" in out
-    assert "canary-orientation" in out
+    assert "core.canary-orientation" in out
 
 
 def test_learn_skill_no_query_with_list_lists_root(capsys):
@@ -756,11 +751,11 @@ def test_learn_skill_no_query_with_list_lists_root(capsys):
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert EXPECTED_CORE_SKILLS <= set(out)
+    assert EXPECTED_CORE_SKILL_PATHS <= set(out)
 
 
 def test_learn_skill_terse_prints_compact_json(capsys):
-    rc = run_learn_skills(query="canary-run-debug.name", terse=True)
+    rc = run_learn_skills(query="core.canary-run-debug.name", terse=True)
 
     assert rc == 0
 
@@ -773,20 +768,19 @@ def test_learn_skill_terse_prints_compact_json(capsys):
 # -------------------------------------------------------------------------
 
 
-def test_plugin_skills_are_aggregated_under_ext(monkeypatch):
+def test_plugin_skills_are_aggregated_under_namespace(monkeypatch):
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
     data = build_skills_tree()
 
-    assert "ext" in data
-    assert "fake" in data["ext"]
-    assert "canary-fake-authoring" in data["ext"]["fake"]
+    assert "fake" in data
+    assert "canary-fake-authoring" in data["fake"]
 
 
 def test_learn_plugin_skill_command(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
-    rc = run_learn_skills(query="ext.fake.canary-fake-authoring")
+    rc = run_learn_skills(query="fake.canary-fake-authoring")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -798,7 +792,7 @@ def test_learn_plugin_skill_command(monkeypatch, capsys):
 def test_learn_plugin_skill_field(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
-    rc = run_learn_skills(query="ext.fake.canary-fake-debug.description")
+    rc = run_learn_skills(query="fake.canary-fake-debug.description")
 
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
@@ -809,13 +803,13 @@ def test_learn_plugin_skill_field(monkeypatch, capsys):
 def test_learn_plugin_skill_list_extension(monkeypatch, capsys):
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
-    rc = run_learn_skills(query="ext.fake", list_keys=True)
+    rc = run_learn_skills(query="fake", list_keys=True)
 
     assert rc == 0
     out = capsys.readouterr().out.splitlines()
 
-    assert "ext.fake.canary-fake-authoring" in out
-    assert "ext.fake.canary-fake-debug" in out
+    assert "fake.canary-fake-authoring" in out
+    assert "fake.canary-fake-debug" in out
 
 
 def test_duplicate_plugin_skill_namespace_raises(monkeypatch):
@@ -826,16 +820,16 @@ def test_duplicate_plugin_skill_namespace_raises(monkeypatch):
     with pytest.raises(ValueError) as exc:
         build_skills_tree()
 
-    assert "Duplicate Canary skills extension namespace: fake" in str(exc.value)
+    assert "Duplicate Canary skills namespace: fake" in str(exc.value)
 
 
 def test_list_skill_paths_lists_terminal_skills(monkeypatch):
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
     data = build_skills_tree()
-    paths = list_skill_paths(data, "ext.fake")
+    paths = list_skill_paths(data, "fake")
 
-    assert paths == ["ext.fake.canary-fake-authoring", "ext.fake.canary-fake-debug"]
+    assert paths == ["fake.canary-fake-authoring", "fake.canary-fake-debug"]
 
 
 # -------------------------------------------------------------------------
@@ -845,7 +839,7 @@ def test_list_skill_paths_lists_terminal_skills(monkeypatch):
 
 def test_skill_to_markdown_emits_frontmatter_and_body():
     data = build_skills_tree()
-    skill = query_json(data, "canary-workflows-results")
+    skill = query_json(data, "core.canary-workflows-results")
 
     markdown = skill_to_markdown(skill)
 
@@ -863,10 +857,10 @@ def test_skill_to_markdown_emits_frontmatter_and_body():
 
 def test_write_specific_skill_markdown_to_file(tmp_path):
     data = build_skills_tree()
-    skill = query_json(data, "canary-test-authoring")
+    skill = query_json(data, "core.canary-test-authoring")
     output = tmp_path / "SKILL.md"
 
-    write_skill_markdown("canary-test-authoring", skill, output)
+    write_skill_markdown("core.canary-test-authoring", skill, output)
 
     assert output.is_file()
 
@@ -879,9 +873,9 @@ def test_write_specific_skill_markdown_to_file(tmp_path):
 
 def test_write_specific_skill_markdown_to_existing_directory(tmp_path):
     data = build_skills_tree()
-    skill = query_json(data, "canary-test-authoring")
+    skill = query_json(data, "core.canary-test-authoring")
 
-    write_skill_markdown("canary-test-authoring", skill, tmp_path)
+    write_skill_markdown("core.canary-test-authoring", skill, tmp_path)
 
     output = tmp_path / "canary-test-authoring.md"
     assert output.is_file()
@@ -899,7 +893,7 @@ def test_write_all_core_skills_markdown_to_directory(tmp_path):
     assert output.is_dir()
 
     for name in EXPECTED_CORE_SKILLS:
-        path = output / f"{name}.md"
+        path = output / "core" / f"{name}.md"
         assert path.is_file()
         text = path.read_text(encoding="utf-8")
         assert "canary" in text
@@ -909,19 +903,19 @@ def test_write_extension_skill_subtree_markdown_to_directory(tmp_path, monkeypat
     install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
 
     data = build_skills_tree()
-    subtree = query_json(data, "ext.fake")
+    subtree = query_json(data, "fake")
     output = tmp_path / "skills"
 
-    write_skill_markdown("ext.fake", subtree, output)
+    write_skill_markdown("fake", subtree, output)
 
-    assert (output / "ext" / "fake" / "canary-fake-authoring.md").is_file()
-    assert (output / "ext" / "fake" / "canary-fake-debug.md").is_file()
+    assert (output / "fake" / "canary-fake-authoring.md").is_file()
+    assert (output / "fake" / "canary-fake-debug.md").is_file()
 
 
 def test_learn_command_writes_specific_skill_markdown(tmp_path):
     output = tmp_path / "canary-run-debug.md"
 
-    rc = run_learn_skills(query="canary-run-debug", markdown=str(output))
+    rc = run_learn_skills(query="core.canary-run-debug", markdown=str(output))
 
     assert rc == 0
     assert output.is_file()
@@ -940,15 +934,15 @@ def test_learn_command_writes_all_skills_markdown(tmp_path):
     assert output.is_dir()
 
     for name in EXPECTED_CORE_SKILLS:
-        assert (output / f"{name}.md").is_file()
+        assert (output / "core" / f"{name}.md").is_file()
 
 
 def test_write_skill_markdown_rejects_scalar_field_query(tmp_path):
     data = build_skills_tree()
-    body = query_json(data, "canary-test-authoring.body")
+    body = query_json(data, "core.canary-test-authoring.body")
 
     with pytest.raises(ValueError) as exc:
-        write_skill_markdown("canary-test-authoring.body", body, tmp_path / "SKILL.md")
+        write_skill_markdown("core.canary-test-authoring.body", body, tmp_path / "SKILL.md")
 
     assert "does not contain any skill objects" in str(exc.value)
 

@@ -24,6 +24,7 @@ from .generator import AbstractTestGenerator
 from .hookspec import hookimpl
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
+from .util.query_data import load_query_data
 from .util.sendmail import sendmail
 from .util.string import pluralize
 from .util.term import terminal_size
@@ -434,3 +435,13 @@ def job_finish_summary(job: "Job", *, attempt: int) -> str:
         % (job.id[:7], job.display_name(resolve=True), job.status.display_name())
     )
     return fmt.getvalue().strip()
+
+
+@hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary.data", "capabilities.json")
+
+
+@hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary.data", "skills.json")
