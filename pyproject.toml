@@ -41,7 +41,7 @@ dependencies = [
     "pyyaml",
     "schema",
     "rich",
-    "typing_extensions; python_version < '3.11'",
+    "typing_extensions",  # ; python_version < '3.11'",
 ]
 
 optional-dependencies.dev = [
