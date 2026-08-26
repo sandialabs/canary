@@ -16,6 +16,7 @@ from . import gc
 from . import help
 from . import info
 from . import init
+from . import learn
 from . import location
 from . import log
 from . import query
@@ -44,6 +45,7 @@ plugins = [
     help,
     info,
     init,
+    learn,
     location,
     log,
     query,
