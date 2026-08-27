@@ -451,6 +451,30 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
     """  # noqa: E501
 
 
+def description(text: str) -> None:
+    """
+    Add a description to the test
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import canary_pyt
+       canary_pyt.directives.description("This is the description")
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``text``: The description
+
+    """
+
+
 def exclusive(*, when: WhenType | None = None) -> None:
     """Do not run this test in parallel with any other test.
 

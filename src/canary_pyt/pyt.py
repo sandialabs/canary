@@ -204,6 +204,9 @@ class PYTModel:
 
     # ----------------------------- add_* API -----------------------------
 
+    def add_description(self, arg: str) -> None:
+        pass
+
     def add_family(self, name: str, when: WhenType | None = None) -> None:
         self.families.add(name, when=when)
 
@@ -597,6 +600,9 @@ class PYTAdapter:
             if fn is None:
                 raise AttributeError(f"Unknown directive {c.name!r}")
             fn(*c.args, **c.kwargs)
+
+    def f_description(self, arg: str) -> None:
+        self.m.add_description(arg)
 
     def f_testname(self, arg: str) -> None:
         self.m.add_family(arg)

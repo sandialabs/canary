@@ -2,8 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
-canary_vvtest Extension
-========================
+.. _canary_vvtest:
+
+VVTest Job-Definition Generator
+===============================
 
 The ``canary_vvtest`` extension provides support for VVTest-style ``.vvt`` files, enabling Canary to discover and execute VVTest test suites.
 
