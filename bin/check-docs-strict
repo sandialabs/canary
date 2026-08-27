@@ -7,6 +7,9 @@ cd "${ROOT}"
 rm -rf docs/build/html docs/build/doctrees
 
 export CANARY_DOCS_REGENERATE_COMMANDS=1
+export CANARY_DOCS_REGENERATE_CHANGELOG_HISTORY=1
+
+./bin/fix-rst-headings.py docs/source
 
 python3 -m sphinx \
   -b html \

@@ -208,6 +208,94 @@ os.environ["COLUMNS"] = "120"
 os.environ["ARGPARSE_WRITER_WIDTH"] = "120"
 
 
+def extract_changelog_synopsis(text: str) -> str:
+    """Extract the top-level Synopsis section from a monthly changelog."""
+    lines = text.splitlines()
+
+    start = None
+
+    for i in range(len(lines) - 1):
+        heading = lines[i].strip()
+        underline = lines[i + 1].strip()
+
+        if heading == "Synopsis" and underline and set(underline) == {"-"}:
+            start = i + 2
+            break
+
+    if start is None:
+        return ""
+
+    end = len(lines)
+
+    for i in range(start, len(lines) - 1):
+        heading = lines[i].strip()
+        underline = lines[i + 1].strip()
+
+        if heading and underline and set(underline) == {"-"}:
+            end = i
+            break
+
+    return "\n".join(lines[start:end]).strip()
+
+
+def ensure_changelog_history() -> None:
+    """Ensure the changelog history page is generated.
+
+    Generates docs/source/changelogs/history.rst if it does not exist, or if
+    CANARY_DOCS_REGENERATE_CHANGELOG_HISTORY is set.
+    """
+    changelog_dir = Path(docs_source_dir) / "changelogs"
+    history_file = changelog_dir / "history.rst"
+
+    regenerate = os.getenv("CANARY_DOCS_REGENERATE_CHANGELOG_HISTORY") is not None
+
+    if history_file.exists() and not regenerate:
+        return
+
+    changelog_dir.mkdir(parents=True, exist_ok=True)
+
+    changelog_re = re.compile(r"changelog-(\d{4}-\d{2})\.rst$")
+
+    changelogs = []
+
+    for path in changelog_dir.glob("changelog-????-??.rst"):
+        match = changelog_re.match(path.name)
+        if not match:
+            continue
+
+        month = match.group(1)
+        text = path.read_text(encoding="utf-8")
+        synopsis = extract_changelog_synopsis(text)
+
+        if not synopsis:
+            synopsis = "No synopsis found."
+
+        changelogs.append((month, path.stem, synopsis))
+
+    changelogs.sort(reverse=True)
+
+    lines = ["Changelog history", "=================", ""]
+
+    if not changelogs:
+        lines.extend(["No monthly changelogs are available.", ""])
+    else:
+        for month, docname, synopsis in changelogs:
+            lines.extend(
+                [
+                    month,
+                    "-" * len(month),
+                    "",
+                    synopsis,
+                    "",
+                    f":doc:`Full changelog <{docname}>`",
+                    "",
+                ]
+            )
+
+    print(f"Generating changelog history in {history_file}")
+    history_file.write_text("\n".join(lines), encoding="utf-8")
+
+
 def ensure_command_reference() -> None:
     """Ensure command reference documentation is generated.
 
@@ -251,5 +339,6 @@ def ensure_command_reference() -> None:
             )
 
 
-# Ensure command reference is available
+# Ensure generated documentation is available
 ensure_command_reference()
+ensure_changelog_history()

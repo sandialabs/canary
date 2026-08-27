@@ -2,8 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
+.. _integrations-cdash:
+
 CDash Reporting Overview
-=========================
+========================
 
 The ``canary_cdash`` extension is a **reporting extension** for Canary that provides CDash integration. It operates on completed Canary workspace results to generate CDash-compatible XML reports.
 

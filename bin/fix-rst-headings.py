@@ -143,8 +143,8 @@ def main() -> int:
     parser.add_argument(
         "paths",
         nargs="*",
-        default=["doc/source"],
-        help="Files or directories to scan [default: doc/source]",
+        default=["docs/source"],
+        help="Files or directories to scan [default: docs/source]",
     )
     parser.add_argument(
         "--check", action="store_true", help="Do not modify files; report files that would change."

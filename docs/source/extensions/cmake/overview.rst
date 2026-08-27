@@ -2,8 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
+.. _integrations-cmake:
+
 canary_cmake Extension Overview
-================================
+===============================
 
 The ``canary_cmake`` extension provides CMake and CTest integration for Canary. It enables running CTest tests natively through Canary's execution framework and provides CMake functions for generating Canary test files.
 

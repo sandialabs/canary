@@ -26,5 +26,4 @@ Get and set configuration options
    
    resource control:
      --oversubscribe TYPE=N
-                           Apply the multiplier N to the number of slots available per resource instance of
-                           type TYPE
+                           Apply the multiplier N to the number of slots available per resource instance of type TYPE
