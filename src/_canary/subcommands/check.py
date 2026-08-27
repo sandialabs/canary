@@ -79,7 +79,7 @@ class Check(CanarySubcommand):
         parser.add_argument("-v", action="store_true", help="verbose")
         parser.add_argument(
             "--local-packages",
-            choices={"yes", "no"},
+            choices=("yes", "no"),
             default="no" if "VIRTUAL_ENV" in os.environ else "yes",
             dest="use_local_packages",
             help="Add local site-packages to search path when running type checker",

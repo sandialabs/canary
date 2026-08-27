@@ -2,6 +2,9 @@
 
    SPDX-License-Identifier: MIT
 
+.. _canary_hpc:
+
+
 HPC Scheduler Extension
 =========================
 

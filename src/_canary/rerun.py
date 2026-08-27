@@ -127,7 +127,7 @@ def setup_parser(parser) -> None:
     parser.add_argument(
         "--only",
         dest="only",
-        choices=STRATEGIES.keys(),
+        choices=sorted(STRATEGIES.keys()),
         default="not_pass",
         help="Which tests to run after selection\n\n"
         "  all      - run all selected tests, even if already passing\n\n"

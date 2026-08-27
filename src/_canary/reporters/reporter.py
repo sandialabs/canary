@@ -15,7 +15,7 @@ def canary_addoption(parser: "Parser") -> None:
         default=None,
         action="append",
         command=("run",),
-        choices={"html", "markdown", "junit", "json", "none"},
+        choices=("html", "markdown", "junit", "json", "none"),
         help="Write final report in this format [default: none]",
     )
 

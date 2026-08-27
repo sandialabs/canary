@@ -13,6 +13,7 @@ This section documents the various extensions available in Canary.
    cdash/index
    cmake/index
    dist/index
+   flux/index
    gpu/index
    hpc/index
    pyt/index

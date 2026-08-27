@@ -203,6 +203,10 @@ todo_include_todos = True
 os.environ["COLIFY_SIZE"] = "25x120"
 os.environ["COLUMNS"] = "120"
 
+# Set a fixed width for argparse writer to ensure consistent documentation
+# generation regardless of terminal size
+os.environ["ARGPARSE_WRITER_WIDTH"] = "120"
+
 
 def ensure_command_reference() -> None:
     """Ensure command reference documentation is generated.
