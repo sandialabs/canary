@@ -88,7 +88,7 @@ Testing Legacy Suites
 
 1. Test a subset of critical tests first
 2. Verify behavior matches expectations
-3. Address issues before full migration
+3. Address compatibility issues
 
 ### Validate Results
 
@@ -99,7 +99,7 @@ Testing Legacy Suites
 ### Incremental Adoption
 
 1. Migrate test suites one at a time
-2. Use both systems in parallel during transition
+2. Use both formats as needed
 3. Monitor for regressions
 
 Migration Strategy
@@ -241,7 +241,7 @@ Best Practices
 4. **Train Team**:
    - Introduce Canary concepts
    - Demonstrate ``.pyt`` format
-   - Share migration patterns
+   - Share patterns and best practices
 
 Examples
 --------

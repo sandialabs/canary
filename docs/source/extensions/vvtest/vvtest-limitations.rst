@@ -94,7 +94,7 @@ Best Practices
 
 1. **Test Incrementally**:
    - Start with small test suites
-   - Verify behavior before full migration
+   - Verify behavior before full adoption
    - Address issues early
 
 2. **Validate Results**:
