@@ -191,3 +191,5 @@ The GPU extensions interact with Canary through several integration points:
 5. **Result Collection**: Job results include GPU resource information
 
 This integration enables seamless GPU support while maintaining Canary's core resource management model.
+
+The GPU extensions provide automatic discovery and configuration for AMD and NVIDIA GPUs.

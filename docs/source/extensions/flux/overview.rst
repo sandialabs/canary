@@ -274,3 +274,5 @@ Use ``canary_hpc`` with Flux backend when:
 - You need large-scale job organization
 - You're migrating from other HPC schedulers
 - You need batch-level status aggregation
+
+The ``canary_flux`` extension integrates with the `Flux Framework <https://flux-framework.org>`_ for HPC job execution.

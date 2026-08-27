@@ -71,3 +71,5 @@ The ``canary_dist`` extension builds on Canary's core functionality:
 - Extends Canary's execution framework for remote operations
 
 The extension does not replace Canary's local execution model but provides an additional execution mode for selected jobs.
+
+The ``canary_dist`` extension uses `hpc-connect <https://github.com/sandialabs/hpc-connect>`_ for distributed execution across remote machines.

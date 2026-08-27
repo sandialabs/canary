@@ -89,3 +89,5 @@ See Also
 - :doc:`cmake-module` - CMake functions reference
 - :doc:`status-and-regex` - Status determination and regular expressions
 - :doc:`fixtures-and-dependencies` - Fixture and dependency handling
+
+The ``canary_cmake`` extension integrates with `CMake <https://cmake.org>`_, enabling execution of CTest tests and generation of CMake-compatible test files.

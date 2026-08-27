@@ -220,3 +220,5 @@ The HPC extension has several important limitations:
 - Some batching combinations unsupported (e.g., duration-targeted atomic batching)
 
 These limitations should be considered when planning HPC test execution.
+
+The ``canary_hpc`` extension uses `hpc-connect <https://github.com/sandialabs/hpc-connect>`_ for HPC scheduler integration.

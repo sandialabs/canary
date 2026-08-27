@@ -98,3 +98,5 @@ See Also
 - :doc:`vvtest-directives`: Supported VVTest directives
 - :doc:`../pyt/overview`: Python job-definition reference
 - :doc:`legacy-and-migration`: Migration guidance
+
+The ``canary_vvtest`` extension allows running test files formatted for Sandia's `vvtest <https://github.com/sandialabs/vvtest>`_ test harness.
