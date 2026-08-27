@@ -8,7 +8,7 @@ Canary Extensions
 This section documents the various extensions available in Canary.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    cdash/index
    cmake/index

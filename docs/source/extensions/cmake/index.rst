@@ -2,8 +2,8 @@
 
    SPDX-License-Identifier: MIT
 
-canary_cmake Extension
-======================
+CMake Support
+=============
 
 The ``canary_cmake`` extension provides CMake and CTest integration for Canary.
 

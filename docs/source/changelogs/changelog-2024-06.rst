@@ -25,7 +25,7 @@ Features
 - Added SQLite database support
 - Added database test
 - Added cloudpickle.py
-- Added support for *.nvtest.py files
+- Added support for ``*.nvtest.py`` files
 - Added replace flag to db.put
 
 Refactoring

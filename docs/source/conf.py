@@ -55,7 +55,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "sphinxext.programoutput",
+    "sphinx_design",
     "sphinxext.docrun",
     "sphinxext.imagesvg",
 ]
