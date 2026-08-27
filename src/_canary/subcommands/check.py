@@ -150,8 +150,8 @@ class Check(CanarySubcommand):
             ruff("format", "./src/canary/examples")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs/source/static")
-            ruff("format", "./docs/source/static")
+            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs")
+            ruff("format", "./docs")
             pm.done()
 
             pm = logger.progress_monitor(f"Formatting tests in {self.root}/tests")

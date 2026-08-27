@@ -34,7 +34,6 @@ import yaml
 from docutils import nodes
 from docutils.parsers import rst
 from docutils.parsers.rst.directives import flag
-from docutils.parsers.rst.directives import nonnegative_int
 from docutils.parsers.rst.directives import unchanged
 from docutils.statemachine import StringList
 from sphinx.util import logging as sphinx_logging
@@ -622,7 +621,9 @@ def _options_record(
     }
 
 
-def _execute(invocation: Invocation, *, returncode: list[int], anyreturncode: bool) -> ExecutionRecord:
+def _execute(
+    invocation: Invocation, *, returncode: list[int], anyreturncode: bool
+) -> ExecutionRecord:
     """Execute an invocation in a fresh temporary directory."""
     with tempfile.TemporaryDirectory(prefix="sphinx-docrun-") as tmp:
         return _execute_in_directory(
@@ -1085,7 +1086,11 @@ def _failure_reason(node: doc_run_output, record: ExecutionRecord) -> str | None
             return f"script command {script.command!r} was not run"
 
         if not node["anyreturncode"]:
-            expected_rc = node["returncode"][i] if isinstance(node["returncode"], list) else node["returncode"]
+            expected_rc = (
+                node["returncode"][i]
+                if isinstance(node["returncode"], list)
+                else node["returncode"]
+            )
             if command_rc != expected_rc:
                 return (
                     f"script command {script.command!r} returned unexpected code "
@@ -1169,7 +1174,9 @@ def _skipped_record(command: str, *, returncode: int, message: str) -> ProcessRe
     return ProcessRecord(command=command, stdout=text, stderr=text, returncode=returncode)
 
 
-def _execute_skipped(invocation: Invocation, *, returncode: int | list[int], message: str) -> ExecutionRecord:
+def _execute_skipped(
+    invocation: Invocation, *, returncode: int | list[int], message: str
+) -> ExecutionRecord:
     """Return a synthetic execution record without running any commands.
 
     This record is deliberately not cached by ``DocRunCache``. It is intended
@@ -1180,7 +1187,9 @@ def _execute_skipped(invocation: Invocation, *, returncode: int | list[int], mes
         for command in invocation.before_script
     ]
 
-    script_returncodes = returncode if isinstance(returncode, list) else [returncode] * len(invocation.script)
+    script_returncodes = (
+        returncode if isinstance(returncode, list) else [returncode] * len(invocation.script)
+    )
     script_records = [
         _skipped_record(command, returncode=script_returncodes[i], message=message)
         for i, command in enumerate(invocation.effective_script())

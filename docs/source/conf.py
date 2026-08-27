@@ -14,7 +14,6 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import glob
 import os
 import re
 import subprocess
@@ -218,8 +217,7 @@ def ensure_command_reference() -> None:
 
     # Check if command reference exists
     command_ref_exists = command_dir.exists() and any(
-        f.name.startswith("commands.") and f.name.endswith(".rst")
-        for f in command_dir.iterdir()
+        f.name.startswith("commands.") and f.name.endswith(".rst") for f in command_dir.iterdir()
     )
 
     # Regenerate if needed
