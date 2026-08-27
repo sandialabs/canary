@@ -11,6 +11,16 @@ keeps that general idea, but is a Canary-maintained refactor with a
 GitLab-CI-like script model, JSON cache files, before/after script support,
 explicit display controls, temporary execution directories, and modern Python
 internals.
+
+Template Variables:
+------------------
+Commands in before_script, script, and after_script support template variable
+expansion using Python's string.Template syntax. The following variables are
+available:
+
+- ${doc_source_dir}: Directory containing the current RST file being processed
+- ${doc_name}: Name of the current document (without .rst extension)
+
 """
 
 from __future__ import annotations
@@ -26,6 +36,7 @@ import sys
 import tempfile
 from importlib import resources
 from pathlib import Path
+from string import Template
 from typing import Any
 from typing import Iterable
 from typing import Literal
@@ -1055,6 +1066,37 @@ def _render_nodes(app: Any, node: doc_run_output, record: ExecutionRecord) -> li
     return [_literal("\n".join(parts))]
 
 
+def _expand_template_variables(
+    commands: list[str], *, doc_source_dir: str, doc_name: str
+) -> list[str]:
+    """Expand template variables in command strings.
+
+    Supports the following variables:
+    - ${doc_source_dir}: Directory containing the current RST file
+    - ${doc_name}: Name of the current document (without extension)
+    """
+    # Ensure variables are strings
+    doc_source_dir = str(doc_source_dir) if doc_source_dir is not None else ""
+    doc_name = str(doc_name) if doc_name is not None else ""
+
+    context = {"doc_source_dir": doc_source_dir, "doc_name": doc_name}
+
+    expanded_commands = []
+    for command in commands:
+        if not command:
+            continue
+
+        try:
+            template = Template(command)
+            expanded = template.safe_substitute(**context)
+            expanded_commands.append(expanded)
+        except Exception as exc:
+            logger.warning("Failed to expand template variables in command %r: %s", command, exc)
+            expanded_commands.append(command)
+
+    return expanded_commands
+
+
 def _make_invocation_from_node(node: doc_run_output) -> Invocation:
     """Reconstruct invocation identity from a placeholder node."""
     return Invocation(
@@ -1222,17 +1264,45 @@ def run_doc_commands(app: Any, doctree: nodes.document) -> None:
     for node in traverse(doctree, doc_run_output):
         assert isinstance(node, doc_run_output)
 
+        # Get the source directory for the current document
+        doc_source_dir = str(Path(app.env.srcdir) / app.env.docname)
+        if not doc_source_dir.endswith(".rst"):
+            doc_source_dir = doc_source_dir + ".rst"
+        doc_source_dir = os.path.dirname(doc_source_dir)
+
+        # Get document name without extension
+        doc_name = os.path.splitext(app.env.docname)[0]
+
+        # Expand template variables in all commands
         invocation = _make_invocation_from_node(node)
+        expanded_invocation = Invocation(
+            before_script=_expand_template_variables(
+                invocation.before_script, doc_source_dir=doc_source_dir, doc_name=doc_name
+            ),
+            script=_expand_template_variables(
+                invocation.script, doc_source_dir=doc_source_dir, doc_name=doc_name
+            ),
+            after_script=_expand_template_variables(
+                invocation.after_script, doc_source_dir=doc_source_dir, doc_name=doc_name
+            ),
+            extraargs=invocation.extraargs,
+            env=invocation.env,
+            cwd=invocation.cwd,
+            shell=invocation.shell,
+            mergestderr=invocation.mergestderr,
+            hash_salt=invocation.hash_salt,
+        )
+
         cache_path = _cache_file(app.env.srcdir, node["docname"], node["hash"])
 
         try:
             if _skip_execution_enabled(app, node):
                 record = _execute_skipped(
-                    invocation, returncode=node["returncode"], message=_skip_message(app)
+                    expanded_invocation, returncode=node["returncode"], message=_skip_message(app)
                 )
             else:
                 record = cache.get(
-                    invocation=invocation,
+                    invocation=expanded_invocation,
                     cache_file=cache_path,
                     nocache=bool(node["nocache"]),
                     returncode=node["returncode"],

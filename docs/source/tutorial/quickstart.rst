@@ -7,6 +7,12 @@
 Quickstart: Run Your First Canary Test
 =======================================
 
+.. note::
+   
+   This tutorial uses **real execution** - all examples are actually run during 
+   documentation build using the ``doc-run`` directive. This ensures the examples 
+   stay up-to-date and actually work!
+
 This quickstart guide will get you running a Canary test in under 5 minutes.
 
 Prerequisites
@@ -19,24 +25,11 @@ Prerequisites
 Step 1: Create a Simple Test
 ----------------------------
 
-Create a file named ``hello.pyt`` with the following content:
+Let's create a simple test file. Here's the content:
 
-.. code-block:: python
+.. literalinclude:: hello.pyt
+   :language: python
    :caption: hello.pyt
-
-   import canary
-   import canary_pyt
-
-   # Add some keywords for filtering
-   canary_pyt.directives.keywords("quickstart", "demo")
-
-   def main():
-       instance = canary.get_instance()
-       print(f"Hello from {instance.name}!")
-       print("This is a Canary test.")
-
-   if __name__ == "__main__":
-       main()
 
 This test:
 - Imports the Canary Python API
@@ -47,75 +40,55 @@ This test:
 Step 2: Run the Test
 --------------------
 
-In your terminal, navigate to the directory containing ``hello.pyt`` and run:
+Let's run the test using Canary:
 
-.. code-block:: console
-
-   python3 -m canary run hello.pyt
-
-You should see output like:
-
-.. code-block:: console
-
-   [canary] Collecting tests...
-   [canary] Found 1 test: hello
-   [canary] Running tests...
-   Hello from hello!
-   This is a Canary test.
-   [canary] Tests completed: 1 passed
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/hello.pyt .', 'python3 -m canary init']
+   :script: ['python3 -m canary run hello.pyt']
+   :display: command, stdout, stderr
 
 Step 3: Check the Results
 -------------------------
 
-Canary creates a workspace (``.canary/``) and a results view (``TestResults/``):
+Canary creates a workspace (``.canary/``) and a results view (``TestResults/``). Let's explore what was created:
 
-.. code-block:: console
-
-   # List the workspace contents
-   ls -la .canary/
-
-   # View test status
-   python3 -m canary status -rA
-
-   # See the test output
-   cat TestResults/hello/canary-out.txt
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/hello.pyt .', 'python3 -m canary run hello.pyt']
+   :script: ['ls -la .canary/', 'python3 -m canary status -rA', 'cat TestResults/hello/canary-out.txt']
+   :display: command, stdout, stderr
 
 Step 4: Run Multiple Tests
 --------------------------
 
-Create another test file ``goodbye.pyt``:
+Let's create another test file:
 
-.. code-block:: python
+.. literalinclude:: goodbye.pyt
+   :language: python
    :caption: goodbye.pyt
-
-   import canary_pyt
-
-   canary_pyt.directives.keywords("quickstart")
-
-   def main():
-       print("Goodbye from Canary!")
-
-   if __name__ == "__main__":
-       main()
 
 Now run both tests:
 
-.. code-block:: console
-
-   python3 -m canary run .
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/hello.pyt .', 'python3 -m canary init']
+   :script: ['python3 -m canary run hello.pyt', 'python3 -m canary status -rA', 'cat TestResults/hello/canary-out.txt']
+   :display: command, stdout, stderr
 
 Step 5: Filter Tests by Keyword
--------------------------------
+--------------------------------
 
 Use keywords to run specific tests:
 
-.. code-block:: console
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/hello.pyt .', 'cp ${doc_source_dir}/goodbye.pyt .', 'python3 -m canary init']
+   :script: ['python3 -m canary run -k quickstart .']
+   :display: command, stdout, stderr
 
-   # Run only quickstart tests
-   python3 -m canary run . -k quickstart
+You can also run only the demo tests:
 
-   # Run only demo tests
-   python3 -m canary run . -k demo
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/hello.pyt .', 'cp ${doc_source_dir}/goodbye.pyt .', 'python3 -m canary init']
+   :script: ['python3 -m canary run .']
+   :display: command, stdout, stderr
 
 Congratulations! 🎉
 --------------------
@@ -129,9 +102,9 @@ You've successfully:
 
 **Next Steps:**
 
-- Learn about :doc:`test structure <basics/test-structure>`
-- Explore :doc:`parameterized tests <intermediate/parameterization>`
-- Try the :doc:`complete examples <examples/simple>`
+- Learn about :doc:`../user/index`
+- Explore :doc:`../examples/index`
+- Read the :doc:`../reference/index`
 
 .. tip::
 

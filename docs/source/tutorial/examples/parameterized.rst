@@ -13,43 +13,21 @@ generates multiple test instances with different parameters.
 Complete Example Code
 ---------------------
 
-.. code-block:: python
+.. literalinclude:: param_test.pyt
+   :language: python
    :caption: param_test.pyt
-   :name: parameterized-example
 
-   import canary
-   import canary_pyt
+This example demonstrates parameterized testing with Canary.
 
-   # Define parameters - this creates multiple test instances
-   canary_pyt.directives.keywords("tutorial", "parameterized", "math")
-   canary_pyt.directives.description("Test addition with various inputs")
-   canary_pyt.directives.parameterize(
-       "a", [1, 2, 3, 5, 8],  # First operand
-       "b", [1, 2, 3, 5, 8]   # Second operand
-   )
+Running the Example
+-------------------
 
-   def main():
-       """Test addition operation."""
-       instance = canary.get_instance()
-       
-       # Get parameter values for this test instance
-       a = instance.parameters.a
-       b = instance.parameters.b
-       
-       # Perform the calculation
-       result = a + b
-       
-       # Validate the result
-       expected = a + b  # This is just for demonstration
-       if result != expected:
-           raise ValueError(f"Addition failed: {a} + {b} = {result}, expected {expected}")
-       
-       # Record measurements
-       instance.add_measurement("operand_a", a)
-       instance.add_measurement("operand_b", b)
-       instance.add_measurement("result", result)
-       
-       print(f"✅ {a} + {b} = {result}")
+Let's execute this parameterized test:
+
+.. doc-run::
+   :before_script: ['cp ${doc_source_dir}/param_test.pyt .', 'python3 -m canary init']
+   :script: ['python3 -m canary run param_test.pyt']
+   :display: command, stdout, stderr
 
 How Parameterization Works
 --------------------------
@@ -69,9 +47,9 @@ Running the Example
    # Run all parameterized instances
    python3 -m canary run param_test.pyt
 
-   # Run specific parameter combinations
-   python3 -m canary run param_test.pyt -k "a=2"
-   python3 -m canary run param_test.pyt -k "b=5"
+    # Run tests with specific parameter values
+    python3 -m canary run -p "a=2" param_test.pyt
+    python3 -m canary run -p "b=5" param_test.pyt
 
    # View all results
    python3 -m canary status -rA
@@ -84,7 +62,7 @@ Single Parameter
 
 .. code-block:: python
 
-   canary_pyt.directives.parameterize("size", [10, 100, 1000])
+   canary_pyt.directives.parameterize("size", [[10], [100], [1000]])
 
 Multiple Parameters
 ^^^^^^^^^^^^^^^^^^^
@@ -92,8 +70,7 @@ Multiple Parameters
 .. code-block:: python
 
    canary_pyt.directives.parameterize(
-       "method", ["fast", "accurate"],
-       "dataset", ["small", "large"]
+       "method,dataset", [("fast", "small"), ("accurate", "large")]
    )
 
 Parameter Types
@@ -102,10 +79,10 @@ Parameter Types
 .. code-block:: python
 
    # Numbers
-   canary_pyt.directives.parameterize("iterations", [10, 50, 100])
-   
+   canary_pyt.directives.parameterize("iterations", [[10], [50], [100]])
+    
    # Strings
-   canary_pyt.directives.parameterize("algorithm", ["bfs", "dfs", "astar"])
+   canary_pyt.directives.parameterize("algorithm", [["bfs"], ["dfs"], ["astar"]])
    
    # Booleans
    canary_pyt.directives.parameterize("use_cache", [True, False])

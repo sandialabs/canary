@@ -44,6 +44,7 @@ and practical usage patterns, from basic test execution to advanced workflow aut
    advanced/hpc
    advanced/ci-integration
    advanced/custom-generators
+   plugins/tutorial
 
 .. toctree::
    :maxdepth: 1

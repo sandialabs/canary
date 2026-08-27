@@ -172,6 +172,8 @@ class Check(CanarySubcommand):
             ruff_check("./src/canary/examples")
             ruff_check("./docs")
             ruff_check("./bin")
+            paths = Check.find_pyt_files("./docs")
+            ruff_check(*paths)
             pm.done()
 
             pm = logger.progress_monitor(
