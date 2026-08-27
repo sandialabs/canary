@@ -105,11 +105,7 @@ def fix_lines(lines: list[str]) -> tuple[list[str], int]:
         #
         #   Title
         #   =====
-        if (
-            i + 1 < n
-            and looks_like_title(out[i])
-            and is_adornment_line(out[i + 1])
-        ):
+        if i + 1 < n and looks_like_title(out[i]) and is_adornment_line(out[i + 1]):
             fixed = fixed_adornment(out[i + 1], out[i])
             if out[i + 1] != fixed:
                 out[i + 1] = fixed
@@ -143,9 +139,7 @@ def fix_file(path: Path, *, check: bool = False) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Fix reStructuredText heading underline lengths."
-    )
+    parser = argparse.ArgumentParser(description="Fix reStructuredText heading underline lengths.")
     parser.add_argument(
         "paths",
         nargs="*",
@@ -153,9 +147,7 @@ def main() -> int:
         help="Files or directories to scan [default: doc/source]",
     )
     parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Do not modify files; report files that would change.",
+        "--check", action="store_true", help="Do not modify files; report files that would change."
     )
     args = parser.parse_args()
 
