@@ -5,17 +5,16 @@
 Overview
 ========
 
-The ``canary_vvtest`` extension enables Canary to consume and execute VVTest-style ``.vvt`` files. This provides a migration path for existing VVTest users and allows legacy test suites to run under Canary's modern execution framework.
+The ``canary_vvtest`` extension enables Canary to consume and execute VVTest-style ``.vvt`` files.
 
-Historical Context
-------------------
+Relationship to VVTest
+=======================
 
-VVTest was one of the inspirations for Canary. While Canary has evolved into a general-purpose workflow execution framework, it retains compatibility with VVTest through the ``canary_vvtest`` extension. This allows organizations with existing VVTest investments to:
+VVTest was one of the inspirations for Canary. The ``canary_vvtest`` extension provides compatibility between the two systems, allowing organizations to:
 
-- Run legacy test suites under Canary
-- Migrate incrementally to Canary's native formats
+- Run VVTest test suites using Canary's execution framework
 - Leverage Canary's advanced features (resource management, distributed execution, reporting)
-- Maintain continuity during transition
+- Use both VVTest and Python test formats as needed
 
 Relationship to Canary
 ----------------------
@@ -35,31 +34,25 @@ Key Characteristics
    - Converts to Canary's internal job representation
    - Preserves VVTest semantics where possible
 
-2. **Migration Bridge**:
-   - Enables incremental adoption of Canary
-   - Allows mixed ``.vvt`` and ``.pyt`` workflows
-   - Provides path to modern Canary features
+2. **Dual Format Support**:
+    - Allows mixed ``.vvt`` and ``.pyt`` workflows
+    - Enables use of both formats based on project needs
+    - Provides access to Canary's features for VVTest files
 
-3. **Not Universal**:
-   - ``.vvt`` is a compatibility format, not the universal Canary job format
-   - Native Python ``.pyt`` files are the reference format
-   - VVTest compatibility has limitations (see :doc:`vvtest-limitations`)
+3. **Format Characteristics**:
+    - ``.vvt`` files use VVTest's format and semantics
+    - ``.pyt`` files use Python-based definitions
+    - Both formats are fully supported by Canary
 
-When to Use canary_vvtest
---------------------------
+VVTest File Format
+==================
 
-Use ``canary_vvtest`` when you need to:
+The ``canary_vvtest`` extension supports VVTest's file format and execution model:
 
-- Run existing VVTest test suites
-- Migrate legacy tests incrementally
-- Maintain compatibility with VVTest workflows
-- Leverage Canary features for VVTest tests
-
-Use ``canary_pyt`` when you:
-
-- Create new test suites
-- Want full access to Canary's features
-- Prefer Python-based test definitions
+- Executable scripts with ``.vvt`` extension
+- VVTest-specific directives and syntax
+- Compatibility with existing VVTest workflows
+- Integration with Canary's execution framework
 - Need maximum flexibility and maintainability
 
 Implementation Model
@@ -97,6 +90,6 @@ See Also
 - :doc:`file-format`: VVTest file format details
 - :doc:`vvtest-directives`: Supported VVTest directives
 - :doc:`../pyt/overview`: Python job-definition reference
-- :doc:`legacy-and-migration`: Migration guidance
+- :doc:`vvtest-limitations`: Format limitations and considerations
 
 The ``canary_vvtest`` extension allows running test files formatted for Sandia's `vvtest <https://github.com/sandialabs/vvtest>`_ test harness.

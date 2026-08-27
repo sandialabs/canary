@@ -17,8 +17,7 @@ Update baseline files from existing test results
    Update baseline files from existing test results
    
    positional arguments:
-     DIR_OR_JOBID     Directory containing test results or a job id/name. If a directory is given,
-                      testcase.lock files are found recursively. [default: current directory]
+     DIR_OR_JOBID     Directory containing test results or a job id/name. If a directory is given, testcase.lock files are found recursively. [default: current directory]
    
    options:
      -k KEYWORD_EXPR  Restrict rebaseline to jobs matching keyword expression

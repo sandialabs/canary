@@ -21,8 +21,7 @@ Print information about a test run
    
    options:
      --durations [N]       Show N slowest test durations (N<0 for all) [default: 10]
-     -o FORMAT_COLS        Comma separated list of fields to print to the screen [default:
-                           ID,Name,Session,Exit Code,Duration,Status,Details]. Choices are:
+     -o FORMAT_COLS        Comma separated list of fields to print to the screen [default: ID,Name,Session,Exit Code,Duration,Status,Details]. Choices are:
                            • Name: the job name
                            • FullName: the job full name (name including relative execution path)
                            • Session: the session name the job was last ran in
@@ -32,8 +31,7 @@ Print information about a test run
                            • Details: additional details, if any
                            
    
-     -r char               Show test summary info as specified by chars: (p)assed, (t)imeout (d)iffed,
-                           (f)ailed, (n)ot run, (s)kipped, (a)ll (except passed), (A)ll. [default: dftns]
+     -r char               Show test summary info as specified by chars: (p)assed, (t)imeout (d)iffed, (f)ailed, (n)ot run, (s)kipped, (a)ll (except passed), (A)ll. [default: dftns]
      --sort-by {duration,name}
                            Sort cases by this field [default: name]
      -h, --help            Show this help message and exit.
