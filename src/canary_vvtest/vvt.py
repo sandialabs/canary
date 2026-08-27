@@ -139,7 +139,7 @@ class VVTestAdapter:
         if arg.argument:
             key = "flag" if arg.argument.startswith("-") else "script"
             options[key] = arg.argument
-        self.m.set_analyze(when=arg.when, **options)
+        self.m.set_aggregate(when=arg.when, **options)
 
     def f_TIMEOUT(self, arg: Directive) -> None:
         try:

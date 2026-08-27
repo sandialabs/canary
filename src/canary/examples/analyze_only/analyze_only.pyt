@@ -9,7 +9,7 @@ import sys
 import canary
 import canary_pyt
 
-canary_pyt.directives.generate_composite_base_case()
+canary_pyt.directives.aggregate()
 canary_pyt.directives.parameterize("cpus", (1, 2))
 canary_pyt.directives.parameterize("a,b", [(1, 2), (2, 3), (4, 5)])
 

@@ -149,7 +149,7 @@ def test_analyze_creates_parent_case_and_dependencies(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     m.add_family("a")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(flag="--analyze", requires="success")
+    m.set_aggregate(flag="--analyze", requires="success")
     specs = lock_model(m)
 
     parent = [s for s in specs if s.family == "a" and s.attributes.get("multicase") is True][0]
@@ -249,7 +249,7 @@ def test_analyze_script_adds_asset_link_if_missing(tmp_path: Path) -> None:
     m = PYTModel(str(tmp_path), "sub/x.pyt")
     m.add_family("a")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(script="analyze.sh")
+    m.set_aggregate(script="analyze.sh")
 
     specs = lock_model(m)
     parent = [s for s in specs if s.attributes.get("multicase") is True][0]
@@ -455,7 +455,7 @@ def test_set_id_template_expands_parent_analyze_with_blank_parameters(tmp_path: 
     m = make_model(tmp_path, "x.pyt")
     m.set_id("deadbeef{p}")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(flag="--analyze")
+    m.set_aggregate(flag="--analyze")
 
     specs = lock_model(m)
 

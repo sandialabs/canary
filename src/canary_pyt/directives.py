@@ -490,7 +490,7 @@ def exclusive(*, when: WhenType | None = None) -> None:
     """
 
 
-def generate_composite_base_case(
+def aggregate(
     *, when: WhenType | None = None, flag: str | None = None, script: str | None = None
 ) -> None:
     """Create an composite base job that depends on all of the parameterized jobs
@@ -512,7 +512,7 @@ def generate_composite_base_case(
     .. code-block:: python
 
        import canary_pyt
-       canary_pyt.directives.generate_composite_base_case(*, flag=None, script=None, when=...)
+       canary_pyt.directives.aggregate(*, flag=None, script=None, when=...)
 
     ``.vvt``:
 
@@ -541,7 +541,7 @@ def generate_composite_base_case(
     References
     ----------
 
-    * :ref:`Writing an execute/analyze test <usage-execute-and-analyze>`
+    * Writing an execute/analyze test
 
     Examples
     --------
@@ -549,7 +549,7 @@ def generate_composite_base_case(
     .. code-block:: python
 
        import canary_pyt
-       canary_pyt.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
+       canary_pyt.directives.aggregate(flag="--base", when="platforms='not darwin'")
        canary_pyt.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
     .. code-block:: python
@@ -571,7 +571,7 @@ def generate_composite_base_case(
        import sys
 
        import canary_pyt
-       canary_pyt.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
+       canary_pyt.directives.aggregate(flag="--base", when="platforms='not darwin'")
        canary_pyt.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 
@@ -595,7 +595,8 @@ def generate_composite_base_case(
     """
 
 
-analyze = generate_composite_base_case
+analyze = aggregate
+generate_composite_base_case = aggregate
 
 
 def enable(*args: bool, when: WhenType | None = None) -> None:
@@ -922,7 +923,7 @@ def parameterize(
     values: Sequence[Sequence[Any] | Any],
     *,
     when: WhenType | None = None,
-    type: enums.enums = enums.list_parameter_space,
+    type: "enums.enums" = enums.list_parameter_space,
     samples: int = 10,
     random_seed: float = 1234.0,
 ) -> None:
@@ -979,7 +980,7 @@ def parameterize(
     References
     ----------
 
-    * :ref:`Parameterizing Tests <usage-parameterize>`
+    * Parameterizing Tests
 
     Examples
     --------
@@ -1202,7 +1203,7 @@ def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> 
     .. warning::
 
        The ``preload`` currently has no effect.  Use ``canary.shell.source`` instead,
-       see :ref:`usage-rcfiles`.
+       see usage-rcfiles.
 
 
     """

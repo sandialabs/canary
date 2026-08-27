@@ -215,7 +215,7 @@ def test_analyze(tmpdir):
             fh.write("import canary_pyt\n")
             fh.write("canary_pyt.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("canary_pyt.directives.parameterize('n', [10,11,12])\n")
-            fh.write("canary_pyt.directives.generate_composite_base_case()\n")
+            fh.write("canary_pyt.directives.aggregate()\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 10
@@ -259,7 +259,7 @@ def test_pyt_generator(tmpdir):
                 """
 import canary_pyt
 canary_pyt.directives.name('baz')
-canary_pyt.directives.generate_composite_base_case()
+canary_pyt.directives.aggregate()
 canary_pyt.directives.owner('me')
 canary_pyt.directives.keywords('test', 'unit')
 canary_pyt.directives.parameterize('cpus', (1, 2), when="options='baz'")
@@ -302,7 +302,7 @@ def test_many_composite(tmpdir):
                 fh.write("import canary_pyt\n")
                 fh.write("canary_pyt.directives.keywords('long')\n")
                 fh.write(f"canary_pyt.directives.parameterize({name!r}, list(range(4)))\n")
-                fh.write("canary_pyt.directives.generate_composite_base_case()\n")
+                fh.write("canary_pyt.directives.aggregate()\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len(specs) == len(names) * 5

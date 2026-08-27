@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "${ROOT}"
+
+rm -rf docs/build/html docs/build/doctrees
+
+export CANARY_DOCS_REGENERATE_COMMANDS=1
+
+python3 -m sphinx \
+  -b html \
+  -n \
+  --keep-going \
+  -v \
+  -d docs/build/doctrees \
+  docs/source \
+  docs/build/html \
+  2>&1 | tee sphinx-build.log

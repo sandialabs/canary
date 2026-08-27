@@ -33,7 +33,7 @@ class Init(CanarySubcommand):
             "path",
             default=os.getcwd(),
             nargs="?",
-            help="Initialize session in this directory [default: %(default)s]",
+            help="Initialize session in this directory [default: .]",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:

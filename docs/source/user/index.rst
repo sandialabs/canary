@@ -2,47 +2,30 @@
 
    SPDX-License-Identifier: MIT
 
-canary user's guide
-===================
+User's Guide
+============
+
+This guide covers the main concepts and usage patterns of Canary.
 
 .. toctree::
-   :caption: Getting started
-   :maxdepth: 1
-
-   about
-   installing
-   getting-help
-   getting-started
-
-.. toctree::
-   :caption: Basics and usage
    :maxdepth: 2
+   :caption: Contents:
 
-   basics
-   usage
-
-.. toctree::
-   :caption: Configuration
-   :maxdepth: 2
-
+   introduction
+   concepts
+   generators
+   jobs
+   workspaces
+   sessions
+   running
+   selection
+   results
+   resources
+   dependencies
+   persistence
+   query
    configuration
+   debugging
+   workflows
+   workflows.agentic
 
-.. toctree::
-   :caption: Creating reports
-   :maxdepth: 2
-
-   reporting
-
-.. toctree::
-   :caption: Extending canary through plugins
-   :maxdepth: 2
-
-   extending
-
-.. toctree::
-   :caption: Commands and directives
-   :maxdepth: 1
-
-   commands
-   directives
-   util

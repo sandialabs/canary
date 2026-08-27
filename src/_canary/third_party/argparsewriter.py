@@ -164,7 +164,7 @@ class ArgparseWriter(argparse.HelpFormatter):
                 raise
 
 
-_rst_levels = ["=", "-", "^", "~", ":", "`"]
+_rst_levels = ["=", "-", "~", "^", ":", "`"]
 
 
 class ArgparseRstWriter(ArgparseWriter):

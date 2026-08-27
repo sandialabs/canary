@@ -31,7 +31,7 @@ def generate_files(tmpdir):
             fh.write("import canary_pyt\n")
             fh.write("canary_pyt.directives.keywords('long')\n")
             fh.write(f"canary_pyt.directives.parameterize({name!r}, list(range(4)))\n")
-            fh.write("canary_pyt.directives.generate_composite_base_case()\n")
+            fh.write("canary_pyt.directives.aggregate()\n")
     yield workdir
 
 

@@ -29,6 +29,9 @@ assert os.path.exists(tests_dir)
 
 os.environ["CANARY_MAKE_DOCS"] = "1"
 
+# Add doc/lib/python to sys.path for custom Sphinx extensions
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib/python"))
+
 
 # -- Project information -----------------------------------------------------
 
@@ -48,13 +51,11 @@ release = canary.version
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-sys.path.insert(0, str(Path(__file__).parent / "extensions"))
 extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "sphinx_design",
     "sphinxext.programoutput",
     "sphinxext.docrun",
     "sphinxext.imagesvg",
@@ -65,6 +66,78 @@ autodoc_mock_imports = ["flux"]
 autodoc_typehints_format = "fully-qualified"
 python_use_unqualified_type_names = False
 autodoc_type_aliases = {"type": "builtins.type"}
+
+# Ignore specific references that are internal implementation details
+nitpick_ignore = [
+    ("py:class", "_canary.ir.DependencySelector"),
+    ("py:class", "_canary.enums.enums"),
+    # External standard library classes
+    ("py:class", "abc.ABC"),
+    ("py:class", "argparse.Namespace"),
+    ("py:class", "argparse.ArgumentParser"),
+    ("py:class", "collections.abc.Sequence"),
+    ("py:class", "collections.Counter"),
+    ("py:class", "datetime.datetime"),
+    ("py:class", "enum.Enum"),
+    ("py:class", "os.PathLike"),
+    ("py:class", "pathlib.Path"),
+    ("py:class", "pathlib._local.Path"),
+    ("py:class", "sqlite3.Connection"),
+    ("py:exc", "NotAWorkspaceError"),
+    # Internal classes not exposed in public API
+    ("py:class", "_canary.job.BaseJob"),
+    ("py:class", "_canary.testinst.TestInstance"),
+    ("py:class", "_canary.testinst.MissingTestInstance"),
+    ("py:class", "_canary.view.ResultsView"),
+    ("py:class", "_canary.view.ViewSettings"),
+    ("py:class", "_canary.view.ViewManager"),
+    ("py:class", "_canary.database.ResultListener"),
+    ("py:class", "_canary.database.PartialSpec"),
+    ("py:class", "_canary.jobspec.BaselineCopyAction"),
+    ("py:class", "_canary.jobspec.BaselineScriptAction"),
+    ("py:class", "_canary.queue.ResourceQueue"),
+    ("py:class", "_canary.queue_executor.ExecutionSlot"),
+    ("py:class", "_canary.resource_pool.rpool.Node"),
+    ("py:class", "_canary.resource_pool.rpool.NodeRequest"),
+    ("py:class", "_canary.select.Selector"),
+    ("py:class", "_canary.select.RuntimeSelector"),
+    ("py:class", "_canary.util.logging.CanaryLogger"),
+    # Rich library classes
+    ("py:class", "rich.table.Table"),
+    ("py:class", "rich.console.Group"),
+    ("py:class", "rich.text.Text"),
+    # Plugin manager classes
+    ("py:class", "PluginManager"),
+    ("py:class", "CanaryPluginManager"),
+    ("py:class", "CanaryConfig"),
+    # Config and parser classes
+    ("py:class", "Parser"),
+    ("py:class", "Collector"),
+    # Event types
+    ("py:class", "EventTypes"),
+    ("py:class", "Status"),
+    # Additional internal classes
+    ("py:class", "NodeRequest"),
+    ("py:class", "ExecutionSlot"),
+    ("py:class", "The test"),
+    # Function references
+    ("py:func", "config.argparsing.Parser.add_argument"),
+    ("py:func", "config.argparsing.Parser.add_command"),
+    ("py:func", "canary.Config.getoption"),
+    ("py:func", "Collector.add_generator"),
+    ("py:func", "Collector.add_skip_dirs"),
+    # Method references
+    ("py:meth", "PluginManager.add_hookspecs"),
+    ("py:meth", "PluginManager.register"),
+    # Additional classes that appear in docstrings
+    ("py:class", "canary.Config"),
+    ("py:class", "canary.CanarySubcommand"),
+    ("py:class", "CanarySubcommand"),
+    ("py:class", "Selector"),
+    ("py:class", "RuntimeSelector"),
+    ("py:class", "dict"),
+    ("py:class", "dict[str"),
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -131,19 +204,50 @@ todo_include_todos = True
 os.environ["COLIFY_SIZE"] = "25x120"
 os.environ["COLUMNS"] = "120"
 
-# Generate full package list if needed
-user_dir = os.path.join(docs_source_dir, "user")
-for section in ("directives", "commands"):
-    pat = os.path.join(user_dir, f"{section}.*rst")
-    files = glob.glob(pat)
-    for file in files:
-        os.remove(file)
-args = [sys.executable, "-m", "canary", "autodoc", "-d", user_dir]
-proc = subprocess.run(args)
-assert proc.returncode == 0
 
-if os.getenv("PROGRAM_OUTPUT_RESET_CACHE") is not None:
-    print("Resetting program output cache")
-    cache_dir = os.path.join(docs_source_dir, ".cache")
-    for file in os.listdir(cache_dir):
-        os.remove(os.path.join(cache_dir, file))
+def ensure_command_reference() -> None:
+    """Ensure command reference documentation is generated.
+
+    Generates command reference pages if they don't exist, or if
+    CANARY_DOCS_REGENERATE_COMMANDS is set.
+    """
+    command_dir = Path(docs_source_dir) / "reference"
+
+    # Check if we should regenerate
+    regenerate = os.getenv("CANARY_DOCS_REGENERATE_COMMANDS") is not None
+
+    # Check if command reference exists
+    command_ref_exists = command_dir.exists() and any(
+        f.name.startswith("commands.") and f.name.endswith(".rst")
+        for f in command_dir.iterdir()
+    )
+
+    # Regenerate if needed
+    if regenerate or not command_ref_exists:
+        # Ensure directory exists
+        command_dir.mkdir(parents=True, exist_ok=True)
+
+        # Run command generation
+        args = [
+            sys.executable,
+            "-m",
+            "canary",
+            "commands",
+            "--style=rst",
+            "--multi-page",
+            "--expand",
+            "-d",
+            str(command_dir),
+        ]
+
+        print(f"Generating command reference in {command_dir}")
+        proc = subprocess.run(args)
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Command reference generation failed with exit code {proc.returncode}"
+            )
+
+
+# Ensure command reference is available
+ensure_command_reference()

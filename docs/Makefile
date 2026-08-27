@@ -7,9 +7,6 @@ BUILDDIR      = build
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-api-docs:
-	../bin/make_api_docs.py
-
 clean_cache:
 	rm -rf ./source/.cache
 
@@ -20,4 +17,4 @@ clean_cache:
 %: Makefile
 	find .. -type d -name '.canary' | xargs rm -rf
 	find .. -type d -name 'TestResults' | xargs rm -rf
-	@NVTEST_MAKE_DOCS=1 $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
