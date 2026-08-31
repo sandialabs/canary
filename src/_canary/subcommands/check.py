@@ -149,7 +149,7 @@ class Check(CanarySubcommand):
             )
             paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff("format", *paths)
-            ruff("format", "./src/canary/docs/examples")
+            ruff("format", "./src/canary")
             pm.done()
 
             pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs")
@@ -171,7 +171,7 @@ class Check(CanarySubcommand):
             )
             paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff_check(*paths)
-            ruff_check("./src/canary/docs/examples")
+            ruff_check("./src/canary/docs")
             ruff_check("./docs")
             ruff_check("./bin")
             paths = Check.find_pyt_files("./docs")

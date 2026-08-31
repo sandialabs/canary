@@ -497,9 +497,7 @@ def exclusive(*, when: WhenType | None = None) -> None:
     """
 
 
-@deprecated(
-    "canary.directives.aggregate is deprecated; use canary_pyt.directives.aggregate"
-)
+@deprecated("canary.directives.aggregate is deprecated; use canary_pyt.directives.aggregate")
 def aggregate(
     *, when: WhenType | None = None, flag: str | None = None, script: str | None = None
 ) -> None:
@@ -605,8 +603,8 @@ def aggregate(
     """
 
 
-analyze = aggregate
-generate_composite_base_case = aggregate
+analyze = aggregate  # ty: ignore[deprecated]
+generate_composite_base_case = aggregate  # ty: ignore[deprecated]
 
 
 @deprecated("canary.directives.enable is deprecated; use canary_pyt.directives.enable")
@@ -930,7 +928,7 @@ def owners(*args: str) -> None:
     """
 
 
-owner = owners
+owner = owners  # ty: ignore[deprecated]
 
 
 @deprecated("canary.directives.parameterize is deprecated; use canary_pyt.directives.parameterize")
@@ -1620,7 +1618,7 @@ def testname(arg: str) -> None:
     """
 
 
-name = testname
+name = testname  # ty: ignore[deprecated]
 
 
 @deprecated("canary.directives.timeout is deprecated; use canary_pyt.directives.timeout")

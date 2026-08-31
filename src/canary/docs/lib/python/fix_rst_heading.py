@@ -7,7 +7,6 @@ at least the title length.
 
 """
 
-import argparse
 from pathlib import Path
 
 ADORNMENT_CHARS = set("=-~^\"'`:#*+_")

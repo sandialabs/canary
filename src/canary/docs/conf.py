@@ -14,10 +14,8 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import glob
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -228,7 +226,7 @@ def ensure_command_reference() -> None:
     """
     from _canary.subcommands import make_commands_docs
 
-    user_dir = Path(docs_source_dir) / "user" 
+    user_dir = Path(docs_source_dir) / "user"
     command_dir = user_dir / "commands"
 
     # Check if we should regenerate
@@ -249,7 +247,7 @@ def ensure_command_reference() -> None:
 def ensure_pyt_directives() -> None:
     from canary_pyt import make_directives_docs
 
-    user_dir = Path(docs_source_dir) / "user" 
+    user_dir = Path(docs_source_dir) / "user"
     directive_dir = user_dir / "directives"
 
     # Check if we should regenerate
@@ -270,7 +268,7 @@ def ensure_pyt_directives() -> None:
 def ensure_api_docs() -> None:
     from make_api_docs import make_api_docs
 
-    api_docs_dir = Path(docs_source_dir) / "api-docs" 
+    api_docs_dir = Path(docs_source_dir) / "api-docs"
 
     # Check if we should regenerate
     regenerate = os.getenv("CANARY_DOCS_REGENERATE_API_DOCS") is not None
@@ -285,8 +283,8 @@ def ensure_api_docs() -> None:
 
 def ensure_rst_headings() -> None:
     from fix_rst_heading import fix_roots
-    fix_roots([Path(docs_source_dir)])
 
+    fix_roots([Path(docs_source_dir)])
 
 
 # Ensure generated documentation is available

@@ -14,6 +14,7 @@ def blt() -> int:
     instance = canary.get_instance()
     for dep in instance.dependencies:
         assert dep.family == "ingredients"
+    return 0
 
 
 if __name__ == "__main__":

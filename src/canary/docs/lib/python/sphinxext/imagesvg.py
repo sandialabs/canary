@@ -116,7 +116,7 @@ class ImageSVGDirective(Image):
     own_option_spec = dict(tagtype=str)
 
     option_spec = Image.option_spec.copy()
-    option_spec.update(own_option_spec)
+    option_spec.update(own_option_spec)  # ty: ignore[no-matching-overload]
 
     def run(self):
         imagesvg_options = dict(
