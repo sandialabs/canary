@@ -12,7 +12,11 @@ from pathlib import Path
 
 from ..config.argparsing import Parser
 from ..hookspec import hookimpl
+from ..util import logging
 from .base import CanarySubcommand
+
+
+logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -41,9 +45,11 @@ class Docs(CanarySubcommand):
             dest = Path(args.dest or "./build")
             if args.wipe:
                 if dest.exists():
+                    logger.info(f"Remving {dest}")
                     shutil.rmtree(dest)
                 for p in ("api-docs", "user/commands", "user/directives", ".cache"):
                     if (docs / p).exists():
+                        logger.info(f"Remving {docs / p}")
                         shutil.rmtree(docs / p)
             argv = [
                 sys.executable,

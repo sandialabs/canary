@@ -203,11 +203,6 @@ class APIDocsMaker:
 
 def make_api_docs(prefix: str):
     canary = str(importlib.resources.files("canary"))
-    canary_root = os.path.join(canary, "../..")
-
-    if not os.path.exists(os.path.join(canary_root, "pyproject.toml")):
-        raise ValueError("make_api_docs.py must be run with canary source checkout")
-
     dest = os.path.join(prefix, "api-docs")
     maker = APIDocsMaker(dest, wipe=True)
     maker.init()
@@ -216,7 +211,7 @@ def make_api_docs(prefix: str):
 
     maker.add_package(
         "_canary",
-        os.path.join(canary_root, "src/_canary"),
+        os.path.join(canary, "../_canary"),
         skip_dirs=["third_party"],
         exclude_members={
             "_canary.select": ["rules"],
@@ -232,35 +227,35 @@ def make_api_docs(prefix: str):
 
     maker.add_package(
         "canary",
-        os.path.join(canary_root, "src/canary"),
+        canary,
         skip_dirs=["examples"],
         skip_modules=["directives"],
     )
 
     maker.add_package(
         "canary_cmake",
-        os.path.join(canary_root, "src/canary_cmake"),
+        os.path.join(canary, "../canary_cmake"),
         skip_dirs=["validators", "tests"],
     )
 
     maker.add_package(
-        "canary_amd", os.path.join(canary_root, "src/canary_amd"), skip_dirs=["tests"]
+        "canary_amd", os.path.join(canary, "../canary_amd"), skip_dirs=["tests"]
     )
 
     maker.add_package(
         "canary_dist",
-        os.path.join(canary_root, "src/canary_dist"),
+        os.path.join(canary, "../canary_dist"),
         skip_dirs=["tests"],
         no_index_modules=["canary_hpc.batchspec"],
     )
 
     maker.add_package(
-        "canary_nvidia", os.path.join(canary_root, "src/canary_nvidia"), skip_dirs=["tests"]
+        "canary_nvidia", os.path.join(canary, "../canary_nvidia"), skip_dirs=["tests"]
     )
 
     maker.add_package(
         "canary_hpc",
-        os.path.join(canary_root, "src/canary_hpc"),
+        os.path.join(canary, "../canary_hpc"),
         skip_dirs=["tests"],
         exclude_members={"canary_hpc.binpack": ["used", "down", "right"]},
         no_index_modules=["canary_hpc.batchspec"],
@@ -268,21 +263,21 @@ def make_api_docs(prefix: str):
 
     maker.add_package(
         "canary_gitlab",
-        os.path.join(canary_root, "src/canary_gitlab"),
+        os.path.join(canary, "../canary_gitlab"),
         skip_dirs=["tests"],
         exclude_members={"canary_gitlab.reporter": ["type"]},
     )
 
     maker.add_package(
         "canary_vvtest",
-        os.path.join(canary_root, "src/canary_vvtest"),
+        os.path.join(canary, "../canary_vvtest"),
         skip_dirs=["tests"],
         exclude_members={"canary_vvtest.vvt": ["type"]},
     )
 
     maker.add_package(
         "canary_pyt",
-        os.path.join(canary_root, "src/canary_pyt"),
+        os.path.join(canary, "../canary_pyt"),
         skip_dirs=["tests"],
         exclude_members={"canary_pyt.pyt": ["type"]},
         no_index_modules=["canary_pyt.directives"],
