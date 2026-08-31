@@ -80,7 +80,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 _canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg"]
-canary = ["py.typed", "examples/**", "data/*.json"]
+canary = ["py.typed", "docs/**", "data/*.json"]
 canary_cdash = ["data/*.json", "validators/*.xsd"]
 canary_cmake = ["Canary.cmake", "data/*.json", "tests/**/CTestTestfile.cmake"]
 canary_dist = ["data/*.json"]
@@ -267,4 +267,4 @@ skips = [
     "B603",
     "B607", # start_process_with_partial_path"
 ]
-exclude_dirs = ["src/canary/examples"]
+exclude_dirs = ["src/canary/docs/examples", "src/canary/docs/lib/python/sphinxext"]

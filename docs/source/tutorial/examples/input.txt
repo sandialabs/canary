@@ -1,1 +1,0 @@
-hello from canary data processing example

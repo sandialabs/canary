@@ -14,7 +14,7 @@ from canary_hpc.conductor import CanaryHPCConductor
 
 def test_repo_bfilter(tmpdir):
     root = Path(importlib.resources.files("canary"))
-    examples = root / "examples"
+    examples = root / "docs/examples"
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
             config.options.hpc_backend = "shell"

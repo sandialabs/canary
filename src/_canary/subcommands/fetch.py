@@ -31,7 +31,7 @@ class Fetch(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.what == "examples":
-            path = str(ir.files("canary").joinpath("examples"))
+            path = str(ir.files("canary").joinpath("docs/examples"))
             if os.path.exists("examples"):
                 raise ValueError(f"A folder named 'examples' already exists at {os.getcwd()}")
             force_copy(path, os.path.basename(path))

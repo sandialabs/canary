@@ -24,7 +24,6 @@ partition.p.*
 canary.cfg
 .canary.*
 scripts/sbatch
-docs/source/commands.rst
 
 src/*.egg-info/
 
@@ -73,7 +72,6 @@ DOCUMENT_PLAN_REVISED.md
 IMPLEMENTATION_CHECKLIST.md
 _claude-docs/
 architectural_messaging_guide.md
-canary/
 canary_cmake_feedback.md
 canary_synopsis.md
 capabilities_gaps_analysis.md
