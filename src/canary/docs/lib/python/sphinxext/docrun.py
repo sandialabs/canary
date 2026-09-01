@@ -31,7 +31,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 from importlib import resources
 from pathlib import Path
 from string import Template
@@ -630,16 +629,6 @@ def _options_record(
     }
 
 
-def _execute(
-    invocation: Invocation, *, returncode: list[int], anyreturncode: bool
-) -> ExecutionRecord:
-    """Execute an invocation in a fresh temporary directory."""
-    with tempfile.TemporaryDirectory(prefix="sphinx-docrun-") as tmp:
-        return _execute_in_directory(
-            invocation, temp_root=Path(tmp), returncode=returncode, anyreturncode=anyreturncode
-        )
-
-
 def _is_builtin_command(command: str) -> bool:
     """Return True if command is a built-in doc-run command."""
     return command.strip() in BUILTIN_COMMANDS
@@ -743,11 +732,6 @@ def _write_cache(path: Path, record: ExecutionRecord) -> None:
         json.dump(record.to_json(), fh, indent=2, sort_keys=True)
         fh.write("\n")
     os.replace(tmp, path)
-
-
-def _cache_file(srcdir: str | os.PathLike[str], docname: str, content_hash: str) -> Path:
-    """Return the cache path for a document-local invocation hash."""
-    return Path(srcdir) / ".cache" / docname / f"{content_hash}.json"
 
 
 def _record_is_usable(
@@ -929,12 +913,13 @@ class DocRunCache:
         self,
         *,
         invocation: Invocation,
-        cache_file: Path,
+        workspace: Path,
         nocache: bool,
         returncode: list[int],
         anyreturncode: bool,
     ) -> ExecutionRecord:
         """Return a usable cached record or execute and cache a fresh record."""
+        cache_file = workspace / "cache.json"
         key = (str(cache_file), invocation.content_hash)
 
         if not nocache and key in self.records:
@@ -966,7 +951,11 @@ class DocRunCache:
                     "Ignoring unsuccessful doc-run cache file %s; executing fresh", cache_file
                 )
 
-        record = _execute(invocation, returncode=returncode, anyreturncode=anyreturncode)
+        # Calculate workspace path: <build-root>/docrun/<relpath>/<basename>/<hash>
+        workspace.mkdir(parents=True, exist_ok=True)
+        record = _execute_in_directory(
+            invocation, temp_root=workspace, returncode=returncode, anyreturncode=anyreturncode
+        )
         _write_cache(cache_file, record)
         self.records[key] = record
         return record
@@ -1292,7 +1281,12 @@ def run_doc_commands(app: Any, doctree: nodes.document) -> None:
             hash_salt=invocation.hash_salt,
         )
 
-        cache_path = _cache_file(app.env.srcdir, node["docname"], node["hash"])
+        prefix = Path(app.outdir).parent
+        doc_path = Path(app.env.docname).with_suffix(".rst")
+        relpath = doc_path.parent
+        basename = doc_path.stem
+        path = prefix / "docrun" / relpath / basename / invocation.content_hash
+        path.mkdir(parents=True, exist_ok=True)
 
         try:
             if _skip_execution_enabled(app, node):
@@ -1302,7 +1296,7 @@ def run_doc_commands(app: Any, doctree: nodes.document) -> None:
             else:
                 record = cache.get(
                     invocation=expanded_invocation,
-                    cache_file=cache_path,
+                    workspace=path,
                     nocache=bool(node["nocache"]),
                     returncode=node["returncode"],
                     anyreturncode=bool(node["anyreturncode"]),
@@ -1312,9 +1306,7 @@ def run_doc_commands(app: Any, doctree: nodes.document) -> None:
             continue
 
         if reason := _failure_reason(node, record):
-            message = (
-                f"{reason}; stdout={record.stdout!r}; stderr={record.stderr!r}; cache={cache_path}"
-            )
+            message = f"{reason}; stdout={record.stdout!r}; stderr={record.stderr!r}; cache={path}/cache.json"
             node.replace_self(_error_node(doctree, node, message))
             continue
 
