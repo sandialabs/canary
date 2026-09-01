@@ -225,22 +225,13 @@ def make_api_docs(prefix: str):
         no_index_modules=["_canary.resource_pool.rpool", "_canary.subcommands.status"],
     )
 
-    maker.add_package(
-        "canary",
-        canary,
-        skip_dirs=["examples"],
-        skip_modules=["directives"],
-    )
+    maker.add_package("canary", canary, skip_dirs=["examples"], skip_modules=["directives"])
 
     maker.add_package(
-        "canary_cmake",
-        os.path.join(canary, "../canary_cmake"),
-        skip_dirs=["validators", "tests"],
+        "canary_cmake", os.path.join(canary, "../canary_cmake"), skip_dirs=["validators", "tests"]
     )
 
-    maker.add_package(
-        "canary_amd", os.path.join(canary, "../canary_amd"), skip_dirs=["tests"]
-    )
+    maker.add_package("canary_amd", os.path.join(canary, "../canary_amd"), skip_dirs=["tests"])
 
     maker.add_package(
         "canary_dist",

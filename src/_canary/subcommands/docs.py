@@ -41,6 +41,7 @@ class Docs(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         if args.docs_action == "build":
+            what = args.what or "html"
             docs = Path(str(resources.files("canary").joinpath("docs")))
             dest = Path(args.dest or "./build")
             if args.wipe:
@@ -56,13 +57,13 @@ class Docs(CanarySubcommand):
                 "-m",
                 "sphinx",
                 "-b",
-                args.what,
+                what,
                 "--keep-going",
                 "-v",
                 "-d",
                 str(dest / "doctrees"),
                 str(docs),
-                str(dest / args.what),
+                str(dest / what),
             ]
             os.execvp(sys.executable, argv)  # nosec B606
         elif args.docs_action == "open":
