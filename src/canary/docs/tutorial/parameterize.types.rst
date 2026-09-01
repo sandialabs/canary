@@ -70,9 +70,8 @@ Example
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
 .. doc-run::
-    :before_script: [link-examples]
-    :script: [canary describe ./centered_space/centered_space.pyt]
-    :cwd: /examples
+    :before_script: [{"args": "cp -R $examples ."}]
+    :script: [{"args": "canary describe ./centered_space/centered_space.pyt", "cwd": "examples"}]
 
 .. _tutorial-random-parameter-space:
 
@@ -103,6 +102,5 @@ Example
 will produce four test cases, each with ``a`` and ``b`` being chosen randomly in the range ``0:5`` and ``6:10``, respectively:
 
 .. doc-run::
-    :before_script: [link-examples]
-    :script: [canary describe ./random_space/random_space.pyt]
-    :cwd: /examples
+    :before_script: [{"args": "cp -R $examples ."}]
+    :script: [{"args": "canary describe ./random_space/random_space.pyt", "cwd": "examples"}]

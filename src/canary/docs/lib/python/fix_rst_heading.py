@@ -130,8 +130,6 @@ def fix_roots(roots: list[Path], check: bool = False) -> None:
             total_files += 1
             total_changes += changes
             action = "would fix" if check else "fixed"
-            print(f"{action}: {file} ({changes} adornment line changes)")
     if total_changes and check:
         raise ValueError(f"{total_changes} heading adornment changes needed in {total_files} files")
-    print(f"Done. {total_changes} heading adornment changes in {total_files} files.")
     return

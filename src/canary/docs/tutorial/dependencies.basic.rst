@@ -18,6 +18,5 @@ Example
 ``depends_on_a`` will not run until after ``a`` runs:
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :cwd: /examples
-    :script: [canary run ./depends_on/basic]
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./depends_on/basic", "cwd": "examples"}]

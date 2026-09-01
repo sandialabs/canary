@@ -69,16 +69,12 @@ Examples
 * Run the canary example suite in 4 batches
 
   .. doc-run::
-    :before_script: [copy-examples]
-    :script: ["canary run --workers=1 -b scheduler=shell -b spec=count:4 ."]
-    :cwd: /examples
-    :returncode: [14]
+    :before_script: [{"args": "cp -R $examples ."}]
+    :script: [{"args": "canary run --workers=1 -b scheduler=shell -b spec=count:4 .", "cwd": "examples", "returns": 14}]
 
 
 * Run the canary example suite in 4 batches, running tests in serial in each batch
 
   .. doc-run::
-    :before_script: [copy-examples]
-    :script: ["canary run --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 ."]
-    :cwd: /examples
-    :returncode: [14]
+    :before_script: [{"args": "cp -R $examples ."}]
+    :script: [{"args": "canary run --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .", "cwd": "examples", "returns": 14}]

@@ -17,10 +17,8 @@ scheme on the command line:
 For example, to run the example suite using the ``shell`` backend in 4 batches:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: ['canary run -b backend=shell -b spec=count:4 .']
-   :cwd: /examples
-   :anyreturncode:
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run -b backend=shell -b spec=count:4 . || true", "cwd": "examples"}]
 
 .. note::
 

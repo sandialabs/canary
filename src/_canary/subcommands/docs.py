@@ -15,7 +15,6 @@ from ..hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -34,8 +33,12 @@ class Docs(CanarySubcommand):
         sp.add_parser("open")
         p = sp.add_parser("build")
         p.add_argument(
-            "-w", "--wipe", action="store_true", help="Remove docs cache before building"
+            "-w",
+            "--wipe",
+            action="store_true",
+            help="Remove existing build directory and generated sources before building",
         )
+        p.add_argument("--no-cache", action="store_true", help="Remove docs cache before building")
         p.add_argument("-d", "--dest", help="Build docs in this directory [default: ./build]")
         p.add_argument("what", nargs="?", help="What to build [default: html]")
 
@@ -46,12 +49,14 @@ class Docs(CanarySubcommand):
             dest = Path(args.dest or "./build")
             if args.wipe:
                 if dest.exists():
-                    logger.info(f"Remving {dest}")
+                    logger.info(f"Removing {dest}")
                     shutil.rmtree(dest)
-                for p in ("api-docs", "user/commands", "user/directives", ".cache"):
+                for p in ("api-docs", "user/commands", "user/directives"):
                     if (docs / p).exists():
-                        logger.info(f"Remving {docs / p}")
+                        logger.info(f"Removing {docs / p}")
                         shutil.rmtree(docs / p)
+            if args.no_cache:
+                os.environ["DOCRUN_REFRESH_CACHE"] = "1"
             argv = [
                 sys.executable,
                 "-m",

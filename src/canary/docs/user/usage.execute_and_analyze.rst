@@ -29,16 +29,14 @@ Consider the directives section of the test file ``examples/execute_and_analyze/
 The dependency graph for this test is
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe execute_and_analyze/execute_and_analyze.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe execute_and_analyze/execute_and_analyze.pyt", "cwd": "examples"}]
 
 As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_analyze.a=1``, ``execute_and_analyze.a=2``, and ``execute_and_analyze.a=3``.  When the test is run, these "children" tests are run first and then the base case:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: ["canary run ./execute_and_analyze"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./execute_and_analyze", "cwd": "examples"}]
 
 Test execution phases
 ---------------------
@@ -99,7 +97,5 @@ Run only the analysis section of a test
 After the test has been run, the analysis sections can be run without rerunning the (potentially expensive) test portion, navigate the test's results directory and execute ``canary run``:
 
 .. doc-run::
-   :before_script: [copy-examples, "canary run ./execute_and_analyze"]
-   :script: ["canary -C $(canary location execute_and_analyze) run ."]
-   :shell:
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./execute_and_analyze", "cwd": "examples"}]
+   :script: [{"args": "canary -C $(canary location execute_and_analyze) run .", "cwd": "examples"}]

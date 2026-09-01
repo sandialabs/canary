@@ -16,7 +16,9 @@
 #
 import os
 import re
+import shutil
 import sys
+from importlib import resources
 from pathlib import Path
 
 import canary
@@ -114,6 +116,9 @@ html_theme_options = {
 }
 
 # -- Extension configuration -------------------------------------------------
+docrun_command_substitutions = {
+    "examples": str(resources.files("canary").joinpath("docs/examples"))
+}
 
 # -- Options for todo extension ----------------------------------------------
 
@@ -287,7 +292,16 @@ def ensure_rst_headings() -> None:
     fix_roots([Path(docs_source_dir)])
 
 
+def ensure_clean_examples() -> None:
+    root = Path(docs_source_dir) / "examples"
+    for dirname, dirs, _ in os.walk(root):
+        if Path(dirname).name in (".canary", "TestResults"):
+            shutil.rmtree(dirname)
+            del dirs[:]
+
+
 # Ensure generated documentation is available
+ensure_clean_examples()
 ensure_command_reference()
 ensure_pyt_directives()
 ensure_api_docs()

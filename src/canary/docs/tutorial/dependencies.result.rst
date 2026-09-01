@@ -20,12 +20,9 @@ Run a test case only when its dependency fails:
 ``depends_on_willfail`` will run only if the result of ``willfail`` is ``failed``:
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: [canary run ./depends_on/result]
-    :cwd: /examples
-    :returncode: [8]
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./depends_on/result", "returns": 8, "cwd": "examples"}]
 
 .. note::
 
    To execute a test regardless of the results of its dependencies, use ``result="*"``.
-

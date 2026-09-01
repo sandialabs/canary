@@ -12,10 +12,8 @@ Canary can generate `JUnit XML files <https://www.ibm.com/docs/en/developer-for-
 A junit report of a test session can be generated after the session has completed:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run ./basic, canary report junit -o junit.xml, cat junit.xml]
-   :ellipsis: [0, null, null]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./basic", "cwd": "examples", "ellipsis": 0}, {"args": "canary report junit -o junit.xml", "cwd": "examples"}, {"args": "cat junit.xml", "cwd": "examples"}]
 
 JUnit spec
 ----------

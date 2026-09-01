@@ -15,8 +15,7 @@ A single test file can generate multiple parameter-specific test cases. Optional
 In this example, the base case that depends on test cases having ``a=1``, ``a=2``, and ``a=3``, is automatically generated:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: [canary describe execute_and_analyze/execute_and_analyze.pyt]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe execute_and_analyze/execute_and_analyze.pyt", "cwd": "examples"}]
 
 The base will not run until each parameterized case is run.

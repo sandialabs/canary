@@ -13,6 +13,5 @@ Basic usage
 -----------
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe execute_and_analyze/execute_and_analyze.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe execute_and_analyze/execute_and_analyze.pyt", "cwd": "examples"}]

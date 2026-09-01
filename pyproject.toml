@@ -233,12 +233,11 @@ ignore_errors = true
 exclude = [
     "src/canary/docs/examples",
     "src/canary/docs/conf.py",
+    "src/canary/docs/lib/python/sphinxext",
     "src/_canary/third_party/distro.py",
-    "src/_canary/third_party/programoutput/*",
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
-    "src/_canary/third_party/imagesvg/*",
     "src/_canary/config/schemas.py",
     "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/testspec.py",  # this file raises a bug in ty

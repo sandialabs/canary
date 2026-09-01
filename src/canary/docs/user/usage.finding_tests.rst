@@ -14,9 +14,8 @@ Basic usage
 -----------
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary find -r ."]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary find -r .", "cwd": "examples"}]
 
 
 Filter by keyword
@@ -25,16 +24,14 @@ Filter by keyword
 The ``-k`` option will filter tests by keyword.  Eg., find tests with the ``basic`` keyword:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary find -k basic -r ."]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary find -k basic -r .", "cwd": "examples"}]
 
 The ``-k`` option can take a python expression, eg
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary find -k 'basic and second' -r ."]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary find -k 'basic and second' -r .", "cwd": "examples"}]
 
 
 Print a test DAG
@@ -43,15 +40,13 @@ Print a test DAG
 The ``-g`` option will print a graph of test dependencies:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary find -g -r ."]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary find -g -r .", "cwd": "examples"}]
 
 
 Show available keywords
 -----------------------
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary find --keywords -r ."]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary find --keywords -r .", "cwd": "examples"}]

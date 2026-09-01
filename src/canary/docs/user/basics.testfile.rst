@@ -91,6 +91,5 @@ A complete example
 This test file would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``, as seen with the ``canary describe`` command:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe parameterize/parameterize1.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe parameterize/parameterize1.pyt", "cwd": "examples"}]

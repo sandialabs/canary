@@ -11,7 +11,7 @@ It is often useful to know the location a test's execution directory.  The :ref:
 
 
 .. doc-run::
-   :script: ["canary location -h"]
+   :script: [{"args": "canary location -h"}]
 
 For example to move to the test execution directory, simply:
 

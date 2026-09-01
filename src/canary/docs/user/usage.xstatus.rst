@@ -13,9 +13,8 @@ The :func:`canary.directives.xdiff` and :func:`canary.directives.xfail` directiv
     :language: python
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: [canary run ./xstatus/xdiff.pyt]
-    :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./xstatus/xdiff.pyt", "cwd": "examples"}]
 
 As you can see, the test status was set to :ref:`stat-xdiff` which is considered a successful outcome.
 
@@ -25,10 +24,8 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
     :language: python
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: [canary run ./xstatus/xfail-fail.pyt]
-    :cwd: /examples
-    :anyreturncode:
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./xstatus/xfail-fail.pyt", "returns": 8, "cwd": "examples"}]
 
 Specifying a nonzero exit code
 ------------------------------
@@ -39,6 +36,5 @@ If a nonzero exit code is expected, use ``canary.directives.xfail(code)``, where
     :language: python
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: [canary run ./xstatus/xfail-code.pyt]
-    :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./xstatus/xfail-code.pyt", "returns": 0, "cwd": "examples"}]

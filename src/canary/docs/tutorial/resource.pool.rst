@@ -16,7 +16,7 @@ Compute resources available to ``canary`` are defined in the ``resource_pool`` :
 To see the current resource pool, execute:
 
 .. doc-run::
-   :script: [canary config show resource_pool]
+   :script: [{"args": "canary config show resource_pool"}]
 
 ----------------------
 

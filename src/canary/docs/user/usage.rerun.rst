@@ -18,31 +18,23 @@ Examples
 --------
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: ["canary run ./status"]
-   :cwd: /examples
-   :returncode: [14]
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./status", "returns": 14, "cwd": "examples"}]
 
 
 Rerun all failed tests
 ~~~~~~~~~~~~~~~~~~~~~~
 
 .. doc-run::
-   :before_script: [copy-examples, "canary run ./status || true"]
-   :script: ["canary run -k 'not success'"]
-   :cwd: /examples
-   :returncode: [14]
-   :shell:
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./status || true", "cwd": "examples"}]
+   :script: [{"args": "canary run -k 'not success'", "returns": 14, "cwd": "examples"}]
 
 Rerun only the diffed tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. doc-run::
-   :before_script: [copy-examples, "canary run ./status || true"]
-   :script: ["canary run -k diff"]
-   :cwd: /examples
-   :returncode: [2]
-   :shell:
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./status || true", "cwd": "examples"}]
+   :script: [{"args": "canary run -k diff", "returns": 2, "cwd": "examples"}]
 
 Rerun tests inside the view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -50,8 +42,5 @@ Rerun tests inside the view
 Optionally, a subdirectory of the workspace view argument can be passed to ``canary run``, causing ``canary`` to rerun only those tests that are in ``PATH`` and its children:
 
 .. doc-run::
-   :before_script: [copy-examples, "canary run ./status || true"]
-   :script: ["canary run $(canary location pass)"]
-   :cwd: /examples
-   :returncode: [0]
-   :shell:
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./status || true", "cwd": "examples"}]
+   :script: [{"args": "canary run $(canary location pass)", "cwd": "examples"}]

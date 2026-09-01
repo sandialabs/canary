@@ -28,9 +28,8 @@ Running the test
 From the ``examples`` directory, run only tests with the ``second`` keyword:
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: canary run -k second ./basic
-    :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run -k second ./basic", "cwd": "examples"}]
 
 Here, ``-k`` filters the session to tests matching the given keyword expression.
 
@@ -41,9 +40,8 @@ When a test runs, its captured console output is written to ``canary-out.txt`` i
 working directory. The :ref:`canary log <canary-log>` command locates and prints that file:
 
 .. doc-run::
-    :before_script: [copy-examples, canary run -k second ./basic]
-    :script: [canary log second]
-    :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run -k second ./basic", "cwd": "examples"}]
+   :script: [{"args": "canary log second", "cwd": "examples"}]
 
 Contents of ``add.py``
 ----------------------

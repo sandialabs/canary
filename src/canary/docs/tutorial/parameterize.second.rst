@@ -13,8 +13,8 @@ A test can define multiple parameters by including multiple names and a correspo
     :language: python
 
 .. doc-run::
-   :before_script: ["cp $examples/parameterize/parameterize2.pyt ."]
-   :script: ["canary describe parameterize2.pyt"]
+   :before_script: [{"args": "cp $examples/parameterize/parameterize2.pyt ."}]
+   :script: [{"args": "canary describe parameterize2.pyt"}]
 
 .. note::
 

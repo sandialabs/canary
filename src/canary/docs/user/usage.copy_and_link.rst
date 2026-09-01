@@ -13,7 +13,5 @@ Resources needed by tests can be copied and linked from their source locations t
     :language: python
 
 .. doc-run::
-   :before_script: ["ln -s $examples/copy_and_link ."]
-   :script: ["canary run ./copy_and_link/", "ls -l $(canary location copy_and_link)/*.txt"]
-   :ellipsis: [0, null]
-
+   :before_script: [{"args": "cp -R $examples/copy_and_link ."}]
+   :script: [{"args": "canary run ./copy_and_link/", "ellipsis": 0}, {"args": "ls -l $(canary location copy_and_link)/*.txt"}]

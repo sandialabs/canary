@@ -21,6 +21,5 @@ The test ``lunch`` depends on ``breakfast``, but only when ``dish="spam"``:
     :language: python
 
 .. doc-run::
-    :before_script: [copy-examples]
-    :script: [canary run ./depends_on/parameter]
-    :cwd: /examples
+    :before_script: [{"args": "cp -R $examples ."}]
+    :script: [{"args": "canary run ./depends_on/parameter", "cwd": "examples"}]

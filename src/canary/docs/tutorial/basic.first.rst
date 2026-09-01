@@ -34,9 +34,8 @@ Running the test
 To run the test, navigate to ``examples/basic/first`` and execute:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run .]
-   :cwd: /examples/basic/first
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run .", "cwd": "examples/basic/first"}]
 
 A test is considered successful if it exits with return code ``0``. See :ref:`basics-status` for
 more details on statuses and failure modes.
@@ -49,22 +48,19 @@ Tests run inside a per-session *workspace* (stored under ``.canary``). After exe
 the source tree used to generate the session:
 
 .. doc-run::
-   :before_script: [copy-examples, canary run .]
-   :script: [canary tree TestResults]
-   :cwd: /examples/basic/first
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run .", "cwd": "examples/basic/first"}]
+   :script: [{"args": "canary tree ./TestResults/", "cwd": "examples/basic/first"}]
 
 To see status information for the session, run :ref:`canary status <canary-status>` from within
 the session directory:
 
 .. doc-run::
-   :before_script: [copy-examples, canary run .]
-   :script: [canary status]
-   :cwd: /examples/basic/first
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run .", "cwd": "examples/basic/first"}]
+   :script: [{"args": "canary status", "cwd": "examples/basic/first"}]
 
 By default, ``canary status`` prints details only for non-passing tests. To show all tests,
 including passing ones, use ``-rA``:
 
 .. doc-run::
-   :before_script: [copy-examples, canary run .]
-   :script: [canary status -rA]
-   :cwd: /examples/basic/first
+   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run .", "cwd": "examples/basic/first"}]
+   :script: [{"args": "canary status -rA", "cwd": "examples/basic/first"}]

@@ -13,9 +13,8 @@ Basic usage
 -----------
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run ./basic]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./basic", "cwd": "examples"}]
 
 Filter tests to run by keyword
 ------------------------------
@@ -27,9 +26,8 @@ Filter tests to run by keyword
 where ``KEYWORD_EXPR`` is a Python expression such as ``-k 'fast and regression'``.  For example
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run -k first ./basic]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run -k first ./basic", "cwd": "examples"}]
 
 Limit the number of concurrent tests
 ------------------------------------
@@ -41,9 +39,8 @@ Limit the number of concurrent tests
 where ``N`` is a number of workers.  For example,
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run --workers=1 ./basic]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run --workers=1 ./basic", "cwd": "examples"}]
 
 Set a timeout on the test session
 ---------------------------------
@@ -55,10 +52,8 @@ Set a timeout on the test session
 where ``T`` is a duration in Go's duration format (``40s,``, ``1h20m``, ``2h``, ``4h30m30s``, etc.)  For example,
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run --timeout session=1m ./basic]
-   :cwd: /examples
-   :returncode: [7]
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run --timeout session=1m ./basic", "returns": 7, "cwd": "examples"}]
 
 Run specific test files
 -----------------------
@@ -69,17 +64,14 @@ Run a file directly
 Test files can be run directly by passing their paths to ``canary run``
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run ./basic/first/first.pyt, ls -F TestResults]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./basic/first/first.pyt", "cwd": "examples"}]
 
 If a path separator is replaced with a colon ``:``, the path is interpreted as ``root:path``.  ie, path segments after the ``:`` are used as the relative path to the test execution directory:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: ['canary run .:/basic/first/first.pyt', 'ls -F TestResults']
-   :cwd: /examples
-   :returncode: [3, 0]
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run .:basic/first/first.pyt", "cwd": "examples"}, {"args": "ls -F TestResults", "cwd": "examples"}]
 
 Running tests from a file
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,9 +91,8 @@ Select tests can be executed by specifying their paths in a ``json`` or ``yaml``
 where ``<root>`` is a parent directory of the tests and ``<path_i>`` are the file paths relative to ``<root>``.  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  Consider, for example, the examples directory tree:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: [canary tree --exclude-results .]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary tree --exclude-results .", "cwd": "examples"}]
 
 To run only ``centered_space/centered_space.pyt`` and ``parameterize/parameterize2.pyt``, write the following to ``tests.json``
 
@@ -111,6 +102,5 @@ To run only ``centered_space/centered_space.pyt`` and ``parameterize/parameteriz
 and pass it to ``canary run``:
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: [canary run -f tests.json]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run -f tests.json", "cwd": "examples"}]

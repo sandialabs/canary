@@ -13,8 +13,5 @@ Tests can be enabled and/or disabled using the :ref:`enable<directive-enable>` d
     :language: python
 
 .. doc-run::
-   :before_script: [copy-examples]
-   :script: ["canary run ./enable", "canary run -o enable ./enable"]
-   :cwd: /examples
-   :returncode: [7, 0]
-
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run ./enable", "returns": 7, "cwd": "examples"}, {"args": "canary run -o enable ./enable", "cwd": "examples"}]

@@ -58,9 +58,8 @@ The ``list_parameter_space`` reads lists of parameter values as defined by the u
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe parameterize/parameterize1.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe parameterize/parameterize1.pyt", "cwd": "examples"}]
 
 Multiple parameter names and their values can be defined:
 
@@ -70,9 +69,8 @@ Multiple parameter names and their values can be defined:
 which would result in the following two tests
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe parameterize/parameterize2.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe parameterize/parameterize2.pyt", "cwd": "examples"}]
 
 .. _centered-parameter-space:
 
@@ -105,9 +103,8 @@ Example
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe ./centered_space/centered_space.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe ./centered_space/centered_space.pyt", "cwd": "examples"}]
 
 .. _random-parameter-space:
 
@@ -135,9 +132,8 @@ Example
 will produce four test cases, each with ``a`` and ``b`` being chosen randomly in the range ``0:5`` and ``6:10``, respectively:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe ./random_space/random_space.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe ./random_space/random_space.pyt", "cwd": "examples"}]
 
 Combining multiple parameter sets
 ---------------------------------
@@ -148,9 +144,8 @@ If multiple ``parameterize`` directives are issued in the same test file, the ca
     :language: python
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe parameterize/parameterize3.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe ./parameterize/parameterize3.pyt", "cwd": "examples"}]
 
 Similarly,
 
@@ -160,6 +155,5 @@ Similarly,
 results in the following 6 test cases:
 
 .. doc-run::
-   :before_script: [link-examples]
-   :script: ["canary describe parameterize/parameterize4.pyt"]
-   :cwd: /examples
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary describe ./parameterize/parameterize4.pyt", "cwd": "examples"}]
