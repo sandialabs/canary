@@ -1,0 +1,20 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import sys
+
+import canary
+import canary_pyt
+
+canary_pyt.directives.parameterize("a", (1, 4))
+
+
+def test():
+    self = canary.get_instance()
+    print(f"{self.parameters.a}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(test())

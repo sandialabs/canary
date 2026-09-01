@@ -1,0 +1,45 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "cmake",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_cmake extension provides CMake and CTest integration. It can generate Canary jobs from CTestTestfile.cmake files and provides CMake helper functions for generating .pyt tests.",
+      "file_patterns": [
+        "CTestTestfile.cmake"
+      ],
+      "generator": "CTestTestGenerator"
+    },
+    "ctest": {
+      "summary": "CTest tests are discovered by running ctest --show-only=json-v1 and transforming CTest test metadata into Canary JobSpecIR objects.",
+      "supported_properties": {
+        "ENVIRONMENT": "Converted into job environment variables.",
+        "ENVIRONMENT_MODIFICATION": "Converted into environment modifications.",
+        "RESOURCE_GROUPS": "Converted into resource group metadata and resource parameters.",
+        "DEPENDS": "Converted into dependency selectors.",
+        "DISABLED": "Converted into a masked job.",
+        "FIXTURES_SETUP": "Used to resolve fixture dependencies.",
+        "FIXTURES_REQUIRED": "Used to resolve fixture dependencies.",
+        "FIXTURES_CLEANUP": "Used to resolve fixture cleanup dependencies.",
+        "LABELS": "Converted into keywords.",
+        "PROCESSORS": "Converted into cpus parameter.",
+        "RUN_SERIAL": "Converted into exclusive execution.",
+        "TIMEOUT": "Converted into job timeout.",
+        "WILL_FAIL": "Inverts success/failure handling."
+      },
+      "post_processing": {
+        "finish_ctest": "Applies pass, fail, skip, skip return code, and WILL_FAIL logic after job execution.",
+        "setup_ctest": "Sets CTEST_RESOURCE_GROUP_* variables for jobs with resource groups."
+      }
+    },
+    "cmake_module": {
+      "file": "Canary.cmake",
+      "functions": {
+        "add_canary_test": "Generate a .pyt test from a CMake command or script.",
+        "add_parallel_canary_test": "Generate a parameterized MPI-style .pyt test.",
+        "add_canary_test_options": "Declare Canary on-options from CMake.",
+        "add_canary_test_target": "Add a canary custom target.",
+        "write_canary_config": "Write canary.yaml with build and compiler metadata."
+      }
+    }
+  }
+}

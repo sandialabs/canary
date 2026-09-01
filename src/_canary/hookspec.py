@@ -10,8 +10,6 @@ from typing import Type
 
 import pluggy
 
-from .plugins.types import CanarySubcommand
-
 if TYPE_CHECKING:
     from .collect import Collector
     from .config.argparsing import Parser
@@ -25,6 +23,7 @@ if TYPE_CHECKING:
     from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
+    from .subcommands.base import CanarySubcommand
     from .workspace import Session
 
 
@@ -116,7 +115,7 @@ def canary_cmdline_modifyargs(parser: "Parser", args: argparse.Namespace) -> Non
 
 
 @hookspec
-def canary_subcommand() -> CanarySubcommand:
+def canary_subcommand() -> "CanarySubcommand":
     """DEPRECATED: use canary_addcommand"""
     raise NotImplementedError
 
@@ -137,6 +136,66 @@ def canary_configure(config: "CanaryConfig") -> None:
     Args:
       config: The canary config object.
 
+    """
+
+
+# -------------------------------------------------------------------------
+# Query data hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_capabilities() -> dict[str, Any] | None:
+    """Return a Canary capabilities document contributed by this plugin.
+
+    The returned object should match one of the query capability schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary capabilities are loaded from package data. Extension plugins
+    should return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "namespace": "pyt",
+          "capabilities": {
+            "overview": {...},
+            ...
+          }
+        }
+
+    The extension namespace is inserted under ``capabilities.ext.<extension>``
+    by ``canary query``.
+
+    Return ``None`` if the plugin does not contribute capabilities.
+    """
+
+
+@hookspec
+def canary_skills() -> dict[str, Any] | None:
+    """Return a Canary skills document contributed by this plugin.
+
+    The returned object should match one of the query skill schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary skills are loaded from package data. Extension plugins should
+    return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "namespace": "pyt",
+          "skills": {
+            "canary-pyt-authoring": {
+              "name": "canary-pyt-authoring",
+              "description": "...",
+              "body": "..."
+            }
+          }
+        }
+
+    The extension namespace is inserted under ``skills.ext.<extension>`` by
+    ``canary query``.
+
+    Return ``None`` if the plugin does not contribute skills.
     """
 
 

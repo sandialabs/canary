@@ -1,0 +1,53 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "vvtest",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_vvtest extension provides a generator for VVTest .vvt files.",
+      "file_patterns": [
+        "*.vvt"
+      ],
+      "generator": "VVTestSpecGenerator",
+      "model": "VVTestModel",
+      "loader": "VVTestLoader",
+      "adapter": "VVTestAdapter",
+      "emitter": "VVTestLockEmitter"
+    },
+    "directives": {
+      "summary": "VVTest directives are read from leading #VVT: comment lines before the first non-comment code token.",
+      "syntax": {
+        "directive": "#VVT: directive_name (options) : arguments",
+        "continuation": "#VVT:: additional arguments",
+        "include": "#VVT: include : file"
+      },
+      "supported": {
+        "keywords": "Attach keywords.",
+        "copy": "Copy files into the workspace.",
+        "link": "Link files into the workspace.",
+        "sources": "Declare source files without staging.",
+        "parameterize": "Generate parameterized job variants.",
+        "analyze": "Create composite analysis jobs.",
+        "timeout": "Set timeout.",
+        "filter_warnings": "Suppress warnings during scan.",
+        "skipif": "Conditionally skip.",
+        "baseline": "Declare rebaseline behavior.",
+        "enable": "Enable or disable.",
+        "name": "Set generated test name.",
+        "testname": "Set generated test name.",
+        "depends_on": "Declare dependencies."
+      }
+    },
+    "compatibility": {
+      "vvtest_util": "Before running .vvt jobs, Canary writes vvtest_util.py into the job workspace with compatibility attributes such as NAME, TESTID, PARAM_DICT, DEPDIRS, RESOURCE_np, and RESOURCE_ndevice.",
+      "stdout": "The canary_vvtest plugin sets stdout to execute.log.",
+      "parameter_aliases": {
+        "np": "Mapped to cpus meta-parameter.",
+        "ndevice": "Mapped to gpus meta-parameter.",
+        "nnode": "Mapped to nodes meta-parameter."
+      }
+    },
+    "cdash": {
+      "name_mapping": "The plugin provides canary_cdash_name for .vvt jobs so CDash names resemble VVTest-style names."
+    }
+  }
+}

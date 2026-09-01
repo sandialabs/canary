@@ -41,7 +41,7 @@ dependencies = [
     "pyyaml",
     "schema",
     "rich",
-    "typing_extensions; python_version < '3.11'",
+    "typing_extensions",
 ]
 
 optional-dependencies.dev = [
@@ -56,11 +56,7 @@ optional-dependencies.dev = [
     "xmlschema",
 ]
 # backward compatible options that are now either required or builtin to hpc-connect
-optional-dependencies.flux = [  ]
-optional-dependencies.pbs = [  ]
-optional-dependencies.psutil = [  ]
 optional-dependencies.requests = [ "requests" ]
-optional-dependencies.slurm = [  ]
 urls.Documentation = "https://canary-wm.readthedocs.io/en/production/"
 urls.Issues = "https://github.com/sandialabs/canary/issues"
 urls.Repository = "https://github.com/sandialabs/canary"
@@ -68,25 +64,30 @@ scripts.canary = "canary:console_main"
 scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
+canary_amd = "canary_amd"
 canary_cdash = "canary_cdash"
 canary_cmake = "canary_cmake"
 canary_dist = "canary_dist"
 canary_flux = "canary_flux"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
-canary_amd = "canary_amd"
 canary_nvidia = "canary_nvidia"
-canary_vvtest = "canary_vvtest"
 canary_pyt = "canary_pyt"
+canary_vvtest = "canary_vvtest"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.package-data]
-canary = ["py.typed", "examples/**", "data/*.json", "skills/*/SKILL.md"]
 _canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg"]
-canary_cdash = ["validators/*.xsd"]
-canary_cmake = ["Canary.cmake", "tests/**/CTestTestfile.cmake"]
+canary = ["py.typed", "docs/**", "data/*.json"]
+canary_cdash = ["data/*.json", "validators/*.xsd"]
+canary_cmake = ["Canary.cmake", "data/*.json", "tests/**/CTestTestfile.cmake"]
+canary_dist = ["data/*.json"]
+canary_gitlab = ["data/*.json"]
+canary_hpc = ["data/*.json"]
+canary_pyt = ["data/*.json"]
+canary_vvtest = ["data/*.json"]
 
 [tool.ruff]
 target-version = "py311"
@@ -230,13 +231,13 @@ ignore_errors = true
 
 [tool.ty.src]
 exclude = [
-    "src/canary/examples",
+    "src/canary/docs/examples",
+    "src/canary/docs/conf.py",
+    "src/canary/docs/lib/python/sphinxext",
     "src/_canary/third_party/distro.py",
-    "src/_canary/third_party/programoutput/*",
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
-    "src/_canary/third_party/imagesvg/*",
     "src/_canary/config/schemas.py",
     "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/testspec.py",  # this file raises a bug in ty
@@ -266,4 +267,4 @@ skips = [
     "B603",
     "B607", # start_process_with_partial_path"
 ]
-exclude_dirs = ["src/canary/examples"]
+exclude_dirs = ["src/canary/docs/examples", "src/canary/docs/lib/python/sphinxext"]

@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "cmake",
+  "skills": {
+    "canary-cmake-ctest": {
+      "name": "canary-cmake-ctest",
+      "description": "Use this skill when integrating Canary with CMake or CTest.",
+      "body": "# Canary CMake and CTest integration\n\n## First actions\n\n```console\ncanary query -c ext.cmake.overview\ncanary query -c ext.cmake.ctest\ncanary query -c ext.cmake.cmake_module\n```\n\n## CTest integration\n\nCanary can read `CTestTestfile.cmake` through the CTest JSON interface and create Canary specs.\n\nUseful flow:\n\n```console\ncanary run path/to/build/tree\ncanary status\ncanary log JOBID\n```\n\n## CMake helper module\n\nThe `Canary.cmake` module can generate `.pyt` wrappers from CMake:\n\n- `add_canary_test`\n- `add_parallel_canary_test`\n- `add_canary_test_options`\n- `add_canary_test_target`\n- `write_canary_config`\n\n## Common issues\n\n- CMake must be new enough to support `ctest --show-only=json-v1`.\n- CTest resource groups require a compatible Canary resource pool.\n- Some CTest properties are intentionally warned as unsupported.\n"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "cdash",
+  "skills": {
+    "canary-cdash-reporting": {
+      "name": "canary-cdash-reporting",
+      "description": "Use this skill when generating or uploading Canary results to CDash.",
+      "body": "# Canary CDash reporting\n\n## First actions\n\n```console\ncanary query -c ext.cdash.overview\ncanary query -c ext.cdash.xml_reporting\ncanary query -c ext.cdash.cdash_api\n```\n\n## What this extension does\n\nThe CDash extension can create CDash XML from Canary jobs, include measurements and compressed output, attach artifacts, and upload files to a CDash server.\n\n## Typical environment\n\n```console\nexport CDASH_URL=https://example/cdash\nexport CDASH_PROJECT=ProjectName\n```\n\n## Debugging tips\n\n- Confirm that jobs have completed and have testcase.lock files.\n- Confirm CDash URL and project variables are set.\n- If XML validation is enabled, check schema validation errors first.\n- For failed upload, inspect curl output when debug logging is enabled.\n"
+    }
+  }
+}

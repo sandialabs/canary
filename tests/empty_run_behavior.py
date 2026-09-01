@@ -37,8 +37,8 @@ def test_workspace_run_all_masked_specs_raises_notests(tmp_path):
     write(
         root / "disabled.pyt",
         """\
-import canary
-canary.directives.enable(False)
+import canary_pyt
+canary_pyt.directives.enable(False)
 def test():
     raise AssertionError("should not run")
 """,

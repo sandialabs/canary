@@ -13,6 +13,7 @@ from typing import Callable
 from typing import Generator
 
 import canary
+from _canary.util.query_data import load_query_data
 from _canary.util.string import csvsplit
 
 from .cdash_html_summary import cdash_summary
@@ -23,6 +24,16 @@ from .xmlreporter import CDashXMLReporter
 @canary.hookimpl
 def canary_reporter() -> canary.CanaryReporter:
     return CDashReporter()
+
+
+@canary.hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_cdash.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_cdash.data", "skills.json")
 
 
 class CDashReporter(canary.CanaryReporter):

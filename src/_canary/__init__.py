@@ -9,11 +9,3 @@ from .util.logging import setup_logging
 
 setup_logging()
 del setup_logging
-
-# Constant that's True when file scanning, but False here.
-FILE_SCANNING = False
-
-
-def set_file_scanning(value: bool):
-    global FILE_SCANNING
-    FILE_SCANNING = value

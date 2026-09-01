@@ -74,11 +74,11 @@ if __name__ == '__main__':
 
 def test_issue_89_pyt(tmp_path):
     demo = """
-import canary
-canary.directives.parameterize('my_var', (0.1,), when={'testname': 'abc_run or abc_post'})
-canary.directives.name('abc_run')
-canary.directives.name('abc_post')
-canary.directives.depends_on('abc_run.my_var=${my_var}', when={'testname': 'abc_post'})
+import canary_pyt
+canary_pyt.directives.parameterize('my_var', (0.1,), when={'testname': 'abc_run or abc_post'})
+canary_pyt.directives.name('abc_run')
+canary_pyt.directives.name('abc_post')
+canary_pyt.directives.depends_on('abc_run.my_var=${my_var}', when={'testname': 'abc_post'})
 #
 if __name__ == '__main__':
     print("Hello world")

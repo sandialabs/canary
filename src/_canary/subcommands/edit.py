@@ -1,0 +1,46 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import argparse
+import os
+from typing import TYPE_CHECKING
+
+from ..hookspec import hookimpl
+from ..util.editor import editor
+from ..workspace import NotAWorkspaceError
+from ..workspace import Workspace
+from .base import CanarySubcommand
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
+
+
+@hookimpl
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Edit())
+
+
+class Edit(CanarySubcommand):
+    name = "edit"
+    description = "open test files in $EDITOR"
+
+    def setup_parser(self, parser: "Parser") -> None:
+        parser.add_argument("testspec", help="Job file or job spec")
+
+    def execute(self, args: argparse.Namespace) -> int:
+        file = find_file(args.testspec)
+        if file is None:
+            print(f"{args.testspec}: no matching generator or job found in {os.getcwd()}")
+            return 1
+        editor(file)
+        return 0
+
+
+def find_file(testspec: str) -> str | None:
+    try:
+        workspace = Workspace.load()
+    except NotAWorkspaceError:
+        return None
+    spec = workspace.find(spec=testspec)
+    return spec.file

@@ -11,6 +11,28 @@ import re
 import sys
 
 
+def get_argparse_writer_width() -> int | None:
+    """Get the width for ArgparseWriter from environment variable or return None.
+
+    Checks for ARGPARSE_WRITER_WIDTH environment variable and returns its
+    integer value. Returns None if not set or invalid.
+
+    Returns:
+        int | None: The width as integer, or None if not specified/invalid
+    """
+    env_var = os.environ.get("ARGPARSE_WRITER_WIDTH")
+    if env_var is None:
+        return None
+
+    try:
+        width = int(env_var)
+        if width <= 0:
+            return None  # Invalid width
+        return width
+    except ValueError:
+        return None  # Invalid integer
+
+
 class Command(object):
     """Parsed representation of a command from argparse.
 
@@ -44,19 +66,38 @@ class Command(object):
 class ArgparseWriter(argparse.HelpFormatter):
     """Analyzes an argparse ArgumentParser for easy generation of help."""
 
-    def __init__(self, prog, out=None, aliases=False):
+    def __init__(self, prog, out=None, aliases=False, width=None):
         """Initializes a new ArgparseWriter instance.
 
         Parameters:
             prog (str): the program name
             out (file object): the file to write to (default sys.stdout)
             aliases (bool): whether or not to include subparsers for aliases
+            width (int): fixed width for formatting (default None for terminal width,
+                       or from ARGPARSE_WRITER_WIDTH environment variable)
         """
-        super(ArgparseWriter, self).__init__(prog)
+        # If width is not provided, try to get it from environment variable
+        if width is None:
+            width = get_argparse_writer_width()
+
+        # Set a fixed width if provided, otherwise use terminal width
+        if width is not None:
+            # Create a custom formatter with fixed width
+            class FixedWidthHelpFormatter(argparse.HelpFormatter):
+                def __init__(self, prog, width):
+                    # Initialize with fixed width instead of terminal width
+                    argparse.HelpFormatter.__init__(self, prog, width=width)
+
+            # We need to set the width on the instance
+            argparse.HelpFormatter.__init__(self, prog, width=width)
+        else:
+            super(ArgparseWriter, self).__init__(prog)
+
         self.level = 0
         self.prog = prog
         self.out = sys.stdout if out is None else out
         self.aliases = aliases
+        self.fixed_width = width
 
     def parse(self, parser, prog):
         """Parses the parser object and returns the relavent components.
@@ -93,9 +134,15 @@ class ArgparseWriter(argparse.HelpFormatter):
                 flags = action.option_strings
                 dest_flags = fmt._format_action_invocation(action)
                 help = self._expand_help(action) if action.help else ""
+                # Preserve paragraph breaks but handle line wraps more carefully
                 help = help.replace("\n\n", "<...>")
-                help = help.replace("\n", " ")
-                help = help.replace("<...>", "\n")
+                if self.fixed_width:
+                    # If we have a fixed width, preserve newlines as they may be intentional
+                    help = help.replace("<...>", "\n")
+                else:
+                    # Original behavior for terminal width
+                    help = help.replace("\n", " ")
+                    help = help.replace("<...>", "\n")
                 optionals.append((flags, dest_flags, help))
             elif isinstance(action, argparse._SubParsersAction):
                 for subaction in action._choices_actions:
@@ -107,13 +154,17 @@ class ArgparseWriter(argparse.HelpFormatter):
                         match = re.match(r"(.*) \((.*)\)", subaction.metavar)
                         if match:
                             aliases = match.group(2).split(", ")
-                            for alias in aliases:
-                                subparser = action._name_parser_map[alias]
-                                subcommands.append((subparser, alias))
+                        for alias in aliases:
+                            subparser = action._name_parser_map[alias]
+                            subcommands.append((subparser, alias))
             else:
                 args = fmt._format_action_invocation(action)
                 help = self._expand_help(action) if action.help else ""
-                help = help.replace("\n", " ")
+                if self.fixed_width:
+                    # Preserve newlines when using fixed width
+                    pass  # Keep original newlines
+                else:
+                    help = help.replace("\n", " ")  # Original behavior for terminal width
                 positionals.append((args, help))
 
         return Command(prog, description, usage, positionals, optionals, subcommands, epilog)
@@ -164,13 +215,13 @@ class ArgparseWriter(argparse.HelpFormatter):
                 raise
 
 
-_rst_levels = ["=", "-", "^", "~", ":", "`"]
+_rst_levels = ["=", "-", "~", "^", ":", "`"]
 
 
 class ArgparseRstWriter(ArgparseWriter):
     """Write argparse output as rst sections."""
 
-    def __init__(self, prog, out=None, aliases=False, rst_levels=_rst_levels):
+    def __init__(self, prog, out=None, aliases=False, rst_levels=_rst_levels, width=None):
         """Create a new ArgparseRstWriter.
 
         Parameters:
@@ -179,9 +230,11 @@ class ArgparseRstWriter(ArgparseWriter):
             aliases (bool): whether or not to include subparsers for aliases
             rst_levels (list of str): list of characters
                 for rst section headings
+            width (int): fixed width for formatting (default None for terminal width,
+                       or from ARGPARSE_WRITER_WIDTH environment variable)
         """
         out = sys.stdout if out is None else out
-        super(ArgparseRstWriter, self).__init__(prog, out, aliases)
+        super(ArgparseRstWriter, self).__init__(prog, out, aliases, width)
         self.rst_levels = rst_levels
 
     def format(self, cmd):
@@ -293,7 +346,7 @@ class ArgparseRstWriter(ArgparseWriter):
 class ArgparseMultiRstWriter(ArgparseRstWriter):
     """Write argparse output as rst sections."""
 
-    def __init__(self, prog, dest, aliases=False, rst_levels=_rst_levels):
+    def __init__(self, prog, dest, aliases=False, rst_levels=_rst_levels, width=None):
         """Create a new ArgparseRstWriter.
 
         Parameters:
@@ -302,9 +355,11 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
             aliases (bool): whether or not to include subparsers for aliases
             rst_levels (list of str): list of characters
                 for rst section headings
+            width (int): fixed width for formatting (default None for terminal width,
+                       or from ARGPARSE_WRITER_WIDTH environment variable)
         """
         out = io.StringIO()
-        super().__init__(prog, out, aliases, rst_levels=rst_levels)
+        super().__init__(prog, out, aliases, rst_levels=rst_levels, width=width)
         self.dest = dest
 
     def format(self, cmd, index=False):
@@ -340,7 +395,7 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
         if index:
             string.write("\n.. toctree::\n   :caption: Subcommands\n   :maxdepth: 1\n\n")
             for _, prog in sorted(cmd.subcommands, key=lambda _: _[1]):
-                string.write(f"   {prog}<commands.{prog}>\n")
+                string.write(f"   {prog}<{prog}>\n")
 
         return string.getvalue()
 
@@ -364,13 +419,13 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
         if level is not None:
             return super()._write(parser, prog, level=level)
         cmd = self.parse(parser, prog)
-        with open(os.path.join(self.dest, "commands.rst"), "w") as fh:
+        with open(os.path.join(self.dest, "index.rst"), "w") as fh:
             fh.write(f".. _{prog}:\n\n")
             fh.write("Command Reference\n=================\n\n")
             fh.write(f'.. raw:: html\n\n   <font size="+3">{prog}</font>\n\n')
             fh.write(self.format(cmd, index=True))
         for subparser, prog in cmd.subcommands:
-            with open(os.path.join(self.dest, f"commands.{prog}.rst"), "w") as self.out:
+            with open(os.path.join(self.dest, f"{prog}.rst"), "w") as self.out:
                 super()._write(subparser, prog)
 
 

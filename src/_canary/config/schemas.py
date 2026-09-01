@@ -34,7 +34,6 @@ def log_level_name(arg: typing.Any) -> str:
     if isinstance(arg, str):
         level_name = arg.upper()
         if level_name not in logging_levels:
-            s = ", ".join(logging_levels)
             raise SchemaError(
                 f"Wrong log level {level_name!r}, choose from {', '.join(logging_levels)}"
             )
@@ -142,4 +141,76 @@ environment_variable_schema = EnvarSchema(
         Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
     },
     ignore_extra_keys=True,
+)
+
+# -------------------------------------------------------------------------
+# Learn capability / skill provider schemas
+# -------------------------------------------------------------------------
+
+
+def _non_empty_string(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    value = value.strip()
+    if not value:
+        raise ValueError("expected non-empty string")
+    return value
+
+
+def _learn_namespace(value: object) -> str:
+    """Validate a learn-data provider namespace.
+
+    Provider namespaces are used as top-level query path components, e.g.
+
+        core.overview
+        pyt.directives
+        hpc.batching
+
+    Keep the character set conservative so selectors remain unambiguous.
+    """
+    text = _non_empty_string(value)
+    if not text.replace("_", "").replace("-", "").isalnum():
+        raise ValueError(
+            "learn namespace must contain only letters, digits, underscores, "
+            f"and hyphens; got {value!r}"
+        )
+    return text
+
+
+json_scalar_schema = Or(str, int, float, bool, type(None))
+
+# Recursive JSON-like data.  The schema package does not make recursive schemas
+# especially elegant, so for capability payloads we validate only that the root
+# payload is a dict.  Individual nested values remain JSON-compatible by
+# construction because they are loaded from JSON or returned by trusted plugins.
+query_payload_schema = dict
+
+
+skill_schema = Schema(
+    {
+        "name": And(str, Use(_non_empty_string)),
+        "description": And(str, Use(_non_empty_string)),
+        "body": str,
+        Optional(str): object,
+    },
+    ignore_extra_keys=False,
+)
+
+
+skills_payload_schema = Schema({str: skill_schema})
+
+
+query_document_base_schema = {
+    "schema_version": And(str, Use(_non_empty_string)),
+    "namespace": And(str, Use(_learn_namespace)),
+}
+
+
+capabilities_provider_schema = Schema(
+    {**query_document_base_schema, "capabilities": query_payload_schema}, ignore_extra_keys=False
+)
+
+
+skills_provider_schema = Schema(
+    {**query_document_base_schema, "skills": skills_payload_schema}, ignore_extra_keys=False
 )

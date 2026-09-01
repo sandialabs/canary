@@ -1,0 +1,122 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import argparse
+import os
+import re
+from typing import TYPE_CHECKING
+
+from ...util import logging
+from ...util.rich import bold
+from ...util.time import time_in_seconds
+
+__all__ = ["add_filter_arguments", "add_resource_arguments"]
+
+
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
+    from ...job import Job
+
+logger = logging.get_logger(__name__)
+
+
+def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
+    group = parser.add_argument_group("filtering")
+    group.add_argument(
+        "-k",
+        dest="keyword_exprs",
+        metavar="expression",
+        action="append",
+        help="Only run tests matching given keyword expression. "
+        "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
+    )
+    group.add_argument(
+        "--owner", dest="owners", action="append", help="Only run tests owned by 'owner'"
+    )
+    group.add_argument(
+        "-p",
+        dest="parameter_expr",
+        metavar="expression",
+        help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
+    )
+    group.add_argument(
+        "--search",
+        "--regex",
+        dest="regex_filter",
+        metavar="regex",
+        help="Include tests containing the regular expression regex in at least 1 of its "
+        "file assets.  regex is a python regular expression, see "
+        "https://docs.python.org/3/library/re.html",
+    )
+    if tagged:
+        group.add_argument("--tag", help="Tag this job selection for future runs [default: False]")
+
+
+def add_resource_arguments(parser: "Parser") -> None:
+    group = parser.add_argument_group("resource control")
+    group.add_argument(
+        "--workers",
+        metavar="N",
+        type=int,
+        help="Execute the test session asynchronously using a pool of at most N workers",
+    )
+    TimeoutResource.setup_parser(group)
+    group.add_argument(
+        "--no-incremental",
+        action="store_true",
+        default=False,
+        help="Don't use the .canary_cache to infer job runtimes",
+    )
+
+
+class TimeoutResource(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        if option_string == "--session-timeout":
+            logger.warning(f"--session-timeout is deprecated, use --timeout session={values}")
+            type = "session"
+            value = time_in_seconds(values)
+        elif option_string == "--timeout-multiplier":
+            logger.warning(f"--timeout-multiplier is deprecated, use --timeout multiplier={values}")
+            type = "multiplier"
+            value = time_in_seconds(values)
+        elif option_string == "--test-timeout":
+            logger.warning(f"--test-timeout is deprecated, use --timeout all={values}")
+            type = "*"
+            value = time_in_seconds(values)
+        else:
+            if match := re.search(r"^(\*|[\w-]+)[:=](.*)$", values):
+                type = match.group(1).lower().replace("-", "_")
+                value = time_in_seconds(match.group(2))
+                if type == "all":
+                    type = "*"
+            else:
+                raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type=value'")
+        timeouts = getattr(args, "timeout", None) or {}
+        timeouts[type] = value
+        setattr(args, "timeout", timeouts)
+
+    @staticmethod
+    def helppage() -> str:
+        text = f"""Set the timeout for {bold("type")} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n
+• type={bold("session")}, the timeout T is applied to the entire test session.\n
+• type={bold("multiplier")}, the multiplier T is applied to each test's timeout.\n
+• type={bold("all")}, the timeout T is applied to all jobs.\n
+Otherwise, a timeout of T is applied to tests having keyword {bold("type")}.  Eg,
+{bold("--timeout fast=2")} would apply a timeout of 2 seconds to all tests having
+the 'fast' keyword; common types are fast, long, default, and ctest."""
+        return text
+
+    @staticmethod
+    def setup_parser(p: "Parser | argparse._ArgumentGroup", flag: str = "--timeout") -> None:
+        p.add_argument(
+            flag, action=TimeoutResource, metavar="type=T", help=TimeoutResource.helppage()
+        )
+        p.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+        p.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+        p.add_argument("--timeout-multiplier", action=TimeoutResource, help=argparse.SUPPRESS)
+
+
+def filter_cases_by_path(jobs: list["Job"], pathspec: str) -> list["Job"]:
+    prefix = os.path.abspath(pathspec)
+    return [c for c in jobs if c.workspace.dir.relative_to(prefix)]

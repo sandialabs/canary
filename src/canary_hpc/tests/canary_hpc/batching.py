@@ -28,10 +28,10 @@ def generate_files(tmpdir):
     mkdirp(workdir)
     for name in "abcde":
         with open(f"{workdir}/{name}.pyt", "w") as fh:
-            fh.write("import canary\n")
-            fh.write("canary.directives.keywords('long')\n")
-            fh.write(f"canary.directives.parameterize({name!r}, list(range(4)))\n")
-            fh.write("canary.directives.generate_composite_base_case()\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.keywords('long')\n")
+            fh.write(f"canary_pyt.directives.parameterize({name!r}, list(range(4)))\n")
+            fh.write("canary_pyt.directives.aggregate()\n")
     yield workdir
 
 

@@ -149,7 +149,7 @@ def test_analyze_creates_parent_case_and_dependencies(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     m.add_family("a")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(flag="--analyze", requires="success")
+    m.set_aggregate(flag="--analyze", requires="success")
     specs = lock_model(m)
 
     parent = [s for s in specs if s.family == "a" and s.attributes.get("multicase") is True][0]
@@ -177,9 +177,9 @@ def test_xfail_sets_code(tmp_path: Path) -> None:
 
 def test_pyt_loader_records_directives(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.keywords("fast", "nightly")
-canary.directives.timeout("3s")
+import canary_pyt
+canary_pyt.directives.keywords("fast", "nightly")
+canary_pyt.directives.timeout("3s")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     calls = PYTLoader(file=f).parse()
@@ -192,10 +192,10 @@ canary.directives.timeout("3s")
 
 def test_adapter_apply_populates_model_from_calls(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.testname("a")
-canary.directives.parameterize("p", [1,2])
-canary.directives.keywords("k1")
+import canary_pyt
+canary_pyt.directives.testname("a")
+canary_pyt.directives.parameterize("p", [1,2])
+canary_pyt.directives.keywords("k1")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     m = PYTModel(str(tmp_path), "t.pyt")
@@ -249,7 +249,7 @@ def test_analyze_script_adds_asset_link_if_missing(tmp_path: Path) -> None:
     m = PYTModel(str(tmp_path), "sub/x.pyt")
     m.add_family("a")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(script="analyze.sh")
+    m.set_aggregate(script="analyze.sh")
 
     specs = lock_model(m)
     parent = [s for s in specs if s.attributes.get("multicase") is True][0]
@@ -419,8 +419,8 @@ def test_set_id_template_rejects_duplicate_expanded_ids(tmp_path: Path) -> None:
 
 def test_adapter_apply_set_id_from_loader(tmp_path: Path) -> None:
     text = """
-import canary
-canary.directives.set_id("deadbeef")
+import canary_pyt
+canary_pyt.directives.set_id("deadbeef")
 """
     f = make_test_file(tmp_path, "t.pyt", text=text)
     m = PYTModel(str(tmp_path), "t.pyt")
@@ -455,7 +455,7 @@ def test_set_id_template_expands_parent_analyze_with_blank_parameters(tmp_path: 
     m = make_model(tmp_path, "x.pyt")
     m.set_id("deadbeef{p}")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
-    m.set_analyze(flag="--analyze")
+    m.set_aggregate(flag="--analyze")
 
     specs = lock_model(m)
 

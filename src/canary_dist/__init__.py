@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import canary
+from _canary.util.query_data import load_query_data
 
 from .batchexec import HPCConnectDistRunner
 from .conductor import DistributedPoolConductor
@@ -60,6 +61,16 @@ class Distributed(canary.CanarySubcommand):
             executor = DistributedPoolExecutor(workspace=args.dist_workspace)
             return executor.run(args)
         return 0
+
+
+@canary.hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_dist.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_dist.data", "skills.json")
 
 
 @canary.hookimpl

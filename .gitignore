@@ -1,4 +1,5 @@
 my-env.sh
+_build
 Canary.html
 HTML
 MARKDOWN
@@ -24,7 +25,6 @@ partition.p.*
 canary.cfg
 .canary.*
 scripts/sbatch
-docs/source/commands.rst
 
 src/*.egg-info/
 
@@ -58,3 +58,31 @@ testcases.lock
 canary_distributed.*
 pool.json
 transactions.jsons
+
+.claude/
+.codex/
+.opencode-workspace/
+.venv/
+diff.txt
+docs-prompt.md
+
+DOCUMENTATION_REWRITE_SUMMARY.md
+DOCUMENT_PLAN.md
+DOCUMENT_PLAN_FINAL.md
+DOCUMENT_PLAN_REVISED.md
+IMPLEMENTATION_CHECKLIST.md
+_claude-docs/
+architectural_messaging_guide.md
+canary_cmake_feedback.md
+canary_synopsis.md
+capabilities_gaps_analysis.md
+check-docs-strict.sh
+check-docs.sh
+check.sh
+doc_restructuring_plan.md
+documentation_rewrite_plan.md
+new_docs_structure.md
+pyproject-no-hpc-connect.toml
+sphinx-build-2.log
+sphinx-build-W.log
+sphinx-build.log

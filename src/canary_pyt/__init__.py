@@ -2,15 +2,29 @@
 #
 # SPDX-License-Identifier: MIT
 
+from pathlib import Path
 from typing import Any
 
 from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
+from _canary.util.query_data import load_query_data
 
+from . import directives
 from .pyt import PYTAdapter
 from .pyt import PYTLoader
 from .pyt import PYTLockEmitter
 from .pyt import PYTModel
+
+__all__ = ["directives", "FILE_SCANNING"]
+
+
+# Constant that's True when file scanning, but False here.
+FILE_SCANNING = False
+
+
+def set_file_scanning(value: bool):
+    global FILE_SCANNING
+    FILE_SCANNING = value
 
 
 class PYTSpecGenerator(AbstractSpecGenerator):
@@ -84,6 +98,44 @@ class PYTSpecGenerator(AbstractSpecGenerator):
         return info
 
 
+def make_directives_docs(prefix: str) -> None:
+    import types
+
+    from _canary.util.rich import set_color_when
+
+    set_color_when("never")
+    dest = Path(prefix).resolve() / "directives"
+    dest.mkdir(parents=True, exist_ok=True)
+    all_directives = []
+    for name in dir(directives):
+        attr = getattr(directives, name)
+        if isinstance(attr, types.FunctionType) and attr.__doc__ and attr not in all_directives:
+            all_directives.append(attr)
+    names = sorted([fun.__name__ for fun in all_directives])
+    with open(dest / "index.rst", "w") as fh:
+        fh.write(".. _test-directives:\n\n")
+        fh.write("Test Directives\n===============\n\n")
+        fh.write(".. automodule:: canary_pyt.directives\n\n")
+        fh.write(".. toctree::\n   :maxdepth: 1\n\n")
+        for name in names:
+            fh.write(f"   {name}<{name}>\n")
+    for name in names:
+        with open(dest / f"{name}.rst", "w") as fh:
+            fh.write(f".. _directive-{name.replace('_', '-')}:\n\n")
+            fh.write(f"{name}\n{'=' * len(name)}\n\n")
+            fh.write(f".. autofunction:: canary_pyt.directives.{name}\n")
+
+
 @hookimpl
 def canary_collectstart(collector) -> None:
     collector.add_generator(PYTSpecGenerator)
+
+
+@hookimpl
+def canary_capabilities() -> dict[str, Any] | None:
+    return load_query_data("canary_pyt.data", "capabilities.json")
+
+
+@hookimpl
+def canary_skills() -> dict[str, Any] | None:
+    return load_query_data("canary_pyt.data", "skills.json")

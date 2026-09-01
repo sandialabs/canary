@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: MIT
 import sys
 
-import canary
+import canary_pyt
 
-canary.directives.keywords("baz")
+canary_pyt.directives.keywords("baz")
 
 
 def test():

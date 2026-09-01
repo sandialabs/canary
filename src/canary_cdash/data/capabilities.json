@@ -1,0 +1,51 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "cdash",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_cdash extension creates CDash XML reports, uploads results to CDash, generates HTML CDash summaries, and can derive GitLab issues from failed CDash tests."
+    },
+    "xml_reporting": {
+      "class": "CDashXMLReporter",
+      "capabilities": [
+        "Create CDash Test XML files from Canary jobs.",
+        "Attach compressed job output.",
+        "Attach artifacts as tar/gzip payloads.",
+        "Validate generated XML when xmlschema is available.",
+        "Post generated XML files to CDash."
+      ],
+      "measurements": [
+        "Exit Code",
+        "Exit Value",
+        "Command Line",
+        "Execution Time",
+        "Completion Status",
+        "Processors",
+        "GPUs",
+        "Job measurements"
+      ]
+    },
+    "cdash_api": {
+      "class": "interface.server",
+      "capabilities": [
+        "Upload files to CDash submit.php.",
+        "Query CDash build summaries.",
+        "Query tests through CDash GraphQL.",
+        "Categorize failed tests as failed, diffed, or timeout.",
+        "Generate CDash links for builds and tests."
+      ]
+    },
+    "html_summary": {
+      "function": "cdash_summary",
+      "environment": [
+        "CDASH_URL",
+        "CDASH_PROJECT"
+      ],
+      "outputs": [
+        "stdout",
+        "HTML file",
+        "email"
+      ]
+    }
+  }
+}

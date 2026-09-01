@@ -155,7 +155,7 @@ class ScheduledBatch:
 class CheapMakespanStats:
     """Incremental lower-bound makespan state.
 
-    The estimate is:
+    The estimate is::
 
         max(
             max task duration,
@@ -165,6 +165,7 @@ class CheapMakespanStats:
         )
 
     This is intentionally a cheap estimate, not an exact simulation.
+
     """
 
     total_work: float = 0.0

@@ -32,13 +32,13 @@ def test_pyt_parameterize_and_analyze(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.name('baz')
-canary.directives.analyze()
-canary.directives.owner('me')
-canary.directives.keywords('test', 'unit')
-canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
-canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
+import canary_pyt
+canary_pyt.directives.name('baz')
+canary_pyt.directives.analyze()
+canary_pyt.directives.owner('me')
+canary_pyt.directives.keywords('test', 'unit')
+canary_pyt.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary_pyt.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """,
         )
 
@@ -55,11 +55,11 @@ def test_pyt_keywords_when_filter(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.keywords('always')
-canary.directives.keywords('opt', when="options='x'")
-canary.directives.keywords('p2', when={"parameters": "p=2"})
-canary.directives.parameterize('p', (1, 2))
+import canary_pyt
+canary_pyt.directives.keywords('always')
+canary_pyt.directives.keywords('opt', when="options='x'")
+canary_pyt.directives.keywords('p2', when={"parameters": "p=2"})
+canary_pyt.directives.parameterize('p', (1, 2))
 """,
         )
 
@@ -78,10 +78,10 @@ def test_pyt_exclusive_enable_skipif(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.exclusive(when="options='x'")
-canary.directives.enable(False, when="options='disable'")
-canary.directives.skipif(True, reason="skip")
+import canary_pyt
+canary_pyt.directives.exclusive(when="options='x'")
+canary_pyt.directives.enable(False, when="options='disable'")
+canary_pyt.directives.skipif(True, reason="skip")
 """,
         )
 
@@ -99,11 +99,11 @@ def test_pyt_sources_baseline_artifact_substitution(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.parameterize('p', (2,))
-canary.directives.copy(src='in_${P}.txt', dst='out_{p}.txt')
-canary.directives.baseline(src='a_{p}.exo', dst='b_${P}.exo')
-canary.directives.artifact('art_{p}.txt', save_on='always')
+import canary_pyt
+canary_pyt.directives.parameterize('p', (2,))
+canary_pyt.directives.copy(src='in_${P}.txt', dst='out_{p}.txt')
+canary_pyt.directives.baseline(src='a_{p}.exo', dst='b_${P}.exo')
+canary_pyt.directives.artifact('art_{p}.txt', save_on='always')
 """,
         )
 
@@ -126,9 +126,9 @@ def test_pyt_depends_on(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.depends_on('foo_${x}', expect=1, result='success', when={'parameters': 'x=1'})
-canary.directives.parameterize('x', (1, 2))
+import canary_pyt
+canary_pyt.directives.depends_on('foo_${x}', expect=1, result='success', when={'parameters': 'x=1'})
+canary_pyt.directives.parameterize('x', (1, 2))
 """,
         )
 
@@ -149,8 +149,8 @@ def test_pyt_modules_use_sets_modulepath(tmpdir, monkeypatch):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.load_module('gcc', use='/m')
+import canary_pyt
+canary_pyt.directives.load_module('gcc', use='/m')
 """,
         )
         monkeypatch.setenv("MODULEPATH", "/a:/b")
@@ -165,8 +165,8 @@ def test_pyt_xfail_xdiff(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.xfail(code=7)
+import canary_pyt
+canary_pyt.directives.xfail(code=7)
 """,
         )
         s = lock_file("test.pyt")[0]
@@ -175,8 +175,8 @@ canary.directives.xfail(code=7)
         write(
             "test2.pyt",
             """
-import canary
-canary.directives.xdiff()
+import canary_pyt
+canary_pyt.directives.xdiff()
 """,
         )
         s2 = lock_file("test2.pyt")[0]
@@ -188,9 +188,9 @@ def test_pyt_preload_rcfiles(tmpdir):
         write(
             "test.pyt",
             """
-import canary
-canary.directives.preload('setup.sh')
-canary.directives.source('rc.sh')
+import canary_pyt
+canary_pyt.directives.preload('setup.sh')
+canary_pyt.directives.source('rc.sh')
 """,
         )
 

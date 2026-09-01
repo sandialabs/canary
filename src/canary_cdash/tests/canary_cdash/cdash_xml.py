@@ -30,7 +30,9 @@ def test_report_cdash(tmpdir):
     with working_dir(tmpdir.strpath):
         root = str(importlib.resources.files("canary"))
         run_canary("init", ".")
-        run_canary("selection", "create", "-r", os.path.join(root, "examples/basic"), "default")
+        run_canary(
+            "selection", "create", "-r", os.path.join(root, "docs/examples/basic"), "default"
+        )
         run_canary("run", "default")
         run_canary("report", "cdash", "create")
         assert os.path.exists("TestResults/CDASH")

@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "dist",
+  "skills": {
+    "canary-distributed-resources": {
+      "name": "canary-distributed-resources",
+      "description": "Use this skill when configuring or debugging Canary's distributed resource-pool adapter.",
+      "body": "# Canary distributed resource adapter\n\n## First actions\n\n```console\ncanary query -c ext.dist.overview\ncanary query -c ext.dist.adapter\ncanary query -c ext.dist.allocation\n```\n\n## What this extension does\n\nThe distributed resource adapter checks out resources from a remote server and returns a Canary allocation object with metadata and node-tagged resources.\n\n## Important limitations\n\n- Multi-node requests are not supported by the distributed adapter.\n- Local capacity checks are approximate.\n- Checkout and checkin are server-authoritative.\n\n## Debugging tips\n\n- Confirm the server URL is correct.\n- Query the server status through the adapter path if instrumented.\n- Check that machine tags and groups match the current run configuration.\n- Ensure every checked-out allocation is checked back in with its transaction ID.\n"
+    }
+  }
+}

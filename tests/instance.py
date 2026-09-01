@@ -27,9 +27,10 @@ def test_instance_deps(tmpdir):
     with working_dir(workdir, create=True):
         with open("a.pyt", "w") as fh:
             fh.write("import canary\n")
-            fh.write("canary.directives.analyze()\n")
-            fh.write("canary.directives.parameterize('cpus', [1,2])\n")
-            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("import canary_pyt\n")
+            fh.write("canary_pyt.directives.analyze()\n")
+            fh.write("canary_pyt.directives.parameterize('cpus', [1,2])\n")
+            fh.write("canary_pyt.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len([spec for spec in specs if not spec.mask]) == 7

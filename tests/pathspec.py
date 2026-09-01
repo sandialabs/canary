@@ -6,8 +6,8 @@ import argparse
 import json
 import os
 
-from _canary.plugins.subcommands.run import PathSpec
-from _canary.plugins.subcommands.run import ReadPathsFromFile
+from _canary.subcommands.run import PathSpec
+from _canary.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
 

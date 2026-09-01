@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from _canary.plugins.subcommands.run import RequestBuilder
-from _canary.plugins.subcommands.run import ScanPathsRequest
+from _canary.subcommands.run import RequestBuilder
+from _canary.subcommands.run import ScanPathsRequest
 from _canary.util import json_helper as json
 
 

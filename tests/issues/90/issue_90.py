@@ -48,14 +48,14 @@ def make_abc_workspace(tmp_path: Path) -> tuple[Workspace, dict[str, JobSpec]]:
     test_file.write_text(
         """\
 import sys
-import canary
+import canary_pyt
 
-canary.directives.name("a")
-canary.directives.name("b")
-canary.directives.name("c")
+canary_pyt.directives.name("a")
+canary_pyt.directives.name("b")
+canary_pyt.directives.name("c")
 
-canary.directives.depends_on("c", when="testname=b")
-canary.directives.depends_on("b", when="testname=a")
+canary_pyt.directives.depends_on("c", when="testname=b")
+canary_pyt.directives.depends_on("b", when="testname=a")
 
 
 def test():

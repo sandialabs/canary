@@ -1,0 +1,6 @@
+{
+  "extension": "canary_cmake",
+  "title": "Running CMake Tests",
+  "description": "Integration for CMake and CTest test definitions",
+  "category": "Generators"
+}

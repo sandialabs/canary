@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "pyt",
+  "skills": {
+    "canary-pyt-authoring": {
+      "name": "canary-pyt-authoring",
+      "description": "Use this skill when writing or modifying Python .pyt Canary job definitions.",
+      "body": "# Authoring .pyt Canary tests\n\n## First actions\n\nQuery the .pyt capability data:\n\n```console\ncanary query -c ext.pyt.overview\ncanary query -c ext.pyt.directives\ncanary query -c ext.pyt.parameters\n```\n\n## Minimal shape\n\n```python\nimport sys\nimport canary\n\ncanary.directives.keywords(\"smoke\")\n\n\ndef test() -> int:\n    return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(test())\n```\n\n## Important rules\n\n- Directives execute during generation.\n- Runtime test logic should be guarded by `if __name__ == \"__main__\"`.\n- Use `parameterize()` for named variants.\n- Use `cpus()`, `gpus()`, and `nodes()` for fixed resource requirements.\n- Use `depends_on()` for dependency-aware workflows.\n- Prefer structured measurements to log scraping.\n\n## Useful queries\n\n```console\ncanary query -c ext.pyt.directives\ncanary query -c ext.pyt.parameters\ncanary query -c dependencies\ncanary query -c resources\n```\n"
+    }
+  }
+}

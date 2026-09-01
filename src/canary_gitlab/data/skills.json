@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "gitlab",
+  "skills": {
+    "canary-gitlab-mr-reporting": {
+      "name": "canary-gitlab-mr-reporting",
+      "description": "Use this skill when posting Canary result summaries to GitLab merge requests.",
+      "body": "# Canary GitLab merge request reporting\n\n## First actions\n\n```console\ncanary query -c ext.gitlab.overview\ncanary query -c ext.gitlab.merge_request_reporter\n```\n\n## Reporter command\n\n```console\ncanary report gitlab-mr\n```\n\nOptionally include a CDash link:\n\n```console\ncanary report gitlab-mr --cdash-url URL\n```\n\n## Required environment\n\nThe reporter expects to run in GitLab CI with:\n\n- `GITLAB_CI`\n- `CI_MERGE_REQUEST_IID`\n- `CI_PROJECT_ID`\n- `CI_API_V4_URL`\n- `GITLAB_ACCESS_TOKEN` or `ACCESS_TOKEN`\n\n## Behavior\n\n- If jobs failed, the reporter posts a failed test summary table.\n- If no jobs failed, the reporter posts a success note.\n- If a CDash URL is provided, it is included in the note.\n"
+    }
+  }
+}

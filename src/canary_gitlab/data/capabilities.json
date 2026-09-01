@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "gitlab",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_gitlab extension provides GitLab API helpers and a merge-request reporter for posting Canary results to GitLab merge requests."
+    },
+    "merge_request_reporter": {
+      "reporter_type": "gitlab-mr",
+      "command": "canary report gitlab-mr",
+      "capabilities": [
+        "Post a success note to a GitLab merge request.",
+        "Post a failed test summary to a GitLab merge request.",
+        "Include a CDash build URL when provided."
+      ],
+      "required_environment": [
+        "GITLAB_CI",
+        "CI_MERGE_REQUEST_IID",
+        "CI_PROJECT_ID",
+        "CI_API_V4_URL",
+        "GITLAB_ACCESS_TOKEN or ACCESS_TOKEN"
+      ]
+    },
+    "api": {
+      "class": "gitlab.repo",
+      "capabilities": [
+        "Clone repositories.",
+        "Inspect branches.",
+        "Commit, tag, and push changes.",
+        "Create and edit issues.",
+        "Create release links.",
+        "Download job artifacts.",
+        "Query merge requests."
+      ]
+    },
+    "security_notes": [
+      "GitLab API actions require an access token.",
+      "Artifact zip extraction blocks absolute paths and parent traversal."
+    ]
+  }
+}

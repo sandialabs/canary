@@ -1,0 +1,52 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "hpc",
+  "capabilities": {
+    "overview": {
+      "summary": "The canary_hpc extension batches Canary jobs and submits batches to HPC schedulers through hpc_connect."
+    },
+    "batching": {
+      "primary_objects": [
+        "BatchingSpec",
+        "BatchSpec",
+        "TestBatch",
+        "CanaryHPCConductor",
+        "HPCConnectBatchRunner"
+      ],
+      "layouts": {
+        "flat": "Jobs within a batch do not depend on each other. Batches may depend on other batches.",
+        "atomic": "Dependency-connected components are kept together. Batches do not depend on other batches."
+      },
+      "node_policies": {
+        "same": "All jobs in a partition require the same node count.",
+        "any": "Jobs with different node counts may be batched together."
+      },
+      "targets": {
+        "duration": "Create batches targeting approximate simulated runtime.",
+        "count": "Create at most N batches.",
+        "count=max": "Create the maximum number of batches allowed by the selected layout."
+      }
+    },
+    "execution": {
+      "summary": "HPC batches are submitted through hpc_connect. Each batch receives a generated resource pool and then launches Canary inside the allocation.",
+      "environment": {
+        "CANARY_LEVEL": "Incremented for nested Canary execution.",
+        "CANARY_HPC_BATCH": "Current batch identifier.",
+        "CANARY_HPC_NODE_COUNT": "Number of scheduler nodes requested."
+      },
+      "timeouts": {
+        "queue_timeout": "Maximum time waiting for scheduler start.",
+        "run_timeout": "Estimated batch runtime multiplied by timeout multiplier."
+      }
+    },
+    "commands": {
+      "run_with_backend": "canary hpc run --backend BACKEND PATH",
+      "legacy_run_options": "canary run --hpc-backend BACKEND PATH",
+      "batch_spec": "Use --batch-spec or legacy -b spec=..."
+    },
+    "resource_model": {
+      "summary": "The conductor uses backend node resource counts to generate a topology-aware resource pool for each batch.",
+      "multi_node": "Batches may request multiple scheduler nodes when jobs require multiple Canary nodes."
+    }
+  }
+}

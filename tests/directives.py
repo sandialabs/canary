@@ -83,8 +83,9 @@ def test_core_pyt_directives(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.keywords('a', 'b', 'c')
+canary_pyt.directives.keywords('a', 'b', 'c')
 
 def test():
     self = canary.get_instance()
@@ -100,11 +101,12 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.testname('kw_name_a')
-canary.directives.testname('kw_name_b')
-canary.directives.keywords('kw_a', when={'testname': 'kw_name_a'})
-canary.directives.keywords('kw_b', when='testname="kw_name_b"')
+canary_pyt.directives.testname('kw_name_a')
+canary_pyt.directives.testname('kw_name_b')
+canary_pyt.directives.keywords('kw_a', when={'testname': 'kw_name_a'})
+canary_pyt.directives.keywords('kw_b', when='testname="kw_name_b"')
 
 def test():
     self = canary.get_instance()
@@ -125,13 +127,14 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a', (2, 4, 6, 8, 10))
-canary.directives.keywords('kw_2', when='parameters="a=2"')
-canary.directives.keywords('kw_4', when='parameters="a=4"')
-canary.directives.keywords('kw_6', when='parameters="a>4 and a<8"')
-canary.directives.keywords('kw_8', when='parameters="a>=7"')
-canary.directives.keywords('kw_9', 'kw_10', when='parameters="a>8"')
+canary_pyt.directives.parameterize('a', (2, 4, 6, 8, 10))
+canary_pyt.directives.keywords('kw_2', when='parameters="a=2"')
+canary_pyt.directives.keywords('kw_4', when='parameters="a=4"')
+canary_pyt.directives.keywords('kw_6', when='parameters="a>4 and a<8"')
+canary_pyt.directives.keywords('kw_8', when='parameters="a>=7"')
+canary_pyt.directives.keywords('kw_9', 'kw_10', when='parameters="a>8"')
 
 def test():
     self = canary.get_instance()
@@ -158,8 +161,9 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a,b,c', [(1, 2, 3), (4, 5, 6)])
+canary_pyt.directives.parameterize('a,b,c', [(1, 2, 3), (4, 5, 6)])
 
 def test():
     self = canary.get_instance()
@@ -176,10 +180,11 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.analyze()
-canary.directives.parameterize('a,b', [('a1', 'b1'), ('a2', 'b2')])
-canary.directives.parameterize('c,d', [('c1', 'd1'), ('c2', 'd2')])
+canary_pyt.directives.analyze()
+canary_pyt.directives.parameterize('a,b', [('a1', 'b1'), ('a2', 'b2')])
+canary_pyt.directives.parameterize('c,d', [('c1', 'd1'), ('c2', 'd2')])
 
 def test():
     self = canary.get_instance()
@@ -239,8 +244,9 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on('dep_source')
+canary_pyt.directives.depends_on('dep_source')
 
 def test():
     self = canary.get_instance()
@@ -258,8 +264,9 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on('dep_source')
+canary_pyt.directives.depends_on('dep_source')
 
 def test():
     self = canary.get_instance()
@@ -277,8 +284,9 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on('dep_source')
+canary_pyt.directives.depends_on('dep_source')
 
 def test():
     self = canary.get_instance()
@@ -295,8 +303,9 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a', (1, 2, 3))
+canary_pyt.directives.parameterize('a', (1, 2, 3))
 
 def test():
     self = canary.get_instance()
@@ -313,8 +322,9 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on('dep_glob_source.a=2')
+canary_pyt.directives.depends_on('dep_glob_source.a=2')
 
 def test():
     self = canary.get_instance()
@@ -333,8 +343,9 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a', (1, 2, 3, 4))
+canary_pyt.directives.parameterize('a', (1, 2, 3, 4))
 
 def test():
     self = canary.get_instance()
@@ -351,8 +362,9 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on(['dep_list_source.a=1', 'dep_list_source.a=3', 'dep_list_source.a=4'])
+canary_pyt.directives.depends_on(['dep_list_source.a=1', 'dep_list_source.a=3', 'dep_list_source.a=4'])
 
 def test():
     self = canary.get_instance()
@@ -375,9 +387,10 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.copy(src='copy_src.txt', dst='copied.txt')
-canary.directives.link(src='link_src.txt', dst='linked.txt')
+canary_pyt.directives.copy(src='copy_src.txt', dst='copied.txt')
+canary_pyt.directives.link(src='link_src.txt', dst='linked.txt')
 
 def test():
     assert os.path.exists('copied.txt')
@@ -394,8 +407,9 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.xfail()
+canary_pyt.directives.xfail()
 
 def test():
     raise canary.TestFailed()
@@ -410,8 +424,9 @@ if __name__ == '__main__':
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.xdiff()
+canary_pyt.directives.xdiff()
 
 def test():
     raise canary.TestDiffed()
@@ -447,9 +462,10 @@ def test_baseline_directives(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a', (1, 2))
-canary.directives.baseline(src='a-out.txt', dst='a.txt', when='parameters="a=1"')
+canary_pyt.directives.parameterize('a', (1, 2))
+canary_pyt.directives.baseline(src='a-out.txt', dst='a.txt', when='parameters="a=1"')
 
 def test():
     self = canary.get_instance()
@@ -468,9 +484,10 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize('a', (1, 2))
-canary.directives.baseline(flag='--baseline', when='parameters="a=1"')
+canary_pyt.directives.parameterize('a', (1, 2))
+canary_pyt.directives.baseline(flag='--baseline', when='parameters="a=1"')
 
 def test():
     self = canary.get_instance()
@@ -511,8 +528,9 @@ def test_enable_directive(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.enable(when='options=baz')
+canary_pyt.directives.enable(when='options=baz')
 
 def test():
     pass
@@ -542,7 +560,8 @@ def test_skipif_directive(tmp_path):
     T = """
 import sys
 import canary
-canary.directives.skipif({skip_value}, reason='just because')
+import canary_pyt
+canary_pyt.directives.skipif({skip_value}, reason='just because')
 def test():
     {body}
 if __name__ == '__main__':
@@ -577,8 +596,8 @@ def test_timeout_directive(tmp_path):
 import sys
 import time
 import canary
-
-canary.directives.timeout('1us')
+import canary_pyt
+canary_pyt.directives.timeout('1us')
 
 def test():
     time.sleep(10)
@@ -603,8 +622,9 @@ def test_copy_and_link_directives(tmp_path):
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.copy('foo.txt', 'baz.txt')
+canary_pyt.directives.copy('foo.txt', 'baz.txt')
 
 def test():
     assert os.path.exists('./foo.txt')
@@ -625,9 +645,10 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.copy(src='foo.txt', dst='foo_copy.txt')
-canary.directives.copy(src='baz.txt', dst='baz_copy.txt')
+canary_pyt.directives.copy(src='foo.txt', dst='foo_copy.txt')
+canary_pyt.directives.copy(src='baz.txt', dst='baz_copy.txt')
 
 def test():
     assert os.path.exists('./foo_copy.txt')
@@ -647,9 +668,9 @@ if __name__ == '__main__':
         """\
 import os
 import sys
-import canary
+import canary_pyt
 
-canary.directives.link('foo.txt', 'baz.txt')
+canary_pyt.directives.link('foo.txt', 'baz.txt')
 
 def test():
     assert os.path.islink('./foo.txt')
@@ -668,9 +689,10 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.link(src='foo.txt', dst='foo_link.txt')
-canary.directives.link(src='baz.txt', dst='baz_link.txt')
+canary_pyt.directives.link(src='foo.txt', dst='foo_link.txt')
+canary_pyt.directives.link(src='baz.txt', dst='baz_link.txt')
 
 def test():
     assert os.path.islink('./foo_link.txt')
@@ -689,9 +711,10 @@ if __name__ == '__main__':
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.link(src='../shared/foo.txt', dst='foo_link.txt')
-canary.directives.link(src='../shared/baz.txt', dst='baz_link.txt')
+canary_pyt.directives.link(src='../shared/foo.txt', dst='foo_link.txt')
+canary_pyt.directives.link(src='../shared/baz.txt', dst='baz_link.txt')
 
 def test():
     assert os.path.islink('./foo_link.txt')
@@ -775,21 +798,21 @@ def test_generation_only_directives(tmp_path):
         root / "meta.pyt",
         """\
 import sys
-import canary
+import canary_pyt
 
-canary.directives.owners("alice", "bob")
-canary.directives.owner("carol")
-canary.directives.exclusive()
-canary.directives.cpus(2)
-canary.directives.gpus(0)
-canary.directives.nodes(1)
-canary.directives.timeout("2s")
-canary.directives.set_attribute(priority="high", answer=42)
-canary.directives.artifact("success.txt", save_on="success")
-canary.directives.artifact("failure.txt", save_on="failure")
-canary.directives.sources("input.dat")
-canary.directives.preload("preload.sh")
-canary.directives.load_module("fake-module", use="/tmp/canary-modulefiles")
+canary_pyt.directives.owners("alice", "bob")
+canary_pyt.directives.owner("carol")
+canary_pyt.directives.exclusive()
+canary_pyt.directives.cpus(2)
+canary_pyt.directives.gpus(0)
+canary_pyt.directives.nodes(1)
+canary_pyt.directives.timeout("2s")
+canary_pyt.directives.set_attribute(priority="high", answer=42)
+canary_pyt.directives.artifact("success.txt", save_on="success")
+canary_pyt.directives.artifact("failure.txt", save_on="failure")
+canary_pyt.directives.sources("input.dat")
+canary_pyt.directives.preload("preload.sh")
+canary_pyt.directives.load_module("fake-module", use="/tmp/canary-modulefiles")
 
 def test():
     pass
@@ -835,9 +858,10 @@ def test_parameterize_modes_centered_and_random(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 from _canary import enums
 
-canary.directives.parameterize(
+canary_pyt.directives.parameterize(
     "x,y",
     [(0, 1, 1), (10, 2, 1)],
     type=enums.centered_parameter_space,
@@ -856,9 +880,10 @@ if __name__ == "__main__":
         """\
 import sys
 import canary
+import canary_pyt
 from _canary import enums
 
-canary.directives.parameterize(
+canary_pyt.directives.parameterize(
     "r,s",
     [(0.0, 1.0), (10.0, 20.0)],
     type=enums.random_parameter_space,
@@ -914,10 +939,11 @@ export CANARY_DIRECTIVE_SOURCE_VALUE=from_rcfile
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.source({str(env_file)!r})
-canary.directives.set_attribute(kind="runtime-meta", enabled=True)
-canary.directives.artifact("kept.txt", save_on="success")
+canary_pyt.directives.source({str(env_file)!r})
+canary_pyt.directives.set_attribute(kind="runtime-meta", enabled=True)
+canary_pyt.directives.artifact("kept.txt", save_on="success")
 
 def test():
     self = canary.get_instance()
@@ -955,12 +981,13 @@ def test_conditional_copy_link_and_sources_directives(tmp_path):
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize("breakfast", ("spam", "eggs"))
-canary.directives.copy("spam.txt", when={"parameters": "breakfast=spam"})
-canary.directives.copy("eggs.txt", when={"parameters": "breakfast=eggs"})
-canary.directives.link(src="shared.txt", dst="shared-link.txt")
-canary.directives.sources("declared-source.txt")
+canary_pyt.directives.parameterize("breakfast", ("spam", "eggs"))
+canary_pyt.directives.copy("spam.txt", when={"parameters": "breakfast=spam"})
+canary_pyt.directives.copy("eggs.txt", when={"parameters": "breakfast=eggs"})
+canary_pyt.directives.link(src="shared.txt", dst="shared-link.txt")
+canary_pyt.directives.sources("declared-source.txt")
 
 def test():
     self = canary.get_instance()
@@ -1017,8 +1044,9 @@ if __name__ == "__main__":
 import os
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on({"job": "provider", "when": "always", "expects": 1})
+canary_pyt.directives.depends_on({"job": "provider", "when": "always", "expects": 1})
 
 def test():
     self = canary.get_instance()
@@ -1050,8 +1078,9 @@ if __name__ == "__main__":
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.depends_on({"job": "expected_diff", "when": "DIFFED", "expects": 1})
+canary_pyt.directives.depends_on({"job": "expected_diff", "when": "DIFFED", "expects": 1})
 
 def test():
     self = canary.get_instance()
@@ -1079,8 +1108,9 @@ def test_enable_false_masks_spec(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.enable(False)
+canary_pyt.directives.enable(False)
 
 def test():
     raise AssertionError("should never run")
@@ -1108,12 +1138,13 @@ def test_resource_directives_with_conditions(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.parameterize("mode", ("small", "large"))
-canary.directives.cpus(1, when={"parameters": "mode=small"})
-canary.directives.cpus(3, when={"parameters": "mode=large"})
-canary.directives.nodes(1)
-canary.directives.gpus(0)
+canary_pyt.directives.parameterize("mode", ("small", "large"))
+canary_pyt.directives.cpus(1, when={"parameters": "mode=small"})
+canary_pyt.directives.cpus(3, when={"parameters": "mode=large"})
+canary_pyt.directives.nodes(1)
+canary_pyt.directives.gpus(0)
 
 def test():
     pass
@@ -1144,8 +1175,9 @@ def test_xfail_specific_code(tmp_path):
         """\
 import sys
 import canary
+import canary_pyt
 
-canary.directives.xfail(code=7)
+canary_pyt.directives.xfail(code=7)
 
 def test():
     return 7

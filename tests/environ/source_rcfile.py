@@ -16,11 +16,11 @@ def test_source_rcfile_1(tmpdir):
         with open("file.pyt", "w") as fh:
             fh.write(
                 """\
-import canary
 import os
 import sys
-canary.directives.source('file.sh')
-canary.directives.link('file.sh')
+import canary_pyt
+canary_pyt.directives.source('file.sh')
+canary_pyt.directives.link('file.sh')
 def test():
     assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
 if __name__ == "__main__":
@@ -41,10 +41,11 @@ def test_source_rcfile_2(tmpdir):
         with open("file.pyt", "w") as fh:
             fh.write(
                 """\
-import canary
 import os
 import sys
-canary.directives.link('file.sh')
+import canary
+import canary_pyt
+canary_pyt.directives.link('file.sh')
 def test():
     with canary.shell.source('file.sh'):
         assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
