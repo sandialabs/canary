@@ -192,8 +192,6 @@ class JobExecutor:
             logger.debug(f"Failed to teardown {job}", exc_info=e)
             return
 
-        queue.put({"event": "job_finished", "timestamp": now})
-
 
 @hookimpl(wrapper=True)
 def canary_runteststart(case: "Job") -> Generator[None, None, bool]:
