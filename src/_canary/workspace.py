@@ -153,11 +153,12 @@ class Session:
             exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
             raise StopExecution("no jobs to run", exit_code=exit_code)
 
+        parent_session = workspace.canary_level == 0
         starting_dir = os.getcwd()
         try:
             self.started_on = datetime.datetime.now()
-            self.save()
-
+            if parent_session:
+                self.save()
             os.chdir(str(self.prefix))
             canary_runtests(runner=runner)
         except Exception:
@@ -167,7 +168,8 @@ class Session:
             self.finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
             self.returncode = runner.returncode
-            self.save()
+            if parent_session:
+                self.save()
 
 
 class Workspace:
@@ -413,6 +415,7 @@ class Workspace:
             The resulting Session object.
         """
         reuse_session: bool = session is not None
+        is_parent = self.canary_level == 0
         if session is not None and not (self.sessions_dir / session).exists():
             raise ValueError(f"Session {session} not found in {self.sessions_dir}")
         now = datetime.datetime.now()
@@ -447,7 +450,7 @@ class Workspace:
             ready.append(job)
 
         s = Session(name=session_dir.name, prefix=session_dir, jobs=ready)
-        if not reuse_session:
+        if is_parent and not reuse_session:
             config.pluginmanager.hook.canary_sessionstart(session=s)
             s.save()
 
@@ -481,10 +484,11 @@ class Workspace:
             view = view_manager.finish()
             if view is not None:
                 self.register_view(view)
-        if not reuse_session:
+        if is_parent and not reuse_session:
             config.pluginmanager.hook.canary_sessionfinish(session=s)
             s.save()
-        self.register_latest_session(s)
+        if is_parent:
+            self.register_latest_session(s)
         return s
 
     def register_latest_session(self, session: Session) -> None:
