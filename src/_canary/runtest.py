@@ -54,7 +54,6 @@ from .hookspec import hookimpl
 from .queue import ResourceQueue
 from .util import glyphs
 from .util import logging
-from .util.multiprocessing import SimpleQueue
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 
@@ -151,46 +150,80 @@ def default_runtests(runner: Runner) -> bool:
 class JobExecutor:
     """Class for running ``AbstractJob``."""
 
-    def __call__(self, job: "Job", queue: SimpleQueue, **kwargs: Any) -> None:
-        from .status import Status
+    def __call__(self, job: "Job", queue, **kwargs: Any) -> None:
+        pm = config.pluginmanager.hook
 
-        def mark_broken(phase: str, e: Exception) -> None:
-            r = f"{e.__class__.__name__}({', '.join(repr(_) for _ in e.args)})"
-            job.status = Status.BROKEN(reason=r)
-            logger.debug(f"Failed to {phase} {job}", exc_info=e)
-            job.save()
+        def mark_broken(phase: str, exc: Exception) -> None:
+            reason = f"{phase} failed: {exc.__class__.__name__}: {exc}"
+            job.set_status(outcome="BROKEN", reason=reason)
 
-        job.timekeeper.reset()
+        submitted_at = time.time()
+        job.timekeeper.open(at=submitted_at)
+        queue.put({"event": "job_submitted", "timestamp": submitted_at})
 
-        now = time.time()
-        queue.put({"event": "job_submitted", "timestamp": now})
+        started = False
+        stopped = False
 
-        now = time.time()
-        queue.put({"event": "job_staged", "timestamp": now})
         try:
-            config.pluginmanager.hook.canary_runteststart(case=job)
-        except Exception as e:
-            mark_broken("setup", e)
-            return
+            # Staging/setup phase begins.
+            staged_at = time.time()
+            job.timekeeper.stage(at=staged_at)
+            queue.put({"event": "job_staged", "timestamp": staged_at})
 
-        now = time.time()
-        queue.put({"event": "job_started", "timestamp": now})
-        try:
-            config.pluginmanager.hook.canary_runtest(case=job)
-            job.timekeeper.maybe_stop()
-        except Exception as e:
-            mark_broken("run", e)
-            return
+            try:
+                pm.canary_runteststart(case=job)
+            except Exception as e:
+                mark_broken("Test setup", e)
+                return
 
-        now = time.time()
-        queue.put({"event": "job_stopped", "timestamp": now})
-        try:
-            config.pluginmanager.hook.canary_runtest_finish(case=job)
-            job.timekeeper.close(at=now)
-            job.save()
-        except Exception as e:
-            logger.debug(f"Failed to teardown {job}", exc_info=e)
-            return
+            # Actual test runtime begins here.
+            started_at = time.time()
+            job.timekeeper.start(at=started_at)
+            started = True
+            queue.put({"event": "job_started", "timestamp": started_at})
+
+            try:
+                pm.canary_runtest(case=job)
+            except Exception as e:
+                # Job.run() normally catches user-test exceptions and sets status.
+                # If an exception escapes the hook layer, treat it as an execution
+                # infrastructure error unless the job already set a terminal status.
+                if job.status.is_unset():
+                    job.set_status(
+                        outcome="ERROR",
+                        reason=f"Test execution failed: {e.__class__.__name__}: {e}",
+                    )
+                return
+            finally:
+                stopped_at = time.time()
+                job.timekeeper.stop(at=stopped_at)
+                stopped = True
+                queue.put({"event": "job_stopped", "timestamp": stopped_at})
+
+            try:
+                pm.canary_runtest_finish(case=job)
+            except Exception as e:
+                # If the test itself already failed, this will overwrite with BROKEN.
+                # That is intentional: teardown/finalization failure means Canary did
+                # not complete the test lifecycle cleanly.
+                mark_broken("Test finish", e)
+                return
+
+        finally:
+            now = time.time()
+
+            # Defensive fill-ins for paths that failed before start/stop.
+            if started and not stopped:
+                job.timekeeper.maybe_stop(at=now)
+                queue.put({"event": "job_stopped", "timestamp": now})
+
+            job.timekeeper.close(at=time.time())
+            job.on_finished()
+
+            try:
+                job.save()
+            except Exception:
+                logger.exception("Failed to save job %s", job.id[:7])
 
 
 @hookimpl(wrapper=True)

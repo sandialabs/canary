@@ -74,7 +74,7 @@ class JobFunctor:
         logging.add_handler(h)
         try:
             executor(job, queue=result_queue, **kwargs)
-        except BaseException as e:
+        except Exception as e:
             logger.exception(f"Job {job}: exception occurred during execution of job functor")
             job.set_status(outcome="ERROR", reason=repr(e))
             sys.exit(1)
@@ -209,12 +209,35 @@ class _MainWorker:
             raise RuntimeError("monitor_job called without active proc/local_q")
 
         job_id = job.id
-        deadline: float = time.time() + 1.05 * job.total_timeout()
+        runtime_timeout = float(job.total_timeout())
+        startup_timeout = max(300.0, min(1800.0, runtime_timeout))
+        finish_timeout = max(300.0, min(1800.0, runtime_timeout))
+
+        startup_deadline = time.time() + startup_timeout
+        run_deadline: float | None = None
+        finish_deadline: float | None = None
+
+        def terminate_and_report(event: str, **extra: Any) -> None:
+            pid = getattr(proc, "pid", None)
+            if isinstance(pid, int):
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except Exception as e:
+                    logger.debug("os.kill(SIGTERM) failed pid=%s: %s", pid, e)
+
+                time.sleep(0.05)
+
+                try:
+                    if proc.is_alive():
+                        os.kill(pid, signal.SIGKILL)
+                except Exception as e:
+                    logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
+
+            self.send({"job_id": job_id, "worker_id": self.worker_id, "event": event, **extra})
 
         while True:
             payload: dict[str, Any] = {"job_id": job_id, "worker_id": self.worker_id}
 
-            # Try to read one event with a short timeout
             try:
                 payload.update(local_q.get(timeout=0.05))
             except QueueEmpty:
@@ -222,37 +245,38 @@ class _MainWorker:
             else:
                 event = payload.get("event")
                 self.send(payload)
-                if event == "job_finished":
+
+                if event == "job_started":
+                    started_at = float(payload["timestamp"])
+                    run_deadline = started_at + 1.05 * runtime_timeout
+                    startup_deadline = float("inf")
+
+                elif event == "job_stopped":
+                    stopped_at = float(payload["timestamp"])
+                    run_deadline = None
+                    finish_deadline = stopped_at + finish_timeout
+
+                elif event == "job_finished":
                     return
+
                 continue
 
-            # No event this tick: enforce timeout / detect death
             now = time.time()
 
-            if proc.is_alive() and now > deadline:
-                # best-effort terminate the per-job Python process (launcher should also be killing
-                # the spawned subprocess group if needed; this is a hard stop at this layer)
-                pid = getattr(proc, "pid", None)
-                if isinstance(pid, int):
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except Exception as e:
-                        logger.debug("os.kill(SIGTERM) failed pid=%s: %s", pid, e)
+            if proc.is_alive():
+                if run_deadline is not None and now > run_deadline:
+                    terminate_and_report("job_timeout", phase="running", timeout=runtime_timeout)
+                    return
 
-                    time.sleep(0.05)
+                if run_deadline is None and finish_deadline is None and now > startup_deadline:
+                    terminate_and_report("job_timeout", phase="startup", timeout=startup_timeout)
+                    return
 
-                    try:
-                        if proc.is_alive():
-                            os.kill(pid, signal.SIGKILL)
-                    except Exception as e:
-                        logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
-
-                payload.update({"event": "job_timeout"})
-                self.send(payload)
-                return
+                if finish_deadline is not None and now > finish_deadline:
+                    terminate_and_report("job_timeout", phase="finishing", timeout=finish_timeout)
+                    return
 
             if not proc.is_alive():
-                # Process exited but FINISHED was never observed
                 payload.update({"event": "job_died", "exitcode": getattr(proc, "exitcode", None)})
                 self.send(payload)
                 return
