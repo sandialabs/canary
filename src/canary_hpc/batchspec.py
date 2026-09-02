@@ -303,36 +303,41 @@ class TestBatch(BaseJob):
         )
         rc: int | None = -1
         failure_reason: str | None = None
+
         try:
             hpc_connect.config.export()
             logger.debug(f"Submitting batch {self.id[:7]}")
+
             now = time.time()
             self.on_submit(at=now)
             queue.put({"event": "job_submitted", "timestamp": now})
-            try:
-                rc = runner.execute(self, queue=queue)
-            finally:
-                now = time.time()
-                self.timekeeper.maybe_close(at=now)
-                queue.put({"event": "job_finished", "timestamp": now})
+
+            rc = runner.execute(self, queue=queue)
+
         except Exception as e:
             logger.exception(f"Failed to run batch {self}")
             failure_reason = f"Batch execution failed: {e}"
             self.fail_preflight(failure_reason)
             rc = 1
+
         finally:
             if rc is None:
                 rc = 1
+
+            now = time.time()
+            self.timekeeper.maybe_close(at=now)
+
             self.refresh()
             self.state.phase = JobPhase.DONE
+
             logger.debug(
                 "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
             )
+
             try:
                 self.save()
             except Exception:
                 logger.exception(f"Failed to save batch {self}")
-        return
 
     def getstate(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
@@ -400,8 +405,16 @@ class TestBatch(BaseJob):
         pass
 
     def refresh(self) -> None:
-        for job in self:
-            job.refresh()
+        deadline = time.monotonic() + 1.0
+        while True:
+            for job in self:
+                job.refresh()
+            unfinished = [
+                job for job in self.jobs if not job.state.is_done() or job.status.is_unset()
+            ]
+            if not unfinished or time.monotonic() >= deadline:
+                break
+            time.sleep(0.25)
         self.finalize_status_from_child_jobs()
 
     def finalize_status_from_child_jobs(self) -> None:
