@@ -419,29 +419,58 @@ class TestBatch(BaseJob):
 
     def finalize_status_from_child_jobs(self) -> None:
         now = time.time()
+
+        # Cross-batch dependencies may have been finalized by another batch. Refresh
+        # dependency lockfiles before deciding whether this job is dependency-blocked.
+        for job in self.jobs:
+            for dep in job.dependencies:
+                try:
+                    dep.job.refresh()
+                except Exception:
+                    logger.debug(
+                        "Failed to refresh dependency %s for job %s",
+                        dep.job.id[:7],
+                        job.id[:7],
+                        exc_info=True,
+                    )
+
         for job in self.jobs:
             try:
                 job.refresh_readiness()
             except Exception:
                 logger.debug("Failed to refresh readiness for %s", job.id[:7], exc_info=True)
+
         unfinished = [job for job in self.jobs if not job.state.is_done() or job.status.is_unset()]
+
         if unfinished:
             for job in unfinished:
                 # refresh_readiness may have marked some jobs BLOCKED.
                 if job.state.is_done() and not job.status.is_unset():
                     continue
+
                 job.state.phase = JobPhase.DONE
                 job.set_status(
                     outcome="BROKEN", reason="Batch finished before job produced a final result"
                 )
-                job.timekeeper.maybe_close(at=now)
+
+                if job.timekeeper.submitted < 0:
+                    job.timekeeper.submitted = (
+                        self.timekeeper.submitted if self.timekeeper.submitted > 0 else now
+                    )
+                if job.timekeeper.started < 0:
+                    job.timekeeper.started = now
+                if job.timekeeper.finished < 0:
+                    job.timekeeper.finished = now
+
                 try:
                     job.save()
                 except Exception:
                     logger.debug("Failed to save finalized child job %s", job.id[:7], exc_info=True)
+
         base = self.status.base
         if base.is_failure() and base.reason:
             return
+
         if any(not job.state.is_done() or job.status.is_unset() for job in self.jobs):
             self.status.set_base(
                 outcome="FAILED", reason="One or more jobs in batch did not produce a final result"

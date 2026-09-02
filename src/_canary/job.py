@@ -583,10 +583,8 @@ class Job(BaseJob):
             return False
         if self.status.is_skipped():
             return False
-        # If any dependency finished in a way that violates criteria, this job will never run
-        if self.dependencies and any(
-            d.is_done() and not d.is_satisfied() for d in self.dependencies
-        ):
+        self.refresh_readiness()
+        if self.state.is_done():
             return False
         return True
 
@@ -597,12 +595,20 @@ class Job(BaseJob):
             if not dep.is_done():
                 continue
             if not dep.is_satisfied():
-                self.state.phase = JobPhase.DONE
-                self.status = Status.BLOCKED(
-                    f"Dependency {dep.job.name} finished with {dep.job.status.outcome.name!r}; "
-                    f"needed {dep.when!r}"
-                )
+                self.blocked_by_dependency(dep)
                 return
+
+    def blocked_by_dependency(self, dep: Dependency) -> None:
+        """Mark this job terminal because a dependency did not satisfy its run condition."""
+        if self.state.is_done() and not self.status.is_unset():
+            return
+        self.state.phase = JobPhase.DONE
+        self.status = Status.BLOCKED(
+            f"Dependency {dep.job.name} finished with {dep.job.status.outcome.name!r}; "
+            f"needed {dep.when!r}"
+        )
+        self.timekeeper.maybe_close()
+        self.save()
 
     def is_ready(self) -> bool:
         if not self.dependencies:

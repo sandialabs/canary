@@ -107,6 +107,10 @@ class ResourceQueue:
                 if not job.is_runnable():
                     # Job will never by ready
                     logger.debug(f"Job {job.id[:7]} not runnable and removed from queue")
+                    try:
+                        job.save()
+                    except Exception:
+                        logger.exception("Failed to save non-runnable job %s", job.id[:7])
                     self._finished[job.id] = job
                     continue
 
