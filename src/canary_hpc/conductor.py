@@ -67,6 +67,24 @@ def create_batch_specs(
         resources_per_node=resources_per_node,
     )
 
+    # A positive batch count is only well-defined for a homogeneous set of node
+    # counts under layout=flat,nodes=same.  Each distinct node count forms its
+    # own partition that is submitted as its own allocation (multi-node jobs run
+    # sequentially within their allocation, single-node jobs pack concurrently),
+    # so a single global count cannot be honored as a hard limit across a mix of
+    # node counts.  Reject it and ask the user to either drop the count (use a
+    # duration target) or restrict the selection to a single node count.
+    if spec.layout == "flat" and spec.node_policy == "same" and spec.count is not None:
+        if not spec.count_is_max():
+            node_counts = {partition.node_count for partition in partitions}
+            if len(node_counts) > 1:
+                raise ValueError(
+                    "A batch count (-b count=N) is not supported for layout=flat,nodes=same "
+                    f"when jobs span multiple node counts (found {sorted(node_counts)}). "
+                    "Use a duration target (-b duration=T) instead, or restrict the "
+                    "selection to jobs with a single node count."
+                )
+
     partition_counts = allocate_partition_counts(spec.count, partitions)
 
     batch_specs: list[BatchSpec] = []

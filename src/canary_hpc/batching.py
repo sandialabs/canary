@@ -352,8 +352,18 @@ def allocate_partition_counts(
         room[i] -= addition
         remaining -= addition
 
+    # Distribute any leftover budget (lost to flooring) one batch at a time,
+    # visiting partitions in descending weight order.  Awarding leftover units to
+    # the heaviest partitions first keeps the dominant (typically large,
+    # independent) partition from being starved, while still splitting evenly
+    # among partitions of comparable weight.  The previous ordering keyed on the
+    # fractional quota first, which spread the remainder thinly and could leave
+    # the dominant partition with too few batches (producing a few enormous
+    # batches alongside many single-job batches).
     order = sorted(
-        range(nparts), key=lambda i: (quotas[i] - math.floor(quotas[i]), weights[i]), reverse=True
+        range(nparts),
+        key=lambda i: (weights[i], quotas[i] - math.floor(quotas[i]), len(partitions[i].jobs)),
+        reverse=True,
     )
 
     while remaining > 0:

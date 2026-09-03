@@ -303,3 +303,55 @@ def test_batch_jobs_preserves_schedule_metadata(generate_files, tmpdir):
             assert metadata["exact_final_estimate"] is False
             assert "cheap_runtime" in metadata
             assert "simulated_runtime" in metadata
+
+
+class _FakePartition:
+    def __init__(self, njobs: int, weight: float, node_count: int = 1) -> None:
+        self.jobs = list(range(njobs))
+        self.weight = weight
+        self.node_count = node_count
+
+
+def test_allocate_partition_counts_balances_dominant_partition() -> None:
+    # A large independent partition alongside several tiny (e.g. aggregate)
+    # partitions must not be starved: the dominant partition should receive the
+    # bulk of the count budget rather than losing batches to per-partition
+    # minimums.  Regression test for the lopsided allocation that produced a
+    # single enormous batch alongside many single-job batches.
+    dominant = _FakePartition(5000, 5000 * 300.0 / 48)
+    aggregates = [_FakePartition(2, 2 * 5.0 / 48) for _ in range(14)]
+    partitions = [dominant, *aggregates]
+
+    counts = batching.allocate_partition_counts(30, partitions)
+
+    assert sum(counts) == 30
+    # Every tiny aggregate partition keeps a home (min 1)...
+    assert all(c >= 1 for c in counts)
+    # ...but the dominant partition claims the remaining budget.
+    assert counts[0] == 30 - len(aggregates)
+    assert all(c == 1 for c in counts[1:])
+
+
+def test_allocate_partition_counts_proportional_across_large_partitions() -> None:
+    partitions = [
+        _FakePartition(2000, 2000 * 300.0 / 48),
+        _FakePartition(1000, 1000 * 300.0 / 48),
+        _FakePartition(500, 500 * 300.0 / 48),
+    ]
+
+    counts = batching.allocate_partition_counts(28, partitions)
+
+    assert sum(counts) == 28
+    # Allocation should be roughly proportional to load (2:1:0.5).
+    assert counts[0] > counts[1] > counts[2]
+    assert counts == [16, 8, 4]
+
+
+def test_allocate_partition_counts_equal_partitions_are_balanced() -> None:
+    partitions = [_FakePartition(100, 100.0) for _ in range(7)]
+
+    counts = batching.allocate_partition_counts(30, partitions)
+
+    assert sum(counts) == 30
+    # Equal partitions should differ by at most one batch.
+    assert max(counts) - min(counts) <= 1

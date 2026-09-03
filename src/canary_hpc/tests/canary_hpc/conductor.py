@@ -242,6 +242,59 @@ def test_create_batch_specs_rejects_atomic_nodes_same() -> None:
         )
 
 
+def test_create_batch_specs_rejects_count_for_flat_nodes_same_mixed_node_counts() -> None:
+    jobs = [
+        FakeJob("one_node", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("two_node", cpus=2, runtime=10.0, node_count=2),
+    ]
+
+    with pytest.raises(ValueError, match="span multiple node counts"):
+        create_batch_specs(
+            jobs=jobs,  # type: ignore[arg-type]
+            batchspec=batchspec(layout="flat", nodes="same", count=2, duration=None),
+            cpus_per_node=8,
+            workers=None,
+        )
+
+
+def test_create_batch_specs_allows_count_for_flat_nodes_same_single_node_count() -> None:
+    jobs = [
+        FakeJob("a", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("b", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("c", cpus=2, runtime=10.0, node_count=1),
+    ]
+
+    specs = create_batch_specs(
+        jobs=jobs,  # type: ignore[arg-type]
+        batchspec=batchspec(layout="flat", nodes="same", count=2, duration=None),
+        cpus_per_node=8,
+        workers=None,
+    )
+
+    assert specs
+    assert all_batch_job_ids(specs) == {"a", "b", "c"}
+    assert len(specs) <= 2
+
+
+def test_create_batch_specs_allows_max_count_for_flat_nodes_same_mixed_node_counts() -> None:
+    # MAX_COUNT ("max") means "as many batches as possible" and is well-defined
+    # even across mixed node counts, so it must not be rejected.
+    jobs = [
+        FakeJob("one_node", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("two_node", cpus=2, runtime=10.0, node_count=2),
+    ]
+
+    specs = create_batch_specs(
+        jobs=jobs,  # type: ignore[arg-type]
+        batchspec=batchspec(layout="flat", nodes="same", count="max", duration=None),
+        cpus_per_node=8,
+        workers=None,
+    )
+
+    assert specs
+    assert all_batch_job_ids(specs) == {"one_node", "two_node"}
+
+
 def test_create_batch_specs_gpu_capacity_appears_in_metadata() -> None:
     jobs = [
         FakeJob("gpu_a", cpus=2, gpus=1, runtime=10.0),
