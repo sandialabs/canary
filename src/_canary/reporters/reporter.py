@@ -48,7 +48,6 @@ def enabled(report_type: str) -> bool:
     if reports is not None:
         return bool(reports) and "none" not in reports and report_type in reports
     return False
-    # return not running_in_ci() and report_type == "html"
 
 
 def running_in_ci() -> bool:

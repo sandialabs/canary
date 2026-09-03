@@ -47,7 +47,7 @@ if __name__ == "__main__":
         workspace = Workspace.create(root)
         specs = workspace.collect({str(root): []})
         with config.override():
-            setattr(config.options, "report", ["html"])
+            setattr(config.options, "report", None)
             session = workspace.run(specs, only="all")
 
         ns = SimpleNamespace(

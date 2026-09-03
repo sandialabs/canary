@@ -131,7 +131,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         if t := canary.config.get_timeout_option("multiplier"):
             timeout_multiplier = float(t)
     except Exception:
-        pass
+        logger.debug(f"Failed to convert multiplier={t} to float", exc_info=True)
 
     for r in rows:
         alloc_s = r["est_s"] * timeout_multiplier
