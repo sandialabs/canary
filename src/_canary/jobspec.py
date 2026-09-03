@@ -454,7 +454,7 @@ class _GlobalSpecCache:
     def _compute_repo_root(cls, path: Path) -> Path:
         d = path.parent
         while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
+            if (d / ".git").exists() or (d / ".repo").exists() or (d / ".canary-root").exists():
                 root = d
                 break
             d = d.parent

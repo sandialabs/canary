@@ -180,3 +180,33 @@ def test_build_spec_id_distinguishes_family_and_parameters(repo: Path):
     base = build_spec_id("fam", f, a=1, b=2)
     assert build_spec_id("fam", f, a=1, b=3) != base  # parameter change
     assert build_spec_id("other", f, a=1, b=2) != base  # family change
+
+
+def test_build_spec_id_uses_canary_root_anchor(tmp_path):
+    """A .canary-root marker file should anchor the repo-relative path used in the spec ID."""
+    from _canary.jobspec import _GlobalSpecCache
+    from _canary.jobspec import build_spec_id
+
+    def clear_cache():
+        _GlobalSpecCache._key.clear()
+        _GlobalSpecCache._file_hash.clear()
+        _GlobalSpecCache._rel_repo.clear()
+        _GlobalSpecCache._repo_root.clear()
+
+    # Workflow tree with a .canary-root marker at the root.
+    root = tmp_path / "workflow"
+    (root / "suite").mkdir(parents=True)
+    (root / ".canary-root").touch()
+    f = root / "suite" / "test_x.py"
+    f.write_text("# test")
+
+    clear_cache()
+    id_with_marker = build_spec_id("fam", f)
+
+    # Without the marker the root falls back to the filesystem root ("/"),
+    # so the repo-relative path is longer and the ID differs.
+    (root / ".canary-root").unlink()
+    clear_cache()
+    id_without_marker = build_spec_id("fam", f)
+
+    assert id_with_marker != id_without_marker
