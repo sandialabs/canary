@@ -25,7 +25,12 @@ class Encoder(json.JSONEncoder):
         elif isinstance(o, tuple):
             return list(o)
         elif hasattr(o, "__serialize__"):
-            data = dict(o.__serialize__())
+            serialized = o.__serialize__()
+            # If __serialize__ returns a plain scalar (str, int, etc.) emit it directly
+            # without wrapping in a __type__ envelope.
+            if not isinstance(serialized, dict):
+                return serialized
+            data = dict(serialized)
             data["__type__"] = f"{o.__class__.__module__}::{o.__class__.__qualname__}"
             return data
         return json.JSONEncoder.default(self, o)

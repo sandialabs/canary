@@ -17,11 +17,13 @@ class Category(str, Enum):
     SKIP = "SKIP"
     NONE = "NONE"
 
-    def __serialize__(self) -> dict[str, Any]:
-        return {"value": self.value}
+    def __serialize__(self) -> str:
+        return self.value
 
     @classmethod
-    def __deserialize__(cls, d: dict) -> "Category":
+    def __deserialize__(cls, d: "dict | str") -> "Category":
+        if isinstance(d, str):
+            return cls(d)
         return cls(d["value"])
 
     @classmethod
@@ -69,11 +71,18 @@ class Outcome(IntEnum):
     SKIPPED = 80
     BLOCKED = 81
 
-    def __serialize__(self) -> dict[str, Any]:
-        return {"value": self.value}
+    def __serialize__(self) -> str:
+        return self.name
 
     @classmethod
-    def __deserialize__(cls, d: dict) -> "Outcome":
+    def __deserialize__(cls, d: "dict | str | int") -> "Outcome":
+        if isinstance(d, str):
+            # Accept both name ("FAILED") and legacy int-string ("65")
+            if d.isdigit() or (d.startswith("-") and d[1:].isdigit()):
+                return cls(int(d))
+            return cls[d]
+        if isinstance(d, int):
+            return cls(d)
         return cls(d["value"])
 
     @property

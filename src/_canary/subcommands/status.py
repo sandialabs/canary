@@ -4,7 +4,9 @@
 
 import argparse
 import io
+import json
 import shutil
+import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -51,8 +53,10 @@ class Status(CanarySubcommand):
             action=StatusFormatAction,
             help="Comma separated list of fields to print to the screen [default: %(default)s]. "
             "Choices are:\n\n"
+            "• ID: the job ID (7-char prefix by default; use --full-ids for full 64-char ID)\n\n"
             "• Name: the job name\n\n"
             "• FullName: the job full name (name including relative execution path)\n\n"
+            "• FilePath: path to the test file relative to file_root\n\n"
             "• Session: the session name the job was last ran in\n\n"
             "• Exit Code: the job's exit code\n\n"
             "• Duration: job duration\n\n"
@@ -82,18 +86,41 @@ class Status(CanarySubcommand):
             help="Sort cases by this field [default: %(default)s]",
         )
         parser.add_argument(
+            "--json",
+            dest="output_json",
+            action="store_true",
+            default=False,
+            help="Emit results as a JSON array instead of a terminal table",
+        )
+        parser.add_argument(
+            "--full-ids",
+            dest="full_ids",
+            action="store_true",
+            default=False,
+            help="Show full 64-character spec IDs instead of 7-character prefixes",
+        )
+        parser.add_argument(
             "specs", nargs=argparse.REMAINDER, help="Show status history for these specific specs"
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
         if args.specs:
-            self.print_spec_status_history(args.specs)
+            self.print_spec_status_history(args.specs, args)
             return 0
         workspace = Workspace.load()
         results = workspace.db.get_results()
+
+        if getattr(args, "output_json", False):
+            self.print_json(results, args)
+            return 0
+
         table = self.get_status_table(results, args)
         console = Console()
-        if table.row_count > shutil.get_terminal_size().lines:
+        use_pager = (
+            sys.stdout.isatty()
+            and table.row_count > shutil.get_terminal_size().lines
+        )
+        if use_pager:
             with console.pager():
                 console.print(table)
         else:
@@ -101,6 +128,49 @@ class Status(CanarySubcommand):
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0
+
+    def print_json(self, results: dict[str, Any], args: "argparse.Namespace") -> None:
+        """Emit all matching results as a JSON array."""
+        rows = sorted(results.values(), key=sortkey)
+        rows = filter_by_status(rows, args.report_chars)
+
+        out = []
+        for row in rows:
+            tk = row["timekeeper"]
+            submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else getattr(tk, "_submitted", -1)
+            staged    = tk.get("_staged",    -1) if isinstance(tk, dict) else getattr(tk, "_staged",    -1)
+            started   = tk.get("_started",   -1) if isinstance(tk, dict) else getattr(tk, "_started",   -1)
+            stopped   = tk.get("_stopped",   -1) if isinstance(tk, dict) else getattr(tk, "_stopped",   -1)
+            finished  = tk.get("_finished",  -1) if isinstance(tk, dict) else getattr(tk, "_finished",  -1)
+
+            def elapsed(a: float, b: float) -> float:
+                return round(b - a, 6) if a > 0 and b > 0 else -1.0
+
+            sid = row["id"] if getattr(args, "full_ids", False) else row["id"][:7]
+            status: _Status = row["status"]
+            out.append({
+                "id": sid,
+                "name": row["spec_name"],
+                "fullname": row["spec_fullname"],
+                "file_path": row.get("file_path", ""),
+                "session": row["session"],
+                "exit_code": status.code,
+                "status": {
+                    "category": status.category.value,
+                    "outcome": status.outcome.name,
+                    "reason": status.reason,
+                },
+                "timings": {
+                    "pending":  elapsed(submitted, staged),
+                    "setup":    elapsed(staged,    started),
+                    "running":  elapsed(started,   stopped),
+                    "teardown": elapsed(stopped,   finished),
+                    "total":    elapsed(submitted, finished),
+                },
+            })
+
+        json.dump(out, sys.stdout, indent=2)
+        sys.stdout.write("\n")
 
     def get_status_table(self, results: dict[str, Any], args: "argparse.Namespace") -> Table:
         rows = sorted(results.values(), key=sortkey)
@@ -111,10 +181,11 @@ class Status(CanarySubcommand):
         for col in cols:
             table.add_column(col)
 
-        map: dict[str, str] = {
+        col_map: dict[str, str] = {
             "ID": "id",
             "Name": "name",
             "FullName": "fullname",
+            "FilePath": "file_path",
             "Session": "session",
             "Exit Code": "returncode",
             "Duration": "duration",
@@ -124,13 +195,13 @@ class Status(CanarySubcommand):
         for row in rows:
             r: list[str] = []
             for col in cols:
-                key = map[col]
-                value = get_attribute(row, key)
+                key = col_map[col]
+                value = get_attribute(row, key, full_ids=getattr(args, "full_ids", False))
                 r.append(value)
             table.add_row(*r)
         return table
 
-    def print_spec_status_history(self, ids: list[str]) -> None:
+    def print_spec_status_history(self, ids: list[str], args: "argparse.Namespace") -> None:
         workspace = Workspace.load()
         table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
@@ -140,7 +211,8 @@ class Status(CanarySubcommand):
             for entry in results:
                 row: list[str] = []
                 row.append(entry["spec_name"])
-                row.append(entry["id"][:7])
+                sid = entry["id"] if args.full_ids else entry["id"][:7]
+                row.append(sid)
                 row.append(entry["session"])
                 row.append(str(entry["status"].code))
                 row.append(str(entry["timekeeper"].duration()))
@@ -160,13 +232,15 @@ def sortkey(row: dict) -> tuple:
     return (c, row["status"].outcome, row["timekeeper"].duration())
 
 
-def get_attribute(row: dict[str, Any], attr: str) -> str:
+def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> str:
     if attr == "id":
-        return row["id"][:7]
+        return row["id"] if full_ids else row["id"][:7]
     elif attr == "name":
-        return row["spec_name"]  # fixme: add color
+        return row["spec_name"]
     elif attr == "fullname":
         return row["spec_fullname"]
+    elif attr == "file_path":
+        return row.get("file_path", "")
     elif attr == "session":
         return row["session"]
     elif attr == "returncode":
@@ -195,6 +269,7 @@ class StatusFormatAction(argparse.Action):
         "ID",
         "FullName",
         "Name",
+        "FilePath",
         "Session",
         "Exit Code",
         "Duration",

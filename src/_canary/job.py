@@ -53,11 +53,13 @@ class JobPhase(str, Enum):
     FINISHING = "FINISHING"
     DONE = "DONE"
 
-    def __serialize__(self) -> dict[str, Any]:
-        return {"value": self.value}
+    def __serialize__(self) -> str:
+        return self.value
 
     @classmethod
-    def __deserialize__(cls, d: dict[str, Any]) -> "JobPhase":
+    def __deserialize__(cls, d: "dict[str, Any] | str") -> "JobPhase":
+        if isinstance(d, str):
+            return cls(d)
         return cls(d["value"])
 
 

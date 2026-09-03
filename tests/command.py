@@ -149,9 +149,28 @@ def run_status(*, report_chars="dftns", durations=None, sort_by="name") -> int:
 
 
 def run_query(*, jobid=None, session=None, query=".", terse=False, list_keys=False) -> int:
-    args = argparse.Namespace(
-        jobid=jobid, session=session, query=query, terse=terse, list_keys=list_keys
-    )
+    """Compatibility shim: dispatch to the new Query subcommand structure."""
+    if jobid is not None:
+        args = argparse.Namespace(
+            query_subcmd="job",
+            jobid=jobid,
+            path=query,
+            cache=False,
+            clean=False,
+            terse=terse,
+            list_keys=list_keys,
+        )
+    else:
+        args = argparse.Namespace(
+            query_subcmd="session",
+            session=session,
+            path=query,
+            expand_jobs=False,
+            where=None,
+            clean=False,
+            terse=terse,
+            list_keys=list_keys,
+        )
     return Query().execute(args)
 
 
@@ -689,7 +708,7 @@ def test_learn_specific_skill_command(capsys):
     out = json.loads(capsys.readouterr().out)
 
     assert out["name"] == "canary-run-debug"
-    assert "# Running and debugging Canary jobs" in out["body"]
+    assert "# Canary run and debug" in out["body"]
 
 
 def test_learn_specific_skill_field_with_full_skill_query(capsys):
@@ -921,7 +940,7 @@ def test_learn_command_writes_specific_skill_markdown(tmp_path):
     assert output.is_file()
 
     text = output.read_text(encoding="utf-8")
-    assert "# Running and debugging Canary jobs" in text
+    assert "# Canary run and debug" in text
     assert "canary" in text
 
 

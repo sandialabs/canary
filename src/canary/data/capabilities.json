@@ -267,34 +267,97 @@
       }
     },
     "query": {
-      "summary": "canary query inspects JSON data from job locks, session locks, aggregated capabilities, or aggregated skills.",
-      "selectors": {
-        "-j, --job": "Query testcase.lock for a job found by ID or matching spec.",
-        "-s, --session": "Query session.lock for a session name or prefix; latest is supported.",
-        "-c, --capability": "Query the aggregated capability tree.",
-        "-k, --skill": "Query the aggregated skill tree."
+      "summary": "canary query inspects workspace data as JSON via subcommands: job, session, sessions, db.",
+      "subcommands": {
+        "job": {
+          "summary": "Query a single job testcase.lock by ID.",
+          "flags": {
+            "JOBID": "Job ID (7-char prefix or full 64-char SHA256).",
+            "path": "Optional dot-notation JSON path (default: whole document).",
+            "--cache": "Show per-job timing cache statistics (mean/min/max runtime history).",
+            "--clean": "Strip __type__ wrappers; normalise legacy enum dicts to plain strings.",
+            "--terse": "Compact single-line JSON.",
+            "--list": "List immediate child keys at the selected path."
+          },
+          "examples": [
+            "canary query job abc1234",
+            "canary query job abc1234 status.outcome",
+            "canary query job abc1234 spec.file_path",
+            "canary query job abc1234 timekeeper",
+            "canary query job abc1234 --cache",
+            "canary query job abc1234 --clean --terse"
+          ]
+        },
+        "session": {
+          "summary": "Query a session.lock or expand its jobs to DB result rows.",
+          "flags": {
+            "SESSION": "Session name, prefix, or \"latest\".",
+            "path": "JSON path expression (only without --expand-jobs).",
+            "--expand-jobs": "Join session job_ids to DB result rows; emit JSON array with id, name, file_path, status, timings.",
+            "--where": "Filter predicate for --expand-jobs, e.g. status.outcome==FAILED or status.category==FAIL.",
+            "--clean": "Strip __type__ wrappers.",
+            "--terse": "Compact single-line JSON.",
+            "--list": "List immediate child keys."
+          },
+          "examples": [
+            "canary query session latest",
+            "canary query session latest argv",
+            "canary query session latest --expand-jobs",
+            "canary query session latest --expand-jobs --where status.outcome==FAILED",
+            "canary query session latest --expand-jobs --where status.category==FAIL --terse"
+          ]
+        },
+        "sessions": {
+          "summary": "List all sessions with per-outcome counts and metadata.",
+          "flags": {
+            "--where": "Filter predicate, e.g. returncode==0.",
+            "--terse": "Compact single-line JSON."
+          },
+          "output_fields": [
+            "name",
+            "started_on",
+            "finished_on",
+            "returncode",
+            "argv",
+            "job_count",
+            "outcomes"
+          ],
+          "examples": [
+            "canary query sessions",
+            "canary query sessions --where returncode==0"
+          ]
+        },
+        "db": {
+          "summary": "Query the workspace SQLite database directly.",
+          "modes": {
+            "schema": "Emit CREATE TABLE DDL for all tables as JSON.",
+            "stats": "Emit spec count, result count, session count, latest session, and per-outcome counts.",
+            "SELECT ...": "Execute a read-only SQL SELECT and return JSON rows."
+          },
+          "tables": {
+            "specs": "(spec_id, data) \u2014 full serialised JobSpec blobs.",
+            "specs_meta": "(spec_id, source, view) \u2014 fast path lookup.",
+            "spec_deps": "(spec_id, dep_id) \u2014 dependency edges.",
+            "results": "(spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace, job_state, status_category, status_outcome, status_reason, status_code, timekeeper, measurements)",
+            "selections": "(tag, spec_id) \u2014 named tag sets.",
+            "selection_meta": "(tag, data) \u2014 tag creation metadata."
+          },
+          "examples": [
+            "canary query db stats",
+            "canary query db schema",
+            "canary query db \"SELECT spec_name, status_outcome, status_reason FROM results WHERE status_outcome != 'SUCCESS' ORDER BY session DESC LIMIT 20\"",
+            "canary query db \"SELECT COUNT(*) as n, status_outcome FROM results GROUP BY status_outcome ORDER BY n DESC\""
+          ]
+        }
       },
       "syntax": {
         ".": "Return the whole selected object.",
         "foo.bar": "Access nested object keys.",
         ".foo.bar": "Leading dot is optional.",
         "array[0]": "Access list index.",
-        "object['key with spaces']": "Access quoted key.",
-        "object[\"key.with.dots\"]": "Access quoted key containing punctuation."
+        "object[\"key with spaces\"]": "Access quoted key."
       },
-      "examples": {
-        "capability_root": "canary query -c .",
-        "overview": "canary query -c overview",
-        "post_hooks": "canary query -c hooks.post",
-        "extension_list": "canary query -c ext --list",
-        "extension_overview": "canary query -c ext.pyt.overview",
-        "whole_job": "canary query -j JOBID",
-        "job_measurements": "canary query -j JOBID measurements.data",
-        "latest_session": "canary query -s latest",
-        "skill_list": "canary query -k . --list",
-        "skill_export": "canary query -k canary-orientation --markdown canary-orientation.md"
-      },
-      "not_jq": "The query language is intentionally small. It does not support filters, pipes, recursive descent, expressions, or transformations."
+      "not_jq": "The query language is intentionally small. It does not support filters, pipes, or transformations."
     },
     "hooks": {
       "summary": "Canary extensions use pluggy hooks to add commands, generators, resource behavior, launchers, runtime behavior, reports, measurements, lifecycle actions, capabilities, and skills.",
@@ -510,12 +573,15 @@
         ]
       },
       "query": {
-        "purpose": "Query job locks, session locks, capabilities, or skills as JSON.",
+        "purpose": "Query workspace data as structured JSON (job locks, session locks, DB, timing cache).",
         "typical": [
-          "canary query -j JOBID measurements.data",
-          "canary query -s latest measurements",
-          "canary query -c overview",
-          "canary query -k canary-orientation"
+          "canary query job JOBID",
+          "canary query job JOBID status.outcome",
+          "canary query session latest --expand-jobs --where status.outcome==FAILED",
+          "canary query sessions",
+          "canary query db stats",
+          "canary query db schema",
+          "canary query db \"SELECT spec_name, status_outcome FROM results LIMIT 10\""
         ]
       },
       "exec": {
@@ -538,6 +604,47 @@
         "typical": [
           "canary config show",
           "canary config show resource_pool"
+        ]
+      },
+      "status": {
+        "purpose": "Print test result summary. Use --json for machine-readable output.",
+        "typical": [
+          "canary status",
+          "canary status --json",
+          "canary status --json -rA",
+          "canary status --json --full-ids",
+          "canary status -o ID,Name,FilePath,Status,Details",
+          "canary status --durations 20"
+        ],
+        "json_output_fields": [
+          "id",
+          "name",
+          "fullname",
+          "file_path",
+          "session",
+          "exit_code",
+          "status",
+          "timings"
+        ],
+        "status_object": {
+          "category": "PASS|FAIL|CANCEL|SKIP|NONE",
+          "outcome": "SUCCESS|FAILED|TIMEOUT|DIFFED|BLOCKED|...",
+          "reason": "str or null"
+        },
+        "timings_object": {
+          "pending": "submitted\u2192staged",
+          "setup": "staged\u2192started",
+          "running": "started\u2192stopped",
+          "teardown": "stopped\u2192finished",
+          "total": "submitted\u2192finished"
+        }
+      },
+      "info": {
+        "purpose": "Print workspace overview. Use --json for machine-readable output.",
+        "typical": [
+          "canary info",
+          "canary info --json",
+          "canary info -t TAGNAME --json"
         ]
       }
     },

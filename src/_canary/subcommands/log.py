@@ -118,6 +118,12 @@ def display_file(file: Path) -> None:
 
 
 def page_text(text: str) -> None:
-    import pydoc
+    import sys
 
-    pydoc.pager(text)
+    if sys.stdout.isatty():
+        import pydoc
+        pydoc.pager(text)
+    else:
+        sys.stdout.write(text)
+        if not text.endswith("\n"):
+            sys.stdout.write("\n")
