@@ -1006,15 +1006,43 @@ def load_job_from_state(lock_data: dict) -> Job:
     return workspace.find(job=lock_data["spec"]["id"])
 
 
+_cache_dir_logged: bool = False
+
+
 def find_cache_dir(start: Path) -> Path | None:
+    """Return the job result cache directory, or None if none is configured.
+
+    Resolution order:
+    1. ``CANARY_CACHE_DIR`` environment variable
+    2. ``run:cache:dir`` config key
+    3. Walk up from *start* for a ``WORKSPACE.TAG`` anchor → ``<anchor>/cache``
+
+    The resolved path (and its source) is logged at DEBUG level the first time
+    this function returns a non-None result during the process lifetime, so
+    operators can confirm which cache is in use without inspecting source code.
+    """
+    global _cache_dir_logged
+
     if "CANARY_CACHE_DIR" in os.environ:
-        return Path(os.environ["CANARY_CACHE_DIR"])
-    if cache_dir := config.get("run:cache:dir"):
-        return Path(cache_dir)
+        cache_dir = Path(os.environ["CANARY_CACHE_DIR"])
+        if not _cache_dir_logged:
+            logger.debug("Job cache dir (CANARY_CACHE_DIR): %s", cache_dir)
+            _cache_dir_logged = True
+        return cache_dir
+    if raw := config.get("run:cache:dir"):
+        cache_dir = Path(raw)
+        if not _cache_dir_logged:
+            logger.debug("Job cache dir (run:cache:dir config): %s", cache_dir)
+            _cache_dir_logged = True
+        return cache_dir
     d = start
     while d != d.parent:
         if (d / "WORKSPACE.TAG").exists():
-            return d / "cache"
+            cache_dir = d / "cache"
+            if not _cache_dir_logged:
+                logger.debug("Job cache dir (WORKSPACE.TAG at %s): %s", d, cache_dir)
+                _cache_dir_logged = True
+            return cache_dir
         d = d.parent
     return None
 

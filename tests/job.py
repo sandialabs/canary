@@ -392,9 +392,13 @@ def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):
 def test_job_runtime_stale_cache_logs_debug(spec: JobSpec, space, tmp_path, caplog):
     """A stale cached mean (> timeout) emits a debug-level log message."""
     import logging
+    import _canary.job as job_module
 
     (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
     _write_job_cache(tmp_path / "cache", spec.id, mean=750.0)  # 2.5x the 300s timeout
+
+    # Reset the once-per-process log flag so this test is order-independent.
+    job_module._cache_dir_logged = False
 
     with caplog.at_level(logging.DEBUG, logger="_canary.job"):
         job = Job(spec=spec, workspace=space)
