@@ -65,6 +65,7 @@ def default_config_values() -> dict[str, Any]:
                 "default": 300.0,
                 "long": 900.0,
             },
+            "cache": {"dir": None},
         },
         "scratch": {},
         "system": system_config(),

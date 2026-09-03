@@ -538,3 +538,27 @@ def atomic_write(path: pathlib.Path, text: str) -> None:
         except OSError:
             pass
         raise
+
+
+@contextmanager
+def file_lock(path: pathlib.Path) -> Generator[None, None, None]:
+    """Advisory exclusive lock guarding ``path`` for read-modify-write.
+
+    Uses a sidecar ``<path>.lock`` file with ``fcntl.flock``.  Safe for
+    coordinating concurrent workers and concurrent HPC batches that share a
+    cache file.  On platforms without ``fcntl`` the lock is a no-op.
+    """
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import fcntl
+    except ImportError:
+        # Non-POSIX platform: best-effort, no cross-process locking available.
+        yield
+        return
+    with open(lock_path, "w") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)

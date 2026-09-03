@@ -209,15 +209,25 @@ class _MainWorker:
             raise RuntimeError("monitor_job called without active proc/local_q")
 
         job_id = job.id
-        runtime_timeout = float(job.total_timeout())
-        startup_timeout = max(300.0, min(1800.0, runtime_timeout))
-        finish_timeout = max(300.0, min(1800.0, runtime_timeout))
 
-        startup_deadline = time.time() + startup_timeout
-        run_deadline: float | None = None
-        finish_deadline: float | None = None
+        total_timeout = float(job.total_timeout())
+        watchdog_grace = float(
+            os.getenv(
+                "CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * total_timeout)))
+            )
+        )
+        watchdog_deadline = time.time() + total_timeout + watchdog_grace
 
         def terminate_and_report(event: str, **extra: Any) -> None:
+            logger.warning(
+                "Terminating worker for job %s: event=%s timeout=%s grace=%s extra=%r",
+                job_id[:7],
+                event,
+                total_timeout,
+                watchdog_grace,
+                extra,
+            )
+
             pid = getattr(proc, "pid", None)
             if isinstance(pid, int):
                 try:
@@ -233,7 +243,13 @@ class _MainWorker:
                 except Exception as e:
                     logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
 
-            self.send({"job_id": job_id, "worker_id": self.worker_id, "event": event, **extra})
+            payload: dict[str, Any] = {
+                "job_id": job_id,
+                "worker_id": self.worker_id,
+                "event": event,
+                **extra,
+            }
+            self.send(payload)
 
         while True:
             payload: dict[str, Any] = {"job_id": job_id, "worker_id": self.worker_id}
@@ -246,35 +262,18 @@ class _MainWorker:
                 event = payload.get("event")
                 self.send(payload)
 
-                if event == "job_started":
-                    started_at = float(payload["timestamp"])
-                    run_deadline = started_at + 1.05 * runtime_timeout
-                    startup_deadline = float("inf")
-
-                elif event == "job_stopped":
-                    stopped_at = float(payload["timestamp"])
-                    run_deadline = None
-                    finish_deadline = stopped_at + finish_timeout
-
-                elif event == "job_finished":
+                if event == "job_finished":
                     return
 
                 continue
 
             now = time.time()
 
-            if proc.is_alive():
-                if run_deadline is not None and now > run_deadline:
-                    terminate_and_report("job_timeout", phase="running", timeout=runtime_timeout)
-                    return
-
-                if run_deadline is None and finish_deadline is None and now > startup_deadline:
-                    terminate_and_report("job_timeout", phase="startup", timeout=startup_timeout)
-                    return
-
-                if finish_deadline is not None and now > finish_deadline:
-                    terminate_and_report("job_timeout", phase="finishing", timeout=finish_timeout)
-                    return
+            if proc.is_alive() and now > watchdog_deadline:
+                terminate_and_report(
+                    "job_timeout", phase="watchdog", timeout=total_timeout, grace=watchdog_grace
+                )
+                return
 
             if not proc.is_alive():
                 payload.update({"event": "job_died", "exitcode": getattr(proc, "exitcode", None)})

@@ -97,3 +97,34 @@ def test_request_node_json_helper_roundtrip():
     assert isinstance(out, RequestNode)
     assert out.kind == "scanpaths"
     assert out.value == {"/tmp/tests": ["a.pyt"]}
+
+
+def test_run_cache_dir_config_default_is_none():
+    assert config.get("run:cache:dir") is None
+
+
+def test_run_cache_dir_config_settable():
+    config.set("run:cache:dir", "/tmp/shared-canary-cache")
+    assert config.get("run:cache:dir") == "/tmp/shared-canary-cache"
+
+
+def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, monkeypatch):
+    from _canary.job import find_cache_dir
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "WORKSPACE.TAG").write_text("")
+
+    # 1. With nothing set, walk up to the WORKSPACE.TAG and use <ws>/cache.
+    monkeypatch.delenv("CANARY_CACHE_DIR", raising=False)
+    assert find_cache_dir(start=ws) == ws / "cache"
+
+    # 2. A configured run:cache:dir takes precedence over the workspace tag.
+    shared = tmp_path / "shared"
+    config.set("run:cache:dir", str(shared))
+    assert find_cache_dir(start=ws) == shared
+
+    # 3. CANARY_CACHE_DIR wins over everything.
+    envdir = tmp_path / "env"
+    monkeypatch.setenv("CANARY_CACHE_DIR", str(envdir))
+    assert find_cache_dir(start=ws) == envdir

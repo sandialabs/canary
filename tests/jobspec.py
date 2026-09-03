@@ -130,3 +130,53 @@ def test_specdependency_roundtrip_json(repo: Path):
     out = json.loads(json.dumps(dep))
     assert out == dep
     assert isinstance(out.spec, JobSpec)
+
+
+def test_build_spec_id_is_lowercase_hex(repo: Path):
+    from _canary.jobspec import build_spec_id
+    from _canary.jobspec import validate_spec_id
+
+    id = build_spec_id("fam", repo / "suite" / "test_x.py", a=1, b=2)
+    assert len(id) == 64
+    assert all(c in "0123456789abcdef" for c in id)
+    # Must satisfy the id regex used throughout the db/lock layer.
+    assert validate_spec_id(id) == id
+
+
+def test_build_spec_id_stable_across_file_content_changes(tmp_path):
+    from _canary.jobspec import _GlobalSpecCache
+    from _canary.jobspec import build_spec_id
+
+    root = tmp_path / "repo"
+    (root / "suite").mkdir(parents=True)
+    f = root / "suite" / "t.pyt"
+
+    def clear_cache():
+        _GlobalSpecCache._key.clear()
+        _GlobalSpecCache._file_hash.clear()
+        _GlobalSpecCache._rel_repo.clear()
+        _GlobalSpecCache._repo_root.clear()
+
+    f.write_text("# version 1\nprint(1)\n")
+    clear_cache()
+    id1 = build_spec_id("t", f, a=1)
+    content1 = _GlobalSpecCache.content_hash(f)
+
+    # An incidental edit (comment) must NOT change the id...
+    f.write_text("# version 2 (edited comment)\nprint(1)\n")
+    clear_cache()
+    id2 = build_spec_id("t", f, a=1)
+    content2 = _GlobalSpecCache.content_hash(f)
+
+    assert id1 == id2
+    # ...but the content hash reflects the edit.
+    assert content1 != content2
+
+
+def test_build_spec_id_distinguishes_family_and_parameters(repo: Path):
+    from _canary.jobspec import build_spec_id
+
+    f = repo / "suite" / "test_x.py"
+    base = build_spec_id("fam", f, a=1, b=2)
+    assert build_spec_id("fam", f, a=1, b=3) != base  # parameter change
+    assert build_spec_id("other", f, a=1, b=2) != base  # family change

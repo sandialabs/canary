@@ -884,54 +884,72 @@ class Job(BaseJob):
         """store relevant information for this run"""
         if not self.status.is_success():
             return
+        from .jobspec import _GlobalSpecCache
+        from .util.filesystem import atomic_write
+        from .util.filesystem import file_lock
+
         if cache_dir := find_cache_dir(start=self.workspace.root):
             file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
             file.parent.mkdir(parents=True, exist_ok=True)
-            cache: dict[str, Any]
-            if not file.exists():
-                cache = {
-                    ".version": [3, 0],
-                    "meta": {
-                        "name": self.spec.display_name(),
-                        "id": self.spec.id,
-                        "root": self.spec.file_root,
-                        "path": self.spec.file_path,
-                        "parameters": self.spec.parameters,
-                    },
-                }
-            else:
-                cache = json.loads(file.read_text())["cache"]
-            history = cache.setdefault("history", {})
-            fn = datetime.datetime.fromtimestamp
-            dt = fn(self.timekeeper._started) if self.timekeeper._started > 0 else None
-            if dt is not None:
-                history["last_run"] = dt.strftime("%c")
-            name = self.status.category.lower()
-            history[name] = history.get(name, 0) + 1
-            if self.timekeeper.running() >= 0 and self.status.is_success():
-                count: int = 0
-                metrics = cache.setdefault("metrics", {})
-                t = metrics.setdefault("time", {})
-                if t:
-                    # Welford's single pass online algorithm to update statistics
-                    count, mean, variance = t["count"], t["mean"], t["variance"]
-                    delta = self.timekeeper.running() - mean
-                    mean += delta / (count + 1)
-                    M2 = variance * count
-                    delta2 = self.timekeeper.running() - mean
-                    M2 += delta * delta2
-                    variance = M2 / (count + 1)
-                    minimum = min(t["min"], self.timekeeper.running())
-                    maximum = max(t["max"], self.timekeeper.running())
+            # Lock the individual cache file for the whole read-modify-write so
+            # concurrent workers and concurrent HPC batches sharing this cache do
+            # not lose one another's updates.
+            with file_lock(file):
+                cache: dict[str, Any]
+                if not file.exists():
+                    cache = {
+                        ".version": [3, 0],
+                        "meta": {
+                            "name": self.spec.display_name(),
+                            "id": self.spec.id,
+                            "root": self.spec.file_root,
+                            "path": self.spec.file_path,
+                            "parameters": self.spec.parameters,
+                        },
+                    }
                 else:
-                    variance = 0.0
-                    mean = minimum = maximum = self.timekeeper.running()
-                t["mean"] = mean
-                t["min"] = minimum
-                t["max"] = maximum
-                t["variance"] = variance
-                t["count"] = count + 1
-            file.write_text(json.dumps({"cache": cache}, indent=2))
+                    cache = json.loads(file.read_text())["cache"]
+                # Record the current file content hash so consumers can detect
+                # that a test was edited since these metrics were recorded (the
+                # id itself is content-independent).
+                try:
+                    meta = cache.setdefault("meta", {})
+                    meta["content_hash"] = _GlobalSpecCache.content_hash(
+                        self.spec.file_root / self.spec.file_path
+                    )
+                except Exception:
+                    logger.debug("Failed to record content hash", exc_info=True)
+                history = cache.setdefault("history", {})
+                fn = datetime.datetime.fromtimestamp
+                dt = fn(self.timekeeper._started) if self.timekeeper._started > 0 else None
+                if dt is not None:
+                    history["last_run"] = dt.strftime("%c")
+                name = self.status.category.lower()
+                history[name] = history.get(name, 0) + 1
+                if self.timekeeper.running() >= 0 and self.status.is_success():
+                    count: int = 0
+                    metrics = cache.setdefault("metrics", {})
+                    t = metrics.setdefault("time", {})
+                    if t:
+                        # Welford's single pass online algorithm to update statistics
+                        count, mean, variance = t["count"], t["mean"], t["variance"]
+                        delta = self.timekeeper.running() - mean
+                        mean += delta / (count + 1)
+                        M2 = variance * count
+                        delta2 = self.timekeeper.running() - mean
+                        M2 += delta * delta2
+                        variance = M2 / (count + 1)
+                        minimum = min(t["min"], self.timekeeper.running())
+                        maximum = max(t["max"], self.timekeeper.running())
+                    else:
+                        variance = 0.0
+                        mean = minimum = maximum = self.timekeeper.running()
+                    t["mean"] = mean
+                    t["min"] = minimum
+                    t["max"] = maximum
+                    t["variance"] = variance
+                    t["count"] = count + 1
+                atomic_write(file, json.dumps({"cache": cache}, indent=2))
 
 
 def load_job_from_file(arg: Path | str | None) -> Job:
@@ -955,6 +973,8 @@ def load_job_from_state(lock_data: dict) -> Job:
 def find_cache_dir(start: Path) -> Path | None:
     if "CANARY_CACHE_DIR" in os.environ:
         return Path(os.environ["CANARY_CACHE_DIR"])
+    if cache_dir := config.get("run:cache:dir"):
+        return Path(cache_dir)
     d = start
     while d != d.parent:
         if (d / "WORKSPACE.TAG").exists():

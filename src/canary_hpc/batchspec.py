@@ -453,14 +453,10 @@ class TestBatch(BaseJob):
                     outcome="BROKEN", reason="Batch finished before job produced a final result"
                 )
 
-                if job.timekeeper.submitted < 0:
-                    job.timekeeper.submitted = (
-                        self.timekeeper.submitted if self.timekeeper.submitted > 0 else now
-                    )
-                if job.timekeeper.started < 0:
-                    job.timekeeper.started = now
-                if job.timekeeper.finished < 0:
-                    job.timekeeper.finished = now
+                batch_submitted = self.timekeeper._submitted
+                job.timekeeper.maybe_open(at=batch_submitted if batch_submitted > 0 else now)
+                job.timekeeper.maybe_start(at=now)
+                job.timekeeper.maybe_close(at=now)
 
                 try:
                     job.save()

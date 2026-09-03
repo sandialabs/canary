@@ -19,6 +19,14 @@ def config(request):
         os.environ.pop("CONFIG_ENV_FILENAME", None)
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"
+        # ``_canary.config`` serves attributes (get, set, getoption, ...) via a
+        # module __getattr__ proxy that forwards to the live Config singleton.
+        # Tests that monkeypatch these names leave real module attributes behind
+        # (monkeypatch restores them as real attributes bound to a now-stale
+        # Config), which would shadow the proxy for later tests.  Clear any such
+        # leaked attributes before installing a fresh singleton.
+        for name in ("get", "set", "getoption", "serialize", "pluginmanager"):
+            _canary.config.__dict__.pop(name, None)
         _canary.config._config = _canary.config.config.Config()
         yield
     finally:

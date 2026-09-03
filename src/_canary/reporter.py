@@ -385,6 +385,7 @@ class EventReporter(Reporter):
     def __init__(self, executor: ReporterExecutorProtocol) -> None:
         super().__init__(executor)
 
+        self.debug = bool(config.get("debug"))
         self.event_columns: tuple[str, ...] = ("Job", "ID", "Status", "Time", "Rank")
         self.validate_columns(self.event_columns)
 
@@ -443,16 +444,18 @@ class EventReporter(Reporter):
         logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_stage(self, slot: "ExecutionSlot") -> None:
-        text = self.render_event_row(slot, status="[blue]STAGED[/]")
-        logger.info(text.markup, extra={"prefix": ""})
+        if self.debug:
+            text = self.render_event_row(slot, status="[blue]STAGING[/]")
+            logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_start(self, slot: "ExecutionSlot") -> None:
         text = self.render_event_row(slot, status="[blue]STARTED[/]")
         logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_stop(self, slot: "ExecutionSlot") -> None:
-        text = self.render_event_row(slot, status="[blue]STOPPED[/]")
-        logger.info(text.markup, extra={"prefix": ""})
+        if self.debug:
+            text = self.render_event_row(slot, status="[blue]FINALIZING[/]")
+            logger.info(text.markup, extra={"prefix": ""})
 
     def on_job_finish(self, slot: "ExecutionSlot") -> None:
         text = self.render_event_row(

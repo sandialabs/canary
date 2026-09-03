@@ -218,7 +218,7 @@ class JobExecutor:
                 queue.put({"event": "job_stopped", "timestamp": now})
 
             job.timekeeper.close(at=time.time())
-            job.on_finished()
+            job.on_finish()
 
             try:
                 job.save()

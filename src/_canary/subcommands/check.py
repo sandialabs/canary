@@ -12,7 +12,6 @@ import site
 import subprocess
 import sys
 import time
-import tomllib
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
@@ -547,28 +546,23 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
 
 
 def canary_entry_point_modules(root: Path) -> dict[str, str]:
-    file = root / "pyproject.toml"
+    """Return ``{entry_point_name: module}`` for the ``canary`` entry-point group.
 
-    if not file.exists():
-        raise FileNotFoundError(file)
+    Uses the installed package metadata (the same mechanism the plugin manager
+    uses to discover plugins) rather than parsing ``pyproject.toml``.  This
+    reflects what is actually installed and avoids a hard dependency on
+    ``tomllib`` (Python 3.11+).
+    """
+    import importlib.metadata as importlib_metadata
 
-    data = tomllib.loads(file.read_text())
-    group = data.get("project", {}).get("entry-points", {}).get("canary", {})
-
-    if not isinstance(group, dict):
-        return {}
+    from ..hookspec import project_name
 
     modules: dict[str, str] = {}
 
-    for name, value in group.items():
-        if not isinstance(value, str):
-            continue
-
-        # Entry point values may be "pkg.mod:object" and may include extras.
-        module = value.split("[", 1)[0].split(":", 1)[0].strip()
-
-        if module:
-            modules[str(name)] = module
+    for ep in importlib_metadata.entry_points(group=project_name):
+        # ``EntryPoint.module`` strips any ``:object`` attribute and extras.
+        if ep.module:
+            modules[str(ep.name)] = ep.module
 
     return modules
 

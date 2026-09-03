@@ -90,7 +90,11 @@ workspace_schema = Schema(
 )
 
 run_schema = Schema(
-    {Optional("default_tag"): str, Optional("timeout"): {Optional(str): Use(time_in_seconds)}}
+    {
+        Optional("default_tag"): str,
+        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+        Optional("cache"): {Optional("dir"): optional_str},
+    }
 )
 
 

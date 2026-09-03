@@ -488,18 +488,36 @@ class _GlobalSpecCache:
         return cls._file_hash[key]
 
     @classmethod
+    def content_hash(cls, path: Path) -> str:
+        """Return the hex content hash of ``path``.
+
+        This is no longer part of the spec ID (see ``build_spec_id``) but is
+        exposed so callers can record it for staleness detection: a test whose
+        ID is unchanged but whose ``content_hash`` differs has been edited since
+        a cached result/runtime was recorded.
+        """
+        return cls.file_hash(path).decode()
+
+    @classmethod
     def rel_repo(cls, path: Path) -> bytes:
         key = cls.populate_cache(path)
         return cls._rel_repo[key]
 
 
 def build_spec_id(*args: Any, **kwargs: Any) -> str:
-    # Hasher is used to build ID
+    # Hasher is used to build ID.
+    #
+    # The ID identifies a *logical* test: its family, its repo-relative location,
+    # and its parameter set.  It intentionally does NOT depend on the file's
+    # contents, so incidental edits (comments, formatting, tolerance tweaks) do
+    # not change a test's identity.  This keeps historical results and the
+    # per-job runtime cache associated with a test across such edits.  The file
+    # content hash is still available separately (see
+    # ``_GlobalSpecCache.content_hash``) for staleness detection.
     float_fmt = "%.16e"
     hasher = hashlib.sha256()
     for arg in args:
         if isinstance(arg, Path):
-            hasher.update(_GlobalSpecCache.file_hash(arg))
             hasher.update(_GlobalSpecCache.rel_repo(arg))
         else:
             hasher.update(stringify(arg, float_fmt=float_fmt).encode())
