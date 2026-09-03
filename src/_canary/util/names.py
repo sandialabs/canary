@@ -1,13 +1,27 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
+"""Random name generation for canary sessions and objects.
+
+Provides ``random_name`` (adjective-noun pairs) and ``unique_random_name``
+(collision-avoiding variant) backed by curated word lists.
+"""
+
 import random
 from typing import Iterable
 
 
 def random_name(seed: int | None = None):
+    """Generate a two-part hyphenated name: <adjective>-<noun>.
+
+    Args:
+        seed: Optional random seed for reproducibility.
+
+    Returns:
+        A hyphenated string such as ``"swift-falcon"``.
+    """
     rng = random.Random(seed)
-    """Generate a two-part hyphenated name: <adjective>-<noun>"""
     return f"{rng.choice(adjectives)}-{rng.choice(nouns)}"
 
 

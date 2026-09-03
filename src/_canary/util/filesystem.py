@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Filesystem utilities: path operations, temporary directories, file I/O helpers.
+
+Key functions include ``which``, ``mkdirp``, ``working_dir``, ``tmpdir``,
+``rmtree2``/``async_rmtree``, ``synctree``, ``touch``/``touchp``,
+``atomic_write``, and ``file_lock``.
+"""
+
 import datetime
 import errno
 import getpass
@@ -58,10 +65,12 @@ __all__ = [
 
 
 def is_hidden(path: str) -> bool:
+    """Return ``True`` if the basename of ``path`` starts with a dot."""
     return os.path.basename(path).startswith(".")
 
 
 def max_name_length() -> int:
+    """Return the maximum filename length supported by the filesystem."""
     if os.name == "nt":
         return 260
     return os.pathconf("/", "PC_NAME_MAX")
@@ -232,6 +241,15 @@ def rmtree2(path: PathLike, n: int = 5) -> None:
 
 
 def async_rmtree(path: PathLike) -> None:
+    """Rename ``path`` to a tombstone name and delete it in a background thread.
+
+    The rename is immediate (fast); the actual ``rmtree`` is performed
+    asynchronously so callers are not blocked by slow NFS deletions.
+    If the path does not exist, this is a no-op.
+
+    Args:
+        path: Directory (or file) to remove asynchronously.
+    """
     path = pathlib.Path(path)
     if not path.exists():
         return
@@ -482,6 +500,15 @@ def ancestor(dir: str, n: int = 1) -> str:
 
 
 def grep(regex: str | re.Pattern, file: PathLike) -> bool:
+    """Return ``True`` if any line in ``file`` matches ``regex``.
+
+    Args:
+        regex: A compiled pattern or a regex string.
+        file: Path to the file to search.
+
+    Returns:
+        ``True`` if a match is found, ``False`` otherwise (including on decode errors).
+    """
     rx: re.Pattern = re.compile(regex) if isinstance(regex, str) else regex
     try:
         for line in open(file):
@@ -493,6 +520,16 @@ def grep(regex: str | re.Pattern, file: PathLike) -> bool:
 
 
 def find_work_tree(start: str | None = None) -> str | None:
+    """Walk up the directory tree to find the canary session work-tree root.
+
+    Looks for either a ``SESSION.TAG`` file or a ``.canary/SESSION.TAG`` marker.
+
+    Args:
+        start: Starting directory for the search; defaults to the current directory.
+
+    Returns:
+        The work-tree root path, or ``None`` if not found.
+    """
     path = os.path.abspath(start or os.getcwd())
     tagfile = "SESSION.TAG"
     while True:
@@ -507,6 +544,11 @@ def find_work_tree(start: str | None = None) -> str | None:
 
 
 def clean_out_folder(folder: str) -> None:
+    """Remove all contents of ``folder`` without deleting the folder itself.
+
+    Args:
+        folder: Path to the directory to empty.
+    """
     if os.path.isdir(folder):
         with working_dir(folder):
             for f in os.listdir("."):
@@ -514,6 +556,12 @@ def clean_out_folder(folder: str) -> None:
 
 
 def write_directory_tag(file: PathLike) -> None:
+    """Write a cache-directory tag file at ``file``.
+
+    Args:
+        file: Destination path for the tag file; parent directories are
+            created if they do not exist.
+    """
     file = pathlib.Path(file)
     file.parent.mkdir(exist_ok=True)
     file.write_text(
@@ -524,6 +572,12 @@ def write_directory_tag(file: PathLike) -> None:
 
 
 def atomic_write(path: pathlib.Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically using a temp-file and ``os.replace``.
+
+    Args:
+        path: Destination file path.
+        text: Text content to write.
+    """
     dir = path.parent
     fd, tmp_path = tempfile.mkstemp(dir=dir, prefix=".tmp-", suffix=".json")
     try:

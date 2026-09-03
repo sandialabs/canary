@@ -62,6 +62,8 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Query(CanarySubcommand):
+    """Structured inspection of Canary workspace data via job, session, sessions, and db subcommands."""
+
     name = "query"
     description = (
         "Query Canary workspace data.\n\n"
@@ -79,31 +81,28 @@ class Query(CanarySubcommand):
     )
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register ``job``, ``session``, ``sessions``, and ``db`` subparsers with their flags."""
         sub = parser.add_subparsers(dest="query_subcmd", metavar="SUBCMD")
 
         # ---- job ----
         p_job = sub.add_parser("job", help="Query a job's testcase.lock")
         p_job.add_argument("jobid", metavar="JOBID", help="Job ID (prefix or full 64-char)")
         p_job.add_argument(
-            "path",
-            nargs="?",
-            default=".",
-            help="JSON path expression (default: whole document)",
+            "path", nargs="?", default=".", help="JSON path expression (default: whole document)"
         )
         p_job.add_argument("--cache", action="store_true", help="Show timing cache for this job")
         p_job.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
         p_job.add_argument("--terse", action="store_true", help="Compact single-line JSON")
         p_job.add_argument(
-            "--list", dest="list_keys", action="store_true",
+            "--list",
+            dest="list_keys",
+            action="store_true",
             help="List queryable child keys at the selected path",
         )
 
         # ---- session ----
         p_ses = sub.add_parser("session", help="Query a session lock or its jobs")
-        p_ses.add_argument(
-            "session", metavar="SESSION",
-            help='Session name, prefix, or "latest"',
-        )
+        p_ses.add_argument("session", metavar="SESSION", help='Session name, prefix, or "latest"')
         p_ses.add_argument(
             "path",
             nargs="?",
@@ -126,24 +125,21 @@ class Query(CanarySubcommand):
         p_ses.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
         p_ses.add_argument("--terse", action="store_true", help="Compact single-line JSON")
         p_ses.add_argument(
-            "--list", dest="list_keys", action="store_true",
+            "--list",
+            dest="list_keys",
+            action="store_true",
             help="List queryable child keys at the selected path",
         )
 
         # ---- sessions ----
         p_sessions = sub.add_parser("sessions", help="List all sessions with summary statistics")
         p_sessions.add_argument(
-            "--where",
-            metavar="EXPR",
-            help='Filter predicate, e.g. "returncode==0"',
+            "--where", metavar="EXPR", help='Filter predicate, e.g. "returncode==0"'
         )
         p_sessions.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
         # ---- db ----
-        p_db = sub.add_parser(
-            "db",
-            help="Query the workspace SQLite database",
-        )
+        p_db = sub.add_parser("db", help="Query the workspace SQLite database")
         p_db.add_argument(
             "db_args",
             nargs=argparse.REMAINDER,
@@ -156,6 +152,7 @@ class Query(CanarySubcommand):
         p_db.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Dispatch to the appropriate query sub-handler and return an exit code."""
         subcmd = getattr(args, "query_subcmd", None)
 
         if subcmd == "job":
@@ -176,6 +173,7 @@ class Query(CanarySubcommand):
     # ------------------------------------------------------------------
 
     def _exec_job(self, args: argparse.Namespace) -> int:
+        """Query a single job's ``testcase.lock`` or its timing cache."""
         workspace = Workspace.load()
 
         if args.cache:
@@ -210,6 +208,7 @@ class Query(CanarySubcommand):
     # ------------------------------------------------------------------
 
     def _exec_session(self, args: argparse.Namespace) -> int:
+        """Query a session lock file or expand its jobs into result rows."""
         workspace = Workspace.load()
         session_dir = _resolve_session_dir(workspace, args.session)
 
@@ -250,10 +249,10 @@ class Query(CanarySubcommand):
         for row in rows:
             tk = row["timekeeper"]
             submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
-            staged    = tk.get("_staged",    -1) if isinstance(tk, dict) else -1
-            started   = tk.get("_started",   -1) if isinstance(tk, dict) else -1
-            stopped   = tk.get("_stopped",   -1) if isinstance(tk, dict) else -1
-            finished  = tk.get("_finished",  -1) if isinstance(tk, dict) else -1
+            staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
+            started = tk.get("_started", -1) if isinstance(tk, dict) else -1
+            stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
+            finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
 
             def elapsed(a: float, b: float) -> float:
                 return round(b - a, 6) if a > 0 and b > 0 else -1.0
@@ -271,11 +270,11 @@ class Query(CanarySubcommand):
                     "reason": row["status"].reason,
                 },
                 "timings": {
-                    "pending":  elapsed(submitted, staged),
-                    "setup":    elapsed(staged,    started),
-                    "running":  elapsed(started,   stopped),
-                    "teardown": elapsed(stopped,   finished),
-                    "total":    elapsed(submitted, finished),
+                    "pending": elapsed(submitted, staged),
+                    "setup": elapsed(staged, started),
+                    "running": elapsed(started, stopped),
+                    "teardown": elapsed(stopped, finished),
+                    "total": elapsed(submitted, finished),
                 },
             }
 
@@ -291,6 +290,7 @@ class Query(CanarySubcommand):
     # ------------------------------------------------------------------
 
     def _exec_sessions(self, args: argparse.Namespace) -> int:
+        """List all sessions with per-outcome job counts as a JSON array."""
         workspace = Workspace.load()
         sessions_dir = workspace.sessions_dir
         predicate = _parse_where(args.where) if args.where else None
@@ -331,6 +331,7 @@ class Query(CanarySubcommand):
     # ------------------------------------------------------------------
 
     def _exec_db(self, args: argparse.Namespace) -> int:
+        """Dispatch to ``schema``, ``stats``, or an arbitrary SQL SELECT statement."""
         workspace = Workspace.load()
         db_args: list[str] = args.db_args or []
 
@@ -351,6 +352,7 @@ class Query(CanarySubcommand):
             return self._db_sql(workspace, sql, args)
 
     def _db_schema(self, workspace: Workspace, args: argparse.Namespace) -> int:
+        """Emit the workspace database table DDL as a JSON object."""
         con = sqlite3.connect(workspace.db.path)
         rows = con.execute(
             "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -361,6 +363,7 @@ class Query(CanarySubcommand):
         return 0
 
     def _db_stats(self, workspace: Workspace, args: argparse.Namespace) -> int:
+        """Emit aggregate statistics (spec count, outcomes, sessions) from the workspace DB."""
         con = sqlite3.connect(workspace.db.path)
         total = con.execute("SELECT COUNT(*) FROM results").fetchone()[0]
         outcome_rows = con.execute(
@@ -368,12 +371,8 @@ class Query(CanarySubcommand):
             "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
             "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
         ).fetchall()
-        session_count = con.execute(
-            "SELECT COUNT(DISTINCT session) FROM results"
-        ).fetchone()[0]
-        latest = con.execute(
-            "SELECT MAX(session) FROM results"
-        ).fetchone()[0]
+        session_count = con.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
+        latest = con.execute("SELECT MAX(session) FROM results").fetchone()[0]
         spec_count = con.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
         con.close()
 
@@ -389,6 +388,7 @@ class Query(CanarySubcommand):
         return 0
 
     def _db_sql(self, workspace: Workspace, sql: str, args: argparse.Namespace) -> int:
+        """Execute a read-only SQL SELECT against the workspace database and emit rows as JSON."""
         sql_stripped = sql.strip().lower()
         if not sql_stripped.startswith("select"):
             sys.stderr.write("canary query db: only SELECT statements are permitted\n")
@@ -415,6 +415,7 @@ class Query(CanarySubcommand):
 
 
 def _job_lockfile(workspace: Workspace, jobid: str) -> Path:
+    """Resolve *jobid* to its ``testcase.lock`` path, raising if not found."""
     job = workspace.find_job(jobid)
     lockfile = job.lockfile
     if not lockfile.exists():
@@ -425,6 +426,7 @@ def _job_lockfile(workspace: Workspace, jobid: str) -> Path:
 def _find_cache_path(workspace: Workspace, spec_id: str) -> Path | None:
     """Return the path to the per-job timing cache file, or None if absent."""
     from ..job import find_cache_dir
+
     cache_dir = find_cache_dir(start=workspace.root)
     if cache_dir is None:
         cache_dir = workspace.root / "cache"
@@ -439,6 +441,7 @@ def _find_cache_path(workspace: Workspace, spec_id: str) -> Path | None:
 
 
 def _resolve_session_dir(workspace: Workspace, session: str) -> Path:
+    """Resolve a session name, prefix, or ``"latest"`` to its directory path."""
     if session == "latest":
         latest = workspace.refs_dir / "latest"
         if not latest.exists():
@@ -467,17 +470,15 @@ def _resolve_session_dir(workspace: Workspace, session: str) -> Path:
 def _db_results_for_session(workspace: Workspace, session_name: str) -> list[dict[str, Any]]:
     """Return all result rows for a given session from the workspace DB."""
     rows = workspace.db.connection.execute(
-        "SELECT * FROM results WHERE session = ? ORDER BY spec_name",
-        (session_name,),
+        "SELECT * FROM results WHERE session = ? ORDER BY spec_name", (session_name,)
     ).fetchall()
     return [workspace.db._reconstruct_results(row) for row in rows]
 
 
-def _db_outcome_counts_for_session(
-    workspace: Workspace, session_name: str
-) -> dict[str, int]:
+def _db_outcome_counts_for_session(workspace: Workspace, session_name: str) -> dict[str, int]:
     """Return {outcome_name: count} for all jobs in a session."""
     from ..status import Outcome
+
     rows = workspace.db.connection.execute(
         "SELECT status_outcome, COUNT(*) FROM results WHERE session = ? GROUP BY status_outcome",
         (session_name,),

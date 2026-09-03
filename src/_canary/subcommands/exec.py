@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary exec`` subcommand for running a single job directly."""
+
 import argparse
 import datetime
 import time
@@ -28,15 +30,19 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Exec(CanarySubcommand):
+    """Execute a single job spec by ID, bypassing the normal session scheduler."""
+
     name = "exec"
     description = "Execute a single job"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register the ``spec`` positional ID and optional ``--session`` arguments."""
         parser.set_defaults(banner=False)
         parser.add_argument("--session", help="Run the job in this session")
         parser.add_argument("spec", help="Run this spec ID")
 
     def execute(self, args: "argparse.Namespace") -> int:
+        """Resolve the spec, verify it is ready to run, execute it, and persist the result."""
         workspace = Workspace.load()
         now = datetime.datetime.now()
         session_name = args.session or now.isoformat(timespec="microseconds").replace(":", "-")
@@ -55,6 +61,7 @@ class Exec(CanarySubcommand):
         return 0
 
     def run_job(self, job: Job) -> None:
+        """Stage, run, and tear down *job*, printing live status updates."""
         pm = config.pluginmanager.hook
         style = config.getoption("console_style") or {}
         namefmt = style.get("name", "short")

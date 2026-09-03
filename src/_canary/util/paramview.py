@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Immutable parameter containers for test instances.
+
+``Parameters`` stores a single set of named parameter values and supports
+single-key, comma-separated multi-key, and tuple multi-key access.
+``MultiParameters`` extends this so each key maps to a tuple of values
+(a column of a parameter table), and multi-key access returns column-wise tuples.
+"""
+
 from typing import Any
 from typing import Generator
 
@@ -75,6 +83,15 @@ class Parameters:
         self.__dict__ = state
 
     def multi_index(self, arg: key_type) -> index_type | None:
+        """Resolve a key or comma-/tuple-separated key spec to an index or tuple of indices.
+
+        Args:
+            arg: A single key string, a comma-separated key string, or a tuple of key strings.
+
+        Returns:
+            An integer index for a single key, a tuple of integers for multiple keys,
+            or ``None`` if any key is not found.
+        """
         keys: tuple[str, ...]
         if isinstance(arg, str):
             if arg in self._keys:
@@ -91,22 +108,39 @@ class Parameters:
         return tuple([self._keys.index(key) for key in keys])
 
     def items(self) -> Generator[Any, None, None]:
+        """Yield ``(key, value)`` pairs in insertion order."""
         for i, key in enumerate(self._keys):
             yield key, self._values[i]
 
     def keys(self) -> list[str]:
+        """Return the list of parameter names."""
         return list(self._keys)
 
     def values(self) -> list[Any]:
+        """Return the list of parameter values."""
         return list(self._values)
 
     def get(self, key: str, default: Any | None = None) -> Any | None:
+        """Return the value for ``key``, or ``default`` if not present.
+
+        Args:
+            key: Parameter name to look up.
+            default: Fallback value when ``key`` is absent.
+
+        Returns:
+            Parameter value or ``default``.
+        """
         try:
             return self[key]
         except KeyError:
             return default
 
     def asdict(self) -> dict[str, Any]:
+        """Return a plain ``{name: value}`` dictionary copy.
+
+        Returns:
+            Dictionary representation of all parameters.
+        """
         d: dict[str, Any] = {}
         for i, key in enumerate(self._keys):
             d[key] = self._values[i]
@@ -142,6 +176,11 @@ class MultiParameters(Parameters):
     """
 
     def __init__(self, **kwargs: Any) -> None:
+        """Initialize with equal-length sequences for each parameter name.
+
+        Raises:
+            ValueError: If any value sequences differ in length.
+        """
         self._keys: list[str] = list(kwargs.keys())
         it = iter(kwargs.values())
         p_len = len(next(it))

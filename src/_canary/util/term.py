@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Terminal size detection via ioctl, with environment-variable fallback."""
+
 import fcntl
 import os
 import struct

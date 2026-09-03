@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Email sending utilities for canary notifications.
+
+Provides ``sendmail`` (tries multiple SMTP hosts), ``create_message``,
+and ``get_sender_address``.  Raises ``SendMailError`` if no host succeeds.
+"""
+
 import pwd
 import smtplib
 import socket
@@ -64,6 +70,15 @@ def sendmail(sendaddr, recvaddrs, subject, content, *, subtype="plain", user=Non
 
 
 def create_message(content, subtype):
+    """Build a ``MIMEText`` message, wrapping HTML content if needed.
+
+    Args:
+        content: Email body text.
+        subtype: MIME subtype (``"plain"`` or ``"html"``).
+
+    Returns:
+        A ``MIMEText`` message object.
+    """
     if subtype == "html" and "<html>" not in content:
         body = f"""\
 <html>
@@ -77,6 +92,17 @@ def create_message(content, subtype):
 
 
 def get_sender_address(*, user=None):
+    """Construct a sender email address from the current user and FQDN.
+
+    Args:
+        user: Username to use; defaults to the current process owner.
+
+    Returns:
+        Email address string in the form ``user@fqdn``.
+
+    Raises:
+        Exception: If the username cannot be determined.
+    """
     user = user or getuser()
     if user is None:  # pragma: no cover
         raise Exception("could not determine user name of this process")
@@ -85,6 +111,8 @@ def get_sender_address(*, user=None):
 
 
 class SendMailError(Exception):
+    """Raised when ``sendmail`` cannot deliver the message via any SMTP host."""
+
     def __init__(self, recvaddrs, error):
         message = StringIO()
         message.write(

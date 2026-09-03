@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary log`` subcommand for viewing session or job log files."""
+
 import argparse
 import datetime
 import io
@@ -24,10 +26,13 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Log(CanarySubcommand):
+    """Display the session log or a specific job's stdout, stderr, or workspace file."""
+
     name = "log"
     description = "Show the session or a job's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register ``testspec``, ``-e/--error``, ``-l/--lock``, ``-f/--file``, and ``--raw`` arguments."""
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-e",
@@ -65,6 +70,15 @@ class Log(CanarySubcommand):
         )
 
     def get_file_from_workspace(self, job: "Job", args: argparse.Namespace) -> Path | None:
+        """Resolve which workspace file to display for *job* based on the parsed flags.
+
+        Args:
+            job: The job whose workspace is inspected.
+            args: Parsed namespace; checks ``args.error`` and ``args.workspace_file``.
+
+        Returns:
+            Absolute path to the file to display, or ``None`` if not applicable.
+        """
         if args.error:
             if job.stderr is None:
                 return None
@@ -74,6 +88,7 @@ class Log(CanarySubcommand):
         return job.workspace.joinpath(job.stdout)
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Display the session log or a specific job log file, paging if needed."""
         workspace = Workspace.load()
 
         if not args.testspec:
@@ -96,6 +111,7 @@ class Log(CanarySubcommand):
 
 
 def reconstruct_log(file: str | Path) -> str:
+    """Read a JSONL log file and return its records reformatted chronologically."""
     file = Path(file)
     fp = io.StringIO()
     if not file.is_file():
@@ -111,6 +127,7 @@ def reconstruct_log(file: str | Path) -> str:
 
 
 def display_file(file: Path) -> None:
+    """Print *file*'s path header and page its contents, raising if the file is missing."""
     print(f"{file}:")
     if not file.exists():
         raise FileNotFoundError(file)
@@ -118,10 +135,12 @@ def display_file(file: Path) -> None:
 
 
 def page_text(text: str) -> None:
+    """Page *text* through a pager when stdout is a TTY, otherwise write directly."""
     import sys
 
     if sys.stdout.isatty():
         import pydoc
+
         pydoc.pager(text)
     else:
         sys.stdout.write(text)

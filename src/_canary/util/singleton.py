@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Lazy-initialized singleton wrapper.
+
+``Singleton`` defers construction of an object until first access and
+proxies attribute lookup, item access, containment, calls, and iteration
+to the underlying instance.
+"""
+
 
 class Singleton:
     """Simple wrapper for lazily initialized singleton objects."""
@@ -18,6 +25,7 @@ class Singleton:
 
     @property
     def instance(self):
+        """Return the singleton instance, creating it on first access."""
         if self._instance is None:
             self._instance = self.factory()
         return self._instance

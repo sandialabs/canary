@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Utility collection types and merge helpers for canary.
+
+Provides ``defaultlist`` (a list with a factory for new elements) and
+``merge``/``contains_any`` helpers used throughout the configuration system.
+"""
+
 import copy
 from typing import Any
 from typing import Iterable
@@ -18,12 +24,24 @@ T = TypeVar("T")
 
 
 class defaultlist(list):
+    """A list that creates new elements on demand via a factory callable.
+
+    Attributes:
+        factory: Zero-argument callable used to produce new list items.
+    """
+
     def __init__(self, factory, n=0):
+        """Initialize with a factory and optionally pre-populate ``n`` items."""
         self.factory = factory
         for i in range(n):
             self.append(self.factory())
 
     def new(self):
+        """Append a new factory-produced element and return it.
+
+        Returns:
+            The newly appended element.
+        """
         self.append(self.factory())
         return self[-1]
 
@@ -109,6 +127,15 @@ def merge(dest: Any, source: Any) -> Any:
 
 
 def contains_any(sequence: Iterable[Any], *args: Any) -> Any:
+    """Return the first element of ``args`` that is present in ``sequence``, or ``None``.
+
+    Args:
+        sequence: The iterable to search.
+        *args: Candidate values to look for.
+
+    Returns:
+        The first matching value, or ``None`` if none are found.
+    """
     for arg in args:
         if arg in sequence:
             return arg

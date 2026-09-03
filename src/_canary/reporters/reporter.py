@@ -1,3 +1,13 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+"""Base infrastructure for Canary report plugins.
+
+Defines :class:`CanaryReporter`, the abstract base that all format-specific
+reporters inherit from, and the ``--report`` global option hook.
+"""
+
 import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
@@ -29,6 +39,7 @@ def canary_cmdline_modifyargs(parser: "Parser", args: Namespace) -> None:
 
 
 def enabled(report_type: str) -> bool:
+    """Return ``True`` if *report_type* is enabled in the current config and not suppressed by ``CANARY_LEVEL``."""
     from .. import config
 
     if os.getenv("CANARY_LEVEL", "0") != "0":
@@ -41,6 +52,7 @@ def enabled(report_type: str) -> bool:
 
 
 def running_in_ci() -> bool:
+    """Return ``True`` if a well-known CI environment variable is set."""
     return any(os.getenv(name) for name in ("GITHUB_ACTIONS", "GITLAB_CI", "CI"))
 
 
@@ -59,7 +71,9 @@ class CanaryReporter:
     description: str
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register report-type-specific arguments on *parser*."""
         pass
 
     def run_from_args(self, args: Namespace) -> int:
+        """Generate the report from parsed arguments and return an exit code."""
         raise NotImplementedError

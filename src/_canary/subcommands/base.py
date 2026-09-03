@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Base class for all Canary CLI subcommand plugin hooks."""
+
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
@@ -34,7 +36,9 @@ class CanarySubcommand:
     add_help: bool = True
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register subcommand-specific arguments on *parser*."""
         pass
 
     def execute(self, args: Namespace) -> int:
+        """Execute the subcommand and return an exit code."""
         raise NotImplementedError

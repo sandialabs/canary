@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Subprocess wrapper for running external commands as callable objects.
+
+Key classes: ``Executable`` (a callable that runs a command via subprocess),
+``Result`` (holds stdout/stderr/returncode), and ``_StreamHandler`` (manages
+I/O stream lifecycles for subprocess calls).
+"""
+
 import dataclasses
 import os
 import shlex
@@ -43,7 +50,18 @@ class Executable:
 
     @staticmethod
     def find(name: str | Path) -> Path:
-        """Find the path to the command ``name``"""
+        """Find the path to the command ``name``
+
+        Args:
+            name: Executable name or path to locate.
+
+        Returns:
+            Absolute ``Path`` to the executable.
+
+        Raises:
+            FileNotFoundError: If the executable cannot be found on PATH.
+            FileNotExecutableError: If the file exists but is not executable.
+        """
         found: Path | None = None
         if os.path.exists(name):
             found = Path(name).absolute()
@@ -227,12 +245,20 @@ class Executable:
 
 
 def is_executable(path: str | Path) -> bool:
+    """Return ``True`` if ``path`` exists and has execute permission."""
     f = Path(path)
     return f.exists() and os.access(f, os.X_OK)
 
 
 class _StreamHandler:
+    """Context manager that owns or borrows a writable stream for subprocess I/O.
+
+    Handles ``None`` (no redirect), open file objects, ``str`` type sentinel
+    (captures output to a temporary file), or file-path strings/Paths.
+    """
+
     def __init__(self, fp: IOType | None) -> None:
+        """Set up the stream handler based on the type of ``fp``."""
         self.name: str
         self.stream: TextIO | tempfile._TemporaryFileWrapper | None = None
         self.owned: bool = False
@@ -269,11 +295,21 @@ class _StreamHandler:
             self.stream.close()
 
     def getvalue(self) -> str | None:
+        """Return captured output if this handler owns a temporary stream, else ``None``."""
         return self.value
 
 
 @dataclasses.dataclass
 class Result:
+    """Holds the outcome of a completed subprocess invocation.
+
+    Attributes:
+        cmd: The full command line that was executed.
+        returncode: Exit code of the subprocess (``-1`` until the process finishes).
+        out: Captured stdout string, or ``None`` if stdout was not captured.
+        err: Captured stderr string, or ``None`` if stderr was not captured.
+    """
+
     cmd: str
     returncode: int = -1
     out: str | None = None
@@ -281,19 +317,37 @@ class Result:
 
     @property
     def stdout(self) -> str | None:
+        """Alias for ``out``."""
         return self.out
 
     @property
     def stderr(self) -> str | None:
+        """Alias for ``err``."""
         return self.err
 
     def get_output(self) -> str:
+        """Return stripped stdout, raising ``ValueError`` if output was not captured.
+
+        Returns:
+            Stripped stdout string.
+
+        Raises:
+            ValueError: If ``out`` is ``None``.
+        """
         if self.out is None:
             raise ValueError("No output string")
         assert isinstance(self.out, str)
         return self.out.strip()
 
     def get_error(self) -> str:
+        """Return stripped stderr, raising ``ValueError`` if error was not captured.
+
+        Returns:
+            Stripped stderr string.
+
+        Raises:
+            ValueError: If ``err`` is ``None``.
+        """
         if self.err is None:
             raise ValueError("No error string")
         assert isinstance(self.err, str)
@@ -301,12 +355,18 @@ class Result:
 
 
 class ProcessError(Exception):
+    """Raised when a subprocess exits with an unexpected return code."""
+
     pass
 
 
 class CommandTimedOutError(Exception):
+    """Raised internally when a subprocess exceeds its allowed wall-clock time."""
+
     pass
 
 
 class FileNotExecutableError(Exception):
+    """Raised when a file exists but does not have execute permission."""
+
     pass

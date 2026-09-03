@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary docs`` subcommand for opening or building Canary documentation."""
+
 import argparse
 import os
 import shutil
@@ -24,10 +26,13 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Docs(CanarySubcommand):
+    """Open the hosted Canary documentation in a browser, or build it locally with Sphinx."""
+
     name = "docs"
     description = "open canary documentation in a web browser"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register ``open`` (default) and ``build`` subcommands with optional wipe/cache flags."""
         parser.set_defaults(docs_action="open")
         sp = parser.add_subparsers(dest="docs_action")
         sp.add_parser("open")
@@ -43,6 +48,7 @@ class Docs(CanarySubcommand):
         p.add_argument("what", nargs="?", help="What to build [default: html]")
 
     def execute(self, args: "argparse.Namespace") -> int:
+        """Open documentation in a browser or exec Sphinx to build HTML docs locally."""
         if args.docs_action == "build":
             what = args.what or "html"
             docs = Path(str(resources.files("canary").joinpath("docs")))

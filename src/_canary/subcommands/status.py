@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary status`` subcommand for displaying test run results."""
+
 import argparse
 import io
 import json
@@ -34,10 +36,13 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Status(CanarySubcommand):
+    """Print a tabular or JSON summary of test results from the current workspace."""
+
     name = "status"
     description = "Print information about a test run"
 
     def setup_parser(self, parser: "Parser"):
+        """Register ``--durations``, ``-o`` columns, ``-r`` report chars, ``--sort-by``, ``--json``, and ``--full-ids``."""
         parser.add_argument(
             "--durations",
             nargs="?",
@@ -104,6 +109,7 @@ class Status(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        """Load workspace results and print the status table or JSON output, returning 0."""
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
@@ -116,10 +122,7 @@ class Status(CanarySubcommand):
 
         table = self.get_status_table(results, args)
         console = Console()
-        use_pager = (
-            sys.stdout.isatty()
-            and table.row_count > shutil.get_terminal_size().lines
-        )
+        use_pager = sys.stdout.isatty() and table.row_count > shutil.get_terminal_size().lines
         if use_pager:
             with console.pager():
                 console.print(table)
@@ -137,42 +140,53 @@ class Status(CanarySubcommand):
         out = []
         for row in rows:
             tk = row["timekeeper"]
-            submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else getattr(tk, "_submitted", -1)
-            staged    = tk.get("_staged",    -1) if isinstance(tk, dict) else getattr(tk, "_staged",    -1)
-            started   = tk.get("_started",   -1) if isinstance(tk, dict) else getattr(tk, "_started",   -1)
-            stopped   = tk.get("_stopped",   -1) if isinstance(tk, dict) else getattr(tk, "_stopped",   -1)
-            finished  = tk.get("_finished",  -1) if isinstance(tk, dict) else getattr(tk, "_finished",  -1)
+            submitted = (
+                tk.get("_submitted", -1) if isinstance(tk, dict) else getattr(tk, "_submitted", -1)
+            )
+            staged = tk.get("_staged", -1) if isinstance(tk, dict) else getattr(tk, "_staged", -1)
+            started = (
+                tk.get("_started", -1) if isinstance(tk, dict) else getattr(tk, "_started", -1)
+            )
+            stopped = (
+                tk.get("_stopped", -1) if isinstance(tk, dict) else getattr(tk, "_stopped", -1)
+            )
+            finished = (
+                tk.get("_finished", -1) if isinstance(tk, dict) else getattr(tk, "_finished", -1)
+            )
 
             def elapsed(a: float, b: float) -> float:
                 return round(b - a, 6) if a > 0 and b > 0 else -1.0
 
             sid = row["id"] if getattr(args, "full_ids", False) else row["id"][:7]
             status: _Status = row["status"]
-            out.append({
-                "id": sid,
-                "name": row["spec_name"],
-                "fullname": row["spec_fullname"],
-                "file_path": row.get("file_path", ""),
-                "session": row["session"],
-                "exit_code": status.code,
-                "status": {
-                    "category": status.category.value,
-                    "outcome": status.outcome.name,
-                    "reason": status.reason,
-                },
-                "timings": {
-                    "pending":  elapsed(submitted, staged),
-                    "setup":    elapsed(staged,    started),
-                    "running":  elapsed(started,   stopped),
-                    "teardown": elapsed(stopped,   finished),
-                    "total":    elapsed(submitted, finished),
-                },
-            })
+            out.append(
+                {
+                    "id": sid,
+                    "name": row["spec_name"],
+                    "fullname": row["spec_fullname"],
+                    "file_path": row.get("file_path", ""),
+                    "session": row["session"],
+                    "exit_code": status.code,
+                    "status": {
+                        "category": status.category.value,
+                        "outcome": status.outcome.name,
+                        "reason": status.reason,
+                    },
+                    "timings": {
+                        "pending": elapsed(submitted, staged),
+                        "setup": elapsed(staged, started),
+                        "running": elapsed(started, stopped),
+                        "teardown": elapsed(stopped, finished),
+                        "total": elapsed(submitted, finished),
+                    },
+                }
+            )
 
         json.dump(out, sys.stdout, indent=2)
         sys.stdout.write("\n")
 
     def get_status_table(self, results: dict[str, Any], args: "argparse.Namespace") -> Table:
+        """Build a Rich ``Table`` of test results filtered and sorted per *args*."""
         rows = sorted(results.values(), key=sortkey)
         rows = filter_by_status(rows, args.report_chars)
         cols = args.format_cols.split(",")
@@ -202,6 +216,7 @@ class Status(CanarySubcommand):
         return table
 
     def print_spec_status_history(self, ids: list[str], args: "argparse.Namespace") -> None:
+        """Print the full history of results across sessions for each spec ID in *ids*."""
         workspace = Workspace.load()
         table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
@@ -224,6 +239,7 @@ class Status(CanarySubcommand):
 
 
 def sortkey(row: dict) -> tuple:
+    """Return a sort tuple for a result row: ``(category_rank, outcome, duration)``."""
     c = 1
     if row["status"].is_success():
         c = 0
@@ -233,6 +249,19 @@ def sortkey(row: dict) -> tuple:
 
 
 def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> str:
+    """Extract a display string for column *attr* from a result *row*.
+
+    Args:
+        row: A workspace result dict containing job metadata.
+        attr: The column key (e.g. ``"id"``, ``"name"``, ``"duration"``).
+        full_ids: When ``True``, return the full 64-character ID rather than a 7-char prefix.
+
+    Returns:
+        A formatted string suitable for display in a status table cell.
+
+    Raises:
+        AttributeError: If *attr* is not a recognised column key.
+    """
     if attr == "id":
         return row["id"] if full_ids else row["id"][:7]
     elif attr == "name":
@@ -255,6 +284,8 @@ def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> 
 
 
 class ReportCharAction(argparse.Action):
+    """Validate and store the ``-r`` report-character filter string."""
+
     chars = "pftdfnsxaA"
 
     def __call__(self, parser, args, values, option_string=None):
@@ -265,6 +296,8 @@ class ReportCharAction(argparse.Action):
 
 
 class StatusFormatAction(argparse.Action):
+    """Validate and normalise the ``-o`` comma-separated column list (case-insensitive)."""
+
     _choices: list[str] = [
         "ID",
         "FullName",
@@ -290,6 +323,7 @@ class StatusFormatAction(argparse.Action):
 
 
 def match_case_insensitive(s: str, choices: list[str]) -> str | None:
+    """Return the matching choice for *s* (case-insensitive), or ``None`` if not found."""
     for choice in choices:
         if s.lower() == choice.lower():
             return choice
@@ -297,6 +331,7 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
 
 
 def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
+    """Return the subset of *rows* whose status matches the report-character filter *chars*."""
     from ..status import Outcome
 
     chars = chars or "dftns"
@@ -328,6 +363,7 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
 
 
 def format_durations(results: dict[str, Any], N: int) -> str:
+    """Return a formatted string listing the *N* slowest test durations."""
     rows = sorted(results.values(), key=lambda x: x["timekeeper"].duration())
     ix = list(range(len(rows)))
     if N > 0:
@@ -346,4 +382,5 @@ def format_durations(results: dict[str, Any], N: int) -> str:
 
 
 def dformat(arg: float) -> str:
+    """Format a duration *arg* as ``"%.2f"`` or ``"NA"`` if negative."""
     return "NA" if arg < 0 else f"{arg:.02f}"

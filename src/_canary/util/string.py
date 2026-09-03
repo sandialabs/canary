@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""String manipulation utilities used throughout canary.
+
+Key functions: ``csvsplit`` (comma-split respecting quotes), ``strip_quotes``,
+``pluralize``, ``stringify``, ``truncate_middle``, and the ``SimpleTemplate``
+class for ``$var`` / ``${var}`` substitution.
+"""
+
 import io
 import re
 import tokenize
@@ -11,10 +18,28 @@ from typing import Mapping
 
 
 def get_tokens(path) -> Generator[tokenize.TokenInfo, None, None]:
+    """Tokenize a Python source string, yielding ``TokenInfo`` objects.
+
+    Args:
+        path: Source string to tokenize.
+
+    Returns:
+        Generator of ``tokenize.TokenInfo`` objects.
+    """
     return tokenize.tokenize(io.BytesIO(path.encode("utf-8")).readline)
 
 
 def strip_quotes(arg: str) -> str:
+    """Remove surrounding quotes from a Python string literal token.
+
+    Handles single, double, triple-single, and triple-double quote styles.
+
+    Args:
+        arg: A quoted Python string literal (e.g. ``"'hello'"``).
+
+    Returns:
+        The unquoted string content, or ``arg`` unchanged if it is not a string token.
+    """
     s_quote, d_quote = "'''", '"""'
     tokens = get_tokens(arg)
     token = next(tokens)
@@ -68,6 +93,17 @@ def csvsplit(expr: str) -> list[str]:
 
 
 def pluralize(word: str, n: int):
+    """Return the singular or plural form of ``word`` based on ``n``.
+
+    Applies common English pluralization rules (``-es``, ``-ies``, ``-s``).
+
+    Args:
+        word: Singular form of the word.
+        n: Count used to determine singular vs. plural.
+
+    Returns:
+        Pluralized (or unchanged) word string.
+    """
     if n == 1:
         return word
     elif word.endswith(("s", "sh", "ss", "z", "x", "ch")):
@@ -107,11 +143,29 @@ def truncate_middle(text: str, max_length: int = 254, sep: str = "...") -> str:
 
 
 class SimpleTemplate:
+    """Minimal ``$var`` / ``${var}`` string template with a custom ``substitute`` method.
+
+    Attributes:
+        string: The raw template string.
+        pattern: Compiled regex matching ``$name`` and ``${name}`` placeholders.
+    """
+
     def __init__(self, s: str) -> None:
         self.string = s
         self.pattern = re.compile(r"\$(\w+)|\$\{([^}]+)\}")
 
     def substitute(self, mapping: Mapping[str, str], missing: str | None = None):
+        """Replace placeholders using ``mapping``.
+
+        Args:
+            mapping: Dictionary of variable substitutions.
+            missing: Value to use for unresolved placeholders.  If ``None``,
+                unresolved placeholders are left as-is in the output.
+
+        Returns:
+            The substituted string.
+        """
+
         def repl(m: re.Match) -> str:
             key = m.group(1) or m.group(2)
             if key in mapping:

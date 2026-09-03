@@ -1,6 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
+"""Implements the ``canary find`` subcommand for searching paths for test files and listing specs."""
+
 import argparse
 import io
 import shutil
@@ -38,11 +41,18 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Find(CanarySubcommand):
+    """Scan one or more paths for test generators, apply filters, and display or export the results.
+
+    Output modes: default table, ``--paths`` (grouped by root), ``--files`` (unique file list),
+    ``--graph`` (dependency DAG), ``--keywords``, and ``--lock`` (JSON lock file).
+    """
+
     name = "find"
     description = "Search paths for test files"
     epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register output-mode flags, scan-path, generator, selector, and resource arguments."""
         group = parser.add_mutually_exclusive_group()
         add_group_argument(group, "paths", "Print file paths, grouped by root", False)
         add_group_argument(group, "files", "Print file paths", False)
@@ -55,6 +65,7 @@ class Find(CanarySubcommand):
         add_resource_arguments(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Collect, generate, filter, and display specs according to the requested output mode."""
         collector = Collector()
         collector.add_scanpaths(args.scanpaths)
         generators = collector.run()
@@ -96,6 +107,7 @@ class Find(CanarySubcommand):
 
 
 def add_group_argument(group, name, help_string, add_short_arg=True):
+    """Add a ``--name`` (and optionally ``-n``) boolean flag to *group*."""
     args = [f"--{name}"]
     if add_short_arg:
         args.insert(0, f"-{name[0]}")
@@ -104,6 +116,7 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
 
 
 def pprint_paths(specs: list["JobSpec"]) -> None:
+    """Print spec file paths grouped by their scan root, one section per root."""
     unique_generators: dict[str, set[str]] = dict()
     for spec in specs:
         unique_generators.setdefault(str(spec.file_root), set()).add(str(spec.file_path))
@@ -119,6 +132,7 @@ def pprint_paths(specs: list["JobSpec"]) -> None:
 
 
 def pprint_files(specs: list["JobSpec"]) -> None:
+    """Print deduplicated spec file paths in column format."""
     console = rich.console.Console()
     columns = Columns(sorted(set([str(spec.file) for spec in specs])))
     with console.pager():
@@ -126,6 +140,7 @@ def pprint_files(specs: list["JobSpec"]) -> None:
 
 
 def pprint_keywords(specs: list["JobSpec"]) -> None:
+    """Print all unique keywords found across specs, grouped by scan root."""
     unique_kwds: dict[str, set[str]] = dict()
     for spec in specs:
         unique_kwds.setdefault(str(spec.file_root), set()).update(spec.keywords)
@@ -141,6 +156,7 @@ def pprint_keywords(specs: list["JobSpec"]) -> None:
 
 
 def pprint_graph(specs: list["JobSpec"]) -> None:
+    """Print the dependency DAG of *specs* in text form."""
     from _canary.jobspec_graph import format_spec_graph
 
     console = rich.console.Console()
@@ -149,6 +165,7 @@ def pprint_graph(specs: list["JobSpec"]) -> None:
 
 
 def pprint(specs: list["JobSpec"]) -> None:
+    """Print spec display names in column format, grouped by scan root."""
     tree: dict[str, list[str]] = {}
     for spec in specs:
         line = spec.display_name(style="rich", resolve=True)

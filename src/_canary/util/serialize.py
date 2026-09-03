@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Recursive serialization helper that expands objects using ``__serialize__``.
+
+``serialize`` converts an object graph into JSON-serializable primitives,
+following the same ``__serialize__``/``__type__`` protocol as ``json_helper``
+but without emitting the type envelope.
+"""
+
 from pathlib import Path
 from typing import Any
 

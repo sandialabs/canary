@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary edit`` subcommand for opening a test file in ``$EDITOR``."""
+
 import argparse
 import os
 from typing import TYPE_CHECKING
@@ -22,13 +24,17 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Edit(CanarySubcommand):
+    """Look up the source file for a test spec and open it in the user's ``$EDITOR``."""
+
     name = "edit"
     description = "open test files in $EDITOR"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register the ``testspec`` positional argument."""
         parser.add_argument("testspec", help="Job file or job spec")
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Resolve the test spec to a file and open it in ``$EDITOR``, returning 1 if not found."""
         file = find_file(args.testspec)
         if file is None:
             print(f"{args.testspec}: no matching generator or job found in {os.getcwd()}")
@@ -38,6 +44,7 @@ class Edit(CanarySubcommand):
 
 
 def find_file(testspec: str) -> str | None:
+    """Return the source file path for *testspec* from the current workspace, or ``None``."""
     try:
         workspace = Workspace.load()
     except NotAWorkspaceError:

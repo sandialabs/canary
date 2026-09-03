@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Rich-based terminal colorization helpers.
+
+Provides ``colorize`` (renders Rich markup to ANSI or plain text),
+``set_color_when`` (global color policy), and small utilities
+``clen``/``cstrip``/``cextra`` for working with ANSI-colored strings.
+Also exports ``bold`` and ``code`` convenience formatters.
+"""
+
 import os
 import re
 import sys
@@ -104,12 +112,28 @@ def cextra(string):
 
 
 def bold(arg: str) -> str:
+    """Return ``arg`` formatted as bold text (or ``**arg**`` when color is disabled).
+
+    Args:
+        arg: Text to bold.
+
+    Returns:
+        ANSI bold string, or ``**arg**`` in no-color mode.
+    """
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"**{arg}**"
     return colorize("[bold]%s[/]" % arg)
 
 
 def code(arg: str) -> str:
+    """Return ``arg`` formatted as inline code (bold; or ````arg```` when color is disabled).
+
+    Args:
+        arg: Text to format as code.
+
+    Returns:
+        ANSI bold string, or backtick-quoted text in no-color mode.
+    """
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"``{arg}``"
     return colorize("[bold]%s[/]" % arg)

@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Physical CPU count probes for Linux (lscpu, /proc/cpuinfo) and macOS (sysctl).
+
+The main entry point is ``cpu_count()``, which tries each platform-appropriate
+probe in order and falls back to a configurable default.
+"""
+
 import functools
 import os
 import re
@@ -12,8 +18,16 @@ import sys
 
 @functools.cache
 def cpu_count(default: int = 4) -> int:
-    """Determine the number of processors on the current machine.
-    Returns the 'default' if the probes fail.
+    """Determine the number of physical processors on the current machine.
+
+    Tries ``lscpu`` and ``sysctl`` on macOS, ``lscpu`` and ``/proc/cpuinfo``
+    on Linux.  Returns ``default`` if all probes fail.
+
+    Args:
+        default: Fallback value when no probe succeeds (default 4).
+
+    Returns:
+        Number of physical CPU cores.
     """
     if sys.platform == "darwin":
         if cpu_count := read_sysctl():
@@ -29,7 +43,11 @@ def cpu_count(default: int = 4) -> int:
 
 
 def read_lscpu() -> int | None:
-    """"""
+    """Parse ``lscpu`` output to determine physical core count.
+
+    Returns:
+        Physical core count, or ``None`` if ``lscpu`` is unavailable or fails.
+    """
     if lscpu := shutil.which("lscpu"):
         try:
             args = [lscpu]
@@ -51,10 +69,13 @@ def read_lscpu() -> int | None:
 
 
 def read_cpuinfo() -> int | None:
-    """
-    count the number of lines of this pattern:
+    """Parse ``/proc/cpuinfo`` to determine physical core count.
 
-        processor       : <integer>
+    Accounts for hyperthreading by dividing total processor entries by the
+    siblings-to-cores ratio when available.
+
+    Returns:
+        Physical core count, or ``None`` if the file is absent or unreadable.
     """
     file = "/proc/cpuinfo"
     if os.path.exists(file):
@@ -84,6 +105,11 @@ def read_cpuinfo() -> int | None:
 
 
 def read_sysctl() -> int | None:
+    """Query ``sysctl hw.physicalcpu`` to determine physical core count on macOS.
+
+    Returns:
+        Physical core count, or ``None`` if ``sysctl`` is unavailable or fails.
+    """
     if sysctl := shutil.which("sysctl"):
         try:
             args = [sysctl, "-n", "hw.physicalcpu"]

@@ -2,6 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Shared argument-group helpers used by multiple Canary subcommands.
+
+Public symbols: ``add_filter_arguments``, ``add_resource_arguments``, ``TimeoutResource``.
+"""
+
 import argparse
 import os
 import re
@@ -22,6 +27,13 @@ logger = logging.get_logger(__name__)
 
 
 def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
+    """Add test-filtering arguments to *parser*.
+
+    Args:
+        parser: The argument parser (or subparser) to extend.
+        tagged: When ``True``, also add a ``--tag`` argument for tagging the
+            selection.
+    """
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
@@ -54,6 +66,7 @@ def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
 
 
 def add_resource_arguments(parser: "Parser") -> None:
+    """Add resource-control arguments (``--workers``, ``--timeout``, ``--no-incremental``) to *parser*."""
     group = parser.add_argument_group("resource control")
     group.add_argument(
         "--workers",
@@ -71,6 +84,8 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 
 class TimeoutResource(argparse.Action):
+    """argparse ``Action`` that parses ``--timeout type=T`` (and deprecated variants) into a dict."""
+
     def __call__(self, parser, args, values, option_string=None):
         if option_string == "--session-timeout":
             logger.warning(f"--session-timeout is deprecated, use --timeout session={values}")
@@ -98,6 +113,7 @@ class TimeoutResource(argparse.Action):
 
     @staticmethod
     def helppage() -> str:
+        """Return the multi-line help text describing ``--timeout`` syntax."""
         text = f"""Set the timeout for {bold("type")} (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n
 • type={bold("session")}, the timeout T is applied to the entire test session.\n
 • type={bold("multiplier")}, the multiplier T is applied to each test's timeout.\n
@@ -109,6 +125,7 @@ the 'fast' keyword; common types are fast, long, default, and ctest."""
 
     @staticmethod
     def setup_parser(p: "Parser | argparse._ArgumentGroup", flag: str = "--timeout") -> None:
+        """Register ``--timeout`` and its deprecated aliases on *p*."""
         p.add_argument(
             flag, action=TimeoutResource, metavar="type=T", help=TimeoutResource.helppage()
         )
@@ -118,5 +135,6 @@ the 'fast' keyword; common types are fast, long, default, and ctest."""
 
 
 def filter_cases_by_path(jobs: list["Job"], pathspec: str) -> list["Job"]:
+    """Return the subset of *jobs* whose workspace directory is under *pathspec*."""
     prefix = os.path.abspath(pathspec)
     return [c for c in jobs if c.workspace.dir.relative_to(prefix)]

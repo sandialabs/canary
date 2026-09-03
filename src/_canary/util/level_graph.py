@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Topologically-ordered dependency graph organized into parallel levels.
+
+``LevelGraph`` groups items into levels where all dependencies of an item
+appear in earlier levels, enabling safe parallel execution within each level.
+Key factory methods are ``from_items`` and ``from_levels``; ``project``
+extracts sub-graphs.
+"""
+
 import dataclasses
 from graphlib import CycleError
 from graphlib import TopologicalSorter
@@ -22,6 +30,19 @@ SortKey = Callable[[T], Any]
 
 @dataclasses.dataclass(frozen=True)
 class LevelGraph(Generic[T]):
+    """Immutable directed acyclic graph whose nodes are grouped into dependency levels.
+
+    Nodes within the same level have no dependency relationship and can be
+    processed concurrently. Each level comes strictly after all levels that
+    contain its dependencies.
+
+    Attributes:
+        items_by_id: Mapping from node ID to node object.
+        deps_by_id: Mapping from node ID to the IDs of its direct dependencies.
+        dependents_by_id: Mapping from node ID to the IDs of nodes that depend on it.
+        level_ids: Tuple of levels, each a tuple of node IDs in that level.
+    """
+
     items_by_id: dict[str, T]
     deps_by_id: dict[str, tuple[str, ...]]
     dependents_by_id: dict[str, tuple[str, ...]]
@@ -29,6 +50,7 @@ class LevelGraph(Generic[T]):
 
     @classmethod
     def empty(cls) -> "LevelGraph[T]":
+        """Return an empty ``LevelGraph`` with no nodes."""
         return cls(items_by_id={}, deps_by_id={}, dependents_by_id={}, level_ids=())
 
     @classmethod
@@ -41,6 +63,23 @@ class LevelGraph(Generic[T]):
         sort_key: SortKey[T] | None = None,
         require_closed: bool = True,
     ) -> "LevelGraph[T]":
+        """Build a ``LevelGraph`` from a flat sequence of items.
+
+        Args:
+            items: The nodes to include in the graph.
+            id_fn: Callable that returns a unique string ID for each item.
+            deps_fn: Callable that returns the dependency IDs for each item.
+            sort_key: Optional key function for deterministic ordering within each level.
+            require_closed: If ``True``, raise ``ValueError`` when a dependency ID
+                is not present in ``items``.
+
+        Returns:
+            A fully constructed ``LevelGraph``.
+
+        Raises:
+            ValueError: On duplicate IDs, missing dependencies (if ``require_closed``),
+                or dependency cycles.
+        """
         items_by_id: dict[str, T] = {}
 
         for item in items:
@@ -89,6 +128,20 @@ class LevelGraph(Generic[T]):
         deps_fn: DepsFn[T],
         require_closed: bool = True,
     ) -> "LevelGraph[T]":
+        """Build a ``LevelGraph`` from pre-partitioned levels, validating consistency.
+
+        Args:
+            levels: Sequence of sequences where each inner sequence is one level.
+            id_fn: Callable that returns a unique string ID for each item.
+            deps_fn: Callable that returns the dependency IDs for each item.
+            require_closed: If ``True``, raise ``ValueError`` for missing dependency IDs.
+
+        Returns:
+            A ``LevelGraph`` with the provided level partitioning.
+
+        Raises:
+            ValueError: If the provided levels are inconsistent with the computed dependencies.
+        """
         items = [item for level in levels for item in level]
 
         graph = cls.from_items(items, id_fn=id_fn, deps_fn=deps_fn, require_closed=require_closed)
@@ -106,11 +159,13 @@ class LevelGraph(Generic[T]):
 
     @property
     def levels(self) -> tuple[tuple[T, ...], ...]:
+        """Return the graph nodes grouped into their dependency levels."""
         return tuple(
             tuple(self.items_by_id[item_id] for item_id in level) for level in self.level_ids
         )
 
     def topo_order(self) -> Iterator[T]:
+        """Yield all items in topological (level-by-level) order."""
         for level in self.levels:
             yield from level
 
@@ -121,18 +176,37 @@ class LevelGraph(Generic[T]):
         return len(self.items_by_id)
 
     def ids(self) -> list[str]:
+        """Return all node IDs in topological order."""
         return [item_id for level in self.level_ids for item_id in level]
 
     def dependencies_of(self, item_id: str) -> tuple[T, ...]:
+        """Return the direct dependencies of ``item_id``.
+
+        Args:
+            item_id: ID of the node whose dependencies to retrieve.
+
+        Returns:
+            Tuple of dependency node objects.
+        """
         return tuple(self.items_by_id[dep_id] for dep_id in self.deps_by_id[item_id])
 
     def dependents_of(self, item_id: str) -> tuple[T, ...]:
+        """Return the nodes that directly depend on ``item_id``.
+
+        Args:
+            item_id: ID of the node whose dependents to retrieve.
+
+        Returns:
+            Tuple of dependent node objects.
+        """
         return tuple(self.items_by_id[user_id] for user_id in self.dependents_by_id[item_id])
 
     def roots(self) -> list[T]:
+        """Return nodes with no dependencies (sources of the DAG)."""
         return [self.items_by_id[item_id] for item_id, deps in self.deps_by_id.items() if not deps]
 
     def leaves(self) -> list[T]:
+        """Return nodes that no other node depends on (sinks of the DAG)."""
         return [
             self.items_by_id[item_id]
             for item_id, users in self.dependents_by_id.items()
@@ -148,6 +222,18 @@ class LevelGraph(Generic[T]):
         require_closed: bool = True,
         sort_key: SortKey[T] | None = None,
     ) -> "LevelGraph[T]":
+        """Return a sub-graph containing only the specified nodes and optionally their transitive neighborhood.
+
+        Args:
+            ids: Node IDs to include in the projection.
+            include_upstreams: Also include all transitive dependencies of ``ids``.
+            include_downstreams: Also include all transitive dependents of ``ids``.
+            require_closed: If ``True``, raise when a retained dependency is absent.
+            sort_key: Optional key for stable level ordering in the projection.
+
+        Returns:
+            A new ``LevelGraph`` restricted to the selected nodes.
+        """
         selected = set(ids)
 
         if include_upstreams:
@@ -176,6 +262,7 @@ class LevelGraph(Generic[T]):
     def _from_projected_items(
         self, items: Sequence[T], *, require_closed: bool, sort_key: SortKey[T] | None
     ) -> "LevelGraph[T]":
+        """Build a new graph from a subset of this graph's items, reusing stored deps."""
         selected_ids = {item_id for item_id, item in self.items_by_id.items() if item in items}
 
         items_by_id = {item_id: self.items_by_id[item_id] for item_id in selected_ids}
@@ -205,6 +292,7 @@ class LevelGraph(Generic[T]):
         )
 
     def _validate_level_ids(self, level_ids: tuple[tuple[str, ...], ...]) -> None:
+        """Assert that ``level_ids`` is a valid level partition for this graph's deps."""
         level_of: dict[str, int] = {}
 
         for level_index, level in enumerate(level_ids):
@@ -230,6 +318,7 @@ class LevelGraph(Generic[T]):
 
 
 def _build_dependents(deps_by_id: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """Invert a dependency mapping to produce a dependents mapping."""
     dependents: dict[str, list[str]] = {item_id: [] for item_id in deps_by_id}
 
     for item_id, dep_ids in deps_by_id.items():
@@ -245,6 +334,11 @@ def _build_levels(
     items_by_id: dict[str, T],
     sort_key: SortKey[T] | None,
 ) -> tuple[tuple[str, ...], ...]:
+    """Topologically sort ``deps_by_id`` into parallel levels using graphlib.
+
+    Returns:
+        Tuple of levels, each a tuple of node IDs ready to process simultaneously.
+    """
     sorter = TopologicalSorter(deps_by_id)
     sorter.prepare()
 

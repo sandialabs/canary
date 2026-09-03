@@ -1,6 +1,28 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+
+"""SQLite-backed workspace database for spec storage, result persistence, and selections.
+
+The :class:`WorkspaceDatabase` manages a single ``workspace.sqlite3`` file at
+the workspace root.  It stores four main collections:
+
+* **specs** — serialised :class:`~_canary.jobspec.JobSpec` blobs indexed by
+  content-independent spec ID.
+* **spec_deps** — dependency edges between specs.
+* **results** — per-job execution results keyed by ``(spec_id, session)``.
+* **selections** — named tag → spec_id membership sets (used for ``canary tag``).
+
+The :class:`ResultListener` is a daemon thread that drains a file-system spool
+queue (:class:`~_canary.util.multiprocessing.FSQueue`) and writes results in
+batches, decoupling worker processes from direct SQLite access.
+
+:class:`PartialSpec` is a lightweight projection of the spec + latest-result
+data returned by :meth:`WorkspaceDatabase.get_partial_specs`.  It is used by
+rerun strategies to decide which specs to re-execute without loading full
+``JobSpec`` objects.
+"""
+
 import collections
 import dataclasses
 import datetime
@@ -32,7 +54,21 @@ logger = logging.get_logger(__name__)
 
 
 class WorkspaceDatabase:
-    """Database wrapper"""
+    """SQLite wrapper for the canary workspace database.
+
+    Manages schema creation, spec/result/selection CRUD, dependency graph
+    queries, and backward-compatibility migrations.
+
+    The database file lives at ``<workspace_root>/workspace.sqlite3``.  Use
+    :meth:`create` to initialise a new database or :meth:`load` to attach to
+    an existing one.
+
+    Attributes:
+        root: Root directory of the workspace.
+        path: Absolute path to the SQLite database file.
+        queue: :class:`~_canary.util.multiprocessing.FSQueue` spool directory
+            used by worker processes to submit results asynchronously.
+    """
 
     def __init__(self, root: Path):
         self.root = Path(root)
@@ -44,31 +80,51 @@ class WorkspaceDatabase:
 
     @property
     def connection(self) -> sqlite3.Connection:
+        """Return the active SQLite connection, lazily opening it if necessary."""
         if self._connection is None:
             self.connect()
         assert self._connection is not None
         return self._connection
 
     def listener(self) -> "ResultListener":
+        """Return a new :class:`ResultListener` thread bound to this database."""
         return ResultListener(self)
 
     def close(self) -> None:
+        """Close the SQLite connection if it is open."""
         if self._connection is not None:
             self._connection.close()
             self._connection = None
 
     @classmethod
     def create(cls, path: Path) -> "WorkspaceDatabase":
+        """Create a new workspace database at *path* and return it.
+
+        Calls :meth:`connect` immediately, which creates the schema tables if
+        they do not yet exist.
+        """
         self = cls(path)
         self.connect()
         return self
 
     @classmethod
     def load(cls, path: Path) -> "WorkspaceDatabase":
+        """Attach to an existing workspace database at *path*.
+
+        The connection is not opened until the first query; use
+        :meth:`connect` to open it eagerly.
+        """
         self = cls(path)
         return self
 
     def connect(self) -> None:
+        """Open the SQLite connection and create or migrate the schema.
+
+        This method is idempotent — calling it multiple times has no effect if
+        the connection is already open.  The schema is created with
+        ``CREATE TABLE IF NOT EXISTS`` guards so it is safe to call on an
+        existing database.
+        """
         if self._connection is None:
             self._connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
             self._connection.execute("PRAGMA journal_mode=MEMORY;")
@@ -174,6 +230,16 @@ class WorkspaceDatabase:
         return
 
     def put_specs(self, specs: list[JobSpec]) -> None:
+        """Upsert *specs* into the database, replacing any previous blobs.
+
+        Also updates ``specs_meta`` (source file path and view path) and
+        rebuilds the ``spec_deps`` edges for the given specs.
+
+        Args:
+            specs: The specs to store.  Serialisation is parallelised over a
+                thread pool for large collections.
+        """
+
         def process_one_spec(spec: JobSpec) -> tuple[str, str, str, str, list[str]]:
             blob = json.dumps_min(spec)
             view = spec.exec_path / spec.file.name
@@ -232,6 +298,19 @@ class WorkspaceDatabase:
             self.connection.execute("DROP TABLE _ids")
 
     def resolve_spec_id(self, id: str) -> str | None:
+        """Expand a short spec ID prefix to its full 64-character ID.
+
+        Args:
+            id: A hex prefix (any length up to 64 chars).  A leading ``@``
+                sigil is stripped before lookup.
+
+        Returns:
+            The full spec ID if exactly one spec matches, or ``None`` if no
+            match is found.
+
+        Raises:
+            ValueError: If the prefix is ambiguous (matches more than one spec).
+        """
         if id.startswith(jobspec.select_sygil):
             id = id[1:]
         try:
@@ -249,7 +328,15 @@ class WorkspaceDatabase:
         return rows[0][0]
 
     def resolve_spec_ids(self, ids: list[str]):
-        """Given partial spec IDs in ``ids``, expand them to their full size"""
+        """Expand short spec ID prefixes in *ids* to their full 64-char IDs in-place.
+
+        Args:
+            ids: List of spec IDs (partial or full).  Modified in place; full
+                IDs are left unchanged.
+
+        Raises:
+            ValueError: If any prefix matches no specs or matches more than one.
+        """
         for i, id in enumerate(ids):
             if id.startswith(jobspec.select_sygil):
                 id = id[1:]
@@ -276,6 +363,17 @@ class WorkspaceDatabase:
     def load_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[JobSpec]:
+        """Load and deserialise :class:`~_canary.jobspec.JobSpec` objects from the database.
+
+        Args:
+            ids: Spec IDs to load.  ``None`` loads all specs.  Short prefixes
+                are expanded via :meth:`resolve_spec_ids`.
+            include_upstreams: If ``True``, upstream prerequisite specs are
+                included in the returned list even if they are not in *ids*.
+
+        Returns:
+            Specs in topological order (dependencies before dependants).
+        """
         if not ids:
             rows = self.connection.execute("SELECT * FROM specs").fetchall()
             return self._reconstruct_specs(rows)
@@ -295,6 +393,17 @@ class WorkspaceDatabase:
         return [spec for spec in specs if spec.id in ids]
 
     def load_specs_by_tagname(self, tag: str) -> list["JobSpec"]:
+        """Load specs that belong to the named selection *tag*.
+
+        Args:
+            tag: Selection tag name.
+
+        Returns:
+            Specs in topological order.
+
+        Raises:
+            NotASelection: If *tag* does not exist in the database.
+        """
         rows = self.connection.execute(
             """
             SELECT s.spec_id, s.data
@@ -309,6 +418,11 @@ class WorkspaceDatabase:
         return self._reconstruct_specs(rows)
 
     def _reconstruct_specs(self, rows: list[tuple[str, bytes]]) -> list[JobSpec]:
+        """Deserialise spec rows and rehydrate dependency references.
+
+        Dependency links stored in ``spec_deps`` are reconnected so each spec's
+        ``spec.dependencies[i].spec`` points to the actual ``JobSpec`` object.
+        """
         spec: JobSpec
         specs: dict[str, JobSpec] = {}
         imap: dict[str, dict[str, int]] = {}
@@ -324,6 +438,11 @@ class WorkspaceDatabase:
         return list(graph.topo_order())
 
     def get_edges(self, ids: list[str] | None = None) -> list[tuple[str, str]]:
+        """Return ``(spec_id, dep_id)`` pairs from the ``spec_deps`` table.
+
+        Args:
+            ids: Restrict results to these spec IDs.  ``None`` returns all edges.
+        """
         if not ids:
             return self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
         rows: list[tuple[str, str]]
@@ -338,6 +457,7 @@ class WorkspaceDatabase:
 
     @staticmethod
     def format_single_result(job: "Job") -> tuple[Any, ...]:
+        """Serialise *job* into a flat tuple suitable for ``INSERT INTO results``."""
         phase = job.state.phase
         if isinstance(phase, str):
             phase = JobPhase(phase)
@@ -360,18 +480,19 @@ class WorkspaceDatabase:
         return row
 
     def put_result(self, job: "Job") -> None:
+        """Store a single job result; convenience wrapper around :meth:`put_results`."""
         return self.put_results(job)
 
     def put_results(self, *jobs: "Job") -> None:
-        """Store results in the DB.
+        """Store one or more job results in the database.
 
-        Since canary uses hierarchical parallelism, this function can be called by many independent
-        processes at once, resulting in some callers hitting a locked database.  We guard against a
-        locked database by trying multiple times with an exponential backoff between attempts.  If
-        we don't succeed we return False and let the caller decide what to do.
+        Each job is serialised via :meth:`format_single_result` and upserted
+        into the ``results`` table keyed by ``(spec_id, session)``.  A
+        ``INSERT OR REPLACE`` strategy is used so re-runs within the same
+        session overwrite the previous entry.
 
-        If writing to the database results in other types of errors, we re-raise those.
-
+        Args:
+            *jobs: One or more :class:`~_canary.job.Job` objects to persist.
         """
 
         rows = [self.format_single_result(job) for job in jobs]
@@ -388,6 +509,16 @@ class WorkspaceDatabase:
     def get_results(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> dict[str, dict[str, Any]]:
+        """Return the latest result record for each spec as a plain dict.
+
+        Args:
+            ids: Restrict results to these spec IDs.  ``None`` returns all specs.
+            include_upstreams: Also include upstream prerequisite specs.
+
+        Returns:
+            Mapping of spec_id → result dict (see :meth:`_reconstruct_results`
+            for the dict schema).
+        """
         rows: list[tuple[str, ...]]
         if not ids:
             with self.connection:
@@ -424,6 +555,14 @@ class WorkspaceDatabase:
         return {row[0]: self._reconstruct_results(row) for row in rows}
 
     def get_result_history(self, id: str) -> list:
+        """Return all historical result records for *id* in ascending session order.
+
+        Args:
+            id: Full or prefix spec ID.
+
+        Returns:
+            List of result dicts (see :meth:`_reconstruct_results`), oldest first.
+        """
         rows = self.connection.execute(
             "SELECT * FROM results WHERE spec_id LIKE ? ORDER BY session ASC", (f"{id}%",)
         ).fetchall()
@@ -434,6 +573,14 @@ class WorkspaceDatabase:
         return data
 
     def _reconstruct_results(self, row: tuple[Any, ...]) -> dict[str, Any]:
+        """Convert a raw ``results`` table row into a structured result dict.
+
+        Returns a dict with keys: ``id``, ``spec_name``, ``spec_fullname``,
+        ``file_root``, ``file_path``, ``session``, ``workspace``, ``state``
+        (:class:`~_canary.job.JobState`), ``status``
+        (:class:`~_canary.status.Status`), ``timekeeper``
+        (:class:`~_canary.timekeeper.Timekeeper`), and ``measurements``.
+        """
         d: dict[str, Any] = {}
         d["id"] = row[0]
         d["spec_name"] = row[1]
@@ -451,6 +598,17 @@ class WorkspaceDatabase:
         return d
 
     def put_selection(self, tag: str, specs: list["JobSpec"], **meta: Any) -> None:
+        """Store a named selection (tag) mapping *tag* → spec IDs.
+
+        Replaces any existing selection with the same name.  The reserved tag
+        ``':all:'`` is rejected with ``ValueError``.
+
+        Args:
+            tag: Selection name.
+            specs: Specs to include in the selection.
+            **meta: Additional metadata key/value pairs stored in
+                ``selection_meta``.
+        """
         if tag == ":all:":
             raise ValueError("Tag name :all: is reserved")
         with self.connection:
@@ -473,10 +631,16 @@ class WorkspaceDatabase:
             )
 
     def rename_selection(self, old: str, new: str) -> None:
+        """Rename selection *old* to *new* (updates both ``selections`` and ``selection_meta``)."""
         with self.connection:
             self.connection.execute("UPDATE selections SET tag = ? WHERE tag = ?", (new, old))
 
     def get_selection_metadata(self, tag: str) -> dict[str, Any]:
+        """Return the metadata dict for selection *tag*.
+
+        Raises:
+            NotASelection: If *tag* does not exist.
+        """
         if not self.is_selection(tag):
             raise NotASelection(f"{tag} is not a selection")
         text = self.connection.execute(
@@ -488,21 +652,38 @@ class WorkspaceDatabase:
 
     @property
     def tags(self) -> list[str]:
+        """List of all selection tag names, sorted alphabetically."""
         rows = self.connection.execute(
             "SELECT DISTINCT tag FROM selections ORDER BY tag"
         ).fetchall()
         return [row[0] for row in rows]
 
     def is_selection(self, tag: str) -> bool:
+        """Return ``True`` if *tag* names an existing selection."""
         cur = self.connection.execute("SELECT 1 FROM selections WHERE tag = ? LIMIT 1", (tag,))
         return cur.fetchone() is not None
 
     def delete_selection(self, tag: str) -> bool:
+        """Delete the selection *tag* from the database.
+
+        Returns:
+            Always ``True`` (the deletion is unconditional).
+        """
         with self.connection:
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
 
     def get_updownstream_ids(self, seeds: list[str] | None = None) -> tuple[set[str], set[str]]:
+        """Return both the upstream prerequisites and downstream dependants of *seeds*.
+
+        Args:
+            seeds: Seed spec IDs.
+
+        Returns:
+            A ``(upstream, downstream)`` tuple of spec ID sets.  ``upstream``
+            contains all prerequisites of the full reachable set (seeds +
+            downstream); ``downstream`` contains all transitive dependants.
+        """
         if seeds is None:
             return set(), set()
         downstream = self.get_downstream_ids(seeds)
@@ -510,7 +691,10 @@ class WorkspaceDatabase:
         return upstream, downstream
 
     def get_downstream_ids(self, seeds: Iterable[str]) -> set[str]:
-        """Return dependencies in instantiation order."""
+        """Return all transitive dependants of *seeds* (specs that depend on them).
+
+        Uses a recursive CTE to traverse ``spec_deps`` in the forward direction.
+        """
         if not seeds:
             return set()
         with self.connection:
@@ -534,7 +718,10 @@ class WorkspaceDatabase:
         return {r[0] for r in rows}
 
     def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
-        """Return dependents in reverse instantiation order."""
+        """Return all transitive prerequisites of *seeds* (specs they depend on).
+
+        Uses a recursive CTE to traverse ``spec_deps`` in the reverse direction.
+        """
         if not seeds:
             return set()
         with self.connection:
@@ -572,6 +759,16 @@ class WorkspaceDatabase:
         return graph
 
     def get_partial_specs(self, *, tag: str | None = None) -> list["PartialSpec"]:
+        """Return lightweight :class:`PartialSpec` summaries for all (or tagged) specs.
+
+        Joins ``specs``, ``specs_meta``, and the latest ``results`` row for each
+        spec into a single query.  Used by rerun strategies to decide which specs
+        to re-execute without deserialising full ``JobSpec`` blobs.
+
+        Args:
+            tag: If given, restrict to specs that belong to this selection.
+                The special value ``':all:'`` is normalised to ``None``.
+        """
         if tag == ":all:":
             tag = None
         clauses: list[str] = []
@@ -655,6 +852,11 @@ class WorkspaceDatabase:
         return [row[0] for row in rows]
 
     def _timekeeper_started_at(self, text: str | None) -> float:
+        """Extract the earliest meaningful timestamp from a serialised :class:`Timekeeper`.
+
+        Returns the first positive value among ``_started``, ``_submitted``, and
+        ``_finished``, or ``-1.0`` if the text is absent or unparseable.
+        """
         if not text:
             return -1.0
         try:
@@ -709,6 +911,20 @@ class ResultListener(threading.Thread):
 
 @dataclasses.dataclass
 class PartialSpec:
+    """Lightweight summary of a spec plus its latest result, used by rerun strategies.
+
+    Attributes:
+        id: Full 64-char spec ID.
+        file: Absolute path to the test source file.
+        view: View-relative path string (e.g. ``'foo/bar/test_case.py'``).
+        result_category: String ``Category`` name of the latest result, or
+            ``None`` if the spec has never run.
+        result_outcome: String ``Outcome`` name of the latest result, or
+            ``None`` if the spec has never run.
+        started_at: Unix timestamp of the latest execution start (or submission
+            / finish if start was not recorded), or ``-1.0`` if never run.
+    """
+
     id: str
     file: Path
     view: str
@@ -718,6 +934,22 @@ class PartialSpec:
 
 
 def increment_hex_prefix(prefix: str) -> str | None:
+    """Return the next hex string after *prefix* for range queries.
+
+    Used to build ``WHERE spec_id >= prefix AND spec_id < upper`` range
+    queries that efficiently expand short prefixes to full IDs.
+
+    Args:
+        prefix: A non-empty hex string.
+
+    Returns:
+        A hex string of the same length that is numerically one greater than
+        *prefix*, or ``None`` if *prefix* is already the maximum value for
+        its length (all ``f``\\s).
+
+    Raises:
+        ValueError: If *prefix* contains non-hex characters.
+    """
     try:
         value = int(prefix, 16)
     except ValueError:
@@ -730,10 +962,13 @@ def increment_hex_prefix(prefix: str) -> str | None:
 
 
 def is_operation_error(e: BaseException) -> bool:
+    """Return ``True`` if *e* is a :class:`sqlite3.OperationalError`."""
     return isinstance(e, sqlite3.OperationalError)
 
 
 class NotASelection(Exception):
+    """Raised when a tag name is not found in the ``selections`` table."""
+
     def __init__(self, tag):
         super().__init__(f"No selection for tag {tag!r} found")
 
@@ -742,6 +977,13 @@ class NotASelection(Exception):
 
 
 def _migrate_results_status_state_to_job_state(db: WorkspaceDatabase) -> None:
+    """One-time migration: rename the legacy ``status_state`` column to ``job_state``.
+
+    Databases created before the ``job_state`` rename keep a ``status_state``
+    column.  This function detects that condition and performs an in-place
+    schema migration using a rename-and-copy strategy so that no result data is
+    lost.  Safe to call on already-migrated databases (no-op).
+    """
     conn = db.connection
     row = conn.execute("SELECT 1 FROM results").fetchone()
     if row is None:

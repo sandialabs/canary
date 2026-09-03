@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary check`` subcommand for running internal code-quality checks.
+
+Runs ruff formatting/linting, mypy/ty type-checking, bandit security scanning,
+pytest tests, coverage reporting, Sphinx documentation builds, and version stamping
+on the Canary source tree.
+"""
+
 import argparse
 import datetime
 import importlib.resources as ir
@@ -42,6 +49,8 @@ logger = logging.get_logger(__name__)
 
 
 class Action(argparse.Action):
+    """Accumulate single-character flag letters into ``namespace.action``."""
+
     def __call__(self, parser, namespace, values, option_string=None):
         action = getattr(namespace, "action", set())
         assert option_string is not None
@@ -51,12 +60,21 @@ class Action(argparse.Action):
 
 
 class Check(CanarySubcommand):
+    """Run canary's internal code-quality and pre-commit checks.
+
+    Orchestrates formatting (ruff), lint checking (ruff), type checking (ty or
+    mypy), security scanning (bandit), pytest test runs (optionally with
+    coverage), Sphinx documentation builds, and project version stamping.
+    Checks run only from an editable install of the Canary repository.
+    """
+
     name = "check"
     description = "Run canary's internal checks"
     add_help = False
     aliases = ["pre-commit"]
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register check flags (-f format, -c lint, -m type, -b bandit, -t test, etc.)."""
         parser.add_argument("-f", nargs=0, action=Action, help="run ruff format (default)")
         parser.add_argument("-c", nargs=0, action=Action, help="run ruff check (default)")
         parser.add_argument("-m", nargs=0, action=Action, help="run mypy (default)")
@@ -88,6 +106,7 @@ class Check(CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Run the selected checks and return 0 on success, raising on any failure."""
         global stdout
         global stderr
 
@@ -145,6 +164,7 @@ class Check(CanarySubcommand):
         return 0
 
     def stamp_version(self, args: argparse.Namespace) -> None:
+        """Update ``pyproject.toml`` project.version to today's YY.MM.DD value."""
         today = datetime.date.today()
         version = f"{today.year % 100}.{today.month}.{today.day}"
         if not args.release_version:
@@ -153,6 +173,7 @@ class Check(CanarySubcommand):
 
     @staticmethod
     def find_pyt_files(top: str) -> list[str]:
+        """Recursively collect ``.pyt`` file paths under *top*."""
         pyt_files: list[str] = []
 
         for dirname, _, files in os.walk(top):
@@ -161,6 +182,7 @@ class Check(CanarySubcommand):
         return pyt_files
 
     def format_code(self, args: argparse.Namespace):
+        """Run ``ruff format`` over all source, docs, and test trees."""
         with working_dir(self.root):
             pm = logger.progress_monitor(
                 f"Formatting examples in {self.root}/src/canary/docs/examples"
@@ -183,6 +205,7 @@ class Check(CanarySubcommand):
             pm.done()
 
     def lint_check_code(self, args: argparse.Namespace):
+        """Run ``ruff check --fix`` over all source, docs, and test trees."""
         with working_dir(self.root):
             pm = logger.progress_monitor(
                 f"Lint checking examples in {self.root}/src/canary/docs/examples"
@@ -211,18 +234,21 @@ class Check(CanarySubcommand):
             pm.done()
 
     def security_check(self, args: argparse.Namespace):
+        """Run bandit security scan over ``src/``."""
         with working_dir(self.root):
             pm = logger.progress_monitor("Checking source for security violations")
             bandit("-c", "./pyproject.toml", "-r", "src/")
             pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
+        """Run ty or mypy type checking over ``src/``."""
         with working_dir(self.root):
             pm = logger.progress_monitor(f"Type checking source in {self.root}/src")
             typecheck("./src", use_local_packages=args.use_local_packages == "yes")
             pm.done()
 
     def run_tests(self, args: argparse.Namespace):
+        """Discover and execute pytest suites, optionally with coverage collection."""
         if "e" in args.action:
             os.environ["CANARY_RUN_EXAMPLES_TEST"] = "1"
 
@@ -258,6 +284,7 @@ class Check(CanarySubcommand):
                 pm.done()
 
     def make_docs(self, args: argparse.Namespace):
+        """Build Sphinx HTML documentation from ``docs/``."""
         with working_dir(f"{self.root}/docs"):
             logger.info(f"Making documentation in {self.root}/docs")
             make("api-docs")
@@ -266,6 +293,7 @@ class Check(CanarySubcommand):
 
 
 def make(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``make`` with the given arguments, raising on non-zero exit."""
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
@@ -284,6 +312,7 @@ def make(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def ruff(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``ruff`` with the given arguments, raising on non-zero exit."""
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
@@ -302,11 +331,13 @@ def ruff(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def ruff_check(*paths: str, **kwargs) -> subprocess.CompletedProcess:
+    """Run ``ruff check --fix`` twice (second pass selects S324) on *paths*."""
     ruff("check", "--fix", *paths, **kwargs)
     return ruff("check", "--fix", "--select", "S324", *paths, **kwargs)
 
 
 def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``bandit`` with the given arguments, raising on non-zero exit."""
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
@@ -325,6 +356,7 @@ def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``ty check`` (preferred) or ``mypy`` with optional extra search paths."""
     use_local_packages: bool = bool(kwargs.pop("use_local_packages", True))
 
     kwargs["stdout"] = stdout
@@ -361,6 +393,7 @@ def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def pytest(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``pytest`` with the given arguments, raising on non-zero exit."""
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
@@ -380,6 +413,8 @@ def pytest(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 @dataclass(frozen=True)
 class PytestResult:
+    """Outcome of a single pytest worker invocation."""
+
     path: str
     returncode: int
     stdout: str
@@ -388,11 +423,22 @@ class PytestResult:
 
     @property
     def ok(self) -> bool:
+        """Return ``True`` if the pytest run exited with code 0."""
         return self.returncode == 0
 
 
 def run_pytest_one(root: str, relpath: str, pytest_args: tuple[str, ...] = ()) -> PytestResult:
-    # Runs in a worker process
+    """Run pytest on a single path in a worker process and return the result.
+
+    Args:
+        root: Absolute path to the repository root (used as ``cwd``).
+        relpath: Relative path to the test directory/file to pass to pytest.
+        pytest_args: Additional arguments forwarded to pytest.
+
+    Returns:
+        A :class:`PytestResult` capturing the return code, captured output,
+        and elapsed time.
+    """
     t0 = time.time()
     command = ["pytest", relpath, *pytest_args]
     cp = subprocess.run(command, cwd=root, stdout=stdout, stderr=stderr, encoding="utf-8")
@@ -413,6 +459,17 @@ def run_pytests_parallel(
     max_workers: int | None = None,
     pytest_args: tuple[str, ...] = (),
 ) -> list[PytestResult]:
+    """Run pytest concurrently over multiple paths using a process pool.
+
+    Args:
+        root: Repository root used to compute relative paths and as ``cwd``.
+        test_paths: Sequence of test paths to distribute across workers.
+        max_workers: Maximum worker processes (defaults to ``os.cpu_count()``).
+        pytest_args: Additional arguments forwarded to every pytest invocation.
+
+    Returns:
+        A list of :class:`PytestResult` objects in completion order.
+    """
     results: list[PytestResult] = []
 
     with ProcessPoolExecutor(max_workers=max_workers or os.cpu_count()) as ex:
@@ -436,6 +493,7 @@ def run_pytests_parallel(
 
 
 def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``coverage`` with the given arguments, raising on non-zero exit."""
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
@@ -454,6 +512,16 @@ def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def update_pyproject_version(root: Path, version: str) -> None:
+    """Rewrite the ``version`` field in ``pyproject.toml``'s ``[project]`` table.
+
+    Args:
+        root: Path to the repository root containing ``pyproject.toml``.
+        version: New version string to write (e.g. ``"25.9.3"`` or ``"25.9.3.dev0"``).
+
+    Raises:
+        FileNotFoundError: If ``pyproject.toml`` does not exist.
+        ValueError: If the ``[project]`` table or ``version`` key is absent.
+    """
     file = root / "pyproject.toml"
 
     if not file.exists():
@@ -568,6 +636,15 @@ def canary_entry_point_modules(root: Path) -> dict[str, str]:
 
 
 def entry_point_test_candidates(root: Path, module: str) -> tuple[Path, ...]:
+    """Return candidate test directory paths for a canary entry-point module.
+
+    Args:
+        root: Repository root directory.
+        module: Dotted module name from the entry-point (e.g. ``my_plugin.canary``).
+
+    Returns:
+        A tuple of :class:`~pathlib.Path` objects that may contain tests.
+    """
     parts = module.split(".")
     top_package = parts[0]
 

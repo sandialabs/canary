@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Multiprocessing utilities: process-pool helpers, error propagation, and an FS-backed queue.
+
+Key components: ``map``/``starmap`` wrappers that transparently fall back to
+single-process execution for small workloads, ``ErrorFromWorker``/``Task`` for
+structured worker-error capture, ``FSQueue`` for disk-backed inter-process
+messaging, and ``initialize`` for setting the preferred start method.
+"""
+
 import contextlib
 import multiprocessing
 import multiprocessing.context
@@ -36,6 +44,17 @@ StartMethod = Literal["fork", "forkserver", "spawn"]
 
 
 def max_workers(hint: int = -1) -> int:
+    """Return the maximum number of worker processes to use.
+
+    Respects the ``CANARY_MAX_WORKERS`` environment variable.  If ``hint``
+    is positive it is used directly (with a warning if it exceeds the CPU count).
+
+    Args:
+        hint: Explicit worker count; ``-1`` or ``0`` defers to the default cap.
+
+    Returns:
+        Number of worker processes to launch.
+    """
     nproc = cpu_count()
     max_default_workers: int
     if var := os.getenv("CANARY_MAX_WORKERS"):
@@ -74,6 +93,17 @@ def default_start_method() -> str:
 
 
 def recommended_start_method() -> StartMethod:
+    """Return the recommended multiprocessing start method for this platform.
+
+    Prefers ``forkserver`` on Linux when ``send_handle`` is available, ``spawn``
+    on macOS and Windows.  Can be overridden with ``CANARY_START_METHOD``.
+
+    Returns:
+        One of ``"fork"``, ``"forkserver"``, or ``"spawn"``.
+
+    Raises:
+        ValueError: If ``CANARY_START_METHOD`` contains an invalid value.
+    """
     if var := os.getenv("CANARY_START_METHOD"):
         if var in ("fork", "forkserver", "spawn"):
             return cast(StartMethod, var)
@@ -88,6 +118,12 @@ def recommended_start_method() -> StartMethod:
 
 
 def initialize() -> None:
+    """Set the multiprocessing start method and warm-start the process pool.
+
+    Idempotent: subsequent calls are no-ops.  Calls ``recommended_start_method``
+    to choose the start method and spawns a no-op child process to pre-initialize
+    the forkserver (if applicable).
+    """
     global _initialized
     if _initialized:
         return
@@ -104,11 +140,15 @@ def _noop():
 
 
 class SimpleQueue(multiprocessing.queues.SimpleQueue):
+    """``multiprocessing.SimpleQueue`` with a default context."""
+
     def __init__(self, ctx: multiprocessing.context.BaseContext | None = None) -> None:
         super().__init__(ctx=ctx or multiprocessing.context._default_context)
 
 
 class Queue(multiprocessing.queues.Queue):
+    """``multiprocessing.Queue`` with a default context."""
+
     def __init__(
         self, maxsize: int = 0, ctx: multiprocessing.context.BaseContext | None = None
     ) -> None:
@@ -134,6 +174,7 @@ class ErrorFromWorker:
 
     @property
     def stacktrace(self):
+        """Return a formatted stacktrace string prefixed with the worker PID."""
         msg = "[PID={0.pid}] {0.stacktrace_message}"
         return msg.format(self)
 
@@ -150,6 +191,7 @@ class Task:
     """
 
     def __init__(self, func: Callable):
+        """Wrap ``func`` so exceptions are returned as ``ErrorFromWorker`` objects."""
         self.func = func
 
     def __call__(self, *args: Any) -> Any:
@@ -286,6 +328,7 @@ def starmap(
 
 
 def parent_process() -> BaseProcess | None:
+    """Return the parent ``Process`` object, or ``None`` in the main process."""
     return multiprocessing.parent_process()
 
 
@@ -298,6 +341,7 @@ class FSQueue:
     """
 
     def __init__(self, root: Path):
+        """Initialize the queue rooted at ``root``, creating the directory if needed."""
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self._cache: list[Path] = []
@@ -324,6 +368,7 @@ class FSQueue:
         self._cache = files
 
     def empty(self) -> bool:
+        """Return ``True`` if the queue contains no items."""
         if not self._cache:
             self._refill_cache()
         return not bool(self._cache)

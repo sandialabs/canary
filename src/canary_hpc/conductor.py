@@ -111,24 +111,20 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
     # ---- build the table -----------------------------------------------
     table = Table(
         title=f"Batch packing summary  ·  algorithm: [bold]{algo_label}[/]  ·  "
-              f"[bold]{total_batches}[/] batches  ·  [bold]{total_jobs}[/] jobs",
+        f"[bold]{total_batches}[/] batches  ·  [bold]{total_jobs}[/] jobs",
         box=box.SIMPLE_HEAD,
         show_footer=True,
         expand=False,
     )
 
-    table.add_column("Batch", no_wrap=True,
-                     footer="")
-    table.add_column("Jobs", justify="right",
-                     footer=f"[bold]{total_jobs}[/]")
-    table.add_column("Nodes", justify="right",
-                     footer="")
-    table.add_column("Width", justify="right",
-                     footer="")
-    table.add_column("Est.", justify="right",
-                     footer=_fmt_min(sum(r["est_s"] for r in rows) / len(rows)))
-    table.add_column("Alloc", justify="right",
-                     footer="")
+    table.add_column("Batch", no_wrap=True, footer="")
+    table.add_column("Jobs", justify="right", footer=f"[bold]{total_jobs}[/]")
+    table.add_column("Nodes", justify="right", footer="")
+    table.add_column("Width", justify="right", footer="")
+    table.add_column(
+        "Est.", justify="right", footer=_fmt_min(sum(r["est_s"] for r in rows) / len(rows))
+    )
+    table.add_column("Alloc", justify="right", footer="")
 
     timeout_multiplier: float = 1.0
     try:
@@ -158,14 +154,8 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
     # ---- footer summary lines ------------------------------------------
     console = Console(file=sys.stderr)
     console.print(table)
-    console.print(
-        f"  Jobs/batch : {_fmt_stats(job_counts, '.0f')}",
-        highlight=False,
-    )
-    console.print(
-        f"  Est. runtime: {_fmt_stats(est_minutes, '.1f')} min",
-        highlight=False,
-    )
+    console.print(f"  Jobs/batch : {_fmt_stats(job_counts, '.0f')}", highlight=False)
+    console.print(f"  Est. runtime: {_fmt_stats(est_minutes, '.1f')} min", highlight=False)
     console.print()
 
 

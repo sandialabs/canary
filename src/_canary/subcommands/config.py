@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary config`` subcommand for inspecting and modifying Canary configuration."""
+
 import argparse
 import inspect
 import io
@@ -26,10 +28,13 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class ConfigCmd(CanarySubcommand):
+    """Display or modify Canary's layered configuration (local and global scopes)."""
+
     name = "config"
     description = "Get and set configuration options"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register ``show`` (with optional ``--format`` and ``--paths``) and ``set`` subcommands."""
         sp = parser.add_subparsers(dest="subcommand")
         p = sp.add_parser(
             "show",
@@ -80,6 +85,7 @@ class ConfigCmd(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        """Dispatch to ``show`` or ``set`` subcommand logic and return an exit code."""
         from .. import config
         from ..util.json_helper import try_loads
 
@@ -97,6 +103,7 @@ class ConfigCmd(CanarySubcommand):
 
 
 def show_config(args: "argparse.Namespace"):
+    """Print the active Canary configuration in the requested format (JSON or YAML)."""
     from .. import config
 
     text: str
@@ -133,6 +140,7 @@ def show_config(args: "argparse.Namespace"):
 
 
 def pretty_print(text: str, fmt: str):
+    """Syntax-highlight *text* in *fmt* format (``json`` or ``yaml``) and print it."""
     from pygments import highlight
     from pygments.formatters import (
         TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
@@ -146,6 +154,7 @@ def pretty_print(text: str, fmt: str):
 
 
 def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str, str]]:
+    """Return a sorted list of ``(namespace, name, file)`` tuples for all registered plugins."""
     plugins: list[tuple[str, str, str]] = []
 
     for name, plugin in pluginmanager.list_name_plugin():
@@ -160,6 +169,7 @@ def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str
 
 
 def getfile(obj: Any) -> str:
+    """Return the source file path for *obj*, falling back to its type."""
     try:
         return inspect.getfile(obj)
     except TypeError:
@@ -167,6 +177,7 @@ def getfile(obj: Any) -> str:
 
 
 def getnamespace(obj: Any) -> str:
+    """Return the dotted package or module name for *obj*."""
     try:
         return obj.__package__
     except AttributeError:
@@ -174,6 +185,7 @@ def getnamespace(obj: Any) -> str:
 
 
 def print_active_plugin_descriptions() -> None:
+    """Print a formatted table of all active plugin namespaces, names, and source files."""
     from .. import config
 
     table: list[tuple[str, str, str]] = []

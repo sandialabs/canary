@@ -2,6 +2,22 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Results view management: per-session symlink/copy/hardlink trees of job output directories.
+
+A *view* is a directory tree that presents the latest result for each job
+in a human-navigable layout.  The root directory contains one entry per job,
+named after the job's ``view_path`` (typically the test's relative path within
+the workspace).
+
+Three classes collaborate here:
+
+* :class:`ViewSettings` — user-facing configuration (name, when, only, mode).
+* :class:`ResultsView` — the view directory itself; knows how to create,
+  update, and remove view entries.
+* :class:`ViewManager` — orchestrates live updates during a session run,
+  protected by a file lock for concurrent multi-process access.
+"""
+
 import dataclasses
 import datetime
 import fcntl
@@ -36,6 +52,20 @@ logger = logging.get_logger(__name__)
 
 @dataclasses.dataclass
 class ViewSettings:
+    """Configuration for a results view.
+
+    Attributes:
+        name: Directory name for the view, relative to the workspace parent.
+            Must not contain a path separator.
+        when: Condition under which the view is populated:
+            ``'always'`` (default), ``'never'``, ``'on_success'``, or
+            ``'on_failure'``.
+        only: Which jobs to include: ``'all'``, ``'failed'``, ``'not_pass'``,
+            or ``'passed'``.
+        mode: How job output directories are linked into the view:
+            ``'symlink'`` (default), ``'hardlink'``, or ``'copy'``.
+    """
+
     name: str = "TestResults"
     when: ViewWhen = "always"
     only: ViewOnly = "all"
@@ -43,6 +73,7 @@ class ViewSettings:
 
     @classmethod
     def default(cls) -> "ViewSettings":
+        """Return a ``ViewSettings`` populated from the active canary configuration."""
         view_cfg = config.get("workspace:view") or {}
         name = str(view_cfg.get("name") or "TestResults")
         when = cast(ViewWhen, view_cfg.get("when") or "always")
@@ -58,12 +89,18 @@ class ViewSettings:
         return cls(**d)
 
     def __post_init__(self):
+        """Validate field values against their allowed sets."""
         assert os.path.sep not in self.name
         assert self.when in {"always", "never", "on_success", "on_failure"}
         assert self.only in {"all", "failed", "not_pass", "passed"}
         assert self.mode in {"symlink", "hardlink", "copy"}
 
     def include_job(self, job: Job) -> bool:
+        """Return ``True`` if *job* should be included in the view.
+
+        Skipped jobs are always excluded.  Other jobs are filtered according to
+        :attr:`only`.
+        """
         if job.status.is_skipped():
             return False
         if self.only == "failed" and not job.status.is_failure():
@@ -75,6 +112,10 @@ class ViewSettings:
         return True
 
     def is_enabled(self, jobs: list[Job]) -> bool:
+        """Return ``True`` if the view should be created/updated given *jobs*.
+
+        Evaluates :attr:`when` against the aggregate job outcomes.
+        """
         if self.when == "always":
             return True
         if self.when == "never":
@@ -86,17 +127,35 @@ class ViewSettings:
         return False
 
     def always_disabled(self) -> bool:
+        """Return ``True`` if the view is unconditionally disabled (``when='never'``)."""
         return self.when == "never"
 
     def always_enabled(self) -> bool:
+        """Return ``True`` if the view is unconditionally enabled (``when='always'``)."""
         return self.when == "always"
 
     def deferred_until_finish(self) -> bool:
+        """Return ``True`` if the view update must wait until the session ends.
+
+        This is the case when ``when`` is ``'on_success'`` or ``'on_failure'``
+        because the decision cannot be made until all jobs have finished.
+        """
         return self.when in {"on_success", "on_failure"}
 
 
 @dataclasses.dataclass
 class ViewManifestEntry:
+    """Record of a single job's entry in the view manifest.
+
+    Attributes:
+        job_id: The spec ID of the job.
+        view_path: Path of the entry relative to the view root directory.
+        source: Absolute path to the job's workspace directory.
+        session: Session ID string when this entry was last written.
+        outcome: String name of the job's :class:`~_canary.status.Outcome`.
+        updated: ISO 8601 UTC timestamp of when this entry was last updated.
+    """
+
     job_id: str
     view_path: str
     source: str
@@ -119,6 +178,18 @@ class ViewManifestEntry:
 
 @dataclasses.dataclass
 class ViewManifest:
+    """JSON manifest that tracks which jobs are present in a view directory.
+
+    Written to ``<view_dir>/.canary-view.json``.  Stores the current
+    :class:`ViewSettings` alongside a mapping of job ID → :class:`ViewManifestEntry`
+    so that stale entries can be removed when a job is re-run.
+
+    Attributes:
+        version: Manifest format version (currently ``1``).
+        settings: Serialized :class:`ViewSettings` as a plain dict.
+        entries: Mapping of job ID → entry record.
+    """
+
     version: int = 1
     settings: dict[str, Any] = dataclasses.field(default_factory=dict)
     entries: dict[str, ViewManifestEntry] = dataclasses.field(default_factory=dict)
@@ -144,11 +215,26 @@ class ViewManifest:
 
 @dataclasses.dataclass(frozen=True)
 class ResultsView:
+    """An on-disk results view rooted at a specific directory.
+
+    Manages the lifecycle of a view directory: creation, per-job updates,
+    manifest persistence, and removal.  The view directory is identified by a
+    ``<root>/<settings.name>/`` path and is tagged with a
+    ``.canary-view.json`` manifest file so canary can distinguish owning
+    directories from user-created ones.
+
+    Attributes:
+        root: Parent directory; the view directory itself is ``root/settings.name``.
+        settings: Configuration that controls which jobs are included and how
+            they are linked.
+    """
+
     root: Path
     settings: ViewSettings
 
     @staticmethod
     def exists_at(p: Path) -> bool:
+        """Return ``True`` if *p* contains a ``.canary-view.json`` manifest."""
         return (p / ".canary-view.json").exists()
 
     def __serialize__(self) -> dict[str, Any]:
@@ -167,6 +253,15 @@ class ResultsView:
         return self.dir.exists() and (self.dir / ".canary-view.json").exists()
 
     def make(self, exist_ok: bool = False) -> None:
+        """Create the view directory, optionally tolerating an existing one.
+
+        Args:
+            exist_ok: If ``True``, do nothing when the view already exists.
+
+        Raises:
+            ValueError: If the directory exists but is not owned by this view,
+                or if it already exists and ``exist_ok`` is ``False``.
+        """
         tag = self.dir / ".canary-view.json"
         if self.dir.exists():
             if not tag.exists():
@@ -177,6 +272,16 @@ class ResultsView:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def unlink(self, missing_ok: bool = False) -> None:
+        """Remove the view directory and all its contents.
+
+        Args:
+            missing_ok: If ``True``, do nothing when the view directory does
+                not exist.
+
+        Raises:
+            ValueError: If the directory exists but is not owned by this view,
+                or if it is missing and ``missing_ok`` is ``False``.
+        """
         if not self.dir.exists():
             if not missing_ok:
                 raise ValueError(f"View does not exist at {self.dir}")
@@ -187,6 +292,18 @@ class ResultsView:
         force_remove(self.dir)
 
     def update(self, jobs: list[Job]) -> bool:
+        """Synchronize all *jobs* into the view and save the manifest.
+
+        Creates the view directory if it does not exist.  Jobs are filtered by
+        :meth:`~ViewSettings.include_job` before being added.
+
+        Args:
+            jobs: All finished jobs to consider.
+
+        Returns:
+            ``True`` if any entry was added or removed, ``False`` if nothing
+            changed (also ``False`` if the view is disabled for these jobs).
+        """
         if not self.settings.is_enabled(jobs):
             return False
 
@@ -206,6 +323,14 @@ class ResultsView:
         return True
 
     def add(self, job: Job) -> None:
+        """Add *job*'s output directory to the view using the configured mode.
+
+        Creates parent directories as needed.  Any existing entry at the
+        destination path is removed first.
+
+        Args:
+            job: The finished job whose workspace directory should be linked.
+        """
         source = job.workspace.dir
         dest = self.dir / job.view_path
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -234,12 +359,19 @@ class ResultsView:
         return self.dir / ".canary-view.json"
 
     def load_manifest(self) -> ViewManifest:
+        """Load and return the view manifest, or an empty one if it does not exist."""
         if not self.manifest_file.exists():
             return ViewManifest(settings=self.settings.__serialize__())
         with open(self.manifest_file) as fh:
             return ViewManifest.from_dict(json.load(fh))
 
     def save_manifest(self, manifest: ViewManifest) -> None:
+        """Atomically write *manifest* to the ``.canary-view.json`` file.
+
+        Uses a temp-file + ``os.replace`` pattern to avoid partial writes.
+        Also performs a best-effort ``fsync`` on the directory fd for rename
+        durability on network filesystems.
+        """
         manifest.settings = self.settings.__serialize__()
 
         fd: int | None = None
@@ -302,6 +434,16 @@ class ResultsView:
         return changed
 
     def remove_entry(self, job_id: str, manifest: ViewManifest) -> bool:
+        """Remove a job's entry from the view and from *manifest*.
+
+        Args:
+            job_id: The spec ID of the job to remove.
+            manifest: The manifest to update in place.
+
+        Returns:
+            ``True`` if an entry was found and removed, ``False`` if the job
+            was not in the manifest.
+        """
         entry = manifest.entries.pop(job_id, None)
         if entry is None:
             return False
@@ -317,6 +459,7 @@ class ResultsView:
         return self.dir / rel
 
     def remove_path(self, path: Path) -> None:
+        """Remove *path* from the view regardless of whether it is a file, symlink, or directory."""
         if path.is_symlink() or path.is_file():
             path.unlink()
         elif path.is_dir():
@@ -345,10 +488,12 @@ class ViewManager:
 
     @property
     def lock_file(self) -> Path:
+        """Path to the exclusive advisory lock file used to serialise view updates."""
         return (self.workspace.cache_dir / "view.lock").resolve()
 
     @contextmanager
     def locked(self) -> Iterator[None]:
+        """Context manager that holds an exclusive ``flock`` on :attr:`lock_file`."""
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.lock_file, "w") as fh:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
@@ -358,6 +503,11 @@ class ViewManager:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
     def start(self) -> None:
+        """Initialise the view manager at the start of a session.
+
+        Creates the view directory (for ``always`` mode) or records that updates
+        are deferred until session end.  Idempotent — safe to call multiple times.
+        """
         if self.started:
             return
         self.started = True
@@ -378,6 +528,16 @@ class ViewManager:
             self.workspace.register_view(self.view)
 
     def finish(self) -> ResultsView | None:
+        """Finalise the view at session end.
+
+        For deferred views (``on_success`` / ``on_failure``) this is where the
+        view is actually created.  For live views the manifest is flushed.
+        Idempotent — safe to call multiple times; subsequent calls are no-ops.
+
+        Returns:
+            The :class:`ResultsView` that was written, or ``None`` if the view
+            was disabled or the ``when`` condition was not met.
+        """
         if self.finished:
             return self.view
         self.finished = True
@@ -420,6 +580,16 @@ class ViewManager:
         return self.view
 
     def sync(self, job: Job) -> None:
+        """Record *job*'s result in the view immediately after it finishes.
+
+        For deferred views (``on_success`` / ``on_failure``) the job is added
+        to ``_finished_jobs`` for processing at :meth:`finish` time but no
+        filesystem changes are made yet.  For live views the view entry is
+        updated under the view lock.
+
+        Args:
+            job: The job that has just completed.
+        """
         if not self.enabled:
             return
         self._finished_jobs[job.id] = job
@@ -478,8 +648,10 @@ class ViewManager:
                             os.rename(bak_dir, old_dir)
 
     def __enter__(self) -> "ViewManager":
+        """Start the view manager; calls :meth:`start`."""
         self.start()
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Finalise the view manager; calls :meth:`finish`."""
         self.finish()

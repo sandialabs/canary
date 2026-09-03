@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary info`` subcommand for printing workspace or tag summary information."""
+
 import argparse
 import io
 import json
@@ -28,10 +30,13 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Info(CanarySubcommand):
+    """Print a summary of the current workspace or of a named tag, with optional JSON output."""
+
     name = "info"
     description = "Print information about test session"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register ``-t/--tag`` and ``--json`` arguments."""
         parser.add_argument("-t", "--tag", help="Show information about this tag")
         parser.add_argument(
             "--json",
@@ -42,6 +47,7 @@ class Info(CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Dispatch to tag or workspace info printing (plain or JSON) and return 0."""
         if args.tag:
             if args.output_json:
                 self.print_tag_info_json(args.tag)
@@ -55,6 +61,7 @@ class Info(CanarySubcommand):
         return 0
 
     def print_tag_info_json(self, tag: str) -> None:
+        """Emit JSON with spec count, creation date, and metadata for *tag* to stdout."""
         workspace = Workspace.load()
         specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
         selection = workspace.db.get_selection_metadata(tag)
@@ -63,15 +70,13 @@ class Info(CanarySubcommand):
             "created_on": selection.pop("created_on", None),
             "metadata": selection,
             "spec_count": len(specs),
-            "specs": [
-                {"id": spec.id, "name": spec.display_name(resolve=True)}
-                for spec in specs
-            ],
+            "specs": [{"id": spec.id, "name": spec.display_name(resolve=True)} for spec in specs],
         }
         json.dump(out, sys.stdout, indent=2)
         sys.stdout.write("\n")
 
     def print_tag_info(self, tag: str) -> None:
+        """Print a rich table of tag metadata and the specs it contains."""
         workspace = Workspace.load()
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
@@ -97,6 +102,7 @@ class Info(CanarySubcommand):
             console.print(groups)
 
     def print_workspace_info_json(self) -> None:
+        """Emit JSON with root, version, spec count, test roots, sessions, and tags to stdout."""
         workspace = Workspace.load()
         info = workspace.info()
         unique_test_roots = sorted({spec.file_root.as_posix() for spec in info["specs"]})
@@ -113,6 +119,7 @@ class Info(CanarySubcommand):
         sys.stdout.write("\n")
 
     def print_workspace_info(self) -> None:
+        """Print a rich summary table of the current workspace."""
         workspace = Workspace.load()
         info = workspace.info()
         unique_test_roots = {spec.file_root.as_posix() for spec in info["specs"]}

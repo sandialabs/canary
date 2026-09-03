@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""HTML report format for Canary test results.
+
+Generates a self-contained static HTML site under a configurable output directory,
+with per-job detail pages, a file browser, and an interactive summary index.
+Key classes: :class:`HTMLReporter`, :class:`HTMLReportCommand`.
+"""
+
 import argparse
 import dataclasses
 import functools

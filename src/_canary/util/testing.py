@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Testing utilities for canary's own test suite.
+
+Provides ``CanaryCommand`` (a callable wrapper for ``python -m canary`` sub-commands),
+random test-file/job-spec/job generators (``generate_random_test_files``,
+``generate_random_jobspecs``, ``generate_random_jobs``), and
+``generate_spec_names`` for computing expected parameterized spec IDs.
+"""
+
 import io
 import os
 import random
@@ -18,14 +26,37 @@ if TYPE_CHECKING:
 
 
 class CanaryCommand:
+    """Callable wrapper that runs a canary sub-command via ``python -m canary``.
+
+    Attributes:
+        command_name: The canary sub-command to invoke (e.g. ``"run"``).
+        default_args: Arguments prepended to every call.
+    """
+
     def __init__(self, command_name: str) -> None:
         self.command_name = command_name
         self.default_args: list[str] = []
 
     def add_default_args(self, *args: str) -> None:
+        """Append ``args`` to the list of default arguments for every call.
+
+        Args:
+            *args: Additional command-line arguments to prepend.
+        """
         self.default_args.extend(args)
 
     def __call__(self, *args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+        """Invoke the canary sub-command with ``args`` and return the completed process.
+
+        Keyword Args:
+            env: Environment dict to use (defaults to a copy of ``os.environ``).
+            cpus: Override the ``resource_pool:cpus`` config value.
+            gpus: Override the ``resource_pool:gpus`` config value.
+            debug: If ``True``, pass ``-d`` to the canary invocation.
+
+        Returns:
+            ``subprocess.CompletedProcess`` result of the invocation.
+        """
         env: dict[str, str] = {}
         if "env" in kwargs:
             env.update(kwargs.pop("env"))
@@ -65,6 +96,20 @@ class CanaryCommand:
 def generate_random_jobs(
     root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5
 ) -> list["Job"]:
+    """Generate a list of random ``Job`` objects for testing.
+
+    Creates random test files under ``root/tests``, collects and generates
+    specs, then wraps each spec in a ``Job`` with appropriate dependencies.
+
+    Args:
+        root: Base directory for the generated session.
+        count: Number of test files to generate.
+        max_params: Maximum number of parameters per test.
+        max_rows: Maximum number of parameter rows per test.
+
+    Returns:
+        List of ``Job`` objects in topological order.
+    """
     from ..job import Dependency
     from ..job import Job
     from ..jobspec_graph import make_spec_graph
@@ -89,6 +134,20 @@ def generate_random_jobs(
 def generate_random_jobspecs(
     root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5
 ) -> list["JobSpec"]:
+    """Generate a list of random ``JobSpec`` objects for testing.
+
+    Writes random ``.pyt`` test files under ``root/tests`` and runs the
+    collector and generator to produce specs.
+
+    Args:
+        root: Base directory under which ``tests/`` is created.
+        count: Number of test files to generate.
+        max_params: Maximum parameter count per test.
+        max_rows: Maximum number of parameter rows per test.
+
+    Returns:
+        List of ``JobSpec`` objects.
+    """
     from ..collect import Collector
     from ..generate import Generator
 
@@ -157,6 +216,19 @@ def generate_random_test_files(
 
 
 def generate_spec_names(family: str, arg_names: str, values: list[tuple[Any, ...]]) -> list[str]:
+    """Compute the expected parameterized spec IDs for a test family.
+
+    Args:
+        family: Base test family name.
+        arg_names: Comma-separated parameter names.
+        values: List of value tuples, one per parameterization row.
+
+    Returns:
+        List of spec name strings in the form ``family.name=v.name=v...``.
+
+    Raises:
+        ValueError: If the number of names does not match the length of any value tuple.
+    """
     param_names = [n.strip() for n in arg_names.split(",")]
     if any(len(param_names) != len(v) for v in values):
         raise ValueError("Incorrect param name/value shape")

@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Time and duration utilities for canary.
+
+Provides ``Duration`` (Go-style duration string parsing/formatting),
+``hhmmss`` (HH:MM:SS formatter), ``pretty_seconds`` (auto-scaled time string),
+``time_in_seconds`` (coerce any time representation to float seconds), and
+``strftimestamp``/``timestamp`` helpers.
+"""
+
 import re
 import time
 from datetime import datetime
@@ -11,16 +19,44 @@ from typing import Callable
 
 
 def strftimestamp(timestamp: float, fmt: str = "%b %d %H:%M") -> str:
+    """Format a UNIX timestamp as a human-readable local time string.
+
+    Args:
+        timestamp: UNIX epoch seconds.
+        fmt: ``strftime`` format string (default ``"%b %d %H:%M"``).
+
+    Returns:
+        Formatted string with the local timezone name appended.
+    """
     s = datetime.fromtimestamp(timestamp).strftime(fmt)
     s += f" {time.tzname[1]}"
     return s
 
 
 def timestamp(local: bool = True) -> float:
+    """Return the current time as a UNIX timestamp.
+
+    Args:
+        local: If ``True`` (default), use local time; otherwise use UTC.
+
+    Returns:
+        Current time in seconds since the epoch.
+    """
     return time.mktime(time.localtime()) if local else time.time()
 
 
 def time_in_seconds(arg: int | float | str) -> float:
+    """Coerce a time value to seconds as a float.
+
+    Accepts numeric types directly, or a duration string parseable by
+    ``Duration.from_str``.
+
+    Args:
+        arg: Numeric seconds or a duration string (e.g. ``"1h30m"``).
+
+    Returns:
+        Duration in seconds.
+    """
     if isinstance(arg, (float, int)):
         return float(arg)
     duration = Duration.from_str(arg)
@@ -28,6 +64,15 @@ def time_in_seconds(arg: int | float | str) -> float:
 
 
 def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
+    """Format ``seconds`` as ``HH:MM:SS``, including sub-second precision below ``threshold``.
+
+    Args:
+        seconds: Duration in seconds, or ``None`` to return a placeholder.
+        threshold: Seconds below which fractional precision is included.
+
+    Returns:
+        Formatted time string, or ``"--:--:--"`` when ``seconds`` is ``None``.
+    """
     if seconds is None:
         return "--:--:--"
     utc = datetime.fromtimestamp(seconds, timezone.utc)
@@ -37,6 +82,14 @@ def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
 
 
 def pretty_seconds_formatter(seconds: int | float) -> Callable:
+    """Return a formatting callable that scales a duration to the most appropriate unit.
+
+    Args:
+        seconds: Reference duration used to choose the unit (s, ms, us, or ns).
+
+    Returns:
+        A callable that accepts a number of seconds and returns a formatted string.
+    """
     multiplier: float
     unit: str
     if seconds >= 1:
@@ -160,6 +213,7 @@ class Duration:
 
     @staticmethod
     def _to_str_small(nanoseconds: float, extended: bool) -> str:
+        """Format sub-second durations (ms, us, ns)."""
         result_str = ""
 
         if not nanoseconds:
@@ -182,6 +236,7 @@ class Duration:
 
     @staticmethod
     def _to_str_large(nanoseconds: float, extended: bool) -> str:
+        """Format durations of one second or longer; includes years/months/days when ``extended``."""
         result_str = ""
 
         if extended:
@@ -219,4 +274,4 @@ class Duration:
 
 
 class DurationError(ValueError):
-    """duration error"""
+    """Raised when a duration string cannot be parsed."""

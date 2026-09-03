@@ -123,6 +123,15 @@ def query_json(data: Any, query: str) -> Any:
 
 
 def format_missing_key_message(key: str, current: dict[str, Any]) -> str:
+    """Build a helpful error message listing available keys when ``key`` is missing.
+
+    Args:
+        key: The missing key that was requested.
+        current: The dict that was searched.
+
+    Returns:
+        A human-readable error string.
+    """
     keys = sorted(str(k) for k in current.keys())
 
     if not keys:
@@ -136,6 +145,17 @@ def format_missing_key_message(key: str, current: dict[str, Any]) -> str:
 
 
 def parse_query(query: str) -> list[str | int]:
+    """Parse a query string into a sequence of string (key) and integer (index) tokens.
+
+    Args:
+        query: A query path starting with ``"."``.
+
+    Returns:
+        Ordered list of tokens to traverse.
+
+    Raises:
+        ValueError: On invalid query syntax.
+    """
     tokens: list[str | int] = []
     i = 0
 
@@ -165,6 +185,18 @@ def parse_query(query: str) -> list[str | int]:
 
 
 def parse_bracket(query: str, i: int) -> tuple[str | int, int]:
+    """Parse a bracket expression ``[...]`` starting at position ``i``.
+
+    Args:
+        query: The full query string.
+        i: Index of the opening ``[``.
+
+    Returns:
+        A ``(token, next_index)`` pair where ``token`` is a string key or integer index.
+
+    Raises:
+        ValueError: On malformed bracket expressions.
+    """
     assert query[i] == "["
     j = i + 1
 
@@ -216,6 +248,14 @@ def parse_bracket(query: str, i: int) -> tuple[str | int, int]:
 
 
 def display_query_prefix(query: str) -> str:
+    """Strip the leading dot from a query string for display purposes.
+
+    Args:
+        query: A query path (may start with ``"."``).
+
+    Returns:
+        The query without its leading dot, or ``""`` for the root.
+    """
     query = query.strip()
 
     if not query or query == ".":
@@ -225,6 +265,17 @@ def display_query_prefix(query: str) -> str:
 
 
 def join_query_path(prefix: str, key: str) -> str:
+    """Append ``key`` to ``prefix`` using the appropriate separator.
+
+    Simple alphanumeric keys use dot notation; others use bracket-quoted notation.
+
+    Args:
+        prefix: Existing query path prefix.
+        key: Key to append.
+
+    Returns:
+        Combined query path string.
+    """
     if not prefix:
         return key
 
@@ -236,6 +287,14 @@ def join_query_path(prefix: str, key: str) -> str:
 
 
 def is_simple_query_key(key: str) -> bool:
+    """Return ``True`` if ``key`` can be written with dot notation (no brackets needed).
+
+    Args:
+        key: Key to test.
+
+    Returns:
+        ``True`` for identifiers matching ``[A-Za-z_][A-Za-z0-9_-]*``.
+    """
     return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", key))
 
 
@@ -261,11 +320,22 @@ def list_json_object_paths(data: Any, query: str) -> list[str]:
 
 
 def print_query_paths(paths: list[str]) -> None:
+    """Print each path in ``paths`` on its own line.
+
+    Args:
+        paths: List of query path strings to print.
+    """
     for path in paths:
         print(path)
 
 
 def print_json(data: Any, *, terse: bool = False) -> None:
+    """Print ``data`` as JSON to stdout.
+
+    Args:
+        data: JSON-serializable object.
+        terse: If ``True``, use compact separators; otherwise indent with 2 spaces.
+    """
     if terse:
         json.dump(data, sys.stdout, separators=(",", ":"))
     else:
@@ -279,6 +349,17 @@ def print_json(data: Any, *, terse: bool = False) -> None:
 
 
 def is_skill_object(data: Any) -> bool:
+    """Return ``True`` if ``data`` looks like a skill JSON object.
+
+    A skill object is a dict with string fields ``name``, ``description``,
+    and ``body``.
+
+    Args:
+        data: Value to test.
+
+    Returns:
+        ``True`` if ``data`` matches the skill object schema.
+    """
     return (
         isinstance(data, dict)
         and isinstance(data.get("name"), str)

@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary fetch`` subcommand for copying bundled assets into the working directory."""
+
 import argparse
 import importlib.resources as ir
 import os
@@ -21,15 +23,19 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Fetch(CanarySubcommand):
+    """Copy bundled Canary assets (examples directory or ``Canary.cmake``) into the current directory."""
+
     name = "fetch"
     description = "Fetch canary assets"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register the ``what`` positional with choices ``examples`` and ``canary.cmake``."""
         parser.add_argument(
             "what", choices=("examples", "canary.cmake"), type=str.lower, help="Asset to fetch"
         )
 
     def execute(self, args: argparse.Namespace) -> int:
+        """Copy the requested asset into the current working directory and return 0."""
         if args.what == "examples":
             path = str(ir.files("canary").joinpath("docs/examples"))
             if os.path.exists("examples"):

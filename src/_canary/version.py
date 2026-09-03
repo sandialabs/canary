@@ -2,6 +2,20 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Version resolution for the ``canary-wm`` distribution.
+
+For installed (non-editable) packages the version is read directly from
+package metadata via ``importlib.metadata``.
+
+For editable (development) installs the metadata version is used as the base,
+and a ``+g<sha>[.dirty]`` local segment is appended by querying the git
+repository at the package source location.
+
+Module-level attributes ``__version__``, ``version``, ``version_info``, and
+``__version_info__`` are resolved lazily via ``__getattr__`` to avoid running
+subprocess calls at import time.
+"""
+
 import json
 import os
 import subprocess
@@ -11,10 +25,14 @@ DIST_NAME = "canary-wm"
 
 
 class GitRepoNotFoundError(Exception):
+    """Raised when the package source directory is not inside a git repository."""
+
     pass
 
 
 class CannotDetermineVersionFromGitError(Exception):
+    """Raised when git is available but the version cannot be determined (e.g. no commits)."""
+
     pass
 
 
@@ -45,6 +63,11 @@ def is_editable(dist_name: str = DIST_NAME) -> bool:
 
 
 def _git_toplevel(start_dir: str) -> str:
+    """Return the absolute path of the git repository root for *start_dir*.
+
+    Raises:
+        GitRepoNotFoundError: If *start_dir* is not inside a git repository.
+    """
     proc = subprocess.run(
         ["git", "-C", start_dir, "rev-parse", "--show-toplevel"],
         text=True,
@@ -57,6 +80,11 @@ def _git_toplevel(start_dir: str) -> str:
 
 
 def _git_short_sha(repo: str) -> str:
+    """Return the short (7-char) SHA of HEAD in *repo*.
+
+    Raises:
+        CannotDetermineVersionFromGitError: If ``git rev-parse`` fails.
+    """
     proc = subprocess.run(
         ["git", "-C", repo, "rev-parse", "--short", "HEAD"],
         text=True,
@@ -69,6 +97,7 @@ def _git_short_sha(repo: str) -> str:
 
 
 def _git_is_dirty(repo: str) -> bool:
+    """Return ``True`` if the working tree in *repo* has uncommitted changes."""
     return (
         subprocess.run(
             ["git", "-C", repo, "diff", "--quiet"],
@@ -80,6 +109,15 @@ def _git_is_dirty(repo: str) -> bool:
 
 
 def git_local_label() -> str:
+    """Return a PEP 440 local segment string for the current git state.
+
+    Returns strings like ``'g3a1b2c3'`` (clean) or ``'g3a1b2c3.dirty'``
+    (uncommitted changes present).
+
+    Raises:
+        GitRepoNotFoundError: If the package source is not in a git repo.
+        CannotDetermineVersionFromGitError: If the SHA cannot be determined.
+    """
     repo = _git_toplevel(os.path.dirname(__file__))
     sha = _git_short_sha(repo)
     local = f"g{sha}"
@@ -142,6 +180,12 @@ def get_version_info() -> tuple[int, int, int, str]:
 
 
 def get_version() -> str:
+    """Return the canonical version string for the ``canary-wm`` distribution.
+
+    For non-editable installs this is the raw metadata version string.
+    For editable installs a ``+g<sha>[.dirty]`` local segment is appended
+    unless the metadata already contains a local segment.
+    """
     major, minor, micro, local = get_version_info()
     v = f"{major}.{minor}.{micro}"
 
@@ -169,6 +213,7 @@ __version_info__: tuple[int, int, int, str]
 
 
 def __getattr__(name: str):
+    """Lazily resolve ``__version__``, ``version``, ``version_info``, and ``__version_info__``."""
     if name in ("version", "__version__"):
         return get_version()
     if name in ("version_info", "__version_info__"):

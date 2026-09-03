@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Canary CLI subcommand registry and documentation utilities.
+
+All built-in subcommands are imported here and exposed via ``plugins`` for
+discovery by the plugin manager.  Public symbols: ``plugins``, ``make_commands_docs``.
+"""
+
 from . import check
 from . import collect
 from . import config
@@ -60,6 +66,12 @@ plugins = [
 
 
 def make_commands_docs(prefix: str) -> None:
+    """Write RST documentation for all registered CLI subcommands.
+
+    Args:
+        prefix: Destination directory under which a ``commands/`` sub-directory
+            is created containing one RST file per subcommand.
+    """
     import os
 
     from .. import config

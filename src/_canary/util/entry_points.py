@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Compatibility wrapper for ``importlib.metadata.entry_points``.
+
+Provides ``get_entry_points`` which handles the API differences between
+Python versions older than 3.10 and 3.10+.
+"""
+
 
 def get_entry_points(*, group: str):
     """Wrapper for ``importlib.metadata.entry_points``

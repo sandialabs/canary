@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Implements the ``canary run`` subcommand for discovering and executing test suites."""
+
 import argparse
 import os
 from dataclasses import dataclass
@@ -45,11 +47,18 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Run(CanarySubcommand):
+    """Find tests from a path specification, create a workspace if needed, and execute them.
+
+    Supports scan-path, tag, spec-ID, and view-path request modes.  All filter,
+    resource, and display-style options are also available.
+    """
+
     name = "run"
     description = "Find and run tests from a pathspec"
     epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
+        """Register all run arguments: paths, wipe, generator/selector options, style, view, etc."""
         parser.set_defaults(banner=True)
         parser.add_argument(
             "-w",
@@ -135,6 +144,7 @@ class Run(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        """Resolve the run request, load or create a workspace, run the session, and return its exit code."""
         request: RequestNode
         if req := getattr(args, "request", None):
             request = req
@@ -205,6 +215,7 @@ class Run(CanarySubcommand):
 
 
 def setdefault(obj, attr, default):
+    """Set *attr* on *obj* to *default* if absent or ``None``, then return its value."""
     if not hasattr(obj, attr):
         setattr(obj, attr, default)
     elif getattr(obj, attr) is None:
@@ -213,6 +224,8 @@ def setdefault(obj, attr, default):
 
 
 class StyleAction(argparse.Action):
+    """Parse ``--style key=value`` pairs into a console-style configuration dict."""
+
     style_choices = {"name": ("long", "short"), "live": ("yes", "no")}
 
     def __call__(
@@ -239,6 +252,8 @@ class StyleAction(argparse.Action):
 
 
 class DeprecatedStoreAction(argparse.Action):
+    """Emit a deprecation warning then store the value, for removed flags kept for compatibility."""
+
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -257,6 +272,8 @@ class DeprecatedStoreAction(argparse.Action):
 
 
 class WipeAction(argparse.Action):
+    """Remove the existing workspace directory when ``-w`` is supplied."""
+
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -281,6 +298,13 @@ SpecIdPayload = list[str]  # full spec ids
 
 @dataclass(frozen=True, slots=True)
 class RequestNode:
+    """Abstract base for a typed run-request carrying a payload value.
+
+    Attributes:
+        kind: One of ``"scanpaths"``, ``"viewpaths"``, ``"specids"``, or ``"tag"``.
+        value: The request payload, whose type depends on ``kind``.
+    """
+
     kind: Literal["scanpaths", "viewpaths", "specids", "tag"]
     value: Any
 
@@ -294,30 +318,40 @@ class RequestNode:
 
 @dataclass(frozen=True, slots=True)
 class ScanPathsRequest(RequestNode):
+    """Run request that scans directories/files for test generators."""
+
     kind: Literal["scanpaths"] = "scanpaths"
     value: ScanPathPayload = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
 class ViewPathsRequest(RequestNode):
+    """Run request that re-runs tests from a previous session view."""
+
     kind: Literal["viewpaths"] = "viewpaths"
     value: ViewPathPayload = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class SpecIdsRequest(RequestNode):
+    """Run request that re-runs specific tests by spec ID."""
+
     kind: Literal["specids"] = "specids"
     value: SpecIdPayload = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class TagRequest(RequestNode):
+    """Run request that re-runs tests belonging to a named tag."""
+
     kind: Literal["tag"] = "tag"
     value: str = ""
 
 
 @dataclass
 class RequestBuilder:
+    """Mutable accumulator that collects pathspec items and produces a :class:`RequestNode`."""
+
     kind: str | None = None
     scanpaths: ScanPathPayload = field(default_factory=dict)
     viewpaths: ViewPathPayload = field(default_factory=list)
@@ -332,12 +366,14 @@ class RequestBuilder:
         return cls(**d)
 
     def require_kind(self, k: str, errors: list[str], what: str) -> None:
+        """Assert that the request kind is *k*, recording a conflict error if it differs."""
         if self.kind is None:
             self.kind = k
         elif self.kind != k:
             errors.append(f"Cannot mix {self.kind} with {what}")
 
     def finalize(self) -> RequestNode | None:
+        """Convert the accumulated state into an immutable :class:`RequestNode`, or ``None``."""
         if self.kind is None:
             return None
         if self.kind == "tag":
@@ -501,6 +537,8 @@ pathspec syntax:
 
 
 class ViewAction(argparse.Action):
+    """Parse ``--view key=value,...`` into a view-settings dict."""
+
     default_value = {"mode": "symlink", "only": "all", "when": "always"}
     metavar = "key=value"
 
@@ -547,6 +585,7 @@ class ViewAction(argparse.Action):
 
     @staticmethod
     def help_page() -> str:
+        """Return the multi-line help text for the ``--view`` option."""
         return """Configure the results view. Given as comma separated key=value pairs:\n
 • mode={symlink,hardlink,copy,none}[symlink]: how to create the view\n
 • only={all,failed,not_pass,passed}[all]: which tests to include\n
@@ -554,6 +593,8 @@ class ViewAction(argparse.Action):
 
 
 class ReadPathsFromFile(argparse.Action):
+    """Read scan paths from a YAML or JSON ``testpaths`` file and populate the request builder."""
+
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -577,6 +618,7 @@ class ReadPathsFromFile(argparse.Action):
 
     @staticmethod
     def read_paths(file: str) -> dict[str, list[str]]:
+        """Parse a YAML or JSON testpaths file and return ``{abs_root: [rel_paths]}``."""
         data: dict
         if file.endswith(".json"):
             with open(file, "r") as fh:
@@ -597,6 +639,7 @@ class ReadPathsFromFile(argparse.Action):
 
     @staticmethod
     def canary_help() -> str:
+        """Return the help text for the ``-f`` pathspec-file option."""
         text = """\
 pathspec file schema syntax:
 
