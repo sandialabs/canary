@@ -324,3 +324,80 @@ def test_job_save_uses_atomic_tmp_cleanup(spec: JobSpec, space):
 
     loaded = json.loads(job.lockfile.read_text())
     assert loaded.id == job.id
+
+
+# ---------------------------------------------------------------------------
+# Tests for job.runtime clamping (cap + floor)
+# ---------------------------------------------------------------------------
+
+def _write_job_cache(cache_dir: Path, spec_id: str, mean: float) -> None:
+    """Write a minimal job cache file with the given mean runtime."""
+    file = cache_dir / "jobs" / spec_id[:2] / f"{spec_id[2:]}.json"
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(
+        '{"cache": {"metrics": {"time": {"mean": %f, "min": %f, "max": %f, "variance": 0.0, "count": 1}}}}' % (mean, mean, mean)
+    )
+
+
+def test_job_runtime_falls_back_to_timeout_when_no_cache(spec: JobSpec, space):
+    """When there is no job cache, runtime should equal the declared timeout."""
+    job = Job(spec=spec, workspace=space)
+    assert job.runtime == spec.timeout
+
+
+def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, tmp_path):
+    """A cached mean well below the timeout is used directly (subject to floor)."""
+    from _canary.job import _RUNTIME_FLOOR_FRACTION
+
+    # find_cache_dir walks up from workspace.root (tmp_path/sessions/s1).
+    # Place WORKSPACE.TAG at tmp_path so find_cache_dir resolves tmp_path/cache.
+    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
+    _write_job_cache(tmp_path / "cache", spec.id, mean=60.0)
+
+    job = Job(spec=spec, workspace=space)
+    # floor = 300 * 0.1 = 30s; mean=60 > floor and < timeout → use 60
+    assert job.runtime == 60.0
+
+
+def test_job_runtime_caps_stale_cache_at_timeout(spec: JobSpec, space, tmp_path):
+    """A cached mean exceeding the declared timeout is capped at the timeout."""
+    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
+    _write_job_cache(tmp_path / "cache", spec.id, mean=900.0)  # stale: 900s > 300s timeout
+
+    job = Job(spec=spec, workspace=space)
+    assert job.runtime == spec.timeout  # capped at 300.0
+
+
+def test_job_runtime_floors_very_fast_cache(spec: JobSpec, space, tmp_path):
+    """A cached mean well below the floor is raised to timeout * floor_fraction."""
+    from _canary.job import _RUNTIME_FLOOR_FRACTION
+
+    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
+    _write_job_cache(tmp_path / "cache", spec.id, mean=1.0)  # 1s actual on 300s declared job
+
+    job = Job(spec=spec, workspace=space)
+    expected_floor = spec.timeout * _RUNTIME_FLOOR_FRACTION  # 30.0
+    assert job.runtime == expected_floor
+
+
+def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):
+    """A cached mean exactly equal to the timeout passes through unchanged."""
+    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
+    _write_job_cache(tmp_path / "cache", spec.id, mean=300.0)
+
+    job = Job(spec=spec, workspace=space)
+    assert job.runtime == 300.0
+
+
+def test_job_runtime_stale_cache_logs_debug(spec: JobSpec, space, tmp_path, caplog):
+    """A stale cached mean (> timeout) emits a debug-level log message."""
+    import logging
+
+    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
+    _write_job_cache(tmp_path / "cache", spec.id, mean=750.0)  # 2.5x the 300s timeout
+
+    with caplog.at_level(logging.DEBUG, logger="_canary.job"):
+        job = Job(spec=spec, workspace=space)
+        _ = job.runtime  # trigger cached_property
+
+    assert any("exceeds declared timeout" in r.message for r in caplog.records)

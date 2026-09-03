@@ -45,6 +45,13 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# Fraction of the declared timeout used as the lower bound for the packing
+# runtime estimate.  Prevents very fast cached runtimes from collapsing the
+# per-batch CPU budget and producing overloaded batches.  The value 0.1 means
+# a job declared with a 300 s timeout will never be estimated below 30 s,
+# keeping the estimate range within a 10x band.
+_RUNTIME_FLOOR_FRACTION: float = 0.1
+
 
 class JobPhase(str, Enum):
     PENDING = "PENDING"
@@ -478,15 +485,42 @@ class Job(BaseJob):
 
     @cached_property
     def runtime(self) -> float:
+        """Return the estimated runtime used for batch packing decisions.
+
+        The estimate is clamped to ``[timeout * _RUNTIME_FLOOR_FRACTION, timeout]``
+        so that:
+
+        * Stale cache entries that exceed the declared timeout cannot inflate the
+          packer cost and produce unnecessary singleton batches.
+        * Very fast cached runtimes (common for analysis-script jobs) cannot
+          collapse the per-batch budget so far that the packer overfills batches,
+          causing contention-induced timeouts.
+
+        The clamping is intentionally lossy.  Batch packing does not need a
+        perfect runtime estimate — it needs *consistent* estimates that keep
+        batch sizes roughly uniform.
+        """
+        timeout = self.timeout
+        floor = timeout * _RUNTIME_FLOOR_FRACTION
         try:
             try:
                 if cache := self.load_cached_runs():
-                    return float(cache["metrics"]["time"]["mean"])
+                    mean = float(cache["metrics"]["time"]["mean"])
+                    if mean > timeout:
+                        logger.debug(
+                            "Cached mean runtime %.1fs for %s exceeds declared timeout %.1fs "
+                            "(%.1fx); capping at timeout for packing estimate",
+                            mean,
+                            self.spec.display_name(),
+                            timeout,
+                            mean / timeout,
+                        )
+                    return max(floor, min(mean, timeout))
             except KeyError:
                 pass
         except Exception:
             logger.debug("Failed to load historic timing data", exc_info=True)
-        return self.timeout
+        return timeout
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
