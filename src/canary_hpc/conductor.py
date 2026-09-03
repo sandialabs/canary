@@ -4,6 +4,8 @@
 import argparse
 import logging
 import os
+import statistics
+import sys
 import threading
 from collections.abc import Mapping
 from graphlib import TopologicalSorter
@@ -39,6 +41,132 @@ from .queue import ResourceQueue
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
+
+
+def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
+    """Print a Rich diagnostic table summarising the batch pack to stderr.
+
+    The table shows one row per batch sorted by descending job count so the
+    most loaded batches are immediately visible.  A footer row shows totals
+    and distribution statistics (min / median / max / stdev) for both job
+    counts and estimated runtimes.
+    """
+    from rich import box
+    from rich.console import Console
+    from rich.table import Table
+
+    if not batch_specs:
+        return
+
+    # ---- gather per-batch data ----------------------------------------
+    rows = []
+    for spec in batch_specs:
+        meta = spec.schedule_metadata or {}
+        n_jobs = len(spec.jobs)
+        est_s = spec.estimated_runtime or 0.0
+        algorithm = meta.get("algorithm", "unknown")
+        node_count = meta.get("node_count", 1)
+        width = meta.get("width", "?")
+        cheap_s = meta.get("cheap_runtime")
+        rows.append(
+            {
+                "id": spec.id[:7],
+                "n_jobs": n_jobs,
+                "est_s": est_s,
+                "cheap_s": cheap_s,
+                "algorithm": algorithm,
+                "node_count": node_count,
+                "width": width,
+            }
+        )
+
+    rows.sort(key=lambda r: -r["n_jobs"])
+
+    # ---- derive a short algorithm label ---------------------------------
+    # All batches in one run use the same algorithm; grab it from the first.
+    algo_full = rows[0]["algorithm"]
+    algo_label = {
+        "pack_by_count_simulated": "count/flat",
+        "pack_by_count_atomic_simulated": "count/atomic",
+        "pack_to_height_simulated": "duration",
+    }.get(algo_full, algo_full)
+
+    # ---- summary statistics --------------------------------------------
+    job_counts = [r["n_jobs"] for r in rows]
+    est_minutes = [r["est_s"] / 60.0 for r in rows]
+    total_jobs = sum(job_counts)
+    total_batches = len(rows)
+
+    def _fmt_min(seconds: float) -> str:
+        return f"{seconds / 60:.1f} min"
+
+    def _fmt_stats(values: list[float], fmt: str = ".0f") -> str:
+        if len(values) < 2:
+            return f"{values[0]:{fmt}}"
+        lo, hi = min(values), max(values)
+        med = statistics.median(values)
+        sd = statistics.stdev(values)
+        return f"min {lo:{fmt}} / med {med:{fmt}} / max {hi:{fmt}} / σ {sd:{fmt}}"
+
+    # ---- build the table -----------------------------------------------
+    table = Table(
+        title=f"Batch packing summary  ·  algorithm: [bold]{algo_label}[/]  ·  "
+              f"[bold]{total_batches}[/] batches  ·  [bold]{total_jobs}[/] jobs",
+        box=box.SIMPLE_HEAD,
+        show_footer=True,
+        expand=False,
+    )
+
+    table.add_column("Batch", no_wrap=True,
+                     footer="")
+    table.add_column("Jobs", justify="right",
+                     footer=f"[bold]{total_jobs}[/]")
+    table.add_column("Nodes", justify="right",
+                     footer="")
+    table.add_column("Width\n(CPUs)", justify="right",
+                     footer="")
+    table.add_column("Est. runtime\n(packer)", justify="right",
+                     footer=_fmt_min(sum(r["est_s"] for r in rows) / len(rows)))
+    table.add_column("Slurm alloc\n(est×mult)", justify="right",
+                     footer="")
+
+    timeout_multiplier: float = 1.0
+    try:
+        if t := canary.config.get_timeout_option("multiplier"):
+            timeout_multiplier = float(t)
+    except Exception:
+        pass
+
+    for r in rows:
+        slurm_s = r["est_s"] * timeout_multiplier
+        # Only annotate with the cheap (pre-simulation) estimate when it differs
+        # from the final estimated_runtime — i.e. when exact simulation refined it.
+        cheap_s = r["cheap_s"]
+        if cheap_s is not None and abs(cheap_s - r["est_s"]) > 1.0:
+            cheap_str = f"  [{_fmt_min(cheap_s)} cheap]"
+        else:
+            cheap_str = ""
+        table.add_row(
+            r["id"],
+            str(r["n_jobs"]),
+            str(r["node_count"]),
+            str(r["width"]),
+            f"{_fmt_min(r['est_s'])}{cheap_str}",
+            _fmt_min(slurm_s),
+        )
+
+    # ---- footer summary lines ------------------------------------------
+    console = Console(file=sys.stderr)
+    console.print(table)
+    console.print(
+        f"  Jobs/batch : {_fmt_stats(job_counts, '.0f')}",
+        highlight=False,
+    )
+    console.print(
+        f"  Est. runtime: {_fmt_stats(est_minutes, '.1f')} min",
+        highlight=False,
+    )
+    console.print()
 
 
 def create_batch_specs(
@@ -280,6 +408,7 @@ class CanaryHPCConductor:
         key = canary.string.pluralize("batch", n=len(batch_specs))
         fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt % (len(batch_specs), key, len(runner.jobs)))
+        _log_batch_summary(batch_specs)
         root = runner.workspace.cache_dir / "canary-hpc"
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}
