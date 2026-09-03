@@ -123,11 +123,11 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
                      footer=f"[bold]{total_jobs}[/]")
     table.add_column("Nodes", justify="right",
                      footer="")
-    table.add_column("Width\n(CPUs)", justify="right",
+    table.add_column("Width", justify="right",
                      footer="")
-    table.add_column("Est. runtime\n(packer)", justify="right",
+    table.add_column("Est.", justify="right",
                      footer=_fmt_min(sum(r["est_s"] for r in rows) / len(rows)))
-    table.add_column("Slurm alloc\n(est×mult)", justify="right",
+    table.add_column("Alloc", justify="right",
                      footer="")
 
     timeout_multiplier: float = 1.0
@@ -138,7 +138,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         pass
 
     for r in rows:
-        slurm_s = r["est_s"] * timeout_multiplier
+        alloc_s = r["est_s"] * timeout_multiplier
         # Only annotate with the cheap (pre-simulation) estimate when it differs
         # from the final estimated_runtime — i.e. when exact simulation refined it.
         cheap_s = r["cheap_s"]
@@ -152,7 +152,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
             str(r["node_count"]),
             str(r["width"]),
             f"{_fmt_min(r['est_s'])}{cheap_str}",
-            _fmt_min(slurm_s),
+            _fmt_min(alloc_s),
         )
 
     # ---- footer summary lines ------------------------------------------
