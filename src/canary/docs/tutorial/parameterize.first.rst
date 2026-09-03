@@ -7,7 +7,7 @@
 Getting started with parameterization
 =====================================
 
-In the most simple case, a single parameter is defined, as demonstrated in the example ``paramterize/parameterize1.pyt``:
+In the most simple case, a single parameter is defined, as demonstrated in the example ``parameterize/parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

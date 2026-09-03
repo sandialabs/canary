@@ -82,3 +82,19 @@ run
      default_tag: ':all:'
      timeout:
        str: T
+     cache:
+       dir: null  # (str or null) explicit path to the job result cache directory
+
+The ``run.cache.dir`` setting specifies an explicit directory for the per-job result cache (used for
+runtime history and staleness detection).  When set, it takes precedence over automatic workspace
+discovery.  The full resolution order is:
+
+1. ``CANARY_CACHE_DIR`` environment variable
+2. ``run.cache.dir`` configuration key
+3. Walk up the directory tree from the workspace for a ``WORKSPACE.TAG`` sentinel, then use
+   ``<dir>/cache``
+4. Fall back to ``.canary/cache`` relative to the current directory
+
+This is primarily useful when multiple workspaces or HPC batch jobs share a single cache directory
+on a network filesystem.  See :ref:`basics-runtimes` for details on cache locking and concurrent
+access.

@@ -11,7 +11,7 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  canary run [-b spec=(duration:T|count:{max,auto,N})[,layout:{flat,atomic}][,nodes:{any,same}]] -b scheduler=SCHEDULER -b workers=N ...
+  canary run [-b spec=(duration:T|count:{max,N})[,layout:{flat,atomic}][,nodes:{any,same}]] -b scheduler=SCHEDULER -b workers=N ...
 
 When run in "batch" mode, ``canary`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
@@ -23,13 +23,12 @@ Batch spec
 
 * if ``duration:T``: create batches with approximate run length of ``T`` seconds
 * if ``count:max``: one test per batch
-* if ``count:auto``: auto batch depending on other options
-* if ``count:N``: create at most ``N`` batches
+* if ``count:N``: create exactly ``N`` batches
 
 * if ``layout:flat``: batches have no intra-batch dependencies but may have inter-batch dependencies
 * if ``layout:atomic``: batch have no inter-batch dependencies but may have intra-batch dependencies
 
-* if ``nodes:any``: tests are batched with respect to node count of test cases
+* if ``nodes:any``: tests are batched without regard to node count
 * if ``nodes:same``: tests are batched with tests having the same node count
 
 The default batch spec is ``duration:30m,nodes:any,layout:flat``.
@@ -37,6 +36,16 @@ The default batch spec is ``duration:30m,nodes:any,layout:flat``.
 .. note::
 
    ``-b spec=count:N`` and ``-b spec=duration:T`` are mutually exclusive.
+
+.. note::
+
+   ``count:auto`` is no longer supported.  Use ``duration:T`` to target a batch runtime.
+
+.. warning::
+
+   ``-b spec=count:N`` combined with ``nodes:same`` is rejected when the selected jobs span more
+   than one distinct node count.  Use ``duration:T`` instead, or pre-filter the selection to a
+   single node count with ``-k 'np==N'``.
 
 Batch scheduler
 ...............

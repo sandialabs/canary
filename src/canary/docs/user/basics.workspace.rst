@@ -19,6 +19,20 @@ At the command line, type:
 
 This creates a new folder named ``.canary`` that contains all of the necessary workspace files.
 
+.. note::
+
+   If your workflow is not under version control, place a ``.canary-root`` marker file at the root
+   of your workflow tree:
+
+   .. code-block:: console
+
+      touch .canary-root
+
+   ``canary`` walks up the directory tree looking for ``.git``, ``.repo``, or ``.canary-root`` to
+   anchor the repo-relative path component of each job's stable ID.  Without one of these anchors
+   the filesystem root ``/`` is used, making job IDs machine-specific.  A ``.canary-root`` marker
+   is sufficient to ensure IDs are consistent across machines for the same workflow tree.
+
 The workspace can be inspected via ``canary info``:
 
 .. doc-run::

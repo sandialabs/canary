@@ -30,7 +30,7 @@ Generating cases with ``lock()``
 --------------------------------
 
 The core method is :meth:`~YAMLTestGenerator.lock`. It reads the YAML, validates it, expands any
-parameter combinations, and returns a list of :class:`~canary.ResolvedSpec` objects (one per runnable
+parameter combinations, and returns a list of :class:`~canary.JobSpec` objects (one per runnable
 test case):
 
 .. literalinclude:: /static/yaml_generator.py

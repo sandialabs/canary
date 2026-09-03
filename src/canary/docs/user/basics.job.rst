@@ -27,7 +27,7 @@ During a test session, ``canary`` creates a :ref:`unique test execution director
     :language: python
     :lines: 11-13
 
-The test instance object defines the following attributes and methods:
+The job object defines the following attributes and methods:
 
 ``file_root: str``:
   The job file's root search path, as passed to ``canary run``.
@@ -72,7 +72,7 @@ The test instance object defines the following attributes and methods:
   The job's execution directory.
 
 ``id: str``:
-  The job's ID.
+  The job's stable, content-independent ID.  See :ref:`basics-spec-id-stability`.
 
 ``cmd_line: str``:
   The command line used to launch this test.
@@ -80,7 +80,7 @@ The test instance object defines the following attributes and methods:
 ``variables: dict[str, str]``:
   Extra environment variables defined for this test.
 
-``dependencies: list[TestInstance]``:
+``dependencies: list[Job]``:
   List of dependencies.
 
 ``cpus: int``:
@@ -89,7 +89,7 @@ The test instance object defines the following attributes and methods:
 ``gpus: int``:
   Number of gpus.
 
-``get_dependency(**params) -> TestInstance``:
+``get_dependency(**params) -> Job``:
   Returns the dependency having parameters equal to ``params``.
 
 .. _test-exec-dir:

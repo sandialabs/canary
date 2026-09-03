@@ -28,7 +28,7 @@ This file can be turned into a runnable ``canary`` test spec in just a few lines
        collector.add_generator(YAMLJobGenerator)
 
 Further sections will describe how the generator recognizes files, validates YAML, and generates
-one or more :class:`~canary.ResolvedSpec` objects.
+one or more :class:`~canary.JobSpec` objects.
 
 .. toctree::
    :maxdepth: 1

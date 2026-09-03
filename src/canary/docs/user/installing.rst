@@ -68,3 +68,33 @@ Alternatively, the package can be installed from a source checkout:
 
       cd canary
       python3 -m pip install -e .
+
+Plugin packages
+---------------
+
+The ``canary-wm`` package installs the ``canary`` core.  Additional capabilities are provided by
+separately installable plugin packages:
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Package
+     - Provides
+   * - ``canary-pyt``
+     - ``.pyt`` Python job-definition generator (the primary test format)
+   * - ``canary-hpc``
+     - HPC batch scheduler integration (Slurm, PBS, Flux, shell)
+   * - ``canary-vvtest``
+     - ``.vvt`` vvtest-format test file generator
+   * - ``canary-cdash``
+     - CDash XML report generation and upload
+   * - ``canary-gitlab``
+     - GitLab merge-request reporting
+
+Install any subset with:
+
+.. code-block:: console
+
+   python3 -m pip install canary-pyt canary-hpc canary-vvtest
+

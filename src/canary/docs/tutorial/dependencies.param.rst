@@ -7,7 +7,7 @@
 Establishing dependencies on specific test parameterizations
 ============================================================
 
-Tests can depend on specific paramterizations of other tests.
+Tests can depend on specific parameterizations of other tests.
 
 Example
 -------

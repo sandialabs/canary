@@ -18,7 +18,7 @@ For full details, refer to the `commit logs <https://github.com/sandialabs/canar
     2025.05.12.rst
     2025.06.12.rst
     2025.10.07.rst
-    2026.03.05.rst
+    2026.03.18.rst
     2026.04.16.rst
     2026.05.27.rst
     2026.06.08.rst
