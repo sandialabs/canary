@@ -64,6 +64,7 @@ def default_config_values() -> dict[str, Any]:
                 "fast": 120.0,
                 "default": 300.0,
                 "long": 900.0,
+                "queue": 4.0 * 60.0 * 60.0,
             },
             "cache": {"dir": None},
         },

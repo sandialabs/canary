@@ -23,7 +23,6 @@ from _canary.subcommands.run import Run
 from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
 from _canary.util.multiprocessing import SimpleQueue
-from _canary.util.time import time_in_seconds
 
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
@@ -492,14 +491,6 @@ class CanaryHPCConductor:
                 "scalar scheduler simulation once per final batch to refine the "
                 "stored runtime estimate.  This is slower for very large suites."
             ),
-        )
-        parser.add_argument(
-            "--queue-timeout",
-            dest="hpc_queue_timeout",
-            metavar="T",
-            type=time_in_seconds,
-            default=30 * 60,
-            help=argparse.SUPPRESS,
         )
 
     @staticmethod

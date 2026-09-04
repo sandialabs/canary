@@ -72,7 +72,8 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
                             future.cancel()
                             raise TimeoutError(
                                 f"Batch {batch.id[:7]} exceeded queue timeout "
-                                f"{batch.queue_timeout:.1f}s"
+                                f"{batch.queue_timeout:.1f}s; "
+                                f"raise with --timeout queue=T"
                             )
                         time.sleep(poll)
                         continue

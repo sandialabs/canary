@@ -364,13 +364,33 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
         print_json([], terse=getattr(args, "terse", False))
         return 0
 
-    rows = []
+    # Collect all job IDs across every batch in this session so we can do a
+    # single DB lookup instead of one query per batch.
+    all_job_ids: list[str] = []
+    batch_data: list[tuple] = []  # (batch_dir, data) pairs
     for batch_dir in sorted(batches_dir.iterdir()):
         lockfile = batch_dir / "batch.lock"
         if not lockfile.exists():
             continue
         data = json.loads(lockfile.read_text())
+        batch_data.append((batch_dir, data))
+        all_job_ids.extend(data.get("jobs", []))
 
+    # Build id → name map from DB; fall back gracefully if DB is unavailable.
+    id_to_name: dict[str, str] = {}
+    if all_job_ids:
+        try:
+            workspace.db.connect()
+            results = workspace.db.get_results(ids=all_job_ids)
+            for spec_id, row in results.items():
+                id_to_name[spec_id] = row.get("spec_name", spec_id[:7])
+        except Exception:
+            pass
+        finally:
+            workspace.db.close()
+
+    rows = []
+    for batch_dir, data in batch_data:
         # Build a summary row
         tk = data.get("timekeeper", {})
         if isinstance(tk, str):
@@ -394,11 +414,18 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
 
         sm = data.get("schedule_metadata", {})
 
+        job_ids: list[str] = data.get("jobs", [])
+        jobs = [
+            {"id": jid, "name": id_to_name.get(jid, jid[:7])}
+            for jid in job_ids
+        ]
+
         row = {
             "id": data.get("id", batch_dir.name),
             "id_prefix": batch_dir.name,
             "session": data.get("session", session_dir.name),
-            "job_count": len(data.get("jobs", [])),
+            "job_count": len(job_ids),
+            "jobs": jobs,
             "estimated_runtime": data.get("estimated_runtime"),
             "algorithm": sm.get("algorithm"),
             "node_count": sm.get("node_count"),

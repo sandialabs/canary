@@ -424,6 +424,7 @@ def _exec_session_expand(workspace: Workspace, session_dir: Path, args: argparse
             "name": row["spec_name"],
             "fullname": row["spec_fullname"],
             "file_path": row.get("file_path", ""),
+            "exec_dir": str(workspace.sessions_dir / row["session"] / row["workspace"]),
             "session": row["session"],
             "exit_code": row["status"].code,
             "status": {

@@ -179,9 +179,7 @@ class TestBatch(BaseJob):
 
     @property
     def queue_timeout(self) -> float:
-        four_hours = 4.0 * 60.0 * 60.0
-        timeout = canary.config.get_timeout_option("queue")
-        return timeout or canary.config.getoption("hpc_queue_timeout") or four_hours
+        return canary.config.get_timeout_option("queue") or (4.0 * 60.0 * 60.0)
 
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
