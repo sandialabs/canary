@@ -64,6 +64,13 @@ class Log(CanarySubcommand):
             help="Show raw log file contents (applicable only to the session log file)",
         )
         parser.add_argument(
+            "-P",
+            "--no-pager",
+            default=False,
+            action="store_true",
+            help="Do not page output",
+        )
+        parser.add_argument(
             "testspec",
             nargs="?",
             help="Test name or TEST_ID.  If not given, the session log will be shown",
@@ -106,7 +113,7 @@ class Log(CanarySubcommand):
         job = workspace.find(job=args.testspec)
         f = self.get_file_from_workspace(job, args)
         if f:
-            display_file(f)
+            display_file(f, use_pager=not args.no_pager)
         return 0
 
 
@@ -126,12 +133,18 @@ def reconstruct_log(file: str | Path) -> str:
     return fp.getvalue()
 
 
-def display_file(file: Path) -> None:
+def display_file(file: Path, use_pager: bool = True) -> None:
     """Print *file*'s path header and page its contents, raising if the file is missing."""
-    print(f"{file}:")
     if not file.exists():
         raise FileNotFoundError(file)
-    page_text(file.read_text())
+    
+    text = file.read_text().rstrip()
+    print(f"{file}:")
+    
+    if use_pager:
+        page_text(text)
+    else:
+        print(text)
 
 
 def page_text(text: str) -> None:
