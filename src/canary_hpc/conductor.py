@@ -82,9 +82,34 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
     def _fmt_min(seconds: float) -> str:
         return f"{seconds / 60:.1f} min"
 
-    # ---- emit summary as logger.info lines ------------------------------
+    # ---- emit per-batch debug lines (captured in log file) --------------
+    algo_full = rows[0]["algorithm"] if rows else "unknown"
+    algo_label = {
+        "pack_by_count_simulated": "count/flat",
+        "pack_by_count_atomic_simulated": "count/atomic",
+        "pack_to_height_simulated": "duration",
+    }.get(algo_full, algo_full)
+    total_jobs = sum(r["n_jobs"] for r in rows)
+    logger.debug(
+        "Batch packing summary: algorithm=%s  batches=%d  jobs=%d",
+        algo_label,
+        len(rows),
+        total_jobs,
+    )
+    for r in rows:
+        cheap_note = (
+            f"  cheap={_fmt_min(r['cheap_s'])}" if r["cheap_s"] is not None and abs(r["cheap_s"] - r["est_s"]) > 1.0 else ""
+        )
+        logger.debug(
+            "  batch=%s  jobs=%d  nodes=%s  est=%s%s",
+            r["id"],
+            r["n_jobs"],
+            r["node_count"],
+            _fmt_min(r["est_s"]),
+            cheap_note,
+        )
 
-    # ---- build the table -----------------------------------------------
+    # ---- build the Rich table (stderr / terminal only) ------------------
     timeout_multiplier: float = 1.0
     try:
         if t := canary.config.get_timeout_option("multiplier"):
@@ -362,7 +387,8 @@ class CanaryHPCConductor:
         fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt, len(batch_specs), key, len(runner.jobs))
         _log_batch_summary(batch_specs)
-        root = runner.workspace.cache_dir / "canary-hpc"
+        root = runner.workspace.sessions_dir / runner.session / "batches"
+        logger.debug("Batch workspace root: %s", root)
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}
         for batch_spec in batch_specs:
@@ -372,7 +398,7 @@ class CanaryHPCConductor:
         ts = TopologicalSorter(graph)
         for id in ts.static_order():
             batch_spec = specmap[id]
-            path = f"batches/{batch_spec.id[:7]}"
+            path = batch_spec.id[:7]
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
             dependencies = [batches[dep.id] for dep in batch_spec.dependencies]
             batch = TestBatch(
@@ -380,6 +406,12 @@ class CanaryHPCConductor:
                 workspace=workspace,
                 dependencies=dependencies,
                 backend_supports_dependencies=self.backend.supports_dependencies(),
+            )
+            logger.debug(
+                "Created batch workspace: %s  jobs=%d  deps=%d",
+                workspace.dir,
+                len(batch_spec.jobs),
+                len(dependencies),
             )
             batches[batch.id] = batch
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)

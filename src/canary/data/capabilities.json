@@ -140,9 +140,10 @@
         ".canary/workspace.sqlite3": "SQLite index/result/state store.",
         ".canary/sessions/<session>/session.lock": "Session manifest and session-level state.",
         ".canary/sessions/<session>/<job-path>/testcase.lock": "Serialized job state.",
+        ".canary/sessions/<session>/batches/<id>/batch.lock": "HPC batch execution record (written by canary_hpc extension).",
         ".canary/logs": "JSON log files.",
         ".canary/reports": "Generated reports.",
-        ".canary/cache": "Runtime caches and view metadata.",
+        ".canary/cache": "Runtime caches and view metadata (job timing cache, view manifests).",
         ".canary/tmp": "Temporary files including result spool data."
       },
       "commands": {

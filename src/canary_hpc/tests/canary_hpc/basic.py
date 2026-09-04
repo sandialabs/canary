@@ -28,7 +28,7 @@ def config(request):
 
 
 def glob_files_in_session(pattern):
-    return glob.glob(f".canary/cache/canary-hpc/batches/**/{pattern}", recursive=True)
+    return glob.glob(f".canary/sessions/*/batches/**/{pattern}", recursive=True)
 
 
 def assert_success(cp: subprocess.CompletedProcess) -> None:

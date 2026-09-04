@@ -297,7 +297,12 @@ class TestBatch(BaseJob):
             return self.dependency_batches_complete()
 
     def run(self, backend: hpc_connect.Backend, queue: SimpleQueue) -> None:
-        logger.debug(f"Running batch {self.id[:7]}")
+        logger.debug(
+            "Running batch %s  jobs=%d  workspace=%s",
+            self.id[:7],
+            len(self.jobs),
+            self.workspace.dir,
+        )
         runner: "HPCConnectRunner" = canary.config.pluginmanager.hook.canary_hpc_batch_runner(
             backend=backend, batch=self
         )
@@ -306,7 +311,12 @@ class TestBatch(BaseJob):
 
         try:
             hpc_connect.config.export()
-            logger.debug(f"Submitting batch {self.id[:7]}")
+            logger.debug(
+                "Submitting batch %s  est_runtime=%.1fs  deps=%d",
+                self.id[:7],
+                self.runtime,
+                len(self.dependencies),
+            )
 
             now = time.time()
             self.on_submit(at=now)
@@ -330,8 +340,25 @@ class TestBatch(BaseJob):
             self.refresh()
             self.state.phase = JobPhase.DONE
 
+            # Log completion with timing breakdown
+            total = self.timekeeper.total()
+            submitted = self.timekeeper._submitted
+            started = self.timekeeper._started
+            queue_wait = (started - submitted) if submitted > 0 and started > 0 else None
+            running = (now - started) if started > 0 else None
+            n_success = sum(1 for j in self.jobs if j.status.is_success())
+            n_fail = len(self.jobs) - n_success
             logger.debug(
-                "Batch [bold blue]%s[/]: batch exited with code %s" % (self.id[:7], str(rc))
+                "Batch %s done: rc=%s  jobs=%d (pass=%d fail=%d)"
+                "  total=%.1fs  queue_wait=%s  running=%s",
+                self.id[:7],
+                rc,
+                len(self.jobs),
+                n_success,
+                n_fail,
+                total,
+                f"{queue_wait:.1f}s" if queue_wait is not None else "?",
+                f"{running:.1f}s" if running is not None else "?",
             )
 
             try:

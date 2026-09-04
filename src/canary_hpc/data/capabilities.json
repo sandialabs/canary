@@ -25,6 +25,12 @@
         "duration": "Create batches targeting approximate simulated runtime.",
         "count": "Create at most N batches.",
         "count=max": "Create the maximum number of batches allowed by the selected layout."
+      },
+      "workspace_layout": {
+        "batch_lock": ".canary/sessions/<session>/batches/<id[:7]>/batch.lock",
+        "batch_script": ".canary/sessions/<session>/batches/<id[:7]>/canary-inp.sh",
+        "batch_stdout": ".canary/sessions/<session>/batches/<id[:7]>/canary-out.txt",
+        "note": "Batch directories are session-scoped artifacts under .canary/sessions/, not under .canary/cache/."
       }
     },
     "execution": {
@@ -42,11 +48,26 @@
     "commands": {
       "run_with_backend": "canary hpc run --backend BACKEND PATH",
       "legacy_run_options": "canary run --hpc-backend BACKEND PATH",
-      "batch_spec": "Use --batch-spec or legacy -b spec=..."
+      "batch_spec": "Use --batch-spec or legacy -b spec=...",
+      "batch_log": "canary hpc log <BATCH_ID>  -- print the stdout log for a batch",
+      "query_batches": "canary query batch <BATCH_ID>  -- inspect a batch.lock (requires canary_query_subcommand hook)",
+      "query_all_batches": "canary query batches  -- list all batches in the latest session"
     },
     "resource_model": {
       "summary": "The conductor uses backend node resource counts to generate a topology-aware resource pool for each batch.",
       "multi_node": "Batches may request multiple scheduler nodes when jobs require multiple Canary nodes."
+    },
+    "debug_logging": {
+      "summary": "Run with --debug or -v -v to enable DEBUG-level logging captured in .canary/logs/canary.0.log.",
+      "logged_at_debug": [
+        "Batch workspace root path",
+        "Per-batch workspace directory, job count, and dependency count at creation",
+        "Batch packing summary: algorithm, total batches, total jobs",
+        "Per-batch packing row: id, jobs, nodes, estimated runtime",
+        "Batch submission: id, estimated runtime, dependency count",
+        "Batch completion: id, rc, pass/fail counts, total wall time, queue wait, running time",
+        "Stale cache cap firings: which jobs had their cached mean clamped to declared timeout"
+      ]
     }
   }
 }

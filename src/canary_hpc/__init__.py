@@ -240,8 +240,13 @@ def display_batch_log(id: str) -> None:
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
-    candidates = workspace.cache_dir.joinpath("canary-hpc/batches").glob(f"{id}*")
-    d = next(candidates)
+    # Search all sessions for a batch matching the given ID prefix.
+    candidates = sorted(workspace.sessions_dir.glob(f"*/batches/{id}*"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"No batch matching {id!r} found under {workspace.sessions_dir}"
+        )
+    d = candidates[0]
     file = d / "canary-out.txt"
     print(f"{file}:")
     if not file.exists():
