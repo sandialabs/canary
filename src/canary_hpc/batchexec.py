@@ -217,10 +217,12 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         def set_starttime(future: hpc_connect.futures.FutureProtocol):
             nonlocal started_at
             started_at = time.time()
-            # on_start() backfills _staged if not already set (see Timekeeper.start()),
-            # so there is no need to call on_stage() separately.  The HPC job actually
-            # starting on nodes is what ends the "Queued" wait; Staging is not a
-            # meaningful phase for canary hpc run.
+            # Record _staged at the moment the HPC job leaves the scheduler queue and
+            # begins running on nodes.  This makes pending() = _staged - _submitted equal
+            # to the real queue-wait duration.  on_start() must be called *after*
+            # on_stage() so that Timekeeper.start() does not backfill _staged to
+            # _submitted (which would collapse the queued time to 0).
+            batch.on_stage(at=started_at)
             batch.on_start(at=started_at)
             queue.put({"event": "job_started", "timestamp": started_at})
 

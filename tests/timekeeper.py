@@ -355,3 +355,63 @@ def test_delta_does_not_clamp_negative_intervals() -> None:
     tk.stage(at=10.0)
 
     assert tk.pending() == -10.0
+
+
+def test_hpc_batch_queued_time_preserved_after_completion() -> None:
+    """Regression test: queued time must not collapse to 0 after a batch completes.
+
+    HPC batch lifecycle:
+      T0 = submitted (on_submit)
+      T1 = job starts on nodes (on_stage + on_start, both at the same time)
+      T2 = job stops
+      T3 = job finished
+
+    Before the fix, on_start() was called without on_stage(), so start()
+    backfilled _staged = _submitted (= T0), making pending() = T0 - T0 = 0.
+
+    After the fix, on_stage(at=T1) is called first, so _staged = T1 and
+    pending() = T1 - T0 = the real queue-wait duration.
+    """
+    T0, T1, T2, T3 = 1000.0, 1060.0, 1120.0, 1121.0  # 60 s queue wait, 60 s running
+    tk = Timekeeper()
+
+    # Simulate the corrected HPC batch lifecycle
+    tk.open(at=T0)       # on_submit
+    tk.stage(at=T1)      # on_stage  (job leaves scheduler queue)
+    tk.start(at=T1)      # on_start  (same timestamp — HPC has no separate staging phase)
+    tk.stop(at=T2)       # on_stop
+    tk.close(at=T3)      # on_finish
+
+    assert tk.pending() == pytest.approx(60.0), "queued time should be T1 - T0 = 60 s"
+    assert tk.running() == pytest.approx(60.0), "running time should be T2 - T1 = 60 s"
+    assert tk.staging() == pytest.approx(0.0), "staging duration is 0 (stage and start at same T)"
+    assert tk.total() == pytest.approx(T3 - T0)
+
+
+def test_hpc_batch_queued_time_live_before_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    """While the job is queued (staged not yet set), live pending increments."""
+    T0 = 1000.0
+    tk = Timekeeper()
+    tk.open(at=T0)  # submitted; _staged is still -1.0
+
+    monkeypatch.setattr("_canary.timekeeper.time", __import__("time"))
+    monkeypatch.setattr("time.time", lambda: T0 + 45.0)
+
+    assert tk.pending(live=True) == pytest.approx(45.0), "live pending should grow while queued"
+    assert tk._staged == -1.0, "_staged must remain unset until on_stage() fires"
+
+
+def test_start_without_prior_stage_backfills_staged_to_submitted() -> None:
+    """start() without a prior stage() backfills _staged = _submitted (existing behaviour).
+
+    This is the old HPC path and explains why calling on_start() alone collapsed
+    the queued time.  The test documents the behaviour so future refactors don't
+    silently break the backfill contract for non-HPC jobs.
+    """
+    tk = Timekeeper()
+    tk.open(at=100.0)
+    tk.start(at=200.0)
+
+    assert tk._staged == 100.0, "start() backfills _staged to _submitted when _staged is unset"
+    assert tk.pending() == pytest.approx(0.0), "pending collapses to 0 — the bug in the old HPC path"
+    assert tk.running(live=True) >= 0.0
