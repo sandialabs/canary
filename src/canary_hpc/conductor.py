@@ -79,28 +79,10 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
 
     rows.sort(key=lambda r: -r["n_jobs"])
 
-    # ---- derive a short algorithm label ---------------------------------
-    # All batches in one run use the same algorithm; grab it from the first.
-    algo_full = rows[0]["algorithm"]
-    algo_label = {
-        "pack_by_count_simulated": "count/flat",
-        "pack_by_count_atomic_simulated": "count/atomic",
-        "pack_to_height_simulated": "duration",
-    }.get(algo_full, algo_full)
-
-    total_jobs = sum(r["n_jobs"] for r in rows)
-    total_batches = len(rows)
-
     def _fmt_min(seconds: float) -> str:
         return f"{seconds / 60:.1f} min"
 
     # ---- emit summary as logger.info lines ------------------------------
-    logger.info(
-        "[bold]Batch packing:[/] algorithm=[bold]%s[/]  batches=[bold]%d[/]  jobs=[bold]%d[/]",
-        algo_label,
-        total_batches,
-        total_jobs,
-    )
 
     # ---- build the table -----------------------------------------------
     timeout_multiplier: float = 1.0
@@ -353,7 +335,7 @@ class CanaryHPCConductor:
             workers = int(workers)
 
         logger.info(
-            "[bold]Batching[/] %d jobs for submission to [bold]%s[/] backend",
+            "[bold]Batching[/] %d jobs for submission to the [bold]%s[/] backend",
             len(runner.jobs),
             self.backend.name,
         )
@@ -378,7 +360,7 @@ class CanaryHPCConductor:
             raise ValueError(f"Jobs missing from batches: {', '.join(missing)}")
         key = canary.string.pluralize("batch", n=len(batch_specs))
         fmt = "[bold]Generated[/] %d batches %s from %d jobs"
-        logger.info(fmt % (len(batch_specs), key, len(runner.jobs)))
+        logger.info(fmt, len(batch_specs), key, len(runner.jobs))
         _log_batch_summary(batch_specs)
         root = runner.workspace.cache_dir / "canary-hpc"
         graph: dict[str, list[str]] = {}
