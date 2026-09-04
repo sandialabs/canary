@@ -121,6 +121,57 @@ def canary_subcommand() -> "CanarySubcommand":
 
 
 @hookspec
+def canary_query_subcommand(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Register additional subcommands under ``canary query``.
+
+    Extensions implement this hook to add their own ``canary query <name>``
+    subcommands.  The *subparsers* argument is the same ``add_subparsers``
+    action that the built-in ``job``, ``session``, ``sessions``, and ``db``
+    subcommands are registered on.  Use ``subparsers.add_parser(name, ...)``
+    to add a new sub-parser and populate it with arguments.
+
+    The plugin is responsible for dispatching execution: implement
+    ``canary_query_execute(args)`` on the same plugin object to handle
+    ``args.query_subcmd == name``.
+
+    Example::
+
+        @canary.hookimpl
+        def canary_query_subcommand(self, subparsers):
+            p = subparsers.add_parser("batch", help="Query batch records")
+            p.add_argument("batchid", nargs="?")
+
+        @canary.hookimpl
+        def canary_query_execute(self, args):
+            if args.query_subcmd == "batch":
+                ...
+                return 0  # handled
+            return None  # not handled
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_query_execute(args: "argparse.Namespace") -> "int | None":
+    """Execute an extension-provided ``canary query`` subcommand.
+
+    Called after the built-in subcommands (job, session, sessions, db) have
+    been checked.  Return an integer exit code if this plugin handled the
+    subcommand, or ``None`` to pass to the next plugin.
+
+    Args:
+      args: Parsed argument namespace.  ``args.query_subcmd`` contains the
+        subcommand name registered via ``canary_query_subcommand``.
+
+    Returns:
+      Integer exit code (0 for success) if handled, ``None`` otherwise.
+
+    """
+
+
+@hookspec
 def canary_addconfig(config: "CanaryConfig") -> None: ...
 
 

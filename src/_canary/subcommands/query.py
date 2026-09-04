@@ -15,6 +15,9 @@ db schema                Emit workspace database DDL as JSON
 db stats                 Emit per-outcome counts and session summary
 db "<SQL>"               Execute a read-only SQL query, return JSON rows
 
+Extension subcommands are registered via the canary_query_subcommand hook
+and dispatched via the canary_query_execute hook.
+
 Common flags
 ------------
 --clean     Strip __type__ wrappers and normalise enum values to strings
@@ -34,6 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
+import canary
 from ..hookspec import hookimpl
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
@@ -151,6 +155,12 @@ class Query(CanarySubcommand):
         )
         p_db.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
+        # ---- extension subcommands (registered by plugins via canary_query_subcommand) ----
+        try:
+            canary.config.pluginmanager.hook.canary_query_subcommand(subparsers=sub)
+        except Exception:
+            pass
+
     def execute(self, args: argparse.Namespace) -> int:
         """Dispatch to the appropriate query sub-handler and return an exit code."""
         subcmd = getattr(args, "query_subcmd", None)
@@ -164,7 +174,14 @@ class Query(CanarySubcommand):
         elif subcmd == "db":
             return self._exec_db(args)
         else:
-            # No subcommand — print help
+            # Try extension plugins before falling through to help.
+            try:
+                result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
+                if result is not None:
+                    return result
+            except Exception:
+                pass
+            # No subcommand matched — print help
             print(self.description)
             return 1
 

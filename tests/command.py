@@ -1025,3 +1025,208 @@ def test_rebaseline_from_directory(tmpdir):
         check_success(cp)
 
         assert Path("expected.txt").read_text() == "new baseline\n"
+
+
+# ---------------------------------------------------------------------------
+# canary query batch / batches tests
+# ---------------------------------------------------------------------------
+
+
+def _write_basic_tests(n: int = 4) -> None:
+    """Write n minimal .pyt test files into the current directory."""
+    for i in range(n):
+        Path(f"bt_{i}.pyt").write_text(
+            "import sys\ndef test():\n    pass\nif __name__ == '__main__':\n    sys.exit(test())\n"
+        )
+
+
+@pytest.fixture(scope="module")
+def batch_setup(tmp_path_factory):
+    """Run a small HPC batch (shell backend, 2 batches) and yield workspace info."""
+    import importlib.resources
+
+    import _canary.config as cfg
+    from _canary.util.filesystem import working_dir
+    from _canary.workspace import Workspace
+    from canary_hpc.conductor import CanaryHPCConductor
+
+    d = tmp_path_factory.mktemp("query-batch")
+    with working_dir(d):
+        _write_basic_tests(4)
+        with cfg.override():
+            cfg.options.hpc_backend = "shell"
+            spec = {"count": 2, "duration": None, "layout": "flat", "nodes": "any"}
+            cfg.options.hpc_batchspec = spec
+            conductor = CanaryHPCConductor(backend="shell")
+            cfg.pluginmanager.register(conductor, "canary_hpc_batch_setup")
+            workspace = Workspace.create(d, force=True)
+            specs = workspace.create_selection("default", {str(d): []})
+            workspace.run(specs)
+
+    # Discover batch dirs and session name
+    session_dirs = sorted((d / ".canary" / "sessions").glob("*"))
+    assert session_dirs, "No session directories created"
+    session_name = session_dirs[0].name
+    batch_dirs = sorted((session_dirs[0] / "batches").glob("*"))
+    assert len(batch_dirs) == 2, f"Expected 2 batch dirs, got {len(batch_dirs)}: {batch_dirs}"
+
+    yield SimpleNamespace(
+        root=d,
+        workspace_dir=d / ".canary",
+        session_name=session_name,
+        session_dir=session_dirs[0],
+        batch_dirs=batch_dirs,
+        batch_id=batch_dirs[0].name,  # 7-char prefix
+    )
+
+
+def _run_query_batch(batch_id, *, session=None, path=".", clean=False, terse=False, list_keys=False):
+    from canary_hpc import _exec_query_batch
+
+    args = argparse.Namespace(
+        query_subcmd="batch",
+        batchid=batch_id,
+        path=path,
+        session=session,
+        clean=clean,
+        terse=terse,
+        list_keys=list_keys,
+    )
+    return _exec_query_batch(args)
+
+
+def _run_query_batches(*, session="latest", where=None, terse=False):
+    from canary_hpc import _exec_query_batches
+
+    args = argparse.Namespace(
+        query_subcmd="batches",
+        session=session,
+        where=where,
+        terse=terse,
+    )
+    return _exec_query_batches(args)
+
+
+def test_query_batch_returns_lock_file_as_json(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batch(batch_setup.batch_id)
+    assert rc == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert "id" in data
+    assert "jobs" in data
+    assert "status" in data
+    assert "timekeeper" in data
+    assert "estimated_runtime" in data
+
+
+def test_query_batch_path_expression(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batch(batch_setup.batch_id, path=".status")
+    assert rc == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    # status has category, outcome, reason keys
+    assert "category" in data or "outcome" in data or "code" in data
+
+
+def test_query_batch_list_keys(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batch(batch_setup.batch_id, list_keys=True)
+    assert rc == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert any("status" in line for line in lines)
+    assert any("timekeeper" in line for line in lines)
+
+
+def test_query_batch_terse_outputs_single_line(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batch(batch_setup.batch_id, terse=True)
+    assert rc == 0
+    lines = [ln for ln in capsys.readouterr().out.strip().splitlines() if ln.strip()]
+    assert len(lines) == 1
+
+
+def test_query_batch_with_explicit_session(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batch(batch_setup.batch_id, session=batch_setup.session_name)
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert "id" in data
+
+
+def test_query_batches_returns_list(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name)
+    assert rc == 0
+    out = capsys.readouterr().out
+    rows = json.loads(out)
+    assert isinstance(rows, list)
+    assert len(rows) == 2
+
+
+def test_query_batches_has_expected_fields(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        assert "id" in row
+        assert "id_prefix" in row
+        assert "job_count" in row
+        assert "status" in row
+        assert "timings" in row
+        assert "estimated_runtime" in row
+
+
+def test_query_batches_sorted_by_job_count_descending(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    counts = [r["job_count"] for r in rows]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_query_batches_where_filter(batch_setup, capsys):
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name, where="status.category==PASS")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    # All returned rows should have category==PASS
+    for row in rows:
+        assert row["status"]["category"] == "PASS"
+
+
+def test_query_batches_via_query_command(batch_setup, capsys):
+    """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
+    with working_dir(batch_setup.root):
+        args = argparse.Namespace(
+            query_subcmd="batches",
+            session=batch_setup.session_name,
+            where=None,
+            terse=False,
+        )
+        rc = Query().execute(args)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 2
+
+
+def test_query_batch_via_query_command(batch_setup, capsys):
+    """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
+    with working_dir(batch_setup.root):
+        args = argparse.Namespace(
+            query_subcmd="batch",
+            batchid=batch_setup.batch_id,
+            path=".",
+            session=batch_setup.session_name,
+            clean=False,
+            terse=False,
+            list_keys=False,
+        )
+        rc = Query().execute(args)
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert "id" in data

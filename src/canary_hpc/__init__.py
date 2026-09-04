@@ -66,6 +66,71 @@ def canary_addcommand(parser: canary.Parser) -> None:
 
 
 @canary.hookimpl
+def canary_query_subcommand(subparsers: "argparse._SubParsersAction") -> None:  # type: ignore[type-arg]
+    """Register ``canary query batch`` and ``canary query batches``."""
+    # ---- batch ----
+    p_batch = subparsers.add_parser(
+        "batch",
+        help="Query a batch.lock for a single HPC batch",
+    )
+    p_batch.add_argument(
+        "batchid",
+        metavar="BATCHID",
+        help="Batch ID (7-char prefix or full UUID)",
+    )
+    p_batch.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="JSON path expression (default: whole document)",
+    )
+    p_batch.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
+    p_batch.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+    p_batch.add_argument(
+        "--list",
+        dest="list_keys",
+        action="store_true",
+        help="List queryable child keys at the selected path",
+    )
+    p_batch.add_argument(
+        "--session",
+        metavar="SESSION",
+        default=None,
+        help='Session name, prefix, or "latest" [default: latest]',
+    )
+
+    # ---- batches ----
+    p_batches = subparsers.add_parser(
+        "batches",
+        help="List all batches for a session with job counts and timing",
+    )
+    p_batches.add_argument(
+        "--session",
+        metavar="SESSION",
+        default="latest",
+        help='Session name, prefix, or "latest" [default: latest]',
+    )
+    p_batches.add_argument(
+        "--where",
+        metavar="EXPR",
+        default=None,
+        help='Filter predicate, e.g. "status.outcome==PASS"',
+    )
+    p_batches.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+
+
+@canary.hookimpl
+def canary_query_execute(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query batch`` and ``canary query batches``."""
+    subcmd = getattr(args, "query_subcmd", None)
+    if subcmd == "batch":
+        return _exec_query_batch(args)
+    if subcmd == "batches":
+        return _exec_query_batches(args)
+    return None
+
+
+@canary.hookimpl
 def canary_capabilities() -> dict[str, Any] | None:
     return load_query_data("canary_hpc.data", "capabilities.json")
 
@@ -232,6 +297,152 @@ def fill_hpc_resource_pool(b: str) -> dict[str, Any]:
         nodes.append({"id": str(i), "resources": resources})
     props = {"hpc_backend": backend.name, "source": "canary hpc", "node_count": backend.node_count}
     return {"allow_multinode": True, "additional_properties": props, "nodes": nodes}
+
+
+# ---------------------------------------------------------------------------
+# canary query batch / batches implementation helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: str) -> "Path":
+    """Return the directory for a specific batch, resolving session if needed."""
+    from _canary.subcommands.query import _resolve_session_dir
+
+    if session_arg is None:
+        # Search all sessions for this batch ID prefix.
+        candidates = sorted(workspace.sessions_dir.glob(f"*/batches/{batch_id}*"))
+        if not candidates:
+            raise FileNotFoundError(
+                f"No batch matching {batch_id!r} found under {workspace.sessions_dir}"
+            )
+        return candidates[0]
+
+    session_dir = _resolve_session_dir(workspace, session_arg)
+    candidates = sorted((session_dir / "batches").glob(f"{batch_id}*"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"No batch matching {batch_id!r} found in session {session_dir.name!r}"
+        )
+    return candidates[0]
+
+
+def _exec_query_batch(args: "argparse.Namespace") -> int:
+    """Implement ``canary query batch <BATCHID> [path]``."""
+    from _canary.subcommands.query import _clean
+    from _canary.util.query_data import list_json_object_paths
+    from _canary.util.query_data import print_json
+    from _canary.util.query_data import print_query_paths
+    from _canary.util.query_data import query_json
+    from _canary.workspace import Workspace
+
+    workspace = Workspace.load()
+    batch_dir = _resolve_batch_dir(workspace, getattr(args, "session", None), args.batchid)
+    lockfile = batch_dir / "batch.lock"
+    if not lockfile.exists():
+        import sys
+        sys.stderr.write(f"canary query batch: batch.lock not found at {lockfile}\n")
+        return 1
+
+    data = json.loads(lockfile.read_text())
+    path = getattr(args, "path", ".")
+
+    if getattr(args, "list_keys", False):
+        print_query_paths(list_json_object_paths(data, path))
+        return 0
+
+    result = query_json(data, path)
+    if getattr(args, "clean", False):
+        result = _clean(result)
+    print_json(result, terse=getattr(args, "terse", False))
+    return 0
+
+
+def _exec_query_batches(args: "argparse.Namespace") -> int:
+    """Implement ``canary query batches [--session S] [--where EXPR]``."""
+    import datetime
+    import sys
+
+    from _canary.subcommands.query import _clean
+    from _canary.subcommands.query import _parse_where
+    from _canary.subcommands.query import _resolve_session_dir
+    from _canary.util.query_data import print_json
+    from _canary.workspace import Workspace
+
+    workspace = Workspace.load()
+    session_arg = getattr(args, "session", "latest")
+    session_dir = _resolve_session_dir(workspace, session_arg)
+    batches_dir = session_dir / "batches"
+
+    if not batches_dir.exists():
+        print_json([], terse=getattr(args, "terse", False))
+        return 0
+
+    rows = []
+    for batch_dir in sorted(batches_dir.iterdir()):
+        lockfile = batch_dir / "batch.lock"
+        if not lockfile.exists():
+            continue
+        data = json.loads(lockfile.read_text())
+
+        # Build a summary row
+        tk = data.get("timekeeper", {})
+        if isinstance(tk, str):
+            try:
+                tk = json.loads(tk)
+            except Exception:
+                tk = {}
+        submitted = tk.get("_submitted", -1)
+        started = tk.get("_started", -1)
+        stopped = tk.get("_stopped", -1)
+        total = (stopped - submitted) if submitted > 0 and stopped > 0 else None
+        queue_wait = (started - submitted) if submitted > 0 and started > 0 else None
+        running = (stopped - started) if started > 0 and stopped > 0 else None
+
+        raw_status = data.get("status", {})
+        if isinstance(raw_status, str):
+            try:
+                raw_status = json.loads(raw_status)
+            except Exception:
+                raw_status = {}
+
+        sm = data.get("schedule_metadata", {})
+
+        row = {
+            "id": data.get("id", batch_dir.name),
+            "id_prefix": batch_dir.name,
+            "session": data.get("session", session_dir.name),
+            "job_count": len(data.get("jobs", [])),
+            "estimated_runtime": data.get("estimated_runtime"),
+            "algorithm": sm.get("algorithm"),
+            "node_count": sm.get("node_count"),
+            "width": sm.get("width"),
+            "status": {
+                "category": raw_status.get("category"),
+                "outcome": raw_status.get("outcome"),
+                "reason": raw_status.get("reason"),
+            },
+            "timings": {
+                "total": round(total, 3) if total is not None else None,
+                "queue_wait": round(queue_wait, 3) if queue_wait is not None else None,
+                "running": round(running, 3) if running is not None else None,
+            },
+            "submitted_on": (
+                datetime.datetime.fromtimestamp(submitted).isoformat()
+                if submitted > 0 else None
+            ),
+        }
+        rows.append(row)
+
+    # Sort by job count descending so heaviest batches come first.
+    rows.sort(key=lambda r: -(r["job_count"] or 0))
+
+    where = getattr(args, "where", None)
+    if where:
+        predicate = _parse_where(where)
+        rows = [r for r in rows if predicate(r)]
+
+    print_json(rows, terse=getattr(args, "terse", False))
+    return 0
 
 
 def display_batch_log(id: str) -> None:
