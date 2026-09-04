@@ -4,7 +4,6 @@
 import argparse
 import logging
 import os
-import statistics
 import sys
 import threading
 from collections.abc import Mapping
@@ -44,12 +43,10 @@ logger = canary.get_logger(__name__)
 
 
 def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
-    """Print a Rich diagnostic table summarising the batch pack to stderr.
+    """Log a table summarising the batch pack.
 
     The table shows one row per batch sorted by descending job count so the
-    most loaded batches are immediately visible.  A footer row shows totals
-    and distribution statistics (min / median / max / stdev) for both job
-    counts and estimated runtimes.
+    most loaded batches are immediately visible.
     """
     from rich import box
     from rich.console import Console
@@ -91,47 +88,35 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         "pack_to_height_simulated": "duration",
     }.get(algo_full, algo_full)
 
-    # ---- summary statistics --------------------------------------------
-    job_counts = [r["n_jobs"] for r in rows]
-    est_minutes = [r["est_s"] / 60.0 for r in rows]
-    total_jobs = sum(job_counts)
+    total_jobs = sum(r["n_jobs"] for r in rows)
     total_batches = len(rows)
 
     def _fmt_min(seconds: float) -> str:
         return f"{seconds / 60:.1f} min"
 
-    def _fmt_stats(values: list[float], fmt: str = ".0f") -> str:
-        if len(values) < 2:
-            return f"{values[0]:{fmt}}"
-        lo, hi = min(values), max(values)
-        med = statistics.median(values)
-        sd = statistics.stdev(values)
-        return f"min {lo:{fmt}} / med {med:{fmt}} / max {hi:{fmt}} / σ {sd:{fmt}}"
+    # ---- emit summary as logger.info lines ------------------------------
+    logger.info(
+        "[bold]Batch packing:[/] algorithm=[bold]%s[/]  batches=[bold]%d[/]  jobs=[bold]%d[/]",
+        algo_label,
+        total_batches,
+        total_jobs,
+    )
 
     # ---- build the table -----------------------------------------------
-    table = Table(
-        title=f"Batch packing summary  ·  algorithm: [bold]{algo_label}[/]  ·  "
-        f"[bold]{total_batches}[/] batches  ·  [bold]{total_jobs}[/] jobs",
-        box=box.SIMPLE_HEAD,
-        show_footer=True,
-        expand=False,
-    )
-
-    table.add_column("Batch", no_wrap=True, footer="")
-    table.add_column("Jobs", justify="right", footer=f"[bold]{total_jobs}[/]")
-    table.add_column("Nodes", justify="right", footer="")
-    table.add_column("Width", justify="right", footer="")
-    table.add_column(
-        "Est.", justify="right", footer=_fmt_min(sum(r["est_s"] for r in rows) / len(rows))
-    )
-    table.add_column("Alloc", justify="right", footer="")
-
     timeout_multiplier: float = 1.0
     try:
         if t := canary.config.get_timeout_option("multiplier"):
             timeout_multiplier = float(t)
     except Exception:
         logger.debug(f"Failed to convert multiplier={t} to float", exc_info=True)
+
+    table = Table(expand=False, box=box.SQUARE)
+    table.add_column("Batch", no_wrap=True)
+    table.add_column("Jobs", justify="right")
+    table.add_column("Nodes", justify="right")
+    table.add_column("Width", justify="right")
+    table.add_column("Est.", justify="right")
+    table.add_column("Alloc", justify="right")
 
     for r in rows:
         alloc_s = r["est_s"] * timeout_multiplier
@@ -151,12 +136,8 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
             _fmt_min(alloc_s),
         )
 
-    # ---- footer summary lines ------------------------------------------
     console = Console(file=sys.stderr)
     console.print(table)
-    console.print(f"  Jobs/batch : {_fmt_stats(job_counts, '.0f')}", highlight=False)
-    console.print(f"  Est. runtime: {_fmt_stats(est_minutes, '.1f')} min", highlight=False)
-    console.print()
 
 
 def create_batch_specs(
