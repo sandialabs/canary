@@ -109,7 +109,8 @@ class Log(CanarySubcommand):
         job = workspace.find(job=args.testspec)
         f = self.get_file_from_workspace(job, args)
         if f:
-            display_file(f, use_pager=not args.no_pager)
+            use_pager = not getattr(args, "no_pager", False)
+            display_file(f, use_pager=use_pager)
         return 0
 
 
