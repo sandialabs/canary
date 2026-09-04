@@ -15,8 +15,10 @@ db schema                Emit workspace database DDL as JSON
 db stats                 Emit per-outcome counts and session summary
 db "<SQL>"               Execute a read-only SQL query, return JSON rows
 
-Extension subcommands are registered via the canary_query_subcommand hook
-and dispatched via the canary_query_execute hook.
+The built-in subcommands (job, session, sessions, db) are implemented as
+``@hookimpl(trylast=True, specname="canary_query_execute")`` functions in
+``_canary.hooks``.  Extension subcommands are registered via the
+``canary_query_subcommand`` hook and dispatched via ``canary_query_execute``.
 
 Common flags
 ------------
@@ -38,6 +40,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
+
 from ..hookspec import hookimpl
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
@@ -85,7 +88,7 @@ class Query(CanarySubcommand):
     )
 
     def setup_parser(self, parser: "Parser") -> None:
-        """Register ``job``, ``session``, ``sessions``, and ``db`` subparsers with their flags."""
+        """Register built-in and extension subparsers under ``canary query``."""
         sub = parser.add_subparsers(dest="query_subcmd", metavar="SUBCMD")
 
         # ---- job ----
@@ -156,278 +159,19 @@ class Query(CanarySubcommand):
         p_db.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
         # ---- extension subcommands (registered by plugins via canary_query_subcommand) ----
-        try:
-            canary.config.pluginmanager.hook.canary_query_subcommand(subparsers=sub)
-        except Exception:
-            pass
+        canary.config.pluginmanager.hook.canary_query_subcommand(subparsers=sub)
 
     def execute(self, args: argparse.Namespace) -> int:
-        """Dispatch to the appropriate query sub-handler and return an exit code."""
-        subcmd = getattr(args, "query_subcmd", None)
-
-        if subcmd == "job":
-            return self._exec_job(args)
-        elif subcmd == "session":
-            return self._exec_session(args)
-        elif subcmd == "sessions":
-            return self._exec_sessions(args)
-        elif subcmd == "db":
-            return self._exec_db(args)
-        else:
-            # Try extension plugins before falling through to help.
-            try:
-                result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
-                if result is not None:
-                    return result
-            except Exception:
-                pass
-            # No subcommand matched — print help
-            print(self.description)
-            return 1
-
-    # ------------------------------------------------------------------
-    # job subcommand
-    # ------------------------------------------------------------------
-
-    def _exec_job(self, args: argparse.Namespace) -> int:
-        """Query a single job's ``testcase.lock`` or its timing cache."""
-        workspace = Workspace.load()
-
-        if args.cache:
-            return self._exec_job_cache(workspace, args)
-
-        lockfile = _job_lockfile(workspace, args.jobid)
-        data = json.loads(lockfile.read_text())
-
-        if args.list_keys:
-            print_query_paths(list_json_object_paths(data, args.path))
-            return 0
-
-        result = query_json(data, args.path)
-        if args.clean:
-            result = _clean(result)
-        print_json(result, terse=args.terse)
-        return 0
-
-    def _exec_job_cache(self, workspace: Workspace, args: argparse.Namespace) -> int:
-        """Emit the per-job timing cache for the given spec ID."""
-        job = workspace.find_job(args.jobid)
-        cache_path = _find_cache_path(workspace, job.id)
-        if cache_path is None:
-            sys.stderr.write(f"No cache entry found for job {args.jobid!r}\n")
-            return 1
-        data = json.loads(cache_path.read_text())
-        print_json(data, terse=args.terse)
-        return 0
-
-    # ------------------------------------------------------------------
-    # session subcommand
-    # ------------------------------------------------------------------
-
-    def _exec_session(self, args: argparse.Namespace) -> int:
-        """Query a session lock file or expand its jobs into result rows."""
-        workspace = Workspace.load()
-        session_dir = _resolve_session_dir(workspace, args.session)
-
-        if args.expand_jobs:
-            return self._exec_session_expand(workspace, session_dir, args)
-
-        lockfile = session_dir / "session.lock"
-        if not lockfile.exists():
-            raise FileNotFoundError(lockfile)
-        data = json.loads(lockfile.read_text())
-
-        if args.list_keys:
-            print_query_paths(list_json_object_paths(data, args.path))
-            return 0
-
-        result = query_json(data, args.path)
-        if args.clean:
-            result = _clean(result)
-        print_json(result, terse=args.terse)
-        return 0
-
-    def _exec_session_expand(
-        self, workspace: Workspace, session_dir: Path, args: argparse.Namespace
-    ) -> int:
-        """Join session job_ids to DB result rows and emit as a JSON array."""
-        lockfile = session_dir / "session.lock"
-        if not lockfile.exists():
-            raise FileNotFoundError(lockfile)
-        session_data = json.loads(lockfile.read_text())
-        session_name = session_data.get("name", session_dir.name)
-
-        # Pull results for this session from the database
-        rows = _db_results_for_session(workspace, session_name)
-
-        predicate = _parse_where(args.where) if args.where else None
-
-        out: list[dict[str, Any]] = []
-        for row in rows:
-            tk = row["timekeeper"]
-            submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
-            staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
-            started = tk.get("_started", -1) if isinstance(tk, dict) else -1
-            stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
-            finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
-
-            def elapsed(a: float, b: float) -> float:
-                return round(b - a, 6) if a > 0 and b > 0 else -1.0
-
-            entry: dict[str, Any] = {
-                "id": row["id"],
-                "name": row["spec_name"],
-                "fullname": row["spec_fullname"],
-                "file_path": row.get("file_path", ""),
-                "session": row["session"],
-                "exit_code": row["status"].code,
-                "status": {
-                    "category": row["status"].category.value,
-                    "outcome": row["status"].outcome.name,
-                    "reason": row["status"].reason,
-                },
-                "timings": {
-                    "pending": elapsed(submitted, staged),
-                    "setup": elapsed(staged, started),
-                    "running": elapsed(started, stopped),
-                    "teardown": elapsed(stopped, finished),
-                    "total": elapsed(submitted, finished),
-                },
-            }
-
-            if predicate and not predicate(entry):
-                continue
-            out.append(entry)
-
-        print_json(out, terse=args.terse)
-        return 0
-
-    # ------------------------------------------------------------------
-    # sessions subcommand
-    # ------------------------------------------------------------------
-
-    def _exec_sessions(self, args: argparse.Namespace) -> int:
-        """List all sessions with per-outcome job counts as a JSON array."""
-        workspace = Workspace.load()
-        sessions_dir = workspace.sessions_dir
-        predicate = _parse_where(args.where) if args.where else None
-
-        out: list[dict[str, Any]] = []
-        for session_dir in sorted(sessions_dir.iterdir()):
-            if not session_dir.is_dir():
-                continue
-            lockfile = session_dir / "session.lock"
-            if not lockfile.exists():
-                continue
-            session_data = json.loads(lockfile.read_text())
-            session_name = session_data.get("name", session_dir.name)
-
-            # Get per-outcome counts from DB
-            counts = _db_outcome_counts_for_session(workspace, session_name)
-            total = sum(counts.values())
-
-            entry: dict[str, Any] = {
-                "name": session_name,
-                "started_on": session_data.get("started_on"),
-                "finished_on": session_data.get("finished_on"),
-                "returncode": session_data.get("returncode"),
-                "argv": session_data.get("argv", []),
-                "job_count": total,
-                "outcomes": counts,
-            }
-
-            if predicate and not predicate(entry):
-                continue
-            out.append(entry)
-
-        print_json(out, terse=args.terse)
-        return 0
-
-    # ------------------------------------------------------------------
-    # db subcommand
-    # ------------------------------------------------------------------
-
-    def _exec_db(self, args: argparse.Namespace) -> int:
-        """Dispatch to ``schema``, ``stats``, or an arbitrary SQL SELECT statement."""
-        workspace = Workspace.load()
-        db_args: list[str] = args.db_args or []
-
-        if not db_args:
-            sys.stderr.write(
-                "canary query db: expected 'schema', 'stats', or a SQL SELECT statement\n"
-            )
-            return 1
-
-        keyword = db_args[0].lower().strip()
-
-        if keyword == "schema":
-            return self._db_schema(workspace, args)
-        elif keyword == "stats":
-            return self._db_stats(workspace, args)
-        else:
-            sql = " ".join(db_args)
-            return self._db_sql(workspace, sql, args)
-
-    def _db_schema(self, workspace: Workspace, args: argparse.Namespace) -> int:
-        """Emit the workspace database table DDL as a JSON object."""
-        con = sqlite3.connect(workspace.db.path)
-        rows = con.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
-        ).fetchall()
-        con.close()
-        out = {name: ddl for name, ddl in rows}
-        print_json(out, terse=args.terse)
-        return 0
-
-    def _db_stats(self, workspace: Workspace, args: argparse.Namespace) -> int:
-        """Emit aggregate statistics (spec count, outcomes, sessions) from the workspace DB."""
-        con = sqlite3.connect(workspace.db.path)
-        total = con.execute("SELECT COUNT(*) FROM results").fetchone()[0]
-        outcome_rows = con.execute(
-            "SELECT status_outcome, COUNT(*) FROM results "
-            "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
-            "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
-        ).fetchall()
-        session_count = con.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
-        latest = con.execute("SELECT MAX(session) FROM results").fetchone()[0]
-        spec_count = con.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
-        con.close()
-
-        outcomes = {outcome: count for outcome, count in outcome_rows}
-        out = {
-            "spec_count": spec_count,
-            "result_count": total,
-            "session_count": session_count,
-            "latest_session": latest,
-            "outcomes": outcomes,
-        }
-        print_json(out, terse=args.terse)
-        return 0
-
-    def _db_sql(self, workspace: Workspace, sql: str, args: argparse.Namespace) -> int:
-        """Execute a read-only SQL SELECT against the workspace database and emit rows as JSON."""
-        sql_stripped = sql.strip().lower()
-        if not sql_stripped.startswith("select"):
-            sys.stderr.write("canary query db: only SELECT statements are permitted\n")
-            return 1
-
-        con = sqlite3.connect(workspace.db.path)
-        con.row_factory = sqlite3.Row
-        try:
-            rows = con.execute(sql).fetchall()
-        except sqlite3.Error as e:
-            sys.stderr.write(f"canary query db: SQL error: {e}\n")
-            con.close()
-            return 1
-        con.close()
-
-        out = [dict(row) for row in rows]
-        print_json(out, terse=args.terse)
-        return 0
+        """Dispatch to the first plugin that handles ``args.query_subcmd``."""
+        result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
+        if result is not None:
+            return result
+        print(self.description)
+        return 1
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers (also used by canary_hpc and tests)
 # ---------------------------------------------------------------------------
 
 
@@ -589,3 +333,219 @@ def _parse_where(expr: str) -> Any:
         return False
 
     return predicate
+
+
+# ---------------------------------------------------------------------------
+# Built-in canary_query_execute implementations
+# (registered in _canary.hooks with @hookimpl trylast=True)
+# ---------------------------------------------------------------------------
+# The implementations live in _canary/hooks.py so that they follow the
+# established pattern for built-in hook implementations and canary_query_execute
+# is a fully open extension point with no special-casing in Query.execute.
+
+
+def _exec_job(args: argparse.Namespace) -> int:
+    """Query a single job's ``testcase.lock`` or its timing cache."""
+    workspace = Workspace.load()
+
+    if args.cache:
+        job = workspace.find_job(args.jobid)
+        cache_path = _find_cache_path(workspace, job.id)
+        if cache_path is None:
+            sys.stderr.write(f"No cache entry found for job {args.jobid!r}\n")
+            return 1
+        data = json.loads(cache_path.read_text())
+        print_json(data, terse=args.terse)
+        return 0
+
+    lockfile = _job_lockfile(workspace, args.jobid)
+    data = json.loads(lockfile.read_text())
+
+    if args.list_keys:
+        print_query_paths(list_json_object_paths(data, args.path))
+        return 0
+
+    result = query_json(data, args.path)
+    if args.clean:
+        result = _clean(result)
+    print_json(result, terse=args.terse)
+    return 0
+
+
+def _exec_session(args: argparse.Namespace) -> int:
+    """Query a session lock file or expand its jobs into result rows."""
+    workspace = Workspace.load()
+    session_dir = _resolve_session_dir(workspace, args.session)
+
+    if args.expand_jobs:
+        return _exec_session_expand(workspace, session_dir, args)
+
+    lockfile = session_dir / "session.lock"
+    if not lockfile.exists():
+        raise FileNotFoundError(lockfile)
+    data = json.loads(lockfile.read_text())
+
+    if args.list_keys:
+        print_query_paths(list_json_object_paths(data, args.path))
+        return 0
+
+    result = query_json(data, args.path)
+    if args.clean:
+        result = _clean(result)
+    print_json(result, terse=args.terse)
+    return 0
+
+
+def _exec_session_expand(workspace: Workspace, session_dir: Path, args: argparse.Namespace) -> int:
+    """Join session job_ids to DB result rows and emit as a JSON array."""
+    lockfile = session_dir / "session.lock"
+    if not lockfile.exists():
+        raise FileNotFoundError(lockfile)
+    session_data = json.loads(lockfile.read_text())
+    session_name = session_data.get("name", session_dir.name)
+
+    rows = _db_results_for_session(workspace, session_name)
+    predicate = _parse_where(args.where) if args.where else None
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        tk = row["timekeeper"]
+        submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
+        staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
+        started = tk.get("_started", -1) if isinstance(tk, dict) else -1
+        stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
+        finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
+
+        def elapsed(a: float, b: float) -> float:
+            return round(b - a, 6) if a > 0 and b > 0 else -1.0
+
+        entry: dict[str, Any] = {
+            "id": row["id"],
+            "name": row["spec_name"],
+            "fullname": row["spec_fullname"],
+            "file_path": row.get("file_path", ""),
+            "session": row["session"],
+            "exit_code": row["status"].code,
+            "status": {
+                "category": row["status"].category.value,
+                "outcome": row["status"].outcome.name,
+                "reason": row["status"].reason,
+            },
+            "timings": {
+                "pending": elapsed(submitted, staged),
+                "setup": elapsed(staged, started),
+                "running": elapsed(started, stopped),
+                "teardown": elapsed(stopped, finished),
+                "total": elapsed(submitted, finished),
+            },
+        }
+
+        if predicate and not predicate(entry):
+            continue
+        out.append(entry)
+
+    print_json(out, terse=args.terse)
+    return 0
+
+
+def _exec_sessions(args: argparse.Namespace) -> int:
+    """List all sessions with per-outcome job counts as a JSON array."""
+    workspace = Workspace.load()
+    sessions_dir = workspace.sessions_dir
+    predicate = _parse_where(args.where) if args.where else None
+
+    out: list[dict[str, Any]] = []
+    for session_dir in sorted(sessions_dir.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        lockfile = session_dir / "session.lock"
+        if not lockfile.exists():
+            continue
+        session_data = json.loads(lockfile.read_text())
+        session_name = session_data.get("name", session_dir.name)
+
+        counts = _db_outcome_counts_for_session(workspace, session_name)
+        total = sum(counts.values())
+
+        entry: dict[str, Any] = {
+            "name": session_name,
+            "started_on": session_data.get("started_on"),
+            "finished_on": session_data.get("finished_on"),
+            "returncode": session_data.get("returncode"),
+            "argv": session_data.get("argv", []),
+            "job_count": total,
+            "outcomes": counts,
+        }
+
+        if predicate and not predicate(entry):
+            continue
+        out.append(entry)
+
+    print_json(out, terse=args.terse)
+    return 0
+
+
+def _exec_db(args: argparse.Namespace) -> int:
+    """Dispatch to ``schema``, ``stats``, or an arbitrary SQL SELECT statement."""
+    workspace = Workspace.load()
+    db_args: list[str] = args.db_args or []
+
+    if not db_args:
+        sys.stderr.write("canary query db: expected 'schema', 'stats', or a SQL SELECT statement\n")
+        return 1
+
+    keyword = db_args[0].lower().strip()
+
+    if keyword == "schema":
+        con = sqlite3.connect(workspace.db.path)
+        rows = con.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        con.close()
+        out = {name: ddl for name, ddl in rows}
+        print_json(out, terse=args.terse)
+        return 0
+
+    if keyword == "stats":
+        con = sqlite3.connect(workspace.db.path)
+        total = con.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+        outcome_rows = con.execute(
+            "SELECT status_outcome, COUNT(*) FROM results "
+            "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
+            "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
+        ).fetchall()
+        session_count = con.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
+        latest = con.execute("SELECT MAX(session) FROM results").fetchone()[0]
+        spec_count = con.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
+        con.close()
+        outcomes = {outcome: count for outcome, count in outcome_rows}
+        out_stats = {
+            "spec_count": spec_count,
+            "result_count": total,
+            "session_count": session_count,
+            "latest_session": latest,
+            "outcomes": outcomes,
+        }
+        print_json(out_stats, terse=args.terse)
+        return 0
+
+    # Arbitrary SELECT
+    sql = " ".join(db_args)
+    sql_stripped = sql.strip().lower()
+    if not sql_stripped.startswith("select"):
+        sys.stderr.write("canary query db: only SELECT statements are permitted\n")
+        return 1
+
+    con = sqlite3.connect(workspace.db.path)
+    con.row_factory = sqlite3.Row
+    try:
+        rows_sql = con.execute(sql).fetchall()
+    except sqlite3.Error as e:
+        sys.stderr.write(f"canary query db: SQL error: {e}\n")
+        con.close()
+        return 1
+    con.close()
+
+    out_sql = [dict(row) for row in rows_sql]
+    print_json(out_sql, terse=args.terse)
+    return 0

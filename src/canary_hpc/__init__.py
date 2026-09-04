@@ -5,6 +5,7 @@
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -69,20 +70,10 @@ def canary_addcommand(parser: canary.Parser) -> None:
 def canary_query_subcommand(subparsers: "argparse._SubParsersAction") -> None:  # type: ignore[type-arg]
     """Register ``canary query batch`` and ``canary query batches``."""
     # ---- batch ----
-    p_batch = subparsers.add_parser(
-        "batch",
-        help="Query a batch.lock for a single HPC batch",
-    )
+    p_batch = subparsers.add_parser("batch", help="Query a batch.lock for a single HPC batch")
+    p_batch.add_argument("batchid", metavar="BATCHID", help="Batch ID (7-char prefix or full UUID)")
     p_batch.add_argument(
-        "batchid",
-        metavar="BATCHID",
-        help="Batch ID (7-char prefix or full UUID)",
-    )
-    p_batch.add_argument(
-        "path",
-        nargs="?",
-        default=".",
-        help="JSON path expression (default: whole document)",
+        "path", nargs="?", default=".", help="JSON path expression (default: whole document)"
     )
     p_batch.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
     p_batch.add_argument("--terse", action="store_true", help="Compact single-line JSON")
@@ -101,8 +92,7 @@ def canary_query_subcommand(subparsers: "argparse._SubParsersAction") -> None:  
 
     # ---- batches ----
     p_batches = subparsers.add_parser(
-        "batches",
-        help="List all batches for a session with job counts and timing",
+        "batches", help="List all batches for a session with job counts and timing"
     )
     p_batches.add_argument(
         "--session",
@@ -339,7 +329,6 @@ def _exec_query_batch(args: "argparse.Namespace") -> int:
     batch_dir = _resolve_batch_dir(workspace, getattr(args, "session", None), args.batchid)
     lockfile = batch_dir / "batch.lock"
     if not lockfile.exists():
-        import sys
         sys.stderr.write(f"canary query batch: batch.lock not found at {lockfile}\n")
         return 1
 
@@ -360,9 +349,7 @@ def _exec_query_batch(args: "argparse.Namespace") -> int:
 def _exec_query_batches(args: "argparse.Namespace") -> int:
     """Implement ``canary query batches [--session S] [--where EXPR]``."""
     import datetime
-    import sys
 
-    from _canary.subcommands.query import _clean
     from _canary.subcommands.query import _parse_where
     from _canary.subcommands.query import _resolve_session_dir
     from _canary.util.query_data import print_json
@@ -427,14 +414,13 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
                 "running": round(running, 3) if running is not None else None,
             },
             "submitted_on": (
-                datetime.datetime.fromtimestamp(submitted).isoformat()
-                if submitted > 0 else None
+                datetime.datetime.fromtimestamp(submitted).isoformat() if submitted > 0 else None
             ),
         }
         rows.append(row)
 
     # Sort by job count descending so heaviest batches come first.
-    rows.sort(key=lambda r: -(r["job_count"] or 0))
+    rows.sort(key=lambda r: -(r["job_count"] if isinstance(r["job_count"], int) else 0))
 
     where = getattr(args, "where", None)
     if where:
@@ -454,9 +440,7 @@ def display_batch_log(id: str) -> None:
     # Search all sessions for a batch matching the given ID prefix.
     candidates = sorted(workspace.sessions_dir.glob(f"*/batches/{id}*"))
     if not candidates:
-        raise FileNotFoundError(
-            f"No batch matching {id!r} found under {workspace.sessions_dir}"
-        )
+        raise FileNotFoundError(f"No batch matching {id!r} found under {workspace.sessions_dir}")
     d = candidates[0]
     file = d / "canary-out.txt"
     print(f"{file}:")

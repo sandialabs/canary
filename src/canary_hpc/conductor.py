@@ -11,6 +11,7 @@ from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
 from typing import Sequence
+from typing import TypedDict
 
 import hpc_connect
 
@@ -42,6 +43,16 @@ global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
+class _BatchRow(TypedDict):
+    id: str
+    n_jobs: int
+    est_s: float
+    cheap_s: float | None
+    algorithm: str
+    node_count: int
+    width: str | int
+
+
 def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
     """Log a table summarising the batch pack.
 
@@ -56,25 +67,26 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         return
 
     # ---- gather per-batch data ----------------------------------------
-    rows = []
+    rows: list[_BatchRow] = []
     for spec in batch_specs:
         meta = spec.schedule_metadata or {}
         n_jobs = len(spec.jobs)
-        est_s = spec.estimated_runtime or 0.0
-        algorithm = meta.get("algorithm", "unknown")
-        node_count = meta.get("node_count", 1)
+        est_s = float(spec.estimated_runtime or 0.0)
+        algorithm = str(meta.get("algorithm", "unknown"))
+        node_count = int(meta.get("node_count", 1))
         width = meta.get("width", "?")
-        cheap_s = meta.get("cheap_runtime")
+        cheap_raw = meta.get("cheap_runtime")
+        cheap_s: float | None = float(cheap_raw) if cheap_raw is not None else None
         rows.append(
-            {
-                "id": spec.id[:7],
-                "n_jobs": n_jobs,
-                "est_s": est_s,
-                "cheap_s": cheap_s,
-                "algorithm": algorithm,
-                "node_count": node_count,
-                "width": width,
-            }
+            _BatchRow(
+                id=spec.id[:7],
+                n_jobs=n_jobs,
+                est_s=est_s,
+                cheap_s=cheap_s,
+                algorithm=algorithm,
+                node_count=node_count,
+                width=width,
+            )
         )
 
     rows.sort(key=lambda r: -r["n_jobs"])
@@ -97,9 +109,9 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         total_jobs,
     )
     for r in rows:
-        cheap_note = (
-            f"  cheap={_fmt_min(r['cheap_s'])}" if r["cheap_s"] is not None and abs(r["cheap_s"] - r["est_s"]) > 1.0 else ""
-        )
+        cheap_note = ""
+        if r["cheap_s"] is not None and abs(r["cheap_s"] - r["est_s"]) > 1.0:
+            cheap_note = f"  cheap={_fmt_min(r['cheap_s'])}"
         logger.debug(
             "  batch=%s  jobs=%d  nodes=%s  est=%s%s",
             r["id"],
@@ -126,7 +138,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
     table.add_column("Alloc", justify="right")
 
     for r in rows:
-        alloc_s = r["est_s"] * timeout_multiplier
+        alloc_s: float = r["est_s"] * timeout_multiplier
         # Only annotate with the cheap (pre-simulation) estimate when it differs
         # from the final estimated_runtime — i.e. when exact simulation refined it.
         cheap_s = r["cheap_s"]

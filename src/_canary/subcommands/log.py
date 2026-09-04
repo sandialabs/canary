@@ -64,7 +64,7 @@ class Log(CanarySubcommand):
             help="Show raw log file contents (applicable only to the session log file)",
         )
         parser.add_argument(
-            "-P", "--no-pager", default=False, action="store_true", help="Do not page output",
+            "-P", "--no-pager", default=False, action="store_true", help="Do not page output"
         )
         parser.add_argument(
             "testspec",

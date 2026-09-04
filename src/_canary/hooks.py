@@ -445,3 +445,50 @@ def canary_capabilities() -> dict[str, Any] | None:
 @hookimpl
 def canary_skills() -> dict[str, Any] | None:
     return load_query_data("canary.data", "skills.json")
+
+
+# ---------------------------------------------------------------------------
+# Built-in canary query subcommand handlers
+# ---------------------------------------------------------------------------
+# Each function handles exactly one value of args.query_subcmd and returns
+# None for any other value so pluggy can try the next implementation.
+
+
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_job(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query job``."""
+    if getattr(args, "query_subcmd", None) != "job":
+        return None
+    from .subcommands.query import _exec_job
+
+    return _exec_job(args)
+
+
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_session(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query session``."""
+    if getattr(args, "query_subcmd", None) != "session":
+        return None
+    from .subcommands.query import _exec_session
+
+    return _exec_session(args)
+
+
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_sessions(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query sessions``."""
+    if getattr(args, "query_subcmd", None) != "sessions":
+        return None
+    from .subcommands.query import _exec_sessions
+
+    return _exec_sessions(args)
+
+
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_db(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query db``."""
+    if getattr(args, "query_subcmd", None) != "db":
+        return None
+    from .subcommands.query import _exec_db
+
+    return _exec_db(args)
