@@ -277,7 +277,7 @@ class CanaryHPCConductor:
         setattr(canary.config.options, "hpc_batchspec", batchspec)
         console_style = canary.config.getoption("console_style") or {}
         if "live_columns" not in console_style:
-            console_style["live_columns"] = "Job,ID,Status,Queued,Staging,Running,Elapsed,Rank"
+            console_style["live_columns"] = "Job,ID,Status,Queued,Running,Elapsed,Rank"
         setattr(canary.config.options, "console_style", console_style)
         return Run().execute(args)
 
