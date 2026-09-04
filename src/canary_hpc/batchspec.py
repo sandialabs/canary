@@ -564,15 +564,16 @@ class TestBatch(BaseJob):
         self.lockfile.write_text(json.dumps(config, indent=2))
         return
 
-    def save(self):
+    def save(self, children: bool = True):
         cfg = json.loads(self.lockfile.read_text())
         cfg["status"] = serialize(self.status)["base"]
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
         cfg["allocation"] = serialize(self.allocation)
         json.safesave(self.lockfile, cfg)
-        for job in self:
-            job.save()
+        if children:
+            for job in self:
+                job.save()
 
     def set_status(
         self,

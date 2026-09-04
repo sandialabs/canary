@@ -100,7 +100,7 @@ class Timekeeper:
         if self._submitted < 0:
             self._submitted = self._started
         if self._staged < 0:
-            self._staged = self._submitted
+            self._staged = self._started
 
     def maybe_start(self, at: float | None = None) -> None:
         """Call :meth:`start` only if the start timestamp has not been set yet."""

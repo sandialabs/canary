@@ -1043,7 +1043,6 @@ def _write_basic_tests(n: int = 4) -> None:
 @pytest.fixture(scope="module")
 def batch_setup(tmp_path_factory):
     """Run a small HPC batch (shell backend, 2 batches) and yield workspace info."""
-    import importlib.resources
 
     import _canary.config as cfg
     from _canary.util.filesystem import working_dir
@@ -1080,7 +1079,9 @@ def batch_setup(tmp_path_factory):
     )
 
 
-def _run_query_batch(batch_id, *, session=None, path=".", clean=False, terse=False, list_keys=False):
+def _run_query_batch(
+    batch_id, *, session=None, path=".", clean=False, terse=False, list_keys=False
+):
     from canary_hpc import _exec_query_batch
 
     args = argparse.Namespace(
@@ -1098,12 +1099,7 @@ def _run_query_batch(batch_id, *, session=None, path=".", clean=False, terse=Fal
 def _run_query_batches(*, session="latest", where=None, terse=False):
     from canary_hpc import _exec_query_batches
 
-    args = argparse.Namespace(
-        query_subcmd="batches",
-        session=session,
-        where=where,
-        terse=terse,
-    )
+    args = argparse.Namespace(query_subcmd="batches", session=session, where=where, terse=terse)
     return _exec_query_batches(args)
 
 
@@ -1203,10 +1199,7 @@ def test_query_batches_via_query_command(batch_setup, capsys):
     """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
     with working_dir(batch_setup.root):
         args = argparse.Namespace(
-            query_subcmd="batches",
-            session=batch_setup.session_name,
-            where=None,
-            terse=False,
+            query_subcmd="batches", session=batch_setup.session_name, where=None, terse=False
         )
         rc = Query().execute(args)
     assert rc == 0

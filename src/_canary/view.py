@@ -520,7 +520,7 @@ class ViewManager:
             logger.info(f"Deferring view update at {self.view.dir} until session finish")
             return
         with self.locked():
-            logger.info(f"Updating live view at {self.view.dir}")
+            logger.info(f"[bold]Updating[/] live view at {self.view.dir}")
             self.view.make(exist_ok=True)
             manifest = self.view.load_manifest()
             self.view.save_manifest(manifest)

@@ -222,8 +222,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             # to the real queue-wait duration.  on_start() must be called *after*
             # on_stage() so that Timekeeper.start() does not backfill _staged to
             # _submitted (which would collapse the queued time to 0).
-            batch.on_stage(at=started_at)
             batch.on_start(at=started_at)
+            batch.save(children=False)
             queue.put({"event": "job_started", "timestamp": started_at})
 
         def set_jobid(future: hpc_connect.futures.FutureProtocol):

@@ -376,11 +376,11 @@ def test_hpc_batch_queued_time_preserved_after_completion() -> None:
     tk = Timekeeper()
 
     # Simulate the corrected HPC batch lifecycle
-    tk.open(at=T0)       # on_submit
-    tk.stage(at=T1)      # on_stage  (job leaves scheduler queue)
-    tk.start(at=T1)      # on_start  (same timestamp — HPC has no separate staging phase)
-    tk.stop(at=T2)       # on_stop
-    tk.close(at=T3)      # on_finish
+    tk.open(at=T0)  # on_submit
+    tk.stage(at=T1)  # on_stage  (job leaves scheduler queue)
+    tk.start(at=T1)  # on_start  (same timestamp — HPC has no separate staging phase)
+    tk.stop(at=T2)  # on_stop
+    tk.close(at=T3)  # on_finish
 
     assert tk.pending() == pytest.approx(60.0), "queued time should be T1 - T0 = 60 s"
     assert tk.running() == pytest.approx(60.0), "running time should be T2 - T1 = 60 s"
@@ -401,7 +401,7 @@ def test_hpc_batch_queued_time_live_before_start(monkeypatch: pytest.MonkeyPatch
     assert tk._staged == -1.0, "_staged must remain unset until on_stage() fires"
 
 
-def test_start_without_prior_stage_backfills_staged_to_submitted() -> None:
+def test_start_without_prior_stage_backfills_staged_to_started() -> None:
     """start() without a prior stage() backfills _staged = _submitted (existing behaviour).
 
     This is the old HPC path and explains why calling on_start() alone collapsed
@@ -412,6 +412,8 @@ def test_start_without_prior_stage_backfills_staged_to_submitted() -> None:
     tk.open(at=100.0)
     tk.start(at=200.0)
 
-    assert tk._staged == 100.0, "start() backfills _staged to _submitted when _staged is unset"
-    assert tk.pending() == pytest.approx(0.0), "pending collapses to 0 — the bug in the old HPC path"
+    assert tk._staged == 200.0, "start() backfills _staged to _submitted when _staged is unset"
+    assert tk.pending() == pytest.approx(100.0), (
+        "pending collapses to 0 — the bug in the old HPC path"
+    )
     assert tk.running(live=True) >= 0.0

@@ -705,7 +705,7 @@ class Workspace:
             owners=owners,
             regex=regex,
         )
-        logger.info(f"Created selection '[bold]{tag}[/]'")
+        logger.info(f"[bold]Created[/] selection '[bold]{tag}[/]'")
         return specs
 
     def apply_selection_rules(
