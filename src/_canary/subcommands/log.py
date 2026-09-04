@@ -64,11 +64,7 @@ class Log(CanarySubcommand):
             help="Show raw log file contents (applicable only to the session log file)",
         )
         parser.add_argument(
-            "-P",
-            "--no-pager",
-            default=False,
-            action="store_true",
-            help="Do not page output",
+            "-P", "--no-pager", default=False, action="store_true", help="Do not page output",
         )
         parser.add_argument(
             "testspec",
@@ -137,10 +133,8 @@ def display_file(file: Path, use_pager: bool = True) -> None:
     """Print *file*'s path header and page its contents, raising if the file is missing."""
     if not file.exists():
         raise FileNotFoundError(file)
-    
     text = file.read_text().rstrip()
     print(f"{file}:")
-    
     if use_pager:
         page_text(text)
     else:
