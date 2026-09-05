@@ -268,7 +268,7 @@
       }
     },
     "query": {
-      "summary": "canary query inspects workspace data as JSON via subcommands: job, session, sessions, db.",
+      "summary": "canary query inspects workspace data as JSON via subcommands: job, session, sessions, jobs, db.",
       "subcommands": {
         "job": {
           "summary": "Query a single job testcase.lock by ID.",
@@ -276,6 +276,7 @@
             "JOBID": "Job ID (7-char prefix or full 64-char SHA256).",
             "path": "Optional dot-notation JSON path (default: whole document).",
             "--cache": "Show per-job timing cache statistics (mean/min/max runtime history).",
+            "--all-runs": "Show all historical runs of this job across all sessions (oldest first), each with session, exit_code, status, and timings. Flag-gated because the same spec_id across code rebuilds may not represent the same computation.",
             "--clean": "Strip __type__ wrappers; normalise legacy enum dicts to plain strings.",
             "--terse": "Compact single-line JSON.",
             "--list": "List immediate child keys at the selected path."
@@ -286,6 +287,7 @@
             "canary query job abc1234 spec.file_path",
             "canary query job abc1234 timekeeper",
             "canary query job abc1234 --cache",
+            "canary query job abc1234 --all-runs",
             "canary query job abc1234 --clean --terse"
           ]
         },
@@ -294,8 +296,9 @@
           "flags": {
             "SESSION": "Session name, prefix, or \"latest\".",
             "path": "JSON path expression (only without --expand-jobs).",
-            "--expand-jobs": "Join session job_ids to DB result rows; emit JSON array with id, name, file_path, status, timings.",
-            "--where": "Filter predicate for --expand-jobs, e.g. status.outcome==FAILED or status.category==FAIL.",
+            "--expand-jobs": "Join session job_ids to DB result rows; emit JSON array with id, name, exec_dir, file_path, status, timings, session.",
+            "--digest": "Print a compact one-line-per-job summary: name CATEGORY (implies --expand-jobs). Combine with --where to filter.",
+            "--where": "Filter predicate for --expand-jobs and --digest. String: status.outcome==FAILED or status.category==FAIL. Numeric: timings.running>60. Operators: == != > < >= <=. None values: ordered ops return False, != returns True.",
             "--clean": "Strip __type__ wrappers.",
             "--terse": "Compact single-line JSON.",
             "--list": "List immediate child keys."
@@ -305,7 +308,9 @@
             "canary query session latest argv",
             "canary query session latest --expand-jobs",
             "canary query session latest --expand-jobs --where status.outcome==FAILED",
-            "canary query session latest --expand-jobs --where status.category==FAIL --terse"
+            "canary query session latest --expand-jobs --where status.category==FAIL --terse",
+            "canary query session latest --digest",
+            "canary query session latest --digest --where status.category==PASS"
           ]
         },
         "sessions": {
@@ -326,6 +331,37 @@
           "examples": [
             "canary query sessions",
             "canary query sessions --where returncode==0"
+          ]
+        },
+        "jobs": {
+          "summary": "List jobs as a JSON array. Default: latest run per distinct job across ALL sessions with session provenance. Use --session to scope to a single session.",
+          "flags": {
+            "--session": "Session name, prefix, or \"latest\". Default: cross-session latest-per-spec-id mode.",
+            "--where": "Filter predicate. String: status.outcome==FAILED, status.category==PASS. Numeric: timings.running>60, timings.total<300. Operators: == != > < >= <=.",
+            "--terse": "Compact single-line JSON.",
+            "--digest": "Print a compact one-line-per-job summary: name CATEGORY. Combine with --where to filter."
+          },
+          "output_fields": [
+            "id",
+            "name",
+            "fullname",
+            "file_path",
+            "exec_dir",
+            "session",
+            "exit_code",
+            "status (category, outcome, reason)",
+            "timings (pending, setup, running, teardown, total)"
+          ],
+          "refinement_a_note": "Default cross-session behaviour returns the LATEST run of each distinct job (keyed by spec_id). Each record carries a session provenance field. Use --session S to scope to one session (equivalent to session --expand-jobs).",
+          "refinement_b_note": "Use canary query job JOBID --all-runs for the per-job full run history across sessions.",
+          "examples": [
+            "canary query jobs",
+            "canary query jobs --where status.category==FAIL",
+            "canary query jobs --where timings.running>60",
+            "canary query jobs --session latest",
+            "canary query jobs --session 2026-09-03T18-10-19",
+            "canary query jobs --digest",
+            "canary query jobs --digest --where status.category==PASS"
           ]
         },
         "db": {
@@ -357,6 +393,21 @@
         ".foo.bar": "Leading dot is optional.",
         "array[0]": "Access list index.",
         "object[\"key with spaces\"]": "Access quoted key."
+      },
+      "where_predicate": {
+        "summary": "--where filters are supported on session --expand-jobs, session --digest, sessions, jobs, query batches (canary_hpc). String and numeric types are both handled.",
+        "string_examples": [
+          "status.outcome==FAILED",
+          "status.category==PASS",
+          "status.category!=FAIL"
+        ],
+        "numeric_examples": [
+          "timings.queue_wait>3600",
+          "timings.running<60",
+          "timings.total>=300"
+        ],
+        "none_handling": "If the actual field value is None (e.g. a batch that has not yet completed), ordered comparisons (>, <, >=, <=) return False. != returns True. == returns False.",
+        "operators": "== != > < >= <="
       },
       "not_jq": "The query language is intentionally small. It does not support filters, pipes, or transformations."
     },

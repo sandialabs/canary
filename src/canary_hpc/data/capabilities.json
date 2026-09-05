@@ -50,8 +50,40 @@
       "legacy_run_options": "canary run --hpc-backend BACKEND PATH",
       "batch_spec": "Use --batch-spec or legacy -b spec=...",
       "batch_log": "canary hpc log <BATCH_ID>  -- print the stdout log for a batch",
-      "query_batches": "canary query batch <BATCH_ID>  -- inspect a batch.lock (requires canary_query_subcommand hook)",
-      "query_all_batches": "canary query batches  -- list all batches in the latest session"
+      "query_batch": "canary query batch <BATCH_ID>  -- inspect a batch.lock as JSON",
+      "query_batch_path": "canary query batch <BATCH_ID> .status  -- JSON path into batch.lock",
+      "query_batches": "canary query batches  -- list all batches for latest session as JSON array",
+      "query_batches_where_string": "canary query batches --where status.category==PASS",
+      "query_batches_where_numeric": "canary query batches --where 'timings.queue_wait>3600'  -- numeric timing filter",
+      "query_batches_where_running": "canary query batches --where 'timings.running<60'",
+      "query_batches_session": "canary query batches --session 2026-09-03T18-10-19"
+    },
+    "query_batches_output_fields": {
+      "summary": "Each row returned by canary query batches includes:",
+      "fields": {
+        "id": "Full UUID of the batch.",
+        "id_prefix": "7-char batch directory name.",
+        "session": "Session name this batch belongs to.",
+        "job_count": "Number of jobs in this batch.",
+        "jobs": "Array of {id, name} for each job in the batch.",
+        "estimated_runtime": "Packer's estimated makespan in seconds.",
+        "algorithm": "Packing algorithm used.",
+        "node_count": "Number of scheduler nodes requested.",
+        "width": "CPUs per node.",
+        "status.category": "PASS or FAIL (or null if still running).",
+        "status.outcome": "DONE, FAILED, TIMEOUT, etc.",
+        "status.reason": "Human-readable reason string.",
+        "timings.total": "Total wall time from submission to completion (seconds).",
+        "timings.queue_wait": "Time waiting in the scheduler queue (seconds). Use this with --where for scheduling triage.",
+        "timings.running": "Time actually running inside the allocation (seconds).",
+        "submitted_on": "ISO8601 timestamp of batch submission."
+      },
+      "where_numeric_examples": [
+        "canary query batches --where 'timings.queue_wait>3600'    # queue-starved batches",
+        "canary query batches --where 'timings.running<60'         # fast-completing batches",
+        "canary query batches --where 'job_count>100'              # large batches"
+      ],
+      "none_note": "timings fields are null for batches that have not yet completed. Ordered --where predicates return False for null values."
     },
     "resource_model": {
       "summary": "The conductor uses backend node resource counts to generate a topology-aware resource pool for each batch.",

@@ -104,7 +104,10 @@ def canary_query_subcommand(subparsers: "argparse._SubParsersAction") -> None:  
         "--where",
         metavar="EXPR",
         default=None,
-        help='Filter predicate, e.g. "status.outcome==PASS"',
+        help=(
+            'Filter predicate, e.g. "status.category==PASS" or '
+            '"timings.queue_wait>3600" (numeric comparisons supported on timings fields)'
+        ),
     )
     p_batches.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
@@ -415,10 +418,7 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
         sm = data.get("schedule_metadata", {})
 
         job_ids: list[str] = data.get("jobs", [])
-        jobs = [
-            {"id": jid, "name": id_to_name.get(jid, jid[:7])}
-            for jid in job_ids
-        ]
+        jobs = [{"id": jid, "name": id_to_name.get(jid, jid[:7])} for jid in job_ids]
 
         row = {
             "id": data.get("id", batch_dir.name),

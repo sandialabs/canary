@@ -8,14 +8,18 @@ Subcommands
 -----------
 job <ID> [path]          Query a single job's testcase.lock
 job <ID> --cache         Show per-job timing cache statistics
+job <ID> --all-runs      Show all historical runs across sessions (oldest first)
 session <S> [path]       Query a session's session.lock
 session <S> --expand-jobs  Join session job_ids to DB result rows
+session <S> --digest     One-line-per-job summary: name CATEGORY (implies --expand-jobs)
 sessions                 List all sessions with summary statistics
+jobs                     List all jobs — latest run per job across all sessions by default
+jobs --session S         Scope to a single session (same data as session --expand-jobs)
 db schema                Emit workspace database DDL as JSON
 db stats                 Emit per-outcome counts and session summary
 db "<SQL>"               Execute a read-only SQL query, return JSON rows
 
-The built-in subcommands (job, session, sessions, db) are implemented as
+The built-in subcommands (job, session, sessions, jobs, db) are implemented as
 ``@hookimpl(trylast=True, specname="canary_query_execute")`` functions in
 ``_canary.hooks``.  Extension subcommands are registered via the
 ``canary_query_subcommand`` hook and dispatched via ``canary_query_execute``.
@@ -25,7 +29,11 @@ Common flags
 --clean     Strip __type__ wrappers and normalise enum values to strings
 --terse     Compact single-line JSON output
 --list      List immediate child keys at the selected query path
---where     Filter predicate for --expand-jobs / sessions  (key==value)
+--digest    One-line-per-job compact summary (session and jobs subcommands)
+--where     Filter predicate for --expand-jobs / sessions / jobs / batches
+            String fields:  status.outcome==FAILED  status.category==PASS
+            Numeric fields: timings.queue_wait>3600  timings.running<60
+            Operators: == != > < >= <=  (None fields: ordered ops → False, != → True)
 """
 
 from __future__ import annotations
@@ -74,13 +82,21 @@ class Query(CanarySubcommand):
     name = "query"
     description = (
         "Query Canary workspace data.\n\n"
-        "Subcommands: job, session, sessions, db\n\n"
+        "Subcommands: job, session, sessions, jobs, db\n\n"
         "Examples:\n"
         "  canary query job abc1234\n"
         "  canary query job abc1234 status.outcome\n"
         "  canary query job abc1234 --cache\n"
+        "  canary query job abc1234 --all-runs\n"
         "  canary query session latest --expand-jobs\n"
         "  canary query session latest --expand-jobs --where status.outcome==FAILED\n"
+        "  canary query session latest --digest\n"
+        "  canary query session latest --digest --where status.category==PASS\n"
+        "  canary query jobs\n"
+        "  canary query jobs --where status.category==FAIL\n"
+        "  canary query jobs --where timings.running>60\n"
+        "  canary query jobs --session latest\n"
+        "  canary query jobs --digest\n"
         "  canary query sessions\n"
         "  canary query db stats\n"
         "  canary query db schema\n"
@@ -105,6 +121,16 @@ class Query(CanarySubcommand):
             dest="list_keys",
             action="store_true",
             help="List queryable child keys at the selected path",
+        )
+        p_job.add_argument(
+            "--all-runs",
+            action="store_true",
+            help=(
+                "Show all historical runs of this job across all sessions "
+                "(oldest first), each with session, exit_code, status, and timings. "
+                "Useful for retried or re-run jobs. "
+                "Note: runs across code rebuilds may not represent the same computation."
+            ),
         )
 
         # ---- session ----
@@ -132,6 +158,15 @@ class Query(CanarySubcommand):
         p_ses.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
         p_ses.add_argument("--terse", action="store_true", help="Compact single-line JSON")
         p_ses.add_argument(
+            "--digest",
+            action="store_true",
+            help=(
+                "Print a compact one-line-per-job summary: name CATEGORY "
+                "(e.g. TJO=1800 PASS).  Implies --expand-jobs.  "
+                "Combine with --where to filter."
+            ),
+        )
+        p_ses.add_argument(
             "--list",
             dest="list_keys",
             action="store_true",
@@ -144,6 +179,40 @@ class Query(CanarySubcommand):
             "--where", metavar="EXPR", help='Filter predicate, e.g. "returncode==0"'
         )
         p_sessions.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+
+        # ---- jobs ----
+        p_jobs = sub.add_parser(
+            "jobs",
+            help=(
+                "List jobs across all sessions — latest run per job by default; "
+                "use --session to scope to one session"
+            ),
+        )
+        p_jobs.add_argument(
+            "--session",
+            metavar="SESSION",
+            default=None,
+            help=(
+                'Session name, prefix, or "latest".  '
+                "Default: latest run per job across ALL sessions "
+                "(each record includes a session provenance field)"
+            ),
+        )
+        p_jobs.add_argument(
+            "--where",
+            metavar="EXPR",
+            help=(
+                "Filter predicate, e.g. "
+                '"status.outcome==FAILED", "status.category==FAIL", '
+                '"timings.running>60"'
+            ),
+        )
+        p_jobs.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+        p_jobs.add_argument(
+            "--digest",
+            action="store_true",
+            help="Print a compact one-line-per-job summary: name CATEGORY",
+        )
 
         # ---- db ----
         p_db = sub.add_parser("db", help="Query the workspace SQLite database")
@@ -287,6 +356,11 @@ def _parse_where(expr: str) -> Any:
     Supported syntax:  ``key.path OP value``
     where OP is one of  ==  !=  >  <  >=  <=
     and value is treated as a string (case-insensitive for status fields).
+    Numeric fields (int/float) are compared numerically so that expressions
+    like ``timings.queue_wait>3600`` work correctly.  If the actual field
+    value is ``None`` (e.g. a batch whose timing has not yet been recorded),
+    ordered comparisons (``>  <  >=  <=``) return ``False``; equality (``==``)
+    also returns ``False`` while ``!=`` returns ``True``.
     """
     m = _WHERE_RE.match(expr.strip())
     if not m:
@@ -305,8 +379,13 @@ def _parse_where(expr: str) -> Any:
             obj = obj.get(part)
         return obj
 
-    def _coerce(actual: Any, expected: str) -> tuple[Any, Any]:
-        """Try to coerce expected to the same type as actual for comparison."""
+    def _coerce(actual: Any, expected: str) -> tuple[Any, Any] | None:
+        """Try to coerce expected to the same type as actual for comparison.
+
+        Returns None when actual is None (caller should handle the null case).
+        """
+        if actual is None:
+            return None
         if isinstance(actual, (int, float)):
             try:
                 return actual, type(actual)(expected)
@@ -317,7 +396,11 @@ def _parse_where(expr: str) -> Any:
 
     def predicate(obj: dict[str, Any]) -> bool:
         actual = _get(obj, path)
-        a, b = _coerce(actual, raw_value)
+        coerced = _coerce(actual, raw_value)
+        if coerced is None:
+            # actual is None — ordered comparisons are False; != is True
+            return op == "!="
+        a, b = coerced
         if op == "==":
             return a == b
         elif op == "!=":
@@ -345,8 +428,22 @@ def _parse_where(expr: str) -> Any:
 
 
 def _exec_job(args: argparse.Namespace) -> int:
-    """Query a single job's ``testcase.lock`` or its timing cache."""
+    """Query a single job's ``testcase.lock``, timing cache, or run history."""
     workspace = Workspace.load()
+
+    if getattr(args, "all_runs", False):
+        job = workspace.find_job(args.jobid)
+        workspace.db.connect()
+        try:
+            history = workspace.db.get_result_history(job.id)
+        finally:
+            workspace.db.close()
+        if not history:
+            sys.stderr.write(f"No run history found for job {args.jobid!r}\n")
+            return 1
+        out: list[dict[str, Any]] = [_row_to_job_entry(workspace, row) for row in history]
+        print_json(out, terse=args.terse)
+        return 0
 
     if args.cache:
         job = workspace.find_job(args.jobid)
@@ -377,7 +474,7 @@ def _exec_session(args: argparse.Namespace) -> int:
     workspace = Workspace.load()
     session_dir = _resolve_session_dir(workspace, args.session)
 
-    if args.expand_jobs:
+    if args.expand_jobs or getattr(args, "digest", False):
         return _exec_session_expand(workspace, session_dir, args)
 
     lockfile = session_dir / "session.lock"
@@ -409,41 +506,14 @@ def _exec_session_expand(workspace: Workspace, session_dir: Path, args: argparse
 
     out: list[dict[str, Any]] = []
     for row in rows:
-        tk = row["timekeeper"]
-        submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
-        staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
-        started = tk.get("_started", -1) if isinstance(tk, dict) else -1
-        stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
-        finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
-
-        def elapsed(a: float, b: float) -> float:
-            return round(b - a, 6) if a > 0 and b > 0 else -1.0
-
-        entry: dict[str, Any] = {
-            "id": row["id"],
-            "name": row["spec_name"],
-            "fullname": row["spec_fullname"],
-            "file_path": row.get("file_path", ""),
-            "exec_dir": str(workspace.sessions_dir / row["session"] / row["workspace"]),
-            "session": row["session"],
-            "exit_code": row["status"].code,
-            "status": {
-                "category": row["status"].category.value,
-                "outcome": row["status"].outcome.name,
-                "reason": row["status"].reason,
-            },
-            "timings": {
-                "pending": elapsed(submitted, staged),
-                "setup": elapsed(staged, started),
-                "running": elapsed(started, stopped),
-                "teardown": elapsed(stopped, finished),
-                "total": elapsed(submitted, finished),
-            },
-        }
-
+        entry = _row_to_job_entry(workspace, row)
         if predicate and not predicate(entry):
             continue
         out.append(entry)
+
+    if getattr(args, "digest", False):
+        _emit_digest(out)
+        return 0
 
     print_json(out, terse=args.terse)
     return 0
@@ -481,6 +551,97 @@ def _exec_sessions(args: argparse.Namespace) -> int:
         if predicate and not predicate(entry):
             continue
         out.append(entry)
+
+    print_json(out, terse=args.terse)
+    return 0
+
+
+def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, Any]:
+    """Convert a DB result row dict into the standard job entry format.
+
+    Used by both ``_exec_session_expand`` and ``_exec_jobs`` to ensure a
+    consistent record shape.
+    """
+    tk = row["timekeeper"]
+    submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
+    staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
+    started = tk.get("_started", -1) if isinstance(tk, dict) else -1
+    stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
+    finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
+
+    def elapsed(a: float, b: float) -> float:
+        return round(b - a, 6) if a > 0 and b > 0 else -1.0
+
+    return {
+        "id": row["id"],
+        "name": row["spec_name"],
+        "fullname": row["spec_fullname"],
+        "file_path": row.get("file_path", ""),
+        "exec_dir": str(workspace.sessions_dir / row["session"] / row["workspace"]),
+        "session": row["session"],
+        "exit_code": row["status"].code,
+        "status": {
+            "category": row["status"].category.value,
+            "outcome": row["status"].outcome.name,
+            "reason": row["status"].reason,
+        },
+        "timings": {
+            "pending": elapsed(submitted, staged),
+            "setup": elapsed(staged, started),
+            "running": elapsed(started, stopped),
+            "teardown": elapsed(stopped, finished),
+            "total": elapsed(submitted, finished),
+        },
+    }
+
+
+def _emit_digest(out: list[dict[str, Any]]) -> None:
+    """Write one line per job entry: ``name CATEGORY``."""
+    for entry in out:
+        category = entry.get("status", {}).get("category", "UNKNOWN")
+        sys.stdout.write(f"{entry['name']} {category}\n")
+
+
+def _exec_jobs(args: argparse.Namespace) -> int:
+    """List jobs as a JSON array.
+
+    Default behaviour (no ``--session``): returns the **latest run** of each
+    distinct job (keyed by spec_id) across **all sessions**, with a ``session``
+    provenance field on each record.
+
+    With ``--session S``: scopes to that single session only, equivalent to
+    ``canary query session S --expand-jobs``.
+    """
+    workspace = Workspace.load()
+    predicate = _parse_where(args.where) if args.where else None
+
+    session_arg = getattr(args, "session", None)
+
+    if session_arg is not None:
+        # Single-session path — identical data to --expand-jobs
+        session_dir = _resolve_session_dir(workspace, session_arg)
+        rows = _db_results_for_session(workspace, session_dir.name)
+    else:
+        # Cross-session path — latest run per spec_id across all sessions
+        workspace.db.connect()
+        try:
+            result_map = workspace.db.get_results()
+        finally:
+            workspace.db.close()
+        rows = list(result_map.values())
+        # Sort by spec_name for deterministic output
+        rows.sort(key=lambda r: r.get("spec_name", ""))
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        entry = _row_to_job_entry(workspace, row)
+        if predicate and not predicate(entry):
+            continue
+        out.append(entry)
+
+    if getattr(args, "digest", False):
+        _emit_digest(out)
+        return 0
 
     print_json(out, terse=args.terse)
     return 0

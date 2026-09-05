@@ -156,6 +156,7 @@ def run_query(*, jobid=None, session=None, query=".", terse=False, list_keys=Fal
             jobid=jobid,
             path=query,
             cache=False,
+            all_runs=False,
             clean=False,
             terse=terse,
             list_keys=list_keys,
@@ -166,6 +167,7 @@ def run_query(*, jobid=None, session=None, query=".", terse=False, list_keys=Fal
             session=session,
             path=query,
             expand_jobs=False,
+            digest=False,
             where=None,
             clean=False,
             terse=terse,
@@ -405,6 +407,52 @@ def test_query_job_list_keys(setup, capsys):
     assert "status" in out
 
 
+def test_query_job_all_runs_returns_list(setup, capsys):
+    from _canary.subcommands.query import _exec_job
+
+    args = argparse.Namespace(
+        query_subcmd="job",
+        jobid=setup.f_a1_id,
+        path=".",
+        cache=False,
+        all_runs=True,
+        clean=False,
+        terse=False,
+        list_keys=False,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _exec_job(args)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) >= 1
+
+
+def test_query_job_all_runs_has_expected_fields(setup, capsys):
+    from _canary.subcommands.query import _exec_job
+
+    args = argparse.Namespace(
+        query_subcmd="job",
+        jobid=setup.f_a1_id,
+        path=".",
+        cache=False,
+        all_runs=True,
+        clean=False,
+        terse=False,
+        list_keys=False,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        _exec_job(args)
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        assert "id" in row
+        assert "name" in row
+        assert "session" in row
+        assert "exit_code" in row
+        assert "status" in row
+        assert "timings" in row
+
+
 def test_query_session_whole_lock_file(setup, capsys):
     with working_dir(setup.results_path), canary.config.override():
         rc = run_query(session=setup.session.name)
@@ -447,6 +495,54 @@ def test_query_latest_session_whole_lock_file_is_json(setup, capsys):
     assert rc == 0
     assert "name" in data
     assert "job_ids" in data
+
+
+def _run_query_session_digest(setup, *, where=None):
+    args = argparse.Namespace(
+        query_subcmd="session",
+        session=setup.session.name,
+        path=".",
+        expand_jobs=False,
+        digest=True,
+        where=where,
+        clean=False,
+        terse=False,
+        list_keys=False,
+    )
+    return Query().execute(args)
+
+
+def test_query_session_digest_outputs_one_line_per_job(setup, capsys):
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _run_query_session_digest(setup)
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    # Each line should be "name CATEGORY"
+    valid_categories = {"PASS", "FAIL", "CANCEL", "SKIP", "NONE"}
+    for line in lines:
+        parts = line.rsplit(" ", 1)
+        assert len(parts) == 2, f"Expected 'name CATEGORY', got {line!r}"
+        _name, category = parts
+        assert category in valid_categories, f"Unexpected category {category!r}"
+
+
+def test_query_session_digest_line_count_matches_job_count(setup, capsys):
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _run_query_session_digest(setup)
+    assert rc == 0
+    digest_lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    # Should have at least one line per job
+    assert len(digest_lines) > 0
+
+
+def test_query_session_digest_where_filters_jobs(setup, capsys):
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _run_query_session_digest(setup, where="status.category==PASS")
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    for line in lines:
+        _, category = line.rsplit(" ", 1)
+        assert category == "PASS"
 
 
 def test_query_terse_outputs_single_line_json(setup, capsys):
@@ -1223,3 +1319,229 @@ def test_query_batch_via_query_command(batch_setup, capsys):
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert "id" in data
+
+
+# -------------------------------------------------------------------------
+# _parse_where unit tests — numeric comparisons on timings.* fields
+# -------------------------------------------------------------------------
+
+
+def test_parse_where_string_equality():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("status.category==PASS")
+    assert pred({"status": {"category": "PASS"}}) is True
+    assert pred({"status": {"category": "FAIL"}}) is False
+
+
+def test_parse_where_string_inequality():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("status.outcome!=FAILED")
+    assert pred({"status": {"outcome": "SUCCESS"}}) is True
+    assert pred({"status": {"outcome": "FAILED"}}) is False
+
+
+def test_parse_where_numeric_greater_than():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.queue_wait>3600")
+    assert pred({"timings": {"queue_wait": 5348.0}}) is True
+    assert pred({"timings": {"queue_wait": 1262.0}}) is False
+    assert pred({"timings": {"queue_wait": 3600.0}}) is False  # strict >
+
+
+def test_parse_where_numeric_greater_than_or_equal():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.queue_wait>=3600")
+    assert pred({"timings": {"queue_wait": 3600.0}}) is True
+    assert pred({"timings": {"queue_wait": 3600.1}}) is True
+    assert pred({"timings": {"queue_wait": 3599.9}}) is False
+
+
+def test_parse_where_numeric_less_than():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.running<60")
+    assert pred({"timings": {"running": 45.5}}) is True
+    assert pred({"timings": {"running": 120.0}}) is False
+
+
+def test_parse_where_numeric_less_than_or_equal():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.running<=60")
+    assert pred({"timings": {"running": 60.0}}) is True
+    assert pred({"timings": {"running": 60.1}}) is False
+
+
+def test_parse_where_none_value_ordered_returns_false():
+    """None timing values (batch not yet finished) should never pass ordered predicates."""
+    from _canary.subcommands.query import _parse_where
+
+    for op in (">", "<", ">=", "<="):
+        pred = _parse_where(f"timings.queue_wait{op}3600")
+        assert pred({"timings": {"queue_wait": None}}) is False, (
+            f"op={op!r} should be False for None"
+        )
+
+
+def test_parse_where_none_value_equality_returns_false():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.queue_wait==3600")
+    assert pred({"timings": {"queue_wait": None}}) is False
+
+
+def test_parse_where_none_value_inequality_returns_true():
+    from _canary.subcommands.query import _parse_where
+
+    pred = _parse_where("timings.queue_wait!=3600")
+    assert pred({"timings": {"queue_wait": None}}) is True
+
+
+def test_parse_where_invalid_expression_raises():
+    from _canary.subcommands.query import _parse_where
+
+    with pytest.raises(ValueError, match="Invalid --where expression"):
+        _parse_where("not_valid_expression")
+
+
+def test_query_batches_where_numeric_timing(batch_setup, capsys):
+    """--where on a numeric timings field should filter correctly."""
+    with working_dir(batch_setup.root):
+        # All batches should have timings.total >= 0 (they are completed)
+        rc = _run_query_batches(session=batch_setup.session_name, where="timings.total>=0")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    # All returned rows have timings.total >= 0
+    for row in rows:
+        total = row["timings"]["total"]
+        assert total is not None and total >= 0
+
+
+# -------------------------------------------------------------------------
+# canary query jobs tests
+# -------------------------------------------------------------------------
+
+
+def _run_query_jobs(setup_ns, *, session=None, where=None, terse=False, digest=False):
+    """Helper: call _exec_jobs via Query().execute() dispatch."""
+    from _canary.subcommands.query import _exec_jobs
+
+    args = argparse.Namespace(
+        query_subcmd="jobs", session=session, where=where, terse=terse, digest=digest
+    )
+    with working_dir(setup_ns.results_path), canary.config.override():
+        return _exec_jobs(args)
+
+
+def test_query_jobs_returns_json_list(setup, capsys):
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+
+
+def test_query_jobs_has_expected_fields(setup, capsys):
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        assert "id" in row
+        assert "name" in row
+        assert "fullname" in row
+        assert "file_path" in row
+        assert "exec_dir" in row
+        assert "session" in row
+        assert "exit_code" in row
+        assert "status" in row
+        assert "category" in row["status"]
+        assert "outcome" in row["status"]
+        assert "timings" in row
+
+
+def test_query_jobs_with_session_scopes_to_session(setup, capsys):
+    rc = _run_query_jobs(setup, session=setup.session.name)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+    # All rows should belong to this session
+    for row in rows:
+        assert row["session"] == setup.session.name
+
+
+def test_query_jobs_with_session_latest(setup, capsys):
+    rc = _run_query_jobs(setup, session="latest")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+
+
+def test_query_jobs_where_filter(setup, capsys):
+    rc = _run_query_jobs(setup, where="status.category==PASS")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    # All returned rows should have category PASS
+    for row in rows:
+        assert row["status"]["category"] == "PASS"
+
+
+def test_query_jobs_where_nonexistent_returns_empty(setup, capsys):
+    # Use a category value that should not exist
+    rc = _run_query_jobs(setup, where="status.category==NONEXISTENT")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows == []
+
+
+def test_query_jobs_digest_outputs_one_line_per_job(setup, capsys):
+    rc = _run_query_jobs(setup, digest=True)
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert len(lines) > 0
+    valid_categories = {"PASS", "FAIL", "CANCEL", "SKIP", "NONE"}
+    for line in lines:
+        parts = line.rsplit(" ", 1)
+        assert len(parts) == 2, f"Expected 'name CATEGORY', got {line!r}"
+        _, category = parts
+        assert category in valid_categories, f"Unexpected category {category!r}"
+
+
+def test_query_jobs_cross_session_returns_latest_per_spec(setup, capsys):
+    """Cross-session default: each spec_name appears at most once."""
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    names = [r["name"] for r in rows]
+    # No duplicates — latest per spec
+    assert len(names) == len(set(names)), "Duplicate spec names in query jobs output"
+
+
+def test_query_jobs_via_query_command(setup, capsys):
+    """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
+    args = argparse.Namespace(
+        query_subcmd="jobs", session=None, where=None, terse=False, digest=False
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = Query().execute(args)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+
+
+def test_query_jobs_terse_outputs_single_line(setup, capsys):
+    rc = _run_query_jobs(setup, terse=True)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert out.endswith("\n")
+    assert "\n" not in out.rstrip("\n")
+    rows = json.loads(out)
+    assert isinstance(rows, list)

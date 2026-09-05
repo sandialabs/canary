@@ -492,3 +492,13 @@ def query_execute_db(args: "argparse.Namespace") -> "int | None":
     from .subcommands.query import _exec_db
 
     return _exec_db(args)
+
+
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_jobs(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query jobs``."""
+    if getattr(args, "query_subcmd", None) != "jobs":
+        return None
+    from .subcommands.query import _exec_jobs
+
+    return _exec_jobs(args)
