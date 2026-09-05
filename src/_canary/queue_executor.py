@@ -19,6 +19,7 @@ from typing import Literal
 from . import config
 from .error import StopExecution
 from .job import BaseJob
+from .job import JobPhase
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
@@ -681,12 +682,49 @@ class ResourceQueueExecutor:
         job_finished event. If we never observed a start event, treat the job as
         having started at submit/spawn time so the timer has a meaningful Running
         phase instead of a zero-duration finish.
+
+        For HPC batches (jobs that expose a ``finalize_status_from_child_jobs``
+        method) we first refresh child lockfiles from disk.  If all children
+        have already reached a terminal state the batch status is derived from
+        the real child outcomes rather than the abnormal executor event; the
+        abnormal event is recorded as a warning so the discrepancy is visible
+        in logs.  This handles the case where the worker process was killed by
+        the outer watchdog after the scheduler already completed the batch but
+        before the subprocess could send ``job_finished``.
         """
         now = time.time()
         try:
             slot.job.refresh()
         except Exception as e:
             logger.debug("job.refresh failed during abnormal finish: %s", e)
+
+        # For HPC batches: check whether all child jobs finished successfully
+        # on disk before trusting the abnormal executor-level outcome.
+        if hasattr(slot.job, "finalize_status_from_child_jobs"):
+            try:
+                slot.job.finalize_status_from_child_jobs()
+                if not slot.job.status.is_unset():
+                    # Children have a real terminal status — use it and warn.
+                    logger.warning(
+                        "Batch %s: abnormal executor event (%s: %s) but child "
+                        "jobs have terminal status %s — using child-derived "
+                        "status.  The worker process may have been killed after "
+                        "the scheduler job completed.",
+                        slot.job.id[:7],
+                        outcome,
+                        reason,
+                        slot.job.status.outcome.name,
+                    )
+                    slot.job.state.phase = JobPhase.DONE
+                    slot.job._allocation["state"] = "inactive"
+                    try:
+                        slot.job.save()
+                    except Exception as e:
+                        logger.debug("job.save failed after child reconciliation: %s", e)
+                    return
+            except Exception as e:
+                logger.debug("finalize_status_from_child_jobs failed during abnormal finish: %s", e)
+
         slot.on_finish(now)
         slot.job.set_status(outcome=outcome, reason=reason, code=code)
         try:

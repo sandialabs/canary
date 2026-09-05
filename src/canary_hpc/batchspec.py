@@ -359,6 +359,14 @@ class TestBatch(BaseJob):
                 f"{running:.1f}s" if running is not None else "?",
             )
 
+            # Mark allocation as released before the final save so that
+            # batch.lock reflects the correct state.  free_resources() will
+            # also be called by the ResourceQueue after run() returns, but
+            # that write happens outside this subprocess — ensuring we record
+            # "inactive" here prevents a stuck "active" state if that later
+            # write doesn't reach disk (e.g. worker process dies after return).
+            self._allocation["state"] = "inactive"
+
             try:
                 self.save()
             except Exception:

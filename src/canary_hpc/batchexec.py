@@ -210,6 +210,24 @@ def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
     return specs
 
 
+def _all_children_finished(batch: "TestBatch") -> bool:
+    """Return True if every child job in *batch* has reached a terminal state.
+
+    Refreshes each child from its ``testcase.lock`` on disk first.  Used by
+    the polling loop to detect the case where the scheduler lost track of the
+    job but all child jobs already completed successfully.
+    """
+    for job in batch.jobs:
+        try:
+            job.refresh()
+        except Exception:
+            # If we can't read the lockfile the job hasn't written it yet.
+            return False
+        if not job.state.is_done() or job.status.is_unset():
+            return False
+    return True
+
+
 class HPCConnectBatchRunner(HPCConnectRunner):
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
         started_at: float = -1.0
@@ -250,6 +268,25 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             return 1
 
         run_timeout = float(batch.timeout * batch.timeout_multiplier)
+        # Canary backstop: 2× the scheduler wall limit.  The scheduler is the
+        # authority on run-time enforcement (it was given time_limit =
+        # estimated_runtime × multiplier); this backstop only fires if canary
+        # loses contact with the scheduler entirely.  Using 2× means we almost
+        # always defer to the scheduler's own kill and avoid the false-FAIL race
+        # where the scheduler hasn't yet delivered the job-ended event but the
+        # child jobs have already written their PASS records to disk.
+        backstop_timeout = 2.0 * run_timeout
+
+        # Periodic child-completion check: every check_interval seconds (after
+        # the scheduler job has started) we read child testcase.lock files to
+        # see if all jobs have already reached a terminal state.  This guards
+        # the "lost batch" scenario where the scheduler dropped the job but
+        # never sent a completion event.  We use run_timeout / 10 clamped to
+        # [30 s, 300 s] — frequent enough to catch the problem promptly without
+        # hammering a shared filesystem on every poll iteration.
+        check_interval = max(30.0, min(300.0, run_timeout / 10.0))
+        last_child_check: float = -1.0
+
         with batch.workspace.enter():
             future = self.submit(batch)
 
@@ -264,7 +301,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                 poll = max(1.0, getattr(future, "_polling_interval", 1.0))
 
                 while True:
-                    # Done?
+                    # Normal completion: scheduler reported the job is done.
                     if future.done():
                         now = time.time()
                         rc = future.result()
@@ -275,7 +312,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
                     now = time.time()
 
-                    # Queue timeout (waiting for scheduler start)
+                    # Queue timeout (waiting for scheduler to start the job).
+                    # There is no scheduler equivalent for this — the scheduler
+                    # happily keeps a job PENDING indefinitely, so we need to
+                    # enforce a canary-side limit here.
                     if started_at < 0.0:
                         if now >= queue_deadline:
                             future.cancel()
@@ -287,17 +327,39 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                         time.sleep(poll)
                         continue
 
-                    # Run timeout (after job start)
-                    remaining = (started_at + run_timeout) - now
-                    if remaining <= 0:
+                    # Periodic child-completion check (only after job has
+                    # started on nodes).  If every child job has already
+                    # written a terminal PASS record we treat the batch as
+                    # done and break out cleanly; the finalize_status_from_
+                    # child_jobs() call in TestBatch.run() will set the final
+                    # batch status from the real child outcomes.
+                    if now - last_child_check >= check_interval:
+                        last_child_check = now
+                        if _all_children_finished(batch):
+                            logger.warning(
+                                "Batch %s: all child jobs reached a terminal state "
+                                "but the scheduler has not yet reported completion — "
+                                "possible scheduler communication loss; "
+                                "treating batch as done.",
+                                batch.id[:7],
+                            )
+                            batch.on_stop(at=now)
+                            queue.put({"event": "job_stopped", "timestamp": now})
+                            return 0
+
+                    # Canary backstop (2× scheduler wall limit).  Only fires if
+                    # we have completely lost contact with the scheduler.
+                    if now >= started_at + backstop_timeout:
                         future.cancel()
                         raise TimeoutError(
-                            f"Batch {batch.id[:7]} exceeded run timeout {run_timeout:.1f}s"
+                            f"Batch {batch.id[:7]} exceeded canary backstop "
+                            f"{backstop_timeout:.1f}s (2× scheduler wall limit "
+                            f"{run_timeout:.1f}s); scheduler communication may "
+                            f"have been lost"
                         )
 
-                    # Block up to remaining time (or poll interval), whichever is smaller
                     try:
-                        rc = future.result(timeout=min(poll, remaining))
+                        rc = future.result(timeout=poll)
                     except TimeoutError:
                         continue
                     else:
