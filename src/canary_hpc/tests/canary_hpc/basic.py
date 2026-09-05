@@ -5,9 +5,7 @@
 import glob
 import os
 import re
-import sqlite3
 import subprocess
-from collections import defaultdict
 
 import pytest
 
@@ -263,6 +261,7 @@ def test_hpc_rerun_not_pass_skips_passing_jobs(tmpdir):
 
         # Record the DB state: note the session for each spec after run 1
         import sqlite3
+
         db_path = os.path.join(".canary", "workspace.sqlite3")
         conn = sqlite3.connect(db_path)
         rows_after_run1 = {
@@ -291,8 +290,7 @@ def test_hpc_rerun_not_pass_skips_passing_jobs(tmpdir):
             stderr=subprocess.PIPE,
         )
         assert cp2.returncode == 0, (
-            f"Second run failed (rc={cp2.returncode})\n"
-            f"stdout: {cp2.stdout}\nstderr: {cp2.stderr}"
+            f"Second run failed (rc={cp2.returncode})\nstdout: {cp2.stdout}\nstderr: {cp2.stderr}"
         )
 
         # Check DB: passing jobs must still have session1 as their latest session.
@@ -320,8 +318,7 @@ def test_hpc_rerun_not_pass_skips_passing_jobs(tmpdir):
             else:
                 # Failing job must have been re-run: new session, now PASS
                 assert new_sess != session1, (
-                    f"Failing job {spec_id[:12]} was NOT re-run: "
-                    f"still in session {new_sess}"
+                    f"Failing job {spec_id[:12]} was NOT re-run: still in session {new_sess}"
                 )
                 assert new_cat == "PASS", (
                     f"Failing job {spec_id[:12]} re-ran but is still {new_cat}"

@@ -387,8 +387,8 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
             results = workspace.db.get_results(ids=all_job_ids)
             for spec_id, row in results.items():
                 id_to_name[spec_id] = row.get("spec_name", spec_id[:7])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to load job names from DB for batch summary: %s", e)
         finally:
             workspace.db.close()
 
