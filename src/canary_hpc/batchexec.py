@@ -217,11 +217,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         def set_starttime(future: hpc_connect.futures.FutureProtocol):
             nonlocal started_at
             started_at = time.time()
-            # Record _staged at the moment the HPC job leaves the scheduler queue and
-            # begins running on nodes.  This makes pending() = _staged - _submitted equal
-            # to the real queue-wait duration.  on_start() must be called *after*
-            # on_stage() so that Timekeeper.start() does not backfill _staged to
-            # _submitted (which would collapse the queued time to 0).
+            # Record the moment the HPC job leaves the scheduler queue and
+            # begins running on nodes.  Timekeeper.start() backfills _staged
+            # to _started (not _submitted), so pending() = _staged - _submitted
+            # correctly reflects the real queue-wait duration.
             batch.on_start(at=started_at)
             batch.save(children=False)
             queue.put({"event": "job_started", "timestamp": started_at})
