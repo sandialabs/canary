@@ -247,6 +247,33 @@ class Reporter:
         return tuple(column_names)
 
 
+class _LiveConsoleHandler(logging.builtin_logging.Handler):
+    """Logging handler that writes records through a Rich ``Console``.
+
+    Installed by :class:`LiveReporter` in place of the normal stream handlers
+    while the live table is active.  Rich's ``Console.log()`` knows to print
+    *above* (i.e. before rewinding) the live display, so warnings and
+    diagnostics appear in-scroll rather than being hidden or corrupting the
+    table.
+
+    Only records at or above *min_level* are forwarded; records below that
+    threshold (e.g. DEBUG during a default-INFO run) are silently dropped,
+    preserving the behaviour of the original stream handler's level filter.
+    """
+
+    def __init__(self, console: Console, min_level: int) -> None:
+        super().__init__(level=min_level)
+        self._console = console
+
+    def emit(self, record: logging.builtin_logging.LogRecord) -> None:
+        try:
+            # Re-use the canary Formatter to get the colored level prefix.
+            msg = self.format(record)
+            self._console.log(msg, markup=True, highlight=False)
+        except Exception:  # nosec B110
+            self.handleError(record)
+
+
 class LiveReporter(Reporter):
     def __init__(self, executor: ReporterExecutorProtocol, **kwargs: Any) -> None:
         super().__init__(executor, **kwargs)
@@ -254,6 +281,7 @@ class LiveReporter(Reporter):
         self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
+        self._live_handlers: list[_LiveConsoleHandler] = []
         self._stop = threading.Event()
         self.refresh_interval = 0.25
 
@@ -272,23 +300,47 @@ class LiveReporter(Reporter):
         self.unmute_stream_handlers()
 
     def mute_stream_handlers(self) -> None:
-        root = logging.builtin_logging.getLogger(logging.root_log_name)
-        for h in root.handlers:
-            if isinstance(h, logging.builtin_logging.StreamHandler):
+        """Replace stream handlers with Rich-aware equivalents.
+
+        For each ``StreamHandler`` found on the canary and root loggers:
+
+        1. Attach the ``MuteConsoleFilter`` to silence its normal output
+           (prevents raw text from leaking around the live display).
+        2. Install a ``_LiveConsoleHandler`` on the *same logger* that routes
+           records through ``live.console.log()``, which Rich renders above the
+           live table without corrupting it.
+
+        The pairing is recorded so :meth:`unmute_stream_handlers` can undo both
+        operations in the right order.
+        """
+        for logger_name in (logging.root_log_name, ""):
+            root = logging.builtin_logging.getLogger(logger_name)
+            for h in root.handlers:
+                if not isinstance(h, logging.builtin_logging.StreamHandler):
+                    continue
+                # 1. Silence the original handler.
                 h.addFilter(self._filter)
-                self._stream_handlers.append(h)
                 h.flush()
-        root = logging.builtin_logging.getLogger()
-        for h in root.handlers:
-            if isinstance(h, logging.builtin_logging.StreamHandler):
-                h.addFilter(self._filter)
                 self._stream_handlers.append(h)
-                h.flush()
+                # 2. Add a Rich-aware handler at the same level.
+                rich_h = _LiveConsoleHandler(self.live.console, h.level)
+                # Copy the canary formatter so the level prefix/colour is preserved.
+                if h.formatter is not None:
+                    rich_h.setFormatter(h.formatter)
+                root.addHandler(rich_h)
+                self._live_handlers.append(rich_h)
 
     def unmute_stream_handlers(self) -> None:
+        """Restore the original stream handlers and remove Rich-aware ones."""
         for h in self._stream_handlers:
             h.removeFilter(self._filter)
         self._stream_handlers.clear()
+
+        for logger_name in (logging.root_log_name, ""):
+            root = logging.builtin_logging.getLogger(logger_name)
+            for rich_h in self._live_handlers:
+                root.removeHandler(rich_h)
+        self._live_handlers.clear()
 
     def _refresh(self) -> None:
         while not self._stop.is_set():

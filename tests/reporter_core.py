@@ -220,3 +220,109 @@ def test_row_values_for_job_falls_back_to_timekeeper():
     assert values["running"].strip() == "4.0s"
     assert values["total"].strip() == "9.0s"
     assert values["details"] == "boom"
+
+
+# ---------------------------------------------------------------------------
+# Tests for _LiveConsoleHandler and LiveReporter log routing
+# ---------------------------------------------------------------------------
+
+
+def test_live_console_handler_emits_via_console():
+    """_LiveConsoleHandler.emit() calls console.log() with the formatted message."""
+    import logging as _logging
+    from io import StringIO
+
+    from rich.console import Console
+
+    from _canary.reporter import _LiveConsoleHandler
+    from _canary.util.logging import Formatter
+
+    buf = StringIO()
+    console = Console(file=buf, highlight=False, markup=True)
+    handler = _LiveConsoleHandler(console, min_level=_logging.WARNING)
+    handler.setFormatter(Formatter(color=False))
+
+    record = _logging.LogRecord(
+        name="canary",
+        level=_logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="something went wrong",
+        args=(),
+        exc_info=None,
+    )
+    handler.emit(record)
+
+    output = buf.getvalue()
+    assert "something went wrong" in output
+
+
+def test_live_console_handler_level_respected_via_logger():
+    """Records below _LiveConsoleHandler's level are not emitted when routed via logger."""
+    import logging as _logging
+    from io import StringIO
+
+    from rich.console import Console
+
+    from _canary.reporter import _LiveConsoleHandler
+    from _canary.util.logging import Formatter
+
+    buf = StringIO()
+    console = Console(file=buf, highlight=False)
+    handler = _LiveConsoleHandler(console, min_level=_logging.WARNING)
+    handler.setFormatter(Formatter(color=False))
+
+    # Wire the handler to a fresh logger so we control what reaches it.
+    test_logger = _logging.getLogger("canary._test_level_check")
+    test_logger.handlers.clear()
+    test_logger.propagate = False
+    test_logger.setLevel(_logging.DEBUG)
+    test_logger.addHandler(handler)
+
+    # DEBUG message: below WARNING threshold — handler.level filters it out.
+    test_logger.debug("debug noise")
+    assert buf.getvalue() == ""
+
+    # WARNING message: at threshold — should pass through.
+    test_logger.warning("important warning")
+    assert "important warning" in buf.getvalue()
+
+    # Clean up.
+    test_logger.removeHandler(handler)
+
+
+def test_mute_and_unmute_restores_handlers():
+    """mute_stream_handlers adds _LiveConsoleHandler; unmute removes it cleanly."""
+    import logging as _logging
+    from io import StringIO
+    from unittest.mock import MagicMock
+
+    from _canary.reporter import LiveReporter
+
+    # Build a minimal fake executor
+    job = DummyJob()
+    executor = DummyExecutor([job])
+
+    reporter = LiveReporter(executor)
+
+    # Capture console output in a buffer (avoids terminal requirement)
+    buf = StringIO()
+    from rich.console import Console
+
+    reporter.live = MagicMock()
+    reporter.live.console = Console(file=buf, highlight=False)
+
+    root = _logging.getLogger()
+    initial_handler_count = len(root.handlers)
+
+    reporter.mute_stream_handlers()
+    after_mute_count = len(root.handlers)
+
+    reporter.unmute_stream_handlers()
+    after_unmute_count = len(root.handlers)
+
+    # After unmuting, handler count should be back to the initial value.
+    assert after_unmute_count == initial_handler_count
+    # During muting, at least one _LiveConsoleHandler should have been added
+    # for each StreamHandler that was found (may be zero if root has none).
+    assert after_mute_count >= initial_handler_count
