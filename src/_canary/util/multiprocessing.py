@@ -28,7 +28,6 @@ from typing import Callable
 from typing import Iterable
 from typing import Literal
 from typing import Sequence
-from typing import cast
 
 from . import cpu_count
 from . import logging
@@ -106,7 +105,7 @@ def recommended_start_method() -> StartMethod:
     """
     if var := os.getenv("CANARY_START_METHOD"):
         if var in ("fork", "forkserver", "spawn"):
-            return cast(StartMethod, var)
+            return var  # type: ignore[return-value]  # narrowed by membership test
         raise ValueError(
             "Invalid CANARY_START_METHOD={!r}; expected one of "
             "'fork', 'forkserver', or 'spawn'".format(var)

@@ -110,6 +110,15 @@ def canary_query_subcommand(subparsers: "argparse._SubParsersAction") -> None:  
         ),
     )
     p_batches.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+    p_batches.add_argument(
+        "--progress",
+        action="store_true",
+        default=False,
+        help=(
+            "Print a single human-readable progress line instead of the full JSON array, "
+            "e.g. '8 batches: 3 done (2 pass, 1 fail) | 2 running | 1 pending | 2 unsubmitted'"
+        ),
+    )
 
 
 @canary.hookimpl
@@ -349,8 +358,32 @@ def _exec_query_batch(args: "argparse.Namespace") -> int:
     return 0
 
 
+def _batch_scheduler_state(submitted: float, started: float, stopped: float) -> str:
+    """Derive a human-readable scheduler state from batch timekeeper timestamps.
+
+    Returns one of four strings that distinguish states that ``status.category``
+    conflates as ``"NONE"``:
+
+    - ``"unsubmitted"`` — canary has not yet dispatched this batch to the
+      scheduler (``_submitted`` is unset).
+    - ``"pending"`` — submitted to the scheduler, waiting for a node
+      (``_submitted`` set, ``_started`` unset).
+    - ``"running"`` — executing on the allocated node(s)
+      (``_started`` set, ``_stopped`` unset).
+    - ``"done"`` — finished (``_stopped`` set); check ``status.category`` for
+      the actual pass/fail outcome.
+    """
+    if stopped > 0:
+        return "done"
+    if started > 0:
+        return "running"
+    if submitted > 0:
+        return "pending"
+    return "unsubmitted"
+
+
 def _exec_query_batches(args: "argparse.Namespace") -> int:
-    """Implement ``canary query batches [--session S] [--where EXPR]``."""
+    """Implement ``canary query batches [--session S] [--where EXPR] [--progress]``."""
     import datetime
 
     from _canary.subcommands.query import _parse_where
@@ -364,6 +397,9 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
     batches_dir = session_dir / "batches"
 
     if not batches_dir.exists():
+        if getattr(args, "progress", False):
+            sys.stdout.write("0 batches\n")
+            return 0
         print_json([], terse=getattr(args, "terse", False))
         return 0
 
@@ -430,6 +466,7 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
             "algorithm": sm.get("algorithm"),
             "node_count": sm.get("node_count"),
             "width": sm.get("width"),
+            "scheduler_state": _batch_scheduler_state(submitted, started, stopped),
             "status": {
                 "category": raw_status.get("category"),
                 "outcome": raw_status.get("outcome"),
@@ -454,8 +491,56 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
         predicate = _parse_where(where)
         rows = [r for r in rows if predicate(r)]
 
+    if getattr(args, "progress", False):
+        sys.stdout.write(_format_batch_progress(rows) + "\n")
+        return 0
+
     print_json(rows, terse=getattr(args, "terse", False))
     return 0
+
+
+def _format_batch_progress(rows: list[dict]) -> str:
+    """Format a compact one-line progress summary from a list of batch rows.
+
+    Example outputs::
+
+        8 batches: 3 done (2 pass, 1 fail) | 2 running | 1 pending | 2 unsubmitted
+        4 batches: 4 done (4 pass)
+        6 batches: 0 done | 2 running | 1 pending | 3 unsubmitted
+    """
+    total = len(rows)
+    counts: dict[str, int] = {"unsubmitted": 0, "pending": 0, "running": 0, "done": 0}
+    pass_count = 0
+    fail_count = 0
+
+    for r in rows:
+        state = r.get("scheduler_state", "unsubmitted")
+        counts[state] = counts.get(state, 0) + 1
+        if state == "done":
+            cat = (r.get("status") or {}).get("category", "")
+            if isinstance(cat, str) and cat.upper() == "PASS":
+                pass_count += 1
+            else:
+                fail_count += 1
+
+    batch_word = "batch" if total == 1 else "batches"
+    parts: list[str] = []
+
+    done = counts["done"]
+    if done:
+        done_detail = (
+            f"{pass_count} pass" if not fail_count else f"{pass_count} pass, {fail_count} fail"
+        )
+        parts.append(f"{done} done ({done_detail})")
+    else:
+        parts.append("0 done")
+
+    for state in ("running", "pending", "unsubmitted"):
+        n = counts[state]
+        if n:
+            parts.append(f"{n} {state}")
+
+    return f"{total} {batch_word}: {' | '.join(parts)}"
 
 
 def display_batch_log(id: str) -> None:

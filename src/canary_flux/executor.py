@@ -5,6 +5,7 @@
 import os
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Protocol
 from typing import cast
 
 import canary
+from _canary.job import BaseJob
 from _canary.queue_executor import ExecutionSlot
 from _canary.reporter import EventReporter
 from _canary.reporter import LiveReporter
@@ -150,10 +152,10 @@ class FluxReporterQueue:
         # EventReporter.__init__ inspects executor.queue._heap to size columns.
         self._heap = [SimpleNamespace(job=job) for job in jobs]
 
-    def jobs(self) -> list[FluxJob]:
+    def jobs(self) -> Sequence[BaseJob]:
         return list(self._jobs)
 
-    def pending(self) -> list[FluxJob]:
+    def pending(self) -> Sequence[BaseJob]:
         return [job for job in self._jobs if job.id in self._pending_ids]
 
     def mark_submitted(self, job: FluxJob) -> None:

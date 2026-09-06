@@ -1247,10 +1247,12 @@ def _run_query_batch(
     return _exec_query_batch(args)
 
 
-def _run_query_batches(*, session="latest", where=None, terse=False):
+def _run_query_batches(*, session="latest", where=None, terse=False, progress=False):
     from canary_hpc import _exec_query_batches
 
-    args = argparse.Namespace(query_subcmd="batches", session=session, where=where, terse=terse)
+    args = argparse.Namespace(
+        query_subcmd="batches", session=session, where=where, terse=terse, progress=progress
+    )
     return _exec_query_batches(args)
 
 
@@ -1350,7 +1352,11 @@ def test_query_batches_via_query_command(batch_setup, capsys):
     """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
     with working_dir(batch_setup.root):
         args = argparse.Namespace(
-            query_subcmd="batches", session=batch_setup.session_name, where=None, terse=False
+            query_subcmd="batches",
+            session=batch_setup.session_name,
+            where=None,
+            terse=False,
+            progress=False,
         )
         rc = Query().execute(args)
     assert rc == 0
@@ -1477,9 +1483,103 @@ def test_query_batches_where_numeric_timing(batch_setup, capsys):
         assert total is not None and total >= 0
 
 
-# -------------------------------------------------------------------------
-# canary query jobs tests
-# -------------------------------------------------------------------------
+def test_query_batches_has_scheduler_state_field(batch_setup, capsys):
+    """Every batch row must have a scheduler_state field."""
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        assert "scheduler_state" in row
+        assert row["scheduler_state"] in ("unsubmitted", "pending", "running", "done")
+
+
+def test_query_batches_completed_batches_have_done_state(batch_setup, capsys):
+    """Completed (PASS/FAIL) batches must report scheduler_state=='done'."""
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    # batch_setup creates completed batches; all should be 'done'
+    for row in rows:
+        if row["status"]["category"] in ("PASS", "FAIL"):
+            assert row["scheduler_state"] == "done", (
+                f"Batch {row['id_prefix']} has category={row['status']['category']} "
+                f"but scheduler_state={row['scheduler_state']!r}"
+            )
+
+
+def test_query_batches_where_scheduler_state(batch_setup, capsys):
+    """--where on scheduler_state field filters correctly."""
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name, where="scheduler_state==done")
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        assert row["scheduler_state"] == "done"
+
+
+def test_query_batches_progress_flag(batch_setup, capsys):
+    """--progress emits a single human-readable line, not JSON."""
+    with working_dir(batch_setup.root):
+        rc = _run_query_batches(session=batch_setup.session_name, progress=True)
+    assert rc == 0
+    out = capsys.readouterr().out.strip()
+    # Must not be JSON
+    assert not out.startswith("[")
+    assert not out.startswith("{")
+    # Must contain 'batch' and state keywords
+    assert "batch" in out
+    assert "done" in out
+
+
+def test_format_batch_progress_all_done_pass():
+    """All-pass: summary says N done (N pass)."""
+    from canary_hpc import _format_batch_progress
+
+    rows = [
+        {"scheduler_state": "done", "job_count": 1, "status": {"category": "PASS"}},
+        {"scheduler_state": "done", "job_count": 1, "status": {"category": "PASS"}},
+        {"scheduler_state": "done", "job_count": 1, "status": {"category": "PASS"}},
+    ]
+    result = _format_batch_progress(rows)
+    assert "3 batches" in result
+    assert "3 done" in result
+    assert "3 pass" in result
+    assert "fail" not in result
+
+
+def test_format_batch_progress_mixed_states():
+    """Mixed states are all represented."""
+    from canary_hpc import _format_batch_progress
+
+    rows = [
+        {"scheduler_state": "done", "job_count": 1, "status": {"category": "PASS"}},
+        {"scheduler_state": "done", "job_count": 1, "status": {"category": "FAIL"}},
+        {"scheduler_state": "running", "job_count": 1, "status": {"category": "NONE"}},
+        {"scheduler_state": "pending", "job_count": 1, "status": {"category": "NONE"}},
+        {"scheduler_state": "unsubmitted", "job_count": 1, "status": {"category": "NONE"}},
+        {"scheduler_state": "unsubmitted", "job_count": 1, "status": {"category": "NONE"}},
+    ]
+    result = _format_batch_progress(rows)
+    assert "6 batches" in result
+    assert "2 done" in result
+    assert "1 pass" in result
+    assert "1 fail" in result
+    assert "1 running" in result
+    assert "1 pending" in result
+    assert "2 unsubmitted" in result
+
+
+def test_batch_scheduler_state_function():
+    """_batch_scheduler_state returns correct value for each timestamp pattern."""
+    from canary_hpc import _batch_scheduler_state
+
+    now = 1_700_000_000.0
+    assert _batch_scheduler_state(-1, -1, -1) == "unsubmitted"
+    assert _batch_scheduler_state(now, -1, -1) == "pending"
+    assert _batch_scheduler_state(now, now + 10, -1) == "running"
+    assert _batch_scheduler_state(now, now + 10, now + 3600) == "done"
 
 
 def _run_query_jobs(setup_ns, *, session=None, where=None, terse=False, digest=False):

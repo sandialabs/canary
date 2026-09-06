@@ -55,7 +55,9 @@
       "query_batch": "canary query batch <BATCH_ID>  -- inspect a batch.lock as JSON",
       "query_batch_path": "canary query batch <BATCH_ID> .status  -- JSON path into batch.lock",
       "query_batches": "canary query batches  -- list all batches for latest session as JSON array",
+      "query_batches_progress": "canary query batches --progress  -- one-line summary: '8 batches: 3 done (2 pass, 1 fail) | 2 running | 1 pending | 2 unsubmitted'",
       "query_batches_where_string": "canary query batches --where status.category==PASS",
+      "query_batches_where_scheduler_state": "canary query batches --where scheduler_state==running  -- in-flight batches only",
       "query_batches_where_numeric": "canary query batches --where 'timings.queue_wait>3600'  -- numeric timing filter",
       "query_batches_where_running": "canary query batches --where 'timings.running<60'",
       "query_batches_session": "canary query batches --session 2026-09-03T18-10-19"
@@ -72,20 +74,35 @@
         "algorithm": "Packing algorithm used.",
         "node_count": "Number of scheduler nodes requested.",
         "width": "CPUs per node.",
-        "status.category": "PASS or FAIL (or null if still running).",
+        "scheduler_state": "Fine-grained lifecycle state — unsubmitted | pending | running | done. Disambiguates the NONE status.category that covers all three pre-completion states.",
+        "status.category": "PASS or FAIL when done; NONE while in flight.",
         "status.outcome": "DONE, FAILED, TIMEOUT, etc.",
         "status.reason": "Human-readable reason string.",
         "timings.total": "Total wall time from submission to completion (seconds).",
         "timings.queue_wait": "Time waiting in the scheduler queue (seconds). Use this with --where for scheduling triage.",
         "timings.running": "Time actually running inside the allocation (seconds).",
-        "submitted_on": "ISO8601 timestamp of batch submission."
+        "submitted_on": "ISO8601 timestamp of batch submission (null if unsubmitted)."
+      },
+      "scheduler_state_values": {
+        "unsubmitted": "canary has not yet dispatched this batch to the scheduler (_submitted timestamp unset). Distinct from pending: the job has not entered the scheduler queue at all.",
+        "pending": "Submitted to the scheduler, waiting for a node to become available (_submitted set, _started unset).",
+        "running": "Executing on the allocated node(s) (_started set, _stopped unset).",
+        "done": "Finished — check status.category for PASS or FAIL outcome."
+      },
+      "progress_flag": {
+        "flag": "--progress",
+        "output_format": "N batches: K done (P pass, F fail) | R running | Q pending | U unsubmitted",
+        "use_case": "Polling a sweep to completion without parsing JSON. Poll with: canary query batches --progress --session latest"
       },
       "where_numeric_examples": [
         "canary query batches --where 'timings.queue_wait>3600'    # queue-starved batches",
         "canary query batches --where 'timings.running<60'         # fast-completing batches",
-        "canary query batches --where 'job_count>100'              # large batches"
+        "canary query batches --where 'job_count>100'              # large batches",
+        "canary query batches --where 'scheduler_state==pending'   # waiting in Slurm queue",
+        "canary query batches --where 'scheduler_state==running'   # currently executing",
+        "canary query batches --where 'scheduler_state==unsubmitted'  # not yet dispatched"
       ],
-      "none_note": "timings fields are null for batches that have not yet completed. Ordered --where predicates return False for null values."
+      "none_note": "timings fields are null for batches that have not yet completed. Ordered --where predicates return False for null values. Use scheduler_state instead of status.category to distinguish the three pre-completion states."
     },
     "resource_model": {
       "summary": "The conductor uses backend node resource counts to generate a topology-aware resource pool for each batch.",
