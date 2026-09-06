@@ -352,6 +352,7 @@
             "status (category, outcome, reason)",
             "timings (pending, setup, running, teardown, total)"
           ],
+          "timings_note": "For local worker jobs, timings reflect the fine-grained per-phase lifecycle. For HPC one-job-per-batch Slurm jobs (where the child job's own timekeeper has no phase data), timings fall back to the owning batch.lock: pending=queue_wait, running=batch_compute_wall, total=batch_total_wall. setup and teardown are -1.0 in this case.",
           "refinement_a_note": "Default cross-session behaviour returns the LATEST run of each distinct job (keyed by spec_id). Each record carries a session provenance field. Use --session S to scope to one session (equivalent to session --expand-jobs).",
           "refinement_b_note": "Use canary query job JOBID --all-runs for the per-job full run history across sessions.",
           "examples": [
@@ -659,15 +660,31 @@
         ]
       },
       "status": {
-        "purpose": "Print test result summary. Use --json for machine-readable output.",
+        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (≤20 jobs). Use --all to force full table; --failed for failures-only.",
         "typical": [
           "canary status",
+          "canary status --all",
+          "canary status --failed",
           "canary status --json",
           "canary status --json -rA",
           "canary status --json --full-ids",
           "canary status -o ID,Name,FilePath,Status,Details",
           "canary status --durations 20"
         ],
+        "flags": {
+          "--all / -a": "Show all jobs regardless of status (forces full table for large runs).",
+          "--failed": "Show only failed/not-pass jobs (failures-only, even for small runs). Mutually exclusive with --all.",
+          "-r CHARS": "Status-character filter: p=passed, t=timeout, d=diffed, f=failed, n=not-run, s=skipped, a=all-except-passed, A=all. Default: dftns.",
+          "--json": "Emit results as a JSON array instead of a terminal table.",
+          "--full-ids": "Show full 64-character spec IDs instead of 7-character prefixes.",
+          "--durations N": "Append N slowest test durations to output."
+        },
+        "behavior": {
+          "summary_line": "Always printed. Format: 'N jobs: X passed, Y failed, Z timeout'. Green on all-pass.",
+          "small_run_auto_expand": "When total jobs ≤ 20 (and --failed not set), the full table is shown automatically.",
+          "large_run_default": "When total jobs > 20, only non-pass jobs are shown (equivalent to -r dftns).",
+          "never_empty": "Output is never empty. When everything passes, only the summary line is printed."
+        },
         "json_output_fields": [
           "id",
           "name",
@@ -684,11 +701,11 @@
           "reason": "str or null"
         },
         "timings_object": {
-          "pending": "submitted\u2192staged",
-          "setup": "staged\u2192started",
-          "running": "started\u2192stopped",
-          "teardown": "stopped\u2192finished",
-          "total": "submitted\u2192finished"
+          "pending": "submitted→staged",
+          "setup": "staged→started",
+          "running": "started→stopped",
+          "teardown": "stopped→finished",
+          "total": "submitted→finished"
         }
       },
       "info": {

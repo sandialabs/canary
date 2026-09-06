@@ -137,12 +137,16 @@ def run_location(testspec: str, *, input=False, log=False, source=False, x=False
     return Location().execute(args)
 
 
-def run_status(*, report_chars="dftns", durations=None, sort_by="name") -> int:
+def run_status(
+    *, report_chars="dftns", durations=None, sort_by="name", show_all=False, show_failed_only=False
+) -> int:
     args = argparse.Namespace(
         durations=durations,
         format_cols="ID,Name,Session,Exit Code,Duration,Status,Details",
         report_chars=report_chars,
         sort_by=sort_by,
+        show_all=show_all,
+        show_failed_only=show_failed_only,
         specs=[],
     )
     return Status().execute(args)
@@ -291,6 +295,57 @@ def test_status(setup):
         assert run_status(report_chars="A") == 0
         assert run_status(report_chars="A", durations=10) == 0
         assert run_status(sort_by="duration") == 0
+
+
+def test_status_summary_always_printed(setup, capsys):
+    """status always prints a summary line even when everything passes."""
+    from _canary.subcommands.status import _build_summary_line
+    from _canary.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        results = workspace.db.get_results()
+        rows = sorted(results.values(), key=lambda r: r["spec_name"])
+        summary = _build_summary_line(rows)
+        # Summary must mention total job count
+        total = len(rows)
+        assert str(total) in summary
+        # Summary must not be empty
+        assert summary.strip()
+
+
+def test_status_all_flag(setup, capsys):
+    """--all flag shows every job regardless of status."""
+    with working_dir(setup.results_path), canary.config.override():
+        assert run_status(show_all=True) == 0
+
+
+def test_status_failed_flag(setup, capsys):
+    """--failed flag restricts to failures-only rows."""
+    with working_dir(setup.results_path), canary.config.override():
+        assert run_status(show_failed_only=True) == 0
+
+
+def test_status_build_summary_all_pass():
+    """_build_summary_line returns green all-pass message when every row passes."""
+    from _canary.job import JobPhase
+    from _canary.job import JobState
+    from _canary.status import Category
+    from _canary.status import Outcome
+    from _canary.status import Status as _Status
+    from _canary.subcommands.status import _build_summary_line
+
+    def _make_row(outcome):
+        return {
+            "status": _Status(category=Category.PASS, outcome=Outcome.SUCCESS, reason="", code=0),
+            "state": JobState(phase=JobPhase.DONE),
+        }
+
+    rows = [_make_row("SUCCESS") for _ in range(3)]
+    summary = _build_summary_line(rows)
+    assert "3" in summary
+    assert "passed" in summary
+    assert "green" in summary
 
 
 def test_describe(capsys):
@@ -1545,3 +1600,69 @@ def test_query_jobs_terse_outputs_single_line(setup, capsys):
     assert "\n" not in out.rstrip("\n")
     rows = json.loads(out)
     assert isinstance(rows, list)
+
+
+def test_batch_timings_fallback_no_batch_dir(setup):
+    """_batch_timings_for_job returns all -1.0 when there is no batches/ directory."""
+    from _canary.subcommands.query import _batch_timings_for_job
+    from _canary.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        result = _batch_timings_for_job(workspace, "nonexistent_id", "nonexistent_session")
+    assert all(v < 0 for v in result.values())
+    assert set(result.keys()) == {"pending", "setup", "running", "teardown", "total"}
+
+
+def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
+    """_batch_timings_for_job returns batch-level timings when a matching batch.lock exists."""
+    import json as _json
+
+    from _canary.subcommands.query import _batch_timings_for_job
+    from _canary.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        # Create a fake batch.lock under sessions/<session>/batches/<id>/
+        session_name = setup.session.name
+        batch_dir = workspace.sessions_dir / session_name / "batches" / "abc1234"
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        fake_job_id = "fakejobid" * 8  # 64 chars
+        t_submitted = 1_700_000_000.0
+        t_started = 1_700_001_000.0  # 1000 s queue wait
+        t_stopped = 1_700_005_200.0  # 4200 s running
+        batch_lock = batch_dir / "batch.lock"
+        batch_lock.write_text(
+            _json.dumps(
+                {
+                    "id": "abc1234" * 9,
+                    "session": session_name,
+                    "jobs": [fake_job_id],
+                    "timekeeper": {
+                        "_submitted": t_submitted,
+                        "_staged": -1.0,
+                        "_started": t_started,
+                        "_stopped": t_stopped,
+                        "_finished": -1.0,
+                    },
+                }
+            )
+        )
+        timings = _batch_timings_for_job(workspace, fake_job_id, session_name)
+
+    assert timings["pending"] == pytest.approx(1000.0, abs=0.01)
+    assert timings["running"] == pytest.approx(4200.0, abs=0.01)
+    assert timings["total"] == pytest.approx(5200.0, abs=0.01)
+    assert timings["setup"] < 0
+    assert timings["teardown"] < 0
+
+
+def test_query_jobs_timings_keys_present(setup, capsys):
+    """All job entries from query jobs have the five standard timing keys."""
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    for row in rows:
+        timings = row["timings"]
+        for key in ("pending", "setup", "running", "teardown", "total"):
+            assert key in timings, f"Missing timings key {key!r} in row {row['name']!r}"

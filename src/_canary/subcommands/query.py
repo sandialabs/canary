@@ -556,11 +556,82 @@ def _exec_sessions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> dict[str, float]:
+    """Look up batch-level timings for a job whose own timekeeper is empty.
+
+    Scans ``sessions/<session>/batches/*/batch.lock`` files for one whose
+    ``jobs`` list contains *job_id*.  Returns a timings dict with keys
+    ``pending``, ``setup``, ``running``, ``teardown``, ``total`` where
+    available, defaulting to ``-1.0``.  All values are rounded to 6 decimal
+    places.
+
+    This is a best-effort fallback for HPC one-job-per-batch Slurm runs where
+    the child job's timekeeper only gets coarse timestamps (the batch wall-clock
+    start/stop), not the fine-grained phase breakdown recorded by local workers.
+    Returns an all-``-1.0`` dict when no matching batch is found.
+    """
+    import json as _json
+
+    empty: dict[str, float] = {
+        "pending": -1.0,
+        "setup": -1.0,
+        "running": -1.0,
+        "teardown": -1.0,
+        "total": -1.0,
+    }
+    batches_dir = workspace.sessions_dir / session / "batches"
+    if not batches_dir.is_dir():
+        return empty
+
+    for batch_lock in batches_dir.glob("*/batch.lock"):
+        try:
+            data = _json.loads(batch_lock.read_text())
+        except (OSError, ValueError):  # nosec B112 — skip unreadable/malformed lock files
+            continue
+        if job_id not in data.get("jobs", []):
+            continue
+        # Found the owning batch — derive timings from its timekeeper.
+        tk = data.get("timekeeper", {})
+        if isinstance(tk, str):
+            try:
+                tk = _json.loads(tk)
+            except ValueError:
+                tk = {}
+        b_submitted: float = float(tk.get("_submitted", -1) or -1)
+        b_started: float = float(tk.get("_started", -1) or -1)
+        b_stopped: float = float(tk.get("_stopped", -1) or -1)
+
+        def _el(a: float, b: float) -> float:
+            return round(b - a, 6) if a > 0 and b > 0 else -1.0
+
+        return {
+            # pending = queue wait (batch submitted → Slurm job started)
+            "pending": _el(b_submitted, b_started),
+            # setup = 0 for HPC (no staging separate from start)
+            "setup": -1.0,
+            # running = actual compute time (Slurm start → stop)
+            "running": _el(b_started, b_stopped),
+            # teardown not tracked separately at batch level
+            "teardown": -1.0,
+            # total = wall time from submission to completion
+            "total": _el(b_submitted, b_stopped),
+        }
+    return empty
+
+
 def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, Any]:
     """Convert a DB result row dict into the standard job entry format.
 
     Used by both ``_exec_session_expand`` and ``_exec_jobs`` to ensure a
     consistent record shape.
+
+    Timings are derived from the job's own ``timekeeper`` when available.  For
+    HPC one-job-per-batch Slurm runs the child job's per-phase timestamps are
+    often ``-1.0`` (the fine-grained lifecycle is tracked at the batch level).
+    In that case the function falls back to scanning the owning
+    ``batch.lock`` and mapping the batch-level wall-clock phases to the
+    standard timing keys (``pending`` = queue wait, ``running`` = compute
+    wall-clock, ``total`` = submission-to-completion).
     """
     tk = row["timekeeper"]
     submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
@@ -571,6 +642,21 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
 
     def elapsed(a: float, b: float) -> float:
         return round(b - a, 6) if a > 0 and b > 0 else -1.0
+
+    timings = {
+        "pending": elapsed(submitted, staged),
+        "setup": elapsed(staged, started),
+        "running": elapsed(started, stopped),
+        "teardown": elapsed(stopped, finished),
+        "total": elapsed(submitted, finished),
+    }
+
+    # Fall back to batch-level timings for HPC child jobs whose own timekeeper
+    # has no meaningful phase data (all -1.0).  This is the common case for
+    # one-job-per-batch Slurm runs where fine-grained lifecycle events are
+    # tracked at the batch level, not the individual job level.
+    if all(v < 0 for v in timings.values()):
+        timings = _batch_timings_for_job(workspace, row["id"], row["session"])
 
     return {
         "id": row["id"],
@@ -585,13 +671,7 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
             "outcome": row["status"].outcome.name,
             "reason": row["status"].reason,
         },
-        "timings": {
-            "pending": elapsed(submitted, staged),
-            "setup": elapsed(staged, started),
-            "running": elapsed(started, stopped),
-            "teardown": elapsed(stopped, finished),
-            "total": elapsed(submitted, finished),
-        },
+        "timings": timings,
     }
 
 

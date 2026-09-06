@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# Number of jobs below which the full table is always shown (unless --failed).
+_AUTO_EXPAND_THRESHOLD = 20
+
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
@@ -104,6 +107,22 @@ class Status(CanarySubcommand):
             default=False,
             help="Show full 64-character spec IDs instead of 7-character prefixes",
         )
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
+            "--all",
+            "-a",
+            dest="show_all",
+            action="store_true",
+            default=False,
+            help="Show all jobs regardless of status (overrides default failures-only filter for large runs)",
+        )
+        group.add_argument(
+            "--failed",
+            dest="show_failed_only",
+            action="store_true",
+            default=False,
+            help="Show only failed/not-pass jobs (always uses the failures filter, even for small runs)",
+        )
         parser.add_argument(
             "specs", nargs=argparse.REMAINDER, help="Show status history for these specific specs"
         )
@@ -120,8 +139,39 @@ class Status(CanarySubcommand):
             self.print_json(results, args)
             return 0
 
-        table = self.get_status_table(results, args)
+        all_rows = sorted(results.values(), key=sortkey)
+        total = len(all_rows)
+        show_all: bool = getattr(args, "show_all", False)
+        show_failed_only: bool = getattr(args, "show_failed_only", False)
+
+        # Determine which rows to show in the detail table.
+        if show_failed_only:
+            # Explicit --failed: always failures-only (current default behavior).
+            detail_rows = filter_by_status(all_rows, args.report_chars)
+        elif show_all or total <= _AUTO_EXPAND_THRESHOLD:
+            # --all flag or small run: show every row.
+            detail_rows = filter_by_status(all_rows, "A")
+        else:
+            # Large run default: failures/diffs/timeouts/not-run/skipped only.
+            detail_rows = filter_by_status(all_rows, args.report_chars)
+
+        # Build outcome counts for the summary line.
+        summary_line = _build_summary_line(all_rows)
+
         console = Console()
+
+        if total == 0:
+            console.print("[dim]No results found in workspace.[/dim]")
+            return 0
+
+        # Always print the summary line first.
+        console.print(summary_line)
+
+        if not detail_rows:
+            # All jobs passed (or nothing matched the filter) — nothing more to print.
+            return 0
+
+        table = self.get_status_table_from_rows(detail_rows, args)
         use_pager = sys.stdout.isatty() and table.row_count > shutil.get_terminal_size().lines
         if use_pager:
             with console.pager():
@@ -189,6 +239,10 @@ class Status(CanarySubcommand):
         """Build a Rich ``Table`` of test results filtered and sorted per *args*."""
         rows = sorted(results.values(), key=sortkey)
         rows = filter_by_status(rows, args.report_chars)
+        return self.get_status_table_from_rows(rows, args)
+
+    def get_status_table_from_rows(self, rows: list[dict], args: "argparse.Namespace") -> Table:
+        """Build a Rich ``Table`` from a pre-filtered list of result rows."""
         cols = args.format_cols.split(",")
 
         table = Table(expand=True, box=box.SQUARE)
@@ -246,6 +300,57 @@ def sortkey(row: dict) -> tuple:
     if row["status"].is_failure():
         c = 2
     return (c, row["status"].outcome, row["timekeeper"].duration())
+
+
+def _build_summary_line(rows: list[dict]) -> str:
+    """Return a Rich-markup summary string for *rows*, e.g. ``"5 jobs: 3 passed, 2 failed"``.
+
+    Always non-empty. When everything passes the line is green; when there are
+    failures it names each non-pass category.
+    """
+    from ..status import Outcome
+
+    total = len(rows)
+    counts: dict[str, int] = {}
+    for row in rows:
+        status: _Status = row["status"]
+        state: JobState = row["state"]
+        if status.is_success():
+            key = "passed"
+        elif status.is_skipped():
+            key = "skipped"
+        elif status.is_diffed():
+            key = "diffed"
+        elif status.is_timeout():
+            key = "timeout"
+        elif status.outcome in (Outcome.FAILED, Outcome.ERROR, Outcome.BROKEN):
+            key = "failed"
+        elif not state.is_done():
+            key = "not run"
+        elif status.is_cancelled():
+            key = "cancelled"
+        else:
+            key = "other"
+        counts[key] = counts.get(key, 0) + 1
+
+    job_word = "job" if total == 1 else "jobs"
+    passed = counts.get("passed", 0)
+
+    if passed == total:
+        return f"[green]{total} {job_word}: {total} passed[/green]"
+
+    parts: list[str] = []
+    if passed:
+        parts.append(f"[green]{passed} passed[/green]")
+    for key in ("failed", "diffed", "timeout", "skipped", "not run", "cancelled", "other"):
+        n = counts.get(key, 0)
+        if n:
+            color = (
+                "red" if key in ("failed",) else "yellow" if key in ("diffed", "timeout") else "dim"
+            )
+            parts.append(f"[{color}]{n} {key}[/{color}]")
+    detail = ", ".join(parts)
+    return f"[bold]{total} {job_word}:[/bold] {detail}"
 
 
 def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> str:
