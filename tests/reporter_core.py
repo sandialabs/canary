@@ -326,3 +326,47 @@ def test_mute_and_unmute_restores_handlers():
     # During muting, at least one _LiveConsoleHandler should have been added
     # for each StreamHandler that was found (may be zero if root has none).
     assert after_mute_count >= initial_handler_count
+
+
+def test_mute_does_not_touch_file_handlers():
+    """mute_stream_handlers must not attach MuteConsoleFilter to FileHandlers.
+
+    FileHandler is a subclass of StreamHandler, so a plain isinstance check
+    would accidentally silence canary.0.log during the live display.
+    """
+    import logging as _logging
+    import os
+    import tempfile
+    from io import StringIO
+    from unittest.mock import MagicMock
+
+    from rich.console import Console
+
+    from _canary.reporter import LiveReporter
+    from _canary.util.logging import MuteConsoleFilter
+
+    job = DummyJob()
+    executor = DummyExecutor([job])
+    reporter = LiveReporter(executor)
+    reporter.live = MagicMock()
+    reporter.live.console = Console(file=StringIO(), highlight=False)
+
+    # Add a real FileHandler to the root logger.
+    root = _logging.getLogger()
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".log")
+    tmp.close()
+    fh = _logging.FileHandler(tmp.name)
+    root.addHandler(fh)
+
+    try:
+        reporter.mute_stream_handlers()
+        # The FileHandler must NOT have MuteConsoleFilter attached.
+        for f in fh.filters:
+            assert not isinstance(f, MuteConsoleFilter), (
+                "MuteConsoleFilter was incorrectly attached to a FileHandler"
+            )
+        reporter.unmute_stream_handlers()
+    finally:
+        root.removeHandler(fh)
+        fh.close()
+        os.unlink(tmp.name)

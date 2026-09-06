@@ -300,9 +300,10 @@ class LiveReporter(Reporter):
         self.unmute_stream_handlers()
 
     def mute_stream_handlers(self) -> None:
-        """Replace stream handlers with Rich-aware equivalents.
+        """Replace terminal stream handlers with Rich-aware equivalents.
 
-        For each ``StreamHandler`` found on the canary and root loggers:
+        For each **terminal** ``StreamHandler`` found on the canary and root
+        loggers (file handlers are explicitly excluded — see below):
 
         1. Attach the ``MuteConsoleFilter`` to silence its normal output
            (prevents raw text from leaking around the live display).
@@ -312,10 +313,23 @@ class LiveReporter(Reporter):
 
         The pairing is recorded so :meth:`unmute_stream_handlers` can undo both
         operations in the right order.
+
+        .. note::
+            ``logging.FileHandler`` is a subclass of ``logging.StreamHandler``
+            in the stdlib, so it would match a plain ``isinstance`` check.  We
+            skip file handlers explicitly so that ``canary.0.log`` continues to
+            receive all log records unmodified throughout the run — only the
+            terminal (stderr/stdout) stream is redirected through Rich.
         """
         for logger_name in (logging.root_log_name, ""):
             root = logging.builtin_logging.getLogger(logger_name)
             for h in root.handlers:
+                # Only intercept pure stream (terminal) handlers — NOT file
+                # handlers.  FileHandler is a subclass of StreamHandler, so
+                # we must explicitly exclude it to ensure log records continue
+                # flowing to canary.0.log unmodified during the live display.
+                if isinstance(h, logging.builtin_logging.FileHandler):
+                    continue
                 if not isinstance(h, logging.builtin_logging.StreamHandler):
                     continue
                 # 1. Silence the original handler.
