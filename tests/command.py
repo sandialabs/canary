@@ -289,6 +289,58 @@ def test_log(setup, monkeypatch):
         assert Log().execute(args) == 0
 
 
+def test_pager_paging_disabled_env(monkeypatch):
+    from _canary.util import pager
+
+    monkeypatch.setenv("CANARY_NO_PAGER", "1")
+    assert pager.paging_disabled() is True
+    monkeypatch.setenv("CANARY_NO_PAGER", "true")
+    assert pager.paging_disabled() is True
+    monkeypatch.setenv("CANARY_NO_PAGER", "0")
+    assert pager.paging_disabled() is False
+    monkeypatch.setenv("CANARY_NO_PAGER", "no")
+    assert pager.paging_disabled() is False
+
+
+def test_pager_paging_disabled_flag(monkeypatch):
+    from _canary.util import pager
+
+    monkeypatch.delenv("CANARY_NO_PAGER", raising=False)
+    with canary.config.override() as cfg:
+        cfg.options = argparse.Namespace(no_pager=True)
+        assert pager.paging_disabled() is True
+        cfg.options = argparse.Namespace(no_pager=False)
+        # config key is False by default
+        assert pager.paging_disabled() is False
+
+
+def test_pager_should_page_not_a_tty(monkeypatch):
+    from _canary.util import pager
+
+    monkeypatch.delenv("CANARY_NO_PAGER", raising=False)
+    # In the test harness stdout is not a TTY, so paging is always suppressed.
+    assert pager.should_page(10_000) is False
+    assert pager.should_page(None) is False
+
+
+def test_pager_page_writes_when_not_paging(monkeypatch, capsys):
+    from _canary.util import pager
+
+    monkeypatch.delenv("CANARY_NO_PAGER", raising=False)
+    pager.page("hello world")
+    captured = capsys.readouterr()
+    assert "hello world" in captured.out
+
+
+def test_global_no_pager_flag_parses():
+    from _canary.config.argparsing import make_argument_parser
+
+    ap = make_argument_parser()
+    assert ap.parse_args(["--no-pager"]).no_pager is True
+    assert ap.parse_args(["-P"]).no_pager is True
+    assert ap.parse_args([]).no_pager is None
+
+
 def test_status(setup):
     with working_dir(setup.results_path), canary.config.override():
         assert run_status() == 0

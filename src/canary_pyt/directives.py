@@ -1608,6 +1608,29 @@ def testname(arg: str) -> None:
 
     This file would result in two tests: "foo" and "bar".
 
+    See also
+    --------
+
+    The :func:`canary_pyt.instance_test` decorator is a higher-level way to
+    define multiple named instances in one file.  It registers each decorated
+    function as an instance (no explicit ``testname`` call needed) and
+    auto-dispatches to the matching function at run time, so no ``test()`` /
+    ``if __name__ == "__main__"`` boilerplate is required:
+
+    .. code:: python
+
+       import canary
+       import canary_pyt
+
+       @canary_pyt.instance_test
+       def test_foo(inst: canary.TestInstance) -> int:
+           do_foo_stuff()
+           return 0
+
+       @canary_pyt.instance_test
+       def test_bar(inst):
+           do_bar_stuff()
+
     """
 
 

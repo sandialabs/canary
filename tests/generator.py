@@ -204,3 +204,158 @@ def test_pyt_model_default_command_uses_basename(tmpdir):
         write("test.pyt", "import canary\n")
         s = lock_file("test.pyt")[0]
         assert s.command == [sys.executable, "test.pyt"]
+
+
+INSTANCE_TEST_FILE = """
+import canary
+import canary_pyt
+
+
+@canary_pyt.instance_test
+def test_foo(inst: canary.TestInstance) -> int:
+    assert inst.family == "foo"
+    return 0
+
+
+@canary_pyt.instance_test
+def test_bar(inst):
+    assert inst.family == "bar"
+    return 0
+
+
+@canary_pyt.instance_test
+def test_baz(inst):
+    return 0
+"""
+
+
+def test_instance_test_registers_families(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        write("test.pyt", INSTANCE_TEST_FILE)
+        specs = lock_file("test.pyt")
+        families = sorted(s.family for s in specs)
+        assert families == ["bar", "baz", "foo"]
+
+
+def test_instance_test_populates_registry(tmpdir):
+    from canary_pyt import instance as instance_mod
+
+    with working_dir(tmpdir.strpath, create=True):
+        write("test.pyt", INSTANCE_TEST_FILE)
+        # Parsing runs the file for collection, which registers the functions.
+        pyt.PYTLoader(file=pyt.PYTModel(".", "test.pyt").file).parse()
+        reg = instance_mod.registered_instance_tests()
+        assert sorted(reg) == ["bar", "baz", "foo"]
+
+
+def test_instance_test_reset_between_files(tmpdir):
+    from canary_pyt import instance as instance_mod
+
+    with working_dir(tmpdir.strpath, create=True):
+        write("a.pyt", INSTANCE_TEST_FILE)
+        write(
+            "b.pyt",
+            "import canary\nimport canary_pyt\n"
+            "@canary_pyt.instance_test\n"
+            "def test_only(inst):\n    return 0\n",
+        )
+        pyt.PYTLoader(file=pyt.PYTModel(".", "a.pyt").file).parse()
+        # Loading a second file must not raise a duplicate-registration error
+        # and must not retain families from the first file.
+        pyt.PYTLoader(file=pyt.PYTModel(".", "b.pyt").file).parse()
+        assert sorted(instance_mod.registered_instance_tests()) == ["only"]
+
+
+def test_instance_test_duplicate_raises(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        write(
+            "dup.pyt",
+            "import canary\nimport canary_pyt\n"
+            "@canary_pyt.instance_test\n"
+            "def test_x(inst):\n    return 0\n"
+            "@canary_pyt.instance_test\n"
+            "def test_x(inst):\n    return 0\n",  # noqa: F811
+        )
+        try:
+            pyt.PYTLoader(file=pyt.PYTModel(".", "dup.pyt").file).parse()
+        except RuntimeError as e:
+            assert "Duplicate instance_test" in str(e)
+        else:
+            raise AssertionError("expected duplicate registration to raise")
+
+
+def test_run_instance_tests_dispatch(tmpdir, monkeypatch):
+    """run_instance_tests() dispatches by family and returns the exit code."""
+    from canary_pyt import instance as instance_mod
+
+    instance_mod.reset_registry()
+
+    calls = []
+
+    class FakeInstance:
+        family = "bar"
+
+    @instance_mod.instance_test
+    def test_foo(inst):
+        calls.append("foo")
+        return 0
+
+    @instance_mod.instance_test
+    def test_bar(inst):
+        calls.append("bar")
+        return 3
+
+    import canary
+
+    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
+    rc = instance_mod.run_instance_tests()
+    assert rc == 3
+    assert calls == ["bar"]
+
+    instance_mod.reset_registry()
+
+
+def test_run_instance_tests_testfailed_exit_code(tmpdir, monkeypatch):
+    from canary_pyt import instance as instance_mod
+
+    instance_mod.reset_registry()
+
+    class FakeInstance:
+        family = "boom"
+
+    @instance_mod.instance_test
+    def test_boom(inst):
+        raise canary.TestFailed("nope")
+
+    import canary
+
+    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
+    rc = instance_mod.run_instance_tests()
+    assert rc == canary.TestFailed.exit_code
+
+    instance_mod.reset_registry()
+
+
+def test_run_instance_tests_unknown_family(tmpdir, monkeypatch):
+    from canary_pyt import instance as instance_mod
+
+    instance_mod.reset_registry()
+
+    class FakeInstance:
+        family = "missing"
+
+    @instance_mod.instance_test
+    def test_present(inst):
+        return 0
+
+    import canary
+
+    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
+    try:
+        instance_mod.run_instance_tests()
+    except RuntimeError as e:
+        assert "No @canary_pyt.instance_test registered for 'missing'" in str(e)
+    else:
+        raise AssertionError("expected unknown family to raise")
+
+    instance_mod.reset_registry()

@@ -14,6 +14,13 @@ General configuration settings
 
   debug: false  # (bool)
   log_level: "INFO"  # (str)
+  no_pager: false  # (bool)
+
+The ``no_pager`` key disables paging of console output (``status``, ``info``,
+``find``, ``log``, and the HPC batch log).  It can also be set with the global
+``-P``/``--no-pager`` command-line flag or the ``CANARY_NO_PAGER`` environment
+variable.  Paging is always skipped automatically when standard output is not a
+terminal, so piped and redirected output is never paged.
 
 plugins
 -------

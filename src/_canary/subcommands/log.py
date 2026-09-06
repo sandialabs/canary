@@ -64,9 +64,6 @@ class Log(CanarySubcommand):
             help="Show raw log file contents (applicable only to the session log file)",
         )
         parser.add_argument(
-            "-P", "--no-pager", default=False, action="store_true", help="Do not page output"
-        )
-        parser.add_argument(
             "testspec",
             nargs="?",
             help="Test name or TEST_ID.  If not given, the session log will be shown",
@@ -109,8 +106,7 @@ class Log(CanarySubcommand):
         job = workspace.find(job=args.testspec)
         f = self.get_file_from_workspace(job, args)
         if f:
-            use_pager = not getattr(args, "no_pager", False)
-            display_file(f, use_pager=use_pager)
+            display_file(f)
         return 0
 
 
@@ -130,27 +126,17 @@ def reconstruct_log(file: str | Path) -> str:
     return fp.getvalue()
 
 
-def display_file(file: Path, use_pager: bool = True) -> None:
+def display_file(file: Path) -> None:
     """Print *file*'s path header and page its contents, raising if the file is missing."""
     if not file.exists():
         raise FileNotFoundError(file)
     text = file.read_text().rstrip()
     print(f"{file}:")
-    if use_pager:
-        page_text(text)
-    else:
-        print(text)
+    page_text(text)
 
 
 def page_text(text: str) -> None:
-    """Page *text* through a pager when stdout is a TTY, otherwise write directly."""
-    import sys
+    """Page *text* through a pager when appropriate, otherwise write directly."""
+    from ..util.pager import page
 
-    if sys.stdout.isatty():
-        import pydoc
-
-        pydoc.pager(text)
-    else:
-        sys.stdout.write(text)
-        if not text.endswith("\n"):
-            sys.stdout.write("\n")
+    page(text)

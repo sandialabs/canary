@@ -102,6 +102,7 @@ config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
+        Optional("no_pager"): Use(boolean),
         Optional("workspace"): workspace_schema,
         Optional("plugins"): [str],
         Optional("environment"): environment_schema,

@@ -51,6 +51,7 @@ def default_config_values() -> dict[str, Any]:
     defaults = {
         "debug": False,
         "log_level": "INFO",
+        "no_pager": False,
         "plugins": [],
         "environment": {"prepend-path": {}, "append-path": {}, "set": {}, "unset": []},
         "workspace": {
@@ -260,6 +261,9 @@ class Config:
             data["debug"] = True
             data["log_level"] = "DEBUG"
             logging.set_level(logging.DEBUG)
+
+        if getattr(args, "no_pager", None):
+            data["no_pager"] = True
 
         if args.config_mods:
             data.update(args.config_mods)

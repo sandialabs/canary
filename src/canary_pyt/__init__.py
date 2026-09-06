@@ -15,7 +15,7 @@ from .pyt import PYTLoader
 from .pyt import PYTLockEmitter
 from .pyt import PYTModel
 
-__all__ = ["directives", "FILE_SCANNING"]
+__all__ = ["directives", "FILE_SCANNING", "instance_test", "run_instance_tests"]
 
 
 # Constant that's True when file scanning, but False here.
@@ -25,6 +25,12 @@ FILE_SCANNING = False
 def set_file_scanning(value: bool):
     global FILE_SCANNING
     FILE_SCANNING = value
+
+
+# Imported after ``directives`` and ``FILE_SCANNING`` are defined because
+# ``instance`` references both at import time via the ``canary_pyt`` module.
+from .instance import instance_test  # noqa: E402
+from .instance import run_instance_tests  # noqa: E402
 
 
 class PYTSpecGenerator(AbstractSpecGenerator):

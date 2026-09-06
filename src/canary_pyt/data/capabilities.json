@@ -33,6 +33,35 @@
         "    sys.exit(test())"
       ]
     },
+    "sub_tests": {
+      "summary": "The @canary_pyt.instance_test decorator defines multiple named test instances in one .pyt file with no manual testname() calls and no test()/__main__ dispatch.",
+      "decorator": "canary_pyt.instance_test",
+      "behavior": [
+        "Each decorated function becomes a test instance (family). The family name is the function name with a leading 'test_' stripped (test_foo -> foo).",
+        "At collection time the decorator registers the family (equivalent to canary_pyt.directives.name(<family>)).",
+        "At run time a built-in auto-runner dispatches to the function whose family matches the running instance and passes it the read-only canary.TestInstance.",
+        "The function returns an integer exit code (0 = success, None treated as 0), or raises a canary outcome exception (TestFailed/TestDiffed/TestSkipped) whose exit_code is propagated.",
+        "No if __name__ == '__main__' guard and no test() dispatcher are needed."
+      ],
+      "helpers": {
+        "canary_pyt.instance_test": "Decorator registering a function as a named test instance.",
+        "canary_pyt.run_instance_tests": "Manual dispatch entry point (rarely needed; the auto-runner calls it).",
+        "canary_pyt.registered_instance_tests": "Return the family-name -> function registry."
+      },
+      "example": [
+        "import canary",
+        "import canary_pyt",
+        "",
+        "@canary_pyt.instance_test",
+        "def test_alpha(inst: canary.TestInstance) -> int:",
+        "    assert inst.family == 'alpha'",
+        "    return 0",
+        "",
+        "@canary_pyt.instance_test",
+        "def test_beta(inst):",
+        "    raise canary.TestFailed('beta failed')"
+      ]
+    },
     "directives": {
       "summary": "Directives are generation-time declarations captured by the .pyt loader and converted into JobSpecIR objects.",
       "common": {

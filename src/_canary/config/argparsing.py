@@ -393,6 +393,14 @@ def make_argument_parser(**kwargs):
         default=None,
         help="When to color output [default: auto]",
     )
+    parser.add_argument(
+        "-P",
+        "--no-pager",
+        dest="no_pager",
+        action="store_true",
+        default=None,
+        help="Do not page output (also settable via CANARY_NO_PAGER or config:no_pager)",
+    )
     group = parser.add_argument_group("profiling")
     group.add_argument(
         "--profile",

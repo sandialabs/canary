@@ -544,8 +544,7 @@ def _format_batch_progress(rows: list[dict]) -> str:
 
 
 def display_batch_log(id: str) -> None:
-    import pydoc
-
+    from _canary.util.pager import page
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
@@ -558,7 +557,7 @@ def display_batch_log(id: str) -> None:
     print(f"{file}:")
     if not file.exists():
         raise FileNotFoundError(file)
-    pydoc.pager(file.read_text())
+    page(file.read_text())
 
 
 class CanaryHPCHooks:

@@ -127,16 +127,19 @@ def pprint_paths(specs: list["JobSpec"]) -> None:
         console.print(Rule(title=f"[magenta]{root}[/magenta]"))
         columns = Columns(sorted(paths))
         console.print(columns)
-    with console.pager():
-        console.print(file.getvalue())
+    from ..util.pager import page
+
+    page(file.getvalue())
 
 
 def pprint_files(specs: list["JobSpec"]) -> None:
     """Print deduplicated spec file paths in column format."""
+    from ..util.pager import page_rich
+
+    names = sorted(set([str(spec.file) for spec in specs]))
     console = rich.console.Console()
-    columns = Columns(sorted(set([str(spec.file) for spec in specs])))
-    with console.pager():
-        console.print(columns)
+    columns = Columns(names)
+    page_rich(console, columns, len(names))
 
 
 def pprint_keywords(specs: list["JobSpec"]) -> None:
@@ -151,17 +154,18 @@ def pprint_keywords(specs: list["JobSpec"]) -> None:
         console.print(Rule(title=f"[magenta]{root}[/magenta]"))
         columns = Columns(sorted(kwds))
         console.print(columns)
-    with console.pager():
-        console.print(file.getvalue())
+    from ..util.pager import page
+
+    page(file.getvalue())
 
 
 def pprint_graph(specs: list["JobSpec"]) -> None:
     """Print the dependency DAG of *specs* in text form."""
     from _canary.jobspec_graph import format_spec_graph
 
-    console = rich.console.Console()
-    with console.pager():
-        console.print(format_spec_graph(specs), markup=False)
+    from ..util.pager import page
+
+    page(format_spec_graph(specs))
 
 
 def pprint(specs: list["JobSpec"]) -> None:
@@ -177,5 +181,6 @@ def pprint(specs: list["JobSpec"]) -> None:
         console.print(Rule(f"[magenta]{root}[/magenta]"))
         columns = Columns(lines, expand=True)
         console.print(columns)
-    with console.pager():
-        console.print(file.getvalue())
+    from ..util.pager import page
+
+    page(file.getvalue())

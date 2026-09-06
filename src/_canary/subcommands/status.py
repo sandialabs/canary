@@ -7,7 +7,6 @@
 import argparse
 import io
 import json
-import shutil
 import sys
 from typing import TYPE_CHECKING
 from typing import Any
@@ -172,12 +171,9 @@ class Status(CanarySubcommand):
             return 0
 
         table = self.get_status_table_from_rows(detail_rows, args)
-        use_pager = sys.stdout.isatty() and table.row_count > shutil.get_terminal_size().lines
-        if use_pager:
-            with console.pager():
-                console.print(table)
-        else:
-            console.print(table)
+        from ..util.pager import page_rich
+
+        page_rich(console, table, table.row_count)
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0

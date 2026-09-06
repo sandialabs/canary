@@ -963,8 +963,10 @@ class PYTLoader:
     def parse(self) -> list[RecordedDirectiveCall]:
         import canary
         import canary_pyt
+        from canary_pyt import instance as _instance
 
         recorder = DirectiveRecorder(target=None, record_location=True)
+        _instance.reset_registry()
         try:
             canary_pyt.set_file_scanning(True)
             with monkeypatch.context() as mp:

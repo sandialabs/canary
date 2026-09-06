@@ -7,7 +7,6 @@
 import argparse
 import io
 import json
-import shutil
 import sys
 from typing import TYPE_CHECKING
 
@@ -94,12 +93,9 @@ class Info(CanarySubcommand):
             table.add_row(str(i), spec.id[:7], spec.display_name(resolve=True, style="rich"))
         console = rich.console.Console()
         groups = rich.console.Group(fh.getvalue(), table)
-        use_pager = sys.stdout.isatty() and len(specs) > shutil.get_terminal_size().lines
-        if use_pager:
-            with console.pager():
-                console.print(groups)
-        else:
-            console.print(groups)
+        from ..util.pager import page_rich
+
+        page_rich(console, groups, len(specs))
 
     def print_workspace_info_json(self) -> None:
         """Emit JSON with root, version, spec count, test roots, sessions, and tags to stdout."""
