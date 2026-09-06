@@ -227,3 +227,49 @@ def test_markdown_report_updates_in_place(setup):
     for job in jobs[1:]:
         assert job.id in after
         assert after[job.id]["status"] == before[job.id]["status"]
+
+
+def test_fmt_secs_negative_is_na():
+    from _canary.reporter import fmt_secs
+
+    assert fmt_secs(-1.0) == "NA"
+    assert fmt_secs(-0.001) == "NA"
+    assert fmt_secs(-5.0, na="--") == "--"
+
+
+def test_fmt_secs_seconds_tier():
+    from _canary.reporter import fmt_secs
+
+    # < 600s: seconds with one decimal (fixed width matches legacy format)
+    assert fmt_secs(0.0) == "  0.0s"
+    assert fmt_secs(1.0) == "  1.0s"
+    assert fmt_secs(123.4) == "123.4s"
+    assert fmt_secs(599.9) == "599.9s"
+
+
+def test_fmt_secs_minutes_tier():
+    from _canary.reporter import fmt_secs
+
+    # [600, 3600): whole minutes and seconds
+    assert fmt_secs(600.0) == "10m 00s"
+    assert fmt_secs(723.0) == "12m 03s"
+    assert fmt_secs(3599.0) == "59m 59s"
+
+
+def test_fmt_secs_hours_tier():
+    from _canary.reporter import fmt_secs
+
+    # >= 3600: whole hours and minutes
+    assert fmt_secs(3600.0) == "1h 00m"
+    assert fmt_secs(3900.0) == "1h 05m"
+    assert fmt_secs(7200.0) == "2h 00m"
+    assert fmt_secs(45296.0) == "12h 34m"
+
+
+def test_fmt_secs_tier_boundaries():
+    from _canary.reporter import fmt_secs
+
+    # Exact boundaries switch units.
+    assert "m" not in fmt_secs(599.99)
+    assert fmt_secs(600.0) == "10m 00s"
+    assert fmt_secs(3600.0) == "1h 00m"

@@ -576,6 +576,24 @@ class StaticTable:
 
 
 def fmt_secs(x: float, *, na: str = "NA") -> str:
+    """Format a duration in seconds using an adaptive unit.
+
+    The unit widens as the magnitude grows so the alive/final tables stay
+    compact and readable:
+
+    * ``< 600 s``      → seconds, one decimal, e.g. ``"123.4s"``
+    * ``< 3600 s``     → whole minutes and seconds, e.g. ``"12m 03s"``
+    * ``>= 3600 s``    → whole hours and minutes, e.g. ``"1h 05m"``
+
+    Negative inputs render as *na* (default ``"NA"``).
+    """
     if x < 0:
         return na
-    return f"{x:5.1f}s"
+    if x < 600:
+        return f"{x:5.1f}s"
+    if x < 3600:
+        minutes, seconds = divmod(int(x), 60)
+        return f"{minutes:d}m {seconds:02d}s"
+    hours, remainder = divmod(int(x), 3600)
+    minutes = remainder // 60
+    return f"{hours:d}h {minutes:02d}m"
