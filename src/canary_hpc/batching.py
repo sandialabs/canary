@@ -122,7 +122,17 @@ class BatchingSpec:
         resolved_layout: BatchLayout = layout or "flat"
 
         if nodes is None:
-            resolved_nodes: NodePolicy = "any" if resolved_layout == "atomic" else "same"
+            # For count-targeted batching the user cares about the number of
+            # batches, not about homogeneous node-count allocations.  Default
+            # to nodes=any so that a single count is honoured as a global
+            # budget across a mixed-node-count suite.  For duration-targeted
+            # batching the allocation size matters more, so default to
+            # nodes=same (each allocation is sized exactly to its jobs).
+            # layout=atomic always requires nodes=any regardless.
+            if resolved_layout == "atomic" or count is not None:
+                resolved_nodes: NodePolicy = "any"
+            else:
+                resolved_nodes = "same"
         else:
             resolved_nodes = nodes
 
@@ -320,14 +330,7 @@ def allocate_partition_counts(
     nparts = len(partitions)
 
     if count < nparts:
-        logger.warning(
-            "Requested batch count=%d is less than the number of partitions (%d); "
-            "clamping to %d (one batch per partition).",
-            count,
-            nparts,
-            nparts,
-        )
-        count = nparts
+        raise ValueError(f"count={count} is insufficient for {nparts} DAG/resource partitions")
 
     capacities = [max(1, len(partition.jobs)) for partition in partitions]
     total_capacity = sum(capacities)

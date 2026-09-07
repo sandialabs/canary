@@ -125,6 +125,20 @@ def test_batch_spec_validate_count_target() -> None:
     assert spec.duration is None
 
 
+def test_batch_spec_validate_count_target_no_explicit_nodes_defaults_to_any() -> None:
+    # The typical CI config: -b spec=count:N with no nodes= value.
+    # with_defaults() must resolve nodes to "any" so the count is honoured as
+    # a global budget even when the suite has mixed node counts.
+    raw = {"layout": "flat", "nodes": None, "count": 1, "duration": None}
+
+    spec = CanaryHPCBatchSpec.validate_and_set_defaults(raw)
+
+    assert spec.layout == "flat"
+    assert spec.node_policy == "any"
+    assert isinstance(spec.target, CountTarget)
+    assert spec.count == 1
+
+
 def test_batch_spec_validate_count_max_target() -> None:
     raw = {"layout": "atomic", "nodes": "any", "count": "max", "duration": None}
 

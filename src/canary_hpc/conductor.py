@@ -184,27 +184,24 @@ def create_batch_specs(
         resources_per_node=resources_per_node,
     )
 
-    # A positive batch count is only well-defined for a homogeneous set of node
-    # counts under layout=flat,nodes=same.  Each distinct node count forms its
-    # own partition that is submitted as its own allocation (multi-node jobs run
-    # sequentially within their allocation, single-node jobs pack concurrently),
-    # so a single global count cannot be honored as a hard limit across a mix of
-    # node counts.  When the requested count is smaller than the number of
-    # partitions we warn and proceed: allocate_partition_counts will clamp the
-    # count upward to the number of partitions (one batch per partition), which
-    # is the minimum viable allocation.
+    # A positive batch count with layout=flat,nodes=same is not meaningful when
+    # jobs span multiple node counts: each distinct node count is its own
+    # partition submitted as its own allocation, so a single global count cannot
+    # be honoured.  This path is only reached when the caller explicitly set
+    # nodes=same together with a count; the with_defaults() normaliser already
+    # silently chooses nodes=any whenever count is given without an explicit
+    # nodes value, so this guard exists purely for the explicit-conflict case.
     if spec.layout == "flat" and spec.node_policy == "same" and spec.count is not None:
         if not spec.count_is_max():
             node_counts = {partition.node_count for partition in partitions}
             if len(node_counts) > 1:
-                logger.warning(
-                    "A batch count (-b count=N) with layout=flat,nodes=same when jobs span "
-                    "multiple node counts (found %s) cannot be honored as a single global "
-                    "limit.  Each distinct node count requires its own allocation, so at "
-                    "least one batch per node count will be created.  Use a duration target "
-                    "(-b duration=T) or restrict the selection to a single node count to "
-                    "suppress this warning.",
-                    sorted(node_counts),
+                raise ValueError(
+                    "A batch count (-b count=N) is not supported for layout=flat,nodes=same "
+                    f"when jobs span multiple node counts (found {sorted(node_counts)}). "
+                    "Use nodes=any to treat all node counts as a single pool "
+                    "(-b spec=count:N,nodes:any), use a duration target "
+                    "(-b duration=T) instead, or restrict the selection to jobs "
+                    "with a single node count."
                 )
 
     partition_counts = allocate_partition_counts(spec.count, partitions)

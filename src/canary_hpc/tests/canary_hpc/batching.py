@@ -67,6 +67,35 @@ def batching_spec(
     )
 
 
+def test_with_defaults_count_implies_nodes_any() -> None:
+    # When count is given without an explicit nodes value, nodes defaults to
+    # "any" so the count is honoured as a global budget across mixed node counts.
+    spec = batching.BatchingSpec.with_defaults(count=4)
+    assert spec.node_policy == "any"
+    assert spec.count == 4
+
+
+def test_with_defaults_duration_implies_nodes_same() -> None:
+    # When a duration target is given without an explicit nodes value, nodes
+    # defaults to "same" (allocations sized exactly to their jobs).
+    spec = batching.BatchingSpec.with_defaults(duration=1800.0)
+    assert spec.node_policy == "same"
+
+
+def test_with_defaults_explicit_nodes_same_with_count_respected() -> None:
+    # An explicit nodes=same overrides the count-implies-any default.
+    spec = batching.BatchingSpec.with_defaults(count=4, nodes="same")
+    assert spec.node_policy == "same"
+    assert spec.count == 4
+
+
+def test_with_defaults_no_args_duration_nodes_same() -> None:
+    # Default with no args: duration target, nodes=same.
+    spec = batching.BatchingSpec.with_defaults()
+    assert spec.node_policy == "same"
+    assert spec.duration is not None
+
+
 def test_batch_n(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         workdir = generate_files
@@ -200,10 +229,7 @@ def test_allocate_partition_counts_integer(generate_files, tmpdir):
         assert all(c >= 1 for c in counts if isinstance(c, int))
 
 
-def test_allocate_partition_counts_clamps_when_count_less_than_partitions(generate_files, tmpdir):
-    # When count < nparts the function should clamp count upward to nparts and
-    # emit a warning rather than raising.  Every partition receives exactly one
-    # batch allocation.
+def test_allocate_partition_counts_insufficient(generate_files, tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         jobs = generate_jobs(generate_files)
         partitions = batching.partition_jobs(
@@ -211,14 +237,10 @@ def test_allocate_partition_counts_clamps_when_count_less_than_partitions(genera
         )
 
         if len(partitions) <= 1:
-            pytest.skip("Need more than one partition to test clamping")
+            pytest.skip("Need more than one partition to test insufficient count")
 
-        # Must not raise; returns 1 per partition (count clamped to nparts)
-        result = batching.allocate_partition_counts(len(partitions) - 1, partitions)
-
-        assert len(result) == len(partitions)
-        # Each partition gets exactly 1 batch when count is clamped to nparts
-        assert all(r == 1 for r in result)
+        with pytest.raises(ValueError, match="insufficient"):
+            batching.allocate_partition_counts(len(partitions) - 1, partitions)
 
 
 def test_set_batch_dependencies_global(generate_files, tmpdir):
