@@ -189,17 +189,22 @@ def create_batch_specs(
     # own partition that is submitted as its own allocation (multi-node jobs run
     # sequentially within their allocation, single-node jobs pack concurrently),
     # so a single global count cannot be honored as a hard limit across a mix of
-    # node counts.  Reject it and ask the user to either drop the count (use a
-    # duration target) or restrict the selection to a single node count.
+    # node counts.  When the requested count is smaller than the number of
+    # partitions we warn and proceed: allocate_partition_counts will clamp the
+    # count upward to the number of partitions (one batch per partition), which
+    # is the minimum viable allocation.
     if spec.layout == "flat" and spec.node_policy == "same" and spec.count is not None:
         if not spec.count_is_max():
             node_counts = {partition.node_count for partition in partitions}
             if len(node_counts) > 1:
-                raise ValueError(
-                    "A batch count (-b count=N) is not supported for layout=flat,nodes=same "
-                    f"when jobs span multiple node counts (found {sorted(node_counts)}). "
-                    "Use a duration target (-b duration=T) instead, or restrict the "
-                    "selection to jobs with a single node count."
+                logger.warning(
+                    "A batch count (-b count=N) with layout=flat,nodes=same when jobs span "
+                    "multiple node counts (found %s) cannot be honored as a single global "
+                    "limit.  Each distinct node count requires its own allocation, so at "
+                    "least one batch per node count will be created.  Use a duration target "
+                    "(-b duration=T) or restrict the selection to a single node count to "
+                    "suppress this warning.",
+                    sorted(node_counts),
                 )
 
     partition_counts = allocate_partition_counts(spec.count, partitions)

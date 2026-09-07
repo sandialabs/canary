@@ -320,7 +320,14 @@ def allocate_partition_counts(
     nparts = len(partitions)
 
     if count < nparts:
-        raise ValueError(f"count={count} is insufficient for {nparts} DAG/resource partitions")
+        logger.warning(
+            "Requested batch count=%d is less than the number of partitions (%d); "
+            "clamping to %d (one batch per partition).",
+            count,
+            nparts,
+            nparts,
+        )
+        count = nparts
 
     capacities = [max(1, len(partition.jobs)) for partition in partitions]
     total_capacity = sum(capacities)

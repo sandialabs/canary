@@ -200,7 +200,10 @@ def test_allocate_partition_counts_integer(generate_files, tmpdir):
         assert all(c >= 1 for c in counts if isinstance(c, int))
 
 
-def test_allocate_partition_counts_insufficient(generate_files, tmpdir):
+def test_allocate_partition_counts_clamps_when_count_less_than_partitions(generate_files, tmpdir):
+    # When count < nparts the function should clamp count upward to nparts and
+    # emit a warning rather than raising.  Every partition receives exactly one
+    # batch allocation.
     with working_dir(tmpdir.strpath, create=True):
         jobs = generate_jobs(generate_files)
         partitions = batching.partition_jobs(
@@ -208,10 +211,14 @@ def test_allocate_partition_counts_insufficient(generate_files, tmpdir):
         )
 
         if len(partitions) <= 1:
-            pytest.skip("Need more than one partition to test insufficient count")
+            pytest.skip("Need more than one partition to test clamping")
 
-        with pytest.raises(ValueError, match="insufficient"):
-            batching.allocate_partition_counts(len(partitions) - 1, partitions)
+        # Must not raise; returns 1 per partition (count clamped to nparts)
+        result = batching.allocate_partition_counts(len(partitions) - 1, partitions)
+
+        assert len(result) == len(partitions)
+        # Each partition gets exactly 1 batch when count is clamped to nparts
+        assert all(r == 1 for r in result)
 
 
 def test_set_batch_dependencies_global(generate_files, tmpdir):

@@ -195,18 +195,25 @@ def test_create_batch_specs_allocates_global_count_across_partitions() -> None:
     assert all_batch_job_ids(specs) == {"a", "b"}
 
 
-def test_create_batch_specs_rejects_insufficient_count_for_flat_partitions() -> None:
+def test_create_batch_specs_clamps_count_for_flat_partitions_with_deps() -> None:
+    # When count < nparts (here: count=1 but jobs span 2 topological levels →
+    # 2 partitions), the count is clamped to nparts.  Each partition gets one
+    # batch and all jobs are included.
     a = FakeJob("a", cpus=1, runtime=10.0)
     b = FakeJob("b", cpus=1, runtime=10.0)
     b.dependencies.append(FakeDependency(job=a))
 
-    with pytest.raises(ValueError, match="insufficient"):
-        create_batch_specs(
-            jobs=[a, b],  # type: ignore[list-item]
-            batchspec=batchspec(layout="flat", nodes="any", count=1, duration=None),
-            cpus_per_node=8,
-            workers=None,
-        )
+    specs = create_batch_specs(
+        jobs=[a, b],  # type: ignore[list-item]
+        batchspec=batchspec(layout="flat", nodes="any", count=1, duration=None),
+        cpus_per_node=8,
+        workers=None,
+    )
+
+    assert specs
+    assert all_batch_job_ids(specs) == {"a", "b"}
+    # count=1 was clamped to 2 (one per topological-level partition)
+    assert len(specs) == 2
 
 
 def test_create_batch_specs_atomic_defaults_to_component_batches_when_count_max() -> None:
@@ -242,19 +249,56 @@ def test_create_batch_specs_rejects_atomic_nodes_same() -> None:
         )
 
 
-def test_create_batch_specs_rejects_count_for_flat_nodes_same_mixed_node_counts() -> None:
+def test_create_batch_specs_warns_count_for_flat_nodes_same_mixed_node_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # count:N with layout=flat,nodes=same and mixed node counts cannot be honored
+    # as a single global limit.  We warn and proceed: each distinct node count
+    # gets at least one batch, so count is clamped upward to the number of
+    # partitions.
     jobs = [
         FakeJob("one_node", cpus=2, runtime=10.0, node_count=1),
         FakeJob("two_node", cpus=2, runtime=10.0, node_count=2),
     ]
 
-    with pytest.raises(ValueError, match="span multiple node counts"):
-        create_batch_specs(
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        specs = create_batch_specs(
             jobs=jobs,  # type: ignore[arg-type]
-            batchspec=batchspec(layout="flat", nodes="same", count=2, duration=None),
+            batchspec=batchspec(layout="flat", nodes="same", count=1, duration=None),
             cpus_per_node=8,
             workers=None,
         )
+
+    assert specs
+    assert all_batch_job_ids(specs) == {"one_node", "two_node"}
+    # At least one batch per node-count partition (2 distinct node counts → 2 batches)
+    assert len(specs) >= 2
+    assert any("cannot be honored" in r.message for r in caplog.records)
+
+
+def test_create_batch_specs_count_clamped_for_flat_nodes_same_mixed_node_counts() -> None:
+    # Verify that count:1 (below the number of partitions) produces the same
+    # result as count equal to the number of distinct node-count partitions.
+    jobs = [
+        FakeJob("j1", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("j2", cpus=2, runtime=10.0, node_count=1),
+        FakeJob("j3", cpus=4, runtime=10.0, node_count=8),
+        FakeJob("j4", cpus=4, runtime=10.0, node_count=8),
+    ]
+
+    # count:1 should be clamped to 2 (one per node-count partition)
+    specs_count1 = create_batch_specs(
+        jobs=jobs,  # type: ignore[arg-type]
+        batchspec=batchspec(layout="flat", nodes="same", count=1, duration=None),
+        cpus_per_node=8,
+        workers=None,
+    )
+
+    assert all_batch_job_ids(specs_count1) == {"j1", "j2", "j3", "j4"}
+    # With count clamped to 2 partitions, we get exactly 2 batches (1 per partition)
+    assert len(specs_count1) == 2
 
 
 def test_create_batch_specs_allows_count_for_flat_nodes_same_single_node_count() -> None:
