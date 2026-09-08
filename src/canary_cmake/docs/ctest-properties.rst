@@ -1,67 +1,102 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 CTest Properties
 ================
 
-Canary maps a wide range of CTest properties to its own internal job specifications.
+Supported CTest Properties
+--------------------------
 
-Supported Properties
---------------------
+The following CTest properties are supported by ``canary_cmake``:
 
-The following CTest properties are supported and mapped to Canary behavior:
++------------------------------------+--------------------------------------------------+
+| Property                            | Description                                     |
++====================================+==================================================+
+| ``ATTACHED_FILES``                 | Files to attach on test completion               |
++------------------------------------+--------------------------------------------------+
+| ``ATTACHED_FILES_ON_FAIL``         | Files to attach on test failure                  |
++------------------------------------+--------------------------------------------------+
+| ``DEPENDS``                        | Test dependencies (with result consideration)    |
++------------------------------------+--------------------------------------------------+
+| ``DISABLED``                       | Disable test execution                           |
++------------------------------------+--------------------------------------------------+
+| ``ENVIRONMENT``                    | Environment variables for test                   |
++------------------------------------+--------------------------------------------------+
+| ``ENVIRONMENT_MODIFICATION``       | Environment variable modifications               |
++------------------------------------+--------------------------------------------------+
+| ``FAIL_REGULAR_EXPRESSION``        | Regular expressions indicating failure           |
++------------------------------------+--------------------------------------------------+
+| ``FIXTURES_CLEANUP``               | Fixtures to cleanup after test                   |
++------------------------------------+--------------------------------------------------+
+| ``FIXTURES_REQUIRED``              | Required fixtures                                |
++------------------------------------+--------------------------------------------------+
+| ``FIXTURES_SETUP``                 | Fixtures to setup before test                    |
++------------------------------------+--------------------------------------------------+
+| ``LABELS``                         | Test labels (converted to Canary keywords)       |
++------------------------------------+--------------------------------------------------+
+| ``PASS_REGULAR_EXPRESSION``        | Regular expressions indicating success           |
++------------------------------------+--------------------------------------------------+
+| ``PROCESSORS``                     | Number of processors                             |
++------------------------------------+--------------------------------------------------+
+| ``RESOURCE_GROUPS``                | Resource group requirements                      |
++------------------------------------+--------------------------------------------------+
+| ``RUN_SERIAL``                     | Run test serially (exclusive execution)          |
++------------------------------------+--------------------------------------------------+
+| ``SKIP_REGULAR_EXPRESSION``        | Regular expressions indicating skip              |
++------------------------------------+--------------------------------------------------+
+| ``SKIP_RETURN_CODE``               | Return code indicating skip                      |
++------------------------------------+--------------------------------------------------+
+| ``TIMEOUT``                        | Test timeout                                     |
++------------------------------------+--------------------------------------------------+
+| ``WILL_FAIL``                      | Test expected to fail                            |
++------------------------------------+--------------------------------------------------+
+| ``WORKING_DIRECTORY``              | Test working directory                           |
++------------------------------------+--------------------------------------------------+
 
-.. list-table::
-   :widths: 30 70
-   :header-rows: 1
+Unsupported CTest Properties
+----------------------------
 
-   * - Property
-     - Canary Mapping
-   * - ATTACHED_FILES
-     - Added as Canary artifacts (always).
-   * - ATTACHED_FILES_ON_FAIL
-     - Added as Canary artifacts (on failure).
-   * - DEPENDS
-     - Created as Canary dependencies (on success).
-   * - DISABLED
-     - The job is masked (skipped) with a note that it was explicitly disabled.
-   * - ENVIRONMENT
-     - Added to the job's environment variables.
-   * - ENVIRONMENT_MODIFICATION
-     - Applied as environment variable modifications (set, unset, append, prepend).
-   * - FAIL_REGULAR_EXPRESSION
-     - Used during post-execution to mark a job as failed if the pattern matches.
-   * - FIXTURES_SETUP / REQUIRED / CLEANUP
-     - Mapped to Canary dependencies to ensure correct setup/teardown ordering.
-   * - LABELS
-     - Added as Canary keywords (along with the default ctest keyword).
-   * - PASS_REGULAR_EXPRESSION
-     - Used during post-execution to mark a job as successful if the pattern matches.
-   * - PROCESSORS
-     - Mapped to the cpus parameter.
-   * - RESOURCE_GROUPS
-     - Mapped to Canary resource requirements.
-   * - RUN_SERIAL
-     - The job is marked as exclusive.
-   * - SKIP_REGULAR_EXPRESSION
-     - Used during post-execution to mark a job as skipped if the pattern matches.
-   * - SKIP_RETURN_CODE
-     - Marks the job as skipped if the return code matches.
-   * - TIMEOUT
-     - Set as the job's timeout.
-   * - WILL_FAIL
-     - Inverts the success logic: success is reported if the test fails.
-   * - WORKING_DIRECTORY
-     - Set as the job's execution directory.
+The following CTest properties are currently not supported:
 
-Unsupported Properties
-----------------------
++------------------------------------+--------------------------------------------------+
+| Property                            | Reason                                          |
++====================================+==================================================+
+| ``COST``                           | Test cost estimation not implemented             |
++------------------------------------+--------------------------------------------------+
+| ``GENERATED_RESOURCE_SPEC_FILE``   | Generated resource specification not supported   |
++------------------------------------+--------------------------------------------------+
+| ``MEASUREMENT``                    | Test measurements not implemented                |
++------------------------------------+--------------------------------------------------+
+| ``PROCESSOR_AFFINITY``             | Processor affinity not supported                 |
++------------------------------------+--------------------------------------------------+
+| ``REQUIRED_FILES``                 | Required files not implemented                   |
++------------------------------------+--------------------------------------------------+
+| ``RESOURCE_LOCK``                  | Resource locking not supported                   |
++------------------------------------+--------------------------------------------------+
+| ``TIMEOUT_AFTER_MATCH``            | Timeout after pattern match not implemented      |
++------------------------------------+--------------------------------------------------+
+| ``TIMEOUT_SIGNAL_GRACE_PERIOD``    | Signal grace period not supported                |
++------------------------------------+--------------------------------------------------+
+| ``TIMEOUT_SIGNAL_NAME``            | Signal name not supported                        |
++------------------------------------+--------------------------------------------------+
 
-The following properties are currently **not** supported. Using them will trigger a warning:
+Behavior Differences from CTest
+-------------------------------
 
-*   COST
-*   GENERATED_RESOURCE_SPEC_FILE
-*   MEASUREMENT
-*   PROCESSOR_AFFINITY
-*   REQUIRED_FILES
-*   RESOURCE_LOCK
-*   TIMEOUT_AFTER_MATCH
-*   TIMEOUT_SIGNAL_GRACE_PERIOD
-*   TIMEOUT_SIGNAL_NAME
+DEPENDS
+~~~~~~~
+
+In CTest, the ``DEPENDS`` property sets execution order but does not consider test results. In Canary, dependencies consider test results - if a dependency fails, the dependent test will not run.
+
+RESOURCE_GROUPS
+~~~~~~~~~~~~~~~
+
+Canary supports CTest resource specification files. Resource groups are mapped to Canary's resource pool system. See :doc:`resources` for details.
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`status-and-regex` - Status determination behavior
+- :doc:`resources` - Resource group handling

@@ -1,24 +1,87 @@
-Resources
-==========
+.. Copyright NTESS. See COPYRIGHT file for details.
 
-Canary maps CTest resource requirements to the Canary resource pool system.
-
-Processor Mapping
------------------
-
-Canary determines the required number of CPUs in the following order of priority:
-1.  **PROCESSORS property**: If defined, this value is used directly.
-2.  **Command Line Inference**: Canary inspects the test command for common MPI flags (e.g., -n, -np, -c, --np). If found, the value is used as the CPU count.
-3.  **Default**: If neither is found, the requirement defaults to 1 CPU.
+   SPDX-License-Identifier: MIT
 
 Resource Groups
-----------------
+===============
 
-The extension supports CTest **Resource Groups**. When a job is scheduled, Canary calculates the necessary resource assignments and injects them as environment variables for the test process.
+Resource Group Support
+----------------------
 
-The following environment variables are provided to the test:
-*   CTEST_RESOURCE_GROUP_COUNT: The number of resource groups defined.
-*   CTEST_RESOURCE_GROUP_i: A comma-separated list of resource types in group $.
-*   CTEST_RESOURCE_GROUP_i_TYPE: A semicolon-separated list of resource IDs and their available slots (e.g., id:gpu0,slots:1;id:gpu1,slots:1).
+Canary maps CTest ``RESOURCE_GROUPS`` to its resource pool system:
 
-This allows CTest-compatible tests to discover which specific hardware resources they have been allocated.
+.. code-block:: cmake
+
+   add_test(my_test "my_program")
+   set_tests_properties(my_test PROPERTIES RESOURCE_GROUPS "2,gpus:1")
+
+This creates a resource requirement for 2 CPUs and 1 GPU.
+
+Resource Group Format
+~~~~~~~~~~~~~~~~~~~~~
+
+CTest resource groups use the format:
+
+.. code-block:: console
+
+   RESOURCE_GROUPS "<cpus>,<type>:<slots>[;<type>:<slots>...]"
+
+Examples:
+
+- ``"2,gpus:1"`` - 2 CPUs + 1 GPU
+- ``"gpus:1,gpus:1"`` - 2 GPUs (different instances)
+- ``"4"`` - 4 CPUs only
+
+Resource Group Variables
+------------------------
+
+Canary sets environment variables for resource groups:
+
++------------------------------------+--------------------------------------------------+
+| Variable                           | Description                                      |
++====================================+==================================================+
+| ``CTEST_RESOURCE_GROUP_COUNT``    | Number of resource groups                         |
++------------------------------------+--------------------------------------------------+
+| ``CTEST_RESOURCE_GROUP_<N>``      | Resource types in group N                         |
++------------------------------------+--------------------------------------------------+
+| ``CTEST_RESOURCE_GROUP_<N>_<TYPE>``| Resource specifications for type in group N      |
++------------------------------------+--------------------------------------------------+
+
+Example
+~~~~~~~
+
+For ``RESOURCE_GROUPS "2,gpus:1"``:
+
+- ``CTEST_RESOURCE_GROUP_COUNT="1"``
+- ``CTEST_RESOURCE_GROUP_0="gpus"``
+- ``CTEST_RESOURCE_GROUP_0_GPUS="id:<gpu_id>,slots:<slots>"``
+
+See the example in ``examples/ctest/resource_group_test_1.py``:
+
+.. literalinclude:: examples/resource_group_test_1.py
+   :language: python
+   :caption: Resource Group Test Example
+
+Resource Allocation
+-------------------
+
+Canary allocates resources from the pool:
+
+1. **Resource Discovery**: Canary discovers available resources
+2. **Group Mapping**: Resource groups are mapped to pool resources
+3. **Environment Setup**: Resource variables are set before test execution
+4. **Validation**: Insufficient resources cause test failure
+
+Limitations
+~~~~~~~~~~~
+
+- Resource group mapping has limitations with certain resource types
+- GPU resource IDs are normalized (``NVIDIA:`` and ``AMD:`` prefixes removed)
+- Resource allocation failures result in ``ValueError``
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`ctest-properties` - Property reference
+- :doc:`ctest-example` - Complete working example

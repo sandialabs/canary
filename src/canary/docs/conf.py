@@ -300,10 +300,65 @@ def ensure_clean_examples() -> None:
             del dirs[:]
 
 
+def ensure_extension_docs() -> None:
+    """Copy docs/ trees from installed canary plugins into extensions/exts/<name>/.
+
+    Discovery:
+    - Scan every entry point in the ``canary`` group via importlib.metadata.
+    - For each entry point, locate the installed package using importlib.resources.
+    - If the package contains a ``docs/`` directory with a ``.canary-ext-docs``
+      marker file, copy the entire ``docs/`` tree into
+      ``<docs_source_dir>/extensions/exts/<entry-point-name>/``.
+
+    The destination directory (``extensions/exts/``) is git-ignored; it is
+    fully regenerated on every docs build.  The ``extensions/index.rst`` toctree
+    uses a glob (``exts/*/index``) to pick up whatever lands there.
+    """
+    from importlib.metadata import entry_points
+
+    exts_dir = Path(docs_source_dir) / "extensions" / "exts"
+
+    # Wipe and recreate so stale entries from uninstalled plugins don't persist.
+    if exts_dir.exists():
+        shutil.rmtree(exts_dir)
+    exts_dir.mkdir(parents=True, exist_ok=True)
+
+    eps = entry_points(group="canary")
+    for ep in eps:
+        try:
+            # Resolve the top-level package name from the entry point value.
+            # Entry point values look like "my_package.module" or "my_package".
+            pkg_name = ep.value.split(".")[0]
+            pkg_files = resources.files(pkg_name)
+        except (ModuleNotFoundError, TypeError, ValueError):
+            continue
+
+        try:
+            docs_path = pkg_files.joinpath("docs")
+            marker = docs_path.joinpath(".canary-ext-docs")
+            if not marker.is_file():
+                continue
+        except (TypeError, FileNotFoundError, NotADirectoryError):
+            continue
+
+        dest = exts_dir / ep.name
+        # resources.files() may return a Path-like object backed by a zip (wheel)
+        # or a real filesystem path.  Resolve to a real path for shutil.copytree.
+        try:
+            real_docs = Path(str(docs_path))
+            if not real_docs.is_dir():
+                continue
+            shutil.copytree(real_docs, dest, dirs_exist_ok=True)
+            print(f"Extension docs: {ep.name} -> extensions/exts/{ep.name}/")
+        except Exception as exc:
+            print(f"Warning: could not copy docs for {ep.name}: {exc}")
+
+
 # Ensure generated documentation is available
 ensure_clean_examples()
 ensure_command_reference()
 ensure_pyt_directives()
 ensure_api_docs()
+ensure_extension_docs()
 ensure_rst_headings()
 # ensure_changelog_history()

@@ -1,30 +1,66 @@
-Status and Regex Behavior
-=========================
+.. Copyright NTESS. See COPYRIGHT file for details.
 
-When running CTest tests, Canary determines the final job status by evaluating the output and return code against several properties.
+   SPDX-License-Identifier: MIT
 
-Evaluation Order
------------------
+Status Determination and Regular Expressions
+=============================================
 
-The status is evaluated in the following order of precedence:
+Regular Expression Evaluation Order
+-----------------------------------
 
-1.  **Pass Regular Expression**: If PASS_REGULAR_EXPRESSION is defined and any pattern matches the output, the status is set to SUCCESS.
-2.  **Skip Return Code**: If SKIP_RETURN_CODE is defined and the return code matches, the status is set to SKIPPED.
-3.  **Skip Regular Expression**: If SKIP_REGULAR_EXPRESSION is defined and any pattern matches, the status is set to SKIPPED.
-4.  **Fail Regular Expression**: If FAIL_REGULAR_EXPRESSION is defined and any pattern matches, the status is set to FAILED.
-5.  **Will Fail**: If WILL_FAIL is true:
-    *   A successful return code results in FAILED.
-    *   A failed return code results in SUCCESS.
+Regular expression patterns are evaluated in the following order:
 
-Common Pitfalls
----------------
+1. ``PASS_REGULAR_EXPRESSION`` - Set status to success if matched
+2. ``SKIP_RETURN_CODE`` - Set status to skipped if return code matches
+3. ``SKIP_REGULAR_EXPRESSION`` - Set status to skipped if matched
+4. ``FAIL_REGULAR_EXPRESSION`` - Set status to failed if matched
 
-**Conflicting Regexes**: If a test defines both a pass and a fail regular expression, and the output contains both, the **fail regular expression takes precedence** if the pass regex was not already matched (though the order listed above shows Pass is checked first). 
+Evaluation Logic
+~~~~~~~~~~~~~~~~
 
-*Correction based on source*: Looking at , the order is:
-1. Pass Regex $\rightarrow$ SUCCESS (break)
-2. Skip Return Code $\rightarrow$ SKIPPED
-3. Skip Regex $\rightarrow$ SKIPPED (break)
-4. Fail Regex $\rightarrow$ FAILED
+The evaluation follows this precise sequence:
 
-If a match is found in the Pass Regex, the test is immediately marked success. Otherwise, it checks for skips, then finally for failures.
+.. code-block:: python
+
+   # Pseudocode showing evaluation order
+   if pass_regex_matches:
+       status = SUCCESS
+   elif return_code == skip_return_code:
+       status = SKIPPED
+   elif skip_regex_matches:
+       status = SKIPPED
+   elif fail_regex_matches:
+       status = FAILED
+
+Important Notes
+~~~~~~~~~~~~~~~
+
+- If both ``PASS_REGULAR_EXPRESSION`` and ``FAIL_REGULAR_EXPRESSION`` match, the test fails since fail patterns are evaluated last.
+- Regular expressions are evaluated with ``re.MULTILINE`` flag.
+- All patterns in a list are evaluated; the first match determines the outcome.
+
+WILL_FAIL Behavior
+------------------
+
+The ``WILL_FAIL`` property inverts the test status logic:
+
+- If the test succeeds but ``WILL_FAIL`` is true, the status becomes ``FAILED``
+- If the test fails but ``WILL_FAIL`` is true, the status becomes ``SUCCESS``
+- ``SKIPPED`` status is not affected by ``WILL_FAIL``
+
+Example
+~~~~~~~
+
+.. code-block:: cmake
+
+   add_test(will_fail_test "false_command")
+   set_tests_properties(will_fail_test PROPERTIES WILL_FAIL TRUE)
+
+In this example, even though ``false_command`` fails, the test will be marked as successful because ``WILL_FAIL`` is set to ``TRUE``.
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`ctest-properties` - Supported properties
+- :doc:`ctest-example` - Working example

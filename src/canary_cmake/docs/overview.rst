@@ -1,23 +1,95 @@
-Overview
-========
+.. Copyright NTESS. See COPYRIGHT file for details.
 
-The canary_cmake extension allows Canary to integrate with CMake-based projects. It provides the ability to discover tests defined via CTest and offers tools to generate Canary-compatible test definitions directly from CMake.
+   SPDX-License-Identifier: MIT
 
-Relationship to Canary
------------------------
+.. _integrations-cmake:
 
-canary_cmake is an extension package that contributes CMake and CTest integration to the Canary ecosystem. Its primary role is to act as a **job generator**.
+canary_cmake Extension Overview
+===============================
 
-It provides a specialized generator for CTestTestfile.cmake files. When Canary encounters these files, the extension transforms the CTest metadata into Canary job specifications.
+The ``canary_cmake`` extension provides CMake and CTest integration for Canary. It enables running CTest tests natively through Canary's execution framework and provides CMake functions for generating Canary test files.
 
-It is important to note that:
-*   **CTest is an input format**: Canary treats CTest definitions as one of many ways to define jobs.
-*   **Core responsibilities remain with Canary**: The Canary core engine remains responsible for selection, dependency resolution, scheduling, execution, persistence, and reporting.
-*   **Independence**: You do not need to use CMake to use Canary, but if you do, this extension allows you to leverage your existing CTest infrastructure.
+Extension Type
+--------------
 
-Main Capabilities
-------------------
+- **CMake/CTest Integration**: Generator extension for CMake projects
+- **Test Generator**: Creates Canary jobs from CTest test definitions
+- **CMake Module**: Provides CMake functions for Canary test generation
 
-1.  **CTest Discovery**: Automatically find and run tests defined in a CMake build directory.
-2.  **CMake Module**: A bundled CMake module (Canary.cmake) that provides functions to generate .pyt test files during the CMake configuration phase.
-3.  **Property Mapping**: Translation of CTest properties (like labels, environment, and timeouts) into Canary attributes and parameters.
+Features
+--------
+
+1. **CTest Integration**: Run CTest tests through Canary's execution framework
+2. **CMake Functions**: Generate Canary test files from CMake
+3. **Resource Management**: Support for CTest resource groups
+4. **Test Properties**: Support for most CTest test properties
+5. **Fixture Support**: CTest fixture setup and cleanup
+
+Usage
+-----
+
+Basic CTest Integration
+~~~~~~~~~~~~~~~~~~~~~~~
+
+To run CTest tests with Canary, simply pass the path to a CMake build directory:
+
+.. code-block:: console
+
+   $ python3 -m canary run ./ctest
+   $ python3 -m canary status -rA
+
+Canary will automatically detect and run CTest tests defined in the build directory.
+
+.. note::
+
+   This example uses bundled CTest examples. For real CMake projects, point to your build directory containing CTestTestfile.cmake.
+
+CMake Module Usage
+~~~~~~~~~~~~~~~~~~
+
+The ``canary_cmake`` extension provides CMake functions for generating Canary test files:
+
+.. code-block:: cmake
+
+   include(Canary.cmake)
+
+   # Add a simple Canary test
+   add_canary_test(
+     NAME my_test
+     COMMAND my_executable arg1 arg2
+     KEYWORDS "unit" "fast"
+     DEPENDS_ON setup_test
+   )
+
+   # Add a parallel MPI test
+   add_parallel_canary_test(
+     NAME mpi_test
+     COMMAND mpi_program
+     NPROC 2 4 8
+     KEYWORDS "mpi" "parallel"
+   )
+
+Configuration
+-------------
+
+The ``canary_cmake`` extension can be configured with these options:
+
+- ``canary_cmake_test_timeout`` - Default timeout for CTest tests (seconds)
+- ``canary_cmake_ctest_config`` - CTest configuration to use
+
+Environment Variables
+~~~~~~~~~~~~~~~~~~~~~
+
+- ``CTEST_TEST_TIMEOUT`` - Timeout for CTest tests
+- ``PATH`` - Used to locate CTest executable
+
+See Also
+--------
+
+- :doc:`ctest-properties` - Supported and unsupported CTest properties
+- :doc:`ctest-example` - Working CTest example
+- :doc:`cmake-module` - CMake functions reference
+- :doc:`status-and-regex` - Status determination and regular expressions
+- :doc:`fixtures-and-dependencies` - Fixture and dependency handling
+
+The ``canary_cmake`` extension integrates with `CMake <https://cmake.org>`_, enabling execution of CTest tests and generation of CMake-compatible test files.

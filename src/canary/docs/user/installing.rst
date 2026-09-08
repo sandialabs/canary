@@ -72,8 +72,8 @@ Alternatively, the package can be installed from a source checkout:
 Plugin packages
 ---------------
 
-The ``canary-wm`` package installs the ``canary`` core.  Additional capabilities are provided by
-separately installable plugin packages:
+The ``canary-wm`` package installs the ``canary`` core and all built-in
+extensions.  Additional optional extensions must be installed separately:
 
 .. list-table::
    :widths: 30 70
@@ -91,10 +91,28 @@ separately installable plugin packages:
      - CDash XML report generation and upload
    * - ``canary-gitlab``
      - GitLab merge-request reporting
+   * - ``canary-notebook``
+     - Jupyter notebook (``.ipynb``) test execution
 
 Install any subset with:
 
 .. code-block:: console
 
    python3 -m pip install canary-pyt canary-hpc canary-vvtest
+
+Jupyter notebook support
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``canary-notebook`` is not bundled with ``canary-wm``.  Install it via the
+``[notebook]`` extra, which pulls the package directly from GitHub:
+
+.. code-block:: console
+
+   pip install "canary-wm[notebook]"
+
+Or install it standalone:
+
+.. code-block:: console
+
+   pip install canary-notebook
 

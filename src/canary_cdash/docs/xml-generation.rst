@@ -1,68 +1,196 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 XML Generation
-===============
+==============
 
-The canary_cdash extension translates Canary's internal session state into CDash XML files.
+The ``canary_cdash`` extension generates CDash-compatible XML files from Canary workspace results.
 
-How it Works
-------------
+Command Reference
+-----------------
 
-When canary report cdash create is run, the extension iterates over the jobs in the current session. Each job is mapped to a CDash <Test> element.
+.. code-block:: console
+
+   $ python3 -m canary report cdash create -h
+
+Options:
+
++------------------------------------+---------------------------------------------------------+
+| Option                             | Description                                             |
++====================================+=========================================================+
+| ``--build name``                   | Build name for CDash [required]                         |
++------------------------------------+---------------------------------------------------------+
+| ``--site name``                    | Site name for CDash [default: hostname]                 |
++------------------------------------+---------------------------------------------------------+
+| ``--track track``                  | Build track [default: Experimental]                     |
++------------------------------------+---------------------------------------------------------+
+| ``--build-stamp stamp``            | Custom build stamp (format: ``%Y%m%d-%H%M-<track>``)    |
++------------------------------------+---------------------------------------------------------+
+| ``--name-format {short,long}``     | Name format [default: short]                            |
++------------------------------------+---------------------------------------------------------+
+| ``-f file``                        | Read from existing XML file                             |
++------------------------------------+---------------------------------------------------------+
+| ``-d directory``                   | Output directory [default: ``$session/_reports/cdash``] |
++------------------------------------+---------------------------------------------------------+
+| ``-n CHUNK_SIZE``                  | Chunk size (-1 for no chunking) [default: 500]          |
++------------------------------------+---------------------------------------------------------+
+| ``-L LABEL``                       | Treat label as subproject                               |
++------------------------------------+---------------------------------------------------------+
+| ``--subproject-labels LABELS``     | Comma-separated subproject labels                       |
++------------------------------------+---------------------------------------------------------+
+
+Basic Usage
+-----------
+
+Generate CDash XML from current workspace:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild --site MySite
+
+Generate with custom track:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild --track Nightly
+
+Generate with custom build stamp:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild --build-stamp 20240101-1200-Experimental
+
+Chunking
+--------
+
+Large test suites are automatically split into chunks:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild -n 200
+
+This creates multiple XML files with 200 tests each.
+
+Disable chunking with ``-n -1``:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild -n -1
+
+Output Directory
+----------------
+
+Default output directory: ``CDASH/`` (relative to invocation directory, or within the session view)
+
+Custom output directory:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash create --build MyBuild -d /custom/output
+
+Build Stamp Generation
+----------------------
+
+Automatic build stamp format: ``%Y%m%d-%H%M-<track>``
+
+Example: ``20240101-1200-Experimental``
+
+Custom build stamp must follow the same format.
+
+Metadata Collection
+-------------------
+
+Automatically collected metadata:
+
++----------------------------+--------------------------------------------------+
+| Metadata                   | Source                                           |
++============================+==================================================+
+| Hostname                   | System hostname                                  |
++----------------------------+--------------------------------------------------+
+| OS Name                    | Canary configuration                             |
++----------------------------+--------------------------------------------------+
+| OS Release                 | Canary configuration                             |
++----------------------------+--------------------------------------------------+
+| OS Version                 | Canary configuration                             |
++----------------------------+--------------------------------------------------+
+| OS Platform                | Canary configuration                             |
++----------------------------+--------------------------------------------------+
+| Compiler Name              | CMake configuration (if available)               |
++----------------------------+--------------------------------------------------+
+| Compiler Version           | CMake configuration (if available)               |
++----------------------------+--------------------------------------------------+
 
 Status Mapping
 --------------
 
-Canary maps job statuses to CDash statuses and completion categories as follows:
+Canary job status to CDash test status mapping:
 
-.. list-table::
-   :widths: 30 30 30
-   :header-rows: 1
++----------------------------+--------------------------------------------------+
+| Canary Status              | CDash Status                                     |
++============================+==================================================+
+| ``SUCCESS``                | ``passed``                                       |
++----------------------------+--------------------------------------------------+
+| ``FAILED``                 | ``failed``                                       |
++----------------------------+--------------------------------------------------+
+| ``SKIPPED``                | ``notdone``                                      |
++----------------------------+--------------------------------------------------+
+| ``TIMEOUT``                | ``failed`` (completion: ``Timeout``)             |
++----------------------------+--------------------------------------------------+
+| ``CANCELLED``              | ``failed``                                       |
++----------------------------+--------------------------------------------------+
+| Not done                   | ``notdone``                                      |
++----------------------------+--------------------------------------------------+
 
-   * - Canary Status
-     - CDash Status
-     - Completion Status
-   * - success
-     - passed
-     - Completed
-   * - timeout
-     - failed
-     - Timeout
-   * - failure
-     - failed
-     - Completed
-   * - cancelled
-     - failed
-     - Completed
-   * - skipped
-     - notdone
-     - notrun
-   * - Not Done
-     - notdone
-     - notrun
+Test Information
+----------------
 
-For failures, the Fail Reason measurement in the XML is populated using the job's status reason or a default string based on the failure outcome.
+Each CDash test includes:
 
-Build Metadata
---------------
+- **Test Name**: Based on job family and parameters
+- **Command**: Job command line
+- **Status**: Mapped from Canary status
+- **Time**: Job execution time
+- **Output**: Captured job output (compressed if large)
+- **Labels**: Job keywords and custom labels
+- **Subproject**: Assigned via labels or hooks
+- **Artifacts**: Attached files
+- **Measurements**: Timings and custom measurements
 
-To uniquely identify a build in CDash, the following metadata is collected:
+Example XML Structure
+~~~~~~~~~~~~~~~~~~~~~
 
-*   **Project**: Specified during the post command.
-*   **Site**: The machine name. Defaults to the current system hostname (os.uname().nodename) unless --site is provided.
-*   **Build Name**: The name of the configuration/build, provided via --build.
-*   **Build Stamp**: A timestamp uniquely identifying the run. Canary generates this automatically in the format %Y%m%d-%H%M-track (where track defaults to Experimental) unless --build-stamp is provided.
-*   **Generator**: Defaults to canary version <version>.
+.. code-block:: xml
 
-Command Options
----------------
+   <Site>
+     <BuildName>MyBuild</BuildName>
+     <SiteName>MySite</SiteName>
+     <BuildStamp>20240101-1200-Experimental</BuildStamp>
+     <Generator>canary version X.Y.Z</Generator>
+     <!-- Metadata -->
+   </Site>
 
-*   **--name-format {short,long}**: Controls how the test name appears in the XML. short uses the job's display name; long uses the full path relative to the session root.
-*   **-n CHUNK_SIZE**: Splits results into multiple XML files of $ entries each. Use -1 for a single file. The default is 500.
-*   **-L LABEL**: Treats a specific Canary label as a CDash subproject.
-*   **--subproject-labels LABELS**: A comma-separated list of labels to be treated as subprojects.
+   <Testing>
+     <Test>
+       <Name>test_name</Name>
+       <Path>path/to/test</Path>
+       <FullName>full.test.name</FullName>
+       <FullCommandLine>command args</FullCommandLine>
+       <Results>
+         <NamedMeasurement type="text/string" name="status">passed</NamedMeasurement>
+         <NamedMeasurement type="text/string" name="completion_status">Completed</NamedMeasurement>
+         <NamedMeasurement type="numeric/double" name="Execution Time">1.23</NamedMeasurement>
+       </Results>
+       <Labels>
+         <Label>label1</Label>
+         <Label>label2</Label>
+       </Labels>
+     </Test>
+   </Testing>
 
-Artifacts and Measurements
---------------------------
+See Also
+--------
 
-*   **Measurements**: All job measurements are converted to CDash <NamedMeasurement> elements. Strings are typically text/string, while numbers are numeric/double.
-*   **Output**: The job's stdout/stderr is embedded as a base64-encoded, gzip-compressed measurement.
-*   **Artifacts**: If any files are identified as artifacts via the canary_cdash_artifacts hook, they are bundled into a tar.gz archive and attached to the test.
+- :doc:`overview` - Extension overview
+- :doc:`reporter-plugin` - Plugin hooks
+- :doc:`customization` - Customization examples

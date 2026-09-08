@@ -1,72 +1,206 @@
-CMake Module
-=============
+.. Copyright NTESS. See COPYRIGHT file for details.
 
-The canary_cmake extension provides a bundled CMake module, Canary.cmake, which allows developers to define Canary tests directly within their CMakeLists.txt files.
+   SPDX-License-Identifier: MIT
 
-How to Use
------------
+CMake Module Reference
+=======================
 
-The Canary.cmake module should be included in your project:
+The ``Canary.cmake`` module provides functions for generating Canary test files from CMake.
 
-.. code-block:: cmake
+add_canary_test
+~~~~~~~~~~~~~~~
 
-   include(Canary)
-
-This module provides several functions to generate .pyt (Python Test) files in the build directory, which Canary can then discover and run.
-
-Key Functions
---------------
-
-**add_canary_test()**
-Adds a basic Canary unit test.
-*   **Required**: NAME and either COMMAND or SCRIPT.
-*   **Optional**: LINK (files to link), KEYWORDS (Canary keywords), DEPENDS_ON (other tests).
-*   **Behavior**: If COMMAND is used, it generates a  file that wraps the command in a Python function. If SCRIPT is used, it copies the script to the build directory as a  file.
-
-**add_parallel_canary_test()**
-Adds a test that is parameterized by the number of processors.
-*   **Required**: NAME, COMMAND, and NPROC (a list of processor counts).
-*   **Behavior**: Generates a  file that uses canary.directives.parameterize("cpus", [...]).
-
-**add_canary_test_options()**
-Adds options to the Canary CLI for this project.
-*   **Usage**: add_canary_test_options(ON_OPTION opt1 opt2).
-*   **Behavior**: Sets the CANARY_ON_OPTIONS cache variable, which is used by write_canary_config().
-
-**add_canary_test_target()**
-Adds a custom CMake target named canary that runs the tests.
-*   **Usage**: add_custom_target(canary ... COMMAND canary run -w .).
-
-**write_canary_config()**
-Generates a canary.yaml configuration file in the build directory.
-*   **Details**: Captures project name, version, build type, compiler info, and the options set via add_canary_test_options.
-
-Example CMakeLists.txt
-----------------------
+Generate a Canary test file from CMake:
 
 .. code-block:: cmake
 
-   cmake_minimum_required(VERSION 3.20)
-   project(MyProject VERSION 1.0)
-
-   include(Canary)
-
-   add_executable(my_test_bin main.cpp)
-   
-   # Add a serial Canary test
    add_canary_test(
-     NAME a_basic_test
-     COMMAND my_test_bin --arg1 val1
-     KEYWORDS smoke stability
+     NAME <name>
+     <COMMAND <command> | SCRIPT <script>>
+     [NO_DEFAULT_LINK]
+     [LINK link1 [link2...]]
+     [KEYWORDS kwd1 [kwd2...]]
+     [DEPENDS_ON dep1 [dep2...]]
    )
 
-   # Add a parallel Canary test run on 1, 2, and 4 CPUs
-   add_parallel_canary_test(
-     NAME a_parallel_test
-     COMMAND mpiexec my_test_bin
-     NPROC 1 2 4
-     KEYWORDS mpi
+Parameters:
+
++----------------------------+----------------------------------------------------------+
+| Parameter                  | Description                                              |
++============================+==========================================================+
+| ``NAME``                   | Test name (required)                                     |
++----------------------------+----------------------------------------------------------+
+| ``COMMAND``                | Command to execute (mutually exclusive with SCRIPT)      |
++----------------------------+----------------------------------------------------------+
+| ``SCRIPT``                 | Script file to execute (mutually exclusive with COMMAND) |
++----------------------------+----------------------------------------------------------+
+| ``NO_DEFAULT_LINK``        | Don't automatically link the command                     |
++----------------------------+----------------------------------------------------------+
+| ``LINK``                   | Additional files to link                                 |
++----------------------------+----------------------------------------------------------+
+| ``KEYWORDS``               | Test keywords                                            |
++----------------------------+----------------------------------------------------------+
+| ``DEPENDS_ON``             | Test dependencies                                        |
++----------------------------+----------------------------------------------------------+
+
+Example:
+
+.. code-block:: cmake
+
+   add_canary_test(
+     NAME unit_test
+     COMMAND my_test_program --fast
+     KEYWORDS "unit" "fast"
+     DEPENDS_ON build_library
    )
+
+add_parallel_canary_test
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generate a parallel Canary test file:
+
+.. code-block:: cmake
+
+   add_parallel_canary_test(
+     NAME <name>
+     COMMAND <command>
+     NPROC <nproc1 [nproc2...]>
+     [NO_DEFAULT_LINK]
+     [LINK link1 [link2...]]
+     [KEYWORDS kwd1 [kwd2...]]
+     [DEPENDS_ON dep1 [dep2...]]
+   )
+
+Parameters:
+
++----------------------------+--------------------------------------------------+
+| Parameter                  | Description                                      |
++============================+==================================================+
+| ``NAME``                   | Test name (required)                             |
++----------------------------+--------------------------------------------------+
+| ``COMMAND``                | Command to execute (required)                    |
++----------------------------+--------------------------------------------------+
+| ``NPROC``                  | Number of processors (required)                  |
++----------------------------+--------------------------------------------------+
+| ``NO_DEFAULT_LINK``        | Don't automatically link the command             |
++----------------------------+--------------------------------------------------+
+| ``LINK``                   | Additional files to link                         |
++----------------------------+--------------------------------------------------+
+| ``KEYWORDS``               | Test keywords                                    |
++----------------------------+--------------------------------------------------+
+| ``DEPENDS_ON``             | Test dependencies                                |
++----------------------------+--------------------------------------------------+
+
+Example:
+
+.. code-block:: cmake
+
+   add_parallel_canary_test(
+     NAME mpi_integration
+     COMMAND mpi_program
+     NPROC 2 4 8
+     KEYWORDS "integration" "mpi"
+   )
+
+add_canary_test_options
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Add options to Canary configuration:
+
+.. code-block:: cmake
+
+   add_canary_test_options(ON_OPTION <option>)
+
+Parameters:
+
++----------------------------+--------------------------------------------------+
+| Parameter                  | Description                                      |
++============================+==================================================+
+| ``ON_OPTION``              | Option to enable                                 |
++----------------------------+--------------------------------------------------+
+
+Example:
+
+.. code-block:: cmake
+
+   add_canary_test_options(ON_OPTION "verbose")
+
+add_canary_test_target
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a CMake target for running Canary tests:
+
+.. code-block:: cmake
+
+   add_canary_test_target()
+
+This creates a ``canary`` target that runs Canary tests in the build directory.
+
+write_canary_config
+~~~~~~~~~~~~~~~~~~~~
+
+Write Canary configuration file:
+
+.. code-block:: cmake
 
    write_canary_config()
+
+Generates a ``canary.yaml`` file with build information including:
+
+- Project name and version
+- Build type and date
+- Source and build directories
+- Compiler information
+- Configured options
+
+Example Usage
+-------------
+
+Complete CMakeLists.txt example:
+
+.. code-block:: cmake
+
+   cmake_minimum_required(VERSION 3.21)
+   project(MyProject VERSION 1.0.0)
+
+   # Include Canary CMake module
+   include(Canary.cmake)
+
+   # Add unit tests
+   add_canary_test(
+     NAME unit_test_fast
+     COMMAND my_unit_test --fast
+     KEYWORDS "unit" "fast"
+   )
+
+   add_canary_test(
+     NAME unit_test_slow
+     COMMAND my_unit_test --slow
+     KEYWORDS "unit" "slow"
+     DEPENDS_ON unit_test_fast
+   )
+
+   # Add MPI integration test
+   find_package(MPI REQUIRED)
+   add_parallel_canary_test(
+     NAME mpi_integration
+     COMMAND mpi_integration_test
+     NPROC 2 4
+     KEYWORDS "integration" "mpi"
+     LINK ${MPI_C_LIBRARIES}
+   )
+
+   # Configure options
+   add_canary_test_options(ON_OPTION "verbose" "color")
+
+   # Create test target
    add_canary_test_target()
+
+   # Write configuration
+   write_canary_config()
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`ctest-example` - Working example

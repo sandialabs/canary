@@ -56,6 +56,7 @@ optional-dependencies.dev = [
 ]
 # backward compatible options that are now either required or builtin to hpc-connect
 optional-dependencies.requests = [ "requests" ]
+optional-dependencies.notebook = [ "canary-notebook @ git+https://github.com/sandialabs/canary-notebook.git" ]
 urls.Documentation = "https://canary-wm.readthedocs.io/en/production/"
 urls.Issues = "https://github.com/sandialabs/canary/issues"
 urls.Repository = "https://github.com/sandialabs/canary"
@@ -80,13 +81,16 @@ include-package-data = true
 [tool.setuptools.package-data]
 _canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg"]
 canary = ["py.typed", "docs/**", "data/*.json"]
-canary_cdash = ["data/*.json", "validators/*.xsd"]
-canary_cmake = ["Canary.cmake", "data/*.json", "tests/**/CTestTestfile.cmake"]
+canary_amd = ["docs/**"]
+canary_cdash = ["data/*.json", "docs/**", "validators/*.xsd"]
+canary_cmake = ["Canary.cmake", "data/*.json", "docs/**", "tests/**/CTestTestfile.cmake"]
 canary_dist = ["data/*.json"]
+canary_flux = ["docs/**"]
 canary_gitlab = ["data/*.json"]
-canary_hpc = ["data/*.json"]
-canary_pyt = ["data/*.json"]
-canary_vvtest = ["data/*.json"]
+canary_hpc = ["data/*.json", "docs/**"]
+canary_nvidia = ["docs/**"]
+canary_pyt = ["data/*.json", "docs/**"]
+canary_vvtest = ["data/*.json", "docs/**"]
 
 [tool.ruff]
 target-version = "py311"

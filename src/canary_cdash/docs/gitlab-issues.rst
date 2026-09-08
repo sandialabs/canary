@@ -1,41 +1,209 @@
-GitLab Issue Generation
-========================
+.. Copyright NTESS. See COPYRIGHT file for details.
 
-The canary_cdash extension includes a utility to synchronize CDash failures with GitLab issues. This is useful for tracking regressions in a project's issue tracker based on the CDash dashboard.
+   SPDX-License-Identifier: MIT
 
-The make-gitlab-issues Command
-----------------------------------
+GitLab Issues
+=============
 
-This command identifies failing tests on CDash and ensures corresponding issues exist in GitLab.
+Create GitLab issues from CDash test failures.
+
+Command Reference
+-----------------
 
 .. code-block:: console
 
-   python3 -m canary report cdash make-gitlab-issues \
-     --cdash-url https://cdash.example.org \
-     --cdash-project MyProject \
-     --gitlab-url https://gitlab.example.org/mygroup/myproject \
-     --gitlab-api-url https://gitlab.example.org/api/v4 \
-     --gitlab-project-id 123456
+   $ python3 -m canary report cdash make-gitlab-issues -h
 
-Authentication
+Options:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Option
+     - Description
+   * - ``-a TOKEN``
+     - GitLab access token
+   * - ``--cdash-url URL``
+     - Base CDash URL [required]
+   * - ``--cdash-project PROJECT``
+     - CDash project name [required]
+   * - ``--gitlab-url URL``
+     - GitLab project URL [required]
+   * - ``--gitlab-api-url URL``
+     - GitLab API URL [required]
+   * - ``--gitlab-project-id ID``
+     - GitLab project ID [required]
+   * - ``-d DATE``
+     - Date for failures (YYYY-MM-DD)
+   * - ``-f GROUPS``
+     - Filter groups (repeatable)
+   * - ``--skip-site SITE``
+     - Skip site (regex pattern, repeatable)
+   * - ``--dont-close-missing``
+     - Don't close issues for missing failures
+
+Basic Usage
+-----------
+
+Create issues from today's failures:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash make-gitlab-issues \
+       -a "$GITLAB_TOKEN" \
+       --cdash-url https://cdash.example.org \
+       --cdash-project MyProject \
+       --gitlab-url https://gitlab.example.org/mygroup/myproject \
+       --gitlab-api-url https://gitlab.example.org/api/v4 \
+       --gitlab-project-id 12345
+
+Create issues for specific date:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash make-gitlab-issues \
+       -a "$GITLAB_TOKEN" \
+       --cdash-url https://cdash.example.org \
+       --cdash-project MyProject \
+       --gitlab-project-id 12345 \
+       -d 2024-01-01
+
+Filter by Groups
+~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash make-gitlab-issues \
+       -a "$GITLAB_TOKEN" \
+       --cdash-url https://cdash.example.org \
+       --cdash-project MyProject \
+       --gitlab-project-id 12345 \
+       -f Nightly
+
+Skip Specific Sites
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash make-gitlab-issues \
+       -a "$GITLAB_TOKEN" \
+       --cdash-url https://cdash.example.org \
+       --cdash-project MyProject \
+       --gitlab-project-id 12345 \
+       --skip-site "test-.*" --skip-site "backup-.*"
+
+Issue Creation Process
+----------------------
+
+1. **Query CDash**: Retrieve test failures from CDash
+2. **Filter Results**: Apply date, group, and site filters
+3. **Create Issues**: Create GitLab issues for new failures
+4. **Update Issues**: Update existing issues with new information
+5. **Close Issues**: Close issues for fixed tests (unless ``--dont-close-missing``)
+
+Requirements
+------------
+
+GitLab Requirements
+~~~~~~~~~~~~~~~~~~~
+
+- **Access Token**: GitLab API token with read/write privileges
+- **Project ID**: GitLab project integer ID
+- **API Access**: GitLab API must be accessible
+- **Permissions**: Token must have issue creation permissions
+
+CDash Requirements
+~~~~~~~~~~~~~~~~~~
+
+- **Read Access**: Requires read access to CDash project
+- **Failure Data**: CDash must have failure data available
+- **Network Access**: CDash server must be accessible
+
+Issue Format
+------------
+
+GitLab issues include:
+
+- **Title**: Descriptive title with test name and failure type
+- **Description**: Detailed failure information from CDash
+- **Labels**: GitLab labels for categorization
+- **Links**: Links to CDash build and test details
+- **Metadata**: Build information and failure context
+
+Issue Management
+----------------
+
+Issue Lifecycle
+~~~~~~~~~~~~~~~
+
+1. **Creation**: Issue created for new test failure
+2. **Update**: Issue updated when failure persists
+3. **Resolution**: Issue closed when test passes
+4. **Reopening**: Issue reopened if failure recurs
+
+Issue Tracking
+~~~~~~~~~~~~~~
+
+The system tracks:
+
+- **Failure History**: When failures first appeared
+- **Resolution History**: When failures were fixed
+- **Recurrence**: If failures reappear after being fixed
+
+Best Practices
 --------------
 
-The command requires a GitLab API access token with read/write privileges. This can be provided via:
-1.  The -a ACCESS_TOKEN argument.
-2.  The ACCESS_TOKEN environment variable.
+1. **Token Security**: Protect GitLab access tokens
+2. **Rate Limiting**: Be aware of GitLab API rate limits
+3. **Issue Volume**: Monitor issue creation volume
+4. **Filtering**: Use filters to focus on relevant failures
+5. **Automation**: Automate issue creation in CI/CD pipelines
 
-Behavior
----------
+Limitations
+-----------
 
-*   **Issue Creation**: If a test fails on CDash but no matching issue exists in GitLab, a new issue is created.
-*   **Issue Updates**: If an issue already exists, it is updated with a list of all currently failing realizations (sites, build types, compilers).
-*   **Automatic Closing**: By default, if a test is no longer failing on CDash, the corresponding GitLab issue is closed and labeled as test::fixed. Use --dont-close-missing to disable this.
-*   **Labeling**: Issues are tagged with:
-    *   test::failed, test::diffed, or test::timeout based on the failure reason.
-    *   system: <sitename> for each site where the test is failing.
-    *   Stage::To Do.
+- **API Limits**: Subject to GitLab API rate limits
+- **Network Dependencies**: Requires both CDash and GitLab access
+- **Complexity**: Issue management can become complex for large projects
+- **Permissions**: Requires appropriate permissions on both systems
 
-Security Note
--------------
+Security Considerations
+-----------------------
 
-Never commit API tokens to version control. Use environment variables or a secure secrets manager.
+- **Token Protection**: Never commit tokens to version control
+- **Environment Variables**: Use environment variables for tokens
+- **Network Security**: Use secure networks for API calls
+- **Access Control**: Limit who can configure issue creation
+
+Example Configuration
+---------------------
+
+Environment variables:
+
+.. code-block:: console
+
+   $ export GITLAB_TOKEN="your-access-token-here"
+   $ export CDASH_URL="https://cdash.example.org"
+   $ export CDASH_PROJECT="MyProject"
+   $ export GITLAB_URL="https://gitlab.example.org/mygroup/myproject"
+   $ export GITLAB_API_URL="https://gitlab.example.org/api/v4"
+   $ export GITLAB_PROJECT_ID="12345"
+
+Automated issue creation:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash make-gitlab-issues \
+       -a "$GITLAB_TOKEN" \
+       --cdash-url "$CDASH_URL" \
+       --cdash-project "$CDASH_PROJECT" \
+       --gitlab-url "$GITLAB_URL" \
+       --gitlab-api-url "$GITLAB_API_URL" \
+       --gitlab-project-id "$GITLAB_PROJECT_ID"
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`summaries` - CDash summaries

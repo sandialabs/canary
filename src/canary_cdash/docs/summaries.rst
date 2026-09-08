@@ -1,32 +1,125 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 CDash Summaries
 ===============
 
-The canary_cdash extension can pull data back from a CDash server to generate a standalone HTML summary of the build status across multiple sites.
+Generate HTML summaries of CDash dashboards.
 
-The summary Command
-----------------------
-
-This command queries the CDash API (and GraphQL endpoint) to aggregate results.
+Command Reference
+-----------------
 
 .. code-block:: console
 
-   python3 -m canary report cdash summary --project MyProject --url https://cdash.example.org -o summary.html
+   $ python3 -m canary report cdash summary -h
 
-Options
--------
+Options:
 
-*   **--project PROJECT**: The CDash project to summarize.
-*   **--url URL**: The base CDash URL.
-*   **-t TRACK**: Filter by specific CDash build groups (e.g., Nightly, Experimental). Defaults to all.
-*   **-m MAILTO**: Email addresses to send the resulting summary to.
-*   **-s SKIP_SITE**: A Python regular expression used to exclude specific sites from the summary.
-*   **-o OUTPUT**: The filename to write the HTML summary to. If omitted, it prints to stdout.
++------------------------------------+--------------------------------------------------+
+| Option                             | Description                                      |
++====================================+==================================================+
+| ``--project CDASH_PROJECT``        | CDash project name                               |
++------------------------------------+--------------------------------------------------+
+| ``--url CDASH_URL``                | Base CDash URL                                   |
++------------------------------------+--------------------------------------------------+
+| ``-t TRACK``                       | Filter by build group (repeatable)               |
++------------------------------------+--------------------------------------------------+
+| ``-m MAILTO``                      | Email address to send summary (repeatable)       |
++------------------------------------+--------------------------------------------------+
+| ``-s SKIP_SITE``                   | Skip site (regex pattern, repeatable)            |
++------------------------------------+--------------------------------------------------+
+| ``-o OUTPUT``                      | Filename to write HTML summary [default: stdout] |
++------------------------------------+--------------------------------------------------+
 
-How it Works
-------------
+Basic Usage
+-----------
 
-The summary tool:
-1.  Queries the CDash index to find builds in the requested groups.
-2.  Retrieves failure counts and timing data.
-3.  Categorizes failures into **Diffed**, **Timeout**, and **Failed** based on the "details" field provided by the CDash server.
-4.  Renders an HTML table with color-coded cells (red for errors, orange for warnings/diffs, limegreen for passes).
+Generate summary for today:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash summary \
+       --project MyProject \
+       --url https://cdash.example.org
+
+Generate summary for specific date:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash summary \
+       --project MyProject \
+       --url https://cdash.example.org \
+       --date 2024-01-01
+
+Filter by Groups
+~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash summary \
+       --project MyProject \
+       --url https://cdash.example.org \
+       -t Nightly -t Experimental
+
+Skip Specific Sites
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash summary \
+       --project MyProject \
+       --url https://cdash.example.org \
+       -s "test-.*" -s "backup-.*"
+
+Summary Features
+----------------
+
+The CDash summary provides:
+
+- **Build Overview**: Summary of all builds
+- **Test Results**: Pass/fail statistics
+- **Failure Analysis**: Detailed failure information
+- **Trend Analysis**: Historical trends
+- **Site Comparison**: Compare results across sites
+
+Summary Output
+--------------
+
+HTML summary is written to standard output or can be redirected:
+
+.. code-block:: console
+
+   $ python3 -m canary report cdash summary \
+       --project MyProject \
+       --url https://cdash.example.org > summary.html
+
+Summary Requirements
+--------------------
+
+- **CDash Access**: Requires read access to CDash project
+- **Network**: Requires internet access to CDash server
+- **Authentication**: CDash server must allow summary access
+
+Summary Limitations
+-------------------
+
+- **Data Availability**: Limited to data available in CDash
+- **Performance**: Large projects may generate large summaries
+- **Customization**: Limited customization options
+- **Real-time**: Summary reflects CDash data at time of generation
+
+Summary Best Practices
+----------------------
+
+1. **Regular Generation**: Generate summaries regularly
+2. **Date Ranges**: Use appropriate date ranges
+3. **Filtering**: Use filters to focus on relevant data
+4. **Automation**: Automate summary generation
+5. **Archiving**: Archive summaries for historical reference
+
+See Also
+--------
+
+- :doc:`overview` - Extension overview
+- :doc:`uploading` - Upload functionality
