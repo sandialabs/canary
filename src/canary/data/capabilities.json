@@ -419,6 +419,54 @@
         "plugin_manager": "_canary.pluginmanager.CanaryPluginManager",
         "marker": "canary.hookimpl or _canary.hookspec.hookimpl"
       },
+      "authoring": {
+        "summary": "How to write and load a project-local plugin without installing a package.",
+        "loading_methods": {
+          "global_flag": {
+            "syntax": "canary -p MODULE_NAME run ...",
+            "note": "The -p flag is a GLOBAL option and must come BEFORE the subcommand. 'canary run -p mod ...' is WRONG; the run-level -p is a parameter-expression filter and is unrelated.",
+            "mechanism": "Does __import__(MODULE_NAME) then registers the module with the plugin manager. The module must be importable (i.e. its parent directory must be on PYTHONPATH).",
+            "multiple": "Use -p multiple times: canary -p hook1 -p hook2 run ..."
+          },
+          "config_file": {
+            "syntax": "plugins: [MODULE_NAME]",
+            "note": "List plugin module names in canary.yaml or canary.json. Loaded via consider_plugin() on startup."
+          },
+          "entry_point": {
+            "syntax": "Declare in pyproject.toml under [project.entry-points.canary]",
+            "note": "For installed packages. Loaded automatically via load_setuptools_entrypoints('canary')."
+          }
+        },
+        "pythonpath": "For -p and config-file methods: ensure the module's parent directory is on PYTHONPATH. Example: PYTHONPATH=src/hooks canary -p mymod run PATH",
+        "minimal_recipe": {
+          "step1": "Create src/hooks/mymod/__init__.py (or src/hooks/mymod.py for a single-file module).",
+          "step2": "Import canary and decorate hookimpl functions: import canary; @canary.hookimpl def canary_runtest_finish(case): ...",
+          "step3": "Set PYTHONPATH=src/hooks (or wherever the module root lives).",
+          "step4": "Load: canary -p mymod run PATH   (note: -p BEFORE run)"
+        },
+        "hookimpl_semantics": {
+          "firstresult_hooks": "When firstresult=True, only the first non-None return value is used. YOUR implementation REPLACES the built-in. Use this only when you intend to fully replace default behavior.",
+          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runtest_finish is firstresult=True — so if you return a truthy value, the built-in case.finish()+save will NOT run. Use @canary.hookimpl(trylast=True) and return None to let the built-in run after your code.",
+          "trylast": "@canary.hookimpl(trylast=True) — your impl runs after all others (safe for additive post-processing).",
+          "tryfirst": "@canary.hookimpl(tryfirst=True) — your impl runs before all others."
+        },
+        "canary_runtest_finish_recipe": {
+          "firstresult": true,
+          "cwd": "Called inside the job's working directory. Outputs are at '.'",
+          "signature": "def canary_runtest_finish(case: Job) -> bool",
+          "safe_pattern": "Return None (not True) so the built-in case.finish()+save still executes after your code.",
+          "useful_attributes": {
+            "case.name": "Job family name.",
+            "case.parameters": "dict of parameter name -> value.",
+            "case.exec_dir": "Absolute path to the job's execution/working directory (same as cwd when hook fires).",
+            "case.status": "Status object with .category, .outcome, .reason.",
+            "case.add_measurement(name, value)": "Attach a structured key/value to the job record.",
+            "case.finish()": "Called by the built-in; completes teardown and saves the job."
+          },
+          "example": "import canary\n@canary.hookimpl(trylast=True)\ndef canary_runtest_finish(case):\n    # cwd is the job's working directory\n    import pathlib\n    out = pathlib.Path('result.dat')\n    if out.exists():\n        value = float(out.read_text().strip())\n        case.add_measurement('my_metric', value)\n    return None  # let built-in run"
+        },
+        "query_measurements": "canary query job JOBID measurements.data.<name>"
+      },
       "query_data": {
         "canary_capabilities": "Return an extension capability document inserted under capabilities.ext.<extension>.",
         "canary_skills": "Return an extension skill document inserted under skills.ext.<extension>."
@@ -426,6 +474,7 @@
       "pre": {
         "canary_sessionstart": {
           "purpose": "Runs when a new session starts.",
+          "firstresult": false,
           "arguments": [
             "session"
           ],
@@ -433,6 +482,8 @@
         },
         "canary_runteststart": {
           "purpose": "Runs during job setup before the job command executes.",
+          "firstresult": true,
+          "cwd": "Called inside the job's working directory.",
           "arguments": [
             "case"
           ],
@@ -442,14 +493,18 @@
       "post": {
         "canary_runtest_finish": {
           "purpose": "Runs after the test execution phase and before the job is finally saved.",
+          "firstresult": true,
+          "cwd": "Called inside the job's working directory.",
           "arguments": [
             "case"
           ],
           "default_behavior": "The built-in wrapper calls case.finish() and saves the job.",
+          "safe_pattern": "Return None (not True/False) so the built-in still executes. Use @canary.hookimpl(trylast=True) to run after any other registered finish hooks.",
           "agent_use": "Inspect outputs, perform post-processing, add measurements, and attach metadata."
         },
         "canary_runtests_report": {
           "purpose": "Runs after a test session to generate reports or summaries.",
+          "firstresult": false,
           "arguments": [
             "runner"
           ],
@@ -457,6 +512,7 @@
         },
         "canary_sessionfinish": {
           "purpose": "Runs after a non-reused session finishes.",
+          "firstresult": false,
           "arguments": [
             "session"
           ],
