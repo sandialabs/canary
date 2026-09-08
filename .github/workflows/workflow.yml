@@ -37,6 +37,12 @@ jobs:
           pytest src/canary_vvtest/tests
           pytest tests
 
+      - name: Clone and test canary-notebook
+        run: |
+          git clone https://github.com/sandialabs/canary-notebook.git /tmp/canary-notebook
+          pip install /tmp/canary-notebook
+          pytest /tmp/canary-notebook/tests
+
   slurm:
    runs-on: ubuntu-latest
    steps:
