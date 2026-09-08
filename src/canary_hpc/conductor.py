@@ -219,7 +219,9 @@ def create_batch_specs(
             resource_capacity = {k: v * node_count for k, v in resources_per_node.items()}
             resource_capacity.setdefault("cpus", width)
 
-        single_spec = dataclasses.replace(spec, layout="atomic", node_policy="any", target=CountTarget(1))
+        single_spec = dataclasses.replace(
+            spec, layout="atomic", node_policy="any", target=CountTarget(1)
+        )
         batch_specs = batch_jobs(
             jobs=jobs,
             width=width,
