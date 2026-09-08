@@ -580,9 +580,7 @@ def test_slots_by_node_reports_capacity_not_availability():
 
 
 def test_slots_capacity_survives_config_mutation():
-    rp = ResourcePool(
-        {"nodes": [{"id": "0", "resources": {"cpus": [{"id": "0", "slots": 2}]}}]}
-    )
+    rp = ResourcePool({"nodes": [{"id": "0", "resources": {"cpus": [{"id": "0", "slots": 2}]}}]})
     node = rp.get_node("0")
     assert node.slots_capacity("cpus") == 2
     node.set_slots_per_resource("cpus", 8)
