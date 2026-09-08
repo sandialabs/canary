@@ -146,11 +146,11 @@ def test_reporter_row_values_for_slot_are_column_driven() -> None:
     assert values["job"] == "myjob"
     assert values["id"] == "aaaaaaaa"[:7]
     assert values["status"] == "[green]RUNNING[/]"
-    assert values["queued"].strip().endswith("s")
-    assert values["staging"].strip().endswith("s")
-    assert values["running"].strip().endswith("s")
-    assert values["finishing"].strip().endswith("s")
-    assert values["total"].strip().endswith("s")
+    # All timing values should be in HH:MM:SS format (two colons present).
+    for col in ("queued", "staging", "running", "finishing", "total"):
+        assert values[col].count(":") == 2, (
+            f"column {col!r}: {values[col]!r} not in HH:MM:SS format"
+        )
     assert values["rank"] == "2/5"
 
 
@@ -159,11 +159,13 @@ def test_reporter_slot_timing_values_from_timekeeper() -> None:
     slot = make_slot()
     values = reporter.row_values_for_slot(slot, ("Job",), status="RUNNING")
 
-    assert values["queued"].strip() == "1.0s"
-    assert values["staging"].strip() == "3.0s"
-    assert values["running"].strip() == "6.0s"
-    assert values["finishing"].strip() == "1.0s"
-    assert values["total"].strip() == "11.0s"
+    # queued=1s, staging=3s, running=6s, finishing=1s, total=11s
+    # < 2s threshold: sub-second precision included; >= 2s: plain HH:MM:SS
+    assert values["queued"] == "00:00:01.00"  # 1s < threshold
+    assert values["staging"] == "00:00:03"  # 3s >= threshold
+    assert values["running"] == "00:00:06"  # 6s >= threshold
+    assert values["finishing"] == "00:00:01.00"  # 1s < threshold
+    assert values["total"] == "00:00:11"  # 11s >= threshold
 
 
 def test_reporter_pending_rows_mark_timing_columns_na() -> None:
@@ -216,9 +218,9 @@ def test_row_values_for_job_falls_back_to_timekeeper():
 
     assert values["job"] == "bad"
     assert values["status"].endswith("[/]") or "FAIL" in values["status"]
-    assert values["queued"].strip() == "2.0s"
-    assert values["running"].strip() == "4.0s"
-    assert values["total"].strip() == "9.0s"
+    assert values["queued"] == "00:00:02"  # 2.0s — at threshold, plain HH:MM:SS
+    assert values["running"] == "00:00:04"  # 4.0s
+    assert values["total"] == "00:00:09"  # 9.0s
     assert values["details"] == "boom"
 
 

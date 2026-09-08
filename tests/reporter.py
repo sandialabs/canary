@@ -229,47 +229,55 @@ def test_markdown_report_updates_in_place(setup):
         assert after[job.id]["status"] == before[job.id]["status"]
 
 
-def test_fmt_secs_negative_is_na():
+def test_fmt_secs_negative_is_placeholder():
     from _canary.reporter import fmt_secs
 
-    assert fmt_secs(-1.0) == "NA"
-    assert fmt_secs(-0.001) == "NA"
-    assert fmt_secs(-5.0, na="--") == "--"
+    # Negative values (= "not yet measured") render as the HH:MM:SS placeholder.
+    assert fmt_secs(-1.0) == "--:--:--"
+    assert fmt_secs(-0.001) == "--:--:--"
 
 
 def test_fmt_secs_seconds_tier():
     from _canary.reporter import fmt_secs
 
-    # < 600s: seconds with one decimal (fixed width matches legacy format)
-    assert fmt_secs(0.0) == "  0.0s"
-    assert fmt_secs(1.0) == "  1.0s"
-    assert fmt_secs(123.4) == "123.4s"
-    assert fmt_secs(599.9) == "599.9s"
+    # Below hhmmss threshold (2.0 s): sub-second precision included.
+    assert fmt_secs(0.0) == "00:00:00.00"
+    assert fmt_secs(1.0) == "00:00:01.00"
+    # At and above threshold: plain HH:MM:SS.
+    assert fmt_secs(2.0) == "00:00:02"
+    assert fmt_secs(59.0) == "00:00:59"
+    assert fmt_secs(123.0) == "00:02:03"
+    assert fmt_secs(599.0) == "00:09:59"
 
 
 def test_fmt_secs_minutes_tier():
     from _canary.reporter import fmt_secs
 
-    # [600, 3600): whole minutes and seconds
-    assert fmt_secs(600.0) == "10m 00s"
-    assert fmt_secs(723.0) == "12m 03s"
-    assert fmt_secs(3599.0) == "59m 59s"
+    # Minutes range — seconds field must still be present.
+    assert fmt_secs(600.0) == "00:10:00"
+    assert fmt_secs(723.0) == "00:12:03"
+    assert fmt_secs(3599.0) == "00:59:59"
 
 
 def test_fmt_secs_hours_tier():
     from _canary.reporter import fmt_secs
 
-    # >= 3600: whole hours and minutes
-    assert fmt_secs(3600.0) == "1h 00m"
-    assert fmt_secs(3900.0) == "1h 05m"
-    assert fmt_secs(7200.0) == "2h 00m"
-    assert fmt_secs(45296.0) == "12h 34m"
+    # Hours range — seconds field is still present (the key fix).
+    assert fmt_secs(3600.0) == "01:00:00"
+    assert fmt_secs(3900.0) == "01:05:00"
+    assert fmt_secs(7200.0) == "02:00:00"
+    assert fmt_secs(7215.0) == "02:00:15"
+    assert fmt_secs(45296.0) == "12:34:56"
 
 
-def test_fmt_secs_tier_boundaries():
+def test_fmt_secs_seconds_always_present():
     from _canary.reporter import fmt_secs
 
-    # Exact boundaries switch units.
-    assert "m" not in fmt_secs(599.99)
-    assert fmt_secs(600.0) == "10m 00s"
-    assert fmt_secs(3600.0) == "1h 00m"
+    # The whole point of the fix: seconds must appear at ALL magnitudes.
+    # Old format dropped seconds past 1 hour — verify it no longer does.
+    result = fmt_secs(3661.0)  # 1h 1m 1s
+    assert result == "01:01:01"
+    # Colons present at every magnitude
+    for secs in (5.0, 65.0, 3665.0, 36065.0):
+        r = fmt_secs(secs)
+        assert r.count(":") == 2, f"fmt_secs({secs}) = {r!r} missing seconds field"

@@ -202,16 +202,48 @@ class Reporter:
         footer = Table(expand=True, show_header=False, box=None)
         footer.add_column("stats")
         footer.add_row(text)
+
+        # Group jobs by status category.  Non-pass categories come first so
+        # failures are always visible at the top; PASS is printed last.
+        # Within each category the insertion order (== execution order) is kept.
+        from collections import defaultdict
+
+        from _canary.status import Category
+
+        _CATEGORY_ORDER = [
+            Category.FAIL,
+            Category.CANCEL,
+            Category.SKIP,
+            Category.NONE,
+            Category.PASS,
+        ]
+        _MAX_PER_CATEGORY = 10
+
+        by_category: dict = defaultdict(list)
+        for job in jobs:
+            by_category[job.status.category].append(job)
+
         table = Table(expand=False, box=box.SQUARE)
         self.add_table_columns(table, self.final_columns)
-        for job in jobs:
-            if job.status.is_success():
+
+        for category in _CATEGORY_ORDER:
+            group = by_category.get(category, [])
+            if not group:
                 continue
-            values = self.row_values_for_job(job, self.final_columns)
-            self.add_table_row_from_values(table, self.final_columns, values)
-        if not table.row_count:
-            n = len(jobs)
-            return Group(f"[blue]INFO[/]: {n}/{n} tests finished with status [bold green]PASS[/]")
+            shown = group[:_MAX_PER_CATEGORY]
+            remainder = len(group) - len(shown)
+            for job in shown:
+                values = self.row_values_for_job(job, self.final_columns)
+                self.add_table_row_from_values(table, self.final_columns, values)
+            if remainder:
+                # Ellipsis row: blank all columns except "Job" which carries the note.
+                ellipsis_values: dict[str, str] = {col.lower(): "" for col in self.final_columns}
+                ellipsis_values["job"] = (
+                    f"[dim]... {remainder} more {category.value} job{'s' if remainder != 1 else ''}"
+                    f" — run [italic]canary status[/] for the full list[/]"
+                )
+                self.add_table_row_from_values(table, self.final_columns, ellipsis_values)
+
         return Group(table, footer)
 
     def expand_column_name_shortcuts(self, args: Sequence[str]) -> tuple[str, ...]:
@@ -575,25 +607,16 @@ class StaticTable:
         logger.info(rule, extra={"prefix": ""})
 
 
-def fmt_secs(x: float, *, na: str = "NA") -> str:
-    """Format a duration in seconds using an adaptive unit.
+def fmt_secs(x: float) -> str:
+    """Format a duration in seconds as ``HH:MM:SS``.
 
-    The unit widens as the magnitude grows so the alive/final tables stay
-    compact and readable:
+    Uses :func:`_canary.util.time.hhmmss` so the seconds field is always
+    present at every magnitude — a monotonically-ticking seconds digit is
+    the cheapest liveness signal for a running job and must never be dropped.
 
-    * ``< 600 s``      → seconds, one decimal, e.g. ``"123.4s"``
-    * ``< 3600 s``     → whole minutes and seconds, e.g. ``"12m 03s"``
-    * ``>= 3600 s``    → whole hours and minutes, e.g. ``"1h 05m"``
-
-    Negative inputs render as *na* (default ``"NA"``).
+    Negative inputs (used internally to signal "not yet measured") render as
+    ``"--:--:--"``.
     """
-    if x < 0:
-        return na
-    if x < 600:
-        return f"{x:5.1f}s"
-    if x < 3600:
-        minutes, seconds = divmod(int(x), 60)
-        return f"{minutes:d}m {seconds:02d}s"
-    hours, remainder = divmod(int(x), 3600)
-    minutes = remainder // 60
-    return f"{hours:d}h {minutes:02d}m"
+    from _canary.util.time import hhmmss
+
+    return hhmmss(None if x < 0 else x)
