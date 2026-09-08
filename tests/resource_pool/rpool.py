@@ -538,6 +538,59 @@ def test_count_per_node_raises_for_heterogeneous_pool():
         rp.count_per_node("cpus")
 
 
+def test_slots_by_node_reports_capacity_not_availability():
+    """slots_by_node must reflect total *configured* capacity, not free slots.
+
+    Regression: previously slots_by_node returned currently-available slots,
+    so after a checkout a homogeneous pool looked heterogeneous mid-run and
+    slots_per_node raised spuriously (canary MR #562 flood of
+    'Post-processing failure' errors).
+    """
+    rp = ResourcePool(
+        {
+            "nodes": [
+                {
+                    "id": "0",
+                    "resources": {
+                        "cpus": [{"id": str(i), "slots": 1} for i in range(4)],
+                        "gpus": [{"id": str(i), "slots": 1} for i in range(4)],
+                    },
+                },
+                {
+                    "id": "1",
+                    "resources": {
+                        "cpus": [{"id": str(i), "slots": 1} for i in range(4)],
+                        "gpus": [{"id": str(i), "slots": 1} for i in range(4)],
+                    },
+                },
+            ]
+        },
+        allow_multinode=True,
+    )
+
+    assert rp.slots_by_node("gpus") == {"0": 4, "1": 4}
+
+    # Check out a couple of GPUs on node 0 only -> availability now differs by
+    # node, but capacity (and thus slots_by_node) must remain homogeneous.
+    rp.checkout([counted_node_request(gpus=2)])
+    assert rp.slots_by_node("gpus") == {"0": 4, "1": 4}
+    # Sanity: raw availability really did change on the node.
+    node0 = rp.get_node("0")
+    assert node0.slots_available("gpus") < node0.slots_capacity("gpus")
+
+
+def test_slots_capacity_survives_config_mutation():
+    rp = ResourcePool(
+        {"nodes": [{"id": "0", "resources": {"cpus": [{"id": "0", "slots": 2}]}}]}
+    )
+    node = rp.get_node("0")
+    assert node.slots_capacity("cpus") == 2
+    node.set_slots_per_resource("cpus", 8)
+    assert node.slots_capacity("cpus") == 8
+    node.set_resource_count("cpus", 3)
+    assert node.slots_capacity("cpus") == 3
+
+
 def test_checkin_requires_node_field():
     rp = ResourcePool(
         {"nodes": [{"id": "local", "resources": {"cpus": [{"id": "0", "slots": 1}]}}]}

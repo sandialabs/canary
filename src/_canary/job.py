@@ -302,11 +302,17 @@ class Job(BaseJob):
         spec: "JobSpec",
         workspace: ExecutionSpace,
         dependencies: list[Dependency] | None = None,
+        rparameters: dict[str, int] | None = None,
     ) -> None:
         super().__init__()
         self.spec = spec
         self.workspace = workspace
-        self.rparameters = self.spec.rparameters
+        # Resource parameters are computed once (from the spec) and thereafter
+        # persisted with the job.  When re-hydrating a job from its lock file we
+        # MUST honor the stored value instead of recomputing: recomputation
+        # depends on the live resource pool (available slots per node), which is
+        # transient during a run and would otherwise raise spuriously.
+        self.rparameters = spec.rparameters if rparameters is None else rparameters
         pm = config.pluginmanager.hook
         self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
         self._mask: Mask | None = None
@@ -341,7 +347,12 @@ class Job(BaseJob):
 
     @classmethod
     def __deserialize__(cls, d: dict[str, Any]) -> "Job":
-        obj = cls(spec=d["spec"], workspace=d["workspace"], dependencies=d["dependencies"])
+        obj = cls(
+            spec=d["spec"],
+            workspace=d["workspace"],
+            dependencies=d["dependencies"],
+            rparameters=d.get("rparameters"),
+        )
         obj._apply_base_state(d)
         if variables := d.get("variables"):
             obj.variables = variables
@@ -350,8 +361,6 @@ class Job(BaseJob):
             obj._allocation.setdefault("metadata", {})
             obj._allocation.setdefault("resources", {})
             obj._allocation.setdefault("state", "inactive")
-        if rparameters := d.get("rparameters"):
-            obj.rparameters = rparameters
         if mask := d.get("mask"):
             obj._mask = mask
         return obj

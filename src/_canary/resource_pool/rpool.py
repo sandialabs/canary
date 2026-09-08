@@ -103,7 +103,7 @@ class Node:
     Resource IDs are node-local.
     """
 
-    __slots__ = ("id", "resources", "slots_per_resource_type", "additional_properties")
+    __slots__ = ("id", "resources", "slots_per_resource_type", "_capacity", "additional_properties")
 
     def __init__(
         self,
@@ -115,8 +115,15 @@ class Node:
         self.id = str(id)
         self.resources: dict[str, ResourceSpec] = resources or {}
         self.slots_per_resource_type: Counter[str] = Counter()
+        # Total configured slot capacity per resource type.  Unlike
+        # ``slots_per_resource_type`` (which tracks *currently available* slots
+        # and shrinks as resources are checked out), this reflects the node's
+        # static capacity and only changes when the resource *definition*
+        # changes.  It is used to derive per-node topology (slots_per_node).
+        self._capacity: Counter[str] = Counter()
         self.additional_properties = dict(additional_properties or {})
         self._recompute_slots()
+        self._recompute_capacity()
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} id={self.id!r}>"
@@ -136,6 +143,17 @@ class Node:
         for rtype, instances in self.resources.items():
             self.slots_per_resource_type[rtype] = sum(int(inst["slots"]) for inst in instances)
 
+    def _recompute_capacity(self) -> None:
+        """Snapshot total configured slot capacity per resource type.
+
+        Call this only when the resource *definition* changes (construction and
+        the ``set_*``/``pop`` mutators), NOT on checkout/checkin, so that
+        capacity is unaffected by transient allocation.
+        """
+        self._capacity.clear()
+        for rtype, instances in self.resources.items():
+            self._capacity[rtype] = sum(int(inst["slots"]) for inst in instances)
+
     def _resolve_type(self, rtype: str) -> str:
         if rtype in self.resources:
             return rtype
@@ -147,6 +165,14 @@ class Node:
     def slots_available(self, rtype: str) -> int:
         rtype = self._resolve_type(rtype)
         return sum(int(inst["slots"]) for inst in self.resources.get(rtype, []))
+
+    def slots_capacity(self, rtype: str) -> int:
+        """Total configured slots for ``rtype`` (independent of allocation)."""
+        try:
+            rtype = self._resolve_type(rtype)
+        except ResourceUnavailable:
+            return 0
+        return int(self._capacity.get(rtype, 0))
 
     def count(self, rtype: str) -> int:
         rtype = self._resolve_type(rtype)
@@ -284,6 +310,7 @@ class Node:
     def pop(self, rtype: str) -> ResourceSpec | None:
         if rtype in self.resources:
             del self.slots_per_resource_type[rtype]
+            self._capacity.pop(rtype, None)
             return self.resources.pop(rtype)
         return None
 
@@ -310,26 +337,31 @@ class Node:
     def set_resource(self, rtype: str, specs: ResourceSpec) -> None:
         self.resources[rtype] = copy.deepcopy(specs)
         self._recompute_slots()
+        self._recompute_capacity()
 
     def set_resources(self, resources: dict[str, ResourceSpec]) -> None:
         self.resources = copy.deepcopy(resources)
         self._recompute_slots()
+        self._recompute_capacity()
 
     def set_resource_count(self, rtype: str, count: int) -> None:
         self.resources[rtype] = [{"id": str(j), "slots": 1} for j in range(count)]
         self._recompute_slots()
+        self._recompute_capacity()
 
     def set_slots_per_resource(self, rtype: str, slots: int) -> None:
         rtype = self._resolve_type(rtype)
         for instance in self.resources[rtype]:
             instance["slots"] = slots
         self._recompute_slots()
+        self._recompute_capacity()
 
     def multiply_slots_per_resource(self, rtype: str, factor: int) -> None:
         rtype = self._resolve_type(rtype)
         for instance in self.resources[rtype]:
             instance["slots"] *= factor
         self._recompute_slots()
+        self._recompute_capacity()
 
 
 class NodeRequest:
@@ -578,10 +610,12 @@ class ResourcePool:
         rtype = self._resolve_type(rtype)
         if rtype == "nodes":
             return {node.id: 1 for node in self.nodes}
-        return {
-            node.id: node.slots_available(rtype) if rtype in node.resources else 0
-            for node in self.nodes
-        }
+        # Report each node's *total configured* slot capacity, not the currently
+        # available (free) slots.  This is used to derive how many nodes a job
+        # needs, which is a static property of the allocation.  Using free slots
+        # would make the value fluctuate as jobs check resources in/out and could
+        # spuriously look "heterogeneous" mid-run.
+        return {node.id: node.slots_capacity(rtype) for node in self.nodes}
 
     def count_per_node(self, rtype: str) -> int:
         counts = self.count_by_node(rtype)

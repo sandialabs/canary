@@ -289,6 +289,31 @@ def test_job_roundtrip_json_includes_base_state(spec: JobSpec, space):
     assert out.resources == {"cpus": [{"id": "0", "slots": 1}]}
 
 
+def test_job_deserialize_honors_stored_rparameters(spec: JobSpec, space, monkeypatch):
+    """Rehydrating a Job must use the persisted rparameters, never recompute.
+
+    Regression: recomputation happens against the live resource pool (available
+    slots per node), which is transient during a run.  A deserialized job must
+    reflect what was stored in its lock file, independent of current pool state.
+    """
+    job = Job(spec=spec, workspace=space)
+    # Simulate the value that was computed once and persisted.
+    job.rparameters = {"cpus": 3, "gpus": 3, "nodes": 1}
+    payload = json.dumps(job)
+
+    # If deserialization recomputed from the spec, it would call this and get a
+    # different (wrong, pool-dependent) answer.  It must NOT be called.
+    def _boom(self):  # pragma: no cover - must not run
+        raise AssertionError("rparameters must not be recomputed on deserialize")
+
+    monkeypatch.setattr(type(spec), "compute_resource_parameters", _boom, raising=True)
+
+    out = json.loads(payload)
+    assert isinstance(out, Job)
+    assert out.rparameters == {"cpus": 3, "gpus": 3, "nodes": 1}
+    assert out.nodes == 1
+
+
 def test_job_dependency_graph_roundtrip_json(repo: Path, space, tmp_path):
     """
     Ensure a Job with dependencies serializes and loads without errors.

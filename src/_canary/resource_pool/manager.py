@@ -118,15 +118,21 @@ class ResourceManager:
         self.get_pool().checkin(allocation)
 
     def slots_per_node(self, type: str) -> int:
+        """Per-node slot capacity for ``type``, used to derive node counts.
+
+        Uses each node's *total configured* capacity (not currently-available
+        slots), so the result is stable during a run.  For a genuinely
+        heterogeneous pool (nodes with different capacities) we return the
+        MINIMUM per-node capacity: sizing a job against the smallest node yields
+        a conservative (safe upper-bound) node count that is guaranteed to fit
+        on any node, rather than raising or under-counting.
+        """
         try:
             by_node = self.get_pool().slots_by_node(type)
         except ResourceUnavailable:
             return 0
 
-        values = set(by_node.values())
+        values = [v for v in by_node.values() if v > 0]
         if not values:
             return 0
-        if len(values) > 1:
-            raise ResourceUnavailable(f"Resource {type!r} has heterogeneous slots per node")
-
-        return values.pop()
+        return min(values)
