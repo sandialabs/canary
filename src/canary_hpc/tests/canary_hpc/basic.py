@@ -368,3 +368,25 @@ def test_hpc_rejects_canary_resource_overrides_legacy(tmpdir):
         assert cp.returncode != 0
         assert "Resource-pool overrides are not allowed" in cp.stderr
         assert not os.path.exists("TestResults")
+
+
+def test_reject_resource_overrides_raises_for_resource_pool_mods():
+    """_reject_canary_resource_overrides raises ValueError when -r is set."""
+    import _canary.config as c
+    from canary_hpc import _reject_canary_resource_overrides
+
+    with c.override():
+        c.options.resource_pool_mods = [{"type": "cpus", "count": 6}]
+        with pytest.raises(ValueError, match="Resource-pool overrides are not allowed"):
+            _reject_canary_resource_overrides(c._config, "shell")
+
+
+def test_reject_resource_overrides_is_noop_without_overrides():
+    """_reject_canary_resource_overrides is a no-op when no overrides are set."""
+    import _canary.config as c
+    from canary_hpc import _reject_canary_resource_overrides
+
+    with c.override():
+        # No resource_pool_mods, no resource_pool_file, no oversubscribe.
+        # Should not raise.
+        _reject_canary_resource_overrides(c._config, "shell")
