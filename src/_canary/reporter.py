@@ -238,8 +238,9 @@ class Reporter:
             if remainder:
                 # Ellipsis row: blank all columns except "Job" which carries the note.
                 ellipsis_values: dict[str, str] = {col.lower(): "" for col in self.final_columns}
-                ellipsis_values["job"] = (
-                    f"[dim]... {remainder} more {category.value} job{'s' if remainder != 1 else ''}"
+                ellipsis_values["job"] = "..."
+                ellipsis_values["details"] = (
+                    f"[dim]{remainder} more {category.value} job{'s' if remainder != 1 else ''}"
                     f" — run [italic]canary status[/] for the full list[/]"
                 )
                 self.add_table_row_from_values(table, self.final_columns, ellipsis_values)
@@ -619,4 +620,4 @@ def fmt_secs(x: float) -> str:
     """
     from _canary.util.time import hhmmss
 
-    return hhmmss(None if x < 0 else x)
+    return hhmmss(None if x < 0 else x, threshold=1)
