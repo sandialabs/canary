@@ -41,7 +41,7 @@ jobs:
         run: |
           git clone https://github.com/sandialabs/canary-notebook.git /tmp/canary-notebook
           pip install /tmp/canary-notebook
-          pytest /tmp/canary-notebook/tests
+          pytest /tmp/canary-notebook/src/canary_notebook/tests
 
   slurm:
    runs-on: ubuntu-latest
