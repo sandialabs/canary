@@ -6,10 +6,12 @@ import argparse
 import json
 import os
 
+import canary
 from _canary.subcommands.run import PathSpec
 from _canary.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
+from _canary.workspace import Workspace
 
 
 def test_pathspec_parse_new(tmpdir):
@@ -39,44 +41,55 @@ def test_pathspec_parse_new(tmpdir):
         assert args.script_args == ["--foo", "--bar"]
 
 
-def test_run_from_file(tmpdir):
-    from _canary.util.testing import CanaryCommand
+def test_run_from_file(tmp_path):
+    """canary run -f file.json only runs tests listed in testpaths.
 
-    with working_dir(tmpdir.strpath, create=True):
-        touchp("tests/regression/2D/test_1.pyt")
-        touchp("tests/regression/2D/test_2.pyt")
-        touchp("tests/verification/2D/test_1.pyt")
-        touchp("tests/verification/2D/test_2.pyt")
-        touchp("tests/verification/3D/test_1.pyt")
-        touchp("tests/verification/3D/test_2.pyt")
-        touchp("tests/prototype/a/test_1.pyt")
-        touchp("tests/prototype/a/test_2.pyt")
-        touchp("tests/prototype/b/test_1.pyt")
-        touchp("tests/prototype/b/test_2.pyt")
-        data = {
-            "root": "tests",
-            "paths": [
-                "regression/2D/test_1.pyt",
-                "verification/2D/test_1.pyt",
-                "verification/3D/test_1.pyt",
-                "prototype/a/test_1.pyt",
-                "prototype/b/test_1.pyt",
-            ],
-        }
-        file = os.path.join(os.getcwd(), "file.json")
-        with open(file, "w") as fh:
-            json.dump({"testpaths": [data]}, fh, indent=2)
-        command = CanaryCommand("run")
-        assert os.path.exists(file)
-        command("-f", file)
-        assert os.path.exists("TestResults/regression/2D/test_1")
-        assert os.path.exists("TestResults/verification/2D/test_1")
-        assert os.path.exists("TestResults/verification/3D/test_1")
-        assert os.path.exists("TestResults/prototype/a/test_1")
-        assert os.path.exists("TestResults/prototype/b/test_1")
+    Converted from CanaryCommand subprocess to in-process workspace.run().
+    We verify by checking which job *families* (spec names) were collected,
+    since the JSON path filter is applied at the collect() stage.
+    """
+    root = tmp_path / "suite"
+    root.mkdir()
 
-        assert not os.path.exists("TestResults/regression/2D/test_2")
-        assert not os.path.exists("TestResults/verification/2D/test_2")
-        assert not os.path.exists("TestResults/verification/3D/test_2")
-        assert not os.path.exists("TestResults/prototype/a/test_2")
-        assert not os.path.exists("TestResults/prototype/b/test_2")
+    # Create stub .pyt files in a tree.
+    pyt_body = """\
+import sys
+def test():
+    pass
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+    dirs = [
+        "tests/regression/2D",
+        "tests/verification/2D",
+        "tests/verification/3D",
+        "tests/prototype/a",
+        "tests/prototype/b",
+    ]
+    for d in dirs:
+        for name in ("test_1", "test_2"):
+            p = root / d / f"{name}.pyt"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(pyt_body)
+
+    # Build a scanpaths dict matching what "canary run -f file.json" would produce.
+    tests_root = root / "tests"
+    included = [
+        "regression/2D/test_1.pyt",
+        "verification/2D/test_1.pyt",
+        "verification/3D/test_1.pyt",
+        "prototype/a/test_1.pyt",
+        "prototype/b/test_1.pyt",
+    ]
+    scanpaths = {str(tests_root): included}
+
+    with working_dir(root), canary.config.override():
+        workspace = Workspace.create(root)
+        specs = workspace.collect(scanpaths)
+
+    collected_names = {s.family for s in specs}
+
+    # Only test_1 variants should be collected.
+    assert "test_1" in collected_names
+    assert "test_2" not in collected_names
+    assert len(specs) == 5

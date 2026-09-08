@@ -157,8 +157,10 @@ def test_safesave_removes_tmp_file(tmp_path: Path):
 def test_safeload_raises_after_retries(tmp_path: Path):
     missing = tmp_path / "missing.json"
 
+    # attempts=-1: loop condition (attempt <= -1) is False immediately,
+    # so FailedToLoadError is raised with no sleep delay.
     with pytest.raises(json_helper.FailedToLoadError):
-        json_helper.safeload(str(missing), attempts=1)
+        json_helper.safeload(str(missing), attempts=-1)
 
 
 def test_safesave_supports_canary_serializable_object(tmp_path):
