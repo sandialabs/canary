@@ -196,14 +196,19 @@ def test_create_batch_specs_allocates_global_count_across_partitions() -> None:
 
 
 def test_create_batch_specs_rejects_insufficient_count_for_flat_partitions() -> None:
+    # count=1 with dependent jobs used to raise; now it produces one batch.
+    # count >= 2 but < nparts (i.e. count=1 is now valid; this test verifies
+    # that count >= 2 is still required when there are more than 2 DAG levels).
     a = FakeJob("a", cpus=1, runtime=10.0)
     b = FakeJob("b", cpus=1, runtime=10.0)
+    c = FakeJob("c", cpus=1, runtime=10.0)
     b.dependencies.append(FakeDependency(job=a))
-
+    c.dependencies.append(FakeDependency(job=b))
+    # 3 topological levels: a → b → c.  count=2 < 3 partitions → must raise.
     with pytest.raises(ValueError, match="insufficient"):
         create_batch_specs(
-            jobs=[a, b],  # type: ignore[list-item]
-            batchspec=batchspec(layout="flat", nodes="any", count=1, duration=None),
+            jobs=[a, b, c],  # type: ignore[list-item]
+            batchspec=batchspec(layout="flat", nodes="any", count=2, duration=None),
             cpus_per_node=8,
             workers=None,
         )
@@ -287,6 +292,30 @@ def test_create_batch_specs_count_without_explicit_nodes_uses_nodes_any() -> Non
     assert all_batch_job_ids(specs) == {"j1", "j2", "j3", "j4"}
     # count=1 is honoured: one batch containing all four jobs
     assert len(specs) == 1
+
+
+def test_create_batch_specs_count_1_with_dependent_jobs_produces_single_batch() -> None:
+    # Regression test for: count=1 with a suite containing dependent jobs
+    # (multiple DAG partitions) previously raised
+    #   ValueError: count=1 is insufficient for 2 DAG/resource partitions
+    # The fix: count=1 is an atomic single-batch request; DAG partitioning is
+    # skipped and all jobs land in one Slurm submission.
+    base = FakeJob("base", cpus=2, runtime=30.0)
+    aggregate = FakeJob("agg", cpus=1, runtime=5.0, dependencies=[FakeDependency(job=base)])
+
+    from canary_hpc.batching import BatchingSpec
+
+    spec = BatchingSpec.with_defaults(count=1)
+
+    specs = create_batch_specs(
+        jobs=[base, aggregate],  # type: ignore[arg-type]
+        batchspec=spec,
+        cpus_per_node=8,
+        workers=None,
+    )
+
+    assert len(specs) == 1
+    assert all_batch_job_ids(specs) == {"base", "agg"}
 
 
 def test_create_batch_specs_allows_count_for_flat_nodes_same_single_node_count() -> None:

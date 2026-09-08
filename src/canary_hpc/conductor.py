@@ -204,6 +204,34 @@ def create_batch_specs(
                     "with a single node count."
                 )
 
+    # count=1 is a special case: the user wants a single atomic Slurm
+    # submission containing all jobs.  DAG partitioning is irrelevant because
+    # the per-job dependency runner inside the batch handles ordering.  We
+    # short-circuit here so that suites with dependent jobs (>1 DAG partition)
+    # don't crash with "count=1 is insufficient for N partitions".
+    # We force layout=atomic so the packer does not re-split jobs by
+    # topological level.
+    if spec.count == 1:
+        node_count = max((p.node_count for p in partitions), default=1)
+        width = node_count * cpus_per_node
+        resource_capacity: dict[str, int] | None = None
+        if resources_per_node is not None:
+            resource_capacity = {k: v * node_count for k, v in resources_per_node.items()}
+            resource_capacity.setdefault("cpus", width)
+
+        single_spec = dataclasses.replace(spec, layout="atomic", node_policy="any", target=CountTarget(1))
+        batch_specs = batch_jobs(
+            jobs=jobs,
+            width=width,
+            workers=workers,
+            spec=single_spec,
+            resource_capacity=resource_capacity,
+            node_count=node_count,
+            exact_final_estimate=exact_final_estimate,
+        )
+        set_batch_dependencies(batch_specs)
+        return batch_specs
+
     partition_counts = allocate_partition_counts(spec.count, partitions)
 
     batch_specs: list[BatchSpec] = []
