@@ -272,6 +272,57 @@ def print_runtests_durations(runner: Runner) -> None:
         return print_durations(runner.jobs, N)
 
 
+@hookimpl(specname="canary_runtests_report")
+def print_final_table(runner: Runner) -> None:
+    """Print the post-session grouped results table.
+
+    Builds a Rich table grouped by status category (FAIL first, PASS last) from
+    the completed job list and prints it to stdout.  At most 10 rows per category
+    are shown; an ellipsis row notes any remainder and points to ``canary status``.
+
+    The footer line summarises totals and elapsed time in the same format used by
+    the ``--debug`` session footer, so this is always shown (not gated on debug
+    mode).
+
+    Runs at default priority so plugin-registered ``tryfirst=True`` hooks can
+    inject output before the table, and ``trylast=True`` hooks (e.g. durations,
+    footer) fire after it.
+    """
+    from rich import print as rprint
+
+    from .reporter import build_final_table
+
+    footer = _build_footer_text(runner)
+    table_group = build_final_table(runner.jobs, footer_text=footer)
+    rprint(table_group)
+
+
+def _build_footer_text(runner: Runner) -> str:
+    """Return a Rich-markup summary line for the session: totals + elapsed time."""
+    from . import status as _status
+
+    def sortkey(x: tuple[_status.Category, _status.Outcome]) -> tuple[int, _status.Outcome]:
+        n = 0 if x[0] == _status.Category.PASS else 2 if x[0] == _status.Category.FAIL else 1
+        return (n, x[1])
+
+    duration = runner.finish - runner.start
+    totals: dict[tuple[_status.Category, _status.Outcome], list["Job"]] = {}
+    for job in runner.jobs:
+        key = (job.status.category, job.status.outcome)
+        totals.setdefault(key, []).append(job)
+
+    N = len(runner.jobs)
+    parts = [f"[bold blue]{N} total[/bold blue]:"]
+    for category, outcome in sorted(totals, key=sortkey):
+        n = len(totals[(category, outcome)])
+        if n:
+            color = category.rich_color()
+            t = category if outcome == _status.Outcome.SUCCESS else outcome
+            parts.append(f"[{color}]{n} {t.name.lower()}[/{color}]")
+    elapsed = hhmmss(None if duration < 0 else duration)
+    return " ".join(parts) + f"  in [bold]{elapsed}[/bold]"
+
+
 @hookimpl(specname="canary_runtests_report", trylast=True)
 def runtests_footer(runner: Runner) -> None:
     """Return a short, high-level, summary of test results"""

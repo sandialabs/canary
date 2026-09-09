@@ -13,7 +13,6 @@ from typing import Literal
 from typing import Protocol
 
 from rich import box
-from rich import print as rprint
 from rich.console import Console
 from rich.console import Group
 from rich.live import Live
@@ -195,57 +194,21 @@ class Reporter:
             row.append(kwargs.get(name.lower(), ""))
         table.add_row(*row)
 
-    def final_table(self) -> Group:
-        xtor = self.executor
-        jobs = xtor.queue.jobs()
-        text = xtor.queue.status(start=xtor.started_on)
-        footer = Table(expand=True, show_header=False, box=None)
-        footer.add_column("stats")
-        footer.add_row(text)
+    def final_table(self, footer_text: str = "") -> Group:
+        """Build and return the final-results Rich renderable.
 
-        # Group jobs by status category.  Non-pass categories come first so
-        # failures are always visible at the top; PASS is printed last.
-        # Within each category the insertion order (== execution order) is kept.
-        from collections import defaultdict
+        Delegates to the module-level :func:`build_final_table` helper so the
+        same rendering logic is accessible from the ``canary_runtests_report``
+        hook without needing a live executor reference.
 
-        from _canary.status import Category
-
-        _CATEGORY_ORDER = [
-            Category.FAIL,
-            Category.CANCEL,
-            Category.SKIP,
-            Category.NONE,
-            Category.PASS,
-        ]
-        _MAX_PER_CATEGORY = 10
-
-        by_category: dict = defaultdict(list)
-        for job in jobs:
-            by_category[job.status.category].append(job)
-
-        table = Table(expand=False, box=box.SQUARE)
-        self.add_table_columns(table, self.final_columns)
-
-        for category in _CATEGORY_ORDER:
-            group = by_category.get(category, [])
-            if not group:
-                continue
-            shown = group[:_MAX_PER_CATEGORY]
-            remainder = len(group) - len(shown)
-            for job in shown:
-                values = self.row_values_for_job(job, self.final_columns)
-                self.add_table_row_from_values(table, self.final_columns, values)
-            if remainder:
-                # Ellipsis row: blank all columns except "Job" which carries the note.
-                ellipsis_values: dict[str, str] = {col.lower(): "" for col in self.final_columns}
-                ellipsis_values["job"] = "..."
-                ellipsis_values["details"] = (
-                    f"[dim]{remainder} more {category.value} job{'s' if remainder != 1 else ''}"
-                    f" — run [italic]canary status[/] for the full list[/]"
-                )
-                self.add_table_row_from_values(table, self.final_columns, ellipsis_values)
-
-        return Group(table, footer)
+        Args:
+            footer_text: Optional summary line to show below the table.
+                Defaults to an empty string (no footer row).
+        """
+        jobs = self.executor.queue.jobs()
+        return build_final_table(
+            jobs, columns=self.final_columns, namefmt=self.namefmt, footer_text=footer_text
+        )
 
     def expand_column_name_shortcuts(self, args: Sequence[str]) -> tuple[str, ...]:
         column_names: list[str] = []
@@ -278,6 +241,124 @@ class Reporter:
                 case _:
                     raise ValueError(f"Unknown column name: {arg}")
         return tuple(column_names)
+
+
+def build_final_table(
+    jobs: Sequence[BaseJob],
+    *,
+    columns: tuple[str, ...] = ("Job", "ID", "Status", "Total", "Details"),
+    namefmt: str = "short",
+    footer_text: str = "",
+) -> Group:
+    """Build the post-session results table as a Rich :class:`~rich.console.Group`.
+
+    This is a pure function that depends only on the completed job list; it does
+    not require access to the executor or queue.  Both :class:`Reporter` (via its
+    :meth:`~Reporter.final_table` wrapper) and the ``canary_runtests_report`` hook
+    call this function so the rendering logic lives in exactly one place.
+
+    Jobs are grouped by status category in a fixed order (FAIL → CANCEL → SKIP →
+    NONE → PASS) so failures are always visible at the top.  Within each category
+    the list order (== execution/finish order) is preserved.  At most
+    ``_MAX_PER_CATEGORY`` rows are shown per category; when the group is larger an
+    ellipsis row notes how many were omitted and points the user to ``canary status``.
+
+    Args:
+        jobs: Completed (or partially completed) job objects.
+        columns: Tuple of column names to include in the table.
+        namefmt: ``"short"`` or ``"long"`` — passed to :meth:`BaseJob.display_name`.
+        footer_text: Optional one-line summary to render below the table.  An
+            empty string suppresses the footer row.
+
+    Returns:
+        A Rich :class:`~rich.console.Group` containing the table and (optionally)
+        the footer row.
+    """
+    from collections import defaultdict
+
+    from _canary.status import Category
+
+    _CATEGORY_ORDER = [Category.FAIL, Category.CANCEL, Category.SKIP, Category.NONE, Category.PASS]
+    _MAX_PER_CATEGORY = 10
+
+    # ---- timing column helper (mirrors Reporter.job_time_for_column) ----
+    _timing_columns = Reporter.timing_columns
+
+    def _job_time(job: BaseJob, column: str) -> float:
+        tk = job.timekeeper
+        match column:
+            case "Pending" | "Queued":
+                return tk.pending(live=True)
+            case "Staging" | "Startup":
+                return tk.staging(live=True)
+            case "Running":
+                return tk.running(live=True)
+            case "Finishing" | "Teardown":
+                return tk.finishing(live=True)
+            case "Total":
+                return tk.total(live=True)
+            case "Elapsed":
+                return tk.elapsed(live=True)
+        return -1.0
+
+    def _row_values(job: BaseJob) -> dict[str, str]:
+        values: dict[str, str] = {
+            "job": job.display_name(style="rich", resolve=namefmt == "long"),
+            "id": job.id[:7],
+            "status": job.status.display_name(style="rich"),
+            "rank": "",
+            "details": job.status.reason or "",
+        }
+        for col in _timing_columns:
+            values[col.lower()] = fmt_secs(_job_time(job, col))
+        return values
+
+    def _add_columns(table: Table) -> None:
+        for name in columns:
+            kwds: dict[str, Any] = {}
+            if name == "Job":
+                kwds["overflow"] = "fold"
+            elif name == "Details":
+                kwds["overflow"] = "ellipsis"
+            elif name in _timing_columns:
+                kwds["justify"] = "right"
+            elif name == "Rank":
+                kwds["justify"] = "right"
+            table.add_column(name, **kwds)
+
+    # ---- build the grouped table ----
+    by_category: dict = defaultdict(list)
+    for job in jobs:
+        by_category[job.status.category].append(job)
+
+    table = Table(expand=False, box=box.SQUARE)
+    _add_columns(table)
+
+    for category in _CATEGORY_ORDER:
+        group = by_category.get(category, [])
+        if not group:
+            continue
+        shown = group[:_MAX_PER_CATEGORY]
+        remainder = len(group) - len(shown)
+        for job in shown:
+            vals = _row_values(job)
+            table.add_row(*(vals.get(col.lower(), "") for col in columns))
+        if remainder:
+            ellipsis_vals: dict[str, str] = {col.lower(): "" for col in columns}
+            ellipsis_vals["job"] = "..."
+            ellipsis_vals["details"] = (
+                f"[dim]{remainder} more {category.value} job{'s' if remainder != 1 else ''}"
+                f" — run [italic]canary status[/] for the full list[/]"
+            )
+            table.add_row(*(ellipsis_vals.get(col.lower(), "") for col in columns))
+
+    if footer_text:
+        footer = Table(expand=True, show_header=False, box=None)
+        footer.add_column("stats")
+        footer.add_row(footer_text)
+        return Group(table, footer)
+
+    return Group(table)
 
 
 class _LiveConsoleHandler(logging.builtin_logging.Handler):
@@ -328,7 +409,6 @@ class LiveReporter(Reporter):
     def __exit__(self, exc_type, exc, tb):
         self._stop.set()
         self._thread.join()
-        self.live.update(self.final_table() or "", refresh=True)
         self.live.__exit__(exc_type, exc, tb)
         self.unmute_stream_handlers()
 
@@ -515,7 +595,6 @@ class EventReporter(Reporter):
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        rprint(self.final_table())
         self.executor.remove_listener(self.on_event)
 
     def on_event(self, event: str, *args, **kwargs) -> None:
