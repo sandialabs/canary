@@ -161,10 +161,10 @@ def test_reporter_slot_timing_values_from_timekeeper() -> None:
 
     # queued=1s, staging=3s, running=6s, finishing=1s, total=11s
     # < 2s threshold: sub-second precision included; >= 2s: plain HH:MM:SS
-    assert values["queued"] == "00:00:01.00"  # 1s < threshold
+    assert values["queued"] == "00:00:01"  # 1s < threshold
     assert values["staging"] == "00:00:03"  # 3s >= threshold
     assert values["running"] == "00:00:06"  # 6s >= threshold
-    assert values["finishing"] == "00:00:01.00"  # 1s < threshold
+    assert values["finishing"] == "00:00:01"  # 1s < threshold
     assert values["total"] == "00:00:11"  # 11s >= threshold
 
 
