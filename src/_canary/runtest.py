@@ -60,7 +60,6 @@ from .util.time import hhmmss
 if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .job import Job
-    from .status import Outcome
     from .workspace import Workspace
 
 
@@ -257,52 +256,14 @@ def canary_addoption(parser: "Parser") -> None:
         p.add_argument(*args, group="console reporting", command="run", **kwargs)
 
     add_group_argument(
-        parser, "--no-summary", action="store_true", help="Disable summary [default: %(default)s]"
-    )
-    add_group_argument(
         parser,
         "--durations",
+        nargs="?",
         type=int,
+        const=10,
         metavar="N",
-        help="Show N slowest test durations (N<0 for all)",
+        help="Show N slowest test durations (N<0 for all) [default: 10]",
     )
-
-
-@hookimpl(specname="canary_runtests_report", tryfirst=True)
-def print_short_test_status_summary(runner: Runner) -> None:
-    """Return a summary of the completed jobs.  if ``include_pass is True``, include
-    passed tests in the summary
-
-    """
-    from .status import Category
-
-    if not config.get("debug") or config.getoption("no_summary"):
-        return
-    include_pass = False
-    truncate = 10
-    file = io.StringIO()
-    if not runner.jobs:
-        file.write("Nothing to report\n")
-    else:
-        totals: dict[tuple[Category, "Outcome"], list["Job"]] = {}
-        for job in runner.jobs:
-            key = (job.status.category, job.status.outcome)
-            totals.setdefault(key, []).append(job)
-        for key in totals:
-            if not include_pass and key[0] == Category.PASS:
-                continue
-            n: int = 0
-            for job in sorted(totals[key], key=lambda t: t.name):
-                file.write(job.statline(style="rich") + "\n")
-                n += 1
-                if truncate > 0 and truncate == n:
-                    file.write(f"... truncating summary to the first {truncate} entries.\n")
-                    file.write("See [bold]canary status[/bold] for the full summary\n")
-                    break
-    string = file.getvalue()
-    if string.strip():
-        string = "\n[bold]Short test summary info[/bold]\n" + string
-    rich.print(string, file=sys.stderr)
 
 
 @hookimpl(specname="canary_runtests_report")
@@ -352,7 +313,7 @@ def print_footer(runner: Runner, title: str) -> None:
 
 
 def print_durations(jobs: list["Job"], N: int) -> None:
-    jobs.sort(key=lambda x: x.timekeeper.running())
+    jobs.sort(key=lambda x: x.timekeeper.duration())
     ix = list(range(len(jobs)))
     if N > 0:
         ix = ix[-N:]
@@ -360,7 +321,7 @@ def print_durations(jobs: list["Job"], N: int) -> None:
     fp = io.StringIO()
     fp.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for i in ix:
-        duration = jobs[i].timekeeper.running()
+        duration = jobs[i].timekeeper.duration()
         if duration < 0:
             continue
         name = jobs[i].display_name(style="rich")
