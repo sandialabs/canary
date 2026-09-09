@@ -172,6 +172,57 @@ def canary_query_execute(args: "argparse.Namespace") -> "int | None":
 
 
 @hookspec
+def canary_fetch_subcommand(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Register additional fetchable assets under ``canary fetch``.
+
+    Extensions implement this hook to advertise assets that ``canary fetch``
+    can retrieve.  The *subparsers* argument is the ``add_subparsers`` action
+    that the built-in assets (``examples``, ``canary.cmake``) are registered
+    on.  Use ``subparsers.add_parser(name, ...)`` to add a new entry and
+    optionally populate it with flags (e.g. ``--dest``, ``--version``).
+
+    The plugin is responsible for dispatching execution: implement
+    ``canary_fetch_execute(args)`` on the same plugin object to handle
+    ``args.fetch_what == name``.
+
+    Example::
+
+        @canary.hookimpl
+        def canary_fetch_subcommand(self, subparsers):
+            subparsers.add_parser("myasset", help="Fetch MyAsset into the current directory")
+
+        @canary.hookimpl
+        def canary_fetch_execute(self, args):
+            if args.fetch_what == "myasset":
+                # copy the asset ...
+                return 0   # handled
+            return None    # not handled
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_fetch_execute(args: "argparse.Namespace") -> "int | None":
+    """Execute a ``canary fetch`` request for a named asset.
+
+    Called after ``canary fetch`` has parsed its subcommand.  Plugins check
+    ``args.fetch_what`` against the name(s) they registered in
+    ``canary_fetch_subcommand`` and return an integer exit code when they
+    handle the request, or ``None`` to pass to the next plugin.
+
+    Args:
+      args: Parsed argument namespace.  ``args.fetch_what`` contains the
+        subcommand name registered via ``canary_fetch_subcommand``.
+
+    Returns:
+      Integer exit code (0 for success) if handled, ``None`` otherwise.
+
+    """
+
+
+@hookspec
 def canary_addconfig(config: "CanaryConfig") -> None: ...
 
 

@@ -50,6 +50,26 @@ def canary_skills() -> dict[str, Any] | None:
 
 
 @canary.hookimpl
+def canary_fetch_subcommand(subparsers: Any) -> None:
+    """Register ``canary fetch canary.cmake``."""
+    subparsers.add_parser("canary.cmake", help="Copy Canary.cmake into the current directory")
+
+
+@canary.hookimpl(trylast=True)
+def canary_fetch_execute(args: Any) -> "int | None":
+    """Handle ``canary fetch canary.cmake``."""
+    if getattr(args, "fetch_what", None) != "canary.cmake":
+        return None
+    import importlib.resources as ir
+
+    path = str(ir.files("canary_cmake").joinpath("Canary.cmake"))
+    dest = os.path.basename(path)
+    with open(path) as src, open(dest, "w") as fh:
+        fh.write(src.read())
+    return 0
+
+
+@canary.hookimpl
 def canary_runteststart(case: canary.Job) -> None:
     if case.spec.file.suffix == ".cmake":
         setup_ctest(case)

@@ -502,3 +502,38 @@ def query_execute_jobs(args: "argparse.Namespace") -> "int | None":
     from .subcommands.query import _exec_jobs
 
     return _exec_jobs(args)
+
+
+# ---------------------------------------------------------------------------
+# Built-in canary fetch subcommand handlers
+# ---------------------------------------------------------------------------
+# The ``examples`` asset lives in the ``canary`` package data tree and is
+# therefore registered here (in _canary's built-in hooks).  The ``canary.cmake``
+# asset lives in ``canary_cmake`` and is registered by that plugin.
+
+
+@hookimpl(specname="canary_fetch_subcommand")
+def fetch_subcommand_examples(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Register ``canary fetch examples``."""
+    subparsers.add_parser(
+        "examples", help="Copy the bundled Canary examples directory into the current directory"
+    )
+
+
+@hookimpl(trylast=True, specname="canary_fetch_execute")
+def fetch_execute_examples(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary fetch examples``."""
+    if getattr(args, "fetch_what", None) != "examples":
+        return None
+    import importlib.resources as ir
+    import os
+
+    from .util.filesystem import force_copy
+
+    path = str(ir.files("canary").joinpath("docs/examples"))
+    if os.path.exists("examples"):
+        raise ValueError(f"A folder named 'examples' already exists at {os.getcwd()}")
+    force_copy(path, os.path.basename(path))
+    return 0
