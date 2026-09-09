@@ -181,6 +181,12 @@ class ProgressMonitor:
     Prints a ``"<message>..."`` line on construction and rewrites it as
     ``"<message>... done (X.XXs.)"`` when ``done()`` is called.
 
+    The rewind (overwrite-in-place) mode is active only when nothing else is
+    writing to the stream between construction and completion.  At ``DEBUG``
+    level other debug statements interleave and corrupt the display, so the
+    monitor automatically falls back to a plain newline-terminated line
+    (same as when ``CANARY_MAKE_DOCS`` is set).
+
     Attributes:
         message: The progress description shown to the user.
         logger_name: Name of the logger used for output.
@@ -188,7 +194,11 @@ class ProgressMonitor:
     """
 
     def __init__(self, logger_name: str, message: str, levelno: int = INFO) -> None:
-        self.enabled = os.getenv("CANARY_MAKE_DOCS") is None
+        # Rewind mode (overwrite-in-place) requires that nothing else writes to
+        # the stream between __init__ and done().  At DEBUG level other debug
+        # statements fire between those two calls and corrupt the display, so we
+        # fall back to a plain newline-terminated line just like CANARY_MAKE_DOCS.
+        self.enabled = os.getenv("CANARY_MAKE_DOCS") is None and get_level() > DEBUG
         self.message = message
         self.logger_name = logger_name
         self.start = time.monotonic()

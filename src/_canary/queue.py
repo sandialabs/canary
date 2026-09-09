@@ -85,7 +85,6 @@ class ResourceQueue:
                 raise ValueError(f"Not enough resources for job {job}")
             slot = HeapSlot(job=job)
             heapq.heappush(self._heap, slot)
-            logger.debug(f"Job {job.id[:7]} added to queue with cost {-slot.cost}")
 
     def get(self) -> BaseJob:
         with self.lock:
