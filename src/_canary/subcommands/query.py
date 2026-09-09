@@ -642,8 +642,10 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
     Scans ``sessions/<session>/batches/*/batch.lock`` files for one whose
     ``jobs`` list contains *job_id*.  Returns a timings dict with keys
     ``pending``, ``setup``, ``running``, ``teardown``, ``total`` where
-    available, defaulting to ``-1.0``.  All values are rounded to 6 decimal
-    places.
+    available, defaulting to ``-1.0``.  Also includes ``_started_at`` and
+    ``_stopped_at`` as absolute unix epoch floats (``-1.0`` when unavailable)
+    so callers can use them for overlap/concurrency analysis without a second
+    batch-lock scan.  All duration values are rounded to 6 decimal places.
 
     This is a best-effort fallback for HPC one-job-per-batch Slurm runs where
     the child job's timekeeper only gets coarse timestamps (the batch wall-clock
@@ -658,6 +660,8 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
         "running": -1.0,
         "teardown": -1.0,
         "total": -1.0,
+        "_started_at": -1.0,
+        "_stopped_at": -1.0,
     }
     batches_dir = workspace.sessions_dir / session / "batches"
     if not batches_dir.is_dir():
@@ -695,6 +699,9 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
             "teardown": -1.0,
             # total = wall time from submission to completion
             "total": _el(b_submitted, b_stopped),
+            # absolute epoch timestamps for overlap/concurrency analysis
+            "_started_at": b_started if b_started > 0 else -1.0,
+            "_stopped_at": b_stopped if b_stopped > 0 else -1.0,
         }
     return empty
 
@@ -743,6 +750,13 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
     standard timing keys (``pending`` = queue wait, ``running`` = compute
     wall-clock, ``total`` = submission-to-completion).
 
+    ``started_at`` and ``stopped_at`` are absolute unix epoch floats marking
+    when the job's actual execution began and ended.  For local-worker jobs
+    these come from ``timekeeper._started`` / ``timekeeper._stopped``.  For
+    HPC batch jobs they fall back to the batch-level Slurm start/stop times.
+    Both are ``null`` when no timestamp is available.  These fields enable
+    overlap/concurrency analysis without reading raw lock files.
+
     The ``last_activity`` field is a unix epoch float recording the most recent
     time the owning batch's output file was written to.  It is populated from
     the ``last_activity`` key in the owning ``batch.lock`` (written by the
@@ -751,11 +765,18 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
     an I/O liveness signal, NOT as a measure of application progress.
     """
     tk = row["timekeeper"]
-    submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
-    staged = tk.get("_staged", -1) if isinstance(tk, dict) else -1
-    started = tk.get("_started", -1) if isinstance(tk, dict) else -1
-    stopped = tk.get("_stopped", -1) if isinstance(tk, dict) else -1
-    finished = tk.get("_finished", -1) if isinstance(tk, dict) else -1
+
+    def _tk_get(key: str) -> float:
+        """Extract a timekeeper field whether tk is a dict or a Timekeeper object."""
+        if isinstance(tk, dict):
+            return float(tk.get(key, -1) or -1)
+        return float(getattr(tk, key, -1) or -1)
+
+    submitted = _tk_get("_submitted")
+    staged = _tk_get("_staged")
+    started = _tk_get("_started")
+    stopped = _tk_get("_stopped")
+    finished = _tk_get("_finished")
 
     def elapsed(a: float, b: float) -> float:
         return round(b - a, 6) if a > 0 and b > 0 else -1.0
@@ -768,12 +789,23 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
         "total": elapsed(submitted, finished),
     }
 
+    # started_at / stopped_at from the job's own timekeeper (local workers).
+    started_at: float | None = float(started) if started > 0 else None
+    stopped_at: float | None = float(stopped) if stopped > 0 else None
+
     # Fall back to batch-level timings for HPC child jobs whose own timekeeper
     # has no meaningful phase data (all -1.0).  This is the common case for
     # one-job-per-batch Slurm runs where fine-grained lifecycle events are
     # tracked at the batch level, not the individual job level.
     if all(v < 0 for v in timings.values()):
-        timings = _batch_timings_for_job(workspace, row["id"], row["session"])
+        batch_timings = _batch_timings_for_job(workspace, row["id"], row["session"])
+        timings = {k: v for k, v in batch_timings.items() if not k.startswith("_")}
+        if started_at is None:
+            b_started = batch_timings.get("_started_at", -1.0)
+            started_at = float(b_started) if b_started > 0 else None
+        if stopped_at is None:
+            b_stopped = batch_timings.get("_stopped_at", -1.0)
+            stopped_at = float(b_stopped) if b_stopped > 0 else None
 
     # last_activity: HPC batch I/O liveness signal from the owning batch.lock.
     # None for local-worker jobs (no batch) or when the batch has not started.
@@ -793,6 +825,8 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
             "reason": row["status"].reason,
         },
         "timings": timings,
+        "started_at": started_at,
+        "stopped_at": stopped_at,
         "last_activity": last_activity,
     }
 

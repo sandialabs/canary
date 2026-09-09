@@ -1815,7 +1815,7 @@ def test_batch_timings_fallback_no_batch_dir(setup):
         workspace = Workspace.load()
         result = _batch_timings_for_job(workspace, "nonexistent_id", "nonexistent_session")
     assert all(v < 0 for v in result.values())
-    assert set(result.keys()) == {"pending", "setup", "running", "teardown", "total"}
+    assert set(result.keys()) == {"pending", "setup", "running", "teardown", "total", "_started_at", "_stopped_at"}
 
 
 def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
@@ -1859,6 +1859,8 @@ def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
     assert timings["total"] == pytest.approx(5200.0, abs=0.01)
     assert timings["setup"] < 0
     assert timings["teardown"] < 0
+    assert timings["_started_at"] == pytest.approx(t_started, abs=0.01)
+    assert timings["_stopped_at"] == pytest.approx(t_stopped, abs=0.01)
 
 
 def test_query_jobs_timings_keys_present(setup, capsys):
@@ -1882,6 +1884,33 @@ def test_query_jobs_has_last_activity_field(setup, capsys):
         assert "last_activity" in row, f"Missing last_activity in row {row['name']!r}"
         # For local-worker jobs (no batch) last_activity should be null
         assert row["last_activity"] is None
+
+
+def test_query_jobs_has_started_at_stopped_at_fields(setup, capsys):
+    """Every job entry from query jobs carries started_at and stopped_at fields."""
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) > 0
+    for row in rows:
+        assert "started_at" in row, f"Missing started_at in {row['name']!r}"
+        assert "stopped_at" in row, f"Missing stopped_at in {row['name']!r}"
+
+
+def test_query_jobs_started_at_is_epoch_float_for_completed_jobs(setup, capsys):
+    """started_at and stopped_at are positive floats for jobs that ran successfully."""
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    # At least the passing jobs (a=1) should have real timestamps
+    passing = [r for r in rows if r["status"]["category"] == "PASS"]
+    assert len(passing) > 0
+    for row in passing:
+        assert isinstance(row["started_at"], float), f"started_at not float in {row['name']!r}"
+        assert isinstance(row["stopped_at"], float), f"stopped_at not float in {row['name']!r}"
+        assert row["started_at"] > 0, f"started_at not positive in {row['name']!r}"
+        assert row["stopped_at"] > 0, f"stopped_at not positive in {row['name']!r}"
+        assert row["stopped_at"] >= row["started_at"]
 
 
 def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):

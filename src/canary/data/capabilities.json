@@ -365,9 +365,12 @@
             "exit_code",
             "status (category, outcome, reason)",
             "timings (pending, setup, running, teardown, total)",
+            "started_at (unix epoch float, null if unavailable; absolute start of job execution)",
+            "stopped_at (unix epoch float, null if unavailable; absolute end of job execution)",
             "last_activity (unix epoch float, null for local-worker jobs; HPC batch I/O liveness signal)"
           ],
           "timings_note": "For local worker jobs, timings reflect the fine-grained per-phase lifecycle. For HPC one-job-per-batch Slurm jobs (where the child job's own timekeeper has no phase data), timings fall back to the owning batch.lock: pending=queue_wait, running=batch_compute_wall, total=batch_total_wall. setup and teardown are -1.0 in this case.",
+          "started_stopped_note": "started_at and stopped_at are absolute unix epoch floats. For local workers they come from timekeeper._started/_stopped. For HPC batch jobs they fall back to the batch Slurm start/stop times. Use these for overlap and concurrency analysis — e.g. to find jobs that were running simultaneously, filter where started_at <= T <= stopped_at for a given epoch T.",
           "refinement_a_note": "Default cross-session behaviour returns the LATEST run of each distinct job (keyed by spec_id). Each record carries a session provenance field. Use --session S to scope to one session (equivalent to session --expand-jobs).",
           "refinement_b_note": "Use canary query job JOBID --all-runs for the per-job full run history across sessions.",
           "examples": [
