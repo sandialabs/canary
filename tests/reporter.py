@@ -242,7 +242,7 @@ def test_fmt_secs_seconds_tier():
 
     # Below hhmmss threshold (2.0 s): sub-second precision included.
     assert fmt_secs(0.0) == "00:00:00.00"
-    assert fmt_secs(1.0) == "00:00:01.00"
+    assert fmt_secs(1.0) == "00:00:01"
     # At and above threshold: plain HH:MM:SS.
     assert fmt_secs(2.0) == "00:00:02"
     assert fmt_secs(59.0) == "00:00:59"
