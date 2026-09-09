@@ -210,6 +210,32 @@ def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
     return specs
 
 
+def _update_last_activity(batch: "TestBatch") -> None:
+    """Sample the batch stdout mtime and persist it to ``batch.lock``.
+
+    Called from the polling loop so that ``canary query batch`` can surface a
+    canary-owned I/O liveness signal without understanding application output.
+    The field records the last time the batch wrote anything to its output file,
+    which advances as long as the job (or its children) are producing output.
+
+    This is deliberately cheap: one ``os.stat`` per poll interval, no additional
+    filesystem walk.  The field is omitted when the stdout file does not exist
+    yet (job has not started writing) or when the lock file cannot be updated
+    (non-fatal; silently skipped).
+    """
+    stdout_path = batch.workspace.joinpath(batch.stdout)
+    try:
+        mtime = stdout_path.stat().st_mtime
+    except OSError:
+        return
+    try:
+        cfg = json.loads(batch.lockfile.read_text())
+        cfg["last_activity"] = mtime
+        batch.lockfile.write_text(json.dumps(cfg, indent=2))
+    except Exception:  # nosec B110 — non-fatal; monitoring only
+        pass
+
+
 def _all_children_finished(batch: "TestBatch") -> bool:
     """Return True if every child job in *batch* has reached a terminal state.
 
@@ -335,6 +361,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                     # batch status from the real child outcomes.
                     if now - last_child_check >= check_interval:
                         last_child_check = now
+                        _update_last_activity(batch)
                         if _all_children_finished(batch):
                             logger.warning(
                                 "Batch %s: all child jobs reached a terminal state "

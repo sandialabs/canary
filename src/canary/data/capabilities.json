@@ -301,7 +301,8 @@
             "--where": "Filter predicate for --expand-jobs and --digest. String: status.outcome==FAILED or status.category==FAIL. Numeric: timings.running>60. Operators: == != > < >= <=. None values: ordered ops return False, != returns True.",
             "--clean": "Strip __type__ wrappers.",
             "--terse": "Compact single-line JSON.",
-            "--list": "List immediate child keys."
+            "--list": "List immediate child keys.",
+            "--watch": "Poll and re-render the job list every SECONDS (default 10). Implies --expand-jobs. Exits automatically when every job has reached a terminal status category (not NONE). Ctrl-C exits cleanly with code 0. With --terse, emits one NDJSON document per cycle."
           },
           "examples": [
             "canary query session latest",
@@ -310,7 +311,10 @@
             "canary query session latest --expand-jobs --where status.outcome==FAILED",
             "canary query session latest --expand-jobs --where status.category==FAIL --terse",
             "canary query session latest --digest",
-            "canary query session latest --digest --where status.category==PASS"
+            "canary query session latest --digest --where status.category==PASS",
+            "canary query session latest --expand-jobs --watch",
+            "canary query session latest --expand-jobs --watch=30",
+            "canary query session latest --digest --watch"
           ]
         },
         "sessions": {
@@ -339,7 +343,8 @@
             "--session": "Session name, prefix, or \"latest\". Default: cross-session latest-per-spec-id mode.",
             "--where": "Filter predicate. String: status.outcome==FAILED, status.category==PASS. Numeric: timings.running>60, timings.total<300. Operators: == != > < >= <=.",
             "--terse": "Compact single-line JSON.",
-            "--digest": "Print a compact one-line-per-job summary: name CATEGORY. Combine with --where to filter."
+            "--digest": "Print a compact one-line-per-job summary: name CATEGORY. Combine with --where to filter.",
+            "--watch": "Poll and re-render the job list every SECONDS (default 10). Exits automatically when every job has reached a terminal status category (not NONE). Ctrl-C exits cleanly with code 0. With --terse, emits one NDJSON document per cycle."
           },
           "output_fields": [
             "id",
@@ -350,7 +355,8 @@
             "session",
             "exit_code",
             "status (category, outcome, reason)",
-            "timings (pending, setup, running, teardown, total)"
+            "timings (pending, setup, running, teardown, total)",
+            "last_activity (unix epoch float, null for local-worker jobs; HPC batch I/O liveness signal)"
           ],
           "timings_note": "For local worker jobs, timings reflect the fine-grained per-phase lifecycle. For HPC one-job-per-batch Slurm jobs (where the child job's own timekeeper has no phase data), timings fall back to the owning batch.lock: pending=queue_wait, running=batch_compute_wall, total=batch_total_wall. setup and teardown are -1.0 in this case.",
           "refinement_a_note": "Default cross-session behaviour returns the LATEST run of each distinct job (keyed by spec_id). Each record carries a session provenance field. Use --session S to scope to one session (equivalent to session --expand-jobs).",
@@ -362,8 +368,12 @@
             "canary query jobs --session latest",
             "canary query jobs --session 2026-09-03T18-10-19",
             "canary query jobs --digest",
-            "canary query jobs --digest --where status.category==PASS"
-          ]
+            "canary query jobs --digest --where status.category==PASS",
+            "canary query jobs --watch",
+            "canary query jobs --watch=30",
+            "canary query jobs --session latest --watch"
+          ],
+          "last_activity_note": "last_activity is a unix epoch float from the owning batch.lock, updated by the HPC polling loop each check_interval (30-300 s) from the mtime of the batch stdout file. It advances as long as the job is writing output and stops advancing if the job hangs. null for local-worker jobs (no owning batch) or when the batch has not yet started writing. NON-GOAL: this is I/O liveness, NOT simulation progress \u2014 canary does not parse application output."
         },
         "db": {
           "summary": "Query the workspace SQLite database directly.",
@@ -410,7 +420,20 @@
         "none_handling": "If the actual field value is None (e.g. a batch that has not yet completed), ordered comparisons (>, <, >=, <=) return False. != returns True. == returns False.",
         "operators": "== != > < >= <="
       },
-      "not_jq": "The query language is intentionally small. It does not support filters, pipes, or transformations."
+      "not_jq": "The query language is intentionally small. It does not support filters, pipes, or transformations.",
+      "watch_mode": {
+        "summary": "Poll and re-render a query on an interval until all jobs reach a terminal state.",
+        "supported_subcommands": [
+          "session (with --expand-jobs or --digest)",
+          "jobs"
+        ],
+        "flag": "--watch [SECONDS]  (default 10 s; accepts --watch alone or --watch=30)",
+        "terminal_condition": "All jobs have status.category != NONE",
+        "ctrl_c": "Exits cleanly with code 0; final render is emitted before exit.",
+        "terse_mode": "With --terse, emits one compact JSON document per cycle (NDJSON format for piping).",
+        "digest_mode": "With --digest, emits one \"name CATEGORY\" line per job per cycle.",
+        "monitoring_recipe": "canary query session latest --expand-jobs --watch  # auto-exits when all jobs are done"
+      }
     },
     "hooks": {
       "summary": "Canary extensions use pluggy hooks to add commands, generators, resource behavior, launchers, runtime behavior, reports, measurements, lifecycle actions, capabilities, and skills.",
@@ -446,9 +469,9 @@
         },
         "hookimpl_semantics": {
           "firstresult_hooks": "When firstresult=True, only the first non-None return value is used. YOUR implementation REPLACES the built-in. Use this only when you intend to fully replace default behavior.",
-          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runtest_finish is firstresult=True — so if you return a truthy value, the built-in case.finish()+save will NOT run. Use @canary.hookimpl(trylast=True) and return None to let the built-in run after your code.",
-          "trylast": "@canary.hookimpl(trylast=True) — your impl runs after all others (safe for additive post-processing).",
-          "tryfirst": "@canary.hookimpl(tryfirst=True) — your impl runs before all others."
+          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runtest_finish is firstresult=True \u2014 so if you return a truthy value, the built-in case.finish()+save will NOT run. Use @canary.hookimpl(trylast=True) and return None to let the built-in run after your code.",
+          "trylast": "@canary.hookimpl(trylast=True) \u2014 your impl runs after all others (safe for additive post-processing).",
+          "tryfirst": "@canary.hookimpl(tryfirst=True) \u2014 your impl runs before all others."
         },
         "canary_runtest_finish_recipe": {
           "firstresult": true,
@@ -716,7 +739,7 @@
         ]
       },
       "status": {
-        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (≤20 jobs). Use --all to force full table; --failed for failures-only.",
+        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (\u226420 jobs). Use --all to force full table; --failed for failures-only.",
         "typical": [
           "canary status",
           "canary status --all",
@@ -737,7 +760,7 @@
         },
         "behavior": {
           "summary_line": "Always printed. Format: 'N jobs: X passed, Y failed, Z timeout'. Green on all-pass.",
-          "small_run_auto_expand": "When total jobs ≤ 20 (and --failed not set), the full table is shown automatically.",
+          "small_run_auto_expand": "When total jobs \u2264 20 (and --failed not set), the full table is shown automatically.",
           "large_run_default": "When total jobs > 20, only non-pass jobs are shown (equivalent to -r dftns).",
           "never_empty": "Output is never empty. When everything passes, only the summary line is printed."
         },
@@ -757,11 +780,11 @@
           "reason": "str or null"
         },
         "timings_object": {
-          "pending": "submitted→staged",
-          "setup": "staged→started",
-          "running": "started→stopped",
-          "teardown": "stopped→finished",
-          "total": "submitted→finished"
+          "pending": "submitted\u2192staged",
+          "setup": "staged\u2192started",
+          "running": "started\u2192stopped",
+          "teardown": "stopped\u2192finished",
+          "total": "submitted\u2192finished"
         }
       },
       "info": {

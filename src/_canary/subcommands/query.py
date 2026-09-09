@@ -12,9 +12,11 @@ job <ID> --all-runs      Show all historical runs across sessions (oldest first)
 session <S> [path]       Query a session's session.lock
 session <S> --expand-jobs  Join session job_ids to DB result rows
 session <S> --digest     One-line-per-job summary: name CATEGORY (implies --expand-jobs)
+session <S> --watch[=N]  Poll and re-render every N seconds until all jobs are terminal
 sessions                 List all sessions with summary statistics
 jobs                     List all jobs — latest run per job across all sessions by default
 jobs --session S         Scope to a single session (same data as session --expand-jobs)
+jobs --watch[=N]         Poll and re-render every N seconds until all jobs are terminal
 db schema                Emit workspace database DDL as JSON
 db stats                 Emit per-outcome counts and session summary
 db "<SQL>"               Execute a read-only SQL query, return JSON rows
@@ -34,6 +36,10 @@ Common flags
             String fields:  status.outcome==FAILED  status.category==PASS
             Numeric fields: timings.queue_wait>3600  timings.running<60
             Operators: == != > < >= <=  (None fields: ordered ops → False, != → True)
+--watch     Poll and re-render the query every N seconds (default 10).  Exits
+            automatically when every job in the selection has reached a terminal
+            status category (i.e. not NONE).  Ctrl-C exits cleanly with code 0.
+            In --terse mode emits one NDJSON document per cycle.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ import json
 import re
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -92,11 +99,14 @@ class Query(CanarySubcommand):
         "  canary query session latest --expand-jobs --where status.outcome==FAILED\n"
         "  canary query session latest --digest\n"
         "  canary query session latest --digest --where status.category==PASS\n"
+        "  canary query session latest --expand-jobs --watch\n"
+        "  canary query session latest --expand-jobs --watch=30\n"
         "  canary query jobs\n"
         "  canary query jobs --where status.category==FAIL\n"
         "  canary query jobs --where timings.running>60\n"
         "  canary query jobs --session latest\n"
         "  canary query jobs --digest\n"
+        "  canary query jobs --watch\n"
         "  canary query sessions\n"
         "  canary query db stats\n"
         "  canary query db schema\n"
@@ -172,6 +182,21 @@ class Query(CanarySubcommand):
             action="store_true",
             help="List queryable child keys at the selected path",
         )
+        p_ses.add_argument(
+            "--watch",
+            nargs="?",
+            const=10,
+            default=None,
+            type=float,
+            metavar="SECONDS",
+            help=(
+                "Poll and re-render every SECONDS (default 10). "
+                "Implies --expand-jobs. "
+                "Exits automatically when every job has reached a terminal status. "
+                "Ctrl-C exits cleanly with code 0. "
+                "With --terse, emits one NDJSON document per cycle."
+            ),
+        )
 
         # ---- sessions ----
         p_sessions = sub.add_parser("sessions", help="List all sessions with summary statistics")
@@ -212,6 +237,20 @@ class Query(CanarySubcommand):
             "--digest",
             action="store_true",
             help="Print a compact one-line-per-job summary: name CATEGORY",
+        )
+        p_jobs.add_argument(
+            "--watch",
+            nargs="?",
+            const=10,
+            default=None,
+            type=float,
+            metavar="SECONDS",
+            help=(
+                "Poll and re-render every SECONDS (default 10). "
+                "Exits automatically when every job has reached a terminal status. "
+                "Ctrl-C exits cleanly with code 0. "
+                "With --terse, emits one NDJSON document per cycle."
+            ),
         )
 
         # ---- db ----
@@ -474,7 +513,11 @@ def _exec_session(args: argparse.Namespace) -> int:
     workspace = Workspace.load()
     session_dir = _resolve_session_dir(workspace, args.session)
 
-    if args.expand_jobs or getattr(args, "digest", False):
+    if (
+        args.expand_jobs
+        or getattr(args, "digest", False)
+        or getattr(args, "watch", None) is not None
+    ):
         return _exec_session_expand(workspace, session_dir, args)
 
     lockfile = session_dir / "session.lock"
@@ -500,18 +543,28 @@ def _exec_session_expand(workspace: Workspace, session_dir: Path, args: argparse
         raise FileNotFoundError(lockfile)
     session_data = json.loads(lockfile.read_text())
     session_name = session_data.get("name", session_dir.name)
-
-    rows = _db_results_for_session(workspace, session_name)
     predicate = _parse_where(args.where) if args.where else None
+    digest = getattr(args, "digest", False)
+    watch_interval = getattr(args, "watch", None)
 
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        entry = _row_to_job_entry(workspace, row)
-        if predicate and not predicate(entry):
-            continue
-        out.append(entry)
+    def _fetch() -> tuple[list[dict[str, Any]], int]:
+        rows = _db_results_for_session(workspace, session_name)
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            entry = _row_to_job_entry(workspace, row)
+            if predicate and not predicate(entry):
+                continue
+            out.append(entry)
+        return out, 0
 
-    if getattr(args, "digest", False):
+    if watch_interval is not None:
+        return _watch_loop(
+            float(watch_interval), fetch=_fetch, terse=getattr(args, "terse", False), digest=digest
+        )
+
+    out, _ = _fetch()
+
+    if digest:
         _emit_digest(out)
         return 0
 
@@ -619,6 +672,36 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
     return empty
 
 
+def _batch_last_activity_for_job(workspace: Workspace, job_id: str, session: str) -> float | None:
+    """Return the ``last_activity`` unix timestamp from the owning batch.lock.
+
+    Scans ``sessions/<session>/batches/*/batch.lock`` files for one whose
+    ``jobs`` list contains *job_id* and returns the ``last_activity`` field if
+    present.  Returns ``None`` when no match is found or the field is absent
+    (e.g. the batch has not started or was written by an older canary version).
+    """
+    import json as _json
+
+    batches_dir = workspace.sessions_dir / session / "batches"
+    if not batches_dir.is_dir():
+        return None
+    for batch_lock in batches_dir.glob("*/batch.lock"):
+        try:
+            data = _json.loads(batch_lock.read_text())
+        except (OSError, ValueError):  # nosec B112 — skip unreadable/malformed lock files
+            continue
+        if job_id not in data.get("jobs", []):
+            continue
+        val = data.get("last_activity")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+        return None
+    return None
+
+
 def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, Any]:
     """Convert a DB result row dict into the standard job entry format.
 
@@ -632,6 +715,13 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
     ``batch.lock`` and mapping the batch-level wall-clock phases to the
     standard timing keys (``pending`` = queue wait, ``running`` = compute
     wall-clock, ``total`` = submission-to-completion).
+
+    The ``last_activity`` field is a unix epoch float recording the most recent
+    time the owning batch's output file was written to.  It is populated from
+    the ``last_activity`` key in the owning ``batch.lock`` (written by the
+    ``batchexec`` polling loop) and is ``null`` for local-worker jobs or when
+    the batch has not yet started writing output.  Callers should treat it as
+    an I/O liveness signal, NOT as a measure of application progress.
     """
     tk = row["timekeeper"]
     submitted = tk.get("_submitted", -1) if isinstance(tk, dict) else -1
@@ -658,6 +748,10 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
     if all(v < 0 for v in timings.values()):
         timings = _batch_timings_for_job(workspace, row["id"], row["session"])
 
+    # last_activity: HPC batch I/O liveness signal from the owning batch.lock.
+    # None for local-worker jobs (no batch) or when the batch has not started.
+    last_activity = _batch_last_activity_for_job(workspace, row["id"], row["session"])
+
     return {
         "id": row["id"],
         "name": row["spec_name"],
@@ -672,6 +766,7 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
             "reason": row["status"].reason,
         },
         "timings": timings,
+        "last_activity": last_activity,
     }
 
 
@@ -680,6 +775,63 @@ def _emit_digest(out: list[dict[str, Any]]) -> None:
     for entry in out:
         category = entry.get("status", {}).get("category", "UNKNOWN")
         sys.stdout.write(f"{entry['name']} {category}\n")
+
+
+def _all_terminal(out: list[dict[str, Any]]) -> bool:
+    """Return True when every job entry has a non-NONE status category."""
+    for entry in out:
+        cat = entry.get("status", {}).get("category", "NONE")
+        if cat == "NONE" or cat is None:
+            return False
+    return bool(out)  # empty list → keep polling (nothing to watch yet)
+
+
+def _watch_render(out: list[dict[str, Any]], *, terse: bool, digest: bool) -> None:
+    """Render one cycle of --watch output to stdout."""
+    if digest:
+        _emit_digest(out)
+    elif terse:
+        # NDJSON: one compact JSON document per cycle
+        print_json(out, terse=True)
+    else:
+        # Human mode: emit a separator header so successive renders are distinct
+        now_str = time.strftime("%Y-%m-%dT%H:%M:%S")
+        sys.stdout.write(f"--- {now_str} ---\n")
+        print_json(out, terse=False)
+    sys.stdout.flush()
+
+
+def _watch_loop(interval: float, *, fetch: Any, terse: bool, digest: bool) -> int:
+    """Drive the ``--watch`` poll loop.
+
+    *fetch* is a zero-argument callable that returns ``(out, rc)`` where *out*
+    is the current list of job-entry dicts and *rc* is the exit code to return
+    if an error occurs.  The loop re-calls *fetch* every *interval* seconds.
+
+    Terminal condition: every job in *out* has a non-NONE status category.
+    The final render is always emitted before returning so the caller sees a
+    clean terminal state.
+
+    Returns 0 on success, non-zero if *fetch* returns an error rc.
+    """
+    try:
+        while True:
+            out, rc = fetch()
+            if rc != 0:
+                return rc
+            _watch_render(out, terse=terse, digest=digest)
+            if _all_terminal(out):
+                return 0
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        # Final render with current state, then exit cleanly
+        try:
+            out, _ = fetch()
+            _watch_render(out, terse=terse, digest=digest)
+        except Exception:  # nosec B110 — best-effort final render on Ctrl-C; errors are ignored
+            pass
+        sys.stdout.flush()
+        return 0
 
 
 def _exec_jobs(args: argparse.Namespace) -> int:
@@ -694,32 +846,39 @@ def _exec_jobs(args: argparse.Namespace) -> int:
     """
     workspace = Workspace.load()
     predicate = _parse_where(args.where) if args.where else None
-
     session_arg = getattr(args, "session", None)
+    digest = getattr(args, "digest", False)
+    watch_interval = getattr(args, "watch", None)
 
-    if session_arg is not None:
-        # Single-session path — identical data to --expand-jobs
-        session_dir = _resolve_session_dir(workspace, session_arg)
-        rows = _db_results_for_session(workspace, session_dir.name)
-    else:
-        # Cross-session path — latest run per spec_id across all sessions
-        workspace.db.connect()
-        try:
-            result_map = workspace.db.get_results()
-        finally:
-            workspace.db.close()
-        rows = list(result_map.values())
-        # Sort by spec_name for deterministic output
-        rows.sort(key=lambda r: r.get("spec_name", ""))
+    def _fetch() -> tuple[list[dict[str, Any]], int]:
+        if session_arg is not None:
+            session_dir = _resolve_session_dir(workspace, session_arg)
+            rows = _db_results_for_session(workspace, session_dir.name)
+        else:
+            workspace.db.connect()
+            try:
+                result_map = workspace.db.get_results()
+            finally:
+                workspace.db.close()
+            rows = list(result_map.values())
+            rows.sort(key=lambda r: r.get("spec_name", ""))
 
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        entry = _row_to_job_entry(workspace, row)
-        if predicate and not predicate(entry):
-            continue
-        out.append(entry)
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            entry = _row_to_job_entry(workspace, row)
+            if predicate and not predicate(entry):
+                continue
+            out.append(entry)
+        return out, 0
 
-    if getattr(args, "digest", False):
+    if watch_interval is not None:
+        return _watch_loop(
+            float(watch_interval), fetch=_fetch, terse=getattr(args, "terse", False), digest=digest
+        )
+
+    out, _ = _fetch()
+
+    if digest:
         _emit_digest(out)
         return 0
 

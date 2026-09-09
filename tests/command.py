@@ -176,6 +176,7 @@ def run_query(*, jobid=None, session=None, query=".", terse=False, list_keys=Fal
             clean=False,
             terse=terse,
             list_keys=list_keys,
+            watch=None,
         )
     return Query().execute(args)
 
@@ -615,6 +616,7 @@ def _run_query_session_digest(setup, *, where=None):
         clean=False,
         terse=False,
         list_keys=False,
+        watch=None,
     )
     return Query().execute(args)
 
@@ -1639,7 +1641,7 @@ def _run_query_jobs(setup_ns, *, session=None, where=None, terse=False, digest=F
     from _canary.subcommands.query import _exec_jobs
 
     args = argparse.Namespace(
-        query_subcmd="jobs", session=session, where=where, terse=terse, digest=digest
+        query_subcmd="jobs", session=session, where=where, terse=terse, digest=digest, watch=None
     )
     with working_dir(setup_ns.results_path), canary.config.override():
         return _exec_jobs(args)
@@ -1734,7 +1736,7 @@ def test_query_jobs_cross_session_returns_latest_per_spec(setup, capsys):
 def test_query_jobs_via_query_command(setup, capsys):
     """Test the full dispatch path: Query().execute() -> canary_query_execute hook."""
     args = argparse.Namespace(
-        query_subcmd="jobs", session=None, where=None, terse=False, digest=False
+        query_subcmd="jobs", session=None, where=None, terse=False, digest=False, watch=None
     )
     with working_dir(setup.results_path), canary.config.override():
         rc = Query().execute(args)
@@ -1818,3 +1820,235 @@ def test_query_jobs_timings_keys_present(setup, capsys):
         timings = row["timings"]
         for key in ("pending", "setup", "running", "teardown", "total"):
             assert key in timings, f"Missing timings key {key!r} in row {row['name']!r}"
+
+
+def test_query_jobs_has_last_activity_field(setup, capsys):
+    """Every job entry from query jobs carries a last_activity field (may be null)."""
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) > 0
+    for row in rows:
+        assert "last_activity" in row, f"Missing last_activity in row {row['name']!r}"
+        # For local-worker jobs (no batch) last_activity should be null
+        assert row["last_activity"] is None
+
+
+def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
+    """last_activity is populated from the owning batch.lock when present."""
+    import json as _json
+
+    from _canary.subcommands.query import _exec_jobs
+    from _canary.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        session_name = setup.session.name
+
+        # Grab the first job id from the DB
+        workspace.db.connect()
+        try:
+            rows = workspace.db.get_results()
+        finally:
+            workspace.db.close()
+        first_row = next(iter(rows.values()))
+        job_id = first_row["id"]
+
+        # Create a fake batch.lock that references this job
+        batch_dir = workspace.sessions_dir / session_name / "batches" / "testbatch1"
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        expected_mtime = 1_700_010_000.0
+        (batch_dir / "batch.lock").write_text(
+            _json.dumps(
+                {
+                    "id": "testbatch1" * 7,
+                    "session": session_name,
+                    "jobs": [job_id],
+                    "last_activity": expected_mtime,
+                    "timekeeper": {},
+                }
+            )
+        )
+
+        args = argparse.Namespace(
+            query_subcmd="jobs",
+            session=session_name,
+            where=None,
+            terse=False,
+            digest=False,
+            watch=None,
+        )
+        rc = _exec_jobs(args)
+
+    assert rc == 0
+    rows_out = json.loads(capsys.readouterr().out)
+    matching = [r for r in rows_out if r["id"] == job_id]
+    assert matching, "Expected at least one row matching the job id"
+    assert matching[0]["last_activity"] == pytest.approx(expected_mtime)
+
+
+def test_batch_last_activity_no_batch_dir(setup):
+    """_batch_last_activity_for_job returns None when no batches/ dir exists."""
+    from _canary.subcommands.query import _batch_last_activity_for_job
+    from _canary.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        result = _batch_last_activity_for_job(workspace, "nonexistent", "nonexistent_session")
+    assert result is None
+
+
+def test_watch_all_terminal_detects_terminal():
+    """_all_terminal returns True when all entries have non-NONE status categories."""
+    from _canary.subcommands.query import _all_terminal
+
+    all_pass = [{"status": {"category": "PASS"}}, {"status": {"category": "PASS"}}]
+    assert _all_terminal(all_pass) is True
+
+
+def test_watch_all_terminal_detects_none_status():
+    """_all_terminal returns False when any entry has NONE category."""
+    from _canary.subcommands.query import _all_terminal
+
+    mixed = [{"status": {"category": "PASS"}}, {"status": {"category": "NONE"}}]
+    assert _all_terminal(mixed) is False
+
+
+def test_watch_all_terminal_empty_list():
+    """_all_terminal returns False (keep polling) for an empty result set."""
+    from _canary.subcommands.query import _all_terminal
+
+    assert _all_terminal([]) is False
+
+
+def test_watch_loop_exits_when_terminal(setup, capsys):
+    """_watch_loop exits immediately when all jobs already have terminal status."""
+
+    # All jobs in setup fixture have completed status — watch should exit after 1 cycle
+    call_count = 0
+
+    def counting_fetch():
+        nonlocal call_count
+        call_count += 1
+        # Build the real job list from the DB
+        from _canary.subcommands.query import _watch_loop  # noqa: F401
+        from _canary.workspace import Workspace
+
+        workspace = Workspace.load()
+        from _canary.subcommands.query import _db_results_for_session
+        from _canary.subcommands.query import _row_to_job_entry
+
+        session_dir = workspace.sessions_dir / setup.session.name
+        rows = _db_results_for_session(workspace, setup.session.name)
+        out = [_row_to_job_entry(workspace, row) for row in rows]
+        return out, 0
+
+    from _canary.subcommands.query import _watch_loop
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _watch_loop(0.0, fetch=counting_fetch, terse=False, digest=False)
+    assert rc == 0
+    assert call_count == 1  # terminal on first poll → only one fetch
+
+
+def test_watch_loop_terse_emits_ndjson(setup, capsys):
+    """In --terse mode, _watch_loop emits one compact JSON line per cycle."""
+    from _canary.subcommands.query import _watch_loop
+    from _canary.workspace import Workspace
+
+    def fetch():
+        workspace = Workspace.load()
+        from _canary.subcommands.query import _db_results_for_session
+        from _canary.subcommands.query import _row_to_job_entry
+
+        rows = _db_results_for_session(workspace, setup.session.name)
+        out = [_row_to_job_entry(workspace, row) for row in rows]
+        return out, 0
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _watch_loop(0.0, fetch=fetch, terse=True, digest=False)
+    assert rc == 0
+    out = capsys.readouterr().out
+    # terse: one compact JSON line ending with \n
+    lines = [l for l in out.splitlines() if l.strip()]
+    assert len(lines) == 1
+    rows = json.loads(lines[0])
+    assert isinstance(rows, list)
+
+
+def test_watch_loop_digest_mode(setup, capsys):
+    """In --digest mode, _watch_loop emits one 'name CATEGORY' line per job per cycle."""
+    from _canary.subcommands.query import _watch_loop
+    from _canary.workspace import Workspace
+
+    def fetch():
+        workspace = Workspace.load()
+        from _canary.subcommands.query import _db_results_for_session
+        from _canary.subcommands.query import _row_to_job_entry
+
+        rows = _db_results_for_session(workspace, setup.session.name)
+        out = [_row_to_job_entry(workspace, row) for row in rows]
+        return out, 0
+
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _watch_loop(0.0, fetch=fetch, terse=False, digest=True)
+    assert rc == 0
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert len(lines) > 0
+    for line in lines:
+        parts = line.rsplit(" ", 1)
+        assert len(parts) == 2
+
+
+def test_watch_flag_in_query_jobs_namespace(setup, capsys):
+    """--watch=0.0 in args namespace exits immediately for a completed session."""
+    from _canary.subcommands.query import _exec_jobs
+
+    args = argparse.Namespace(
+        query_subcmd="jobs",
+        session=setup.session.name,
+        where=None,
+        terse=False,
+        digest=False,
+        watch=0.0,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _exec_jobs(args)
+    assert rc == 0
+    out = capsys.readouterr().out
+    # Human watch mode: header line + JSON block
+    assert "---" in out
+    rows = None
+    for line in out.splitlines():
+        if line.strip().startswith("["):
+            rows = json.loads(line + out[out.index(line) + len(line) :].split("\n---")[0])
+            break
+    # Just verify output is non-empty and contains valid data
+    assert out.strip() != ""
+
+
+def test_watch_flag_in_query_session_namespace(setup, capsys):
+    """--watch=0.0 on session subcommand expands jobs and exits on terminal state."""
+    from _canary.subcommands.query import _exec_session
+
+    args = argparse.Namespace(
+        query_subcmd="session",
+        session=setup.session.name,
+        path=".",
+        expand_jobs=False,
+        digest=False,
+        where=None,
+        clean=False,
+        terse=True,
+        list_keys=False,
+        watch=0.0,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _exec_session(args)
+    assert rc == 0
+    out = capsys.readouterr().out
+    # terse watch: one compact JSON line per cycle
+    lines = [l for l in out.splitlines() if l.strip()]
+    assert len(lines) >= 1
+    rows = json.loads(lines[0])
+    assert isinstance(rows, list)
