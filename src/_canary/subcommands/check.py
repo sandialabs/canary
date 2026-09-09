@@ -574,10 +574,22 @@ def update_pyproject_version(root: Path, version: str) -> None:
 def discover_test_paths(root: Path) -> tuple[str, ...]:
     """Return pytest paths for Canary core plus registered Canary extensions.
 
-    The repository-level ``tests`` directory is currently special-cased.
-    Extension test directories are discovered from
-    ``[project.entry-points."canary"]`` in pyproject.toml.
+    The repository-level ``tests`` directory is always included.
+
+    In-tree extensions (living under ``root/src/``) are discovered via
+    ``entry_point_test_candidates``.
+
+    Out-of-tree extensions are discovered by scanning every entry point in the
+    ``canary`` group via ``importlib.metadata`` / ``importlib.resources``.  If
+    the installed package contains a ``tests/`` directory with a
+    ``.canary-ext-tests`` marker file, that directory is added to the pytest
+    paths.
     """
+    import importlib.metadata as importlib_metadata
+    import importlib.resources as importlib_resources
+
+    from ..hookspec import project_name
+
     root = root.resolve()
 
     paths: list[str] = []
@@ -587,27 +599,49 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
         if not path.is_dir():
             return
 
-        rel = path.resolve().relative_to(root).as_posix()
+        resolved = path.resolve()
+        key = str(resolved)
 
-        if rel in seen:
+        if key in seen:
             return
 
-        seen.add(rel)
-        paths.append(rel)
+        seen.add(key)
+        try:
+            p = resolved.relative_to(root).as_posix()
+        except ValueError:
+            p = str(resolved)
+        paths.append(p)
 
     # Core repository tests are not an entry-point package.
     add(root / "tests")
 
+    # In-tree extensions via the old candidate mechanism.
     for name, module in canary_entry_point_modules(root).items():
-        found = False
-
         for path in entry_point_test_candidates(root, module):
             if path.is_dir():
                 add(path)
-                found = True
 
-        if not found:
-            logger.debug("No tests directory found for canary entry point %s=%s", name, module)
+    # Out-of-tree extensions: use importlib.resources + .canary-ext-tests marker.
+    for ep in importlib_metadata.entry_points(group=project_name):
+        try:
+            pkg_name = ep.value.split(".")[0]
+            pkg_files = importlib_resources.files(pkg_name)
+        except (ModuleNotFoundError, TypeError, ValueError):
+            continue
+
+        try:
+            tests_path = pkg_files.joinpath("tests")
+            marker = tests_path.joinpath(".canary-ext-tests")
+            if not marker.is_file():
+                continue
+        except (TypeError, FileNotFoundError, NotADirectoryError):
+            continue
+
+        try:
+            real_tests = Path(str(tests_path))
+            add(real_tests)
+        except Exception as exc:
+            logger.debug("Could not add tests for %s: %s", ep.name, exc)
 
     logger.info("[bold]Discovered[/] %d pytest path(s): %s", len(paths), ", ".join(paths))
     return tuple(paths)
