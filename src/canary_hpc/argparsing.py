@@ -280,6 +280,18 @@ class CanaryHPCResourceSetter(argparse.Action):
                 raise ValueError(f"Incorrect batch timeout choice: {raw}")
             setattr(namespace, "hpc_batch_timeout_strategy", raw)
 
+        elif match := re.search(r"^queue[_-]?timeout[:=](.+)$", value):
+            # Backward compatibility: -b queue_timeout=T is the deprecated spelling
+            # of --timeout queue=T.  Store it in the same `timeout` dict so it flows
+            # through config.get_timeout_option("queue").
+            logger.warning(
+                "-b queue_timeout=T is deprecated, use --timeout queue=T instead"
+            )
+            raw = strip_quotes(match.group(1))
+            timeouts = getattr(namespace, "timeout", None) or {}
+            timeouts["queue"] = time_in_seconds(raw)
+            setattr(namespace, "timeout", timeouts)
+
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
             dest = "hpc_submit_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()

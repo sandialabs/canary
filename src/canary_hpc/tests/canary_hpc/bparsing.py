@@ -180,6 +180,30 @@ def test_hpc_resource_setter_workers() -> None:
     assert ns.hpc_batch_workers == 7
 
 
+def test_hpc_resource_setter_queue_timeout_backward_compat() -> None:
+    # -b queue_timeout=T (and queue-timeout=T) is the deprecated spelling of
+    # --timeout queue=T; both must land in the shared `timeout` dict as "queue".
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+
+    ns = parser.parse_args(["-b", "queue_timeout=999h"])
+    assert ns.timeout == {"queue": 999 * 60 * 60}
+
+    ns = parser.parse_args(["-b", "queue-timeout=20m"])
+    assert ns.timeout == {"queue": 20 * 60}
+
+
+def test_hpc_resource_setter_timeout_strategy_not_queue_timeout() -> None:
+    # `-b timeout=<strategy>` must remain the batch-timeout strategy and must NOT
+    # be captured by the queue_timeout backward-compat branch.
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+
+    ns = parser.parse_args(["-b", "timeout=aggressive"])
+    assert ns.hpc_batch_timeout_strategy == "aggressive"
+    assert getattr(ns, "timeout", None) is None
+
+
 def test_hpc_resource_setter_rejects_nonpositive_workers() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")

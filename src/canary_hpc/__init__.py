@@ -59,6 +59,28 @@ def canary_addoption(parser: "canary.Parser") -> None:
         help="Use this HPC backend [default: None]",
     )
     CanaryHPCConductor.setup_legacy_parser(parser)
+    # Supplement (do not replace) the base `canary run --timeout` help with the HPC
+    # queue type.  `-b queue_timeout=T` remains accepted for backward compatibility
+    # but is intentionally NOT advertised as its own option; point users at --timeout.
+    try:
+        run_parser = parser.get_subparser("run")
+    except KeyError:
+        run_parser = None
+    if run_parser is not None:
+        try:
+            run_parser.update_argument(
+                "--timeout",
+                help=f"""%(orig)s\n\n\n
+HPC timeout types:\n\n
+• type={bold("queue")}, maximum time to wait in the scheduler queue for a batch to
+      start before treating it as timed out.  (The deprecated {bold("-b queue_timeout=T")}
+      is accepted as an alias for {bold("--timeout queue=T")}.)
+""",
+            )
+        except ValueError:
+            # --timeout may not be present in every parser context; best-effort.
+            pass
+
 
 
 @canary.hookimpl
