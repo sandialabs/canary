@@ -274,18 +274,27 @@
           "summary": "Query a single job testcase.lock by ID.",
           "flags": {
             "JOBID": "Job ID (7-char prefix or full 64-char SHA256).",
-            "path": "Optional dot-notation JSON path (default: whole document).",
+            "path": "Optional dot-notation JSON path (default: whole document). Use 'env' or 'env.KEY' to query the runtime environment snapshot.",
             "--cache": "Show per-job timing cache statistics (mean/min/max runtime history).",
             "--all-runs": "Show all historical runs of this job across all sessions (oldest first), each with session, exit_code, status, and timings. Flag-gated because the same spec_id across code rebuilds may not represent the same computation.",
             "--clean": "Strip __type__ wrappers; normalise legacy enum dicts to plain strings.",
             "--terse": "Compact single-line JSON.",
             "--list": "List immediate child keys at the selected path."
           },
+          "env_query": {
+            "summary": "Every job workspace contains an env.json snapshot of the exact environment the test subprocess inherited. Use 'env' as the path argument to query it — works identically to the 'measurements' path.",
+            "written_by": "SubprocessLauncher.context in _canary/launcher.py, immediately after job.set_runtime_env() injects the job's variables into os.environ and before the subprocess starts. Written for all backends: local, HPC child process, Flux.",
+            "contents": "Plain {VAR: value} JSON object. Includes all inherited env vars plus CANARY_* vars, PATH/PYTHONPATH with workspace prepended, resource vars (CANARY_CPU_IDS etc.), and any spec-declared environment keys.",
+            "note": "Kept as a sidecar file (not inlined into testcase.lock) so the lock file stays compact and grep-based access remains fast."
+          },
           "examples": [
             "canary query job abc1234",
             "canary query job abc1234 status.outcome",
             "canary query job abc1234 spec.file_path",
             "canary query job abc1234 timekeeper",
+            "canary query job abc1234 env",
+            "canary query job abc1234 env.CUDA_VISIBLE_DEVICES",
+            "canary query job abc1234 env.PATH",
             "canary query job abc1234 --cache",
             "canary query job abc1234 --all-runs",
             "canary query job abc1234 --clean --terse"
