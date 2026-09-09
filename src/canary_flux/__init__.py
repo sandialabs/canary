@@ -28,14 +28,6 @@ def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Flux())
 
 
-@hookimpl
-def canary_runtest_finish(case: "canary.Job") -> None:
-    import json
-
-    with case.workspace.openfile("env.json", "w") as fh:
-        json.dump(dict(os.environ), fh, indent=2)
-
-
 class Flux(canary.CanarySubcommand):
     name = "flux"
     description = "Run Canary tests through Flux"

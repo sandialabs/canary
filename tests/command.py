@@ -561,6 +561,56 @@ def test_query_job_all_runs_has_expected_fields(setup, capsys):
         assert "timings" in row
 
 
+def test_query_job_env_returns_dict(setup, capsys):
+    """env.json is written by SubprocessLauncher and queryable as 'env'."""
+    from _canary.subcommands.query import _exec_job
+
+    args = argparse.Namespace(
+        query_subcmd="job",
+        jobid=setup.f_a1_id,
+        path="env",
+        cache=False,
+        all_runs=False,
+        clean=False,
+        terse=False,
+        list_keys=False,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _exec_job(args)
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    data = json.loads(captured.out)
+    assert isinstance(data, dict)
+    # PATH is always present in a subprocess environment
+    assert "PATH" in data
+
+
+def test_query_job_env_single_key(setup, capsys):
+    """env.KEY drills into the env snapshot exactly like measurements.KEY."""
+    from _canary.subcommands.query import _exec_job
+
+    args = argparse.Namespace(
+        query_subcmd="job",
+        jobid=setup.f_a1_id,
+        path="env.PATH",
+        cache=False,
+        all_runs=False,
+        clean=False,
+        terse=False,
+        list_keys=False,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = _exec_job(args)
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    # PATH value is a non-empty string
+    value = json.loads(captured.out)
+    assert isinstance(value, str)
+    assert len(value) > 0
+
+
 def test_query_session_whole_lock_file(setup, capsys):
     with working_dir(setup.results_path), canary.config.override():
         rc = run_query(session=setup.session.name)

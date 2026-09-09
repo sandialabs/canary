@@ -274,8 +274,18 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             queue.put({"event": "job_updated", "timestamp": time.time(), "attrs": {"jobid": jobid}})
 
         def write_procinfo(future: hpc_connect.futures.FutureProtocol):
-            with open("procinfo.json", "w") as fh:
-                json.dump(future.proc_info(), fh, indent=2)
+            try:
+                info = future.proc_info()
+            except Exception:
+                logger.debug("Failed to read proc_info for batch %s", batch.id[:7], exc_info=True)
+                return
+            batch.measurements.update({"scheduler": info})
+            try:
+                batch.save(children=False)
+            except Exception:
+                logger.debug(
+                    "Failed to save scheduler proc_info for batch %s", batch.id[:7], exc_info=True
+                )
 
         logger.debug(f"Starting {batch} on pid {os.getpid()}")
         self.generate_resource_pool(batch)

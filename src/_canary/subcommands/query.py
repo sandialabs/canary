@@ -7,6 +7,8 @@
 Subcommands
 -----------
 job <ID> [path]          Query a single job's testcase.lock
+job <ID> env             Show the runtime environment snapshot (env.json)
+job <ID> env.KEY         Show a single environment variable (e.g. env.CUDA_VISIBLE_DEVICES)
 job <ID> --cache         Show per-job timing cache statistics
 job <ID> --all-runs      Show all historical runs across sessions (oldest first)
 session <S> [path]       Query a session's session.lock
@@ -93,6 +95,8 @@ class Query(CanarySubcommand):
         "Examples:\n"
         "  canary query job abc1234\n"
         "  canary query job abc1234 status.outcome\n"
+        "  canary query job abc1234 env\n"
+        "  canary query job abc1234 env.CUDA_VISIBLE_DEVICES\n"
         "  canary query job abc1234 --cache\n"
         "  canary query job abc1234 --all-runs\n"
         "  canary query session latest --expand-jobs\n"
@@ -121,7 +125,14 @@ class Query(CanarySubcommand):
         p_job = sub.add_parser("job", help="Query a job's testcase.lock")
         p_job.add_argument("jobid", metavar="JOBID", help="Job ID (prefix or full 64-char)")
         p_job.add_argument(
-            "path", nargs="?", default=".", help="JSON path expression (default: whole document)"
+            "path",
+            nargs="?",
+            default=".",
+            help=(
+                "JSON path expression (default: whole document). "
+                "Use 'env' or 'env.KEY' to query the runtime environment snapshot "
+                "(e.g. 'env.CUDA_VISIBLE_DEVICES')."
+            ),
         )
         p_job.add_argument("--cache", action="store_true", help="Show timing cache for this job")
         p_job.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
@@ -496,6 +507,22 @@ def _exec_job(args: argparse.Namespace) -> int:
 
     lockfile = _job_lockfile(workspace, args.jobid)
     data = json.loads(lockfile.read_text())
+
+    # Merge env.json as a top-level "env" key so that path expressions like
+    # "env" and "env.CUDA_VISIBLE_DEVICES" work identically to "measurements"
+    # and "measurements.flux".  The file is loaded lazily — only when the
+    # query path starts with "env" — so queries that don't touch env pay no
+    # filesystem cost.
+    path = args.path.lstrip(".")
+    if path == "env" or path.startswith("env.") or path.startswith("env["):
+        env_file = lockfile.parent / "env.json"
+        if env_file.exists():
+            data["env"] = json.loads(env_file.read_text())
+        else:
+            sys.stderr.write(
+                f"No env.json found for job {args.jobid!r} (file not present at {env_file})\n"
+            )
+            return 1
 
     if args.list_keys:
         print_query_paths(list_json_object_paths(data, args.path))

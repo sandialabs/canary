@@ -54,6 +54,7 @@ class SubprocessLauncher(Launcher):
             for rcfile in job.spec.rcfiles or []:
                 source_rcfile(rcfile)
             os.chdir(job.workspace.dir)
+            _write_env_json(job)
             yield
         finally:
             os.chdir(old_cwd)
@@ -335,3 +336,24 @@ class MeasuredProcess:
 @hookimpl(trylast=True, specname="canary_runtest_launcher")
 def default_job_launcher(case: "Job") -> Launcher:
     return SubprocessLauncher()
+
+
+def _write_env_json(job: "Job") -> None:
+    """Write the current ``os.environ`` to ``env.json`` in the job workspace.
+
+    Called from :meth:`SubprocessLauncher.context` immediately after
+    :meth:`~_canary.job.Job.set_runtime_env` has injected the job's variables
+    into ``os.environ`` — capturing exactly the environment the test subprocess
+    will inherit.  Written best-effort; failures are logged at DEBUG and do not
+    affect job execution.
+
+    The file is a plain ``{"VAR": "value", ...}`` JSON object, queryable via
+    ``canary query job <id> env`` or ``canary query job <id> env.KEY``.
+    """
+    import json as _json
+
+    try:
+        with job.workspace.openfile("env.json", "w") as fh:
+            _json.dump(dict(os.environ), fh, sort_keys=True, indent=2)
+    except Exception:
+        logger.debug("Failed to write env.json for %s", job.id[:7], exc_info=True)

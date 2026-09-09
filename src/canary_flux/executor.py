@@ -680,13 +680,6 @@ class FluxDirectExecutor:
         returned_at = time.time()
         slot.on_finish(at=returned_at)
 
-        # Attach Flux scheduler/process metadata, if available.
-        if proc_info:
-            try:
-                self._write_proc_info(job, proc_info)
-            except Exception:
-                logger.debug("Failed to write Flux proc_info for %s", job.id[:7], exc_info=True)
-
         failure_reason = self._proc_info_failure_reason(proc_info)
 
         if exc is not None:
@@ -824,23 +817,6 @@ class FluxDirectExecutor:
             job.save()
         except Exception:
             logger.debug("Failed to save Flux jobid for %s", job_id[:7], exc_info=True)
-
-    def _write_proc_info(self, job: canary.Job, proc_info: dict[str, Any]) -> None:
-        """
-        Write Flux scheduler/process metadata to the Flux submit workspace.
-
-        This is best-effort debugging metadata. It should not affect job outcome.
-        """
-        import json
-
-        data = {
-            "canary_job_id": job.id,
-            "canary_job_name": job.display_name(resolve=True),
-            "flux_proc_info": proc_info,
-        }
-
-        with job.workspace.openfile("procinfo.json", "w") as fh:
-            json.dump(data, fh, indent=2, sort_keys=True)
 
     def _refresh_running_jobs(self) -> None:
         for slot in list(self.running.values()):
