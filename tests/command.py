@@ -1815,7 +1815,15 @@ def test_batch_timings_fallback_no_batch_dir(setup):
         workspace = Workspace.load()
         result = _batch_timings_for_job(workspace, "nonexistent_id", "nonexistent_session")
     assert all(v < 0 for v in result.values())
-    assert set(result.keys()) == {"pending", "setup", "running", "teardown", "total", "_started_at", "_stopped_at"}
+    assert set(result.keys()) == {
+        "pending",
+        "setup",
+        "running",
+        "teardown",
+        "total",
+        "_started_at",
+        "_stopped_at",
+    }
 
 
 def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):

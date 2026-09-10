@@ -284,9 +284,7 @@ class CanaryHPCResourceSetter(argparse.Action):
             # Backward compatibility: -b queue_timeout=T is the deprecated spelling
             # of --timeout queue=T.  Store it in the same `timeout` dict so it flows
             # through config.get_timeout_option("queue").
-            logger.warning(
-                "-b queue_timeout=T is deprecated, use --timeout queue=T instead"
-            )
+            logger.warning("-b queue_timeout=T is deprecated, use --timeout queue=T instead")
             raw = strip_quotes(match.group(1))
             timeouts = getattr(namespace, "timeout", None) or {}
             timeouts["queue"] = time_in_seconds(raw)

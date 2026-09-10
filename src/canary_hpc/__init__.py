@@ -82,7 +82,6 @@ HPC timeout types:\n\n
             pass
 
 
-
 @canary.hookimpl
 def canary_addcommand(parser: canary.Parser) -> None:
     parser.add_command(HPC())
