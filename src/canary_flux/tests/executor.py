@@ -277,9 +277,6 @@ def test_mark_finished_records_flux_timing_and_overhead(monkeypatch, tmp_path):
         cast(Any, runner), allocation_requested_at=98.0, allocation_granted_at=99.0
     )
 
-    # Avoid filesystem/proc-info side effects in this unit test.
-    monkeypatch.setattr(xtor, "_write_proc_info", lambda job, proc_info: None)
-
     # Parent observes future completion at 110.
     monkeypatch.setattr(ex.time, "time", lambda: 110.0)
 
