@@ -357,54 +357,96 @@ def add_repeat_options(parser: "Parser") -> None:
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_pass(case: "Job") -> None:
-    if case.status.is_failure() and (count := config.getoption("repeat_until_pass")):
-        i: int = 0
-        while i < count:
-            i += 1
-            rerun_case(case, i)
-            if case.status.is_success():
-                return
-        logger.error(
-            f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
-        )
+def repeat_until_pass(case: "Job") -> bool | None:
+    """Run *case*, retrying up to ``--repeat-until-pass`` times until it passes.
+
+    Returns ``None`` (falling through to the next ``canary_runtest`` impl, and
+    ultimately the default runner) when the option is not set, so this only
+    takes over execution when the user asked for it.
+    """
+    from .runtest import run_once
+
+    count = config.getoption("repeat_until_pass")
+    if not count:
+        return None
+    run_once(case)
+    if case.status.is_success():
+        return True
+    i: int = 0
+    while i < count:
+        i += 1
+        rerun_case(case, i)
+        if case.status.is_success():
+            return True
+    logger.error(
+        f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
+    )
+    return True
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_after_timeout(case: "Job") -> None:
-    if case.status.is_timeout() and (count := config.getoption("repeat_after_timeout")):
-        i: int = 0
-        while i < count:
-            i += 1
-            rerun_case(case, i)
-            if not case.status.is_timeout():
-                return
-        logger.error(
-            f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
-        )
+def repeat_after_timeout(case: "Job") -> bool | None:
+    """Run *case*, retrying up to ``--repeat-after-timeout`` times on timeout."""
+    from .runtest import run_once
+
+    count = config.getoption("repeat_after_timeout")
+    if not count:
+        return None
+    run_once(case)
+    if not case.status.is_timeout():
+        return True
+    i: int = 0
+    while i < count:
+        i += 1
+        rerun_case(case, i)
+        if not case.status.is_timeout():
+            return True
+    logger.error(
+        f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
+    )
+    return True
 
 
 @hookimpl(specname="canary_runtest")
-def repeat_until_fail(case: "Job") -> None:
-    if case.status.is_success() and (count := config.getoption("repeat_until_fail")):
-        i: int = 1
-        while i < count:
-            i += 1
-            rerun_case(case, i)
-            if not case.status.is_success():
-                break
-        else:
-            return
-        n: int = count
-        logger.error(
-            f"{case}: failed to finish successfully {n} {pluralize('time', n)} without failing"
-        )
+def repeat_until_fail(case: "Job") -> bool | None:
+    """Run *case* ``--repeat-until-fail`` times, requiring every run to pass.
+
+    Stops early as soon as a run does not succeed.
+    """
+    from .runtest import run_once
+
+    count = config.getoption("repeat_until_fail")
+    if not count:
+        return None
+    run_once(case)
+    if not case.status.is_success():
+        return True
+    i: int = 1
+    while i < count:
+        i += 1
+        rerun_case(case, i)
+        if not case.status.is_success():
+            n: int = count
+            logger.error(
+                f"{case}: failed to finish successfully {n} {pluralize('time', n)} without failing"
+            )
+            return True
+    return True
 
 
 # ---- RERUN
 def rerun_case(job: "Job", attempt: int) -> None:
     try:
         job.restore_workspace()
+        # Reset the terminal status/state from the previous attempt so the job is
+        # runnable again.  Without this, ``Job.run()`` sees ``state.is_done()`` and
+        # ``is_runnable()`` returns False, so the test body is never re-executed
+        # and the (stale) failing status stands -- silently defeating every
+        # ``canary_runtest`` repeat hook (``--repeat-until-pass``,
+        # ``--repeat-after-timeout``, and downstream plugins).  Mirrors the reset
+        # performed by the ``exec`` subcommand before running a single job.
+        job.status.reset()
+        job.state.reset()
         if summary := job_start_summary(job):
             logger.debug(summary)
         job.setup()

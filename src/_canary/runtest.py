@@ -225,29 +225,40 @@ class JobExecutor:
                 logger.exception("Failed to save job %s", job.id[:7])
 
 
-@hookimpl(wrapper=True)
-def canary_runteststart(case: "Job") -> Generator[None, None, bool]:
+@hookimpl(tryfirst=True)
+def canary_runteststart(case: "Job") -> None:
     case.workspace.create(exist_ok=True)
     case.setup()
-    yield
     case.save()
+
+
+@hookimpl(trylast=True)
+def canary_runtest(case: "Job") -> bool:
+    """Default test runner.
+
+    Registered ``trylast`` so plugin and built-in ``--repeat-*`` implementations
+    (registered without an ordering hint) are attempted first and may claim the
+    case by returning a non-``None`` value.  This is the fallback that actually
+    executes the case exactly once.
+    """
+    run_once(case)
     return True
 
 
-@hookimpl(wrapper=True)
-def canary_runtest(case: "Job") -> Generator[None, None, bool]:
+def run_once(case: "Job") -> None:
+    """Execute *case* exactly once and persist its result.
+
+    Shared by the default :func:`canary_runtest` runner and the built-in
+    ``--repeat-*`` implementations (which call it in a loop).
+    """
     case.run()
-    yield
     case.save()
-    return True
 
 
-@hookimpl(wrapper=True)
-def canary_runtest_finish(case: "Job") -> Generator[None, None, bool]:
+@hookimpl(tryfirst=True)
+def canary_runtest_finish(case: "Job") -> None:
     case.finish()
-    yield
     case.save()
-    return True
 
 
 @hookimpl

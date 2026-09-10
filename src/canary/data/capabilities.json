@@ -481,15 +481,15 @@
         },
         "hookimpl_semantics": {
           "firstresult_hooks": "When firstresult=True, only the first non-None return value is used. YOUR implementation REPLACES the built-in. Use this only when you intend to fully replace default behavior.",
-          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runtest_finish is firstresult=True \u2014 so if you return a truthy value, the built-in case.finish()+save will NOT run. Use @canary.hookimpl(trylast=True) and return None to let the built-in run after your code.",
+          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runteststart and canary_runtest_finish are firstresult=False \u2014 every implementation runs, so just return None. The built-in default runs first (tryfirst); use @canary.hookimpl(trylast=True) if you must run after all other implementations.",
           "trylast": "@canary.hookimpl(trylast=True) \u2014 your impl runs after all others (safe for additive post-processing).",
           "tryfirst": "@canary.hookimpl(tryfirst=True) \u2014 your impl runs before all others."
         },
         "canary_runtest_finish_recipe": {
-          "firstresult": true,
+          "firstresult": false,
           "cwd": "Called inside the job's working directory. Outputs are at '.'",
-          "signature": "def canary_runtest_finish(case: Job) -> bool",
-          "safe_pattern": "Return None (not True) so the built-in case.finish()+save still executes after your code.",
+          "signature": "def canary_runtest_finish(case: Job) -> None",
+          "safe_pattern": "Return None; this is a non-firstresult hook so every implementation runs. The built-in default (tryfirst) runs case.finish()+save first; use @canary.hookimpl(trylast=True) to run after all other implementations.",
           "useful_attributes": {
             "case.name": "Job family name.",
             "case.parameters": "dict of parameter name -> value.",
@@ -517,24 +517,24 @@
         },
         "canary_runteststart": {
           "purpose": "Runs during job setup before the job command executes.",
-          "firstresult": true,
+          "firstresult": false,
           "cwd": "Called inside the job's working directory.",
           "arguments": [
             "case"
           ],
-          "default_behavior": "The built-in wrapper calls case.setup() and then saves the job."
+          "default_behavior": "A normal (non-firstresult) hook; every implementation runs. The built-in default (tryfirst) calls case.setup() and saves the job first, so plugin implementations can build on the prepared workspace."
         }
       },
       "post": {
         "canary_runtest_finish": {
           "purpose": "Runs after the test execution phase and before the job is finally saved.",
-          "firstresult": true,
+          "firstresult": false,
           "cwd": "Called inside the job's working directory.",
           "arguments": [
             "case"
           ],
-          "default_behavior": "The built-in wrapper calls case.finish() and saves the job.",
-          "safe_pattern": "Return None (not True/False) so the built-in still executes. Use @canary.hookimpl(trylast=True) to run after any other registered finish hooks.",
+          "default_behavior": "A normal (non-firstresult) hook; every implementation runs. The built-in default (tryfirst) calls case.finish() and saves the job first.",
+          "safe_pattern": "Return None; every implementation runs. Use @canary.hookimpl(trylast=True) to run after any other registered finish hooks (the built-in default runs first via tryfirst).",
           "agent_use": "Inspect outputs, perform post-processing, add measurements, and attach metadata."
         },
         "canary_runtests_report": {
@@ -563,7 +563,7 @@
         "canary_runtests": "Override or provide a test-session execution backend.",
         "canary_runtest_launcher": "Return a Launcher for an individual Job.",
         "canary_runteststart": "Setup phase for one Job.",
-        "canary_runtest": "Execution phase for one Job.",
+        "canary_runtest": "Execution phase for one Job. A firstresult hook: the built-in runner is registered trylast, so plugins (and the --repeat-* implementations) can override execution by returning a non-None value, or return None to fall through to the default runner.",
         "canary_runtest_finish": "Finish/post-processing phase for one Job."
       },
       "resources": {

@@ -493,50 +493,60 @@ def canary_runtest_launcher(case: "Job") -> "Launcher":
     raise NotImplementedError
 
 
-@hookspec(firstresult=True)
-def canary_runteststart(case: "Job") -> bool:
-    """Called to perform the setup phase for a test case.
+@hookspec
+def canary_runteststart(case: "Job") -> None:
+    """Perform the setup phase for a test case.
 
-    The default implementation runs ``case.setup()``.
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``tryfirst``) creates the case workspace and runs
+    ``case.setup()`` first; plugin implementations then run and may build on the
+    prepared workspace (e.g. writing files into ``case.workspace.dir`` or
+    setting ``case.variables``).
 
     Args:
         The test case.
 
     Note:
       This function is called inside the test case's working directory
-
     """
-    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
 def canary_runtest(case: "Job") -> bool:
-    """Called to run the test case
+    """Run the test case.
+
+    This is a ``firstresult`` hook: implementations are tried in order and the
+    first one to return a non-``None`` value claims execution; no further
+    implementations run.  Canary registers the default runner as ``trylast`` so
+    that plugins (and the built-in ``--repeat-*`` implementations) can override
+    how a case is executed by returning a non-``None`` value.  An implementation
+    that does not wish to handle the case must return ``None`` to fall through to
+    the next implementation (ultimately the default runner).
 
     Args:
         The test case.
 
     Note:
       This function is called inside the test case's working directory
-
     """
     raise NotImplementedError
 
 
-@hookspec(firstresult=True)
-def canary_runtest_finish(case: "Job") -> bool:
-    """Called to perform the finishing tasks for the test case
+@hookspec
+def canary_runtest_finish(case: "Job") -> None:
+    """Perform the finishing tasks for the test case.
 
-    The default implementation runs ``case.finish()``
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``tryfirst``) runs ``case.finish()`` first; plugin
+    implementations then run (e.g. capturing the environment or post-processing
+    results).
 
     Args:
         The test case.
 
     Note:
       This function is called inside the test case's working directory
-
     """
-    raise NotImplementedError
 
 
 # -------------------------------------------------------------------------
