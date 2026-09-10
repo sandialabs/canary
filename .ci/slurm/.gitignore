@@ -1,0 +1,7 @@
+# Local CI debug/build artifacts -- must NOT be committed.
+# corp-root-ca.crt is a site-internal (Zscaler/proxy) CA chain used only to
+# build the image behind an intercepting proxy; committing it would break the
+# clean GitHub Actions build and leak internal infrastructure details.
+corp-root-ca.crt
+*.out
+*.err

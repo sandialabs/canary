@@ -1,9 +1,22 @@
 FROM rockylinux:9.3
 
+# ---------------------------------------------------------------------------
+# Base Slurm image for canary CI.
+#
+# This image contains a fully built and configured Slurm installation plus
+# all system dependencies (MariaDB accounting, munge, MPICH, Python 3.12).
+# It intentionally does NOT install canary itself -- canary is installed at
+# CI runtime from the branch/PR under test (see .ci/slurm/test.sh), so this
+# image can be built once and reused by every CI run.
+#
+# The image is published to GitHub Container Registry and pulled by the
+# `slurm` job in .github/workflows/workflow.yml. See .ci/slurm/README.md for
+# build/push instructions.
+# ---------------------------------------------------------------------------
+
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
 ARG SLURM_CONFDIR=${SLURM_ROOT}/etc
-ARG BRANCH_NAME
 
 ENV SLURM_VERSION   ${SLURM_VERSION}
 ENV SLURM_ROOT      ${SLURM_ROOT}
@@ -88,12 +101,6 @@ RUN chmod g-w /etc && \
     chmod +t /etc && \
     chown slurm:slurm /opt/slurm-23.02.7/etc/cgroup.conf && \
     chown -R mysql:mysql /var/lib/mysql
-
-# Canary install
-RUN python3 -m venv canary && \
-    . canary/bin/activate && \
-    python -m pip install --upgrade pip==25.1.1 && \
-    python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
 
 WORKDIR /root
 
