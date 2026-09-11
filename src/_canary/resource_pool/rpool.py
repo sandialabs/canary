@@ -383,6 +383,13 @@ class NodeRequest:
                 count += int(item.get("slots", 1))
         return count
 
+    def totals(self) -> dict[str, int]:
+        """Slot counts for this node request, keyed by resource type."""
+        totals: dict[str, int] = {}
+        for item in self.resources:
+            totals[item["type"]] = totals.get(item["type"], 0) + int(item.get("slots", 1))
+        return totals
+
     def total_slots(self) -> int:
         return sum(int(item.get("slots", 1)) for item in self.resources)
 

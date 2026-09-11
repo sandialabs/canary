@@ -12,6 +12,7 @@ from _canary.status import Outcome
 from _canary.status import Status
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
+from canary_hpc.batchexec import HPCConnectRunner
 from canary_hpc.batchexec import _all_children_finished
 from canary_hpc.batchspec import BatchSpec
 from canary_hpc.batchspec import TestBatch as HPCBatch
@@ -410,3 +411,41 @@ def test_finish_abnormal_slot_no_finalize_method_falls_through(tmp_path):
     ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
 
     assert slot.job.outcome == "TIMEOUT"
+
+
+class _DummyBackend:
+    """Minimal stand-in for hpc_connect.Backend (resource_totals never touches it)."""
+
+    name = "dummy"
+
+
+def _runner() -> HPCConnectRunner:
+    return HPCConnectRunner.__new__(HPCConnectRunner)
+
+
+def test_resource_totals_single_node_gpu_batch(tmp_path):
+    batch = make_batch(tmp_path, [FakeJob(id="j1", cpus=4, gpus=1)])
+    totals = _runner().resource_totals(batch)
+    # one node, largest per-node request scaled by node count (1)
+    assert totals == {"cpus": 4, "gpus": 1}
+
+
+def test_resource_totals_takes_max_over_jobs(tmp_path):
+    batch = make_batch(
+        tmp_path,
+        [
+            FakeJob(id="j1", cpus=2, gpus=1),
+            FakeJob(id="j2", cpus=8, gpus=0),
+            FakeJob(id="j3", cpus=1, gpus=4),
+        ],
+    )
+    totals = _runner().resource_totals(batch)
+    # per-type max single-node request across the batch (all single-node)
+    assert totals == {"cpus": 8, "gpus": 4}
+
+
+def test_resource_totals_cpu_only_batch_has_no_gpus(tmp_path):
+    batch = make_batch(tmp_path, [FakeJob(id="j1", cpus=4, gpus=0)])
+    totals = _runner().resource_totals(batch)
+    assert totals == {"cpus": 4}
+    assert "gpus" not in totals

@@ -187,6 +187,26 @@ class HPCConnectRunner:
             node_count = max(node_count, len(job.required_resources()))
         return node_count
 
+    def resource_totals(self, batch: "TestBatch") -> dict[str, int]:
+        """Total resource counts the batch allocation must provide.
+
+        Each job's ``required_resources()`` is a per-node list of ``NodeRequest``
+        objects.  We take, per resource type, the largest single-node request in
+        the batch (canary reserves whole nodes, so a node must be able to host
+        the most demanding job) multiplied by the batch node count.  This lets
+        the (scheduler-agnostic) hpc_connect backend translate the logical
+        request into the correct directives (e.g. Slurm ``--gres=gpu:N``, Flux
+        ``--gpus-per-slot``) instead of relying on hand-written submit args.
+        """
+        node_count = self.nodes_required(batch)
+        per_node: dict[str, int] = {}
+        for job in batch.jobs:
+            for request in job.required_resources():
+                for rtype, count in request.totals().items():
+                    if count > per_node.get(rtype, 0):
+                        per_node[rtype] = count
+        return {rtype: count * node_count for rtype, count in per_node.items() if count > 0}
+
 
 def _canonical_resource_type(rtype: str) -> str:
     return rtype if rtype.endswith("s") else f"{rtype}s"
@@ -411,10 +431,13 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         invocation = self.canary_invocation(batch)
         node_count = self.nodes_required(batch)
         variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
+        totals = self.resource_totals(batch)
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
             nodes=node_count,
+            cpus=totals.get("cpus"),
+            gpus=totals.get("gpus"),
             time_limit=batch.estimated_runtime() * batch.timeout_multiplier,
             env=variables,
             output=str(batch.workspace.joinpath(batch.stdout)),
