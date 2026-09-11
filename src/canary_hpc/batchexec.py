@@ -572,7 +572,13 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             commands=[invocation],
             nodes=node_count,
             cpus=totals.get("cpus"),
-            gpus=totals.get("gpus"),
+            # Pass an explicit 0 (not None) when the batch requests no GPUs.
+            # resource_totals() omits a resource type entirely when its count is
+            # 0, so totals.get("gpus") is None for a CPU-only batch.  Backends
+            # (e.g. Slurm) treat gpus=None as "unknown -> assume a whole-node GPU
+            # job" and would emit a spurious --gres=gpu:N on GPU-equipped nodes.
+            # An explicit 0 unambiguously means "no GPUs requested".
+            gpus=totals.get("gpus", 0),
             time_limit=estimated,
             env=variables,
             output=str(batch.workspace.joinpath(batch.stdout)),

@@ -465,6 +465,59 @@ def test_resource_totals_cpu_only_batch_has_no_gpus(tmp_path):
     assert "gpus" not in totals
 
 
+def _capture_submitted_jobspec(tmp_path, jobs):
+    """Drive HPCConnectRunner.submit() with stubs and return the JobSpec that
+    reached the backend's submission manager."""
+    from canary_hpc.batchexec import HPCConnectBatchRunner
+
+    batch = make_batch(tmp_path, jobs)
+    runner = HPCConnectBatchRunner.__new__(HPCConnectBatchRunner)
+
+    captured: dict[str, Any] = {}
+
+    class _Adapter:
+        def submit(self, jobspec):
+            captured["jobspec"] = jobspec
+            return object()
+
+    class _Backend:
+        name = "dummy"
+
+        def submission_manager(self):
+            return _Adapter()
+
+    runner.backend = _Backend()  # type: ignore[attr-defined]
+
+    # Neutralize the ancillary helpers submit() calls so we exercise only the
+    # JobSpec construction (the part the None-vs-0 fix touches).
+    runner.rc_environ = lambda batch: {}  # type: ignore[assignment]
+    runner.canary_invocation = lambda batch: "canary run"  # type: ignore[assignment]
+    runner.scheduler_args = lambda: []  # type: ignore[assignment]
+    runner._warn_if_wall_too_short = lambda *a, **k: None  # type: ignore[assignment]
+
+    runner.submit(batch)
+    return captured["jobspec"]
+
+
+def test_submit_cpu_only_batch_sets_gpus_to_zero_not_none(tmp_path):
+    """A CPU-only batch must send gpus=0 (explicit), not None.
+
+    resource_totals() omits 'gpus' for CPU-only batches, so totals.get('gpus')
+    is None.  Backends (e.g. Slurm) treat gpus=None as 'assume a whole-node GPU
+    job' and would emit a spurious --gres=gpu:N on GPU-equipped nodes.  The
+    explicit 0 unambiguously means 'no GPUs'.
+    """
+    jobspec = _capture_submitted_jobspec(tmp_path, [FakeJob(id="j1", cpus=4, gpus=0)])
+    assert jobspec.gpus == 0
+    assert jobspec.gpus is not None
+
+
+def test_submit_gpu_batch_forwards_gpu_count(tmp_path):
+    """A GPU batch forwards the aggregated GPU count to the JobSpec."""
+    jobspec = _capture_submitted_jobspec(tmp_path, [FakeJob(id="j1", cpus=4, gpus=2)])
+    assert jobspec.gpus == 2
+
+
 # ---------------------------------------------------------------------------
 # Scheduler wall-limit termination detection + status propagation
 # ---------------------------------------------------------------------------
