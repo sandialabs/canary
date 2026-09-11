@@ -4,6 +4,7 @@
 import dataclasses
 import json
 import os
+import re
 import shlex
 import signal
 import sys
@@ -216,6 +217,117 @@ def _singular_resource_type(rtype: str) -> str:
     return rtype[:-1] if rtype.endswith("s") else rtype
 
 
+#: Scheduler accounting states / substrings that mean "the scheduler ended the
+#: allocation because it hit its wall-clock time limit" (Slurm ``TIMEOUT``, the
+#: ``DUE TO TIME LIMIT`` cancellation message, PBS/other equivalents).
+_WALL_LIMIT_STATE_MARKERS: tuple[str, ...] = (
+    "TIMEOUT",
+    "TIME LIMIT",
+    "TIMELIMIT",
+    "DUE TO TIME LIMIT",
+)
+
+#: Flux signals a wall-limit kill with this job return code (see hpcc_flux).
+_FLUX_TIMEOUT_RETURNCODE = 66
+
+
+def _parse_wall_seconds(submit_args: Sequence[str]) -> float | None:
+    """Extract a wall-limit (in seconds) from scheduler submit args, if pinned.
+
+    Recognizes Slurm ``--time``/``-t`` (``MM``, ``MM:SS``, ``HH:MM:SS``,
+    ``D-HH[:MM[:SS]]``) and flux ``--time-limit`` (``N`` seconds, or ``Ns``/
+    ``Nm``/``Nh``/``Nd`` suffixed).  Returns ``None`` if no wall is pinned or it
+    cannot be parsed.  Best-effort: used only to warn, never to gate.
+    """
+    tokens: list[str] = []
+    for arg in submit_args:
+        tokens.extend(shlex.split(arg) if isinstance(arg, str) else [str(arg)])
+
+    value: str | None = None
+    for i, tok in enumerate(tokens):
+        for key in ("--time-limit", "--time", "-t"):
+            if tok == key and i + 1 < len(tokens):
+                value = tokens[i + 1]
+            elif tok.startswith(key + "="):
+                value = tok.split("=", 1)[1]
+            if value is not None:
+                break
+        if value is not None:
+            break
+
+    if value is None:
+        return None
+    value = value.strip().strip("'\"")
+
+    # flux-style suffixed duration, e.g. 90m, 1h, 3600s, 2d
+    m = re.fullmatch(r"(?i)\s*([0-9]*\.?[0-9]+)\s*([smhd])\s*", value)
+    if m:
+        n = float(m.group(1))
+        return n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2).lower()]
+
+    # slurm-style [D-]HH:MM:SS / MM:SS / MM, optional leading "D-"
+    days = 0.0
+    body = value
+    if "-" in body:
+        d, _, body = body.partition("-")
+        try:
+            days = float(d)
+        except ValueError:
+            return None
+    parts = body.split(":")
+    try:
+        nums = [float(p) for p in parts]
+    except ValueError:
+        return None
+    if len(parts) == 1:
+        # bare number: minutes (slurm) unless days prefix present (then hours)
+        return days * 86400 + (nums[0] * 3600 if days else nums[0] * 60)
+    if len(parts) == 2:
+        return days * 86400 + nums[0] * 3600 + nums[1] * 60 if days else nums[0] * 60 + nums[1]
+    if len(parts) == 3:
+        return days * 86400 + nums[0] * 3600 + nums[1] * 60 + nums[2]
+    return None
+
+
+def _scheduler_wall_limit_reason(
+    proc_info: dict[str, Any] | None,
+    *,
+    returncode: int | None,
+    requested_wall: float | None,
+    elapsed: float | None,
+) -> str | None:
+    """Return an explanation if the scheduler killed the batch at its wall limit.
+
+    Backends surface this differently, so we check several signals:
+
+    * an accounting ``state`` containing a wall-limit marker (Slurm ``TIMEOUT``,
+      PBS, or the ``DUE TO TIME LIMIT`` message);
+    * a Flux timeout return code (66);
+    * a heuristic fallback: the batch ran for essentially its whole requested
+      wall (>= 95%), which almost always means the scheduler killed it.
+
+    Returns ``None`` when there is no evidence of a wall-limit termination.
+    """
+    info = proc_info or {}
+    state = str(info.get("state") or "").upper()
+    if any(marker in state for marker in _WALL_LIMIT_STATE_MARKERS):
+        wall = f" (wall limit {requested_wall / 60.0:.0f} min)" if requested_wall else ""
+        return f"the scheduler ended the allocation at its time limit{wall} [state={state}]"
+
+    if returncode == _FLUX_TIMEOUT_RETURNCODE:
+        wall = f" (wall limit {requested_wall / 60.0:.0f} min)" if requested_wall else ""
+        return f"the scheduler ended the allocation at its time limit{wall}"
+
+    if requested_wall and elapsed and elapsed >= 0.95 * requested_wall:
+        return (
+            f"the allocation ran for ~{elapsed / 60.0:.0f} min, at/near its "
+            f"{requested_wall / 60.0:.0f} min wall limit, and was likely killed by "
+            f"the scheduler; raise the wall (or reduce the batch size) so the batch fits"
+        )
+
+    return None
+
+
 def _resource_specs(count: int, *, rtype: str) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
 
@@ -298,8 +410,28 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                 info = future.proc_info()
             except Exception:
                 logger.debug("Failed to read proc_info for batch %s", batch.id[:7], exc_info=True)
-                return
+                info = {}
             batch.measurements.update({"scheduler": info})
+
+            # Detect a scheduler wall-limit termination so unfinished child jobs
+            # get an actionable reason (instead of the generic "batch finished
+            # before job produced a final result").
+            try:
+                returncode = getattr(future, "returncode", None)
+                elapsed = (time.time() - started_at) if started_at > 0 else None
+                reason = _scheduler_wall_limit_reason(
+                    info, returncode=returncode, requested_wall=run_timeout, elapsed=elapsed
+                )
+                if reason:
+                    batch.scheduler_termination = reason
+                    logger.error("Batch %s: %s", batch.id[:7], reason)
+            except Exception:
+                logger.debug(
+                    "Failed to classify scheduler termination for batch %s",
+                    batch.id[:7],
+                    exc_info=True,
+                )
+
             try:
                 batch.save(children=False)
             except Exception:
@@ -432,18 +564,21 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         node_count = self.nodes_required(batch)
         variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
         totals = self.resource_totals(batch)
+        submit_args = self.scheduler_args()
+        estimated = batch.estimated_runtime() * batch.timeout_multiplier
+        self._warn_if_wall_too_short(batch, submit_args, estimated)
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
             nodes=node_count,
             cpus=totals.get("cpus"),
             gpus=totals.get("gpus"),
-            time_limit=batch.estimated_runtime() * batch.timeout_multiplier,
+            time_limit=estimated,
             env=variables,
             output=str(batch.workspace.joinpath(batch.stdout)),
             error=str(batch.workspace.joinpath(batch.stdout)),
             workspace=batch.workspace.dir,
-            submit_args=self.scheduler_args(),
+            submit_args=submit_args,
         )
         if all(b.jobid is not None for b in batch.dependencies):
             hpc_job = hpc_job.with_dependencies([b.jobid for b in batch.dependencies])  # type: ignore
@@ -453,6 +588,31 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             logger.exception(f"Submission for job {hpc_job} failed")
             raise
         return future
+
+    def _warn_if_wall_too_short(
+        self, batch: "TestBatch", submit_args: Sequence[str], estimated: float
+    ) -> None:
+        """Warn when a user-pinned wall limit is below the estimated batch runtime.
+
+        canary sizes the scheduler wall from ``estimated_runtime`` automatically.
+        A user can override it with a submit arg (e.g. ``-b option="--time=..."``
+        / ``--time-limit=...``).  If that override is shorter than the estimate,
+        the scheduler will very likely kill the batch mid-run, so surface it up
+        front rather than leaving the user to decode ``TIMEOUT`` failures later.
+        """
+        pinned = _parse_wall_seconds(submit_args)
+        if pinned is None or estimated <= 0:
+            return
+        if pinned < estimated:
+            logger.warning(
+                "Batch %s: requested wall limit %.0f min is below the estimated "
+                "runtime %.0f min. The scheduler may kill the batch before its "
+                "jobs finish. Remove the pinned wall to let canary size it, or "
+                "raise it above the estimate.",
+                batch.id[:7],
+                pinned / 60.0,
+                estimated / 60.0,
+            )
 
     def canary_invocation(self, batch: "TestBatch") -> str:
         """Write the canary invocation used to run this batch."""

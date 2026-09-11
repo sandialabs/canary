@@ -98,6 +98,12 @@ class TestBatch(BaseJob):
         self.variables = {"CANARY_BATCH_ID": str(self.spec.id)}
         self.dependencies: list["TestBatch"] = dependencies or []
         self.backend_supports_dependencies = backend_supports_dependencies
+        #: When the scheduler (not canary) ended the allocation for a knowable
+        #: reason -- e.g. it hit the Slurm ``--time`` wall (state ``TIMEOUT``) --
+        #: this holds a short human-readable explanation.  It is used to give
+        #: jobs that did not finish an actionable status reason instead of the
+        #: generic "batch finished before job produced a final result".
+        self.scheduler_termination: str | None = None
 
     def __iter__(self):
         return iter(self.jobs)
@@ -476,15 +482,20 @@ class TestBatch(BaseJob):
         unfinished = [job for job in self.jobs if not job.state.is_done() or job.status.is_unset()]
 
         if unfinished:
+            if self.scheduler_termination:
+                unfinished_reason = (
+                    f"Did not complete: {self.scheduler_termination}. "
+                    f"{len(unfinished)} of {len(self.jobs)} jobs in the batch did not finish."
+                )
+            else:
+                unfinished_reason = "Batch finished before job produced a final result"
             for job in unfinished:
                 # refresh_readiness may have marked some jobs BLOCKED.
                 if job.state.is_done() and not job.status.is_unset():
                     continue
 
                 job.state.phase = JobPhase.DONE
-                job.set_status(
-                    outcome="BROKEN", reason="Batch finished before job produced a final result"
-                )
+                job.set_status(outcome="BROKEN", reason=unfinished_reason)
 
                 batch_submitted = self.timekeeper._submitted
                 job.timekeeper.maybe_open(at=batch_submitted if batch_submitted > 0 else now)
@@ -501,9 +512,11 @@ class TestBatch(BaseJob):
             return
 
         if any(not job.state.is_done() or job.status.is_unset() for job in self.jobs):
-            self.status.set_base(
-                outcome="FAILED", reason="One or more jobs in batch did not produce a final result"
-            )
+            if self.scheduler_termination:
+                reason = f"One or more jobs did not complete: {self.scheduler_termination}"
+            else:
+                reason = "One or more jobs in batch did not produce a final result"
+            self.status.set_base(outcome="FAILED", reason=reason)
         elif all(job.status.is_success() for job in self.jobs):
             self.status.set_base(outcome="SUCCESS")
         else:

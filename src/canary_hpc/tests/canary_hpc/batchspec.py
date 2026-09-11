@@ -423,6 +423,20 @@ def _runner() -> HPCConnectRunner:
     return HPCConnectRunner.__new__(HPCConnectRunner)
 
 
+class _FinalizableJob(FakeJob):
+    """FakeJob plus the extra API finalize_status_from_child_jobs() uses."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.dependencies: list[Any] = []
+
+    def refresh_readiness(self) -> None:
+        pass
+
+    def set_status(self, *, outcome: str, reason: str, code: int = -1) -> None:
+        self.status = Status(outcome=outcome, reason=reason)
+
+
 def test_resource_totals_single_node_gpu_batch(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="j1", cpus=4, gpus=1)])
     totals = _runner().resource_totals(batch)
@@ -449,3 +463,86 @@ def test_resource_totals_cpu_only_batch_has_no_gpus(tmp_path):
     totals = _runner().resource_totals(batch)
     assert totals == {"cpus": 4}
     assert "gpus" not in totals
+
+
+# ---------------------------------------------------------------------------
+# Scheduler wall-limit termination detection + status propagation
+# ---------------------------------------------------------------------------
+
+
+def test_parse_wall_seconds_slurm_and_flux_formats():
+    from canary_hpc.batchexec import _parse_wall_seconds
+
+    # slurm --time formats
+    assert _parse_wall_seconds(["--time=1:00:00"]) == 3600.0
+    assert _parse_wall_seconds(["--time=30"]) == 1800.0  # bare = minutes
+    assert _parse_wall_seconds(["--time=90:00"]) == 5400.0  # MM:SS
+    assert _parse_wall_seconds(["-t", "2:00:00"]) == 7200.0
+    assert _parse_wall_seconds(["--time=1-00:00:00"]) == 86400.0  # D-HH:MM:SS
+    # flux --time-limit suffixed
+    assert _parse_wall_seconds(["--time-limit=90m"]) == 5400.0
+    assert _parse_wall_seconds(["--time-limit=1h"]) == 3600.0
+    assert _parse_wall_seconds(["--time-limit=3600s"]) == 3600.0
+    # combined option string (as CI passes it)
+    assert _parse_wall_seconds(["--account=X", "--time=1:00:00"]) == 3600.0
+    # nothing pinned
+    assert _parse_wall_seconds(["--account=X", "--partition=batch"]) is None
+
+
+def test_scheduler_wall_limit_reason_from_state():
+    from canary_hpc.batchexec import _scheduler_wall_limit_reason
+
+    r = _scheduler_wall_limit_reason(
+        {"state": "TIMEOUT"}, returncode=1, requested_wall=3600.0, elapsed=3600.0
+    )
+    assert r and "time limit" in r.lower()
+
+
+def test_scheduler_wall_limit_reason_flux_returncode():
+    from canary_hpc.batchexec import _scheduler_wall_limit_reason
+
+    r = _scheduler_wall_limit_reason({}, returncode=66, requested_wall=3600.0, elapsed=100.0)
+    assert r and "time limit" in r.lower()
+
+
+def test_scheduler_wall_limit_reason_elapsed_heuristic():
+    from canary_hpc.batchexec import _scheduler_wall_limit_reason
+
+    # ran to ~99% of the wall with no explicit state -> heuristic fires
+    r = _scheduler_wall_limit_reason(
+        {"state": "COMPLETED"}, returncode=0, requested_wall=3600.0, elapsed=3595.0
+    )
+    assert r and "wall limit" in r.lower()
+
+
+def test_scheduler_wall_limit_reason_none_when_healthy():
+    from canary_hpc.batchexec import _scheduler_wall_limit_reason
+
+    assert (
+        _scheduler_wall_limit_reason(
+            {"state": "COMPLETED"}, returncode=0, requested_wall=3600.0, elapsed=120.0
+        )
+        is None
+    )
+
+
+def test_unfinished_jobs_get_actionable_reason_on_wall_limit(tmp_path):
+    """A wall-limit kill gives unfinished jobs a specific, actionable reason."""
+    batch = make_batch(tmp_path, [_FinalizableJob(id="j1")])
+    batch.scheduler_termination = (
+        "the scheduler ended the allocation at its time limit (wall limit 60 min)"
+    )
+    batch.finalize_status_from_child_jobs()
+    job = batch.jobs[0]
+    assert job.status.outcome.name == "BROKEN"
+    assert "time limit" in (job.status.reason or "").lower()
+    assert "did not complete" in (job.status.reason or "").lower()
+
+
+def test_unfinished_jobs_generic_reason_without_wall_limit(tmp_path):
+    """Absent a known scheduler cause, the generic reason is used."""
+    batch = make_batch(tmp_path, [_FinalizableJob(id="j1")])
+    batch.finalize_status_from_child_jobs()
+    job = batch.jobs[0]
+    assert job.status.outcome.name == "BROKEN"
+    assert "final result" in (job.status.reason or "").lower()
