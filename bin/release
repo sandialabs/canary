@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+"""Create a canary PyPI release locally.
+
+This drives a release end to end *up to* the point of publishing:
+
+  1. verify a clean working tree on ``main``;
+  2. create a throwaway release branch ``releases/<date>`` off ``main``
+     (``main`` is never modified -- it always tracks hpc-connect from git);
+  3. stamp canary's version to the date-based ``YY.M.D`` value;
+  4. pin the hpc-connect dependency to the requested released version
+     (``hpc-connect==<X>``);
+  5. validate: run the test suite, build the wheel, install it into a fresh
+     virtual environment (a "mock install"), and run the fetched examples,
+     asserting the expected exit code (14 -- several examples intentionally
+     fail);
+  6. commit the pinned/stamped state on the release branch and tag it
+     ``release/<date>``.
+
+Publishing is intentionally left to you: review, then push the branch and tag::
+
+    git push origin releases/<date> release/<date>
+
+Pushing the ``release/*`` tag triggers the GitHub publish workflow, which
+uploads to PyPI.  The tagged tree is self-contained (already pinned), so the
+workflow's build-time pin step is a no-op.
+
+Usage::
+
+    bin/release --hpc-connect 26.9.11
+    bin/release --hpc-connect 26.9.11 --date 2026-09-11   # override the date
+    bin/release --hpc-connect 26.9.11 --keep-going        # don't abort on dirty tree (dev)
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+#: canary run exit code when a session has the expected mix of pass/fail
+#: results (several bundled examples intentionally fail/diff/timeout).
+EXAMPLES_EXPECTED_RC = 14
+
+GIT_URL_DEP = '"hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git"'
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    root = repo_root()
+    os.chdir(root)
+
+    if args.date:
+        date = datetime.date.fromisoformat(args.date)
+    else:
+        date = datetime.date.today()
+    version = f"{date.year - 2000}.{date.month}.{date.day}"
+    tag = f"release/{date.year - 2000}.{date.month:02d}.{date.day:02d}"
+    branch = f"releases/{date.year - 2000}.{date.month:02d}.{date.day:02d}"
+
+    info(f"Release version : {version}")
+    info(f"Release branch  : {branch}")
+    info(f"Release tag     : {tag}")
+    info(f"hpc-connect pin : =={args.hpc_connect}")
+
+    preflight(args, tag, branch)
+
+    git("switch", "-c", branch)
+    try:
+        stamp_version(root, version)
+        pin_hpc_connect(root, args.hpc_connect)
+
+        if not args.no_validate:
+            run_tests(root)
+            wheel = build_wheel(root)
+            mock_install_and_run_examples(wheel, args.hpc_connect)
+
+        git("add", "pyproject.toml")
+        git("commit", "-m", f"Release {version} (hpc-connect=={args.hpc_connect})")
+        git("tag", tag)
+    except BaseException:
+        error("Release failed; cleaning up the release branch.")
+        git("switch", "main", check=False)
+        git("branch", "-D", branch, check=False)
+        git("tag", "-d", tag, check=False)
+        raise
+
+    git("switch", "main")
+
+    info("")
+    info(f"Release {version} prepared on branch {branch!r} and tagged {tag!r}.")
+    info("main was not modified. Review, then publish with:")
+    info(f"    git push origin {branch} {tag}")
+    info("Pushing the tag triggers the PyPI publish workflow.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# steps
+# ---------------------------------------------------------------------------
+
+
+def preflight(args: argparse.Namespace, tag: str, branch: str) -> None:
+    current = git("rev-parse", "--abbrev-ref", "HEAD", capture=True).strip()
+    if current != "main" and not args.keep_going:
+        raise SystemExit(
+            f"must be on 'main' to release (on {current!r}); use --keep-going to override"
+        )
+
+    if is_dirty() and not args.keep_going:
+        raise SystemExit("working tree is dirty; commit or stash first (or use --keep-going)")
+
+    existing_tags = git("tag", "--list", tag, capture=True).strip()
+    if existing_tags:
+        raise SystemExit(f"tag {tag!r} already exists")
+
+    existing_branch = git("branch", "--list", branch, capture=True).strip()
+    if existing_branch:
+        raise SystemExit(f"branch {branch!r} already exists; delete it first")
+
+
+def stamp_version(root: Path, version: str) -> None:
+    info(f"Stamping canary version -> {version}")
+    _sub_version_line(root / "pyproject.toml", version)
+
+
+def pin_hpc_connect(root: Path, pin: str) -> None:
+    info(f"Pinning hpc-connect=={pin}")
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
+    new, n = re.subn(re.escape(GIT_URL_DEP), f'"hpc-connect=={pin}"', text)
+    if n != 1:
+        raise SystemExit(
+            f"expected exactly one hpc-connect git dependency to pin, found {n} "
+            "(is main tracking hpc-connect from git?)"
+        )
+    pyproject.write_text(new, encoding="utf-8")
+
+
+def run_tests(root: Path) -> None:
+    info("Running test suite (canary check -t)...")
+    run([canary_exe(), "check", "-t", "--verbose"], cwd=root)
+
+
+def build_wheel(root: Path) -> Path:
+    info("Building wheel...")
+    dist = root / "dist"
+    if dist.exists():
+        shutil.rmtree(dist)
+    run([sys.executable, "-m", "build", "--wheel"], cwd=root)
+    wheels = sorted(dist.glob("canary_wm-*.whl"))
+    if not wheels:
+        raise SystemExit("no wheel produced in ./dist")
+    wheel = wheels[-1]
+    info(f"Built {wheel.name}")
+    return wheel
+
+
+def mock_install_and_run_examples(wheel: Path, hpc_connect_pin: str) -> None:
+    """Install the built wheel into a throwaway venv and run the examples.
+
+    Mirrors the slurm/flux CI test scripts: `canary fetch examples` into a temp
+    directory, run them, and require exit code 14 (several examples fail by
+    design).
+    """
+    info("Mock-installing the wheel into a fresh virtual environment...")
+    tmp = Path(tempfile.mkdtemp(prefix="canary-release-"))
+    try:
+        venv = tmp / "venv"
+        run([sys.executable, "-m", "venv", str(venv)])
+        py = venv / "bin" / "python"
+        canary = venv / "bin" / "canary"
+
+        run([str(py), "-m", "pip", "install", "--upgrade", "pip"])
+        # Install the wheel and its dependencies.  The pinned hpc-connect==<X>
+        # must be resolvable from the configured index.
+        run([str(py), "-m", "pip", "install", str(wheel)])
+
+        # Confirm the installed metadata reflects the exact pin we committed.
+        installed = run(
+            [str(py), "-c", "import importlib.metadata as m; print(m.version('hpc-connect'))"],
+            capture=True,
+        ).strip()
+        if installed != hpc_connect_pin:
+            raise SystemExit(
+                f"installed hpc-connect version {installed!r} does not match the "
+                f"requested pin {hpc_connect_pin!r}"
+            )
+        info(f"Verified installed hpc-connect=={installed}")
+
+        work = tmp / "work"
+        work.mkdir()
+        info("Fetching examples...")
+        run([str(canary), "fetch", "examples"], cwd=work)
+
+        info(f"Running examples (expecting exit code {EXAMPLES_EXPECTED_RC})...")
+        rc = run(
+            [str(canary), "-d", "run", "--show-excluded-tests", "-w", "./examples"],
+            cwd=work,
+            check=False,
+        )
+        if rc != EXAMPLES_EXPECTED_RC:
+            raise SystemExit(
+                f"examples run returned {rc}, expected {EXAMPLES_EXPECTED_RC}; "
+                "the mock install did not behave as expected"
+            )
+        info("Examples ran with the expected result.")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+
+def _sub_version_line(pyproject: Path, version: str) -> None:
+    text = pyproject.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    in_project = False
+    replaced = False
+    header = re.compile(r"^\s*\[project\]\s*(?:#.*)?$")
+    other = re.compile(r"^\s*\[[^\]]+\]\s*(?:#.*)?$")
+    version_re = re.compile(r"""^(\s*version\s*=\s*)(["'])(.*?)(\2)(.*)$""")
+    for i, line in enumerate(lines):
+        body = line.rstrip("\r\n")
+        ending = line[len(body) :]
+        if header.match(body):
+            in_project = True
+            continue
+        if in_project and other.match(body):
+            break
+        if in_project:
+            m = version_re.match(body)
+            if m:
+                lines[i] = f"{m.group(1)}{m.group(2)}{version}{m.group(2)}{m.group(5)}{ending}"
+                replaced = True
+                break
+    if not replaced:
+        raise SystemExit("could not find project.version in pyproject.toml")
+    pyproject.write_text("".join(lines), encoding="utf-8")
+
+
+def repo_root() -> Path:
+    out = git("rev-parse", "--show-toplevel", capture=True).strip()
+    return Path(out)
+
+
+def is_dirty() -> bool:
+    return subprocess.run(["git", "diff", "--quiet"]).returncode != 0 or (
+        subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode != 0
+    )
+
+
+def canary_exe() -> str:
+    exe = shutil.which("canary")
+    if exe is None:
+        raise SystemExit("canary must be on PATH (editable install) to run the test suite")
+    return exe
+
+
+def git(*args: str, capture: bool = False, check: bool = True) -> str:
+    cmd = ["git", *args]
+    if capture:
+        proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, check=check)
+        return proc.stdout
+    subprocess.run(cmd, check=check)
+    return ""
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, capture: bool = False, check: bool = True):
+    if capture:
+        proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, cwd=cwd, check=check)
+        return proc.stdout
+    proc = subprocess.run(cmd, cwd=cwd, check=check)
+    return proc.returncode
+
+
+def info(msg: str) -> None:
+    print(f"[release] {msg}", flush=True)
+
+
+def error(msg: str) -> None:
+    print(f"[release] ERROR: {msg}", file=sys.stderr, flush=True)
+
+
+def parse_args(argv: list[str] | None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "--hpc-connect",
+        required=True,
+        metavar="VERSION",
+        help="hpc-connect version to pin for this release (e.g. 26.9.11)",
+    )
+    p.add_argument(
+        "--date", metavar="YYYY-MM-DD", help="override the release date (default: today)"
+    )
+    p.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="skip tests / build / mock-install / examples (not recommended)",
+    )
+    p.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="proceed even if not on main or the working tree is dirty (dev only)",
+    )
+    return p.parse_args(argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

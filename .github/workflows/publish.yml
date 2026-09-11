@@ -39,12 +39,19 @@ jobs:
 
         - name: Pin hpc-connect for the release build
           # main tracks hpc-connect from git; a published wheel must instead
-          # depend on a released `hpc-connect==<X>`.  Determine the version to
-          # pin: the workflow_dispatch input if given, else the tag's date
-          # (release/YY.MM.DD -> YY.M.D), and rewrite pyproject.toml in place.
-          # This edit is build-only and is never committed back to main.
+          # depend on a released `hpc-connect==<X>`.  The local `bin/release`
+          # driver normally commits this pin on the release branch/tag, so the
+          # tagged tree is already pinned and this step is a no-op.  If the tag
+          # still has the git dependency (e.g. tagged without bin/release),
+          # pin it here: use the workflow_dispatch input if given, else derive
+          # from the tag (release/YY.MM.DD -> YY.M.D).  Never committed to main.
           run: |
             set -euo pipefail
+            if ! grep -q 'hpc-connect @ git' pyproject.toml; then
+              echo "hpc-connect already pinned in pyproject.toml; nothing to do:"
+              grep -n "hpc-connect" pyproject.toml
+              exit 0
+            fi
             PIN="${{ github.event.inputs.hpc_connect_version }}"
             if [ -z "$PIN" ]; then
               TAG="${GITHUB_REF#refs/tags/release/}"
