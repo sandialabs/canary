@@ -1,77 +1,132 @@
-# CANARY
+# canary
 
-`canary` is a Python package for defining, scheduling, and executing jobs across a wide range of computing environments, from developer laptops to large-scale HPC systems.
+`canary` is an application testing framework and workflow engine for scientific
+software. It finds your tests, figures out how they depend on each other and
+what resources they need, then runs them as fast as your hardware allows and
+tells you what happened. The same machinery scales from a quick run on a laptop
+to thousands of jobs spread across an HPC allocation.
 
 - **Documentation:** https://canary-wm.readthedocs.io
+- **Source:** https://github.com/sandialabs/canary
+
+```console
+python3 -m pip install canary-wm
+canary run ./tests
+```
+
+## Heritage
+
+`canary` grows out of [vvtest](https://github.com/sandialabs/vvtest), the test
+harness that Sandia teams have relied on for years to test large scientific
+codes. vvtest proved out the ideas that matter most: tests are ordinary
+scripts, a passing test is one that exits `0`, and a test harness has to
+understand real HPC resources instead of pretending every machine is a single
+box.
+
+`canary` keeps those ideas and rebuilds around them. It reads vvtest's `.vvt`
+files directly, so existing test suites keep working, and it adds a native
+Python test format (`.pyt`), a plugin system, a persistent results database,
+and first class support for batch schedulers. If you are coming from vvtest, the
+mental model is the same and your tests come along with you.
+
+## What it does
+
+Point `canary` at a directory and it will:
+
+1. **Discover** test and job definitions by walking the filesystem.
+2. **Generate** concrete jobs from those definitions, expanding parameterized
+   tests into the full set of cases.
+3. **Resolve** dependencies into an execution graph and match each job against
+   the resources it asks for (CPUs, GPUs, nodes).
+4. **Schedule and run** the graph with hierarchical parallelism, so independent
+   work runs concurrently and dependent work waits only for what it needs.
+5. **Record** everything to a queryable results database and render reports.
+
+A "job" does not have to be a test. It can be a simulation, an analysis step, a
+data-processing stage, or any other executable unit of work, which is why the
+same tool that runs a test suite can also drive an analysis pipeline.
+
+## Why people use it
+
+**It understands HPC.** `canary` models CPUs, GPUs, and nodes as real resources
+and packs work onto them accordingly. It can run directly, or submit and manage
+batches through Slurm, Flux, and PBS, or fan work out across a distributed pool
+of machines.
+
+**Tests are just Python.** A `.pyt` test is a small Python script with a few
+directives. You get the entire Python ecosystem for setup, checking, and
+analysis, and there is no bespoke DSL to learn.
+
+```python
+import canary_pyt
+
+canary_pyt.directives.keywords("fast", "regression")
+canary_pyt.directives.parameterize("cpus", [1, 2, 4])
 
 
-Originally developed for application testing, `canary` has evolved into a general-purpose workflow execution framework. Today it is used to automate software testing, manage analysis workflows, execute computational pipelines, and coordinate collections of dependent jobs.
+def test():
+    # your check here; return nonzero to fail
+    return 0
+```
 
+**Results stick around and answer questions.** Every run is written to a
+persistent workspace and database. You can ask things like "what failed in the
+last session," "which jobs ran longer than a minute," or run SQL directly:
 
-`canary` is inspired by `vvtest` and retains its strengths in scalable test execution while providing a flexible foundation for broader workflow automation. Built on `pluggy`, `canary` uses a plugin-based architecture for job discovery and execution. Common plugins support Python-based job definitions in `.pyt` and `.vvt` files, while others provide integration with frameworks such as CMake/CTest. Given one or more filesystem paths, `canary` recursively discovers job definitions, constructs the execution graph, schedules work according to available resources and dependencies, executes jobs, and reports results.
+```console
+canary status
+canary query jobs --where status.category==FAIL
+canary query session latest --expand-jobs --watch
+```
 
+**It fits your toolchain.** Built-in integrations cover CMake/CTest, CDash, and
+GitLab CI, so `canary` slots into existing build and continuous-integration
+setups instead of replacing them.
 
-Testing remains a primary use case, but it is no longer the defining purpose of the project. A `canary` job may represent a software test, simulation, data-processing stage, analysis task, validation check, or any other executable unit of work.
+**It is extensible.** `canary` is built on [pluggy](https://pluggy.readthedocs.io).
+Discovery, generation, scheduling, execution, reporting, and even the
+job-definition format are all plugin points. The bundled schedulers and
+integrations are themselves plugins and double as worked examples.
 
+## A quick tour
 
-`canary` offers several advantages:
+```console
+canary run ./tests                 # discover and run everything under ./tests
+canary run -k fast ./tests         # only tests tagged "fast"
+canary status                      # summarize the most recent run
+canary log <job-id>                # show a job's output
+canary run -b scheduler=slurm ./tests   # submit as Slurm batches
+canary fetch examples && canary run ./examples   # grab the bundled examples
+```
 
-
-**Scalable Execution**: Hierarchical parallelism enables efficient utilization of available resources, allowing large collections of jobs to execute concurrently across diverse hardware platforms.
-
-
-**Workflow and Testing**: The same framework supports both automated software testing and general workflow orchestration, reducing the need for separate tools.
-
-
-**Python-Based Definitions**: Python-based plugins provide access to the full Python ecosystem while enabling concise and expressive workflow descriptions.
-
-
-**Integration**: `canary` integrates with common development and automation tools such as CMake, CDash, and GitLab, simplifying testing and continuous integration workflows.
-
-
-**Extensibility**: A plugin architecture allows users to customize discovery, scheduling, execution, reporting, job-definition formats, and other aspects of a `canary` session.
-
+See the [user's guide](https://canary-wm.readthedocs.io/en/latest/) for the
+full command reference, the directive catalog, resource configuration, and the
+plugin API.
 
 ## Requirements
 
-Python 3.10+
-
+Python 3.10 or newer.
 
 ## Install
 
-`canary` is distributed as a Python package and is most easily installed using `pip` (or another compatible package manager).
-
-
-To install the latest production release:
+Latest release from PyPI:
 
 ```console
 python3 -m pip install canary-wm
 ```
 
-
-To install the latest development version:
-
-```console
-python3 -m pip install "canary-wm@git+ssh://git@github.com/sandialabs/canary"
-```
-
-
-> **NOTE:** Installing from the main development branch may depend on floating git references in one or more dependencies. For stable installations, use a published release.
-
-
-## Developers
-
-For developers wishing to modify or contribute to `canary`, install in editable mode:
+Latest development version from git:
 
 ```console
-python3 -m pip install -e git+https://github.com/sandialabs/canary#egg=canary-wm[dev]
+python3 -m pip install "canary-wm@git+https://github.com/sandialabs/canary"
 ```
 
+Note that the development branch may depend on unreleased versions of its own
+dependencies. For reproducible installs, use a published release.
 
-This places a working copy of the source in your Python distribution's `$prefix/src` directory, allowing changes to become immediately visible to the interpreter.
+## Developing
 
-
-Alternatively:
+Install in editable mode with the development extras:
 
 ```console
 git clone git@github.com:sandialabs/canary
@@ -79,34 +134,31 @@ cd canary
 python3 -m pip install --editable .[dev]
 ```
 
-
-To format code and run `canary`'s internal test suite before committing:
+Before committing, run the internal checks:
 
 ```console
 canary check
 ```
 
-If all checks pass, this also updates the version in `pyproject.toml` to today's
-date (`YY.M.D`).
-
+`canary check` adds any missing license headers, formats and lints the tree,
+type-checks, runs bandit, runs the test suite, and, if everything passes,
+stamps `pyproject.toml` with today's date-based version (`YY.M.D`).
 
 ### Cutting a release
 
-`main` always depends on `hpc-connect` from git (canary and `hpc-connect` are
-developed together). A PyPI release must instead pin a published
-`hpc-connect==<version>`. The `bin/release` script prepares a release without
-touching `main`:
+`main` always depends on `hpc-connect` from git, because `canary` and
+`hpc-connect` are developed together. A PyPI release instead pins a published
+`hpc-connect` version. `bin/release` prepares a release without touching `main`:
 
 ```console
 bin/release --hpc-connect 26.9.11
 ```
 
-It creates a throwaway `releases/<date>` branch, stamps canary's date-based
-version, pins `hpc-connect==<version>`, then validates by running the tests,
-building the wheel, installing it into a fresh virtual environment, and running
-the fetched examples. On success it commits on the branch and tags
-`release/<date>`, leaving `main` untouched. Review, then publish by pushing the
-branch and tag:
+It creates a throwaway `releases/<date>` branch, stamps the date-based version,
+pins `hpc-connect==<version>`, then validates by running the tests, building the
+wheel, installing it into a fresh virtual environment, and running the fetched
+examples. On success it commits on the branch and tags `release/<date>`, leaving
+`main` untouched. Review, then publish:
 
 ```console
 git push origin releases/<date> release/<date>
@@ -114,13 +166,11 @@ git push origin releases/<date> release/<date>
 
 Pushing the `release/*` tag triggers the GitHub workflow that uploads to PyPI.
 
-
 ## License
 
-Canary is distributed under the terms of the MIT license. See `LICENSE` and `COPYRIGHT` for details.
-
+`canary` is distributed under the terms of the MIT license. See `LICENSE` and
+`COPYRIGHT` for details.
 
 SPDX-License-Identifier: MIT
-
 
 SCR#:3170.0
