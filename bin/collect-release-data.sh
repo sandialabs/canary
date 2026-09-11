@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # collect_release_data.sh
 #
 # Usage:

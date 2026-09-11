@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from _canary.util.reducer import ALL
 from _canary.util.reducer import ANY
 from _canary.util.reducer import FIRST

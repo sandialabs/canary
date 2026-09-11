@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING

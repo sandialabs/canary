@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # -*- coding: utf-8 -*-
 """
 sphinxcontrib.imagesvg

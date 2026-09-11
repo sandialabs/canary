@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 But isn't Canary for running tests from many sources?
 -----------------------------------------------------
 

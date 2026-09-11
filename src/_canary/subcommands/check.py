@@ -4,9 +4,9 @@
 
 """Implements the ``canary check`` subcommand for running internal code-quality checks.
 
-Runs ruff formatting/linting, mypy/ty type-checking, bandit security scanning,
-pytest tests, coverage reporting, Sphinx documentation builds, and version stamping
-on the Canary source tree.
+Runs license-header insertion, ruff formatting/linting, mypy/ty type-checking,
+bandit security scanning, pytest tests, coverage reporting, Sphinx documentation
+builds, and version stamping on the Canary source tree.
 """
 
 import argparse
@@ -75,6 +75,9 @@ class Check(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         """Register check flags (-f format, -c lint, -m type, -b bandit, -t test, etc.)."""
+        parser.add_argument(
+            "-l", nargs=0, action=Action, help="add missing license headers (default)"
+        )
         parser.add_argument("-f", nargs=0, action=Action, help="run ruff format (default)")
         parser.add_argument("-c", nargs=0, action=Action, help="run ruff check (default)")
         parser.add_argument("-m", nargs=0, action=Action, help="run mypy (default)")
@@ -110,7 +113,7 @@ class Check(CanarySubcommand):
         self.root = os.path.normpath(str(root))
 
         if not hasattr(args, "action"):
-            args.action = set("fcmbt")
+            args.action = set("lfcmbt")
 
         if shutil.which("ruff") is None and "f" in args.action:
             raise ValueError("ruff must be on PATH to format and check code")
@@ -126,6 +129,9 @@ class Check(CanarySubcommand):
                 raise ValueError("pytest must be on PATH to test code")
             if shutil.which("coverage") is None and "C" in args.action:
                 raise ValueError("coverage must be on PATH to run coverage")
+
+        if "l" in args.action:
+            self.add_licenses(args)
 
         if "f" in args.action:
             self.format_code(args)
@@ -168,6 +174,15 @@ class Check(CanarySubcommand):
             pyt_files.extend([os.path.join(dirname, f) for f in files if f.endswith(".pyt")])
 
         return pyt_files
+
+    def add_licenses(self, args: argparse.Namespace):
+        """Add missing SPDX license headers to source, docs, and test trees."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor(f"Adding missing license headers in {self.root}")
+            for top in ("./src", "./docs", "./tests", "./bin"):
+                if os.path.isdir(top):
+                    add_licenses(top)
+            pm.done()
 
     def format_code(self, args: argparse.Namespace):
         """Run ``ruff format`` over all source, docs, and test trees."""
@@ -497,6 +512,59 @@ def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
         raise ValueError(f"{' '.join(command)} failed!")
 
     return cp
+
+
+def add_licenses(path: str) -> None:
+    """Recursively add missing license headers under *path*.
+
+    Ported from the former ``bin/add_license.py`` so it can run as part of
+    ``canary check``.  Skips ``third_party`` and ``TestResults`` trees.
+    """
+    for dirname, dirs, files in os.walk(path):
+        if dirname.endswith(("third_party", "TestResults")):
+            del dirs[:]
+            continue
+        for file in files:
+            if file.endswith((".py", ".pyt", ".vvt", ".cmake", ".sh")):
+                add_python_license(os.path.join(dirname, file))
+            elif file.endswith(".rst"):
+                add_rst_license(os.path.join(dirname, file))
+
+
+def add_python_license(file: str) -> None:
+    """Prepend the ``#``-style SPDX license header if absent (after any shebang)."""
+    license = (
+        "# Copyright NTESS. See COPYRIGHT file for details.\n#\n# SPDX-License-Identifier: MIT\n\n"
+    )
+    with open(file) as fh:
+        content = fh.read()
+    if "# Copyright NTESS" in content:
+        return
+    logger.info(f"Adding license to {file}")
+    with open(file, "w") as fh:
+        if content.startswith("#!"):
+            lines = content.splitlines(keepends=True)
+            fh.write(lines[0])
+            fh.write(license)
+            fh.write("".join(lines[1:]))
+        else:
+            fh.write(license)
+            fh.write(content)
+
+
+def add_rst_license(file: str) -> None:
+    """Prepend the reStructuredText-comment SPDX license header if absent."""
+    license = (
+        ".. Copyright NTESS. See COPYRIGHT file for details.\n\n   SPDX-License-Identifier: MIT\n\n"
+    )
+    with open(file) as fh:
+        content = fh.read()
+    if ".. Copyright NTESS" in content:
+        return
+    logger.info(f"Adding license to {file}")
+    with open(file, "w") as fh:
+        fh.write(license)
+        fh.write(content)
 
 
 def update_pyproject_version(root: Path, version: str) -> None:

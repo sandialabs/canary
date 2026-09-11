@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 """
 Generate a large Canary test suite for performance testing.
 

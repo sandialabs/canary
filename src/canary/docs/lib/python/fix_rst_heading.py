@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 """Fix reStructuredText heading underline lengths.
 
 This script walks one or more files/directories, finds .rst files, detects
