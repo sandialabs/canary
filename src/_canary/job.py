@@ -508,6 +508,14 @@ class Job(BaseJob):
         The clamping is intentionally lossy.  Batch packing does not need a
         perfect runtime estimate — it needs *consistent* estimates that keep
         batch sizes roughly uniform.
+
+        When there is *no* timing history (cold cache) we fall back to the floor
+        (``timeout * _RUNTIME_FLOOR_FRACTION``) rather than the full declared
+        ``timeout``.  The declared timeout is a safety *ceiling*, typically many
+        times a job's real runtime; using it as the estimate massively
+        over-inflates the batch makespan on the first run (e.g. a GPU-bound suite
+        estimated at ~10h instead of ~1h) and requests an oversized scheduler
+        wall.  Once a job runs, its cached mean supersedes this cold estimate.
         """
         timeout = self.timeout
         floor = timeout * _RUNTIME_FLOOR_FRACTION
@@ -529,7 +537,7 @@ class Job(BaseJob):
                 pass
         except Exception:
             logger.debug("Failed to load historic timing data", exc_info=True)
-        return timeout
+        return floor
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]

@@ -366,10 +366,17 @@ def _write_job_cache(cache_dir: Path, spec_id: str, mean: float) -> None:
     )
 
 
-def test_job_runtime_falls_back_to_timeout_when_no_cache(spec: JobSpec, space):
-    """When there is no job cache, runtime should equal the declared timeout."""
+def test_job_runtime_falls_back_to_floor_when_no_cache(spec: JobSpec, space):
+    """With no job cache, runtime falls back to the floor, not the full timeout.
+
+    The declared timeout is a safety ceiling (typically far larger than a job's
+    real runtime); using it as the cold-cache estimate over-inflates the batch
+    makespan on first runs.  We use ``timeout * _RUNTIME_FLOOR_FRACTION`` instead.
+    """
+    from _canary.job import _RUNTIME_FLOOR_FRACTION
+
     job = Job(spec=spec, workspace=space)
-    assert job.runtime == spec.timeout
+    assert job.runtime == spec.timeout * _RUNTIME_FLOOR_FRACTION
 
 
 def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, tmp_path):
