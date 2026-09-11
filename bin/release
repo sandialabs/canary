@@ -32,7 +32,15 @@ Usage::
 
     bin/release --hpc-connect 26.9.11
     bin/release --hpc-connect 26.9.11 --date 2026-09-11   # override the date
+    bin/release --hpc-connect 26.9.11 --index-url https://pypi.org/simple
+    bin/release --hpc-connect 26.9.11 --skip-install-check  # if the pin isn't visible yet
     bin/release --hpc-connect 26.9.11 --keep-going        # don't abort on dirty tree (dev)
+
+The mock-install validation resolves ``hpc-connect==<X>`` from whatever index
+pip is configured to use (e.g. a Nexus proxy), or from ``--index-url`` /
+``--extra-index-url`` if given.  Since a proxy may lag PyPI just after a
+publish, ``--skip-install-check`` skips the install/examples step (tests and the
+wheel build still run).
 """
 
 from __future__ import annotations
@@ -83,7 +91,18 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_validate:
             run_tests(root)
             wheel = build_wheel(root)
-            mock_install_and_run_examples(wheel, args.hpc_connect)
+            if args.skip_install_check:
+                info(
+                    "Skipping mock install + examples (--skip-install-check); "
+                    f"not verifying that hpc-connect=={args.hpc_connect} is installable."
+                )
+            else:
+                mock_install_and_run_examples(
+                    wheel,
+                    args.hpc_connect,
+                    index_url=args.index_url,
+                    extra_index_urls=args.extra_index_url,
+                )
 
         git("add", "pyproject.toml")
         git("commit", "-m", f"Release {version} (hpc-connect=={args.hpc_connect})")
@@ -166,14 +185,36 @@ def build_wheel(root: Path) -> Path:
     return wheel
 
 
-def mock_install_and_run_examples(wheel: Path, hpc_connect_pin: str) -> None:
+def mock_install_and_run_examples(
+    wheel: Path,
+    hpc_connect_pin: str,
+    *,
+    index_url: str | None = None,
+    extra_index_urls: list[str] | None = None,
+) -> None:
     """Install the built wheel into a throwaway venv and run the examples.
 
     Mirrors the slurm/flux CI test scripts: `canary fetch examples` into a temp
     directory, run them, and require exit code 14 (several examples fail by
     design).
+
+    The pinned ``hpc-connect==<X>`` must be resolvable from the index used here.
+    That is whatever pip is configured for by default (e.g. a Nexus proxy), or
+    the index(es) passed via ``index_url``/``extra_index_urls`` (e.g. pypi.org).
+    Note that "published to PyPI" and "visible through a proxy" are not
+    simultaneous; if the pin was just published, a proxy may lag.  Use
+    ``--skip-install-check`` to bypass this validation.
     """
     info("Mock-installing the wheel into a fresh virtual environment...")
+
+    def index_args() -> list[str]:
+        args: list[str] = []
+        if index_url:
+            args += ["--index-url", index_url]
+        for extra in extra_index_urls or []:
+            args += ["--extra-index-url", extra]
+        return args
+
     tmp = Path(tempfile.mkdtemp(prefix="canary-release-"))
     try:
         venv = tmp / "venv"
@@ -183,8 +224,8 @@ def mock_install_and_run_examples(wheel: Path, hpc_connect_pin: str) -> None:
 
         run([str(py), "-m", "pip", "install", "--upgrade", "pip"])
         # Install the wheel and its dependencies.  The pinned hpc-connect==<X>
-        # must be resolvable from the configured index.
-        run([str(py), "-m", "pip", "install", str(wheel)])
+        # must be resolvable from the (configured or overridden) index.
+        run([str(py), "-m", "pip", "install", *index_args(), str(wheel)])
 
         # Confirm the installed metadata reflects the exact pin we committed.
         installed = run(
@@ -311,6 +352,31 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--no-validate",
         action="store_true",
         help="skip tests / build / mock-install / examples (not recommended)",
+    )
+    p.add_argument(
+        "--skip-install-check",
+        action="store_true",
+        help=(
+            "still run tests and build the wheel, but skip the mock install + "
+            "examples run. Use when the pinned hpc-connect is not yet visible to "
+            "the validation index (e.g. a proxy lagging PyPI); resolvability is "
+            "then deferred to the publish workflow and consumers."
+        ),
+    )
+    p.add_argument(
+        "--index-url",
+        metavar="URL",
+        help=(
+            "index URL for the validation venv's pip (default: pip's configured "
+            "index). Use e.g. https://pypi.org/simple to validate against PyPI "
+            "directly rather than a local proxy."
+        ),
+    )
+    p.add_argument(
+        "--extra-index-url",
+        metavar="URL",
+        action="append",
+        help="additional index URL for the validation venv (repeatable)",
     )
     p.add_argument(
         "--keep-going",
