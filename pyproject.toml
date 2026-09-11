@@ -41,6 +41,7 @@ dependencies = [
     "schema",
     "rich",
     "typing_extensions",
+    "distro; sys_platform == 'linux'",
 ]
 
 optional-dependencies.dev = [
