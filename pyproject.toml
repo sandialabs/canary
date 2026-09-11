@@ -154,12 +154,7 @@ directory = "html.cov"
 [tool.mypy]
 exclude = [
     "src/canary/examples/*",
-    "src/_canary/third_party/distro.py",
-    "src/_canary/third_party/programoutput/*",
-    "src/_canary/third_party/monkeypatch.py",
-    "src/_canary/third_party/cloudpickle.py",
-    "src/_canary/third_party/docstring_parser/*",
-    "src/_canary/third_party/imagesvg/*",
+    "src/_canary/third_party/*",
     "src/canary_gitlab/tests/*",
     "src/canary_amd/tests/canary_amd/amd_select.py",
     "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
