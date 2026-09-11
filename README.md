@@ -80,11 +80,14 @@ python3 -m pip install --editable .[dev]
 ```
 
 
-To format code and run `canary`'s internal test suite:
+To format code and run `canary`'s internal test suite before committing:
 
 ```console
 canary check
 ```
+
+If all checks pass, this also updates the version in `pyproject.toml` to today's
+date (`YY.M.D`).
 
 
 ## License

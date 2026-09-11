@@ -11,7 +11,6 @@ import schema
 import _canary.config as config
 import _canary.enums as enums
 import _canary.status as status
-from _canary import version as _v
 from _canary.collect import Collector
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
@@ -69,11 +68,8 @@ from . import patterns
 
 get_logger = logging.get_logger
 
-version = _v.version
-version_info = _v.version_info
 ResolvedSpec = JobSpec
 AbstractTestGenerator = AbstractSpecGenerator
-del _v
 
 
 __all__ = [
@@ -186,6 +182,11 @@ get_testcase = get_job
 
 
 def __getattr__(name):
+    if name in ("version", "__version__", "version_info", "__version_info__"):
+        from _canary import version as _v
+
+        return getattr(_v, name)
+
     import canary_pyt
 
     if name == "FILE_SCANNING":

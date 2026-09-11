@@ -12,6 +12,45 @@ env:
   CANARY_TESTING_GPUS: "4"
 
 jobs:
+  version-check:
+    # The date-based version only has to be correct in what actually lands on
+    # main (and in what gets published from a release tag).  On pull_request
+    # runs, actions/checkout builds an ephemeral merge commit dated "now", so a
+    # branch stamped on an earlier day would spuriously fail.  Enforce only on
+    # push to main, where HEAD is the real commit with a stable date.  If this
+    # fails after main moved ahead, just merge main, re-run `canary check`, and
+    # push again.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify pyproject.toml version matches the commit date
+        run: |
+          set -euo pipefail
+          COMMIT_DATE=$(git log -1 --date=short --pretty=format:%ad)
+          echo "HEAD commit date: $COMMIT_DATE"
+          python - "$COMMIT_DATE" <<'PY'
+          import re, sys
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+          y, m, d = sys.argv[1].split("-")
+          expected = f"{int(y) - 2000}.{int(m)}.{int(d)}"
+          with open("pyproject.toml", "rb") as fh:
+              version = tomllib.load(fh)["project"]["version"]
+          if version != expected:
+              raise SystemExit(
+                  f"pyproject.toml version {version!r} does not match the commit "
+                  f"date {expected!r}. Run `canary check` to update it."
+              )
+          print(f"pyproject.toml version is current: {version}")
+          PY
+
   unit-tests:
 
     runs-on: ubuntu-latest

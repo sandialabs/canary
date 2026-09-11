@@ -85,12 +85,6 @@ class Check(CanarySubcommand):
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
         parser.add_argument("-e", nargs=0, action=Action, help="run examples test")
         parser.add_argument("-d", nargs=0, action=Action, help="make docs")
-        parser.add_argument(
-            "-v",
-            nargs=0,
-            action=Action,
-            help="update pyproject.toml project.version to today's YY.MM.DD value",
-        )
         parser.add_argument("--verbose", action="store_true", help="verbose")
         parser.add_argument(
             "--local-packages",
@@ -98,11 +92,6 @@ class Check(CanarySubcommand):
             default="no" if "VIRTUAL_ENV" in os.environ else "yes",
             dest="use_local_packages",
             help="Add local site-packages to search path when running type checker",
-        )
-        parser.add_argument(
-            "--release-version",
-            action="store_true",
-            help="When used with -v, stamp a release version without .dev0",
         )
 
     def execute(self, args: argparse.Namespace) -> int:
@@ -156,19 +145,18 @@ class Check(CanarySubcommand):
         if "d" in args.action:
             self.make_docs(args)
 
-        if "v" in args.action:
-            self.stamp_version(args)
+        # All selected checks passed: stamp the date-based version
+        # unconditionally.
+        self.stamp_version(args)
 
         logger.info("All checks complete!")
 
         return 0
 
     def stamp_version(self, args: argparse.Namespace) -> None:
-        """Update ``pyproject.toml`` project.version to today's YY.MM.DD value."""
+        """Update ``pyproject.toml`` project.version to today's YY.M.D value."""
         today = datetime.date.today()
         version = f"{today.year % 100}.{today.month}.{today.day}"
-        if not args.release_version:
-            version = f"{version}.dev0"
         update_pyproject_version(Path(self.root), version)
 
     @staticmethod

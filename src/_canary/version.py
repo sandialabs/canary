@@ -2,22 +2,33 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Version resolution for the ``canary-wm`` distribution.
+"""Runtime version resolution for the ``canary-wm`` distribution.
 
-For installed (non-editable) packages the version is read directly from
-package metadata via ``importlib.metadata``.
+The published version is the plain, static ``version`` string in
+``pyproject.toml`` (of the form ``YY.M.D``).  It is stamped by
+``canary pre-commit`` and read back at runtime from the installed package
+metadata.  This deliberately does *not* consult git at build time, so builds
+from a ``.git``-stripped source tree (e.g. Spack) still report the correct
+version.
 
-For editable (development) installs the metadata version is used as the base,
-and a ``+g<sha>[.dirty]`` local segment is appended by querying the git
-repository at the package source location.
+Two contexts are handled:
 
-Module-level attributes ``__version__``, ``version``, ``version_info``, and
-``__version_info__`` are resolved lazily via ``__getattr__`` to avoid running
-subprocess calls at import time.
+* **Installed / non-editable (no reachable ``.git``)** -- e.g. a wheel or a
+  Spack install.  ``version`` is exactly the metadata version.  No subprocess,
+  no git, nothing that can fail if ``.git`` is absent.
+
+* **Editable / source checkout (a ``.git`` is found above this module)** -- the
+  metadata version is augmented with a local label ``+g<sha>[.dirty]`` so a
+  developer's ``canary --version`` reflects the exact working state.  This
+  string is intentionally *not* PEP 440 conformant; it is for human consumption
+  on the command line only.
+
+Module-level attributes ``version``, ``__version__``, ``version_info``, and
+``__version_info__`` are resolved lazily via ``__getattr__``.
 """
 
-import json
 import os
+import re
 import subprocess
 from importlib import metadata as im
 
@@ -25,49 +36,62 @@ DIST_NAME = "canary-wm"
 
 
 class GitRepoNotFoundError(Exception):
-    """Raised when the package source directory is not inside a git repository."""
-
     pass
 
 
 class CannotDetermineVersionFromGitError(Exception):
-    """Raised when git is available but the version cannot be determined (e.g. no commits)."""
-
     pass
 
 
-def is_editable(dist_name: str = DIST_NAME) -> bool:
-    """
-    Best-effort PEP 610 editable detection via direct_url.json.
-    Returns False if unavailable.
-    """
+def _base_version() -> str:
+    """The static, published version from installed package metadata."""
     try:
-        dist = im.distribution(dist_name)
+        return im.version(DIST_NAME)
     except im.PackageNotFoundError:
-        return False
+        # Not installed (e.g. running straight from a source tree that was
+        # never `pip install`ed).  Fall back to reading pyproject.toml so that
+        # `canary --version` still works during development.
+        return _version_from_pyproject()
 
+
+def _version_from_pyproject() -> str:
+    root = _find_repo_root(os.path.dirname(__file__))
+    if root is None:
+        return "0.0.0"
+    pyproject = os.path.join(root, "pyproject.toml")
+    # Parse the static `version = "..."` line directly rather than importing a
+    # TOML library: this fallback runs only for an uninstalled source tree, and
+    # avoiding tomllib/tomli keeps it working on Python 3.10 with no extra deps.
     try:
-        direct_url_content = dist.read_text("direct_url.json")
-    except Exception:
-        direct_url_content = None
+        with open(pyproject, encoding="utf-8") as fh:
+            in_project = False
+            for line in fh:
+                stripped = line.strip()
+                if stripped.startswith("["):
+                    in_project = stripped.startswith("[project]")
+                    continue
+                if in_project:
+                    m = re.match(r"""version\s*=\s*["'](?P<v>[^"']+)["']""", stripped)
+                    if m:
+                        return m.group("v")
+    except OSError:
+        pass
+    return "0.0.0"
 
-    if not direct_url_content:
-        return False
 
-    try:
-        data = json.loads(direct_url_content)
-    except json.JSONDecodeError:
-        return False
-
-    return bool(data.get("dir_info", {}).get("editable", False))
+def _find_repo_root(start_dir: str) -> str | None:
+    """Return the directory containing a ``.git`` at or above ``start_dir``."""
+    d = os.path.abspath(start_dir)
+    while True:
+        if os.path.exists(os.path.join(d, ".git")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
 
 
 def _git_toplevel(start_dir: str) -> str:
-    """Return the absolute path of the git repository root for *start_dir*.
-
-    Raises:
-        GitRepoNotFoundError: If *start_dir* is not inside a git repository.
-    """
     proc = subprocess.run(
         ["git", "-C", start_dir, "rev-parse", "--show-toplevel"],
         text=True,
@@ -80,11 +104,6 @@ def _git_toplevel(start_dir: str) -> str:
 
 
 def _git_short_sha(repo: str) -> str:
-    """Return the short (7-char) SHA of HEAD in *repo*.
-
-    Raises:
-        CannotDetermineVersionFromGitError: If ``git rev-parse`` fails.
-    """
     proc = subprocess.run(
         ["git", "-C", repo, "rev-parse", "--short", "HEAD"],
         text=True,
@@ -97,7 +116,6 @@ def _git_short_sha(repo: str) -> str:
 
 
 def _git_is_dirty(repo: str) -> bool:
-    """Return ``True`` if the working tree in *repo* has uncommitted changes."""
     return (
         subprocess.run(
             ["git", "-C", repo, "diff", "--quiet"],
@@ -109,14 +127,9 @@ def _git_is_dirty(repo: str) -> bool:
 
 
 def git_local_label() -> str:
-    """Return a PEP 440 local segment string for the current git state.
+    """``g<sha>[.dirty]`` for the repo containing this module.
 
-    Returns strings like ``'g3a1b2c3'`` (clean) or ``'g3a1b2c3.dirty'``
-    (uncommitted changes present).
-
-    Raises:
-        GitRepoNotFoundError: If the package source is not in a git repo.
-        CannotDetermineVersionFromGitError: If the SHA cannot be determined.
+    Raises if no git repo / git binary is available.
     """
     repo = _git_toplevel(os.path.dirname(__file__))
     sha = _git_short_sha(repo)
@@ -126,84 +139,54 @@ def git_local_label() -> str:
     return local
 
 
-def _parse_dist_version(v: str) -> tuple[int, int, int, str]:
+def get_version() -> str:
+    """Human-facing version string.
+
+    Installed (no reachable ``.git``): the static metadata version.
+    Source checkout (``.git`` present): metadata version + ``+g<sha>[.dirty]``.
     """
-    Parses enough PEP 440 to support:
-      - X.Y.Z
-      - X.Y.Z.devN
-      - X.Y.Z.<anything> (we ignore beyond Z for numeric triplet)
-      - optional +local
-    Returns (major, minor, micro, local) where local excludes '+'.
+    base = _base_version()
+
+    # Only augment for a real source checkout.  A wheel/Spack install has no
+    # reachable .git, so this short-circuits before touching git at all.
+    if _find_repo_root(os.path.dirname(__file__)) is None:
+        return base
+
+    # Don't stack a local segment on top of one already present.
+    if "+" in base:
+        return base
+
+    try:
+        return f"{base}+{git_local_label()}"
+    except (GitRepoNotFoundError, CannotDetermineVersionFromGitError):
+        return base
+
+
+def get_version_info() -> tuple[int, int, int, str]:
+    """Return ``(major, minor, micro, local)`` parsed from the version string.
+
+    ``local`` is the segment after ``+`` (empty string if none).
     """
+    v = get_version()
     if "+" in v:
         public, local = v.split("+", 1)
     else:
         public, local = v, ""
 
-    # numeric release triplet from the start of public part
     parts = public.split(".")
-    if len(parts) < 3:
-        raise ValueError(f"Expected at least three numeric components, got {v!r}")
+    nums: list[int] = []
+    for part in parts[:3]:
+        digits = ""
+        for ch in part:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        nums.append(int(digits) if digits else 0)
+    while len(nums) < 3:
+        nums.append(0)
 
-    major = int(parts[0])
-    minor = int(parts[1])
-
-    micro_str = parts[2]
-    micro_digits = ""
-    for ch in micro_str:
-        if ch.isdigit():
-            micro_digits += ch
-        else:
-            break
-    micro = int(micro_digits) if micro_digits else 0
-
-    return major, minor, micro, local
-
-
-def get_version_info() -> tuple[int, int, int, str]:
-    """
-    For non-editable installs: returns metadata version triplet and local (if any).
-    For editable installs: uses metadata triplet, but local becomes 'g<sha>[.dirty]'.
-    """
-    base = im.version(DIST_NAME)
-    major, minor, micro, local = _parse_dist_version(base)
-
-    if is_editable(DIST_NAME):
-        # If base already has a local segment, keep it (avoid stacking).
-        if not local:
-            try:
-                local = git_local_label()
-            except (GitRepoNotFoundError, CannotDetermineVersionFromGitError):
-                pass
-
-    return major, minor, micro, local
-
-
-def get_version() -> str:
-    """Return the canonical version string for the ``canary-wm`` distribution.
-
-    For non-editable installs this is the raw metadata version string.
-    For editable installs a ``+g<sha>[.dirty]`` local segment is appended
-    unless the metadata already contains a local segment.
-    """
-    major, minor, micro, local = get_version_info()
-    v = f"{major}.{minor}.{micro}"
-
-    # Preserve pre/dev info from metadata in the string if you want it:
-    # We intentionally do NOT reconstruct '.devN' etc here; instead, return the
-    # actual metadata version unless we need to append a local label.
-    base = im.version(DIST_NAME)
-    if not is_editable(DIST_NAME):
-        return base
-
-    # Editable: append local label only if base doesn't already have one
-    if "+" in base:
-        return base
-
-    # If base already contains something like '.dev0', keep it, and add +local
-    if local:
-        return f"{base}+{local}" if "+" not in base else base
-    return base
+    return nums[0], nums[1], nums[2], local
 
 
 __version__: str
@@ -213,7 +196,6 @@ __version_info__: tuple[int, int, int, str]
 
 
 def __getattr__(name: str):
-    """Lazily resolve ``__version__``, ``version``, ``version_info``, and ``__version_info__``."""
     if name in ("version", "__version__"):
         return get_version()
     if name in ("version_info", "__version_info__"):

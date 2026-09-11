@@ -4,6 +4,12 @@ on:
   push:
     tags:
     - "release/*"
+  workflow_dispatch:
+    inputs:
+      hpc_connect_version:
+        description: "hpc-connect version to pin for this release (e.g. 26.9.11)"
+        required: true
+        type: string
 
 env:
   ACTIONS_RUNNER_DEBUG: "true"
@@ -31,9 +37,41 @@ jobs:
             python -m pip install --upgrade pip
             pip install build
 
+        - name: Pin hpc-connect for the release build
+          # main tracks hpc-connect from git; a published wheel must instead
+          # depend on a released `hpc-connect==<X>`.  Determine the version to
+          # pin: the workflow_dispatch input if given, else the tag's date
+          # (release/YY.MM.DD -> YY.M.D), and rewrite pyproject.toml in place.
+          # This edit is build-only and is never committed back to main.
+          run: |
+            set -euo pipefail
+            PIN="${{ github.event.inputs.hpc_connect_version }}"
+            if [ -z "$PIN" ]; then
+              TAG="${GITHUB_REF#refs/tags/release/}"
+              # YY.MM.DD -> YY.M.D (strip leading zeros in month/day)
+              PIN=$(python -c "import sys; y,m,d=sys.argv[1].split('.'); print(f'{int(y)}.{int(m)}.{int(d)}')" "$TAG")
+            fi
+            echo "Pinning hpc-connect==$PIN"
+            python - "$PIN" <<'PY'
+            import re, sys
+            pin = sys.argv[1]
+            with open("pyproject.toml", encoding="utf-8") as fh:
+                text = fh.read()
+            new, n = re.subn(
+                r'"hpc-connect @ git\+https://github\.com/sandialabs/hpc-connect\.git"',
+                f'"hpc-connect=={pin}"',
+                text,
+            )
+            if n != 1:
+                raise SystemExit(f"expected exactly one hpc-connect git dependency to pin, found {n}")
+            with open("pyproject.toml", "w", encoding="utf-8") as fh:
+                fh.write(new)
+            print(f"pinned hpc-connect=={pin}")
+            PY
+            grep -n "hpc-connect" pyproject.toml
+
         - name: Build distribution
           run: |
-            export PROJECT_SOURCE_DIR=$(pwd)
             python -m build
 
         - name: Publish package distributions to PyPI
