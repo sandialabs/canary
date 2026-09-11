@@ -169,10 +169,10 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            os_release = canary.config.get("system:os:release")
-            os_name = canary.config.get("system:platform")
-            os_version = canary.config.get("system:os:fullversion")
-            os_platform = canary.config.get("system:arch")
+            os_release = canary.config.get("system:release")
+            os_name = canary.config.get("system:sysname")
+            os_version = canary.config.get("system:version")
+            os_platform = canary.config.get("system:machine")
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site

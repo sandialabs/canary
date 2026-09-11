@@ -50,7 +50,6 @@ dependencies = [
     "schema>=0.7.5",
     "rich>=13.0",
     "typing_extensions>=4.5",
-    "distro>=1.7; sys_platform == 'linux'",
 ]
 
 optional-dependencies.dev = [
@@ -242,7 +241,6 @@ exclude = [
     "src/canary/docs/examples",
     "src/canary/docs/conf.py",
     "src/canary/docs/lib/python/sphinxext",
-    "src/_canary/third_party/distro.py",
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
