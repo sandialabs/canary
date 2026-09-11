@@ -90,6 +90,31 @@ If all checks pass, this also updates the version in `pyproject.toml` to today's
 date (`YY.M.D`).
 
 
+### Cutting a release
+
+`main` always depends on `hpc-connect` from git (canary and `hpc-connect` are
+developed together). A PyPI release must instead pin a published
+`hpc-connect==<version>`. The `bin/release` script prepares a release without
+touching `main`:
+
+```console
+bin/release --hpc-connect 26.9.11
+```
+
+It creates a throwaway `releases/<date>` branch, stamps canary's date-based
+version, pins `hpc-connect==<version>`, then validates by running the tests,
+building the wheel, installing it into a fresh virtual environment, and running
+the fetched examples. On success it commits on the branch and tags
+`release/<date>`, leaving `main` untouched. Review, then publish by pushing the
+branch and tag:
+
+```console
+git push origin releases/<date> release/<date>
+```
+
+Pushing the `release/*` tag triggers the GitHub workflow that uploads to PyPI.
+
+
 ## License
 
 Canary is distributed under the terms of the MIT license. See `LICENSE` and `COPYRIGHT` for details.
