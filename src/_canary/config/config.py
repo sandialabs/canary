@@ -23,7 +23,6 @@ from ..util.collections import merge
 from ..util.compression import deserialize
 from ..util.compression import serialize
 from ..util.rich import set_color_when
-from ._machine import system_config
 from .schemas import config_schema
 from .schemas import environment_variable_schema
 
@@ -48,6 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 def default_config_values() -> dict[str, Any]:
+    uname = os.uname()
     defaults = {
         "debug": False,
         "log_level": "INFO",
@@ -70,7 +70,13 @@ def default_config_values() -> dict[str, Any]:
             "cache": {"dir": None},
         },
         "scratch": {},
-        "system": system_config(),
+        "system": {
+            "sysname": uname.sysname,
+            "nodename": uname.nodename,
+            "release": uname.release,
+            "version": uname.version,
+            "machine": uname.machine,
+        },
     }
     return defaults
 
