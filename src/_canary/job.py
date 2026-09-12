@@ -1011,16 +1011,16 @@ def load_job_from_file(arg: Path | str | None) -> Job:
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
     lock_data = json.loads(file.read_text())
-    id = lock_data["spec"]["id"]
+    id = lock_data.spec.id
     workspace = Workspace.load()
     return workspace.find(job=id)
 
 
-def load_job_from_state(lock_data: dict) -> Job:
+def load_job_from_state(lock_data: "Job") -> "Job":
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()
-    return workspace.find(job=lock_data["spec"]["id"])
+    return workspace.find(job=lock_data.spec.id)
 
 
 _cache_dir_logged: bool = False

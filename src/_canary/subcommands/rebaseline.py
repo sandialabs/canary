@@ -72,22 +72,23 @@ def resolve_rebaseline_jobs(workspace: Workspace, target: str) -> list["Job"]:
     path = Path(target)
 
     if path.exists():
-        return jobs_from_path(path)
+        return jobs_from_path(workspace, path)
 
     return [workspace.find(job=target)]
 
 
-def jobs_from_path(path: Path) -> list["Job"]:
+def jobs_from_path(workspace: Workspace, path: Path) -> list["Job"]:
     lockfiles = list(iter_lockfiles(path))
     jobs: list["Job"] = []
     seen: set[str] = set()
 
     for lockfile in lockfiles:
-        job = load_job_from_lockfile(lockfile)
-        if job.id in seen:
+        lock_data = json.loads(lockfile.read_text())
+        job_id = lock_data.spec.id
+        if job_id in seen:
             continue
-        seen.add(job.id)
-        jobs.append(job)
+        seen.add(job_id)
+        jobs.append(workspace.find(job=job_id))
 
     return jobs
 
@@ -107,13 +108,6 @@ def iter_lockfiles(path: Path):
     for root, dirs, files in os.walk(path, followlinks=True):
         if "testcase.lock" in files:
             yield Path(root) / "testcase.lock"
-
-
-def load_job_from_lockfile(path: Path) -> "Job":
-    if not path.exists():
-        raise FileNotFoundError(path)
-    job = json.loads(path.read_text())
-    return job
 
 
 def filter_jobs_by_keywords(jobs: list["Job"], keyword_exprs: list[str] | None) -> list["Job"]:
