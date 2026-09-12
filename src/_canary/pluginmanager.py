@@ -2,7 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
+import importlib.util
 import inspect
+import os
 import sys
 import warnings
 from typing import Any
@@ -68,9 +70,44 @@ class CanaryPluginManager(pluggy.PluginManager):
             self.unregister(name)
 
     def import_plugin(self, name: str) -> None:
-        """Import a plugin with ``name``."""
+        """Import and register a plugin.
+
+        Three loading modes are supported:
+
+        1. **File path** — if *name* ends with ``.py`` and names an existing
+           file, the file is loaded as a module whose registration name is the
+           file stem (e.g. ``myhooks.py`` → registered as ``myhooks``).
+
+        2. **Directory path** — if *name* names an existing directory the
+           directory is treated as a package; its ``__init__.py`` is loaded and
+           the registration name is the directory's base name.
+
+        3. **Module name** — otherwise *name* is treated as a dotted Python
+           module name and imported via the normal import machinery (the
+           existing behaviour).
+
+        In all cases the ``no:`` prefix recognised by :meth:`consider_plugin`
+        uses the registration name, not the original path.
+        """
         assert isinstance(name, str), f"module name as text required, got {name!r}"
 
+        # ------------------------------------------------------------------ #
+        # File-path loading: -p /path/to/myhooks.py                          #
+        # ------------------------------------------------------------------ #
+        if name.endswith(".py") and os.path.isfile(name):
+            self._import_plugin_from_file(name)
+            return
+
+        # ------------------------------------------------------------------ #
+        # Directory / package loading: -p /path/to/mypkg                     #
+        # ------------------------------------------------------------------ #
+        if os.path.isdir(name):
+            self._import_plugin_from_directory(name)
+            return
+
+        # ------------------------------------------------------------------ #
+        # Ordinary dotted module name (original behaviour)                   #
+        # ------------------------------------------------------------------ #
         if self.is_blocked(name) or self.get_plugin(name) is not None:
             return
 
@@ -86,6 +123,90 @@ class CanaryPluginManager(pluggy.PluginManager):
                 msg = f"Plugin {name} already registered under the name {other}"
                 raise PluginAlreadyImportedError(msg)
             self.register(mod, name)
+
+    # ---------------------------------------------------------------------- #
+    # Private helpers                                                         #
+    # ---------------------------------------------------------------------- #
+
+    def _import_plugin_from_file(self, path: str) -> None:
+        """Load *path* (a ``.py`` file) as a plugin module.
+
+        The module is registered under the file stem so that ``no:<stem>``
+        can later unload it.  The module is also inserted into ``sys.modules``
+        under the same stem name so that relative imports inside the file
+        (if any) can resolve.
+        """
+        import pathlib
+
+        stem = pathlib.Path(path).stem
+        abs_path = os.path.abspath(path)
+
+        if self.is_blocked(stem) or self.get_plugin(stem) is not None:
+            return
+
+        spec = importlib.util.spec_from_file_location(stem, abs_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot create module spec for plugin file {path!r}")
+
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault(stem, mod)
+        try:
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        except Exception as e:
+            sys.modules.pop(stem, None)
+            msg = f"Error loading plugin file {path!r}: {e}"
+            raise ImportError(msg) from e
+
+        if mod in self._name2plugin.values():
+            other = next(k for k, v in self._name2plugin.items() if v == mod)
+            msg = f"Plugin {path!r} already registered under the name {other!r}"
+            raise PluginAlreadyImportedError(msg)
+
+        self.register(mod, stem)
+
+    def _import_plugin_from_directory(self, path: str) -> None:
+        """Load *path* (a directory) as a plugin package.
+
+        The directory's ``__init__.py`` is executed and the package is
+        registered under the directory's base name.  The package is also
+        inserted into ``sys.modules`` so intra-package imports work.
+        """
+        import pathlib
+
+        pkg_name = pathlib.Path(path).name
+        abs_path = os.path.abspath(path)
+        init = os.path.join(abs_path, "__init__.py")
+
+        if not os.path.isfile(init):
+            raise ImportError(
+                f"Plugin directory {path!r} does not contain an __init__.py; "
+                "it cannot be loaded as a package."
+            )
+
+        if self.is_blocked(pkg_name) or self.get_plugin(pkg_name) is not None:
+            return
+
+        spec = importlib.util.spec_from_file_location(
+            pkg_name, init, submodule_search_locations=[abs_path]
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot create module spec for plugin directory {path!r}")
+
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault(pkg_name, mod)
+        try:
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        except Exception as e:
+            sys.modules.pop(pkg_name, None)
+            msg = f"Error loading plugin directory {path!r}: {e}"
+            raise ImportError(msg) from e
+
+        if mod in self._name2plugin.values():
+            other = next(k for k, v in self._name2plugin.items() if v == mod)
+            msg = f"Plugin {path!r} already registered under the name {other!r}"
+            raise PluginAlreadyImportedError(msg)
+
+        self.register(mod, pkg_name)
 
 
 def getname(obj: Any) -> str:
