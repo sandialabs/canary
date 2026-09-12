@@ -14,24 +14,39 @@ import os
 import re
 import sys
 from io import StringIO
+from typing import TYPE_CHECKING
 
-from rich.console import Console
-from rich.text import Text
+if TYPE_CHECKING:
+    from rich.console import Console
 
 # Mapping from color arguments to values for logging.set_color
 color_when_values = {"always": True, "auto": None, "never": False}
 _force_color: bool | None = color_when_values.get(os.getenv("COLOR_WHEN", "auto"))
 
-# Reuse consoles to avoid overhead
-_COLOR_CONSOLE = Console(
-    file=StringIO(),
-    force_terminal=True,
-    color_system="truecolor",
-    width=10_000,
-    legacy_windows=False,
-)
+# Rich Console instances are created lazily on first use to avoid the ~38 ms
+# import cost of ``rich.console`` in every test subprocess that imports canary.
+_COLOR_CONSOLE: "Console | None" = None
+_PLAIN_CONSOLE: "Console | None" = None
 
-_PLAIN_CONSOLE = Console(file=StringIO(), force_terminal=False, color_system=None, width=10_000)
+
+def _get_consoles() -> "tuple[Console, Console]":
+    """Return (color_console, plain_console), creating them on first call."""
+    global _COLOR_CONSOLE, _PLAIN_CONSOLE
+    if _COLOR_CONSOLE is None:
+        from rich.console import Console
+
+        _COLOR_CONSOLE = Console(
+            file=StringIO(),
+            force_terminal=True,
+            color_system="truecolor",
+            width=10_000,
+            legacy_windows=False,
+        )
+        _PLAIN_CONSOLE = Console(
+            file=StringIO(), force_terminal=False, color_system=None, width=10_000
+        )
+    assert _PLAIN_CONSOLE is not None
+    return _COLOR_CONSOLE, _PLAIN_CONSOLE
 
 
 def set_color_when(when):
@@ -83,8 +98,12 @@ def colorize(message: str, *, color: bool | None = None) -> str:
     else:
         use_color = sys.stdin.isatty()
 
+    # Lazily initialise consoles and import Text on first use
+    from rich.text import Text
+
+    color_console, plain_console = _get_consoles()
     # Reset buffers
-    console = _COLOR_CONSOLE if use_color else _PLAIN_CONSOLE
+    console = color_console if use_color else plain_console
     buffer = console.file
     buffer.seek(0)
     buffer.truncate(0)

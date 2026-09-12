@@ -40,9 +40,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-import rich.box
-from rich.console import Console
-from rich.table import Table
+if TYPE_CHECKING:
+    pass
 
 from . import config
 from .hookspec import hookimpl
@@ -132,6 +131,10 @@ def canary_generate_report(generator: Generator) -> None:
     logger.info("[bold]Generated[/] %d test specs from %d generators" % (nc, ng))
     excluded = [spec for spec in generator.specs if spec.mask]
     if excluded:
+        import rich.box
+        from rich.console import Console
+        from rich.table import Table
+
         n = len(excluded)
         logger.info("[bold]Excluded[/] %d test %s during generation" % (n, pluralize("spec", n)))
         table = Table(show_header=True, header_style="bold", box=rich.box.SIMPLE_HEAD)

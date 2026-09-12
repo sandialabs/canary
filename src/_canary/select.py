@@ -64,9 +64,8 @@ from typing import TYPE_CHECKING
 from typing import Generator
 from typing import Iterable
 
-import rich.box
-from rich.console import Console
-from rich.table import Table
+if TYPE_CHECKING:
+    pass
 from schema import Or
 from schema import Schema
 
@@ -361,6 +360,10 @@ def canary_select_report(selector: "Selector") -> None:
             excluded.append(spec)
     logger.info("[bold]Selected[/] %d test specs" % (len(selector.specs) - len(selector.masked)))
     if excluded:
+        import rich.box
+        from rich.console import Console
+        from rich.table import Table
+
         n = len(selector.masked)
         show_excluded_tests = config.getoption("show_excluded_tests") or config.get("debug")
         n = len(excluded)
@@ -392,6 +395,10 @@ def canary_rtselect_report(selector: "RuntimeSelector") -> None:
     excluded: list["Job"] = [job for job in selector.jobs if job.id in selector.masked]
     n = len(selector.masked)
     if excluded:
+        import rich.box
+        from rich.console import Console
+        from rich.table import Table
+
         n = len(excluded)
         reasons: dict[str | None, list["Job"]] = {}
         for job in excluded:

@@ -806,6 +806,23 @@
           "canary info --json",
           "canary info -t TAGNAME --json"
         ]
+      },
+      "fetch": {
+        "purpose": "Copy a bundled asset (examples, Canary.cmake, etc.) into the current directory. Available assets are contributed by installed plugins via the canary_fetch_subcommand / canary_fetch_execute hook pair.",
+        "typical": [
+          "canary fetch examples",
+          "canary fetch canary.cmake"
+        ],
+        "builtin_assets": {
+          "examples": "Copy the bundled Canary examples directory into ./examples in the current directory. Raises an error if ./examples already exists.",
+          "canary.cmake": "Copy Canary.cmake into the current directory (registered by canary_cmake plugin)."
+        },
+        "plugin_authoring": "To make a new asset fetchable, implement the canary_fetch_subcommand hook to register a subparser and the canary_fetch_execute hook to handle execution. Return 0 on success or None to pass to the next plugin.",
+        "notes": [
+          "canary fetch must be run in the directory where you want the asset copied.",
+          "canary fetch examples fails if an 'examples' directory already exists at the destination.",
+          "After fetching examples, run them with: canary run examples/"
+        ]
       }
     },
     "agent_workflows": {
