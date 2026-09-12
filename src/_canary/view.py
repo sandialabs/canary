@@ -238,12 +238,18 @@ class ResultsView:
         return (p / ".canary-view.json").exists()
 
     def __serialize__(self) -> dict[str, Any]:
-        # json_helper.Encoder will add ".type" automatically
-        return {"root": self.root, "settings": self.settings}
+        # root is intentionally omitted — it is always recomputed from the live
+        # workspace anchor at load time so the cache file remains valid after the
+        # workspace directory is moved.  See Workspace.latest_view().
+        return {"settings": self.settings}
 
     @classmethod
     def __deserialize__(cls, d: dict[str, Any]) -> "ResultsView":
-        return cls(root=Path(d["root"]), settings=d["settings"])
+        # root may be absent (current format) or present (legacy cache files
+        # written before this change).  Workspace.latest_view() overwrites root
+        # with the correct live value in both cases, so we use a sentinel here.
+        root = Path(d["root"]) if "root" in d else Path()
+        return cls(root=root, settings=d["settings"])
 
     @property
     def dir(self) -> Path:

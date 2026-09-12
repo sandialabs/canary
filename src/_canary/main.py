@@ -89,6 +89,14 @@ class CanaryMain:
                 raise ValueError(f"cannot change to {args.C!r}: No such file or directory")
             os.chdir(args.C)
 
+        # --canary-dir / CANARY_DIR: explicit workspace root, bypasses upward discovery.
+        # CLI flag takes precedence over env var.
+        canary_dir = args.canary_dir or os.environ.get("CANARY_DIR")
+        if canary_dir:
+            from .workspace import set_workspace_dir
+
+            set_workspace_dir(canary_dir)
+
         # Consider plugins passed in the environment and the command line early, before parsing the
         # main command line. This allows plugins to define a subcommand (which must be registered
         # before it can be run)

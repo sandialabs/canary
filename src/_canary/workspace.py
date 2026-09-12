@@ -71,6 +71,37 @@ workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 workspace_log = "canary.log"
 
+# ---------------------------------------------------------------------------
+# Explicit workspace override
+# ---------------------------------------------------------------------------
+# When ``--canary-dir`` is passed on the CLI (or ``CANARY_DIR`` is set in the
+# environment) this module-level variable is set once at startup by
+# ``set_workspace_dir()``.  All subsequent ``Workspace.load()`` calls use this
+# path directly instead of walking upward from cwd.
+# ---------------------------------------------------------------------------
+_override_workspace_dir: Path | None = None
+
+
+def set_workspace_dir(path: str | Path) -> None:
+    """Override the workspace root used by all ``Workspace.load()`` calls.
+
+    This is the canary equivalent of ``git --git-dir=<path>``.  Once set,
+    every ``Workspace.load()`` in the current process uses *path* as the
+    workspace root without performing upward-directory discovery.
+
+    Args:
+        path: Path to the ``.canary`` workspace directory (or any directory
+              that contains ``WORKSPACE.TAG``).
+
+    Raises:
+        NotAWorkspaceError: If *path* does not contain a valid workspace.
+    """
+    global _override_workspace_dir
+    p = Path(path).absolute()
+    if not Workspace.exists_at(p):
+        raise NotAWorkspaceError(f"not a Canary workspace: {p}")
+    _override_workspace_dir = p
+
 
 @dataclasses.dataclass
 class Session:
@@ -283,6 +314,9 @@ class Workspace:
         file = self.cache_dir / "view"
         if file.exists():
             view = json.loads(file.read_text())
+            # root is not persisted (it would go stale if the workspace moves).
+            # Inject the correct live anchor here so callers always get a usable view.
+            object.__setattr__(view, "root", self.root.parent)
             return view
         return None
 
@@ -373,8 +407,17 @@ class Workspace:
     def load(cls, start: str | Path | None = None) -> "Workspace":
         """Loads an existing workspace from the filesystem.
 
+        Workspace resolution order:
+        1. ``_override_workspace_dir`` — set by ``set_workspace_dir()`` when
+           ``--canary-dir`` or ``CANARY_DIR`` is in effect.  Points directly at
+           the ``.canary`` directory; no upward search is performed.
+        2. ``start`` argument — walk upward from *start* to find the nearest
+           ancestor that contains a ``.canary`` subdirectory.
+        3. ``cwd`` — same upward walk starting from the current working directory.
+
         Args:
             start: The directory to start searching for the workspace.
+                   Ignored when an explicit override is active.
 
         Returns:
             A loaded Workspace instance.
@@ -382,6 +425,13 @@ class Workspace:
         Raises:
             NotAWorkspaceError: If no workspace is found.
         """
+        if _override_workspace_dir is not None:
+            logger.debug(f"Loading Canary workspace from override: {_override_workspace_dir}")
+            ws: Workspace = object.__new__(cls)
+            # The override points at the .canary dir itself; its parent is the anchor.
+            ws.initialize_properties(anchor=_override_workspace_dir.parent)
+            ws.db = WorkspaceDatabase.load(ws.root)
+            return ws
         start = Path(start or Path.cwd())
         logger.debug(f"Loading Canary workspace from {start}")
         anchor = cls.find_anchor(start=start)

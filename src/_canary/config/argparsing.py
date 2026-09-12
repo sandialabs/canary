@@ -89,7 +89,7 @@ class Parser(argparse.ArgumentParser):
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
     def preparse(self, args: list[str], addopts: bool = False):
-        ns = argparse.Namespace(plugins=[], debug=False, C=None)
+        ns = argparse.Namespace(plugins=[], debug=False, C=None, canary_dir=None)
         if addopts:
             self.add_opts_from_environment(args)
         for i, arg in enumerate(args):
@@ -121,6 +121,14 @@ class Parser(argparse.ArgumentParser):
                     i += 1
                 elif opt.startswith("-C"):
                     ns.C = opt[2:]
+                elif opt == "--canary-dir":
+                    try:
+                        ns.canary_dir = args[i]
+                    except IndexError:
+                        return ns
+                    i += 1
+                elif opt.startswith("--canary-dir="):
+                    ns.canary_dir = opt[len("--canary-dir=") :]
                 else:
                     continue
         return ns
@@ -356,6 +364,17 @@ def make_argument_parser(**kwargs):
         metavar="path",
         help=colorize(
             "Run as if canary was started in [bold]path[/] instead of the current working directory."
+        ),
+    )
+    parser.add_argument(
+        "--canary-dir",
+        default=None,
+        metavar="path",
+        dest="canary_dir",
+        help=colorize(
+            "Use [bold]path[/] as the workspace directory (``.canary``) instead of "
+            "searching upward from the current working directory.  "
+            "Equivalent to setting the ``CANARY_DIR`` environment variable."
         ),
     )
     parser.add_argument(
