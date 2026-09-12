@@ -19,7 +19,7 @@ authors = [
 # Spack) still produce the correct version.  Runtime code (_canary.version)
 # reads this via importlib.metadata for installed packages and augments it with
 # a git label only for editable/source checkouts.
-version = "26.9.11"
+version = "26.9.12"
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 6 - Mature",
@@ -166,6 +166,8 @@ exclude = [
     "src/canary_gitlab/tests/*",
     "src/canary_amd/tests/canary_amd/amd_select.py",
     "src/canary_nvidia/tests/canary_nvidia/nvidia_select.py",
+    "src/canary/docs/conf.py",
+    "src/canary/docs/lib/python/sphinxext/.*",
 ]
 
 [[tool.mypy.overrides]]

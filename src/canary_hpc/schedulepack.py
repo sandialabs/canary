@@ -703,12 +703,12 @@ def pack_by_count_atomic_simulated(
     ]
     heapq.heapify(heap)
 
-    for component in component_infos:
+    for comp_info in component_infos:
         *_, batch_index = heapq.heappop(heap)
 
         accum = accums[batch_index]
-        accum.tasks.extend(component.tasks)
-        accum.stats.add_many(component.tasks, critical_path=component.critical_path)
+        accum.tasks.extend(comp_info.tasks)
+        accum.stats.add_many(comp_info.tasks, critical_path=comp_info.critical_path)
 
         heapq.heappush(
             heap,

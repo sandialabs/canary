@@ -742,7 +742,7 @@ def test_pack_by_count_simulated_uses_gpu_capacity_in_estimate() -> None:
     packed = set().union(*(set(batch.ids) for batch in batches))
     assert packed == {"gpu_a", "gpu_b", "gpu_c", "gpu_d"}
 
-    assert all(batch.metadata["resource_capacity"]["gpus"] == 1 for batch in batches)
+    assert all(batch.metadata["resource_capacity"]["gpus"] == 1 for batch in batches)  # type: ignore[index]
 
 
 def test_pack_by_count_simulated_mixes_cpu_only_with_gpu_tasks() -> None:
@@ -832,7 +832,7 @@ def test_pack_by_count_simulated_exact_final_estimate_opt_in() -> None:
     assert batches
     assert all(batch.metadata["exact_final_estimate"] is True for batch in batches)
     assert all(batch.metadata["simulated_runtime"] is not None for batch in batches)
-    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)
+    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)  # type: ignore[operator]
 
 
 def test_pack_by_count_simulated_exact_final_estimate_calls_simulator(monkeypatch) -> None:
@@ -865,7 +865,7 @@ def test_pack_by_count_atomic_simulated_exact_final_estimate_opt_in() -> None:
     assert len(batches) == 1
     assert batches[0].metadata["exact_final_estimate"] is True
     assert batches[0].metadata["simulated_runtime"] is not None
-    assert batches[0].estimated_runtime >= batches[0].metadata["cheap_runtime"]
+    assert batches[0].estimated_runtime >= batches[0].metadata["cheap_runtime"]  # type: ignore[operator]
 
 
 def test_pack_to_height_simulated_exact_final_estimate_opt_in() -> None:
@@ -876,4 +876,4 @@ def test_pack_to_height_simulated_exact_final_estimate_opt_in() -> None:
     assert batches
     assert all(batch.metadata["exact_final_estimate"] is True for batch in batches)
     assert all(batch.metadata["simulated_runtime"] is not None for batch in batches)
-    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)
+    assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)  # type: ignore[operator]

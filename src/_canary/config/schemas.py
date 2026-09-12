@@ -4,6 +4,7 @@
 
 import os
 import typing
+from typing import Any
 
 from schema import And
 from schema import Optional
@@ -182,7 +183,7 @@ def _learn_namespace(value: object) -> str:
     return text
 
 
-json_scalar_schema = Or(str, int, float, bool, type(None))
+json_scalar_schema: Or = Or(str, int, float, bool, type(None))
 
 # Recursive JSON-like data.  The schema package does not make recursive schemas
 # especially elegant, so for capability payloads we validate only that the root
@@ -205,9 +206,9 @@ skill_schema = Schema(
 skills_payload_schema = Schema({str: skill_schema})
 
 
-query_document_base_schema = {
-    "schema_version": And(str, Use(_non_empty_string)),
-    "namespace": And(str, Use(_learn_namespace)),
+query_document_base_schema: dict[str, Any] = {
+    "schema_version": And(str, Use(_non_empty_string)),  # type: ignore[arg-type]
+    "namespace": And(str, Use(_learn_namespace)),  # type: ignore[arg-type]
 }
 
 

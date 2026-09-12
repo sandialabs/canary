@@ -43,6 +43,7 @@ own exit codes.
 import atexit
 import os
 import sys
+from types import FrameType
 from typing import Any
 from typing import Callable
 
@@ -152,7 +153,7 @@ def _install_runner_if_needed() -> None:
 
 def _caller_is_main() -> bool:
     """Return True when the code applying the decorator lives in ``__main__``."""
-    frame = sys._getframe(1)
+    frame: FrameType | None = sys._getframe(1)
     # Walk out of this module's frames to the caller that used the decorator.
     while frame is not None and frame.f_globals.get("__name__") == __name__:
         frame = frame.f_back

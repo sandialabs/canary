@@ -236,7 +236,7 @@ def create_batch_specs(
 
     partition_counts = allocate_partition_counts(spec.count, partitions)
 
-    batch_specs: list[BatchSpec] = []
+    batch_specs = []
 
     for partition, partition_count in zip(partitions, partition_counts):
         if partition_count is None:

@@ -229,7 +229,7 @@ class DistributedResourcePoolAdapter:
 
         hostname = data["hostname"]
         transaction_id = data["transaction_id"]
-        resources = _with_node(data["resources"], hostname)
+        resources_with_node = _with_node(data["resources"], hostname)
 
         return {
             "metadata": {
@@ -238,7 +238,7 @@ class DistributedResourcePoolAdapter:
                 "hostname": hostname,
                 "transaction_id": transaction_id,
             },
-            "resources": resources,
+            "resources": resources_with_node,
         }
 
     def checkin(self, allocation: dict[str, Any]) -> None:

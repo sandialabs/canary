@@ -88,7 +88,7 @@ def fake_conductor(*, counts: dict[str, int], failures: set[str] | None = None):
     from canary_hpc.conductor import CanaryHPCConductor
 
     conductor = CanaryHPCConductor.__new__(CanaryHPCConductor)
-    conductor.backend = FakeBackend(counts=counts, failures=failures)
+    conductor.backend = FakeBackend(counts=counts, failures=failures)  # type: ignore[assignment]
     return conductor
 
 
@@ -308,7 +308,7 @@ def test_create_batch_specs_count_1_with_dependent_jobs_produces_single_batch() 
     spec = BatchingSpec.with_defaults(count=1)
 
     specs = create_batch_specs(
-        jobs=[base, aggregate],  # type: ignore[arg-type]
+        jobs=[base, aggregate],  # type: ignore[list-item]
         batchspec=spec,
         cpus_per_node=8,
         workers=None,

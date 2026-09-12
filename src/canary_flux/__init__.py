@@ -183,7 +183,7 @@ def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
 
 @hookimpl(tryfirst=True)
 def canary_runtests(runner: "Runner") -> bool | None:
-    from hpcc_flux.allocation import FluxAllocation
+    from hpcc_flux.allocation import FluxAllocation  # type: ignore[import-untyped]
 
     from .executor import FluxDirectExecutor
 

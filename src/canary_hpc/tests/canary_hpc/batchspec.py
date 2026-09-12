@@ -434,7 +434,7 @@ class _FinalizableJob(FakeJob):
         pass
 
     def set_status(self, *, outcome: str, reason: str, code: int = -1) -> None:
-        self.status = Status(outcome=outcome, reason=reason)
+        self.status = Status(outcome=outcome, reason=reason)  # type: ignore[arg-type]
 
 
 def test_resource_totals_single_node_gpu_batch(tmp_path):

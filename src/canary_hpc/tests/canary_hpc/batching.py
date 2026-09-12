@@ -49,11 +49,11 @@ def make_jobs(tmp_path: Path, cpus: int = 1, nodes: int = 1) -> list:
     ExecutionSpace = _canary.testexec.ExecutionSpace
 
     ws = ExecutionSpace(tmp_path, Path("session"))
-    lookup: dict[str, Job] = {}
-    jobs: list[Job] = []
+    lookup: dict[str, Job] = {}  # type: ignore[valid-type]
+    jobs: list[Job] = []  # type: ignore[valid-type]
 
     for family in "abcde":
-        leaf_jobs: list[Job] = []
+        leaf_jobs: list[Job] = []  # type: ignore[valid-type]
 
         for param in range(4):
             name = f"{family}.{family}={param}"
@@ -97,7 +97,10 @@ def batching_spec(
     duration: float | None = None,
 ) -> batching.BatchingSpec:
     return batching.BatchingSpec.with_defaults(
-        layout=layout, nodes=nodes, count=count, duration=duration
+        layout=layout,  # type: ignore[arg-type]
+        nodes=nodes,  # type: ignore[arg-type]
+        count=count,
+        duration=duration,
     )
 
 
@@ -350,14 +353,14 @@ def test_allocate_partition_counts_balances_dominant_partition() -> None:
     aggregates = [_FakePartition(2, 2 * 5.0 / 48) for _ in range(14)]
     partitions = [dominant, *aggregates]
 
-    counts = batching.allocate_partition_counts(30, partitions)
+    counts = batching.allocate_partition_counts(30, partitions)  # type: ignore[arg-type]
 
-    assert sum(counts) == 30
+    assert sum(c for c in counts if c is not None) == 30
     # Every tiny aggregate partition keeps a home (min 1)...
-    assert all(c >= 1 for c in counts)
+    assert all(c >= 1 for c in counts if c is not None)
     # ...but the dominant partition claims the remaining budget.
     assert counts[0] == 30 - len(aggregates)
-    assert all(c == 1 for c in counts[1:])
+    assert all(c == 1 for c in counts[1:] if c is not None)
 
 
 def test_allocate_partition_counts_proportional_across_large_partitions() -> None:
@@ -367,19 +370,19 @@ def test_allocate_partition_counts_proportional_across_large_partitions() -> Non
         _FakePartition(500, 500 * 300.0 / 48),
     ]
 
-    counts = batching.allocate_partition_counts(28, partitions)
+    counts = batching.allocate_partition_counts(28, partitions)  # type: ignore[arg-type]
 
-    assert sum(counts) == 28
+    assert sum(c for c in counts if c is not None) == 28
     # Allocation should be roughly proportional to load (2:1:0.5).
-    assert counts[0] > counts[1] > counts[2]
+    assert counts[0] > counts[1] > counts[2]  # type: ignore[operator]
     assert counts == [16, 8, 4]
 
 
 def test_allocate_partition_counts_equal_partitions_are_balanced() -> None:
     partitions = [_FakePartition(100, 100.0) for _ in range(7)]
 
-    counts = batching.allocate_partition_counts(30, partitions)
+    counts = batching.allocate_partition_counts(30, partitions)  # type: ignore[arg-type]
 
-    assert sum(counts) == 30
+    assert sum(c for c in counts if c is not None) == 30
     # Equal partitions should differ by at most one batch.
-    assert max(counts) - min(counts) <= 1
+    assert max(c for c in counts if c is not None) - min(c for c in counts if c is not None) <= 1

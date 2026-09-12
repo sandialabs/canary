@@ -85,7 +85,7 @@ class TestBatch(BaseJob):
         super().__init__()
         self.spec = spec
         self.jobs = spec.jobs
-        self.status: BatchStatus = BatchStatus(self.jobs)
+        self.status: BatchStatus = BatchStatus(self.jobs)  # type: ignore[assignment]
         self.session = self.spec.session
         self.workspace = workspace
         self.lockfile = self.workspace.joinpath("batch.lock")
