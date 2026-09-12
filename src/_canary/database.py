@@ -422,6 +422,12 @@ class WorkspaceDatabase:
 
         Dependency links stored in ``spec_deps`` are reconnected so each spec's
         ``spec.dependencies[i].spec`` points to the actual ``JobSpec`` object.
+
+        Handles both the current compact format (``dep.spec`` is a plain
+        ``{"id": "..."}`` stub written by the new serializer) and the legacy
+        format (``dep.spec`` is a full deserialized ``JobSpec`` object written
+        by older canary versions).  The stub format is preferred — it eliminates
+        redundant full-spec blobs embedded inside parent spec blobs.
         """
         spec: JobSpec
         specs: dict[str, JobSpec] = {}
@@ -429,7 +435,13 @@ class WorkspaceDatabase:
         for row in rows:
             spec = json.loads(row[-1])
             specs[spec.id] = spec
-            imap[spec.id] = {dep.spec.id: i for i, dep in enumerate(spec.dependencies)}
+            # dep.spec may be either a full JobSpec object (legacy blobs written
+            # by canary < this change) or a plain dict {"id": "..."} (current
+            # compact format).  Extract the ID from either form.
+            imap[spec.id] = {
+                (dep.spec.id if isinstance(dep.spec, JobSpec) else dep.spec["id"]): i
+                for i, dep in enumerate(spec.dependencies)
+            }
         ids = [spec.id for spec in specs.values()]
         edges = self.get_edges(ids)
         for spec_id, dep_id in edges:

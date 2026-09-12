@@ -145,7 +145,10 @@ class SpecDependency:
     when: str = "on_success"
 
     def __serialize__(self) -> dict[str, Any]:
-        return {"spec": self.spec, "when": self.when}
+        # Store only the spec ID — the full spec object is stored separately in the
+        # specs table and its edges in spec_deps.  _reconstruct_specs re-wires the
+        # pointer after loading, so the full blob is never needed here.
+        return {"spec": {"id": self.spec.id}, "when": self.when}
 
     @classmethod
     def __deserialize__(cls, d: dict) -> "SpecDependency":

@@ -129,11 +129,25 @@ def test_jobspec_serialization_roundtrip_includes_mask_and_baseline(repo: Path):
 
 
 def test_specdependency_roundtrip_json(repo: Path):
+    # SpecDependency serializes only the spec ID stub to keep DB blobs compact.
+    # _reconstruct_specs re-wires the full JobSpec pointer after loading from the DB.
     upstream = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="b" * 64)
     dep = SpecDependency(spec=upstream, when="on_success")
-    out = json.loads(json.dumps(dep))
-    assert out == dep
-    assert isinstance(out.spec, JobSpec)
+    raw = json.dumps(dep)
+    out = json.loads(raw)
+    # The serialized blob must contain only the id stub, not the full spec.
+    assert out.when == dep.when
+    assert out.spec == {"id": "b" * 64}
+
+
+def test_specdependency_serialize_is_compact(repo: Path):
+    # Serialized form must be the id-only stub — no nested spec fields.
+    upstream = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), id="b" * 64)
+    dep = SpecDependency(spec=upstream, when="on_success")
+    serialized = dep.__serialize__()
+    assert serialized == {"spec": {"id": "b" * 64}, "when": "on_success"}
+    assert "file_root" not in serialized["spec"]
+    assert "file_path" not in serialized["spec"]
 
 
 def test_build_spec_id_is_lowercase_hex(repo: Path):
