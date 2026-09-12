@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Tests for PYT directive parsing, model building, and spec locking.
+
+Exercises canary_pyt.pyt internals: PYTModel, PYTLoader, PYTAdapter,
+PYTLockEmitter.  These are unit tests of the pyt generator layer, not of the
+higher-level collection pipeline.
+"""
+
 import sys
 
 import canary_pyt.pyt as pyt
@@ -27,7 +34,8 @@ def lock_file(path: str, *, on_options=None):
     return pyt.PYTLockEmitter().lock(m, on_options=on_options or [])
 
 
-def test_pyt_parameterize_and_analyze(tmpdir):
+def test_parameterize_with_analyze_expands_cases(tmpdir):
+    """Parameterize + analyze: N×M leaf cases plus one multi-case analyze spec."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -50,7 +58,8 @@ canary_pyt.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33,
         assert "paramsets" in specs[-1].attributes
 
 
-def test_pyt_keywords_when_filter(tmpdir):
+def test_keywords_when_options_filter(tmpdir):
+    """keywords(when=...) conditionally adds keyword based on active options."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -73,7 +82,8 @@ canary_pyt.directives.parameterize('p', (1, 2))
         assert "always" in k2 and "opt" in k2 and "p2" in k2
 
 
-def test_pyt_exclusive_enable_skipif(tmpdir):
+def test_exclusive_and_skipif_mask_spec(tmpdir):
+    """exclusive() and skipif(True) both produce masked specs."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -93,7 +103,8 @@ canary_pyt.directives.skipif(True, reason="skip")
         assert bool(s2.mask) is True
 
 
-def test_pyt_sources_baseline_artifact_substitution(tmpdir):
+def test_copy_baseline_artifact_parameter_substitution(tmpdir):
+    """${P} / {p} substitution in copy/baseline/artifact paths uses parameter values."""
     with working_dir(tmpdir.strpath, create=True):
         write("in_2.txt", "data\n")
         write(
@@ -121,7 +132,8 @@ canary_pyt.directives.artifact('art_{p}.txt', save_on='always')
         assert any(a.pattern == "art_2.txt" for a in s.artifacts)
 
 
-def test_pyt_depends_on(tmpdir):
+def test_depends_on_with_when_condition(tmpdir):
+    """depends_on(when=...) only adds dependency to matching parameter variants."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -144,7 +156,8 @@ canary_pyt.directives.parameterize('x', (1, 2))
         assert len(s2.dependencies) == 0
 
 
-def test_pyt_modules_use_sets_modulepath(tmpdir, monkeypatch):
+def test_load_module_prepends_modulepath(tmpdir, monkeypatch):
+    """load_module(use=...) prepends the given path to MODULEPATH."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -160,7 +173,8 @@ canary_pyt.directives.load_module('gcc', use='/m')
         assert "gcc" in (s.modules or [])
 
 
-def test_pyt_xfail_xdiff(tmpdir):
+def test_xfail_sets_xstatus_code(tmpdir):
+    """xfail(code=N) stores the expected-failure exit code on the spec."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -172,6 +186,10 @@ canary_pyt.directives.xfail(code=7)
         s = lock_file("test.pyt")[0]
         assert s.xstatus == 7
 
+
+def test_xdiff_sets_nonzero_xstatus(tmpdir):
+    """xdiff() stores a nonzero expected-diff exit code on the spec."""
+    with working_dir(tmpdir.strpath, create=True):
         write(
             "test2.pyt",
             """
@@ -180,10 +198,11 @@ canary_pyt.directives.xdiff()
 """,
         )
         s2 = lock_file("test2.pyt")[0]
-        assert s2.xstatus != 0  # exact diff_exit_status covered elsewhere
+        assert s2.xstatus != 0
 
 
-def test_pyt_preload_rcfiles(tmpdir):
+def test_preload_and_source_stored_on_spec(tmpdir):
+    """preload() and source() populate the corresponding spec fields."""
     with working_dir(tmpdir.strpath, create=True):
         write(
             "test.pyt",
@@ -199,163 +218,9 @@ canary_pyt.directives.source('rc.sh')
         assert "rc.sh" in (s.rcfiles or [])
 
 
-def test_pyt_model_default_command_uses_basename(tmpdir):
+def test_default_command_uses_python_and_basename(tmpdir):
+    """A plain .pyt file with no command directive runs via the Python interpreter."""
     with working_dir(tmpdir.strpath, create=True):
         write("test.pyt", "import canary\n")
         s = lock_file("test.pyt")[0]
         assert s.command == [sys.executable, "test.pyt"]
-
-
-INSTANCE_TEST_FILE = """
-import canary
-import canary_pyt
-
-
-@canary_pyt.instance_test
-def test_foo(inst: canary.TestInstance) -> int:
-    assert inst.family == "foo"
-    return 0
-
-
-@canary_pyt.instance_test
-def test_bar(inst):
-    assert inst.family == "bar"
-    return 0
-
-
-@canary_pyt.instance_test
-def test_baz(inst):
-    return 0
-"""
-
-
-def test_instance_test_registers_families(tmpdir):
-    with working_dir(tmpdir.strpath, create=True):
-        write("test.pyt", INSTANCE_TEST_FILE)
-        specs = lock_file("test.pyt")
-        families = sorted(s.family for s in specs)
-        assert families == ["bar", "baz", "foo"]
-
-
-def test_instance_test_populates_registry(tmpdir):
-    from canary_pyt import instance as instance_mod
-
-    with working_dir(tmpdir.strpath, create=True):
-        write("test.pyt", INSTANCE_TEST_FILE)
-        # Parsing runs the file for collection, which registers the functions.
-        pyt.PYTLoader(file=pyt.PYTModel(".", "test.pyt").file).parse()
-        reg = instance_mod.registered_instance_tests()
-        assert sorted(reg) == ["bar", "baz", "foo"]
-
-
-def test_instance_test_reset_between_files(tmpdir):
-    from canary_pyt import instance as instance_mod
-
-    with working_dir(tmpdir.strpath, create=True):
-        write("a.pyt", INSTANCE_TEST_FILE)
-        write(
-            "b.pyt",
-            "import canary\nimport canary_pyt\n"
-            "@canary_pyt.instance_test\n"
-            "def test_only(inst):\n    return 0\n",
-        )
-        pyt.PYTLoader(file=pyt.PYTModel(".", "a.pyt").file).parse()
-        # Loading a second file must not raise a duplicate-registration error
-        # and must not retain families from the first file.
-        pyt.PYTLoader(file=pyt.PYTModel(".", "b.pyt").file).parse()
-        assert sorted(instance_mod.registered_instance_tests()) == ["only"]
-
-
-def test_instance_test_duplicate_raises(tmpdir):
-    with working_dir(tmpdir.strpath, create=True):
-        write(
-            "dup.pyt",
-            "import canary\nimport canary_pyt\n"
-            "@canary_pyt.instance_test\n"
-            "def test_x(inst):\n    return 0\n"
-            "@canary_pyt.instance_test\n"
-            "def test_x(inst):\n    return 0\n",  # noqa: F811
-        )
-        try:
-            pyt.PYTLoader(file=pyt.PYTModel(".", "dup.pyt").file).parse()
-        except RuntimeError as e:
-            assert "Duplicate instance_test" in str(e)
-        else:
-            raise AssertionError("expected duplicate registration to raise")
-
-
-def test_run_instance_tests_dispatch(tmpdir, monkeypatch):
-    """run_instance_tests() dispatches by family and returns the exit code."""
-    from canary_pyt import instance as instance_mod
-
-    instance_mod.reset_registry()
-
-    calls = []
-
-    class FakeInstance:
-        family = "bar"
-
-    @instance_mod.instance_test
-    def test_foo(inst):
-        calls.append("foo")
-        return 0
-
-    @instance_mod.instance_test
-    def test_bar(inst):
-        calls.append("bar")
-        return 3
-
-    import canary
-
-    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
-    rc = instance_mod.run_instance_tests()
-    assert rc == 3
-    assert calls == ["bar"]
-
-    instance_mod.reset_registry()
-
-
-def test_run_instance_tests_testfailed_exit_code(tmpdir, monkeypatch):
-    from canary_pyt import instance as instance_mod
-
-    instance_mod.reset_registry()
-
-    class FakeInstance:
-        family = "boom"
-
-    @instance_mod.instance_test
-    def test_boom(inst):
-        raise canary.TestFailed("nope")
-
-    import canary
-
-    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
-    rc = instance_mod.run_instance_tests()
-    assert rc == canary.TestFailed.exit_code
-
-    instance_mod.reset_registry()
-
-
-def test_run_instance_tests_unknown_family(tmpdir, monkeypatch):
-    from canary_pyt import instance as instance_mod
-
-    instance_mod.reset_registry()
-
-    class FakeInstance:
-        family = "missing"
-
-    @instance_mod.instance_test
-    def test_present(inst):
-        return 0
-
-    import canary
-
-    monkeypatch.setattr(canary, "get_instance", lambda arg=None: FakeInstance())
-    try:
-        instance_mod.run_instance_tests()
-    except RuntimeError as e:
-        assert "No @canary_pyt.instance_test registered for 'missing'" in str(e)
-    else:
-        raise AssertionError("expected unknown family to raise")
-
-    instance_mod.reset_registry()

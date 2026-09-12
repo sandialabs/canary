@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""Tests for rerun closure computation with upstream/downstream dependencies.
+
+Verifies that when a job fails and a downstream job is blocked, rerunning
+failed tests correctly includes upstream dependency specs (masked, to supply
+prior results) and downstream specs (active, to be re-executed).
+"""
+
 import time
 from pathlib import Path
 
@@ -18,14 +25,6 @@ from _canary.workspace import Workspace
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
-    """
-    Keep this test at the library level without inheriting a caller's Canary
-    environment/configuration.
-
-    The global config object is one of the reasons these tests have historically
-    used subprocesses.  For this test, we only need default configuration and the
-    builtin plugins/resource manager.
-    """
     monkeypatch.delenv("CANARYCFG64", raising=False)
     monkeypatch.delenv("CANARYCFGFILE", raising=False)
     monkeypatch.setenv("CANARY_DISABLE_KB", "1")
@@ -35,15 +34,8 @@ def isolated_config(tmp_path, monkeypatch):
         yield
 
 
-def make_abc_workspace(tmp_path: Path) -> tuple[Workspace, dict[str, JobSpec]]:
-    """
-    Construct this dependency graph directly:
-
-        a -> b -> c
-
-    This avoids parser/collector/subprocess overhead and isolates the rerun
-    closure logic.
-    """
+def make_linear_dep_workspace(tmp_path: Path) -> tuple[Workspace, dict[str, JobSpec]]:
+    """Construct the dependency graph ``a -> b -> c`` directly without parsing."""
     test_file = tmp_path / "test.pyt"
     test_file.write_text(
         """\
@@ -69,7 +61,6 @@ if __name__ == "__main__":
 """
     )
 
-    # Use full-length hex IDs so database partial-ID resolution is not involved.
     c = JobSpec(file_root=tmp_path, file_path=Path("test.pyt"), family="c", id="c" * 64)
     b = JobSpec(
         file_root=tmp_path,
@@ -92,16 +83,8 @@ if __name__ == "__main__":
     return ws, {"a": a, "b": b, "c": c}
 
 
-def store_initial_issue_90_results(ws: Workspace, specs: dict[str, JobSpec]) -> None:
-    """
-    Simulate the first run:
-
-      c passes
-      b fails
-      a is blocked because b failed
-
-    We only need database state for rerun selection/closure.
-    """
+def store_initial_results(ws: Workspace, specs: dict[str, JobSpec]) -> None:
+    """Simulate: c passes, b fails, a is blocked."""
     session_dir = ws.sessions_dir / "initial"
     jobs = ws.construct_jobs([specs["c"], specs["b"], specs["a"]], session_dir)
 
@@ -123,66 +106,44 @@ def store_initial_issue_90_results(ws: Workspace, specs: dict[str, JobSpec]) -> 
     ws.db.put_results(*jobs)
 
 
-def test_issue_90_failed_rerun_closure_keeps_upstream_dependencies(tmp_path):
-    """
-    Regression test for issue 90.
-
-    If b fails and a is blocked, rerunning failed tests must include upstream
-    dependency c in the reconstructed spec set.  c should be masked so it is not
-    rerun, but it must still be present so b's dependency edge can be satisfied
-    from prior results.
-    """
-    ws, specs = make_abc_workspace(tmp_path)
-    store_initial_issue_90_results(ws, specs)
+def test_rerun_failed_includes_upstream_as_masked(tmp_path):
+    """rerun strategy='failed' includes upstream c as masked and b/a as active."""
+    ws, specs = make_linear_dep_workspace(tmp_path)
+    store_initial_results(ws, specs)
 
     selected = rerun.get_specs(ws.db, strategy="failed")
     by_name = {spec.name: spec for spec in selected}
 
     assert set(by_name) == {"a", "b", "c"}
 
-    # b failed and a was blocked/downstream, so both are runnable roots/closure.
     assert not by_name["a"].mask
     assert not by_name["b"].mask
 
-    # c is required upstream state.  It should be present but masked.
     assert by_name["c"].mask
     assert by_name["c"].mask.reason == "Skip upstream specs"
 
 
-def test_issue_90_explicit_rerun_closure_keeps_upstream_dependencies(tmp_path):
-    """
-    The CLI regression test used roughly:
-
-        canary run --only=failed b
-
-    The pathspec 'b' becomes a concrete spec-id request, and the rerun closure
-    must include c as a masked upstream dependency and a as downstream work.
-    """
-    ws, specs = make_abc_workspace(tmp_path)
-    store_initial_issue_90_results(ws, specs)
+def test_rerun_explicit_root_includes_upstream_masked_and_downstream_active(tmp_path):
+    """Explicit rerun of b includes c (masked upstream) and a (downstream)."""
+    ws, specs = make_linear_dep_workspace(tmp_path)
+    store_initial_results(ws, specs)
 
     selected = rerun.compute_rerun_closure(ws.db, roots=[specs["b"].id])
     by_name = {spec.name: spec for spec in selected}
 
     assert set(by_name) == {"a", "b", "c"}
 
-    # Explicit root b and downstream a are active.
     assert not by_name["a"].mask
     assert not by_name["b"].mask
 
-    # Upstream c is present for dependency reconstruction but will not rerun.
     assert by_name["c"].mask
     assert by_name["c"].mask.reason == "Skip upstream specs"
 
 
-def test_issue_90_constructed_jobs_include_masked_upstream_result(tmp_path):
-    """
-    Verify that after rerun closure, Workspace.construct_jobs can still
-    reconstruct b with dependency c present and carrying its previous successful
-    result.
-    """
-    ws, specs = make_abc_workspace(tmp_path)
-    store_initial_issue_90_results(ws, specs)
+def test_rerun_constructed_jobs_carry_prior_upstream_result(tmp_path):
+    """After rerun closure, construct_jobs gives c its prior SUCCESS status."""
+    ws, specs = make_linear_dep_workspace(tmp_path)
+    store_initial_results(ws, specs)
 
     selected = rerun.compute_rerun_closure(ws.db, roots=[specs["b"].id])
     jobs = ws.construct_jobs(selected, ws.sessions_dir / "rerun")

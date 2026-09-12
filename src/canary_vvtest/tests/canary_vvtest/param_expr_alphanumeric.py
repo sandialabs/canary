@@ -1,17 +1,11 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""
-Regression test for issue 80.
 
-This test verifies parameter-expression parsing for values such as ``2D``.
-Historically, expressions like ``dim=2D`` could be tokenized incorrectly because
-``2D`` combines a numeric prefix with a string suffix.  The test avoids invoking
-``canary run -p`` through a subprocess and instead uses ``Workspace`` selection
-APIs directly.
+"""Tests for parameter-expression parsing with alphanumeric values.
 
-The covered behavior is that selecting with ``parameter_expr="dim=2D"`` returns
-only the generated VVT specs whose ``dim`` parameter is exactly ``2D``.
+Verifies that expressions like ``dim=2D`` are tokenized correctly even though
+``2D`` combines a numeric prefix with a string suffix.
 """
 
 from pathlib import Path
@@ -32,16 +26,14 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with _canary.config.override():
-        try:
-            _canary.config.pluginmanager.ensure_loaded("canary_vvtest")
-        except Exception:
-            pass
+        _canary.config.pluginmanager.ensure_loaded("canary_vvtest")
         yield
 
 
-def test_issue_80(tmp_path):
+def test_alphanumeric_parameter_value_selected_exactly(tmp_path):
+    """parameter_expr='dim=2D' selects only specs with that exact parameter value."""
     workspace = Workspace.create(tmp_path)
-    f = HERE / "issue-80.vvt"
+    f = HERE / "param_expr_alphanumeric.vvt"
 
     specs = workspace.collect({str(f.parent): [f.name]})
     selected = workspace.select_from_specs(specs, parameter_expr="dim=2D")

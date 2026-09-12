@@ -1,17 +1,12 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""
-Regression test for issue 47.
 
-This test verifies VVT ``include`` directives combined with parameterization
-without invoking Canary through the CLI.  The VVT file defines multiple test
-names, includes additional directives from a neighboring text file, and applies
-separate parameterizations to different test names.
+"""Tests for VVT ``include`` directives combined with parameterization.
 
-The regression is covered entirely at generation time: the test uses
-``Workspace.collect`` and asserts that the generated runnable specs have the
-expected parameterized names.
+Verifies that a VVT file that defines multiple test names, includes additional
+directives from a neighboring text file, and applies separate parameterizations
+to different test names generates the expected set of runnable specs.
 """
 
 from pathlib import Path
@@ -32,16 +27,14 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with _canary.config.override():
-        try:
-            _canary.config.pluginmanager.ensure_loaded("canary_vvtest")
-        except Exception:
-            pass
+        _canary.config.pluginmanager.ensure_loaded("canary_vvtest")
         yield
 
 
-def test_issue_47(tmp_path):
+def test_include_directive_with_per_testname_parameterize(tmp_path):
+    """Parameterizations from an included file combine with inline ones correctly."""
     workspace = Workspace.create(tmp_path)
-    f = HERE / "issue-47.vvt"
+    f = HERE / "include_parameterize.vvt"
 
     specs = workspace.collect({str(f.parent): [f.name]})
     specs = [spec for spec in specs if not spec.mask]

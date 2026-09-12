@@ -1,17 +1,11 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""
-Regression test for issue 84.
 
-This test verifies that keyword-specific timeout configuration is applied during
-spec generation.  The original test drove ``canary init``, ``canary config
-set``, ``canary selection create``, and ``canary run`` through subprocesses.
-This replacement sets the relevant configuration value directly and uses
-``Workspace.collect`` to generate specs in-process.
+"""Tests for keyword-specific timeout configuration applied at spec generation.
 
-The covered behavior is that a PYT test marked with keyword ``baz`` receives the
-configured ``run:timeout:baz`` value of four minutes.
+Verifies that a PYT test marked with a keyword receives the configured
+``run:timeout:<keyword>`` value when specs are collected.
 """
 
 from pathlib import Path
@@ -32,23 +26,21 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with _canary.config.override():
-        try:
-            _canary.config.pluginmanager.ensure_loaded("canary_pyt")
-        except Exception:
-            pass
+        _canary.config.pluginmanager.ensure_loaded("canary_pyt")
         yield
 
 
-def test_issue_84(tmp_path):
+def test_keyword_timeout_config_applied_during_collection(tmp_path):
+    """run:timeout:<keyword> config is reflected in the generated spec's timeout."""
     _canary.config.set("run:timeout:baz", "4m")
 
     workspace = Workspace.create(tmp_path)
-    f = HERE / "issue-84.pyt"
+    f = HERE / "keyword_timeout.pyt"
 
     specs = workspace.collect({str(f.parent): [f.name]})
     specs = [spec for spec in specs if not spec.mask]
 
     assert len(specs) == 1
-    assert specs[0].family == "issue-84"
+    assert specs[0].family == "keyword_timeout"
     assert specs[0].keywords == ["baz"]
     assert specs[0].timeout == 240.0

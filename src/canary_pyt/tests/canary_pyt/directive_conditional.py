@@ -1,16 +1,11 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""
-Regression test for issue 62.
 
-This test verifies PYT directive evaluation when ``enable`` and ``keywords`` are
-conditioned on parameter values.  It intentionally works directly with the PYT
-loader/model/adapter/emitter classes rather than running Canary through the CLI.
+"""Tests for PYT enable/keywords directives conditioned on parameter values.
 
-The covered behavior is that all parameterized specs are generated, but the
-spec whose parameter value disables the test is masked, leaving only the
-expected runnable specs.
+Verifies that a parameterized spec whose ``enable`` is conditioned on its
+parameter value gets masked while the others remain runnable.
 """
 
 from pathlib import Path
@@ -32,25 +27,22 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with _canary.config.override():
-        try:
-            _canary.config.pluginmanager.ensure_loaded("canary_pyt")
-        except Exception:
-            pass
+        _canary.config.pluginmanager.ensure_loaded("canary_pyt")
         yield
 
 
-def test_issue_62():
+def test_enable_conditioned_on_parameter_masks_matching_variant():
+    """enable(False, when='parameters="Letter=c"') masks only the Letter=c spec."""
     with canary.filesystem.working_dir(HERE):
-        m = pyt.PYTModel(".", "issue-62.pyt")
+        m = pyt.PYTModel(".", "directive_conditional.pyt")
         calls = pyt.PYTLoader(file=m.file).parse()
         pyt.PYTAdapter(m).apply(calls)
-
         specs = pyt.PYTLockEmitter().lock(m, on_options=[])
 
     assert len(specs) == 3
     assert len([spec for spec in specs if not spec.mask]) == 2
 
     by_name = {spec.name: spec for spec in specs}
-    assert not by_name["issue-62.Letter=a"].mask
-    assert not by_name["issue-62.Letter=b"].mask
-    assert by_name["issue-62.Letter=c"].mask
+    assert not by_name["directive_conditional.Letter=a"].mask
+    assert not by_name["directive_conditional.Letter=b"].mask
+    assert by_name["directive_conditional.Letter=c"].mask
