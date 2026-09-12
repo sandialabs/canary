@@ -6,9 +6,12 @@
 
 All built-in subcommands are imported here and exposed via ``plugins`` for
 discovery by the plugin manager.  Public symbols: ``plugins``, ``make_commands_docs``.
+
+Note: the ``check`` / ``pre-commit`` developer subcommand is **not** listed
+here.  It lives in ``dev/__init__.py`` at the repository root and is loaded
+automatically by the plugin manager when running from an editable checkout.
 """
 
-from . import check
 from . import collect
 from . import config
 from . import describe
@@ -36,7 +39,6 @@ from . import tree
 from . import view
 
 plugins = [
-    check,
     collect,
     config,
     describe,

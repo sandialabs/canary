@@ -2,11 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Implements the ``canary check`` subcommand for running internal code-quality checks.
+"""Developer-only ``canary pre-commit`` / ``canary check`` subcommand.
 
-Runs license-header insertion, ruff formatting/linting, mypy/ty type-checking,
-bandit security scanning, pytest tests, coverage reporting, Sphinx documentation
-builds, and version stamping on the Canary source tree.
+This module is **not** part of the installed canary package.  It lives in the
+``dev/`` directory at the repository root and is only loaded by
+:class:`_canary.pluginmanager.CanaryPluginManager` when canary is running from
+an editable checkout that has the ``dev/`` directory present next to ``.git/``.
+
+The public surface exposed to canary's plugin system is the
+:func:`canary_addcommand` hook implementation in :mod:`dev.__init__`.  This
+module contains the full implementation.
 """
 
 import argparse
@@ -18,29 +23,18 @@ import shutil
 import site
 import subprocess
 import sys
-import time
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
-from ..hookspec import hookimpl
-from ..util import logging
-from ..util.filesystem import working_dir
-from .base import CanarySubcommand
-
-if TYPE_CHECKING:
-    from ..config.argparsing import Parser
-
-
-@hookimpl
-def canary_addcommand(parser: "Parser") -> None:
-    parser.add_command(Check())
-
+from _canary.subcommands.base import CanarySubcommand
+from _canary.util import logging
+from _canary.util.filesystem import working_dir
+from _canary.util.pytest_runner import PytestResult
+from _canary.util.pytest_runner import run_pytest_one
 
 stdout: Any = subprocess.PIPE
 stderr: Any = subprocess.PIPE
@@ -64,16 +58,16 @@ class Check(CanarySubcommand):
 
     Orchestrates formatting (ruff), lint checking (ruff), type checking (ty or
     mypy), security scanning (bandit), pytest test runs (optionally with
-    coverage), Sphinx documentation builds, and project version stamping.
+    coverage), Sphinx documentation builds, and version stamping.
     Checks run only from an editable install of the Canary repository.
     """
 
-    name = "check"
+    name = "pre-commit"
     description = "Run canary's internal checks"
     add_help = False
-    aliases = ["pre-commit"]
+    aliases = ["check"]
 
-    def setup_parser(self, parser: "Parser") -> None:
+    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         """Register check flags (-f format, -c lint, -m type, -b bandit, -t test, etc.)."""
         parser.add_argument(
             "-l", nargs=0, action=Action, help="add missing license headers (default)"
@@ -108,7 +102,7 @@ class Check(CanarySubcommand):
 
         root = ir.files("canary").joinpath("../..")
         if not root.joinpath(".git").is_dir():
-            raise ValueError("canary check must be run from a editable install of canary")
+            raise ValueError("canary pre-commit must be run from an editable install of canary")
 
         self.root = os.path.normpath(str(root))
 
@@ -179,7 +173,7 @@ class Check(CanarySubcommand):
         """Add missing SPDX license headers to source, docs, and test trees."""
         with working_dir(self.root):
             pm = logger.progress_monitor(f"Adding missing license headers in {self.root}")
-            for top in ("./src", "./docs", "./tests", "./bin"):
+            for top in ("./src", "./docs", "./tests", "./bin", "./dev"):
                 if os.path.isdir(top):
                     add_licenses(top)
             pm.done()
@@ -205,6 +199,10 @@ class Check(CanarySubcommand):
 
             pm = logger.progress_monitor(f"Formatting source in {self.root}/src")
             ruff("format", "./src")
+            pm.done()
+
+            pm = logger.progress_monitor(f"Formatting dev in {self.root}/dev")
+            ruff("format", "./dev")
             pm.done()
 
     def lint_check_code(self, args: argparse.Namespace):
@@ -234,6 +232,10 @@ class Check(CanarySubcommand):
 
             pm = logger.progress_monitor(f"Lint checking source in {self.root}/src")
             ruff_check("./src")
+            pm.done()
+
+            pm = logger.progress_monitor(f"Lint checking dev in {self.root}/dev")
+            ruff_check("./dev")
             pm.done()
 
     def security_check(self, args: argparse.Namespace):
@@ -414,47 +416,6 @@ def pytest(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     return cp
 
 
-@dataclass(frozen=True)
-class PytestResult:
-    """Outcome of a single pytest worker invocation."""
-
-    path: str
-    returncode: int
-    stdout: str
-    stderr: str
-    elapsed_s: float
-
-    @property
-    def ok(self) -> bool:
-        """Return ``True`` if the pytest run exited with code 0."""
-        return self.returncode == 0
-
-
-def run_pytest_one(root: str, relpath: str, pytest_args: tuple[str, ...] = ()) -> PytestResult:
-    """Run pytest on a single path in a worker process and return the result.
-
-    Args:
-        root: Absolute path to the repository root (used as ``cwd``).
-        relpath: Relative path to the test directory/file to pass to pytest.
-        pytest_args: Additional arguments forwarded to pytest.
-
-    Returns:
-        A :class:`PytestResult` capturing the return code, captured output,
-        and elapsed time.
-    """
-    t0 = time.time()
-    command = ["pytest", relpath, *pytest_args]
-    cp = subprocess.run(command, cwd=root, stdout=stdout, stderr=stderr, encoding="utf-8")
-
-    return PytestResult(
-        path=relpath,
-        returncode=cp.returncode,
-        stdout=cp.stdout or "",
-        stderr=cp.stderr or "",
-        elapsed_s=time.time() - t0,
-    )
-
-
 def run_pytests_parallel(
     root: Path,
     test_paths: Sequence[str],
@@ -462,17 +423,7 @@ def run_pytests_parallel(
     max_workers: int | None = None,
     pytest_args: tuple[str, ...] = (),
 ) -> list[PytestResult]:
-    """Run pytest concurrently over multiple paths using a process pool.
-
-    Args:
-        root: Repository root used to compute relative paths and as ``cwd``.
-        test_paths: Sequence of test paths to distribute across workers.
-        max_workers: Maximum worker processes (defaults to ``os.cpu_count()``).
-        pytest_args: Additional arguments forwarded to every pytest invocation.
-
-    Returns:
-        A list of :class:`PytestResult` objects in completion order.
-    """
+    """Run pytest concurrently over multiple paths using a process pool."""
     results: list[PytestResult] = []
 
     with ProcessPoolExecutor(max_workers=max_workers or os.cpu_count()) as ex:
@@ -488,8 +439,6 @@ def run_pytests_parallel(
         for fut in as_completed(futures):
             res = fut.result()
             results.append(res)
-
-            # Print on completion (no interleaving during run)
             logger.info(f"pytest finished: {res.path} ({res.elapsed_s:.1f}s) rc={res.returncode}")
 
     return results
@@ -517,8 +466,7 @@ def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
 def add_licenses(path: str) -> None:
     """Recursively add missing license headers under *path*.
 
-    Ported from the former ``bin/add_license.py`` so it can run as part of
-    ``canary check``.  Skips ``third_party`` and ``TestResults`` trees.
+    Skips ``third_party`` and ``TestResults`` trees.
     """
     for dirname, dirs, files in os.walk(path):
         if dirname.endswith(("third_party", "TestResults")):
@@ -568,16 +516,7 @@ def add_rst_license(file: str) -> None:
 
 
 def update_pyproject_version(root: Path, version: str) -> None:
-    """Rewrite the ``version`` field in ``pyproject.toml``'s ``[project]`` table.
-
-    Args:
-        root: Path to the repository root containing ``pyproject.toml``.
-        version: New version string to write (e.g. ``"25.9.3"`` or ``"25.9.3.dev0"``).
-
-    Raises:
-        FileNotFoundError: If ``pyproject.toml`` does not exist.
-        ValueError: If the ``[project]`` table or ``version`` key is absent.
-    """
+    """Rewrite the ``version`` field in ``pyproject.toml``'s ``[project]`` table."""
     file = root / "pyproject.toml"
 
     if not file.exists():
@@ -628,23 +567,11 @@ def update_pyproject_version(root: Path, version: str) -> None:
 
 
 def discover_test_paths(root: Path) -> tuple[str, ...]:
-    """Return pytest paths for Canary core plus registered Canary extensions.
-
-    The repository-level ``tests`` directory is always included.
-
-    In-tree extensions (living under ``root/src/``) are discovered via
-    ``entry_point_test_candidates``.
-
-    Out-of-tree extensions are discovered by scanning every entry point in the
-    ``canary`` group via ``importlib.metadata`` / ``importlib.resources``.  If
-    the installed package contains a ``tests/`` directory with a
-    ``.canary-ext-tests`` marker file, that directory is added to the pytest
-    paths.
-    """
+    """Return pytest paths for Canary core plus registered Canary extensions."""
     import importlib.metadata as importlib_metadata
     import importlib.resources as importlib_resources
 
-    from ..hookspec import project_name
+    from _canary.hookspec import project_name
 
     root = root.resolve()
 
@@ -704,21 +631,14 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
 
 
 def canary_entry_point_modules(root: Path) -> dict[str, str]:
-    """Return ``{entry_point_name: module}`` for the ``canary`` entry-point group.
-
-    Uses the installed package metadata (the same mechanism the plugin manager
-    uses to discover plugins) rather than parsing ``pyproject.toml``.  This
-    reflects what is actually installed and avoids a hard dependency on
-    ``tomllib`` (Python 3.11+).
-    """
+    """Return ``{entry_point_name: module}`` for the ``canary`` entry-point group."""
     import importlib.metadata as importlib_metadata
 
-    from ..hookspec import project_name
+    from _canary.hookspec import project_name
 
     modules: dict[str, str] = {}
 
     for ep in importlib_metadata.entry_points(group=project_name):
-        # ``EntryPoint.module`` strips any ``:object`` attribute and extras.
         if ep.module:
             modules[str(ep.name)] = ep.module
 
@@ -726,15 +646,7 @@ def canary_entry_point_modules(root: Path) -> dict[str, str]:
 
 
 def entry_point_test_candidates(root: Path, module: str) -> tuple[Path, ...]:
-    """Return candidate test directory paths for a canary entry-point module.
-
-    Args:
-        root: Repository root directory.
-        module: Dotted module name from the entry-point (e.g. ``my_plugin.canary``).
-
-    Returns:
-        A tuple of :class:`~pathlib.Path` objects that may contain tests.
-    """
+    """Return candidate test directory paths for a canary entry-point module."""
     parts = module.split(".")
     top_package = parts[0]
 

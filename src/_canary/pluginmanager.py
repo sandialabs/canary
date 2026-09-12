@@ -23,7 +23,44 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.add_hookspecs(hookspec)
         self.register_builtins()
         self.load_setuptools_entrypoints(hookspec.project_name)
+        self._load_dev_plugin()
         return self
+
+    def _load_dev_plugin(self) -> None:
+        """Load ``dev/`` from the repository root when running an editable install.
+
+        Detection logic:
+          1. Resolve the canary package location via ``importlib.resources``.
+          2. Walk two levels up (``src/canary`` → repo root).
+          3. If a ``.git/`` directory is present there it is an editable
+             checkout.
+          4. If a ``dev/`` directory also exists there, load it as a plugin
+             package using :meth:`_import_plugin_from_directory`.
+
+        This is intentionally silent: if the conditions are not met (installed
+        release, no ``.git``, no ``dev/``) the method does nothing.
+        """
+        import importlib.resources as ir
+
+        try:
+            root_traversable = ir.files("canary").joinpath("../..")
+            root = os.path.normpath(str(root_traversable))
+        except Exception:
+            return
+
+        if not os.path.isdir(os.path.join(root, ".git")):
+            return
+
+        dev_dir = os.path.join(root, "dev")
+        if not os.path.isdir(dev_dir):
+            return
+
+        try:
+            self._import_plugin_from_directory(dev_dir)
+        except Exception as exc:
+            import warnings
+
+            warnings.warn(f"Failed to load developer plugin from {dev_dir!r}: {exc}", stacklevel=2)
 
     def register_builtins(self):
         from . import collect
