@@ -205,6 +205,11 @@ class Check(CanarySubcommand):
             ruff("format", "./dev")
             pm.done()
 
+            if os.path.isdir("./packages"):
+                pm = logger.progress_monitor(f"Formatting packages in {self.root}/packages")
+                ruff("format", "./packages")
+                pm.done()
+
     def lint_check_code(self, args: argparse.Namespace):
         """Run ``ruff check --fix`` over all source, docs, and test trees."""
         with working_dir(self.root):
@@ -237,6 +242,11 @@ class Check(CanarySubcommand):
             pm = logger.progress_monitor(f"Lint checking dev in {self.root}/dev")
             ruff_check("./dev")
             pm.done()
+
+            if os.path.isdir("./packages"):
+                pm = logger.progress_monitor(f"Lint checking packages in {self.root}/packages")
+                ruff_check("./packages")
+                pm.done()
 
     def security_check(self, args: argparse.Namespace):
         """Run bandit security scan over ``src/``."""
@@ -625,6 +635,10 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
             add(real_tests)
         except Exception as exc:
             logger.debug("Could not add tests for %s: %s", ep.name, exc)
+
+    # In-repo sub-packages: add tests from packages/ subdirectories when present.
+    for pkg_dir in sorted((root / "packages").iterdir()) if (root / "packages").is_dir() else []:
+        add(pkg_dir / "tests")
 
     logger.info("[bold]Discovered[/] %d pytest path(s): %s", len(paths), ", ".join(paths))
     return tuple(paths)

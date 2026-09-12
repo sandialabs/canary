@@ -1,0 +1,71 @@
+[project]
+name = "canary-distributed-server"
+description = "server for canary-distributed package"
+version = "0.5"
+readme = "README.md"
+dependencies = ["schema", "fastapi", "pydantic", "uvicorn", "pyyaml"]
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["ruff", "ty", "pytest", "httpx2"]
+
+[project.scripts]
+canary-dist-server = "canary_distributed_server:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.check-wheel-contents]
+# W009: Wheel contains multiple toplevel library entries
+ignore = "W009"
+
+[tool.ruff.lint.per-file-ignores]
+"src/canary_distributed/__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = "mock"
+addopts = "-ra --durations=10"
+cache_dir = ".cache/pytest"
+python_files = "*.py"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.run]
+branch = true
+omit = ["*/third_party/*"]
+source = ["_canary"]
+command_line = "-m pytest"
+
+[tool.coverage.html]
+directory = "html.cov"
+
+[[tool.mypy.overrides]]
+module = "schema"
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py313"
+line-length = 99
+exclude = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = true
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+ignore = ["E741", "F841", "E731"]
+select = ["F", "I"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+force-single-line = true
+known-first-party = ["performance_dashboard"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

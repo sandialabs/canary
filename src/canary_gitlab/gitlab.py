@@ -78,7 +78,7 @@ class repo:
             raise ValueError(f"Unrecognized protocol {protocol}")
 
     def remove_source_tree(self):
-        if self.cloned:
+        if self.cloned():
             assert self.path is not None
             shutil.rmtree(self.path)
 

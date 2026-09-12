@@ -153,10 +153,10 @@ class FluxReporterQueue:
         self._heap = [SimpleNamespace(job=job) for job in jobs]
 
     def jobs(self) -> Sequence[BaseJob]:
-        return list(self._jobs)  # type: ignore[arg-type]
+        return cast(Sequence[BaseJob], list(self._jobs))
 
     def pending(self) -> Sequence[BaseJob]:
-        return [job for job in self._jobs if job.id in self._pending_ids]  # type: ignore[misc]
+        return cast(Sequence[BaseJob], [job for job in self._jobs if job.id in self._pending_ids])
 
     def mark_submitted(self, job: FluxJob) -> None:
         self._pending_ids.discard(job.id)
