@@ -720,7 +720,7 @@ class Job(BaseJob):
                     else:
                         file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
                         self.workspace.link(asset.src, asset.dst)
-                except:
+                except Exception:
                     logger.exception("FAILED")
                     raise
 

@@ -325,7 +325,10 @@ class DistributedResourcePoolAdapter:
         return True
 
     def _current_groups(self) -> list[str] | None:
-        # FIXME: find and add the user's groups here, if/when desired.
+        # Group-based filtering is not yet implemented on the client side.
+        # When desired, resolve the calling user's OS groups here (e.g. via
+        # os.getgroups() / grp.getgrgid()) and return them as a list of
+        # strings so that group-restricted machines can be targeted.
         return None
 
 

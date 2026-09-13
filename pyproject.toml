@@ -130,16 +130,19 @@ max_supported_python = "3.14"
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
+    "src/canary_amd/tests",
     "src/canary_cdash/tests",
     "src/canary_cmake/tests",
     "src/canary_dist/tests",
+    "src/canary_flux/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
+    "src/canary_nvidia/tests",
     "src/canary_pyt/tests",
     "src/canary_vvtest/tests",
 ]
 norecursedirs = "mock data generators"
-addopts = "-ra --durations=10"
+addopts = "-ra --durations=10 --import-mode=importlib"
 cache_dir = ".cache/pytest"
 python_files = "*.py"
 filterwarnings = [ "ignore::DeprecationWarning" ]
@@ -152,9 +155,35 @@ output = "coverage.xml"
 
 [tool.coverage.run]
 branch = true
+parallel = true
+concurrency = ["multiprocessing", "thread"]
 omit = [ "*/third_party/*" ]
-source = [ "_canary" ]
-command_line = "-m pytest ./tests ./src/canary_cdash/tests ./src/canary_cmake/tests ./src/canary_dist/tests ./src/canary_gitlab/tests ./src/canary_hpc/tests ./src/canary_pyt/tests ./src/canary_vvtest/tests"
+source = [
+    "_canary",
+    "canary_amd",
+    "canary_cdash",
+    "canary_cmake",
+    "canary_dist",
+    "canary_flux",
+    "canary_gitlab",
+    "canary_hpc",
+    "canary_nvidia",
+    "canary_pyt",
+    "canary_vvtest",
+]
+command_line = """-m pytest --import-mode=importlib
+    ./tests
+    ./src/canary_amd/tests
+    ./src/canary_cdash/tests
+    ./src/canary_cmake/tests
+    ./src/canary_dist/tests
+    ./src/canary_flux/tests
+    ./src/canary_gitlab/tests
+    ./src/canary_hpc/tests
+    ./src/canary_nvidia/tests
+    ./src/canary_pyt/tests
+    ./src/canary_vvtest/tests
+    ./packages/canary-distributed-server/tests"""
 
 [tool.coverage.html]
 directory = "html.cov"

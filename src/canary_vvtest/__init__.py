@@ -261,8 +261,12 @@ def get_vvtest_attrs(job: "canary.Job") -> dict:
                     table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
+    # DEPDIRMAP maps each dependency's test name (last path component) to its
+    # execution directory, mirroring vvtest's own DEPDIRMAP semantics.
     attrs["DEPDIRS"] = [str(dep.job.workspace.dir) for dep in job.dependencies]
-    attrs["DEPDIRMAP"] = {}  # FIXME
+    attrs["DEPDIRMAP"] = {
+        dep.job.name.split("/")[-1]: str(dep.job.workspace.dir) for dep in job.dependencies
+    }
 
     attrs["exec_dir"] = str(job.workspace.dir)
     attrs["exec_root"] = str(job.workspace.root)

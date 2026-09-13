@@ -61,7 +61,7 @@ class Describe(CanarySubcommand):
         workspace = Workspace.load()
         try:
             job_or_spec = workspace.find(job=args.testspec)
-        except:
+        except Exception:
             job_or_spec = workspace.find(spec=args.testspec)
         describe_job(job_or_spec)
         return 0

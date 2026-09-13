@@ -293,6 +293,10 @@ class Check(CanarySubcommand):
                 coverage("run")
                 pm.done()
 
+                pm = logger.progress_monitor("Combining coverage data files")
+                coverage("combine")
+                pm.done()
+
                 pm = logger.progress_monitor("Creating coverage report")
                 coverage("report")
                 coverage("html")
