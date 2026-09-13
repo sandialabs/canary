@@ -9,7 +9,6 @@ import pytest
 from canary_gitlab.gitlab import api_access_required
 from canary_gitlab.gitlab import repo
 
-
 # ---------------------------------------------------------------------------
 # repo.sanitize_url
 # ---------------------------------------------------------------------------
@@ -43,7 +42,12 @@ def test_repo_init_basic(monkeypatch):
     monkeypatch.delenv("ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("CI_PROJECT_ID", raising=False)
     monkeypatch.delenv("CI_API_V4_URL", raising=False)
-    r = repo(url="https://gitlab.example.com/group/proj", access_token="tok", project_id=42, api_url="http://api")
+    r = repo(
+        url="https://gitlab.example.com/group/proj",
+        access_token="tok",  # nosec B106
+        project_id=42,
+        api_url="http://api",
+    )
     assert "gitlab.example.com/group/proj" in repr(r)
     assert r.gitlab_id == 42
 
@@ -54,12 +58,22 @@ def test_repo_init_requires_url_or_path():
 
 
 def test_repo_build_api_url_no_query():
-    r = repo(url="https://gitlab.example.com/g/p", api_url="http://api/v4", access_token="t", project_id=1)
+    r = repo(
+        url="https://gitlab.example.com/g/p",
+        api_url="http://api/v4",
+        access_token="t",  # nosec B106
+        project_id=1,
+    )
     assert r.build_api_url(path="projects/1/issues") == "http://api/v4/projects/1/issues"
 
 
 def test_repo_build_api_url_with_query():
-    r = repo(url="https://gitlab.example.com/g/p", api_url="http://api/v4", access_token="t", project_id=1)
+    r = repo(
+        url="https://gitlab.example.com/g/p",
+        api_url="http://api/v4",
+        access_token="t",  # nosec B106
+        project_id=1,
+    )
     url = r.build_api_url(path="projects/1/issues", query="state=opened")
     assert url == "http://api/v4/projects/1/issues?state=opened"
 
@@ -95,7 +109,7 @@ class _FakeRepo:
 
 
 def test_api_access_required_passes_with_all_fields():
-    obj = _FakeRepo(access_token="tok", gitlab_id=1, api_url="http://api")
+    obj = _FakeRepo(access_token="tok", gitlab_id=1, api_url="http://api")  # nosec B106
     assert obj.do_api_call() == "ok"
 
 
@@ -106,13 +120,13 @@ def test_api_access_required_raises_without_token():
 
 
 def test_api_access_required_raises_without_id():
-    obj = _FakeRepo(access_token="tok", gitlab_id=None, api_url="http://api")
+    obj = _FakeRepo(access_token="tok", gitlab_id=None, api_url="http://api")  # nosec B106
     with pytest.raises(ValueError, match="project or group id"):
         obj.do_api_call()
 
 
 def test_api_access_required_raises_without_api_url():
-    obj = _FakeRepo(access_token="tok", gitlab_id=1, api_url=None)
+    obj = _FakeRepo(access_token="tok", gitlab_id=1, api_url=None)  # nosec B106
     with pytest.raises(ValueError, match="api url"):
         obj.do_api_call()
 

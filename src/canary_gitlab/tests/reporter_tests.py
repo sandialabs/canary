@@ -6,12 +6,11 @@
 
 import pytest
 
-from canary_gitlab.reporter import MissingCIVariable
 from canary_gitlab.reporter import MergeRequest
+from canary_gitlab.reporter import MissingCIVariable
 from canary_gitlab.reporter import escape_md
 from canary_gitlab.reporter import escape_table_cell
 from canary_gitlab.reporter import group_failed_jobs
-
 
 # ---------------------------------------------------------------------------
 # escape_table_cell
@@ -100,12 +99,12 @@ def test_group_failed_jobs_empty():
 
 def test_group_failed_jobs_all_pass():
     jobs = [_FakeJob("a", success=True), _FakeJob("b", success=True)]
-    assert group_failed_jobs(jobs) == {}
+    assert group_failed_jobs(jobs) == {}  # ty: ignore[invalid-argument-type]
 
 
 def test_group_failed_jobs_single_failure():
     jobs = [_FakeJob("test1", success=False, outcome="FAILED")]
-    result = group_failed_jobs(jobs)
+    result = group_failed_jobs(jobs)  # ty: ignore[invalid-argument-type]
     assert "FAILED" in result
     assert len(result["FAILED"]) == 1
 
@@ -116,7 +115,7 @@ def test_group_failed_jobs_mixed():
         _FakeJob("b", success=False, outcome="FAILED"),
         _FakeJob("c", success=False, outcome="TIMEOUT"),
     ]
-    result = group_failed_jobs(jobs)
+    result = group_failed_jobs(jobs)  # ty: ignore[invalid-argument-type]
     assert "FAILED" in result
     assert "TIMEOUT" in result
     assert len(result["FAILED"]) == 1
@@ -128,7 +127,7 @@ def test_group_failed_jobs_groups_by_outcome():
         _FakeJob("b1", success=False, outcome="FAILED"),
         _FakeJob("b2", success=False, outcome="FAILED"),
     ]
-    result = group_failed_jobs(jobs)
+    result = group_failed_jobs(jobs)  # ty: ignore[invalid-argument-type]
     assert len(result["FAILED"]) == 2
 
 

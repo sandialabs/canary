@@ -13,7 +13,6 @@ from canary_cdash.cdash_html_summary import _html_summary
 from canary_cdash.cdash_html_summary import cdash_summary
 from canary_cdash.cdash_html_summary import groupby_buildgroup
 
-
 # ---------------------------------------------------------------------------
 # groupby_buildgroup
 # ---------------------------------------------------------------------------
@@ -138,7 +137,14 @@ def test_html_summary_hascompilation_true():
 def test_html_summary_hastest_true():
     build = _make_build(
         hastest=True,
-        test={"notrun": 0, "fail": 2, "pass": 10, "fail_timeout": 1, "fail_diff": 0, "fail_fail": 1},
+        test={
+            "notrun": 0,
+            "fail": 2,
+            "pass": 10,  # nosec B105
+            "fail_timeout": 1,
+            "fail_diff": 0,
+            "fail_fail": 1,
+        },
     )
     html = _html_summary("http://cdash", "MyProject", {"N": [build]})
     assert "viewTest.php" in html

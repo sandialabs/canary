@@ -4,11 +4,8 @@
 
 """Tests for canary_cdash.gitlab_issue_generator — pure functions and mock-repo paths."""
 
-import datetime
-
 import pytest
 
-from canary_cdash.gitlab_issue_generator import MissingCIVariable
 from canary_cdash.gitlab_issue_generator import close_test_issues_missing_from_cdash
 from canary_cdash.gitlab_issue_generator import create_new_issue
 from canary_cdash.gitlab_issue_generator import create_or_update_test_issues
@@ -17,9 +14,7 @@ from canary_cdash.gitlab_issue_generator import generate_test_issue
 from canary_cdash.gitlab_issue_generator import groupby_status_and_testname
 from canary_cdash.gitlab_issue_generator import is_test_issue
 from canary_cdash.gitlab_issue_generator import site_label
-from canary_cdash.gitlab_issue_generator import test_status_label
-from canary_cdash.gitlab_issue_generator import update_existing_issue
-
+from canary_cdash.gitlab_issue_generator import test_status_label as make_status_label
 
 # ---------------------------------------------------------------------------
 # test_status_label / site_label
@@ -32,12 +27,12 @@ from canary_cdash.gitlab_issue_generator import update_existing_issue
         ("Diffed", "test::diffed"),
         ("Failed", "test::failed"),
         ("Timeout", "test::timeout"),
-        ("Unknown", "test::failed"),   # fallback
+        ("Unknown", "test::failed"),  # fallback
         ("whatever", "test::failed"),  # fallback
     ],
 )
 def test_test_status_label(status, expected):
-    assert test_status_label(status) == expected
+    assert make_status_label(status) == expected
 
 
 def test_site_label():
@@ -190,27 +185,35 @@ def test_generate_test_issue_sites_list():
 
 
 def test_find_existing_issue_by_title():
-    new_issue = {"title": "mytest: Failed", "legacy_title": "TEST FAILED: mytest", "fail_reason": "Failed"}
-    existing = [
-        {"title": "mytest: Failed", "labels": ["test::failed"], "iid": 1},
-    ]
+    new_issue = {
+        "title": "mytest: Failed",
+        "legacy_title": "TEST FAILED: mytest",
+        "fail_reason": "Failed",
+    }
+    existing = [{"title": "mytest: Failed", "labels": ["test::failed"], "iid": 1}]
     result = find_existing_issue(new_issue, existing)
     assert result is not None
     assert result["iid"] == 1
 
 
 def test_find_existing_issue_by_legacy_title():
-    new_issue = {"title": "mytest: Failed", "legacy_title": "TEST FAILED: mytest", "fail_reason": "Failed"}
-    existing = [
-        {"title": "TEST FAILED: mytest", "labels": ["test::failed"], "iid": 2},
-    ]
+    new_issue = {
+        "title": "mytest: Failed",
+        "legacy_title": "TEST FAILED: mytest",
+        "fail_reason": "Failed",
+    }
+    existing = [{"title": "TEST FAILED: mytest", "labels": ["test::failed"], "iid": 2}]
     result = find_existing_issue(new_issue, existing)
     assert result is not None
     assert result["iid"] == 2
 
 
 def test_find_existing_issue_not_found():
-    new_issue = {"title": "mytest: Failed", "legacy_title": "TEST FAILED: mytest", "fail_reason": "Failed"}
+    new_issue = {
+        "title": "mytest: Failed",
+        "legacy_title": "TEST FAILED: mytest",
+        "fail_reason": "Failed",
+    }
     existing = [{"title": "othertest: Failed", "labels": ["test::failed"], "iid": 99}]
     result = find_existing_issue(new_issue, existing)
     assert result is None
@@ -218,7 +221,11 @@ def test_find_existing_issue_not_found():
 
 def test_find_existing_issue_label_mismatch():
     # Label doesn't match fail_reason → not found
-    new_issue = {"title": "mytest: Timeout", "legacy_title": "TEST TIMEOUT: mytest", "fail_reason": "Timeout"}
+    new_issue = {
+        "title": "mytest: Timeout",
+        "legacy_title": "TEST TIMEOUT: mytest",
+        "fail_reason": "Timeout",
+    }
     existing = [{"title": "mytest: Timeout", "labels": ["test::failed"], "iid": 5}]
     result = find_existing_issue(new_issue, existing)
     assert result is None
@@ -239,7 +246,14 @@ class MockRepo:
         return self._issues
 
     def new_issue(self, data):
-        self._issues.append({**data, "iid": len(self._issues) + 100, "state": "opened", "labels": data.get("labels", "").split(",")})
+        self._issues.append(
+            {
+                **data,
+                "iid": len(self._issues) + 100,
+                "state": "opened",
+                "labels": data.get("labels", "").split(","),
+            }
+        )
         self.created.append(data)
         return len(self._issues) + 100
 
@@ -306,9 +320,7 @@ def test_create_or_update_updates_when_existing():
 
 
 def test_close_missing_closes_open_issues_not_in_current():
-    existing = [
-        {"title": "stale: Failed", "labels": ["test::failed"], "iid": 1, "state": "opened"},
-    ]
+    existing = [{"title": "stale: Failed", "labels": ["test::failed"], "iid": 1, "state": "opened"}]
     repo = MockRepo(existing_issues=existing)
     current_issues = []  # nothing current → stale should be closed
     close_test_issues_missing_from_cdash(repo, current_issues)
@@ -317,9 +329,7 @@ def test_close_missing_closes_open_issues_not_in_current():
 
 
 def test_close_missing_does_not_close_already_closed():
-    existing = [
-        {"title": "old: Failed", "labels": ["test::failed"], "iid": 2, "state": "closed"},
-    ]
+    existing = [{"title": "old: Failed", "labels": ["test::failed"], "iid": 2, "state": "closed"}]
     repo = MockRepo(existing_issues=existing)
     close_test_issues_missing_from_cdash(repo, [])
     assert len(repo.edited) == 0
@@ -327,7 +337,7 @@ def test_close_missing_does_not_close_already_closed():
 
 def test_close_missing_does_not_close_current_issues():
     existing = [
-        {"title": "current: Failed", "labels": ["test::failed"], "iid": 3, "state": "opened"},
+        {"title": "current: Failed", "labels": ["test::failed"], "iid": 3, "state": "opened"}
     ]
     repo = MockRepo(existing_issues=existing)
     current = [{"title": "current: Failed", "legacy_title": "TEST FAILED: current"}]
