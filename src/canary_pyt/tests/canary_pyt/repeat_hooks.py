@@ -116,7 +116,7 @@ def test_repeat_until_pass_reruns_failed_case_until_it_passes(tmp_path):
     write(root / "flaky.pyt", _counter_case(counter, fail_while_lt=2))
 
     workspace, specs = create_workspace(root)
-    session = run_specs(workspace, specs, options={"repeat_until_pass": 3})
+    session = run_specs(workspace, specs, options={"repeat_until_pass": 3})  # nosec B105
     jobs = jobs_by_name(workspace)
 
     # The retry hook must have re-run the case a second time and it must
@@ -135,7 +135,7 @@ def test_repeat_until_pass_gives_up_after_n_attempts(tmp_path):
     write(root / "always.pyt", _counter_case(counter, fail_while_lt=5))
 
     workspace, specs = create_workspace(root)
-    session = run_specs(workspace, specs, options={"repeat_until_pass": 2})
+    session = run_specs(workspace, specs, options={"repeat_until_pass": 2})  # nosec B105
     jobs = jobs_by_name(workspace)
 
     # Initial run + 2 retries == 3 executions, then it gives up still-failed.
@@ -153,7 +153,7 @@ def test_repeat_until_pass_does_not_rerun_a_passing_case(tmp_path):
     write(root / "good.pyt", _counter_case(counter, fail_while_lt=1))
 
     workspace, specs = create_workspace(root)
-    session = run_specs(workspace, specs, options={"repeat_until_pass": 3})
+    session = run_specs(workspace, specs, options={"repeat_until_pass": 3})  # nosec B105
     jobs = jobs_by_name(workspace)
 
     assert session.returncode == 0

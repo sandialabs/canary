@@ -402,7 +402,7 @@ def test_status_build_summary_all_pass():
 
 
 def test_describe(capsys):
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
 
     with canary.config.override():
         args = argparse.Namespace(on_options=None, testspec=os.path.join(data_dir, "empire.pyt"))
@@ -419,9 +419,10 @@ def test_describe(capsys):
 
 
 def test_find():
-    d = os.path.dirname(__file__)
-    root = os.path.abspath(os.path.join(d, ".."))
-    examples = os.path.join(root, "examples")
+    from importlib import resources
+
+    examples = str(resources.files("canary").joinpath("docs/examples"))
+    root = os.path.dirname(examples)
 
     with working_dir(root), canary.config.override():
         args = argparse.Namespace(
@@ -458,7 +459,9 @@ def test_analyze(setup):
 
 
 def test_tree():
-    examples = os.path.join(os.path.dirname(__file__), "../examples")
+    from importlib import resources
+
+    examples = str(resources.files("canary").joinpath("docs/examples"))
 
     args = argparse.Namespace(a=False, d=False, exclude_results=False, directory=examples)
     assert Tree().execute(args) == 0

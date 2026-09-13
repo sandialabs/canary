@@ -446,7 +446,7 @@ def test_analyze_generators(tmp_path):
     root = tmp_path / "analyze"
     root.mkdir()
 
-    generator_dir = (Path(__file__).parent / "data/generators").resolve()
+    generator_dir = (data_dir() / "generators").resolve()
     scanpaths = {str(generator_dir): ["analyze.pyt", "analyze_alt_flag.pyt", "analyze_script.pyt"]}
 
     run_specs(root, scanpaths=scanpaths, expected_returncode=0)
@@ -838,7 +838,7 @@ if __name__ == "__main__":
     assert spec.attributes["answer"] == 42
     assert spec.preload == "preload.sh"
     assert spec.modules == ["fake-module"]
-    assert spec.environment["MODULEPATH"].split(":")[0] == "/tmp/canary-modulefiles"
+    assert spec.environment["MODULEPATH"].split(":")[0] == "/tmp/canary-modulefiles"  # nosec B108
 
     artifacts = {(a.pattern, a.when) for a in spec.artifacts}
     assert ("success.txt", "on_success") in artifacts
