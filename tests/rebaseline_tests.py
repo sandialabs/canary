@@ -4,14 +4,10 @@
 
 """Tests for _canary.subcommands.rebaseline — iter_lockfiles and filter_jobs_by_keywords."""
 
-import json
-from pathlib import Path
-
 import pytest
 
 from _canary.subcommands.rebaseline import filter_jobs_by_keywords
 from _canary.subcommands.rebaseline import iter_lockfiles
-
 
 # ---------------------------------------------------------------------------
 # iter_lockfiles

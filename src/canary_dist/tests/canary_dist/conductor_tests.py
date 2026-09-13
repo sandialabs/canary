@@ -8,9 +8,8 @@ import argparse
 
 import pytest
 
-from canary_dist.conductor import export_splitter
 from canary_dist.conductor import DistributedPoolConductor
-
+from canary_dist.conductor import export_splitter
 
 # ---------------------------------------------------------------------------
 # export_splitter

@@ -13,7 +13,6 @@ from _canary.util.keyboard import disable_keyboard_query
 from _canary.util.keyboard import get_key
 from _canary.util.keyboard import key_mapping
 
-
 # ---------------------------------------------------------------------------
 # Helpers — reset global state between tests
 # ---------------------------------------------------------------------------

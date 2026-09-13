@@ -16,7 +16,6 @@ from _canary.util.misc import digits
 from _canary.util.misc import ns2dict
 from _canary.util.misc import partition
 
-
 # ---------------------------------------------------------------------------
 # boolean
 # ---------------------------------------------------------------------------
@@ -131,17 +130,7 @@ def test_dedup_strings():
 
 
 @pytest.mark.parametrize(
-    "x, expected",
-    [
-        (0, 1),
-        (1, 1),
-        (9, 1),
-        (10, 2),
-        (99, 2),
-        (100, 3),
-        (999, 3),
-        (1000, 4),
-    ],
+    "x, expected", [(0, 1), (1, 1), (9, 1), (10, 2), (99, 2), (100, 3), (999, 3), (1000, 4)]
 )
 def test_digits(x, expected):
     assert digits(x) == expected

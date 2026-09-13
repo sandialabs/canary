@@ -6,8 +6,6 @@
 
 import importlib.metadata
 
-import pytest
-
 from _canary.util.entry_points import get_entry_points
 
 

@@ -4,8 +4,6 @@
 
 """Tests for canary_cmake.ctest — pure parser functions (no cmake required)."""
 
-import os
-
 import pytest
 
 from canary_cmake.ctest import apply_env_mods
@@ -15,7 +13,6 @@ from canary_cmake.ctest import parse_environment
 from canary_cmake.ctest import parse_environment_modification
 from canary_cmake.ctest import parse_np
 from canary_cmake.ctest import parse_resource_groups
-
 
 # ---------------------------------------------------------------------------
 # parse_np
@@ -171,10 +168,7 @@ def test_parse_environment_modification_path_append():
 
 
 def test_parse_environment_modification_multiple():
-    items = [
-        "VAR_A=set:val_a",
-        "VAR_B=string_append:suffix",
-    ]
+    items = ["VAR_A=set:val_a", "VAR_B=string_append:suffix"]
     result = parse_environment_modification(items)
     assert len(result) == 2
 
@@ -196,23 +190,14 @@ def test_parse_environment_modification_skips_non_matching():
 
 
 def test_parse_resource_groups_basic():
-    rg = [
-        {"requirements": [{".type": "gpus", "slots": 1}]},
-    ]
+    rg = [{"requirements": [{".type": "gpus", "slots": 1}]}]
     result = parse_resource_groups(rg)
     assert len(result) == 1
     assert result[0] == [{"type": "gpus", "slots": 1}]
 
 
 def test_parse_resource_groups_multiple_requirements():
-    rg = [
-        {
-            "requirements": [
-                {".type": "gpus", "slots": 1},
-                {".type": "cpus", "slots": 4},
-            ]
-        }
-    ]
+    rg = [{"requirements": [{".type": "gpus", "slots": 1}, {".type": "cpus", "slots": 4}]}]
     result = parse_resource_groups(rg)
     assert len(result[0]) == 2
 
@@ -260,10 +245,7 @@ def test_infer_project_source_dir_found(tmp_path):
     build_dir = tmp_path / "build"
     build_dir.mkdir()
     cache = build_dir / "CMakeCache.txt"
-    cache.write_text(
-        "CMAKE_PROJECT_NAME:STATIC=MyProj\n"
-        "MyProj_SOURCE_DIR:STATIC=/path/to/source\n"
-    )
+    cache.write_text("CMAKE_PROJECT_NAME:STATIC=MyProj\nMyProj_SOURCE_DIR:STATIC=/path/to/source\n")
     result = infer_project_source_dir(str(build_dir))
     assert result == "/path/to/source"
 

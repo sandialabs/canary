@@ -11,10 +11,8 @@ import pytest
 
 import _canary.util.rprobe as rprobe_mod
 from _canary.util.rprobe import cpu_count
-from _canary.util.rprobe import read_cpuinfo
 from _canary.util.rprobe import read_lscpu
 from _canary.util.rprobe import read_sysctl
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,18 +73,14 @@ processor\t: 3
 
 def test_read_lscpu_parses_cores_times_sockets(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda exe: f"/usr/bin/{exe}")
-    monkeypatch.setattr(
-        subprocess, "check_output", lambda args, encoding: LSCPU_SAMPLE
-    )
+    monkeypatch.setattr(subprocess, "check_output", lambda args, encoding: LSCPU_SAMPLE)
     result = read_lscpu()
     assert result == 8  # 4 cores/socket * 2 sockets
 
 
 def test_read_lscpu_single_socket(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda exe: f"/usr/bin/{exe}")
-    monkeypatch.setattr(
-        subprocess, "check_output", lambda args, encoding: LSCPU_SINGLE_SOCKET
-    )
+    monkeypatch.setattr(subprocess, "check_output", lambda args, encoding: LSCPU_SINGLE_SOCKET)
     result = read_lscpu()
     assert result == 6
 
@@ -108,9 +102,7 @@ def test_read_lscpu_returns_none_on_error(monkeypatch):
 
 def test_read_lscpu_returns_none_when_missing_fields(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda exe: "/usr/bin/lscpu")
-    monkeypatch.setattr(
-        subprocess, "check_output", lambda args, encoding: "Architecture: x86_64\n"
-    )
+    monkeypatch.setattr(subprocess, "check_output", lambda args, encoding: "Architecture: x86_64\n")
     assert read_lscpu() is None
 
 
@@ -123,10 +115,13 @@ def test_read_cpuinfo_with_hyperthreading(tmp_path, monkeypatch):
     cpuinfo = tmp_path / "cpuinfo"
     cpuinfo.write_text(CPUINFO_HT)
     import builtins
+
     import _canary.util.rprobe as rp
 
     original_exists = rp.os.path.exists
-    monkeypatch.setattr(rp.os.path, "exists", lambda p: True if p == "/proc/cpuinfo" else original_exists(p))
+    monkeypatch.setattr(
+        rp.os.path, "exists", lambda p: True if p == "/proc/cpuinfo" else original_exists(p)
+    )
 
     real_open = builtins.open
 
@@ -146,11 +141,14 @@ def test_read_cpuinfo_no_hyperthreading(tmp_path, monkeypatch):
     cpuinfo = tmp_path / "cpuinfo"
     cpuinfo.write_text(CPUINFO_NO_HT)
     import builtins
+
     import _canary.util.rprobe as rp
 
     original_exists = rp.os.path.exists
 
-    monkeypatch.setattr(rp.os.path, "exists", lambda p: True if p == "/proc/cpuinfo" else original_exists(p))
+    monkeypatch.setattr(
+        rp.os.path, "exists", lambda p: True if p == "/proc/cpuinfo" else original_exists(p)
+    )
 
     def fake_open(path, *args, **kwargs):
         if path == "/proc/cpuinfo":
@@ -177,9 +175,7 @@ def test_read_cpuinfo_returns_none_when_file_absent(monkeypatch):
 
 def test_read_sysctl_parses_output(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda exe: f"/usr/sbin/{exe}")
-    monkeypatch.setattr(
-        subprocess, "check_output", lambda args, encoding: "12\n"
-    )
+    monkeypatch.setattr(subprocess, "check_output", lambda args, encoding: "12\n")
     result = read_sysctl()
     assert result == 12
 

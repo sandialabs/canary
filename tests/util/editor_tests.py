@@ -4,14 +4,10 @@
 
 """Tests for _canary.util.editor — text editor finder/invoker."""
 
-import os
-
 import pytest
 
 from _canary.util.editor import _find_exe_from_env_var
 from _canary.util.editor import editor
-from _canary.util.filesystem import which
-
 
 # ---------------------------------------------------------------------------
 # _find_exe_from_env_var

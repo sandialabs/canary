@@ -4,7 +4,6 @@
 
 """Tests for canary_cdash.interface — pure utility functions and api_filters."""
 
-import hashlib
 import os
 import xml.dom.minidom as dom
 
@@ -22,7 +21,6 @@ from canary_cdash.interface import no_proxy
 from canary_cdash.interface import normalize_cdash_status
 from canary_cdash.interface import server
 from canary_cdash.interface import urlescape
-
 
 # ---------------------------------------------------------------------------
 # api_filters
@@ -258,7 +256,7 @@ def test_find_build_type_non_dict_configure():
         ("64", "does not contain"),
         ("65", "endswith"),
         ("99", "contains"),  # fallback
-        (41, "equal"),       # int input via str()
+        (41, "equal"),  # int input via str()
     ],
 )
 def test_comparison_from_code(code, expected):
@@ -313,12 +311,7 @@ def test_legacy_filters_match_no_filters():
 
 def test_legacy_filters_match_single_and():
     row = {"status": "Failed"}
-    filters = {
-        "filtercount": 1,
-        "field1": "status",
-        "comparison1": "is",
-        "value1": "Failed",
-    }
+    filters = {"filtercount": 1, "field1": "status", "comparison1": "is", "value1": "Failed"}
     assert legacy_filters_match(row, filters) is True
 
 
@@ -445,10 +438,7 @@ def test_normalize_index_build_minimal():
 
 def test_normalize_index_build_sets_has_flags():
     s = server("http://cdash.example.com", "MyProject")
-    build = {
-        "buildname": "b",
-        "configure": {"command": "", "error": 0, "warning": 0},
-    }
+    build = {"buildname": "b", "configure": {"command": "", "error": 0, "warning": 0}}
     group = {"name": "N", "unixtimestamp": 0}
     result = s.normalize_index_build(build, group)
     assert result["hasconfigure"] is True
@@ -465,10 +455,7 @@ def test_normalize_index_build_aliases_hascompilation_hasbuild():
 
 def test_normalize_index_build_sets_build_type():
     s = server("http://cdash.example.com", "P")
-    build = {
-        "buildname": "b",
-        "configure": {"command": "-DCMAKE_BUILD_TYPE=Debug"},
-    }
+    build = {"buildname": "b", "configure": {"command": "-DCMAKE_BUILD_TYPE=Debug"}}
     group = {"name": "N", "unixtimestamp": 0}
     result = s.normalize_index_build(build, group)
     assert result["build_type"] == "Debug"

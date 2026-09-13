@@ -4,17 +4,10 @@
 
 """Tests for _canary.hooks — alias expansion, html report, summary formatters."""
 
-import io
-import os
-
-import pytest
-
-import _canary.config as config_mod
 from _canary.hooks import generate_html_report
 from _canary.hooks import get_canary_prefix
 from _canary.hooks import job_finish_summary
 from _canary.hooks import job_start_summary
-
 
 # ---------------------------------------------------------------------------
 # get_canary_prefix
@@ -106,10 +99,7 @@ def test_generate_html_report_contains_table_headers():
 
 
 def test_generate_html_report_multiple_status_groups():
-    jobs = [
-        _FakeJob("pass_test", "Pass", "PASSED"),
-        _FakeJob("fail_test", "Fail", "FAILED"),
-    ]
+    jobs = [_FakeJob("pass_test", "Pass", "PASSED"), _FakeJob("fail_test", "Fail", "FAILED")]
     session = _FakeSession(jobs)
     html = generate_html_report(session)
     assert "pass_test" in html
@@ -145,6 +135,7 @@ def test_job_start_summary_contains_job_id(monkeypatch):
     monkeypatch.delenv("GITLAB_CI", raising=False)
     # Ensure logging level is INFO so the summary is generated
     from _canary.util import logging as clog
+
     monkeypatch.setattr(clog, "get_level", lambda: clog.INFO)
     job = _SummaryJob(jid="abcdef1234", name="my.test")
     result = job_start_summary(job)
@@ -155,6 +146,7 @@ def test_job_start_summary_contains_job_id(monkeypatch):
 def test_job_start_summary_contains_timestamp_in_ci(monkeypatch):
     monkeypatch.setenv("GITLAB_CI", "true")
     from _canary.util import logging as clog
+
     monkeypatch.setattr(clog, "get_level", lambda: clog.INFO)
     job = _SummaryJob()
     result = job_start_summary(job)
@@ -165,6 +157,7 @@ def test_job_start_summary_contains_timestamp_in_ci(monkeypatch):
 def test_job_start_summary_empty_when_log_level_high(monkeypatch):
     monkeypatch.delenv("GITLAB_CI", raising=False)
     from _canary.util import logging as clog
+
     monkeypatch.setattr(clog, "get_level", lambda: clog.WARNING)
     job = _SummaryJob()
     assert job_start_summary(job) == ""
@@ -173,16 +166,18 @@ def test_job_start_summary_empty_when_log_level_high(monkeypatch):
 def test_job_finish_summary_contains_attempt(monkeypatch):
     monkeypatch.delenv("GITLAB_CI", raising=False)
     from _canary.util import logging as clog
+
     monkeypatch.setattr(clog, "get_level", lambda: clog.INFO)
     job = _SummaryJob(jid="abcdef1234", name="my.test")
     result = job_finish_summary(job, attempt=2)
-    assert "attempt 3" in result   # attempt+1
+    assert "attempt 3" in result  # attempt+1
     assert "abcdef1" in result
 
 
 def test_job_finish_summary_empty_when_log_level_high(monkeypatch):
     monkeypatch.delenv("GITLAB_CI", raising=False)
     from _canary.util import logging as clog
+
     monkeypatch.setattr(clog, "get_level", lambda: clog.WARNING)
     job = _SummaryJob()
     assert job_finish_summary(job, attempt=0) == ""
@@ -196,8 +191,9 @@ def test_job_finish_summary_empty_when_log_level_high(monkeypatch):
 def test_alias_expansion_no_aliases():
     """With no aliases configured, parse_args is called directly."""
     import argparse
-    from _canary.hooks import canary_cmdline_parse
+
     import _canary.config
+    from _canary.hooks import canary_cmdline_parse
 
     with _canary.config.override():
         parser = argparse.ArgumentParser()
@@ -210,8 +206,9 @@ def test_alias_expansion_no_aliases():
 def test_alias_expansion_with_alias(monkeypatch):
     """Alias is expanded before parsing."""
     import argparse
-    from _canary.hooks import canary_cmdline_parse
+
     import _canary.config
+    from _canary.hooks import canary_cmdline_parse
 
     with _canary.config.override() as cfg:
         cfg.set("aliases", {"r": "run"})
@@ -225,8 +222,9 @@ def test_alias_expansion_with_alias(monkeypatch):
 def test_alias_expansion_with_dollar_at(monkeypatch):
     """$@ passes remaining args into expansion."""
     import argparse
-    from _canary.hooks import canary_cmdline_parse
+
     import _canary.config
+    from _canary.hooks import canary_cmdline_parse
 
     with _canary.config.override() as cfg:
         cfg.set("aliases", {"rw": "run $@"})

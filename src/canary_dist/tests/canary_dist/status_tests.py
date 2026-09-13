@@ -9,13 +9,11 @@ import sys
 
 import pytest
 
-import canary_dist.status as status_mod
 from canary_dist.status import color
 from canary_dist.status import green
 from canary_dist.status import print_resource_pool_status
 from canary_dist.status import red
 from canary_dist.status import yellow
-
 
 # ---------------------------------------------------------------------------
 # color helpers
@@ -60,13 +58,8 @@ SAMPLE_DATA = {
             "hostname": "node1",
             "tags": ["gpu"],
             "resources": {
-                "cpus": [
-                    {"id": "cpu0", "slots": 4},
-                    {"id": "cpu1", "slots": 0},
-                ],
-                "gpus": [
-                    {"id": "gpu0", "slots": 1},
-                ],
+                "cpus": [{"id": "cpu0", "slots": 4}, {"id": "cpu1", "slots": 0}],
+                "gpus": [{"id": "gpu0", "slots": 1}],
             },
         }
     ]
@@ -135,12 +128,7 @@ def test_verbose_false_hides_resource_ids(buf):
 def test_groups_printed_when_present(buf):
     data = {
         "machines": [
-            {
-                "hostname": "n1",
-                "tags": [],
-                "groups": ["team-a", "team-b"],
-                "resources": {},
-            }
+            {"hostname": "n1", "tags": [], "groups": ["team-a", "team-b"], "resources": {}}
         ]
     }
     print_resource_pool_status(data, file=buf)
@@ -149,11 +137,7 @@ def test_groups_printed_when_present(buf):
 
 
 def test_groups_omitted_when_absent(buf):
-    data = {
-        "machines": [
-            {"hostname": "n1", "tags": [], "resources": {}}
-        ]
-    }
+    data = {"machines": [{"hostname": "n1", "tags": [], "resources": {}}]}
     print_resource_pool_status(data, file=buf)
     assert "groups:" not in buf.getvalue()
 
@@ -162,13 +146,7 @@ def test_availability_percentage(buf):
     # 4 slots, 4 available → 100%
     data = {
         "machines": [
-            {
-                "hostname": "full",
-                "tags": [],
-                "resources": {
-                    "cpus": [{"id": "c0", "slots": 4}]
-                },
-            }
+            {"hostname": "full", "tags": [], "resources": {"cpus": [{"id": "c0", "slots": 4}]}}
         ]
     }
     print_resource_pool_status(data, file=buf)
@@ -178,13 +156,7 @@ def test_availability_percentage(buf):
 def test_zero_available_percentage(buf):
     data = {
         "machines": [
-            {
-                "hostname": "busy",
-                "tags": [],
-                "resources": {
-                    "cpus": [{"id": "c0", "slots": 0}]
-                },
-            }
+            {"hostname": "busy", "tags": [], "resources": {"cpus": [{"id": "c0", "slots": 0}]}}
         ]
     }
     print_resource_pool_status(data, file=buf)

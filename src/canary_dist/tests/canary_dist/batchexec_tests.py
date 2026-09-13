@@ -6,10 +6,7 @@
 
 import os
 
-import pytest
-
 from canary_dist.batchexec import HPCConnectDistRunner
-
 
 # ---------------------------------------------------------------------------
 # filtered_env
@@ -58,5 +55,6 @@ def test_filtered_env_returns_all_non_filtered(monkeypatch):
 
 def test_filtered_env_is_generator():
     import types
+
     result = HPCConnectDistRunner.filtered_env()
     assert isinstance(result, types.GeneratorType)
