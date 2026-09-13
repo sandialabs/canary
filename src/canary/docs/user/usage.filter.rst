@@ -94,3 +94,51 @@ A test can use the ``enable`` directive to limit the platforms that will run the
    ...
 
 will only run if the platform name is ``Darwin``. Expressions are allowed as the ``platform`` attribute value, such as ``when="platforms='Darwin or Linux'"``, or ``when="platforms='not Darwin'"``.
+
+.. _filter-owner:
+
+Filter by owner
+---------------
+
+Use ``--owner`` to run only tests attributed to a specific owner or set of owners.
+Owners are declared in test files using the ``canary.directives.owners`` directive:
+
+.. code-block:: python
+
+   canary.directives.owners("alice", "bob")
+
+Filter on the command line:
+
+.. code-block:: console
+
+   canary run --owner alice .
+   canary run --owner alice --owner bob .
+
+.. _filter-regex:
+
+Filter by regular expression
+-----------------------------
+
+Use ``--regex`` to filter tests whose name, full name, or file path matches a
+regular expression pattern:
+
+.. code-block:: console
+
+   canary run --regex "test_.*" .
+   canary run --regex "integration/.*" .
+   canary run --regex "(smoke|regression)_test" .
+
+The pattern is matched against the job name, full name, and file path.
+
+.. _filter-id:
+
+Filter by job ID
+-----------------
+
+Pass one or more job IDs directly to ``canary run`` to execute specific jobs by
+their SHA256-based identifier:
+
+.. code-block:: console
+
+   canary run a1b2c3d4e5f6
+   canary run job1_id job2_id

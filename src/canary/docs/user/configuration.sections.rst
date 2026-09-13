@@ -79,6 +79,30 @@ workspace
    workspace:
      view: TestResults
 
+.. _configuration-workspace-view:
+
+Workspace view options
+~~~~~~~~~~~~~~~~~~~~~~
+
+The view controls how ``TestResults/`` is populated after each run:
+
+.. code-block:: yaml
+
+   workspace:
+     view:
+       name: TestResults    # Directory name for the results view
+       mode: symlink        # How result files are placed: symlink, hardlink, or copy
+       when: always         # When to update the view: always, never, or on_failure
+       only: all            # Which results to include: all, failed, or passed
+
+- ``name`` — the directory name for the results view (default: ``TestResults``)
+- ``mode`` — ``symlink`` (default, fastest), ``hardlink`` (avoids broken links on
+  delete), or ``copy`` (full copy, safe for archiving)
+- ``when`` — ``always`` (default), ``never`` (disable view creation), or
+  ``on_failure`` (only write failed results)
+- ``only`` — ``all`` (default), ``failed`` (write only failed job results), or
+  ``passed`` (write only passing job results)
+
 
 run
 ---

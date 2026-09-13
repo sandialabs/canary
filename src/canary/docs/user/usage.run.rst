@@ -104,3 +104,88 @@ and pass it to ``canary run``:
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}]
    :script: [{"args": "canary run -f tests.json", "cwd": "examples"}]
+
+Additional run options
+-----------------------
+
+Allow an empty test set
+~~~~~~~~~~~~~~~~~~~~~~~
+
+By default ``canary run`` exits with code 7 if no tests match the given criteria.
+Pass ``--empty-ok`` to treat an empty match as a normal (zero-exit) result:
+
+.. code-block:: console
+
+   canary run --empty-ok -k "nonexistent_keyword" .
+
+Stop at the first failure
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``--fail-fast`` to stop the session as soon as any job fails:
+
+.. code-block:: console
+
+   canary run --fail-fast .
+
+This is useful during development for fast feedback when a failure early in the
+dependency graph would make subsequent failures meaningless.
+
+Pass arguments to test scripts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Arguments placed after ``--`` on the command line are forwarded to every test
+script that is executed:
+
+.. code-block:: console
+
+   canary run . -- --verbose --debug-level=2
+
+Clean work directories before running
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``-w`` to remove and recreate each job's execution directory before running,
+ensuring a completely clean environment:
+
+.. code-block:: console
+
+   canary run -w .
+
+Run from view paths
+~~~~~~~~~~~~~~~~~~~~
+
+A path inside the ``TestResults/`` view can be passed directly to ``canary run``
+to re-execute only the jobs whose results live at that location:
+
+.. code-block:: console
+
+   canary run ./TestResults/path/to/subdirectory/
+
+Run configuration summary
+--------------------------
+
+.. list-table:: Common ``canary run`` options
+   :widths: 30 70
+   :header-rows: 1
+
+   * - Option
+     - Purpose
+   * - ``--only {all,failed,not_pass,not_run}``
+     - Rerun strategy (see :ref:`usage-rerun`)
+   * - ``--empty-ok``
+     - Allow empty test set (no error on zero matches)
+   * - ``--fail-fast``
+     - Stop at first job failure
+   * - ``--workers N``
+     - Limit concurrent workers
+   * - ``--timeout session=T``
+     - Limit total session duration
+   * - ``--timeout default=T``
+     - Set default per-job timeout
+   * - ``-w``
+     - Clean work directories before running
+   * - ``--``
+     - Pass remaining arguments to test scripts
+   * - ``-f FILE``
+     - Read test paths from a JSON/YAML file
+   * - ``-k EXPR``
+     - Filter by keyword expression

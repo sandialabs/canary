@@ -22,3 +22,21 @@ To set environment variables do
 .. note::
 
    Configuration settings set on the command line take precedence over environment configuration settings.
+
+Persisting configuration with ``canary config set``
+------------------------------------------------------
+
+To write a setting permanently to the local workspace configuration or the global
+user configuration, use ``canary config set``:
+
+.. code-block:: console
+
+   # Write to .canary/config.yaml (workspace-local)
+   canary config set --local run:timeout:default 600.0
+
+   # Write to ~/.config/canary/config.yaml (user-global)
+   canary config set --global plugins "[canary_hpc]"
+
+The ``--local`` flag writes to the workspace's ``.canary/config.yaml``; ``--global``
+writes to the user-level ``~/.config/canary/config.yaml``.  Both flags require a
+``KEY VALUE`` pair where the key uses colon-separated YAML path notation.

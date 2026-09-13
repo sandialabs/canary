@@ -44,3 +44,33 @@ Optionally, a subdirectory of the workspace view argument can be passed to ``can
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./status || true", "cwd": "examples"}]
    :script: [{"args": "canary run $(canary location pass)", "cwd": "examples"}]
+
+Rerun strategies with ``--only``
+---------------------------------
+
+The ``--only`` option provides explicit control over which jobs from a previous
+session are included in the new run:
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Strategy
+     - Behaviour
+   * - ``not_pass`` *(default)*
+     - Run jobs that did not pass in the previous session (failed, diffed, timed
+       out, or never ran)
+   * - ``all``
+     - Run all jobs regardless of previous status
+   * - ``failed``
+     - Run only jobs that failed in the previous session
+   * - ``not_run``
+     - Run only jobs that were not executed in the previous session
+
+Examples:
+
+.. code-block:: console
+
+   canary run --only all .
+   canary run --only failed .
+   canary run --only not_run .

@@ -175,3 +175,72 @@ Additionally, existing environment variables having the placeholders ``%(<name>_
 .. [2] ``canary``\ 's resource pool specification is a generalization of `ctest's <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation>`_.
 .. [3] The CPU IDs are ``canary``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.
 .. [4] ``canary`` currently only detects NVIDIA GPUs by default. Contributions for detecting other vendors or resource types are welcome!
+
+Multi-node resource pools
+--------------------------
+
+For distributed or HPC execution, the resource pool can be organized into multiple
+nodes.  Set ``allow_multinode: true`` and list each node explicitly:
+
+.. code-block:: yaml
+
+   resource_pool:
+     allow_multinode: true
+     nodes:
+     - id: node-0
+       resources:
+         cpus:
+         - id: "0"
+           slots: 1
+         - id: "1"
+           slots: 1
+         gpus:
+         - id: "0"
+           slots: 1
+     - id: node-1
+       resources:
+         cpus:
+         - id: "0"
+           slots: 1
+
+When ``allow_multinode`` is ``false`` (the default), all resources are treated as
+belonging to a single node.  Multi-node allocation is primarily used with HPC
+extensions.  See :ref:`canary_hpc_extension` for details.
+
+Resource allocation lifecycle
+------------------------------
+
+When ``canary`` schedules a job, the resource manager steps through four phases:
+
+1. **Accommodate** — verify that sufficient total slots exist across the pool for
+   the job's requirements; jobs that can never fit are rejected immediately
+2. **Score** — rank available nodes by residual capacity to prefer the least-loaded
+   node and minimize fragmentation
+3. **Checkout** — allocate (reserve) the required slots from the chosen node, making
+   them unavailable to other concurrently running jobs
+4. **Checkin** — return the reserved slots to the pool when the job finishes,
+   making them available for subsequent jobs
+
+Resource troubleshooting
+------------------------
+
+**Insufficient slots**:
+
+.. code-block:: console
+
+   Error: insufficient slots on node hostname of cpus (requested 16, available 8)
+
+Reduce the test's ``cpus`` parameter, or increase the pool with
+``canary -r cpus=32 run .``.
+
+**Unknown resource type**:
+
+.. code-block:: console
+
+   Error: Resource 'fpgas' unavailable on node hostname
+
+The resource type must be declared in the pool even if the count is 0:
+
+.. code-block:: console
+
+   canary -r fpgas=0 run .

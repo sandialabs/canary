@@ -120,3 +120,72 @@ blocked
 -------
 
 A test case that was expected to run was not run.  Common reasons for being marked ``blocked`` are the test case not being run due to a failed or skipped dependency and the test session being stopped prematurely.
+
+Two-level status model
+----------------------
+
+Internally, ``canary`` represents each status using two levels:
+
+- **Category** — high-level outcome: ``PASS``, ``FAIL``, ``CANCEL``, ``SKIP``, or
+  ``NONE`` (not yet run)
+- **Outcome** — specific result that maps to the user-visible status names above
+
+.. list-table:: Category / Outcome mapping
+   :widths: 20 20 60
+   :header-rows: 1
+
+   * - Category
+     - Outcome
+     - Meaning
+   * - ``PASS``
+     - ``SUCCESS``
+     - Job completed with exit code 0
+   * - ``PASS``
+     - ``XFAIL``
+     - Job failed as expected (marked :ref:`xfail <directive-xfail>`)
+   * - ``PASS``
+     - ``XDIFF``
+     - Job diffed as expected (marked :ref:`xdiff <directive-xdiff>`)
+   * - ``FAIL``
+     - ``FAILED``
+     - Job exited with a nonzero code
+   * - ``FAIL``
+     - ``DIFFED``
+     - Job exited with the diff code (64)
+   * - ``FAIL``
+     - ``TIMEOUT``
+     - Job exceeded its allowed run time
+   * - ``SKIP``
+     - ``SKIPPED``
+     - Job was skipped due to conditions or a skipped dependency
+   * - ``CANCEL``
+     - ``CANCELLED``
+     - Job was cancelled by the user or the session
+   * - ``NONE``
+     - ``BLOCKED``
+     - Job could not run due to a failed or unrun dependency
+
+The Category level is what matters for rerun strategies (``--only failed`` targets
+``Category=FAIL``, etc.) and for reporting summaries.
+
+Process return codes
+--------------------
+
+The specific exit codes that ``canary`` assigns meaning to are:
+
+.. list-table::
+   :widths: 15 85
+   :header-rows: 1
+
+   * - Exit code
+     - Meaning
+   * - ``0``
+     - Success (``PASS / SUCCESS``)
+   * - ``63``
+     - Skip (``SKIP / SKIPPED``) — prefer ``canary.skip_exit_status`` or raise
+       ``canary.TestSkipped``
+   * - ``64``
+     - Diff (``FAIL / DIFFED``) — prefer ``canary.diff_exit_status`` or raise
+       ``canary.TestDiffed``
+   * - other non-zero
+     - Failure (``FAIL / FAILED``)

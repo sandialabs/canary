@@ -12,9 +12,11 @@ This section covers every basic command you need to get started with Canary.  By
 .. toctree::
    :maxdepth: 1
 
+   basics.concepts
    basics.workspace
    basics.testfile
    basics.job
    basics.status
    basics.resource
    basics.runtime
+   basics.session
