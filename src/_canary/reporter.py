@@ -257,7 +257,7 @@ def build_final_table(
     :meth:`~Reporter.final_table` wrapper) and the ``canary_runtests_report`` hook
     call this function so the rendering logic lives in exactly one place.
 
-    Jobs are grouped by status category in a fixed order (FAIL → CANCEL → NOTRUN →
+    Jobs are grouped by status category in a fixed order (FAIL → ABORTED → NOTRUN →
     NONE → PASS) so failures are always visible at the top.  Within each category
     the list order (== execution/finish order) is preserved.  At most
     ``_MAX_PER_CATEGORY`` rows are shown per category; when the group is larger an
@@ -280,7 +280,7 @@ def build_final_table(
 
     _CATEGORY_ORDER = [
         Category.FAIL,
-        Category.CANCEL,
+        Category.ABORTED,
         Category.NOTRUN,
         Category.NONE,
         Category.PASS,

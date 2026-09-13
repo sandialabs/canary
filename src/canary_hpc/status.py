@@ -113,8 +113,8 @@ class BatchStatus:
 
         if Category.FAIL in present:
             return Category.FAIL
-        if Category.CANCEL in present:
-            return Category.CANCEL
+        if Category.ABORTED in present:
+            return Category.ABORTED
         if Category.NOTRUN in present:
             return Category.NOTRUN
         if present == {Category.PASS}:

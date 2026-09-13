@@ -228,6 +228,7 @@ class WorkspaceDatabase:
 
         _migrate_results_status_state_to_job_state(self)
         _migrate_status_category_skip_to_notrun(self)
+        _migrate_status_category_cancel_to_aborted(self)
         return
 
     def put_specs(self, specs: list[JobSpec]) -> None:
@@ -1086,3 +1087,22 @@ def _migrate_status_category_skip_to_notrun(db: "WorkspaceDatabase") -> None:
     logger.info("DB migration: results.status_category 'SKIP' -> 'NOTRUN'")
     with conn:
         conn.execute("UPDATE results SET status_category = 'NOTRUN' WHERE status_category = 'SKIP'")
+
+
+def _migrate_status_category_cancel_to_aborted(db: "WorkspaceDatabase") -> None:
+    """One-time migration: rename the ``status_category`` value ``'CANCEL'`` to ``'ABORTED'``.
+
+    Databases written before the ``Category.CANCEL`` → ``Category.ABORTED`` rename
+    store the string ``'CANCEL'`` in ``results.status_category``.  This function
+    rewrites those rows in-place.  Safe to call on already-migrated databases
+    (no-op when no ``'CANCEL'`` rows remain).
+    """
+    conn = db.connection
+    row = conn.execute("SELECT 1 FROM results WHERE status_category = 'CANCEL' LIMIT 1").fetchone()
+    if row is None:
+        return
+    logger.info("DB migration: results.status_category 'CANCEL' -> 'ABORTED'")
+    with conn:
+        conn.execute(
+            "UPDATE results SET status_category = 'ABORTED' WHERE status_category = 'CANCEL'"
+        )

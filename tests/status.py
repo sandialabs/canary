@@ -29,8 +29,8 @@ def test_status_category_sets_default_outcome():
     assert s.category == status.Category.NOTRUN
     assert s.outcome == status.Outcome.SKIPPED
 
-    s.set(category="CANCEL")
-    assert s.category == status.Category.CANCEL
+    s.set(category="ABORTED")
+    assert s.category == status.Category.ABORTED
     assert s.outcome == status.Outcome.CANCELLED
 
     s.set(category="FAIL")
@@ -72,7 +72,7 @@ def test_glyphs_for_common_outcomes():
     assert s.code == int(status.Outcome.TIMEOUT)
 
     s.set(outcome="CANCELLED")
-    assert s.category == status.Category.CANCEL
+    assert s.category == status.Category.ABORTED
     assert s.glyph() == "⊘"
     assert s.code == int(status.Outcome.CANCELLED)
 
