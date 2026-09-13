@@ -363,7 +363,7 @@ def _update_last_activity(batch: "TestBatch") -> None:
     try:
         cfg = json.loads(batch.lockfile.read_text())
         cfg["last_activity"] = mtime
-        batch.lockfile.write_text(json.dumps(cfg, indent=2))
+        json_helper.safesave(batch.lockfile, cfg)
     except Exception:  # nosec B110 — non-fatal; monitoring only
         pass
 

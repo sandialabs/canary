@@ -859,7 +859,7 @@ def test_parameterize_modes_centered_and_random(tmp_path):
 import sys
 import canary
 import canary_pyt
-from _canary import enums
+from canary_pyt import enums
 
 canary_pyt.directives.parameterize(
     "x,y",
@@ -881,7 +881,7 @@ if __name__ == "__main__":
 import sys
 import canary
 import canary_pyt
-from _canary import enums
+from canary_pyt import enums
 
 canary_pyt.directives.parameterize(
     "r,s",
