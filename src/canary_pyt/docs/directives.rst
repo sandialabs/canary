@@ -204,8 +204,6 @@ Best Practices
       import canary_pyt
       canary_pyt.directives.keywords("smoke")
 
-   Avoid deprecated ``canary.directives``.
-
 2. **Place at Module Level**:
 
    .. code-block:: python
@@ -258,10 +256,6 @@ Common Pitfalls
    # BAD - after runtime guard
    if __name__ == "__main__":
        canary_pyt.directives.keywords("smoke")  # Not recorded!
-
-   # BAD - deprecated namespace
-   import canary
-   canary.directives.keywords("smoke")  # Use canary_pyt.directives instead
 
 See Also
 --------

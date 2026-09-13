@@ -90,7 +90,7 @@ Differences from native vvtest
 The following behavioural differences apply when running ``.vvt`` tests under ``canary``:
 
 * **``preload`` is a no-op.** The directive is accepted without error but has no effect.  Use
-  ``canary.directives.source()`` or ``canary.directives.load_module()`` from a ``.pyt`` wrapper
+  ``canary_pyt.directives.source()`` or ``canary_pyt.directives.load_module()`` from a ``.pyt`` wrapper
   if environment setup is needed.
 
 * **``DEPDIRMAP`` is always empty.** ``canary`` always writes ``vvtest_util.DEPDIRMAP = {}``.

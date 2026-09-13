@@ -155,7 +155,7 @@ Jobs manage file resources through two categories:
 **Assets** are input files required before execution begins:
 
 - Copied or linked from source locations into the job's execution directory
-- Specified via the ``canary.directives.copy`` or ``canary.directives.link``
+- Specified via the ``canary_pyt.directives.copy`` or ``canary_pyt.directives.link``
   directives, or the ``baseline`` attribute
 - Availability is checked before the job starts
 

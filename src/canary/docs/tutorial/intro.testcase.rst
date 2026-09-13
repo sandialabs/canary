@@ -19,8 +19,9 @@ Example
 
     import sys
     import canary
-    canary.directives.keywords("spam")
-    canary.directives.parameters("breakfast", ("bacon", "eggs"))
+    import canary_pyt
+    canary_pyt.directives.keywords("spam")
+    canary_pyt.directives.parameters("breakfast", ("bacon", "eggs"))
 
     def test() -> int:
         instance = canary.get_instance()

@@ -9,7 +9,7 @@ A second test
 
 This example introduces two common patterns:
 
-* staging an input file into the test working directory with :func:`canary.directives.link`; and
+* staging an input file into the test working directory with :func:`canary_pyt.directives.link`; and
 * running an external program using :class:`~_canary.util.executable.Executable`.
 
 The test file

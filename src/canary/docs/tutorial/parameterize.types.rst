@@ -7,7 +7,7 @@
 Types of parameterizations
 ==========================
 
-:func:`~canary.directives.parameterize` takes an optional ``type`` argument, allowing parameters to be generated in different ways from the input ``values``.  Three ``type``\ s are recoginized:
+:func:`~canary_pyt.directives.parameterize` takes an optional ``type`` argument, allowing parameters to be generated in different ways from the input ``values``.  Three ``type``\ s are recoginized:
 
 * :ref:`list_parameter_space <tutorial-list-parameter-space>` (default)
 * :ref:`centered_parameter_space <tutorial-centered-parameter-space>`

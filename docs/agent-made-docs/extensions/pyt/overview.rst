@@ -41,8 +41,6 @@ The authoritative directive namespace is:
    import canary_pyt
    canary_pyt.directives.directive_name(*args, **kwargs)
 
-The deprecated ``canary.directives`` namespace exists for backward compatibility only and should not be used in new code.
-
 Implementation Model
 --------------------
 
@@ -52,7 +50,7 @@ Implementation Model
    - ``PYTLoader`` executes the ``.pyt`` file with ``__name__ == "__load__"``
    - Directives are monkeypatched to a ``DirectiveRecorder``
    - File execution records directive calls without running test logic
-   - Both ``canary_pyt.directives`` and ``canary.directives`` are monkeypatched for compatibility
+   - ``canary_pyt.directives`` is monkeypatched for recording
 
 2. **Generation Phase**:
    - ``DirectiveRecorder`` stores directive name, arguments, keyword arguments, file, and line number
@@ -112,7 +110,7 @@ Example: Minimal .pyt Job
 
 This example shows:
 
-- Import of ``canary_pyt`` (not deprecated ``canary``)
+- Import of ``canary_pyt`` for directives
 - Directive usage at module level
 - Test logic guarded by ``if __name__ == "__main__"``
 - No side effects during discovery phase

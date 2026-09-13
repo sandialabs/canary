@@ -19,12 +19,12 @@ Some tests require a modified environment.  When the required environment modifi
           with canary.shell.source("filename"):
               # do work
 
-2. Through the :func:`canary.directives.source` directive:
+2. Through the :func:`canary_pyt.directives.source` directive:
 
    .. code-block:: python
 
-      import canary
-      canary.directives.source("filename", when=...)
+      import canary_pyt
+      canary_pyt.directives.source("filename", when=...)
 
       def test():
           # do work

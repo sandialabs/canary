@@ -15,9 +15,9 @@ For example, if the following test:
 
 .. code-block:: python
 
-    import canary
+    import canary_pyt
 
-    canary.directives.parameterize("cpus,gpus", ((4, 4)))
+    canary_pyt.directives.parameterize("cpus,gpus", ((4, 4)))
 
 
 acquires CPUs 10, 11, 12, and 13, and GPUs 0, 1, 2, and 3 from the resource pool, respectively, the test environment would have the following variables defined:

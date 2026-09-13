@@ -11,7 +11,7 @@ It is often necessary to update the baseline values for a test when the outputs 
 
 .. note::
 
-   For a test to be rebaselined, it must define the baseline instructions.  See :func:`canary.directives.baseline`.
+   For a test to be rebaselined, it must define the baseline instructions.  See :func:`canary_pyt.directives.baseline`.
 
 By default, ``canary rebaseline`` will reset baseline values for all :ref:`stat-diffed` tests.  Eg, running
 

@@ -83,8 +83,9 @@ would generate the following file in the current binary directory
    # my_test.pyt
    import sys
    import canary
-   canary.directives.keywords("fast", "unit_test")
-   canary.directives.link("my_test")
+   import canary_pyt
+   canary_pyt.directives.keywords("fast", "unit_test")
+   canary_pyt.directives.link("my_test")
    def test():
        cmd = canary.Executable("my_test")
        args = ["--option=value"]
@@ -154,9 +155,10 @@ would generate the following file in the current binary directory
    # my_parallel_test.pyt
    import sys
    import canary
-   canary.directives.keywords("fast", "unit_test")
-   canary.directives.link("my_test")
-   canary.directives.parameterize("cpus", [1, 4])
+   import canary_pyt
+   canary_pyt.directives.keywords("fast", "unit_test")
+   canary_pyt.directives.link("my_test")
+   canary_pyt.directives.parameterize("cpus", [1, 4])
    def test():
        self = canary.test.instance
        mpi = canary.Executable("${MPIEXEC_EXECUTABLE}")

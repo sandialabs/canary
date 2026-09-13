@@ -7,7 +7,7 @@
 Marking a test expected to diff or fail
 =======================================
 
-The :func:`canary.directives.xdiff` and :func:`canary.directives.xfail` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
+The :func:`canary_pyt.directives.xdiff` and :func:`canary_pyt.directives.xfail` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
 
 .. literalinclude:: /examples/xstatus/xdiff.pyt
     :language: python
@@ -30,7 +30,7 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 Specifying a nonzero exit code
 ------------------------------
 
-If a nonzero exit code is expected, use ``canary.directives.xfail(code)``, where ``code`` is the expected exit code.  Any other exit code other than ``code`` will be considered a failure.
+If a nonzero exit code is expected, use ``canary_pyt.directives.xfail(code)``, where ``code`` is the expected exit code.  Any other exit code other than ``code`` will be considered a failure.
 
 .. literalinclude:: /examples/xstatus/xfail-code.pyt
     :language: python

@@ -154,12 +154,12 @@ PYT directives and test metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * Added resource directives for ``.pyt`` tests:
-  * :py:func:`canary.directives.cpus`;
-  * :py:func:`canary.directives.gpus`;
-  * :py:func:`canary.directives.nodes`.
+  * :py:func:`canary_pyt.directives.cpus`;
+  * :py:func:`canary_pyt.directives.gpus`;
+  * :py:func:`canary_pyt.directives.nodes`.
 * Resource directives are stored as meta-parameters so they affect scheduling without changing parameterized test names.
 * Added support for PYT meta-parameters in generated :py:class:`_canary.ir.JobSpecIR` instances.
-* Added :py:func:`canary.directives.artifact(..., save_on=...)` spelling for artifact save policy.
+* Added :py:func:`canary_pyt.directives.artifact(..., save_on=...)` spelling for artifact save policy.
 * Test instances now include spec attributes when converted through :py:mod:`_canary.testinst`.
 * Composite/analyze-only handling now accounts for parameters and meta-parameters when building multi-instance parameter tables.
 
@@ -318,7 +318,7 @@ PYT and directives
 
 * Added PYT model support for meta-parameters.
 * Added resource-parameter handling for ``cpus``, ``gpus``, and ``nodes``.
-* Added public directive documentation for :py:func:`canary.directives.nodes`.
+* Added public directive documentation for :py:func:`canary_pyt.directives.nodes`.
 * Resource directives validate integer type and minimum value.
 * PYT lock emission now includes meta-parameters in generated IR.
 * Template substitution can use both parameters and meta-parameters.

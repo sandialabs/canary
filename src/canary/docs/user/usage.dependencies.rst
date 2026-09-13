@@ -33,13 +33,13 @@ Dependencies are declared in ``.pyt`` test files using the ``depends_on`` direct
 
 .. code-block:: python
 
-   import canary
+   import canary_pyt
 
    # Simple dependency on another test
-   canary.directives.depends_on("other_test.pyt")
+   canary_pyt.directives.depends_on("other_test.pyt")
 
    # Dependency with conditional execution
-   canary.directives.depends_on("setup_test.pyt", when="on_success")
+   canary_pyt.directives.depends_on("setup_test.pyt", when="on_success")
 
 Dependency patterns
 -------------------
@@ -57,10 +57,10 @@ Example:
 .. code-block:: python
 
    # Depend on all jobs in the setup family
-   canary.directives.depends_on("family:setup")
+   canary_pyt.directives.depends_on("family:setup")
 
    # Depend on jobs tagged as @prerequisite
-   canary.directives.depends_on("@prerequisite")
+   canary_pyt.directives.depends_on("@prerequisite")
 
 Dependency conditions
 ---------------------
@@ -75,10 +75,10 @@ of its dependency:
 .. code-block:: python
 
    # Cleanup step only if main test succeeded
-   canary.directives.depends_on("main_test.pyt", when="on_success")
+   canary_pyt.directives.depends_on("main_test.pyt", when="on_success")
 
    # Recovery step only if main test failed
-   canary.directives.depends_on("main_test.pyt", when="on_failure")
+   canary_pyt.directives.depends_on("main_test.pyt", when="on_failure")
 
 If a condition is not met, the dependent job receives a ``blocked`` status rather than
 running.
@@ -93,12 +93,12 @@ be considered met.  All groups must be met for the dependent to run.
 .. code-block:: python
 
    # Group 1: both setup steps must succeed
-   canary.directives.depends_on("setup_db.pyt", group=1)
-   canary.directives.depends_on("setup_cache.pyt", group=1)
+   canary_pyt.directives.depends_on("setup_db.pyt", group=1)
+   canary_pyt.directives.depends_on("setup_cache.pyt", group=1)
 
    # Group 2: at least one data-loading path must succeed
-   canary.directives.depends_on("fast_path.pyt", group=2)
-   canary.directives.depends_on("slow_path.pyt", group=2)
+   canary_pyt.directives.depends_on("fast_path.pyt", group=2)
+   canary_pyt.directives.depends_on("slow_path.pyt", group=2)
 
 Execute-and-analyze pattern
 ---------------------------
@@ -109,13 +109,13 @@ relationship automatically:
 
 .. code-block:: python
 
-   import canary
+   import canary_pyt
 
    # Parameterized children are created automatically
-   canary.directives.parameterize("a", [1, 2, 3])
+   canary_pyt.directives.parameterize("a", [1, 2, 3])
 
    # This test runs after all parameterized instances complete
-   canary.directives.aggregate()
+   canary_pyt.directives.aggregate()
 
 This creates four jobs: ``test.a=1``, ``test.a=2``, ``test.a=3``, and ``test``
 (the base test that depends on all three).  See :ref:`usage-execute-and-analyze` for

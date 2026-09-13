@@ -7,7 +7,7 @@
 Generating the base case
 ========================
 
-A single test file can generate multiple parameter-specific test cases. Optionally, a non-parameterized "base" case can be generated that depends on each of the parameterized cases by calling :func:`canary.directives.generate_composite_base_case`:
+A single test file can generate multiple parameter-specific test cases. Optionally, a non-parameterized "base" case can be generated that depends on each of the parameterized cases by calling :func:`canary_pyt.directives.generate_composite_base_case`:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python

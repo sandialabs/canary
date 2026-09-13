@@ -21,8 +21,8 @@ directive assigns keywords (labels) to the test which can be used in filtering o
 
 .. code-block:: python
 
-    import canary
-    canary.directives.keywords("spam")
+    import canary_pyt
+    canary_pyt.directives.keywords("spam")
 
 Directives are evaluated when the test file is imported and must appear at the file's global scope
 and not in function or class scopes.

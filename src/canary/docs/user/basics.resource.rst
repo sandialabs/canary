@@ -84,7 +84,7 @@ The resources required by a test case are inferred by comparing the case's :ref:
 
 .. code-block:: python
 
-  canary.directives.parameterize("cpus,gpus", [(4, 4)])
+  canary_pyt.directives.parameterize("cpus,gpus", [(4, 4)])
 
 
 .. code-block:: yaml
@@ -101,7 +101,7 @@ If a test requires a non-default resource, that resource type must appear in the
 
 .. code-block:: python
 
-  canary.directives.parameterize("fpgas", [n])
+  canary_pyt.directives.parameterize("fpgas", [n])
 
 ``canary`` will not treat ``fpgas`` as a resource consuming parameter unless it is explicitly defined within the resource pool - either by the command line, a configuration file, or both. Even if the system does not contain any ``fpgas`` (i.e., the count is 0), the user still must explicitly set the count to zero. Otherwise, ``canary`` will treat ``fpgas`` as a regular parameter and proceed with executing the test on systems not having ``fpgas``.
 

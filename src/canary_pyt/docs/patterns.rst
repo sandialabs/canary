@@ -266,7 +266,6 @@ Best Practices
 
 2. **Use Canonical Namespace**:
    - Always use ``canary_pyt.directives``
-   - Avoid deprecated ``canary.directives``
 
 3. **Guard Test Logic**:
    - Use ``if __name__ == "__main__"``

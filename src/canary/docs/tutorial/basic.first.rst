@@ -18,7 +18,7 @@ Consider the test file ``first.pyt``:
 .. literalinclude:: /examples/basic/first/first.pyt
    :language: python
 
-This example also introduces a *directive*: :func:`canary.directives.keywords`. Directives are how
+This example also introduces a *directive*: :func:`canary_pyt.directives.keywords`. Directives are how
 a test file communicates metadata and configuration back to ``canary`` during test discovery and
 generation. The ``keywords`` directive assigns labels to a test, which can later be used for
 filtering (for example, selecting a subset of tests to run).

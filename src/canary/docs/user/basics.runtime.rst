@@ -41,8 +41,8 @@ to set a tests timeout to 5 minutes add the following the test file:
 
 .. code-block:: python
 
-   import canary
-   canary.directives.timeout(5 * 60)
+   import canary_pyt
+   canary_pyt.directives.timeout(5 * 60)
 
 If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long``
 keywords in a manner similar to `vvtest <https://github.com/sandialabs/vvtest>`_:

@@ -9,7 +9,7 @@ Python Job-Definition Generator
 
 The ``canary_pyt`` extension is the **reference Python job-definition generator** for Canary. It provides a Python-based domain-specific language for defining test jobs using directives, enabling complex test scenarios with parameterization, dependencies, resource requirements, and conditional activation.
 
-**Extension type**: reference Python job-definition generator, directive interpreter, compatibility layer for legacy ``canary.directives`` imports.
+**Extension type**: reference Python job-definition generator, directive interpreter.
 
 .. note::
 

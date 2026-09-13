@@ -23,12 +23,12 @@ The test file is composed of two parts: :ref:`directives<file-directives>` and t
 Directives
 ~~~~~~~~~~
 
-These lines provide instructions to ``canary`` regarding the setup and cleanup of the test.  These instructions are provided through the ``canary.directives`` namespace.  For example,
+These lines provide instructions to ``canary`` regarding the setup and cleanup of the test.  These instructions are provided through the ``canary_pyt.directives`` namespace.  For example,
 
 .. code-block:: python
 
-    import canary
-    canary.directives.copy("file.txt")
+    import canary_pyt
+    canary_pyt.directives.copy("file.txt")
 
 would copy ``file.txt`` from the test's source directory into the the test's execution directory.
 

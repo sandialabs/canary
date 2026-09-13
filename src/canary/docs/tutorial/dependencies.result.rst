@@ -7,7 +7,7 @@
 Controlling test execution based on dependency results
 ======================================================
 
-By default, a test case will not run unless all of its dependencies complete successfully.  This behavior can be modified by passing the ``result`` argument to :func:`~canary.directives.depends_on`.
+By default, a test case will not run unless all of its dependencies complete successfully.  This behavior can be modified by passing the ``result`` argument to :func:`~canary_pyt.directives.depends_on`.
 
 Example
 -------

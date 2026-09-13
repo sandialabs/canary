@@ -13,8 +13,8 @@ For example, the test defining parameters
 
 .. code-block:: python
 
-    import canary
-    canary.directives.parameterize("cpus,gpus", [(1, 1), (2, 2), (4, 4)])
+    import canary_pyt
+    canary_pyt.directives.parameterize("cpus,gpus", [(1, 1), (2, 2), (4, 4)])
 
 would generate 3 test cases needing 1, 2, and 4 ``cpus`` and ``gpus``, respectively.
 

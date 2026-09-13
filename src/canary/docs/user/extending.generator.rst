@@ -36,7 +36,7 @@ Built-in generator extensions
 ``canary_pyt``
   Python-based job definitions (``.pyt`` files).  The primary format for new test
   suites and the reference implementation for extension authors.  Uses Python
-  function calls (``canary.directives.*``) to define test behaviour.
+  function calls (``canary_pyt.directives.*``) to define test behaviour.
 
 ``canary_cmake``
   CMake/CTest integration.  Consumes ``CTestTestFile.cmake`` and CMakeLists-driven

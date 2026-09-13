@@ -54,14 +54,6 @@ Canonical Namespace
    import canary_pyt
    canary_pyt.directives.keywords("smoke")
 
-**Deprecated namespace**: ``canary.directives``
-
-.. code-block:: python
-
-   # BAD - Deprecated namespace
-   import canary
-   canary.directives.keywords("smoke")  # Avoid
-
 Fixed Resources
 ---------------
 
@@ -181,7 +173,6 @@ Best Practices
 
 2. **Use canonical namespace**:
    - Always use ``canary_pyt.directives``
-   - Avoid deprecated ``canary.directives``
 
 3. **Use parameterize for variants**:
    - Fixed resources: ``cpus(N)``, ``gpus(N)``, ``nodes(N)``

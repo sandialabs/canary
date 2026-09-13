@@ -11,7 +11,7 @@ A single test file can generate many test cases, each having different parameter
 
 .. code-block:: python
 
-    canary.directives.parameterize("odd,even", [(1, 2), (3, 4)])
+    canary_pyt.directives.parameterize("odd,even", [(1, 2), (3, 4)])
 
 instructs ``canary`` to create two test instances with parameters ``odd=1`` and ``even=2`` in the first, and parameters ``odd=3`` and ``even=4`` in the second.
 

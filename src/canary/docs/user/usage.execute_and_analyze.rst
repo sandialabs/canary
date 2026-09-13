@@ -14,7 +14,7 @@ The "execute and analyze" pattern generates a collection of :ref:`jobs <basics-j
 
 The base case runs only after all of the parameterized jobs are finished.
 
-The execute and analyze pattern is enabled by adding :func:`canary.directives.generate_composite_base_case` to the test file's directives.
+The execute and analyze pattern is enabled by adding :func:`canary_pyt.directives.generate_composite_base_case` to the test file's directives.
 
 .. admonition:: vvtest compatibility
 

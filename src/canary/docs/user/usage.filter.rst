@@ -18,16 +18,16 @@ Using ``-k`` on the command line, filters (selects) tests based on the :ref:`key
 
 .. code-block:: python
 
-   import canary
-   canary.directives.keywords("3D", "mhd", "circuit")
+   import canary_pyt
+   canary_pyt.directives.keywords("3D", "mhd", "circuit")
    print("running test1")
 
 and ``parameterize2.pyt``:
 
 .. code-block:: python
 
-   import canary
-   canary.directives.keywords("3D", "mhd", "conduction")
+   import canary_pyt
+   canary_pyt.directives.keywords("3D", "mhd", "conduction")
    print("running parameterize2")
 
 Using the command ``canary run -k 3D`` would cause both tests to run, because they both have the keyword ``3D``. Using the command ``canary run -k circuit`` would run only ``parameterize2``, because only that test has the ``circuit`` keyword defined.
@@ -45,16 +45,16 @@ When tests define parameters using the :ref:`parameterize directive<directive-pa
 
 .. code-block:: python
 
-   import canary
-   canary.directives.parameterize("cpus", (1, 4))
+   import canary_pyt
+   canary_pyt.directives.parameterize("cpus", (1, 4))
    print("running test p1")
 
 and the test file ``p2.pyt``:
 
 .. code-block:: python
 
-   import canary
-   canary.directives.parameterize("MODEL", ("elastic", "elasticplastic"))
+   import canary_pyt
+   canary_pyt.directives.parameterize("MODEL", ("elastic", "elasticplastic"))
    print("running test p2")
 
 The command ``canary run -p cpus`` would only run test ``p1``, because the ``cpus`` parameter is only defined in that test file.  In general, specifying a parameter name means include the test if the parameter is defined by the test.
@@ -89,8 +89,8 @@ A test can use the ``enable`` directive to limit the platforms that will run the
 
 .. code-block:: python
 
-   import canary
-   canary.directives.enable(when="platforms='Darwin'")
+   import canary_pyt
+   canary_pyt.directives.enable(when="platforms='Darwin'")
    ...
 
 will only run if the platform name is ``Darwin``. Expressions are allowed as the ``platform`` attribute value, such as ``when="platforms='Darwin or Linux'"``, or ``when="platforms='not Darwin'"``.
@@ -101,11 +101,11 @@ Filter by owner
 ---------------
 
 Use ``--owner`` to run only tests attributed to a specific owner or set of owners.
-Owners are declared in test files using the ``canary.directives.owners`` directive:
+Owners are declared in test files using the ``canary_pyt.directives.owners`` directive:
 
 .. code-block:: python
 
-   canary.directives.owners("alice", "bob")
+   canary_pyt.directives.owners("alice", "bob")
 
 Filter on the command line:
 

@@ -7,7 +7,7 @@
 Copying and linking resource files into the test execution directory
 ====================================================================
 
-Resources needed by tests can be copied and linked from their source locations to the execution directory with the :func:`canary.directives.copy` and :func:`canary.directives.link` directives, respectively, as shown in the following example:
+Resources needed by tests can be copied and linked from their source locations to the execution directory with the :func:`canary_pyt.directives.copy` and :func:`canary_pyt.directives.link` directives, respectively, as shown in the following example:
 
 .. literalinclude:: /examples/copy_and_link/copy_and_link.pyt
     :language: python
