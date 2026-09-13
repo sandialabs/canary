@@ -43,7 +43,7 @@ dependencies = [
     # main tracks hpc-connect from git (canary and hpc-connect are jointly
     # developed).  PyPI releases replace this with a pinned `hpc-connect==<X>`
     # at build time (see the publish workflow); it is never pinned on main.
-    #     "hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git",  # pre-installed  # temp-sandbox
+    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git",  # pre-installed  # temp-sandbox
     "pluggy>=1.5",
     "psutil>=5.9",
     "pyyaml>=6.0",
