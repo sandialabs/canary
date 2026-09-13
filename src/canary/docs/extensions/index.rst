@@ -16,6 +16,20 @@ how to author new ones.
 
    authoring
 
+.. toctree::
+   :maxdepth: 1
+   :caption: In-depth guides
+
+   plugins
+   hooks
+   configuration
+   resources
+   measurements
+   generators
+   commands
+   reporters
+   docs
+
 .. rubric:: Installed extensions
 
 The pages below are generated at build time from every installed ``canary``
