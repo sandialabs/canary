@@ -4,9 +4,9 @@
 
 import pytest
 
-from _canary.paramset import ParameterSet
-from _canary.paramset import is_scalar
-from _canary.paramset import transpose
+from canary_pyt.paramset import ParameterSet
+from canary_pyt.paramset import is_scalar
+from canary_pyt.paramset import transpose
 
 
 def test_init_validates_row_length():

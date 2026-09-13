@@ -15,13 +15,10 @@ from pathlib import Path
 import schema
 
 import _canary.config as config
-import _canary.enums as enums
 import _canary.status as status
+import canary_pyt.enums as enums
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
-from _canary.enums import centered_parameter_space
-from _canary.enums import list_parameter_space
-from _canary.enums import random_parameter_space
 from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
@@ -55,6 +52,9 @@ from _canary.util import shell
 from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
+from canary_pyt.enums import centered_parameter_space
+from canary_pyt.enums import list_parameter_space
+from canary_pyt.enums import random_parameter_space
 
 from . import directives
 from . import patterns

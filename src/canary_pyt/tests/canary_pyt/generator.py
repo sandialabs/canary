@@ -10,7 +10,7 @@ import pytest
 from _canary.error import diff_exit_status
 from _canary.ir import DependencySelector
 from _canary.jobspec import BaselineCopyAction
-from _canary.paramset import ParameterSet
+from canary_pyt.paramset import ParameterSet
 from canary_pyt.pyt import PYTAdapter
 from canary_pyt.pyt import PYTLoader
 from canary_pyt.pyt import PYTLockEmitter

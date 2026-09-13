@@ -103,8 +103,8 @@ from typing import Sequence
 
 from typing_extensions import deprecated
 
-from _canary import enums
 from _canary.ir import DependencySelector
+from canary_pyt import enums
 
 WhenType = str | dict[str, str]
 DependencyType = str | dict[str, Any] | DependencySelector

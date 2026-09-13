@@ -2,35 +2,24 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Named constants for the three parameter-space sampling strategies.
+"""Backward-compatible re-export shim.
 
-The :class:`enums` enum and its module-level aliases are used as the ``kind``
-argument to :meth:`ParameterSet` factory methods so callers can refer to
-strategies by name rather than by magic integer.
-
-Example::
-
-    from _canary.enums import list_parameter_space, centered_parameter_space
-    ps = ParameterSet.list_parameter_space(...)
+The canonical location of these symbols is now ``canary_pyt.enums``.
+This module re-exports everything from there so that existing code that
+imports from ``_canary.enums`` continues to work without modification.
 """
 
-import enum
+import warnings
 
+warnings.warn(
+    "_canary.enums is deprecated; import from canary_pyt.enums instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-class enums(enum.Enum):
-    """Enumeration of parameter-space sampling strategies.
+from canary_pyt.enums import centered_parameter_space  # noqa: F401, E402
+from canary_pyt.enums import enums  # noqa: F401, E402
+from canary_pyt.enums import list_parameter_space  # noqa: F401, E402
+from canary_pyt.enums import random_parameter_space  # noqa: F401, E402
 
-    Attributes:
-        list_parameter_space: Full Cartesian product of all parameter lists.
-        centered_parameter_space: One-at-a-time variation around a central point.
-        random_parameter_space: Random Monte Carlo sampling of the parameter space.
-    """
-
-    list_parameter_space = 0
-    centered_parameter_space = 1
-    random_parameter_space = 2
-
-
-list_parameter_space = enums.list_parameter_space
-centered_parameter_space = enums.centered_parameter_space
-random_parameter_space = enums.random_parameter_space
+__all__ = ["enums", "list_parameter_space", "centered_parameter_space", "random_parameter_space"]

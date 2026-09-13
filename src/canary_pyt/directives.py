@@ -101,8 +101,8 @@ The ``when`` expression recognizes the following conditions:
 from typing import Any
 from typing import Sequence
 
-from _canary import enums
 from _canary.ir import DependencySelector
+from canary_pyt import enums
 
 WhenType = str | dict[str, str]
 DependencyType = str | dict[str, Any] | DependencySelector

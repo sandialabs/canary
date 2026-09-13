@@ -6,7 +6,7 @@ import sys
 
 import canary
 import canary_vvtest.vvt as vvt
-from _canary.enums import list_parameter_space
+from canary_pyt.enums import list_parameter_space
 
 
 def test_include_file(tmpdir):
