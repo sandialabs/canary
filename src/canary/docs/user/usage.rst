@@ -28,6 +28,7 @@ canary usage
    usage.copy_and_link
    usage.execute_and_analyze
    usage.dependencies
+   usage.canaryconf
    usage.debugging
    usage.xstatus
    usage.modules

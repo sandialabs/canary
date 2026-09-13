@@ -69,6 +69,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import launcher
         from . import reporters
         from . import runtest
+        from . import scope_hooks
         from . import select
         from . import subcommands
         from .resource_pool import gpu_select
@@ -88,6 +89,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(launcher, "builtin.launcher")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
+        self.register(scope_hooks, "builtin.scope_hooks")
         self.register(select, "builtin.select")
 
     def consider_plugin(self, name: str) -> None:
