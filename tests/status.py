@@ -25,8 +25,8 @@ def test_status_category_sets_default_outcome():
     assert s.category == status.Category.PASS
     assert s.outcome == status.Outcome.SUCCESS
 
-    s.set(category="SKIP")
-    assert s.category == status.Category.SKIP
+    s.set(category="NOTRUN")
+    assert s.category == status.Category.NOTRUN
     assert s.outcome == status.Outcome.SKIPPED
 
     s.set(category="CANCEL")
@@ -42,7 +42,7 @@ def test_outcome_infers_category():
     s = status.Status()
 
     s.set(outcome="BLOCKED")
-    assert s.category == status.Category.SKIP
+    assert s.category == status.Category.NOTRUN
     assert s.outcome == status.Outcome.BLOCKED
 
     s.set(outcome="XFAIL")
@@ -59,8 +59,8 @@ def test_conflicting_category_and_outcome_raises():
 def test_invalid_outcome_for_category_raises():
     s = status.Status()
     # Force category first, then forbid mismatched outcome by providing both
-    with pytest.raises(ValueError, match="Outcome FAILED implies category FAIL, not SKIP"):
-        s.set(category="SKIP", outcome="FAILED")
+    with pytest.raises(ValueError, match="Outcome FAILED implies category FAIL, not NOTRUN"):
+        s.set(category="NOTRUN", outcome="FAILED")
 
 
 def test_glyphs_for_common_outcomes():
@@ -77,7 +77,7 @@ def test_glyphs_for_common_outcomes():
     assert s.code == int(status.Outcome.CANCELLED)
 
     s.set(outcome="SKIPPED")
-    assert s.category == status.Category.SKIP
+    assert s.category == status.Category.NOTRUN
     assert s.glyph() == "⊘"
     assert s.code == int(status.Outcome.SKIPPED)
 
@@ -120,7 +120,7 @@ def test_convenience_constructors():
     assert f.reason == "nope"
 
     k = status.Status.SKIPPED(reason="not applicable")
-    assert k.category == status.Category.SKIP
+    assert k.category == status.Category.NOTRUN
     assert k.outcome == status.Outcome.SKIPPED
     assert k.reason == "not applicable"
 

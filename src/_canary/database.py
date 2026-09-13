@@ -227,6 +227,7 @@ class WorkspaceDatabase:
             conn.execute(sql)
 
         _migrate_results_status_state_to_job_state(self)
+        _migrate_status_category_skip_to_notrun(self)
         return
 
     def put_specs(self, specs: list[JobSpec]) -> None:
@@ -1068,3 +1069,20 @@ def _migrate_results_status_state_to_job_state(db: WorkspaceDatabase) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)")
         conn.execute("DROP TABLE results_old")
+
+
+def _migrate_status_category_skip_to_notrun(db: "WorkspaceDatabase") -> None:
+    """One-time migration: rename the ``status_category`` value ``'SKIP'`` to ``'NOTRUN'``.
+
+    Databases written before the ``Category.SKIP`` → ``Category.NOTRUN`` rename
+    store the string ``'SKIP'`` in ``results.status_category``.  This function
+    rewrites those rows in-place.  Safe to call on already-migrated databases
+    (no-op when no ``'SKIP'`` rows remain).
+    """
+    conn = db.connection
+    row = conn.execute("SELECT 1 FROM results WHERE status_category = 'SKIP' LIMIT 1").fetchone()
+    if row is None:
+        return
+    logger.info("DB migration: results.status_category 'SKIP' -> 'NOTRUN'")
+    with conn:
+        conn.execute("UPDATE results SET status_category = 'NOTRUN' WHERE status_category = 'SKIP'")

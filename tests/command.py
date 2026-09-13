@@ -677,7 +677,7 @@ def test_query_session_digest_outputs_one_line_per_job(setup, capsys):
     assert rc == 0
     lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
     # Each line should be "name CATEGORY"
-    valid_categories = {"PASS", "FAIL", "CANCEL", "SKIP", "NONE"}
+    valid_categories = {"PASS", "FAIL", "CANCEL", "NOTRUN", "NONE"}
     for line in lines:
         parts = line.rsplit(" ", 1)
         assert len(parts) == 2, f"Expected 'name CATEGORY', got {line!r}"
@@ -1765,7 +1765,7 @@ def test_query_jobs_digest_outputs_one_line_per_job(setup, capsys):
     assert rc == 0
     lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
     assert len(lines) > 0
-    valid_categories = {"PASS", "FAIL", "CANCEL", "SKIP", "NONE"}
+    valid_categories = {"PASS", "FAIL", "CANCEL", "NOTRUN", "NONE"}
     for line in lines:
         parts = line.rsplit(" ", 1)
         assert len(parts) == 2, f"Expected 'name CATEGORY', got {line!r}"

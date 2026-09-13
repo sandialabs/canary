@@ -6,7 +6,7 @@
 
 Three concepts are defined here:
 
-* :class:`Category` — broad pass/fail bucket (PASS, FAIL, CANCEL, SKIP, NONE).
+* :class:`Category` — broad pass/fail bucket (PASS, FAIL, CANCEL, NOTRUN, NONE).
 * :class:`Outcome` — specific result code within a category (FAILED, TIMEOUT,
   BLOCKED, SUCCESS, …).
 * :class:`Status` — composite object holding (category, outcome, reason, exit code).
@@ -39,14 +39,15 @@ class Category(str, Enum):
         PASS: The job succeeded (possibly as an expected failure/diff).
         FAIL: The job produced an unacceptable result.
         CANCEL: The job was cancelled or interrupted before completion.
-        SKIP: The job was skipped or blocked by a dependency.
+        NOTRUN: The job did not run — either skipped before execution or
+            blocked by an unsatisfied dependency.
         NONE: No result has been recorded yet (initial/unset state).
     """
 
     PASS = "PASS"  # nosec B105
     FAIL = "FAIL"
     CANCEL = "CANCEL"
-    SKIP = "SKIP"
+    NOTRUN = "NOTRUN"
     NONE = "NONE"
 
     def __serialize__(self) -> str:
@@ -55,15 +56,31 @@ class Category(str, Enum):
 
     @classmethod
     def __deserialize__(cls, d: "dict | str") -> "Category":
-        """Deserialize from a plain string or a legacy ``{"value": ...}`` dict."""
+        """Deserialize from a plain string or a legacy ``{"value": ...}`` dict.
+
+        Accepts the legacy value ``'SKIP'`` and maps it to ``NOTRUN``.
+        """
         if isinstance(d, str):
+            if d == "SKIP":
+                return cls.NOTRUN
             return cls(d)
-        return cls(d["value"])
+        value = d["value"]
+        if value == "SKIP":
+            return cls.NOTRUN
+        return cls(value)
 
     @classmethod
     def factory(cls, arg: "Category | str") -> "Category":
-        """Coerce a string or ``Category`` to a ``Category``, uppercasing as needed."""
-        return arg if isinstance(arg, Category) else Category(arg.upper())
+        """Coerce a string or ``Category`` to a ``Category``, uppercasing as needed.
+
+        Accepts the legacy value ``'SKIP'`` and maps it to ``NOTRUN``.
+        """
+        if isinstance(arg, Category):
+            return arg
+        upper = arg.upper()
+        if upper == "SKIP":
+            return cls.NOTRUN
+        return Category(upper)
 
     def rich_color(self) -> str:
         """Return a Rich markup color string for this category."""
@@ -71,7 +88,7 @@ class Category(str, Enum):
             return "bold green"
         elif self == Category.FAIL:
             return "bold red"
-        elif self == Category.SKIP:
+        elif self == Category.NOTRUN:
             return "bold yellow"
         elif self == Category.CANCEL:
             return "bold magenta"
@@ -84,7 +101,7 @@ class Category(str, Enum):
             return "#02FE20"
         elif self == Category.FAIL:
             return "#FF3333"
-        elif self == Category.SKIP:
+        elif self == Category.NOTRUN:
             return "#FEFD02"
         elif self == Category.CANCEL:
             return "#F202FE"
@@ -112,9 +129,9 @@ class Outcome(IntEnum):
         INVALID: Job specification is invalid and could not be run (FAIL category).
         CANCELLED: Job was explicitly cancelled by the user (CANCEL category).
         INTERRUPTED: Job was interrupted by a signal (CANCEL category).
-        SKIPPED: Job was filtered out before execution (SKIP category).
+        SKIPPED: Job was filtered out before execution (NOTRUN category).
         BLOCKED: Job cannot run because an upstream dependency did not satisfy
-            its run condition (SKIP category).
+            its run condition (NOTRUN category).
     """
 
     NONE = -1
@@ -246,8 +263,8 @@ class Status:
         return self.category == Category.FAIL
 
     def is_skipped(self) -> bool:
-        """True if the job was skipped or blocked (category is SKIP)."""
-        return self.category == Category.SKIP
+        """True if the job did not run — skipped or blocked (category is NOTRUN)."""
+        return self.category == Category.NOTRUN
 
     def is_cancelled(self) -> bool:
         """True if the job was cancelled or interrupted (category is CANCEL)."""
@@ -521,7 +538,7 @@ def get_category(arg: Outcome) -> "Category":
     elif arg in (Outcome.CANCELLED, Outcome.INTERRUPTED):
         return Category.CANCEL
     elif arg in (Outcome.SKIPPED, Outcome.BLOCKED):
-        return Category.SKIP
+        return Category.NOTRUN
     else:
         return Category.NONE
 
@@ -549,7 +566,7 @@ def get_possible_outcomes(arg: Category) -> tuple["Outcome", ...]:
         )
     elif arg == Category.CANCEL:
         return (Outcome.CANCELLED, Outcome.INTERRUPTED)
-    elif arg == Category.SKIP:
+    elif arg == Category.NOTRUN:
         return (Outcome.SKIPPED, Outcome.BLOCKED)
     else:
         return (Outcome.NONE,)
@@ -565,7 +582,7 @@ def get_default_outcome(arg: Category) -> "Outcome":
 
     Returns:
         ``SUCCESS`` for PASS, ``FAILED`` for FAIL, ``CANCELLED`` for CANCEL,
-        ``SKIPPED`` for SKIP, and ``NONE`` otherwise.
+        ``SKIPPED`` for NOTRUN, and ``NONE`` otherwise.
     """
     if arg == Category.PASS:
         return Outcome.SUCCESS
@@ -573,7 +590,7 @@ def get_default_outcome(arg: Category) -> "Outcome":
         return Outcome.FAILED
     elif arg == Category.CANCEL:
         return Outcome.CANCELLED
-    elif arg == Category.SKIP:
+    elif arg == Category.NOTRUN:
         return Outcome.SKIPPED
     else:
         return Outcome.NONE
