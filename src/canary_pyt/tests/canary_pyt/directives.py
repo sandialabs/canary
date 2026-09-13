@@ -20,12 +20,7 @@ def write(path: Path, text: str = "") -> None:
 
 
 def data_dir() -> Path:
-    here = Path(__file__).parent
-    candidates = [here / "data", here.parent / "data"]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.resolve()
-    raise FileNotFoundError(f"Could not find tests data dir from {here}")
+    return (Path(__file__).parent.parent / "data").resolve()
 
 
 def find_job_by_name(workspace: Workspace, name: str):

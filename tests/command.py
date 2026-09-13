@@ -402,7 +402,7 @@ def test_status_build_summary_all_pass():
 
 
 def test_describe(capsys):
-    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
 
     with canary.config.override():
         args = argparse.Namespace(on_options=None, testspec=os.path.join(data_dir, "empire.pyt"))
