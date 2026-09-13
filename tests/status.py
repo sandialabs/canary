@@ -35,7 +35,7 @@ def test_status_category_sets_default_outcome():
 
     s.set(category="FAIL")
     assert s.category == status.Category.FAIL
-    assert s.outcome == status.Outcome.DIFFED  # default FAIL outcome per implementation
+    assert s.outcome == status.Outcome.FAILED  # default FAIL outcome
 
 
 def test_outcome_infers_category():

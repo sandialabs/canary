@@ -564,13 +564,13 @@ def get_default_outcome(arg: Category) -> "Outcome":
         arg: The category to query.
 
     Returns:
-        ``SUCCESS`` for PASS, ``DIFFED`` for FAIL, ``CANCELLED`` for CANCEL,
+        ``SUCCESS`` for PASS, ``FAILED`` for FAIL, ``CANCELLED`` for CANCEL,
         ``SKIPPED`` for SKIP, and ``NONE`` otherwise.
     """
     if arg == Category.PASS:
         return Outcome.SUCCESS
     elif arg == Category.FAIL:
-        return Outcome.DIFFED
+        return Outcome.FAILED
     elif arg == Category.CANCEL:
         return Outcome.CANCELLED
     elif arg == Category.SKIP:
