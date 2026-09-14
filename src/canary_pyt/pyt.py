@@ -182,6 +182,7 @@ class PYTModel:
         self.attributes: Field[dict[str, Any], dict[str, Any]] = Field(reducer=reducer.MERGE_DICTS)
         self.aggregate: Field[AggregateSpec, AggregateSpec | None] = Field.make(reducer.LAST)
         self.preload: Field[str, str | None] = Field.make(reducer.LAST)
+        self.exec_path: Field[str, str | None] = Field.make(reducer.LAST)
         self.enable: Field[bool, list[bool]] = Field(reducer=reducer.IDENTITY)
         self.skip_reason: Field[str, str | None] = Field.make(reducer.LAST)
         self.xstatus: Field[XstatusSpec, XstatusSpec | None] = Field.make(reducer.LAST)
@@ -314,6 +315,9 @@ class PYTModel:
 
     def set_preload(self, arg: str, when: WhenType | None = None) -> None:
         self.preload.add(arg, when=when)
+
+    def set_exec_path(self, path: str, when: WhenType | None = None) -> None:
+        self.exec_path.add(path, when=when)
 
     def set_enable(self, value: bool, when: WhenType | None = None) -> None:
         self.enable.add(bool(value), when=when)
@@ -523,6 +527,18 @@ class PYTModel:
         on_options: list[str] | None = None,
     ) -> str | None:
         return self.preload.eval(family=family, parameters=parameters, on_options=on_options)
+
+    def get_exec_path(
+        self,
+        family: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        on_options: list[str] | None = None,
+        subs: dict[str, Any] | None = None,
+    ) -> str | None:
+        path = self.exec_path.eval(family=family, parameters=parameters, on_options=on_options)
+        if path is not None and subs:
+            path = self.safe_substitute(path, **subs)
+        return path
 
     def get_enable(self, family=None, parameters=None, on_options=None) -> tuple[bool, str | None]:
         for c in self.enable.items:
@@ -738,6 +754,9 @@ class PYTAdapter:
     def f_preload(self, arg: str, *, when: WhenType | None = None) -> None:
         self.m.set_preload(arg, when=when)
 
+    def f_execution_path(self, path: str, *, when: WhenType | None = None) -> None:
+        self.m.set_exec_path(path, when=when)
+
     def f_exclusive(self, *, when: WhenType | None = None) -> None:
         self.m.set_exclusive(when=when)
 
@@ -810,6 +829,7 @@ class PYTLockEmitter:
                 modules = model.get_modules(family, parameters, on_options=on_options)
                 timeout = model.get_timeout(family, parameters, on_options=on_options)
                 preload = model.get_preload(family, parameters, on_options=on_options)
+                exec_path = model.get_exec_path(family, parameters, on_options=on_options, subs=kw)
                 xstatus = model.get_xstatus(family, parameters, on_options=on_options)
                 exclusive = model.get_exclusive(family, parameters, on_options=on_options)
                 rcfiles = model.get_rcfiles(family, parameters, on_options=on_options)
@@ -844,6 +864,7 @@ class PYTLockEmitter:
                     exclusive=exclusive,
                     dependencies=deps,
                     command=list(model.command),
+                    exec_path=exec_path,
                 )
                 ir.add_artifact("testcase.lock")
                 ir.add_artifact(ir.stdout)
@@ -912,6 +933,7 @@ class PYTLockEmitter:
                     timeout=model.get_timeout(family, on_options=on_options) or -1.0,
                     attributes={"multicase": True, "paramsets": pset_meta},
                     dependencies=deps,
+                    exec_path=model.get_exec_path(family, on_options=on_options, subs=kw),
                 )
                 parent.add_artifact("testcase.lock")
                 parent.add_artifact(parent.stdout)

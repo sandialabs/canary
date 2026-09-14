@@ -1364,6 +1364,54 @@ def set_id(id: str, *, when: WhenType | None = None) -> None:
     """
 
 
+def execution_path(path: str, *, when: WhenType | None = None) -> None:
+    """Override the directory in which the job executes.
+
+    By default a job executes in a directory derived from the test file's
+    location and the job name.  ``execution_path`` sets an explicit execution
+    directory for the job (``JobSpec.exec_path``).
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import canary_pyt
+       canary_pyt.directives.execution_path(path, when=...)
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``path``: The execution directory for the job.  A relative path is
+      interpreted relative to the test file's directory.
+    * ``when``: Restrict processing of the directive to this condition
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platforms``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``options``: Restrict processing of the directive to command line ``-o`` options
+    * ``parameters``: Restrict processing of the directive to certain parameter
+      names and values
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       import canary_pyt
+       canary_pyt.directives.execution_path("custom/exec/dir")
+
+    will run the job in ``custom/exec/dir`` instead of the default
+    location.
+    """
+
+
 def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """Set an attribute on the test
 

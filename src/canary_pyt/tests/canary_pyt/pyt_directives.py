@@ -218,6 +218,53 @@ canary_pyt.directives.source('rc.sh')
         assert "rc.sh" in (s.rcfiles or [])
 
 
+def test_execution_path_overrides_exec_path(tmpdir):
+    """execution_path() sets the job's exec_path on the locked spec."""
+    with working_dir(tmpdir.strpath, create=True):
+        write(
+            "test.pyt",
+            """
+import canary_pyt
+canary_pyt.directives.execution_path('custom/exec/dir')
+""",
+        )
+
+        s = lock_file("test.pyt")[0]
+        assert s.exec_path == "custom/exec/dir"
+
+
+def test_execution_path_when_gated(tmpdir):
+    """A when-gated execution_path() that does not match leaves exec_path unset."""
+    with working_dir(tmpdir.strpath, create=True):
+        write(
+            "test.pyt",
+            """
+import canary_pyt
+canary_pyt.directives.execution_path('gated/dir', when="options='never'")
+""",
+        )
+
+        s = lock_file("test.pyt")[0]
+        assert s.exec_path is None
+
+
+def test_execution_path_expands_parameters(tmpdir):
+    """execution_path() supports parameter template substitution."""
+    with working_dir(tmpdir.strpath, create=True):
+        write(
+            "test.pyt",
+            """
+import canary_pyt
+canary_pyt.directives.parameterize('a', (1, 2))
+canary_pyt.directives.execution_path('run_{a}')
+""",
+        )
+
+        specs = lock_file("test.pyt")
+        exec_paths = sorted(s.exec_path for s in specs)
+        assert exec_paths == ["run_1", "run_2"]
+
+
 def test_default_command_uses_python_and_basename(tmpdir):
     """A plain .pyt file with no command directive runs via the Python interpreter."""
     with working_dir(tmpdir.strpath, create=True):
