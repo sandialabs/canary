@@ -199,6 +199,55 @@ Environment Variable Arguments
    # Use environment variable
    python3 -m canary hpc run --backend=pbs ./basic
 
+Per-Batch Scheduler Arguments
+-----------------------------
+
+The scheduler arguments described above (``--submit-arg`` / ``-b option=`` and
+the environment variable) apply globally to every batch.  To vary scheduler
+arguments *per batch* — for example to send small single-node batches to a
+different partition or with a shorter wall time than large multi-node batches —
+implement the ``canary_hpc_batch_setup`` plugin hook.
+
+The hook is called once for each batch after batching is complete and before the
+batch is submitted.  Implementations inspect the batch and attach raw scheduler
+options with :meth:`TestBatch.add_submit_option`:
+
+.. code-block:: python
+
+   import canary
+
+
+   @canary.hookimpl
+   def canary_hpc_batch_setup(batch) -> None:
+       # batch.spec.node_count is the number of nodes this batch will request.
+       if batch.spec.node_count <= 1:
+           batch.add_submit_option("--time=5m", "--partition=short,batch")
+       else:
+           batch.add_submit_option("--time=10:00:00", "--partition=batch")
+
+The option strings are passed through to the scheduler unmodified; canary_hpc
+does not interpret them (the sole exception is ``--time`` / ``--time-limit``,
+which canary reads to size the batch wall time and to warn when a requested wall
+limit is shorter than the estimated runtime).
+
+.. note::
+
+   The hook attaches options to an *already-formed* batch; it does not change how
+   jobs are grouped into batches.  Because a single scheduler allocation cannot
+   span multiple partitions, if you need different partitions per problem, first
+   arrange for those jobs to land in separate batches — for example by giving
+   them different node counts via ``parameterize("nodes", ...)`` together with
+   ``-b spec=count:max``.
+
+Precedence
+~~~~~~~~~~
+
+Per-batch options are combined with the global submit arguments.  The global
+(command-line) options are applied **last**, so they take precedence on
+conflicting flags.  For example, if a plugin sets ``--time=5m`` on a batch and
+the user also runs with ``--submit-arg="--time=30m"``, the batch is submitted
+with a 30-minute wall time.
+
 Argument Passing Mechanism
 --------------------------
 

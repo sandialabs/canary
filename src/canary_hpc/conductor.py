@@ -457,6 +457,8 @@ class CanaryHPCConductor:
                 len(dependencies),
             )
             batches[batch.id] = batch
+        for batch in batches.values():
+            canary.config.pluginmanager.hook.canary_hpc_batch_setup(batch=batch)
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)
         queue.put(*batches.values())  # type: ignore
         queue.prepare()

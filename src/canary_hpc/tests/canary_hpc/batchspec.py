@@ -465,12 +465,13 @@ def test_resource_totals_cpu_only_batch_has_no_gpus(tmp_path):
     assert "gpus" not in totals
 
 
-def _capture_submitted_jobspec(tmp_path, jobs):
+def _capture_submitted_jobspec(tmp_path, jobs, batch=None):
     """Drive HPCConnectRunner.submit() with stubs and return the JobSpec that
     reached the backend's submission manager."""
     from canary_hpc.batchexec import HPCConnectBatchRunner
 
-    batch = make_batch(tmp_path, jobs)
+    if batch is None:
+        batch = make_batch(tmp_path, jobs)
     runner = HPCConnectBatchRunner.__new__(HPCConnectBatchRunner)
 
     captured: dict[str, Any] = {}
@@ -492,7 +493,7 @@ def _capture_submitted_jobspec(tmp_path, jobs):
     # JobSpec construction (the part the None-vs-0 fix touches).
     runner.rc_environ = lambda batch: {}  # type: ignore[assignment]
     runner.canary_invocation = lambda batch: "canary run"  # type: ignore[assignment]
-    runner.scheduler_args = lambda: []  # type: ignore[assignment]
+    runner.scheduler_args = lambda batch: list(batch.submit_options)  # type: ignore[assignment]
     runner._warn_if_wall_too_short = lambda *a, **k: None  # type: ignore[assignment]
 
     runner.submit(batch)
@@ -516,6 +517,55 @@ def test_submit_gpu_batch_forwards_gpu_count(tmp_path):
     """A GPU batch forwards the aggregated GPU count to the JobSpec."""
     jobspec = _capture_submitted_jobspec(tmp_path, [FakeJob(id="j1", cpus=4, gpus=2)])
     assert jobspec.gpus == 2
+
+
+# ---------------------------------------------------------------------------
+# Per-batch submit options (canary_hpc_batch_setup hook)
+# ---------------------------------------------------------------------------
+
+
+def test_add_submit_option_accumulates(tmp_path):
+    batch = make_batch(tmp_path, [FakeJob(id="j1")])
+    assert batch.submit_options == []
+    batch.add_submit_option("--time=5m")
+    batch.add_submit_option("--partition=short,batch", "--exclusive")
+    assert batch.submit_options == ["--time=5m", "--partition=short,batch", "--exclusive"]
+
+
+def test_per_batch_options_reach_submitted_jobspec(tmp_path):
+    batch = make_batch(tmp_path, [FakeJob(id="j1", cpus=4, gpus=0)])
+    batch.add_submit_option("--partition=short,batch", "--time=5m")
+    jobspec = _capture_submitted_jobspec(tmp_path, batch.jobs, batch=batch)
+    assert jobspec.submit_args == ["--partition=short,batch", "--time=5m"]
+
+
+def test_scheduler_args_merges_command_line_last(tmp_path):
+    """Per-batch options come first; global (command-line) options are appended
+    last so they win on conflicting flags."""
+    import _canary.config as config
+
+    batch = make_batch(tmp_path, [FakeJob(id="j1")])
+    batch.add_submit_option("--time=5m", "--partition=short")
+
+    runner = HPCConnectRunner.__new__(HPCConnectRunner)
+    with config.override():
+        config.options.hpc_submit_args = ["--time=30m", "--account=abc"]
+        args = runner.scheduler_args(batch)
+
+    # per-batch first, global last
+    assert args == ["--time=5m", "--partition=short", "--time=30m", "--account=abc"]
+
+
+def test_estimated_runtime_honors_per_batch_time_but_command_line_wins(tmp_path):
+    batch = make_batch(tmp_path, [FakeJob(id="j1", runtime=10.0)])
+
+    # A per-batch --time is honored when it is the only wall spec supplied.
+    assert batch.estimated_runtime(submit_args=["--time=5m"]) == 300.0
+
+    # When both per-batch and global specify --time, the merged list has the
+    # global one last, so command line wins.
+    merged = ["--time=5m", "--time=30m"]
+    assert batch.estimated_runtime(submit_args=merged) == 1800.0
 
 
 # ---------------------------------------------------------------------------

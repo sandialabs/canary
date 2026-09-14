@@ -11,6 +11,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Sequence
 from typing import cast
 
 import hpc_connect
@@ -104,6 +105,19 @@ class TestBatch(BaseJob):
         #: jobs that did not finish an actionable status reason instead of the
         #: generic "batch finished before job produced a final result".
         self.scheduler_termination: str | None = None
+        #: Raw scheduler submit options attached to this batch by
+        #: ``canary_hpc_batch_setup`` plugins.  Combined with the global submit
+        #: arguments at submission time (the global/command-line options take
+        #: precedence on conflicting flags).
+        self.submit_options: list[str] = []
+
+    def add_submit_option(self, *args: str) -> None:
+        """Append raw scheduler submit option(s) for this batch.
+
+        The strings are passed through to the scheduler unmodified (e.g.
+        ``batch.add_submit_option("--time=5m", "--partition=short,batch")``).
+        """
+        self.submit_options.extend(args)
 
     def __iter__(self):
         return iter(self.jobs)
@@ -190,8 +204,14 @@ class TestBatch(BaseJob):
     def total_timeout(self) -> float:
         return self.queue_timeout + self.timeout_multiplier * self.timeout
 
-    def estimated_runtime(self) -> float:
-        if submit_args := canary.config.getoption("hpc_submit_args"):
+    def estimated_runtime(self, submit_args: "Sequence[str] | None" = None) -> float:
+        # ``submit_args`` lets the caller supply the fully-merged scheduler
+        # options (per-batch options + global command-line options) so that a
+        # per-batch ``--time`` is honored.  When not provided, fall back to the
+        # global command-line submit args only.
+        if submit_args is None:
+            submit_args = canary.config.getoption("hpc_submit_args")
+        if submit_args:
             p = argparse.ArgumentParser()
             p.add_argument("--time", "--time-limit", dest="qtime")
             a, _ = p.parse_known_args(submit_args)

@@ -73,8 +73,11 @@ class HPCConnectRunner:
         variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         return variables
 
-    def scheduler_args(self) -> list[str]:
-        options: list[str] = []
+    def scheduler_args(self, batch: "TestBatch") -> list[str]:
+        # Per-batch options (attached by canary_hpc_batch_setup plugins) come
+        # first; the global command-line options are appended last so they take
+        # precedence on conflicting flags.
+        options: list[str] = list(batch.submit_options)
         if args := canary.config.getoption("hpc_submit_args"):
             options.extend(args)
         return options
@@ -564,8 +567,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         node_count = self.nodes_required(batch)
         variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
         totals = self.resource_totals(batch)
-        submit_args = self.scheduler_args()
-        estimated = batch.estimated_runtime() * batch.timeout_multiplier
+        submit_args = self.scheduler_args(batch)
+        estimated = batch.estimated_runtime(submit_args=submit_args) * batch.timeout_multiplier
         self._warn_if_wall_too_short(batch, submit_args, estimated)
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",

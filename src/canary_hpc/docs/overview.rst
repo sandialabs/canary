@@ -112,6 +112,7 @@ The HPC extension integrates with Canary through command-line options and hooks:
 - ``canary_addcommand``: Adds the ``hpc`` command
 - ``canary_resource_pool_fill``: Fills HPC backend resource pool or batch-local resource pool
 - ``canary_hpc_batch_runner``: Allows plugins to provide custom batch runners
+- ``canary_hpc_batch_setup``: Allows plugins to attach per-batch scheduler submit options before submission
 
 Execution Flow
 --------------

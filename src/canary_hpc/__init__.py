@@ -590,6 +590,25 @@ class CanaryHPCHooks:
         """Return a runner for this batch"""
         raise NotImplementedError
 
+    @staticmethod
+    @canary.hookspec
+    def canary_hpc_batch_setup(batch: "TestBatch") -> None:
+        """Configure a batch before it is submitted to the scheduler.
+
+        Called once per batch after batching is complete and before the batch is
+        submitted.  Implementations may inspect the batch (for example
+        ``batch.jobs``, ``batch.spec.node_count``, or per-job
+        ``job.spec.attributes``) and attach raw scheduler submit options with
+        :meth:`TestBatch.add_submit_option`.
+
+        Per-batch options are combined with the global submit arguments
+        (``-b option=`` / ``--submit-arg``).  The global (command line) options
+        take precedence on conflicting flags.
+
+        canary_hpc does not interpret the option strings; they are passed through
+        to the scheduler as-is.
+        """
+
 
 @canary.hookimpl
 def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
