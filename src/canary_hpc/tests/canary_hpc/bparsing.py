@@ -57,6 +57,38 @@ def test_batch_spec_parse_count_max() -> None:
     assert spec == {"layout": "atomic", "nodes": "any", "count": MAX_COUNT}
 
 
+def test_batch_spec_parse_atomic_bare_defaults_true() -> None:
+    # ``atomic`` with no value means atomic=true -> layout=atomic
+    assert CanaryHPCBatchSpec.parse("atomic") == {"layout": "atomic"}
+
+
+@pytest.mark.parametrize("token", ["atomic:true", "atomic=true", "atomic:1", "atomic:yes"])
+def test_batch_spec_parse_atomic_true(token: str) -> None:
+    assert CanaryHPCBatchSpec.parse(token) == {"layout": "atomic"}
+
+
+@pytest.mark.parametrize("token", ["atomic:false", "atomic=false", "atomic:0", "atomic:no"])
+def test_batch_spec_parse_atomic_false_is_flat(token: str) -> None:
+    assert CanaryHPCBatchSpec.parse(token) == {"layout": "flat"}
+
+
+def test_batch_spec_parse_atomic_composes() -> None:
+    spec = CanaryHPCBatchSpec.parse("atomic,nodes=any,count=2")
+    assert spec == {"layout": "atomic", "nodes": "any", "count": 2}
+
+
+def test_batch_spec_parse_atomic_rejects_bad_value() -> None:
+    with pytest.raises(ValueError, match="invalid batch spec arg"):
+        CanaryHPCBatchSpec.parse("atomic:maybe")
+
+
+def test_batch_spec_parse_layout_still_accepted() -> None:
+    # layout=(flat|atomic) remains valid for backward compatibility (just
+    # undocumented in the help page).
+    assert CanaryHPCBatchSpec.parse("layout=atomic") == {"layout": "atomic"}
+    assert CanaryHPCBatchSpec.parse("layout=flat") == {"layout": "flat"}
+
+
 def test_batch_spec_parse_rejects_count_auto() -> None:
     with pytest.raises(ValueError, match="count=auto"):
         CanaryHPCBatchSpec.parse("count=auto")

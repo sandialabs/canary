@@ -110,6 +110,15 @@ class CanaryHPCBatchSpec(argparse.Action):
             if match := re.search(r"^nodes[:=](any|same)$", lowered):
                 spec["nodes"] = match.group(1)
 
+            elif match := re.search(r"^atomic(?:[:=](true|false|1|0|yes|no))?$", lowered):
+                # ``atomic`` is a boolean spelling of ``layout``:
+                #   atomic            -> layout=atomic (default true)
+                #   atomic:true/1/yes -> layout=atomic
+                #   atomic:false/0/no -> layout=flat
+                value_str = match.group(1)
+                is_atomic = value_str in (None, "true", "1", "yes")
+                spec["layout"] = "atomic" if is_atomic else "flat"
+
             elif match := re.search(r"^layout[:=](flat|atomic)$", lowered):
                 spec["layout"] = match.group(1)
 
@@ -160,12 +169,12 @@ class CanaryHPCBatchSpec(argparse.Action):
           Controls how many batches are created.
 
           count=max
-              create the maximum number of batches allowed by the selected layout.
+              create the maximum number of batches allowed by the selected mode.
 
-              For layout=flat:
+              Without atomic (the default):
                   one test job per batch.
 
-              For layout=atomic:
+              With atomic:
                   one dependency-connected component per batch.
 
           count=N
@@ -181,20 +190,21 @@ class CanaryHPCBatchSpec(argparse.Action):
               Go duration syntax such as: 40s, 2h, 4h30m30s, 45m
 
           Notes:
-              Duration-targeted packing is currently supported for layout=flat.
+              Duration-targeted packing is not supported with atomic.
 
-      layout
-          Controls dependency rules within and between batches.
+      atomic
+          Controls dependency rules within and between batches.  Takes an
+          optional boolean value; ``atomic`` on its own means ``atomic=true``.
 
-          layout=flat (default)
+          atomic (or atomic=true)
+              Jobs within a batch MAY depend on each other.
+              Batches do NOT depend on other batches.
+              Requires nodes=any and defaults to count=max if no count is
+              supplied.
+
+          atomic=false (default)
               Jobs within a batch do NOT depend on each other.
               Batches MAY depend on other batches.
-
-      layout=atomic
-          Jobs within a batch MAY depend on each other.
-          Batches do NOT depend on other batches.
-          Defaults to nodes=any,count=max if no count is supplied.
-          Duration-targeted atomic batching is not supported.
 
       nodes
           Controls whether tests in a batch must request the same node count.
@@ -208,11 +218,11 @@ class CanaryHPCBatchSpec(argparse.Action):
     Examples:
 
       1) Time-targeted batching
-          layout=flat,nodes=same,duration=1800
-              Create flat batches of approximately 1800 simulated seconds each.
+          nodes=same,duration=1800
+              Create batches of approximately 1800 simulated seconds each.
 
       2) Independent atomic batches
-          layout=atomic,nodes=any,count=2
+          atomic,nodes=any,count=2
               Partition dependency-connected components into at most 2
               independent batches.
 
