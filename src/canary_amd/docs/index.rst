@@ -2,8 +2,8 @@
 
    SPDX-License-Identifier: MIT
 
-canary_amd Documentation
-=========================
+Discovering AMD GPUs
+====================
 
 ``canary_amd`` is a Canary plugin extension that provides AMD GPU backend support: automatic
 device discovery via ``amd-smi`` (with ``rocm-smi`` fallback) and runtime environment
