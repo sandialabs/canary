@@ -2,24 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for _canary.scope_hooks — directory-scoped setup/teardown via canaryconf.py."""
+"""Tests for _canary.canaryconf_impl — directory-scoped setup/teardown via canaryconf.py."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
 
+from _canary.canaryconf_impl import CANARYCONF_FILENAME
+from _canary.canaryconf_impl import CONFTEST_KEYWORD
+from _canary.canaryconf_impl import ROLE_TO_FUNCTION
+from _canary.canaryconf_impl import SETUP_FUNCTION
+from _canary.canaryconf_impl import TEARDOWN_FUNCTION
+from _canary.canaryconf_impl import _find_canaryconf
+from _canary.canaryconf_impl import _has_setup
+from _canary.canaryconf_impl import _has_teardown
+from _canary.canaryconf_impl import _inject_conftest_jobs
+from _canary.canaryconf_impl import _make_synthetic_spec
+from _canary.canaryconf_impl import _top_level_functions
 from _canary.jobspec import JobSpec
-from _canary.scope_hooks import CANARYCONF_FILENAME
-from _canary.scope_hooks import CONFTEST_KEYWORD
-from _canary.scope_hooks import SETUP_FUNCTION
-from _canary.scope_hooks import TEARDOWN_FUNCTION
-from _canary.scope_hooks import _find_canaryconf
-from _canary.scope_hooks import _has_setup
-from _canary.scope_hooks import _has_teardown
-from _canary.scope_hooks import _inject_conftest_jobs
-from _canary.scope_hooks import _make_synthetic_spec
-from _canary.scope_hooks import _top_level_functions
 
 # ---------------------------------------------------------------------------
 # helpers — cheap JobSpec factory
@@ -130,7 +131,12 @@ def test_make_synthetic_spec_setup(tmp_path):
     assert spec.attributes["canary_conftest"]["role"] == "setup"
     assert spec.attributes["canary_conftest"]["scope_dir"] == str(tmp_path)
     assert spec.attributes["canary_conftest"]["source_file"] == str(cf)
-    assert spec.environment.get("CANARY_CONFTEST_PHASE") == "setup"
+    # In-process dispatch: no subprocess command, no phase env var.
+    assert spec.command == []
+    assert "CANARY_CONFTEST_PHASE" not in spec.environment
+    # exec_path is a dedicated __setup__ dir beneath the governing directory.
+    assert spec.exec_path == cf.parent.relative_to(tmp_path) / "__setup__"
+    assert ROLE_TO_FUNCTION["setup"] == SETUP_FUNCTION
 
 
 def test_make_synthetic_spec_teardown(tmp_path):
@@ -141,7 +147,9 @@ def test_make_synthetic_spec_teardown(tmp_path):
     )
     assert spec.attributes["canary_conftest"]["role"] == "teardown"
     assert "teardown" in spec.keywords
-    assert spec.environment.get("CANARY_CONFTEST_PHASE") == "teardown"
+    assert spec.command == []
+    assert "CANARY_CONFTEST_PHASE" not in spec.environment
+    assert ROLE_TO_FUNCTION["teardown"] == TEARDOWN_FUNCTION
 
 
 # ---------------------------------------------------------------------------
@@ -399,10 +407,116 @@ def test_inject_no_duplicate_dependencies(tmp_path):
 
 
 def test_hookimpl_registered():
-    """scope_hooks exposes canary_generate_modifyitems as a hookimpl."""
-    import _canary.scope_hooks as sh
+    """canaryconf_impl exposes canary_generate_modifyitems as a hookimpl."""
+    import _canary.canaryconf_impl as sh
 
     assert hasattr(sh, "canary_generate_modifyitems")
     # pluggy marks hookimpl callables with a special attribute
     impl = sh.canary_generate_modifyitems
     assert hasattr(impl, "canary_impl") or callable(impl)
+
+
+# ---------------------------------------------------------------------------
+# PythonFunctionLauncher selection
+# ---------------------------------------------------------------------------
+
+
+def test_launcher_selected_for_conftest_jobs():
+    """canaryconf jobs get a PythonFunctionLauncher; others get None from the hook."""
+    from _canary.launcher import PythonFunctionLauncher
+    from _canary.launcher import canaryconf_job_launcher
+
+    conftest_case = SimpleNamespace(
+        get_attribute=lambda name, *a: {"role": "setup"} if name == "canary_conftest" else None
+    )
+    plain_case = SimpleNamespace(get_attribute=lambda name, *a: None)
+
+    assert isinstance(canaryconf_job_launcher(case=conftest_case), PythonFunctionLauncher)
+    assert canaryconf_job_launcher(case=plain_case) is None
+
+
+def test_import_source_reads_functions(tmp_path):
+    """PythonFunctionLauncher._import_source loads a canaryconf.py by path."""
+    from _canary.launcher import PythonFunctionLauncher
+
+    cf = tmp_path / CANARYCONF_FILENAME
+    cf.write_text(
+        f"def {SETUP_FUNCTION}(ctx):\n    return 'ok'\n"
+        f"def {TEARDOWN_FUNCTION}(ctx):\n    return 'bye'\n"
+    )
+    module = PythonFunctionLauncher._import_source(cf)
+    assert callable(getattr(module, SETUP_FUNCTION))
+    assert callable(getattr(module, TEARDOWN_FUNCTION))
+    # Anonymous import must not leak into sys.modules.
+    import sys
+
+    assert not any(cf.stem == m for m in sys.modules if m == CANARYCONF_FILENAME[:-3])
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: setup/teardown actually execute in-process during a run
+# ---------------------------------------------------------------------------
+
+
+def test_setup_teardown_run_in_process(tmp_path):
+    """A full session runs canary_setup/canary_teardown in-process (no subprocess).
+
+    The canaryconf.py writes marker files into ctx.file_root so we can assert
+    the functions actually executed, and that setup ran before the test while
+    teardown ran after it.
+    """
+    import canary
+    from _canary.util.filesystem import working_dir
+    from _canary.workspace import Workspace
+
+    root = tmp_path / "suite"
+    root.mkdir()
+
+    (root / CANARYCONF_FILENAME).write_text(
+        "import os\n"
+        "import canary\n"
+        "\n"
+        f"def {SETUP_FUNCTION}(ctx):\n"
+        "    root = ctx.file_root\n"
+        "    open(os.path.join(root, 'setup.marker'), 'w').close()\n"
+        "\n"
+        f"def {TEARDOWN_FUNCTION}(ctx):\n"
+        "    root = ctx.file_root\n"
+        "    open(os.path.join(root, 'teardown.marker'), 'w').close()\n"
+    )
+
+    (root / "t.pyt").write_text(
+        "import os\n"
+        "import canary\n"
+        "import canary_pyt\n"
+        "def test():\n"
+        "    self = canary.get_instance()\n"
+        "    # setup must have run before us\n"
+        "    assert os.path.exists(os.path.join(self.file_root, 'setup.marker'))\n"
+        "    # teardown must NOT have run yet\n"
+        "    assert not os.path.exists(os.path.join(self.file_root, 'teardown.marker'))\n"
+        "if __name__ == '__main__':\n"
+        "    test()\n"
+    )
+
+    with working_dir(root):
+        with canary.config.override():
+            workspace = Workspace.create(root)
+            specs = workspace.collect({str(root): []})
+            workspace.run(specs, only="all")
+
+        jobs = workspace.load_jobs()
+
+    # Marker files prove both hooks executed in-process.
+    assert (root / "setup.marker").exists()
+    assert (root / "teardown.marker").exists()
+
+    # The setup and teardown synthetic jobs must have passed, and the real test
+    # (which asserts ordering) must have passed too.
+    by_family = {job.family: job for job in jobs}
+    assert f"{CANARYCONF_FILENAME}::setup" in by_family
+    assert f"{CANARYCONF_FILENAME}::teardown" in by_family
+    for job in jobs:
+        assert job.status.outcome.name in ("SUCCESS", "PASS"), (
+            f"{job.family}: {job.status.outcome.name} ({job.status.reason})"
+        )

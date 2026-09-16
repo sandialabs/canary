@@ -31,7 +31,13 @@ has already run.  It:
    ``canary_setup`` and/or ``canary_teardown`` are defined *without executing
    user code at generation time*.
 3. Creates synthetic :class:`~_canary.jobspec.JobSpec` objects for setup and/or
-   teardown.
+   teardown.  These specs carry *no* ``command``: they are dispatched
+   in-process by :class:`~_canary.launcher.PythonFunctionLauncher`, which
+   imports the ``canaryconf.py`` file and calls ``canary_setup(ctx)`` /
+   ``canary_teardown(ctx)`` directly (see :mod:`_canary.launcher`).  The
+   synthetic spec's ``exec_path`` is set to a dedicated ``__setup__`` /
+   ``__teardown__`` directory beneath the governing directory so the function
+   runs in the session tree location mirroring the ``canaryconf.py``.
 4. Wires :class:`~_canary.jobspec.SpecDependency` edges:
    - Every test in scope: ``test.dependencies += [SpecDependency(setup, "on_success")]``
    - Teardown spec: ``teardown.dependencies += [SpecDependency(test, "always")]``
@@ -68,7 +74,6 @@ Teardown re-runs whenever any downstream test re-runs, because the
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -88,6 +93,9 @@ CANARYCONF_FILENAME = "canaryconf.py"
 #: Function names canary looks for inside the sentinel file.
 SETUP_FUNCTION = "canary_setup"
 TEARDOWN_FUNCTION = "canary_teardown"
+
+#: Maps a synthetic job's ``role`` to the function invoked in the canaryconf.py.
+ROLE_TO_FUNCTION = {"setup": SETUP_FUNCTION, "teardown": TEARDOWN_FUNCTION}
 
 #: Keyword attached to every synthetic spec.
 CONFTEST_KEYWORD = "canary_conftest"
@@ -138,13 +146,16 @@ def _find_canaryconf(directory: Path) -> Path | None:
 # spec factory
 # ---------------------------------------------------------------------------
 
-_CONFTEST_MARKER = "__canary_conftest__"
-
 
 def _make_synthetic_spec(
     *, role: str, canaryconf_path: Path, file_root: Path, scope_dir: Path
 ) -> JobSpec:
     """Build a synthetic setup or teardown :class:`JobSpec`.
+
+    The spec carries no ``command``.  It is dispatched in-process by
+    :class:`~_canary.launcher.PythonFunctionLauncher`, which imports the
+    ``canaryconf.py`` file and calls the function named by ``role`` (see
+    :data:`ROLE_TO_FUNCTION`) with the job's ``TestInstance`` as ``ctx``.
 
     Args:
         role:           ``"setup"`` or ``"teardown"``.
@@ -159,11 +170,13 @@ def _make_synthetic_spec(
         file_root=file_root,
         file_path=file_path,
         family=family,
-        # Run the canaryconf.py with a CANARY_CONFTEST_PHASE env var so it
-        # knows which function to invoke.  The file itself is responsible for
-        # calling canary_setup(ctx) / canary_teardown(ctx) when invoked.
-        command=[sys.executable, CANARYCONF_FILENAME],
-        environment={"CANARY_CONFTEST_PHASE": role},
+        # Execute in a dedicated per-role directory beneath the session tree
+        # location mirroring the canaryconf.py's governing directory (e.g.
+        # ``<scope_dir>/__setup__`` / ``<scope_dir>/__teardown__``).  A dedicated
+        # directory is required because the job machinery creates and enters an
+        # execution workspace; the governing directory itself is shared by the
+        # governed tests and cannot be reused as an exec dir.
+        exec_path=file_path.parent / f"__{role}__",
         keywords=[CONFTEST_KEYWORD, role],
         attributes={
             "canary_conftest": {

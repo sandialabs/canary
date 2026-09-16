@@ -3,14 +3,19 @@
 # SPDX-License-Identifier: MIT
 """Defines launchers for individual test jobs"""
 
+import importlib.util
 import os
 import shlex
 import signal
 import subprocess
+import sys
 import time
+import traceback
 from abc import ABC
 from abc import abstractmethod
 from contextlib import contextmanager
+from contextlib import redirect_stderr
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -130,6 +135,101 @@ class SubprocessLauncher(Launcher):
                 stdout.close()
                 if not isinstance(stderr, int):
                     stderr.close()
+
+
+class PythonFunctionLauncher(Launcher):
+    """Launcher that imports a Python file and calls a function *in-process*.
+
+    Used for the synthetic setup/teardown jobs injected from ``canaryconf.py``
+    (see :mod:`_canary.canaryconf_impl`).  Rather than spawning
+    ``python canaryconf.py`` as a subprocess, this launcher imports the file
+    named by the job's ``canary_conftest["source_file"]`` attribute and calls
+    the function selected by ``canary_conftest["role"]`` (``canary_setup`` or
+    ``canary_teardown``) directly, passing the job's ``TestInstance`` as
+    ``ctx``.
+
+    The function runs with the current working directory set to the job's
+    workspace directory (which mirrors the ``canaryconf.py``'s governing
+    directory in the session tree) and with the job's runtime environment
+    applied.  ``stdout``/``stderr`` produced by the function are captured to the
+    job's output files.  A raised exception yields a non-zero return code so the
+    job is marked failed and downstream tests are gated accordingly.
+    """
+
+    def run(self, job: "Job") -> int:
+        from .canaryconf_impl import ROLE_TO_FUNCTION
+        from .testinst import from_job
+
+        logger.debug(f"Starting {job.display_name()} on pid {os.getpid()} (python function)")
+
+        meta = job.get_attribute("canary_conftest") or {}
+        role = meta.get("role")
+        source_file = meta.get("source_file")
+        if role not in ROLE_TO_FUNCTION:
+            raise RuntimeError(f"{job}: unknown canary_conftest role {role!r}")
+        if not source_file:
+            raise RuntimeError(f"{job}: canary_conftest missing source_file")
+        func_name = ROLE_TO_FUNCTION[role]
+
+        job.add_measurement("command_line", f"{source_file}::{func_name}(ctx)")
+
+        with self._context(job):
+            module = self._import_source(Path(source_file))
+            func = getattr(module, func_name, None)
+            if not callable(func):
+                raise RuntimeError(f"{job}: {source_file} does not define a callable {func_name!r}")
+            ctx = from_job(job)
+            start = time.time()
+            stdout: TextIO = open(job.stdout, "a")
+            stderr: StdErrorT = open(job.stderr, "a") if job.stderr is not None else stdout
+            try:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    func(ctx)
+                rc = 0
+            except Exception:
+                traceback.print_exc(file=stderr)
+                rc = 1
+            finally:
+                if stderr is not stdout and not isinstance(stderr, int):
+                    stderr.close()
+                stdout.close()
+            job.add_measurement("duration", time.time() - start)
+            logger.debug(f"Finished {job.display_name()} (rc={rc})")
+            return rc
+
+    @contextmanager
+    def _context(self, job: "Job") -> Generator[None, None, None]:
+        old_env = os.environ.copy()
+        old_cwd = Path.cwd()
+        try:
+            job.set_runtime_env(os.environ)
+            for module in job.spec.modules or []:
+                load_module(module)
+            for rcfile in job.spec.rcfiles or []:
+                source_rcfile(rcfile)
+            os.chdir(job.workspace.dir)
+            yield
+        finally:
+            os.chdir(old_cwd)
+            os.environ.clear()
+            os.environ.update(old_env)
+
+    @staticmethod
+    def _import_source(path: Path) -> Any:
+        """Import *path* as an anonymous module without polluting ``sys.modules``."""
+        name = f"_canary_conftest_{abs(hash(str(path)))}"
+        spec = importlib.util.spec_from_file_location(name, str(path))
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot import canaryconf file {path!r}")
+        module = importlib.util.module_from_spec(spec)
+        # Register temporarily so dataclasses / typing lookups inside the module
+        # resolve, then remove to avoid leaking state between jobs.
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(name, None)
+        return module
 
 
 class MeasuredProcess:
@@ -331,6 +431,14 @@ class MeasuredProcess:
                 continue
             measurements[k] = {"min": min(vals), "max": max(vals), "ave": sum(vals) / len(vals)}
         return measurements
+
+
+@hookimpl(specname="canary_runtest_launcher")
+def canaryconf_job_launcher(case: "Job") -> Launcher | None:
+    """Select :class:`PythonFunctionLauncher` for synthetic ``canaryconf.py`` jobs."""
+    if case.get_attribute("canary_conftest"):
+        return PythonFunctionLauncher()
+    return None
 
 
 @hookimpl(trylast=True, specname="canary_runtest_launcher")

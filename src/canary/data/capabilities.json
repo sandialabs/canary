@@ -265,7 +265,7 @@
           "canary_teardown(ctx)": "Optional. Runs once after every governed test, regardless of test outcome. ctx is the teardown job's TestInstance."
         },
         "either_or_both": "A canaryconf.py may define only canary_setup, only canary_teardown, or both. If it defines neither known function it is ignored.",
-        "phase_dispatch": "The synthetic job runs the canaryconf.py as a script (python canaryconf.py) with the CANARY_CONFTEST_PHASE environment variable set to 'setup' or 'teardown'. The file is responsible for calling the corresponding function for the active phase.",
+        "phase_dispatch": "The synthetic job is dispatched in-process by PythonFunctionLauncher: canary imports the canaryconf.py file and calls canary_setup(ctx) or canary_teardown(ctx) directly (per the job's role), rather than running it as a subprocess. The function runs with the working directory set to the session-tree location mirroring the canaryconf.py's governing directory.",
         "safety": "canary parses canaryconf.py with ast at generation time to detect the functions; user code is NOT executed during generation."
       },
       "scheduling_model": {
@@ -281,7 +281,7 @@
         "rerun": "Synthetic jobs have stable spec IDs, so a setup that passed previously is skipped by rerun strategies like --only not_pass. Teardown re-runs whenever any governed test re-runs (its always edges keep it unready until those tests finish)."
       },
       "implementation": {
-        "module": "_canary.scope_hooks (registered as builtin.scope_hooks plugin).",
+        "module": "_canary.canaryconf_impl (registered as builtin.canaryconf_impl plugin). In-process dispatch uses _canary.launcher.PythonFunctionLauncher, selected via the canary_runtest_launcher hook for jobs carrying the canary_conftest attribute.",
         "hook": "canary_generate_modifyitems, which runs after dependency resolution and injects the synthetic specs into generator.specs.",
         "idempotent": "Re-running the hook does not add duplicate synthetic jobs or duplicate dependency edges."
       },
@@ -290,8 +290,7 @@
         "Expecting one setup/teardown pair per test — there is one shared pair per canaryconf.py.",
         "Expecting teardown to be skipped when a governed test fails — teardown uses an always edge and still runs.",
         "Putting per-test fixture logic in canaryconf.py — it is directory-scoped and shared, not per-test.",
-        "Forgetting that a canaryconf.py governs the whole subtree beneath it, not just its own directory.",
-        "Not guarding setup/teardown side effects for the CANARY_CONFTEST_PHASE the file is invoked with."
+        "Forgetting that a canaryconf.py governs the whole subtree beneath it, not just its own directory."
       ]
     },
     "execution": {
@@ -597,7 +596,7 @@
       },
       "generation": {
         "canary_collectstart": "Register job generator classes with the collector.",
-        "canary_generate_modifyitems": "Inspect or mutate generated JobSpecs before they are stored or run. The builtin scope_hooks plugin uses this hook to inject directory-scoped setup/teardown jobs from canaryconf.py — see the directory_fixtures capability.",
+        "canary_generate_modifyitems": "Inspect or mutate generated JobSpecs before they are stored or run. The builtin canaryconf_impl plugin uses this hook to inject directory-scoped setup/teardown jobs from canaryconf.py — see the directory_fixtures capability.",
         "canary_generate_report": "Report generation results."
       },
       "execution": {

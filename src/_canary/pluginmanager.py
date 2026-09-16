@@ -63,13 +63,13 @@ class CanaryPluginManager(pluggy.PluginManager):
             warnings.warn(f"Failed to load developer plugin from {dev_dir!r}: {exc}", stacklevel=2)
 
     def register_builtins(self):
+        from . import canaryconf_impl
         from . import collect
         from . import generate
         from . import hooks
         from . import launcher
         from . import reporters
         from . import runtest
-        from . import scope_hooks
         from . import select
         from . import subcommands
         from .resource_pool import gpu_select
@@ -89,7 +89,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(launcher, "builtin.launcher")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
-        self.register(scope_hooks, "builtin.scope_hooks")
+        self.register(canaryconf_impl, "builtin.canaryconf_impl")
         self.register(select, "builtin.select")
 
     def consider_plugin(self, name: str) -> None:

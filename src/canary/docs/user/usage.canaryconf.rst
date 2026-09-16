@@ -77,8 +77,16 @@ attributes include:
     canary workspace).
 
 ``ctx.environment``
-    The environment mapping for this execution, including the
-    ``CANARY_CONFTEST_PHASE`` variable set to ``"setup"`` or ``"teardown"``.
+    The environment mapping for this execution.
+
+.. note::
+
+   Setup and teardown are dispatched *in-process*: canary imports the
+   ``canaryconf.py`` file and calls ``canary_setup(ctx)`` or
+   ``canary_teardown(ctx)`` directly.  The function runs with the working
+   directory set to the session-tree location mirroring the ``canaryconf.py``'s
+   governing directory.  There is no ``python canaryconf.py`` subprocess and no
+   ``CANARY_CONFTEST_PHASE`` environment variable.
 
 Scope and inheritance
 ---------------------
