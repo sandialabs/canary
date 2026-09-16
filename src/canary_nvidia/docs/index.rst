@@ -2,8 +2,8 @@
 
    SPDX-License-Identifier: MIT
 
-canary_nvidia Documentation
-============================
+Discovering NVIDIA GPUs
+=======================
 
 ``canary_nvidia`` is a Canary plugin extension that provides NVIDIA GPU backend support:
 automatic device discovery via ``nvidia-smi`` and runtime environment configuration via
