@@ -719,6 +719,21 @@ class PYTAdapter:
     def f_set_attribute(self, *, when: WhenType | None = None, **attributes: Any) -> None:
         self.m.set_attributes(when=when, **attributes)
 
+    def f_setup(self, func: Any) -> None:
+        self._set_lifecycle("__setup_fn__", "setup", func)
+
+    def f_teardown(self, func: Any) -> None:
+        self._set_lifecycle("__teardown_fn__", "teardown", func)
+
+    def _set_lifecycle(self, attr: str, role: str, func: Any) -> None:
+        name = func if isinstance(func, str) else getattr(func, "__name__", None)
+        if not name:
+            raise ValueError(f"@canary_pyt.directives.{role} requires a named function")
+        existing = self.m.attributes.items
+        if any(attr in dict(getattr(c, "value", {}) or {}) for c in existing):
+            raise ValueError(f"only one @canary_pyt.directives.{role} function is allowed per file")
+        self.m.set_attributes(**{attr: name})
+
     def f_load_module(
         self, arg: str, *, when: WhenType | None = None, use: str | None = None
     ) -> None:

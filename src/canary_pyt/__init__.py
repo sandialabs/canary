@@ -138,6 +138,67 @@ def canary_collectstart(collector) -> None:
 
 
 @hookimpl
+def canary_runteststart(case: Any) -> None:
+    """Run the file's ``@directives.setup`` function, if any, before the body."""
+    _run_lifecycle(case, "__setup_fn__")
+
+
+@hookimpl
+def canary_runtest_finish(case: Any) -> None:
+    """Run the file's ``@directives.teardown`` function, if any, after the body."""
+    _run_lifecycle(case, "__teardown_fn__")
+
+
+def _run_lifecycle(case: Any, attr: str) -> None:
+    """Import the job's ``.pyt`` and call the recorded lifecycle function.
+
+    ``attr`` is ``"__setup_fn__"`` or ``"__teardown_fn__"``.  The function name
+    is read from ``case`` attributes (recorded during scanning) and the function
+    is resolved by importing the job's source file in-process.  The live
+    :class:`canary.Job` is passed as the sole argument.  No-op when the job has
+    no such function.
+    """
+    fn_name = case.get_attribute(attr)
+    if not fn_name:
+        return
+
+    source = Path(case.spec.file)
+    module = _import_source(source)
+    func = getattr(module, fn_name, None)
+    if not callable(func):
+        raise RuntimeError(
+            f"{case}: {source} does not define a callable {fn_name!r} "
+            f"named by @canary_pyt.directives.{attr.strip('_').removesuffix('_fn')}"
+        )
+    with case.workspace.enter():
+        func(case)
+
+
+def _import_source(path: Path) -> Any:
+    """Import *path* as an anonymous module without polluting ``sys.modules``.
+
+    Uses an explicit source-file loader so non-``.py`` suffixes (``.pyt``) are
+    imported as Python source.
+    """
+    import importlib.util
+    import sys
+    from importlib.machinery import SourceFileLoader
+
+    name = f"_canary_pyt_lifecycle_{abs(hash(str(path)))}"
+    loader = SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(name, loader)
+    if spec is None:
+        raise ImportError(f"cannot import test file {path!r}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        loader.exec_module(module)
+    finally:
+        sys.modules.pop(name, None)
+    return module
+
+
+@hookimpl
 def canary_capabilities() -> dict[str, Any] | None:
     return load_query_data("canary_pyt.data", "capabilities.json")
 

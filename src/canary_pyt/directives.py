@@ -99,6 +99,7 @@ The ``when`` expression recognizes the following conditions:
 # ----------------------------------------------------------------------------------------------- #
 
 from typing import Any
+from typing import Callable
 from typing import Sequence
 
 from _canary.ir import DependencySelector
@@ -1795,3 +1796,69 @@ def xfail(*, code: int = -1, when: WhenType | None = None) -> None:
       names and values
 
     """
+
+
+def setup(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Register ``func`` as the file's per-test *setup* function.
+
+    Use as a bare decorator on a top-level function in a ``.pyt`` file:
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import canary_pyt
+
+       @canary_pyt.directives.setup
+       def my_setup(job):
+           ...
+
+    ``.vvt``: ``NA``
+
+    The decorated function runs once, immediately before the test body, in the
+    worker process that executes the job (via the ``canary_runteststart`` hook).
+    It receives the running :class:`canary.Job` as its sole argument.  If setup
+    raises, the job is marked broken and its body does not run.
+
+    During scanning the decorator records the function's name onto the job spec
+    (``attributes["__setup_fn__"]``); at run time it is an identity decorator so
+    the function remains defined for dispatch.  Only one ``setup`` function may
+    be defined per file.
+    """
+    return func
+
+
+def teardown(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Register ``func`` as the file's per-test *teardown* function.
+
+    Use as a bare decorator on a top-level function in a ``.pyt`` file:
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import canary_pyt
+
+       @canary_pyt.directives.teardown
+       def my_teardown(job):
+           ...
+
+    ``.vvt``: ``NA``
+
+    The decorated function runs once, after the test body finishes (regardless
+    of the body's outcome), in the worker process that executes the job (via the
+    ``canary_runtest_finish`` hook).  It receives the running
+    :class:`canary.Job` as its sole argument.
+
+    During scanning the decorator records the function's name onto the job spec
+    (``attributes["__teardown_fn__"]``); at run time it is an identity decorator
+    so the function remains defined for dispatch.  Only one ``teardown``
+    function may be defined per file.
+    """
+    return func

@@ -85,6 +85,8 @@
         "source": "Source an rc file before execution.",
         "set_id": "Set a stable explicit ID or ID template.",
         "set_attribute": "Attach arbitrary metadata.",
+        "setup": "Decorator registering a per-file setup function; runs before the test body (via canary_runteststart) with the live Job. One per file.",
+        "teardown": "Decorator registering a per-file teardown function; runs after the test body (via canary_runtest_finish) with the live Job, regardless of outcome. One per file.",
         "enable": "Enable or disable generated jobs conditionally.",
         "skipif": "Skip jobs conditionally with a reason.",
         "xfail": "Mark expected nonzero exit.",
