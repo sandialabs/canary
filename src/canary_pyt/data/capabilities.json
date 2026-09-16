@@ -33,33 +33,29 @@
         "    sys.exit(test())"
       ]
     },
-    "sub_tests": {
-      "summary": "The @canary_pyt.instance_test decorator defines multiple named test instances in one .pyt file with no manual testname() calls and no test()/__main__ dispatch.",
-      "decorator": "canary_pyt.instance_test",
-      "behavior": [
-        "Each decorated function becomes a test instance (family). The family name is the function name with a leading 'test_' stripped (test_foo -> foo).",
-        "At collection time the decorator registers the family (equivalent to canary_pyt.directives.name(<family>)).",
-        "At run time a built-in auto-runner dispatches to the function whose family matches the running instance and passes it the read-only canary.TestInstance.",
-        "The function returns an integer exit code (0 = success, None treated as 0), or raises a canary outcome exception (TestFailed/TestDiffed/TestSkipped) whose exit_code is propagated.",
-        "No if __name__ == '__main__' guard and no test() dispatcher are needed."
-      ],
-      "helpers": {
-        "canary_pyt.instance_test": "Decorator registering a function as a named test instance.",
-        "canary_pyt.run_instance_tests": "Manual dispatch entry point (rarely needed; the auto-runner calls it).",
-        "canary_pyt.registered_instance_tests": "Return the family-name -> function registry."
+    "lifecycle": {
+      "summary": "A .pyt file may declare a per-file setup and/or teardown function via bare decorators. They run in the worker process that executes the job, wrapping the test body.",
+      "decorators": {
+        "canary_pyt.directives.setup": "Registers a per-file setup function. Runs before the test body via the canary_runteststart hook. If it raises, the job is marked broken and the body does not run. One per file.",
+        "canary_pyt.directives.teardown": "Registers a per-file teardown function. Runs after the test body via the canary_runtest_finish hook, regardless of the body's outcome. One per file."
       },
+      "behavior": [
+        "During scanning the decorator records the function name onto the job spec attributes (__setup_fn__ / __teardown_fn__); at run time it is an identity decorator so the function stays defined.",
+        "At run time canary_pyt imports the job's .pyt in-process and calls the recorded function with the live canary.Job as its sole argument, inside the job workspace.",
+        "Setup/teardown are not separate jobs; they wrap the single test's execution."
+      ],
       "example": [
-        "import canary",
         "import canary_pyt",
         "",
-        "@canary_pyt.instance_test",
-        "def test_alpha(inst: canary.TestInstance) -> int:",
-        "    assert inst.family == 'alpha'",
-        "    return 0",
+        "canary_pyt.directives.name('t')",
         "",
-        "@canary_pyt.instance_test",
-        "def test_beta(inst):",
-        "    raise canary.TestFailed('beta failed')"
+        "@canary_pyt.directives.setup",
+        "def my_setup(job):",
+        "    ...",
+        "",
+        "@canary_pyt.directives.teardown",
+        "def my_teardown(job):",
+        "    ..."
       ]
     },
     "directives": {
