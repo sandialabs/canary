@@ -83,7 +83,7 @@ class DummyQueue:
     def done(self, job: BaseJob) -> None:
         self.done_jobs.append(job)
 
-    def clear(self, status: str) -> None:
+    def clear(self, status: str = "CANCELLED", reason: str | None = None, code: int = -1) -> None:
         self.cleared = status
 
     def jobs(self) -> list[BaseJob]:
@@ -204,10 +204,14 @@ def test_terminate_all_marks_inflight_jobs_cancelled() -> None:
     executor._terminate_all(signal.SIGINT)
 
     assert job.state.is_done()
-    assert job.status.outcome.name == "CANCELLED"
+    # A Ctrl-C (SIGINT) is reported as INTERRUPTED (keyboard interrupt), not a
+    # generic CANCELLED, so the results database and ``canary status`` reflect
+    # that the user interrupted the run.
+    assert job.status.outcome.name == "INTERRUPTED"
+    assert "Keyboard interrupt" in (job.status.reason or "")
     assert job.id in executor.finished
     assert queue.done_jobs == [job]
-    assert queue.cleared == "CANCELLED"
+    assert queue.cleared == "INTERRUPTED"
     assert events[-1][0] == "job_finished"
     assert job.timekeeper._finished > 0
 
@@ -232,3 +236,61 @@ def test_terminate_all_marks_inflight_jobs_error_for_non_interrupt() -> None:
     assert queue.done_jobs == [job]
     assert queue.cleared == "ERROR"
     assert job.timekeeper._finished > 0
+
+
+def test_resource_queue_clear_cancels_pending_jobs_terminally() -> None:
+    """A pending job cleared on interrupt must become terminal, not NONE (NONE).
+
+    Regression test: previously ``ResourceQueue.clear`` set the status but left
+    ``state.phase == PENDING`` and never saved the job, so a job that was still
+    queued when the run was interrupted surfaced as ``NONE (NONE)``.
+    """
+    import heapq
+    import threading
+
+    from _canary.queue import HeapSlot
+    from _canary.queue import ResourceQueue
+
+    class FakePool:
+        def accommodates(self, req):
+            return True
+
+    jobs = [DummyJob(id=str(i) * 64) for i in range(3)]
+    q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
+    for j in jobs:
+        heapq.heappush(q._heap, HeapSlot(job=cast(BaseJob, j)))
+
+    q.clear("INTERRUPTED", reason="Keyboard interrupt")
+
+    assert len(q._heap) == 0
+    for j in jobs:
+        assert j.state.is_done()
+        assert j.status.outcome.name == "INTERRUPTED"
+        assert j.status.category.value == "ABORTED"
+        assert "Keyboard interrupt" in (j.status.reason or "")
+        assert j.saved
+
+
+def test_resource_queue_clear_default_cancelled() -> None:
+    """Non-interrupt clears use CANCELLED with a sensible default reason."""
+    import heapq
+    import threading
+
+    from _canary.queue import HeapSlot
+    from _canary.queue import ResourceQueue
+
+    class FakePool:
+        def accommodates(self, req):
+            return True
+
+    job = DummyJob(id="c" * 64)
+    q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
+    heapq.heappush(q._heap, HeapSlot(job=cast(BaseJob, job)))
+
+    q.clear("CANCELLED")
+
+    assert job.state.is_done()
+    assert job.status.outcome.name == "CANCELLED"
+    assert job.status.category.value == "ABORTED"
+    assert (job.status.reason or "") == "Cancelled before the job started"
+    assert job.saved

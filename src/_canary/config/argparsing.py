@@ -190,6 +190,11 @@ class Parser(argparse.ArgumentParser):
         for name, command in self.__subcommand_objects.items():
             if cmdname == name:
                 return command
+        # Fall back to alias resolution so that, e.g., ``canary check`` resolves
+        # to the ``pre-commit`` command declaring ``aliases = ["check"]``.
+        for command in self.__subcommand_objects.values():
+            if cmdname in getattr(command, "aliases", ()):
+                return command
         return None
 
     def remove_argument(self, opt_string):

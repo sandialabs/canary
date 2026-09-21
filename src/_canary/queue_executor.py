@@ -857,8 +857,14 @@ class ResourceQueueExecutor:
             time.sleep(self.busy_wait_time)
 
     def _terminate_all(self, signum: int) -> None:
-        stat = "CANCELLED" if signum == signal.SIGINT else "ERROR"
-        reason = f"Job terminated with signal {signum}"
+        if signum == signal.SIGINT:
+            stat = "INTERRUPTED"
+            reason = "Keyboard interrupt"
+            code = int(signal.SIGINT)
+        else:
+            stat = "ERROR"
+            reason = f"Job terminated with signal {signum}"
+            code = -1
 
         inflight_slots = list(self.inflight.values())
         self.running.clear()
@@ -866,7 +872,7 @@ class ResourceQueueExecutor:
 
         for slot in inflight_slots:
             try:
-                self._close_slot_abnormally(slot, outcome=stat, reason=reason)
+                self._close_slot_abnormally(slot, outcome=stat, reason=reason, code=code)
             except Exception:
                 logger.exception(f"Unexpected error terminating job {slot.job.id[:7]}")
 
@@ -881,7 +887,7 @@ class ResourceQueueExecutor:
                 self.notify_listeners("job_finished", slot)
 
         self._shutdown_workers()
-        self.queue.clear(stat)
+        self.queue.clear(stat, reason=reason, code=code)
 
     def _close_slot_abnormally(
         self,

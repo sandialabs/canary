@@ -10,6 +10,7 @@ from typing import TypeAlias
 import canary
 from _canary import queue
 from _canary.job import BaseJob
+from _canary.job import JobPhase
 from _canary.util.time import hhmmss
 
 logger = canary.get_logger(__name__)
@@ -26,6 +27,44 @@ class ResourceQueue(queue.ResourceQueue):
                 slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
                 heapq.heappush(self._heap, slot)
                 logger.debug(f"Job {batch.id} added to queue with cost {-slot.cost}")
+
+    def clear(self, status: str = "CANCELLED", reason: str | None = None, code: int = -1) -> None:
+        """Terminate every still-queued (pending) batch and its child jobs.
+
+        The base implementation cancels the object stored in the heap.  For the
+        HPC backend that object is a ``TestBatch`` whose ``set_status`` only
+        updates the batch's own base status; it does not touch the child
+        ``canary.Job`` objects that are ultimately written to the results
+        database.  Without propagating the cancellation to the children, a batch
+        that was still pending when the run was interrupted would leave its jobs
+        with an unset status, surfacing as ``NONE (NONE)`` in ``canary status``.
+        """
+        if reason is None:
+            reason = (
+                "Keyboard interrupt"
+                if status == "INTERRUPTED"
+                else "Cancelled before the batch was submitted"
+            )
+        child_reason = (
+            "Keyboard interrupt"
+            if status == "INTERRUPTED"
+            else f"Batch cancelled before it was submitted: {reason}"
+        )
+        while self._heap:
+            slot = self._heap.pop()
+            batch = slot.job
+            try:
+                if not batch.state.is_done():
+                    batch.set_status(outcome=status, reason=reason, code=code)
+                    batch.state.phase = JobPhase.DONE
+                for job in batch:  # ty: ignore[not-iterable]
+                    if job.state.is_done() and not job.status.is_unset():
+                        continue
+                    job.set_status(outcome=status, reason=child_reason, code=code)
+                    job.state.phase = JobPhase.DONE
+                batch.save()
+            except Exception:
+                logger.exception("Failed to cancel pending batch %s", batch.id[:7])
 
     def jobs(self) -> list[BaseJob]:
         jobs: list[BaseJob] = [job for slot in self._heap for job in slot.job]  # type: ignore

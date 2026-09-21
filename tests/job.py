@@ -194,6 +194,19 @@ def _patch_pluginmanager_and_config(monkeypatch):
     monkeypatch.setattr(config, "getoption", lambda *a, **k: None, raising=True)
     monkeypatch.setattr(config, "get", lambda *a, **k: None, raising=True)
     monkeypatch.setattr(config, "serialize", lambda: "CFG", raising=True)
+    try:
+        yield
+    finally:
+        # ``_canary.config`` serves these names via a module ``__getattr__``
+        # proxy that forwards to the live Config singleton, so they are not real
+        # module attributes.  ``monkeypatch`` restores them as *real* attributes
+        # bound to a now-stale Config, which would shadow the proxy for tests in
+        # other packages (e.g. canary_hpc) that share this interpreter session.
+        # Undo the patches first, then delete the leaked names so the proxy is
+        # restored.
+        monkeypatch.undo()
+        for name in ("pluginmanager", "getoption", "get", "serialize"):
+            config.__dict__.pop(name, None)
 
 
 @pytest.fixture

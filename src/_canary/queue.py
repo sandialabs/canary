@@ -148,10 +148,36 @@ class ResourceQueue:
             else:
                 raise Empty
 
-    def clear(self, status: str = "CANCELLED") -> None:
+    def clear(self, status: str = "CANCELLED", reason: str | None = None, code: int = -1) -> None:
+        """Terminate every still-queued (pending) job.
+
+        A job that never started still needs a terminal status *and* a terminal
+        phase so that downstream consumers (the results database, ``canary
+        status``, dependency resolution) treat it as finished rather than as an
+        in-flight or unset job.  Historically only ``set_status`` was called
+        here, which left ``state.phase`` at ``PENDING`` and never persisted the
+        job, so an interrupted-while-pending job could surface as ``NONE
+        (NONE)``.
+        """
+        from .job import JobPhase
+
+        if reason is None:
+            reason = (
+                "Keyboard interrupt"
+                if status == "INTERRUPTED"
+                else "Cancelled before the job started"
+            )
         while self._heap:
             slot = self._heap.pop()
-            slot.job.set_status(outcome=status)
+            job = slot.job
+            if job.state.is_done():
+                continue
+            try:
+                job.set_status(outcome=status, reason=reason, code=code)
+                job.state.phase = JobPhase.DONE
+                job.save()
+            except Exception:
+                logger.exception("Failed to cancel pending job %s", job.id[:7])
 
     def done(self, job: BaseJob) -> None:
         try:
