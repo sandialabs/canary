@@ -74,17 +74,18 @@ class Status(CanarySubcommand):
             "-r",
             dest="report_chars",
             action=ReportCharAction,
-            default="dftns",
+            default="dftnrs",
             metavar="char",
             help="Show test summary info as specified by chars: "
             "(p)assed, "
             "(t)imeout "
             "(d)iffed, "
             "(f)ailed, "
+            "(r)unning, "
             "(n)ot run, "
             "(s)kipped, "
             "(a)ll (except passed), "
-            "(A)ll.  [default: dftns]",
+            "(A)ll.  [default: dftnrs]",
         )
         parser.add_argument(
             "--sort-by",
@@ -205,6 +206,7 @@ class Status(CanarySubcommand):
 
             sid = row["id"] if getattr(args, "full_ids", False) else row["id"][:7]
             status: _Status = row["status"]
+            state: JobState = row["state"]
             out.append(
                 {
                     "id": sid,
@@ -213,6 +215,8 @@ class Status(CanarySubcommand):
                     "file_path": row.get("file_path", ""),
                     "session": row["session"],
                     "exit_code": status.code,
+                    "phase": state.phase.value,
+                    "running": state.is_running(),
                     "status": {
                         "category": status.category.value,
                         "outcome": status.outcome.name,
@@ -321,6 +325,8 @@ def _build_summary_line(rows: list[dict]) -> str:
             key = "timeout"
         elif status.outcome in (Outcome.FAILED, Outcome.ERROR, Outcome.BROKEN):
             key = "failed"
+        elif state.is_running():
+            key = "running"
         elif not state.is_done():
             key = "not run"
         elif status.is_cancelled():
@@ -338,11 +344,26 @@ def _build_summary_line(rows: list[dict]) -> str:
     parts: list[str] = []
     if passed:
         parts.append(f"[green]{passed} passed[/green]")
-    for key in ("failed", "diffed", "timeout", "skipped", "not run", "cancelled", "other"):
+    for key in (
+        "failed",
+        "diffed",
+        "timeout",
+        "running",
+        "skipped",
+        "not run",
+        "cancelled",
+        "other",
+    ):
         n = counts.get(key, 0)
         if n:
             color = (
-                "red" if key in ("failed",) else "yellow" if key in ("diffed", "timeout") else "dim"
+                "red"
+                if key in ("failed",)
+                else "yellow"
+                if key in ("diffed", "timeout")
+                else "cyan"
+                if key in ("running",)
+                else "dim"
             )
             parts.append(f"[{color}]{n} {key}[/{color}]")
     detail = ", ".join(parts)
@@ -378,7 +399,11 @@ def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> 
     elif attr == "duration":
         return dformat(row["timekeeper"].duration())
     elif attr == "status_name":
-        return row["status"].display_name(style="rich")
+        state: JobState = row["state"]
+        status: _Status = row["status"]
+        if state.is_running() and status.is_unset():
+            return "[cyan]RUNNING[/cyan]"
+        return status.display_name(style="rich")
     elif attr == "status_reason":
         return row["status"].reason or ""
     raise AttributeError(attr)
@@ -387,7 +412,7 @@ def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> 
 class ReportCharAction(argparse.Action):
     """Validate and store the ``-r`` report-character filter string."""
 
-    chars = "pftdfnsxaA"
+    chars = "pftdfnrsxaA"
 
     def __call__(self, parser, args, values, option_string=None):
         for value in values:
@@ -435,7 +460,7 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
     """Return the subset of *rows* whose status matches the report-character filter *chars*."""
     from ..status import Outcome
 
-    chars = chars or "dftns"
+    chars = chars or "dftnrs"
     if "A" in chars:
         return rows
     keep = [False] * len(rows)
@@ -454,6 +479,8 @@ def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
             keep[i] = "d" in chars
         elif status.is_timeout():
             keep[i] = "t" in chars
+        elif state.is_running():
+            keep[i] = "r" in chars
         elif not state.is_done():
             keep[i] = "n" in chars
         elif status.is_cancelled():

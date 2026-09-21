@@ -401,6 +401,56 @@ def test_status_build_summary_all_pass():
     assert "green" in summary
 
 
+def test_status_build_summary_reports_running():
+    """_build_summary_line counts RUNNING jobs distinctly (not as 'not run')."""
+    from _canary.job import JobPhase
+    from _canary.job import JobState
+    from _canary.status import Category
+    from _canary.status import Outcome
+    from _canary.status import Status as _Status
+    from _canary.subcommands.status import _build_summary_line
+
+    rows = [
+        {
+            "status": _Status(category=Category.PASS, outcome=Outcome.SUCCESS, reason="", code=0),
+            "state": JobState(phase=JobPhase.DONE),
+        },
+        # An in-flight job: result unset, phase RUNNING.
+        {"status": _Status(), "state": JobState(phase=JobPhase.RUNNING)},
+        # A queued/pending job: result unset, phase PENDING -> "not run".
+        {"status": _Status(), "state": JobState(phase=JobPhase.PENDING)},
+    ]
+    summary = _build_summary_line(rows)
+    assert "3" in summary
+    assert "1 running" in summary
+    assert "1 not run" in summary
+    assert "1 passed" in summary
+
+
+def test_status_filter_by_status_running_char():
+    """filter_by_status honors the (r)unning report char."""
+    from _canary.job import JobPhase
+    from _canary.job import JobState
+    from _canary.status import Status as _Status
+    from _canary.subcommands.status import filter_by_status
+
+    running = {"status": _Status(), "state": JobState(phase=JobPhase.RUNNING)}
+    pending = {"status": _Status(), "state": JobState(phase=JobPhase.PENDING)}
+    rows = [running, pending]
+
+    # 'r' keeps only the running job.
+    kept = filter_by_status(rows, "r")
+    assert kept == [running]
+
+    # 'n' keeps only the pending/not-run job.
+    kept = filter_by_status(rows, "n")
+    assert kept == [pending]
+
+    # default filter surfaces both.
+    kept = filter_by_status(rows, "dftnrs")
+    assert running in kept and pending in kept
+
+
 def test_describe(capsys):
     data_dir = os.path.join(os.path.dirname(__file__), "data")
 
