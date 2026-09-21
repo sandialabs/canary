@@ -476,6 +476,19 @@ class TestBatch(BaseJob):
             time.sleep(0.25)
         self.finalize_status_from_child_jobs()
 
+    def mark_children_running(self) -> None:
+        """Advance not-yet-finished child jobs to the RUNNING phase.
+
+        Called when the batch is dispatched so that in-progress child jobs are
+        reflected as running in the results database (and thus in ``canary
+        status``) while the batch's allocation is active.  A child that already
+        reached a terminal state is left untouched.
+        """
+        for job in self.jobs:
+            if job.state.is_done():
+                continue
+            job.state.phase = JobPhase.RUNNING
+
     def finalize_status_from_child_jobs(self) -> None:
         now = time.time()
 

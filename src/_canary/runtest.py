@@ -109,12 +109,62 @@ def canary_runtests(runner: Runner, listeners: list[Callable[..., None]] | None 
         logger.exception("Unhandled exception in canary_runtests")
         raise
     finally:
+        # If the session unwound before every job reached a terminal state
+        # (e.g. a Ctrl-C left batches pending, or a backend returned early),
+        # give those jobs a terminal status so the final report and return code
+        # never show ``NONE (NONE)`` / phantom running jobs.
+        interrupted = isinstance(sys.exc_info()[1], KeyboardInterrupt)
+        reconcile_unfinished_jobs(runner, interrupted=interrupted)
         logger.info(
             f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
             f"with returncode {runner.returncode}"
         )
         pm.canary_runtests_report(runner=runner)
     return
+
+
+def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> int:
+    """Give any not-yet-terminal job in *runner* a terminal status.
+
+    A job that never reached a terminal phase (still pending/staging/running/
+    finishing, or carrying an unset status) is rewritten so it is ``DONE`` with
+    a concrete outcome:
+
+    * jobs that never produced a result are marked ``INTERRUPTED`` when the run
+      was interrupted, otherwise ``CANCELLED``;
+    * jobs that started but never reported a result are marked ``BROKEN``.
+
+    Returns the number of jobs that were reconciled.
+    """
+    from .job import JobPhase
+
+    n = 0
+    for job in runner.jobs:
+        if job.state.is_done() and not job.status.is_unset():
+            continue
+        started = job.state.phase in (JobPhase.RUNNING, JobPhase.FINISHING)
+        if started:
+            outcome = "BROKEN"
+            reason = "Job did not report a result before the session ended"
+        elif interrupted:
+            outcome = "INTERRUPTED"
+            reason = "Keyboard interrupt"
+        else:
+            outcome = "CANCELLED"
+            reason = "Job did not run before the session ended"
+        now = time.time()
+        job.timekeeper.maybe_open(at=now)
+        job.timekeeper.maybe_close(at=now)
+        job.set_status(outcome=outcome, reason=reason)
+        job.state.phase = JobPhase.DONE
+        try:
+            job.save()
+        except Exception:
+            logger.debug("Failed to save reconciled job %s", job.id[:7], exc_info=True)
+        n += 1
+    if n:
+        logger.debug("Reconciled %d unfinished job(s) at session end", n)
+    return n
 
 
 @hookimpl(trylast=True, specname="canary_runtests")

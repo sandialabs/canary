@@ -520,6 +520,60 @@ class WorkspaceDatabase:
         with self.connection:
             self.connection.executemany(sql, rows)
 
+    def reconcile_running_jobs(
+        self,
+        session: str,
+        *,
+        outcome: str = "BROKEN",
+        reason: str = "Job did not finish before the session ended",
+    ) -> int:
+        """Flip any non-terminal result rows for *session* to a terminal failure.
+
+        Intermediate rows (``PENDING``/``STAGING``/``RUNNING``/``FINISHING``)
+        are spooled to the results table while a job is in flight so that
+        ``canary status`` can reflect running work.  If the session ends without
+        those jobs reaching a terminal state (e.g. the run was killed, a worker
+        died, or a batch never reported back), the stale rows would otherwise
+        persist as perpetually "running".  This rewrites them to a terminal
+        (``DONE``) failure state.
+
+        Args:
+            session: The session whose rows should be reconciled.
+            outcome: The :class:`~_canary.status.Outcome` name to assign.
+            reason: The status reason to record.
+
+        Returns:
+            The number of rows updated.
+        """
+        from .status import Category
+        from .status import Outcome
+        from .status import get_category
+
+        o = Outcome.factory(outcome)
+        category: Category = get_category(o)
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE results
+                SET job_state = ?,
+                    status_category = ?,
+                    status_outcome = ?,
+                    status_reason = ?,
+                    status_code = ?
+                WHERE session = ? AND job_state != ?
+                """,
+                (
+                    JobPhase.DONE.value,
+                    category.value,
+                    o.name,
+                    reason,
+                    int(o.value),
+                    session,
+                    JobPhase.DONE.value,
+                ),
+            )
+            return cursor.rowcount
+
     def get_results(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> dict[str, dict[str, Any]]:

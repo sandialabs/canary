@@ -528,9 +528,20 @@ class Workspace:
             self.view_manager = None
             if listener is not None:
                 listener.stop_and_join()
-                not_saved = [job for job in s.jobs if job.id not in listener._processed]
-                if not_saved:
-                    self.db.put_results(*not_saved)
+                # Persist the authoritative final in-memory state of every job.
+                # Running/pending rows may have been spooled mid-run; writing the
+                # final state here overwrites them (INSERT OR REPLACE) so the DB
+                # reflects the true outcome.  ``s.jobs`` are the same objects the
+                # runner executed, so this is a cheap, correct upsert.
+                if s.jobs:
+                    self.db.put_results(*s.jobs)
+                # Any rows still non-terminal (e.g. the run was killed and a job
+                # never reported a terminal state) are flipped to a failure so we
+                # never leave phantom "running" jobs persisted in the database.
+                try:
+                    self.db.reconcile_running_jobs(s.name)
+                except Exception:
+                    logger.exception("Failed to reconcile non-terminal jobs for session %s", s.name)
             view = view_manager.finish()
             if view is not None:
                 self.register_view(view)
@@ -1077,11 +1088,17 @@ class Workspace:
     def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
         """Callback to queue job results for database persistence.
 
+        Results are spooled to the database not only when a job finishes but
+        also when it is submitted or starts running, so that ``canary status``
+        (which reads the results database) reflects in-progress jobs mid-run.
+        The database uses ``INSERT OR REPLACE`` keyed on ``(spec_id, session)``,
+        so each transition simply overwrites the previous row for that job.
+
         Args:
             event: The event type.
-            *args: Event arguments, expected to contain the finished job.
+            *args: Event arguments, expected to contain the job's execution slot.
         """
-        if event != "job_finished":
+        if event not in ("job_submitted", "job_started", "job_finished"):
             return
         job = args[0].job
         self.db.queue.put(job)

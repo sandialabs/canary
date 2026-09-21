@@ -212,6 +212,53 @@ def test_result_history(db: WorkspaceDatabase, make_session):
     assert {history[0]["session"], history[1]["session"]} == {"s1", "s2"}
 
 
+def test_reconcile_running_jobs_flips_non_terminal_rows(db: WorkspaceDatabase, make_session):
+    """Non-terminal (running/pending) rows are flipped to a terminal failure."""
+    from _canary.job import JobPhase
+
+    session = make_session(db.path.parent)
+    # Simulate a mix: some jobs finished (DONE/SUCCESS), some left running/pending.
+    running = session.jobs[: len(session.jobs) // 2]
+    finished = session.jobs[len(session.jobs) // 2 :]
+    for job in running:
+        job.state.phase = JobPhase.RUNNING
+        job.status.reset()
+    for job in finished:
+        job.state.phase = JobPhase.DONE
+        job.status.set(category="PASS", outcome="SUCCESS")
+    db.put_results(*session.jobs)
+
+    n = db.reconcile_running_jobs("session")
+    assert n == len(running)
+
+    results = db.get_results()
+    for job in running:
+        r = results[job.id]
+        assert r["state"].phase == JobPhase.DONE
+        assert r["status"].outcome.name == "BROKEN"
+        assert r["status"].category.value == "FAIL"
+        assert r["status"].reason
+    for job in finished:
+        r = results[job.id]
+        assert r["state"].phase == JobPhase.DONE
+        assert r["status"].outcome.name == "SUCCESS"
+
+
+def test_reconcile_running_jobs_noop_when_all_terminal(db: WorkspaceDatabase, make_session):
+    """Reconciliation does nothing when every row is already terminal."""
+    from _canary.job import JobPhase
+
+    session = make_session(db.path.parent)
+    for job in session.jobs:
+        job.state.phase = JobPhase.DONE
+        job.status.set(category="PASS", outcome="SUCCESS")
+    db.put_results(*session.jobs)
+    assert db.reconcile_running_jobs("session") == 0
+    results = db.get_results()
+    for job in session.jobs:
+        assert results[job.id]["status"].outcome.name == "SUCCESS"
+
+
 # -----------------------------------------------------------------------------
 # View-based selection
 # -----------------------------------------------------------------------------

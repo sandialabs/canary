@@ -465,9 +465,42 @@ class CanaryHPCConductor:
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
         with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+            ex.add_listener(self._make_batch_result_listener(runner.workspace))
             ex.run(backend=self.backend.name)
 
         return True
+
+    def _make_batch_result_listener(self, workspace: "canary.Workspace"):
+        """Build an executor listener that spools batch child-job results to the DB.
+
+        The shared executor works with :class:`TestBatch` objects, so the
+        default per-job ``testcase_done_callback`` cannot be used directly.  This
+        listener instead spools each child :class:`~_canary.job.Job` of a batch
+        to the results database as the batch is submitted, starts running, and
+        finishes, so that ``canary status`` reflects in-progress HPC jobs
+        mid-run.  Only the parent process (which owns the running
+        :class:`ResultListener`) persists to the database.
+        """
+
+        def listener(event: str, slot: Any) -> None:
+            if event not in ("job_submitted", "job_started", "job_finished"):
+                return
+            batch = slot.job
+            try:
+                if event == "job_started":
+                    # The batch's allocation is active; surface its jobs as running.
+                    batch.mark_children_running()
+                for job in batch:
+                    workspace.db.queue.put(job)
+                    if workspace.view_manager is not None:
+                        try:
+                            workspace.view_manager.sync(job)
+                        except Exception:
+                            logger.exception("Failed to update live view for job %s", job.id)
+            except Exception:
+                logger.exception("Failed to spool results for batch %s", batch.id[:7])
+
+        return listener
 
     @staticmethod
     def setup_parser(
