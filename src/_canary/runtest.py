@@ -130,9 +130,15 @@ def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> i
     finishing, or carrying an unset status) is rewritten so it is ``DONE`` with
     a concrete outcome:
 
-    * jobs that never produced a result are marked ``INTERRUPTED`` when the run
-      was interrupted, otherwise ``CANCELLED``;
-    * jobs that started but never reported a result are marked ``BROKEN``.
+    * If the run was interrupted (Ctrl-C), every unfinished job is marked
+      ``INTERRUPTED`` — the user aborted the run, which is not the job's fault.
+    * Otherwise (a backend/batch ended early on its own), a job that genuinely
+      started executing but never reported a result is marked ``BROKEN``, and a
+      job that never started is marked ``CANCELLED``.
+
+    Note: job *phase* is not a reliable "did it start" signal here because some
+    backends (e.g. HPC) optimistically mark a dispatched batch's children as
+    running for live display.  The timekeeper's start timestamp is used instead.
 
     Returns the number of jobs that were reconciled.
     """
@@ -142,13 +148,12 @@ def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> i
     for job in runner.jobs:
         if job.state.is_done() and not job.status.is_unset():
             continue
-        started = job.state.phase in (JobPhase.RUNNING, JobPhase.FINISHING)
-        if started:
-            outcome = "BROKEN"
-            reason = "Job did not report a result before the session ended"
-        elif interrupted:
+        if interrupted:
             outcome = "INTERRUPTED"
             reason = "Keyboard interrupt"
+        elif getattr(job.timekeeper, "_started", -1.0) > 0:
+            outcome = "BROKEN"
+            reason = "Job did not report a result before the session ended"
         else:
             outcome = "CANCELLED"
             reason = "Job did not run before the session ended"

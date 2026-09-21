@@ -73,7 +73,7 @@ def _runner(jobs: list[DummyJob]) -> Runner:
 
 
 def test_reconcile_marks_pending_job_cancelled():
-    job = DummyJob()  # phase PENDING, status unset
+    job = DummyJob()  # phase PENDING, status unset, never started
     n = reconcile_unfinished_jobs(_runner([job]), interrupted=False)
     assert n == 1
     assert job.state.is_done()
@@ -91,15 +91,36 @@ def test_reconcile_marks_pending_job_interrupted_when_interrupted():
     assert "Keyboard interrupt" in (job.status.reason or "")
 
 
-def test_reconcile_marks_running_job_broken():
+def test_reconcile_interrupt_marks_running_job_interrupted_not_broken():
+    """On Ctrl-C an in-flight job is INTERRUPTED, not BROKEN."""
     job = DummyJob()
     job.state.phase = JobPhase.RUNNING
+    job.timekeeper.start()  # genuinely started
     n = reconcile_unfinished_jobs(_runner([job]), interrupted=True)
     assert n == 1
     assert job.state.is_done()
-    # A job that started but never reported is BROKEN regardless of interrupt.
+    assert job.status.outcome.name == "INTERRUPTED"
+    assert job.status.category.value == "ABORTED"
+
+
+def test_reconcile_noninterrupt_started_job_broken():
+    """Without an interrupt, a job that genuinely started but never reported is BROKEN."""
+    job = DummyJob()
+    job.timekeeper.start()  # _started > 0
+    n = reconcile_unfinished_jobs(_runner([job]), interrupted=False)
+    assert n == 1
+    assert job.state.is_done()
     assert job.status.outcome.name == "BROKEN"
     assert job.status.category.value == "FAIL"
+
+
+def test_reconcile_noninterrupt_never_started_cancelled():
+    """A RUNNING phase without a real start timestamp is treated as never-started."""
+    job = DummyJob()
+    job.state.phase = JobPhase.RUNNING  # optimistically marked (e.g. HPC), never started
+    n = reconcile_unfinished_jobs(_runner([job]), interrupted=False)
+    assert n == 1
+    assert job.status.outcome.name == "CANCELLED"
 
 
 def test_reconcile_leaves_terminal_jobs_untouched():
@@ -112,17 +133,19 @@ def test_reconcile_leaves_terminal_jobs_untouched():
     assert not done.saved
 
 
-def test_reconcile_mixed_batch_counts_only_unfinished():
+def test_reconcile_mixed_batch_on_interrupt():
     done = DummyJob(id="d" * 64)
     done.state.phase = JobPhase.DONE
     done.status.set(category="FAIL", outcome="FAILED")
     pending = DummyJob(id="p" * 64)
     running = DummyJob(id="r" * 64)
     running.state.phase = JobPhase.RUNNING
+    running.timekeeper.start()
 
-    n = reconcile_unfinished_jobs(_runner([done, pending, running]), interrupted=False)
+    n = reconcile_unfinished_jobs(_runner([done, pending, running]), interrupted=True)
     assert n == 2
     assert done.status.outcome.name == "FAILED"
-    assert pending.status.outcome.name == "CANCELLED"
-    assert running.status.outcome.name == "BROKEN"
+    # On interrupt both unfinished jobs are INTERRUPTED regardless of phase.
+    assert pending.status.outcome.name == "INTERRUPTED"
+    assert running.status.outcome.name == "INTERRUPTED"
     assert all(j.state.is_done() for j in (done, pending, running))
