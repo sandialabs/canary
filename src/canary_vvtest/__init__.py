@@ -125,6 +125,16 @@ def canary_runteststart(case: "canary.Job") -> None:
             write_vvtest_util(case)
 
 
+@canary.hookimpl(tryfirst=True)
+def canary_runtest_rebaseline(case: "canary.Job") -> None:
+    if case.spec.file_path.suffix == ".vvt":
+        # Regenerate vvtest_util.py so the baseline script sees is_baseline=True
+        # (the command is "rebaseline" here); the file was written for "run".
+        # Runs before the builtin default that executes the baseline script.
+        with canary.filesystem.working_dir(case.workspace.dir):
+            write_vvtest_util(case)
+
+
 @canary.hookimpl
 def canary_addoption(parser: "canary.Parser") -> None:
     parser.add_argument(

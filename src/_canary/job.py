@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
@@ -35,7 +34,6 @@ from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
-from .util.executable import Executable
 from .util.string import SimpleTemplate
 
 if TYPE_CHECKING:
@@ -809,17 +807,7 @@ class Job(BaseJob):
         if not self.spec.baseline:
             return
         logger.info(f"Rebaselining {self.spec.display_name()}")
-        with self.workspace.enter():
-            for b in self.spec.baseline:
-                if script := getattr(b, "script", None):
-                    exe = Executable(script[0])
-                    exe(*script[1:], fail_on_error=False)
-                else:
-                    src = self.workspace.dir / b.src  # type: ignore
-                    dst = self.spec.file.parent / b.dst  # type: ignore
-                    if src.exists():
-                        logger.debug(f"    Replacing {dst} with {src}\n")
-                        copyfile(src, dst)
+        config.pluginmanager.hook.canary_runtest_rebaseline(case=self)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
         from .status import Outcome

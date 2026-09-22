@@ -549,6 +549,26 @@ def canary_runtest_finish(case: "Job") -> None:
     """
 
 
+@hookspec
+def canary_runtest_rebaseline(case: "Job") -> None:
+    """Rebaseline a test case from its existing results.
+
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``trylast``) performs the case's declared baseline
+    actions -- copying produced files over their gold counterparts and running
+    baseline scripts with the job's runtime environment.  Plugin implementations
+    run first and may prepare generated helpers (e.g. the vvtest plugin
+    regenerates ``vvtest_util.py`` with ``is_baseline=True``) so the baseline
+    script observes that it is being rebaselined.
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+    """
+
+
 # -------------------------------------------------------------------------
 # resource pool hooks
 # -------------------------------------------------------------------------
