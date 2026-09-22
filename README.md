@@ -137,10 +137,10 @@ python3 -m pip install --editable .[dev]
 Before committing, run the internal checks:
 
 ```console
-canary check
+canary pre-commit
 ```
 
-`canary check` adds any missing license headers, formats and lints the tree,
+`canary pre-commit` adds any missing license headers, formats and lints the tree,
 type-checks, runs bandit, runs the test suite, and, if everything passes,
 stamps `pyproject.toml` with today's date-based version (`YY.M.D`).
 
