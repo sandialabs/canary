@@ -617,12 +617,28 @@ class TestBatch(BaseJob):
         return
 
     def save(self, children: bool = True):
-        cfg = json.loads(self.lockfile.read_text())
+        # The batch subprocess finalizes concurrently with the parent session.
+        # If the parent removed this batch's directory (e.g. a workspace wipe),
+        # there is nothing to persist to; skip rather than crash on the write.
+        if not self.lockfile.parent.exists():
+            logger.debug("Skipping save for %s: batch directory no longer exists", self)
+            return
+        try:
+            cfg = json.loads(self.lockfile.read_text())
+        except FileNotFoundError:
+            logger.debug("Skipping save for %s: batch lockfile no longer exists", self)
+            return
         cfg["status"] = serialize(self.status)["base"]
         cfg["timekeeper"] = serialize(self.timekeeper)
         cfg["measurements"] = serialize(self.measurements)
         cfg["allocation"] = serialize(self.allocation)
-        json.safesave(self.lockfile, cfg)
+        try:
+            json.safesave(self.lockfile, cfg)
+        except FileNotFoundError:
+            # The batch directory was removed between the checks above and the
+            # atomic replace.  Nothing left to persist to.
+            logger.debug("Skipping save for %s: batch directory vanished mid-write", self)
+            return
         if children:
             for job in self:
                 job.save()

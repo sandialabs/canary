@@ -138,7 +138,9 @@ def safesave(file: str | os.PathLike[str], state: Any, *, indent: int | None = 2
     """
     path = os.fspath(file)
     dirname, basename = os.path.split(path)
-    tmp = os.path.join(dirname, f".{basename}.tmp")
+    # Include the pid in the temp name so concurrent writers (e.g. separate
+    # batch subprocesses) do not clobber or remove each other's temp files.
+    tmp = os.path.join(dirname, f".{basename}.{os.getpid()}.tmp")
 
     mkdirp(dirname)
 
@@ -148,7 +150,11 @@ def safesave(file: str | os.PathLike[str], state: Any, *, indent: int | None = 2
         os.replace(tmp, path)
     finally:
         if os.path.exists(tmp):
-            os.remove(tmp)
+            try:
+                os.remove(tmp)
+            except FileNotFoundError:
+                # A concurrent directory wipe removed the temp file already.
+                pass
 
 
 def safeload(file: str, attempts: int = 8) -> dict[str, Any]:
