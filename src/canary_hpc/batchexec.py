@@ -63,6 +63,8 @@ class HPCConnectRunner:
         )
         if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
+        if pythonpath := self._absolute_pythonpath():
+            variables["PYTHONPATH"] = pythonpath
         resource_pool_file = batch.workspace.joinpath("resource_pool.json")
         resource_pool_data = json.loads(resource_pool_file.read_text())["resource_pool"]
         snapshot = canary.config.snapshot()
@@ -72,6 +74,26 @@ class HPCConnectRunner:
             fh.write(json_helper.dumps(snapshot, indent=2))
         variables[canary.config.CONFIG_ENV_FILENAME] = str(f)
         return variables
+
+    @staticmethod
+    def _absolute_pythonpath() -> str | None:
+        """Return ``PYTHONPATH`` with every entry resolved to an absolute path.
+
+        The batch child runs ``python -m canary -C <workspace> hpc exec ...`` in
+        the batch workspace, not the directory canary was invoked from, so
+        relative ``PYTHONPATH`` entries would not resolve there.  Resolve them
+        against the invocation directory so the child imports the same modules.
+        """
+        if not (pythonpath := os.getenv("PYTHONPATH")):
+            return None
+        invocation_dir = str(canary.config.invocation_dir)
+        resolved: list[str] = []
+        for entry in pythonpath.split(os.pathsep):
+            if not entry or os.path.isabs(entry):
+                resolved.append(entry)
+            else:
+                resolved.append(os.path.abspath(os.path.join(invocation_dir, entry)))
+        return os.pathsep.join(resolved)
 
     def scheduler_args(self, batch: "TestBatch") -> list[str]:
         # Per-batch options (attached by canary_hpc_batch_setup plugins) come

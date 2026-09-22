@@ -390,3 +390,33 @@ def test_reject_resource_overrides_is_noop_without_overrides():
         # No resource_pool_mods, no resource_pool_file, no oversubscribe.
         # Should not raise.
         _reject_canary_resource_overrides(c._config, "shell")
+
+
+def test_absolute_pythonpath_resolves_relative_entries(tmpdir, monkeypatch):
+    """Relative PYTHONPATH entries resolve against the invocation dir.
+
+    The batch child runs in the batch workspace, so a relative entry (the
+    documented ``PYTHONPATH=src/hooks``) must be made absolute or command-line
+    ``-p`` plugins loaded from it cannot be imported.
+    """
+    import _canary.config as c
+    from canary_hpc.batchexec import HPCConnectRunner
+
+    with c.override():
+        c._config.invocation_dir = tmpdir.strpath
+        abs_entry = os.path.join(tmpdir.strpath, "abs")
+        monkeypatch.setenv("PYTHONPATH", os.pathsep.join(["rel/hooks", abs_entry, ""]))
+        result = HPCConnectRunner._absolute_pythonpath()
+
+    assert result is not None
+    entries = result.split(os.pathsep)
+    assert entries[0] == os.path.join(tmpdir.strpath, "rel", "hooks")
+    assert entries[1] == abs_entry
+    assert entries[2] == ""
+
+
+def test_absolute_pythonpath_returns_none_when_unset(monkeypatch):
+    from canary_hpc.batchexec import HPCConnectRunner
+
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    assert HPCConnectRunner._absolute_pythonpath() is None
