@@ -281,3 +281,55 @@ def test_results_view_serialize_omits_root(tmp_path):
 
     d = stdlib_json.loads(blob)
     assert "root" not in d, "root must not be persisted in the serialized view"
+
+
+def test_view_settings_deserialize_ignores_unknown_keys():
+    """ViewSettings.__deserialize__ must tolerate keys written by other canary
+    versions (e.g. a legacy 'reports' field) instead of raising a TypeError."""
+    from _canary.util import json_helper as json
+    from _canary.view import ViewSettings
+
+    blob = json.dumps(
+        {
+            "name": "TestResults",
+            "when": "always",
+            "only": "all",
+            "mode": "symlink",
+            # A field this version of ViewSettings does not know about.
+            "reports": ["html", "json"],
+            "__type__": "_canary.view::ViewSettings",
+        }
+    )
+    settings = json.loads(blob)
+    assert isinstance(settings, ViewSettings)
+    assert settings.name == "TestResults"
+    assert settings.when == "always"
+    assert settings.only == "all"
+    assert settings.mode == "symlink"
+    assert not hasattr(settings, "reports")
+
+
+def test_latest_view_survives_unknown_view_settings_key(tmp_path):
+    """A view cache carrying an unknown ViewSettings key (written by a different
+    canary version) must still load via Workspace.latest_view()."""
+    import json as stdlib_json
+
+    from _canary.view import ResultsView
+    from _canary.view import ViewSettings
+
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+
+    # Write a normal view cache, then inject an unknown key into the persisted
+    # ViewSettings payload to emulate a cache from an incompatible version.
+    ws.register_view(ResultsView(root=proj.parent, settings=ViewSettings()))
+    cache = ws.cache_dir / "view"
+    raw = stdlib_json.loads(cache.read_text())
+    raw["settings"]["reports"] = ["html", "json"]
+    cache.write_text(stdlib_json.dumps(raw, indent=2))
+
+    loaded = ws.latest_view()
+    assert loaded is not None
+    assert isinstance(loaded.settings, ViewSettings)
+    assert loaded.settings.name == "TestResults"

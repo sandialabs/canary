@@ -86,7 +86,13 @@ class ViewSettings:
 
     @classmethod
     def __deserialize__(cls, d: dict[str, Any]) -> "ViewSettings":
-        return cls(**d)
+        # Tolerate keys that are not (or no longer) fields of this dataclass so
+        # that cache files written by a different canary version — which may
+        # have carried extra view settings — remain loadable. Unknown keys are
+        # silently dropped rather than raising a TypeError from ``cls(**d)``.
+        field_names = {f.name for f in dataclasses.fields(cls) if f.init}
+        known = {k: v for k, v in d.items() if k in field_names}
+        return cls(**known)
 
     def __post_init__(self):
         """Validate field values against their allowed sets."""
