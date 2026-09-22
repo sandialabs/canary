@@ -103,9 +103,12 @@ class Config:
         if env_scope := get_env_scope():
             data = merge(data, env_scope)  # type: ignore
         bootstrap = Schema({Optional("plugins"): [str]}, ignore_extra_keys=True).validate(data)
-        anchor = workspace_anchor()
+        # Persisted plugins here come from a workspace config.yaml; relative
+        # path plugins are resolved against the workspace anchor (the directory
+        # containing .canary) per the hard rule for that file.
+        base = workspace_anchor()
         for plugin in bootstrap.get("plugins", []):
-            self._consider_persisted_plugin(plugin, anchor=anchor)
+            self._consider_persisted_plugin(plugin, base=base)
         self.pluginmanager.hook.canary_addconfig(config=self)
         self.resource_manager.clear()
         self.data = config_schema.validate(data)
@@ -165,23 +168,27 @@ class Config:
                 sys.path.insert(0, entry)
 
     def _load_plugins_from_data(self) -> None:
-        # Load plugins listed in current self.data, then let them add config sections
-        anchor = workspace_anchor()
+        # Load plugins listed in current self.data, then let them add config sections.
+        # These come from a config SNAPSHOT (an HPC batch child, flux job, or
+        # worker), which may run from a different cwd than the original run, so
+        # relative plugin paths are resolved against the run's invocation_dir
+        # (carried in the snapshot) — the same base used for snapshot sys.path.
+        base = self.invocation_dir
         for plugin in self.data.get("plugins", []):
-            self._consider_persisted_plugin(plugin, anchor=anchor)
+            self._consider_persisted_plugin(plugin, base=base)
         self.pluginmanager.hook.canary_addconfig(config=self)
 
-    def _consider_persisted_plugin(self, plugin: str, *, anchor: Path | None) -> None:
+    def _consider_persisted_plugin(self, plugin: str, *, base: str | Path | None) -> None:
         """Load a plugin recorded in persisted config, best-effort.
 
-        Relative paths are resolved against the workspace *anchor* (the single
-        rule for relative paths in ``.canary/config.yaml``).  A load failure is
-        downgraded to a warning rather than crashing every command in the
-        workspace: a stale or unresolvable persisted plugin must not brick the
-        CLI.  Plugins requested on the CURRENT command line still surface hard
-        errors because they flow through ``consider_plugin`` directly.
+        Relative path plugins are resolved against *base* (see
+        :func:`resolve_plugin`).  A load failure is downgraded to a warning
+        rather than crashing every command in the workspace: a stale or
+        unresolvable persisted plugin must not brick the CLI.  Plugins requested
+        on the CURRENT command line still surface hard errors because they flow
+        through ``consider_plugin`` directly.
         """
-        resolved = resolve_plugin(plugin, anchor=anchor)
+        resolved = resolve_plugin(plugin, base=base)
         try:
             self.pluginmanager.consider_plugin(resolved)
         except Exception as e:
@@ -463,16 +470,24 @@ def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str:
     return f"{prefix}{abspath}"
 
 
-def resolve_plugin(name: str, *, anchor: str | Path | None) -> str:
+def resolve_plugin(name: str, *, base: str | Path | None) -> str:
     """Resolve a persisted plugin spec to something loadable in this process.
 
-    A relative path is resolved against the workspace *anchor* (the directory
-    containing ``.canary``); this is the single hard rule for relative paths in
-    ``.canary/config.yaml``.  Absolute paths, dotted module names, and ``no:``
-    block directives are returned unchanged.  Returns *name* unchanged when no
-    anchor is available.
+    A relative *path* plugin is resolved against *base* (an absolute directory).
+    Absolute paths, dotted module names, and ``no:`` block directives are
+    returned unchanged.  Returns *name* unchanged when *base* is ``None``.
+
+    The correct *base* depends on the source of the persisted spec:
+
+    * a workspace ``config.yaml`` — the workspace anchor (directory containing
+      ``.canary``); this is the hard rule for relative paths in that file.
+    * a config *snapshot* (``config.json`` / ``CANARYCFG64``) consumed by an HPC
+      batch child, flux job, or worker — the run's ``invocation_dir``.  Such a
+      child typically runs from a different cwd (its batch/workspace dir), so a
+      relative path must be resolved against the original invocation directory,
+      exactly as snapshot ``sys.path`` entries are (see ``_snapshot_sys_path``).
     """
-    if anchor is None or not is_plugin_path(name):
+    if base is None or not is_plugin_path(name):
         return name
     prefix = ""
     raw = name
@@ -480,7 +495,7 @@ def resolve_plugin(name: str, *, anchor: str | Path | None) -> str:
         prefix, raw = "no:", raw[3:]
     if os.path.isabs(raw):
         return name
-    return f"{prefix}{os.path.abspath(os.path.join(str(anchor), raw))}"
+    return f"{prefix}{os.path.abspath(os.path.join(str(base), raw))}"
 
 
 def workspace_anchor() -> Path | None:

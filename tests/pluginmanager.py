@@ -260,19 +260,59 @@ def test_normalize_plugin_for_storage_keeps_module_and_outside_paths(tmp_path):
     assert norm(str(outside), anchor=anchor) == str(outside)
 
 
-def test_resolve_plugin_resolves_relative_against_anchor(tmp_path):
+def test_resolve_plugin_resolves_relative_against_base(tmp_path):
     """resolve_plugin turns a stored relative path into an absolute one anchored
-    at the *current* workspace location (portable across mount points)."""
+    at the given base directory (portable across mount points / cwds)."""
     from _canary.config.config import resolve_plugin
 
-    anchor = tmp_path / "container_mount"
-    assert resolve_plugin("analysis/reverify.py", anchor=anchor) == str(
-        anchor / "analysis" / "reverify.py"
+    base = tmp_path / "container_mount"
+    assert resolve_plugin("analysis/reverify.py", base=base) == str(
+        base / "analysis" / "reverify.py"
     )
-    assert resolve_plugin("no:analysis/reverify.py", anchor=anchor) == "no:" + str(
-        anchor / "analysis" / "reverify.py"
+    assert resolve_plugin("no:analysis/reverify.py", base=base) == "no:" + str(
+        base / "analysis" / "reverify.py"
     )
-    # module names, absolute paths, and a missing anchor are returned unchanged
-    assert resolve_plugin("mypkg.hooks", anchor=anchor) == "mypkg.hooks"
-    assert resolve_plugin("/opt/hooks/x.py", anchor=anchor) == "/opt/hooks/x.py"
-    assert resolve_plugin("analysis/reverify.py", anchor=None) == "analysis/reverify.py"
+    # module names, absolute paths, and a missing base are returned unchanged
+    assert resolve_plugin("mypkg.hooks", base=base) == "mypkg.hooks"
+    assert resolve_plugin("/opt/hooks/x.py", base=base) == "/opt/hooks/x.py"
+    assert resolve_plugin("analysis/reverify.py", base=None) == "analysis/reverify.py"
+
+
+def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
+    """A relative plugin in a config SNAPSHOT resolves against the snapshot's
+    invocation_dir, not the (different) cwd of an HPC batch child.
+
+    Reproduces the batched-Slurm case: the batch child runs from its own
+    workspace dir (deep under .canary/sessions/.../batches/<B>, which has its
+    OWN .canary), while the deck-local ``analysis/reverify.py`` lives only under
+    the run's invocation_dir.  Resolving against the workspace anchor would look
+    in the batch dir and fail; resolving against invocation_dir succeeds so the
+    canary_runtest_finish hook registers.
+    """
+    from _canary import config
+    from _canary.util.filesystem import working_dir
+
+    deck = tmp_path / "deckroot"
+    (deck / "analysis").mkdir(parents=True)
+    (deck / "analysis" / "reverify.py").write_text(
+        "import canary\n\n@canary.hookimpl\ndef canary_runtest_finish(case):\n    pass\n"
+    )
+    # Batch child workspace dir with its OWN .canary (as in --workspace=<batchdir>).
+    batch = deck / ".canary" / "sessions" / "S" / "batches" / "B"
+    (batch / ".canary").mkdir(parents=True)
+
+    # Build a realistic snapshot from the deck root, then inject the relative
+    # plugin exactly as the HPC batch writer does.
+    with working_dir(deck), config.override():
+        snap = config._config.snapshot()
+    snap["invocation_dir"] = str(deck)
+    snap["data"] = dict(snap.get("data", {}))
+    snap["data"]["plugins"] = ["analysis/reverify.py"]
+
+    # Act as the batch child: cwd is the batch dir, config comes from the snapshot.
+    with working_dir(batch), config.override():
+        config.load_snapshot(snap)
+        pm = config._config.pluginmanager
+        assert pm.get_plugin("reverify") is not None
+        impls = [h.plugin_name for h in pm.hook.canary_runtest_finish.get_hookimpls()]
+        assert "reverify" in impls
