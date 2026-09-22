@@ -37,10 +37,12 @@ the ``canary_runtests`` hook.  The default implementation is registered with
 """
 
 import dataclasses
+import datetime
 import io
 import sys
 import threading
 import time
+import traceback
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any
@@ -257,10 +259,10 @@ class JobExecutor:
             try:
                 pm.canary_runtest_finish(case=job)
             except Exception as e:
-                # If the test itself already failed, this will overwrite with BROKEN.
-                # That is intentional: teardown/finalization failure means Canary did
-                # not complete the test lifecycle cleanly.
-                mark_broken("Test finish", e)
+                # A finish/teardown hook failure must not change the job's
+                # outcome: the job keeps the status produced by canary_runtest.
+                # Record the failure to the job's output file for diagnosis.
+                _record_finish_failure(job, e)
                 return
 
         finally:
@@ -278,6 +280,26 @@ class JobExecutor:
                 job.save()
             except Exception:
                 logger.exception("Failed to save job %s", job.id[:7])
+
+
+def _record_finish_failure(job: "Job", exc: Exception) -> None:
+    """Record a ``canary_runtest_finish`` hook failure to the job's output file.
+
+    The job's outcome is deliberately left unchanged; only a diagnostic record
+    is appended so the failing finish/teardown hook can be traced.
+    """
+    detail = f"{exc.__class__.__name__}: {exc}"
+    logger.error("canary_runtest_finish hook failed for %s: %s", job.id[:7], detail)
+    tb = traceback.format_exc()
+    try:
+        with job.workspace.openfile(job.stdout, "a") as fh:
+            prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            fh.write(f"[{prefix}] canary_runtest_finish hook failed: {detail}\n")
+            fh.write(tb)
+            if not tb.endswith("\n"):
+                fh.write("\n")
+    except Exception:
+        logger.exception("Failed to record finish-hook failure for job %s", job.id[:7])
 
 
 @hookimpl(tryfirst=True)

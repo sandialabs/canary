@@ -6,7 +6,6 @@
 
 import argparse
 import datetime
-import time
 from typing import TYPE_CHECKING
 
 import rich
@@ -14,6 +13,7 @@ import rich
 from .. import config
 from ..hookspec import hookimpl
 from ..job import Job
+from ..runtest import JobExecutor
 from ..util import logging
 from ..workspace import Workspace
 from .base import CanarySubcommand
@@ -61,21 +61,48 @@ class Exec(CanarySubcommand):
         return 0
 
     def run_job(self, job: Job) -> None:
-        """Stage, run, and tear down *job*, printing live status updates."""
-        pm = config.pluginmanager.hook
+        """Stage, run, and tear down *job*, printing live status updates.
+
+        Delegates the phase orchestration to :class:`JobExecutor` so that hook
+        exception handling and the final ``job.save()`` behave identically to
+        the in-session scheduler.  A small event sink renders the live status
+        lines from the executor's event stream.
+        """
         style = config.getoption("console_style") or {}
         namefmt = style.get("name", "short")
         display_name = job.display_name(style="rich", resolve=namefmt == "long")
-        try:
-            job.timekeeper.open()
-            rich.print(f"{display_name}: [blue]STARTING[/]")
-            job.on_stage(at=time.time())
-            pm.canary_runteststart(case=job)
-            rich.print(f"{display_name}: [blue]RUNNING[/]")
-            pm.canary_runtest(case=job)
-            job.timekeeper.close()
-        finally:
-            st = job.status.display_name(style="rich")
-            rich.print(f"{display_name}: {st}")
-            pm.canary_runtest_finish(case=job)
-            job.save()
+
+        sink = _StatusSink(job, display_name)
+        JobExecutor()(job, sink)
+        sink.print_final()
+
+
+class _StatusSink:
+    """Adapt :class:`JobExecutor` events to ``canary exec``'s live status lines.
+
+    In the in-session scheduler these events drive job phase transitions via the
+    executor's slot; here there is no slot, so this sink applies the same
+    transitions to the job and renders the live status lines.
+    """
+
+    def __init__(self, job: Job, display_name: str) -> None:
+        self.job = job
+        self.display_name = display_name
+
+    def put(self, event: dict) -> None:
+        name = event.get("event")
+        at = event.get("timestamp")
+        if name == "job_submitted":
+            self.job.on_submit(at=at)
+        elif name == "job_staged":
+            self.job.on_stage(at=at)
+            rich.print(f"{self.display_name}: [blue]STARTING[/]")
+        elif name == "job_started":
+            self.job.on_start(at=at)
+            rich.print(f"{self.display_name}: [blue]RUNNING[/]")
+        elif name == "job_stopped":
+            self.job.on_stop(at=at)
+
+    def print_final(self) -> None:
+        st = self.job.status.display_name(style="rich")
+        rich.print(f"{self.display_name}: {st}")

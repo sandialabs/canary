@@ -4,6 +4,7 @@
 
 """Tests for session-end reconciliation of unfinished jobs."""
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,6 +12,7 @@ from _canary.job import BaseJob
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.runtest import Runner
+from _canary.runtest import _record_finish_failure
 from _canary.runtest import reconcile_unfinished_jobs
 from _canary.status import Status
 from _canary.timekeeper import Timekeeper
@@ -149,3 +151,37 @@ def test_reconcile_mixed_batch_on_interrupt():
     assert pending.status.outcome.name == "INTERRUPTED"
     assert running.status.outcome.name == "INTERRUPTED"
     assert all(j.state.is_done() for j in (done, pending, running))
+
+
+def test_record_finish_failure_preserves_status_and_writes_output(tmp_path):
+    """A failing finish hook is recorded to the job output, not the job status."""
+
+    written: list[str] = []
+
+    @contextmanager
+    def openfile(name, mode="r"):
+        assert mode == "a"
+        f = tmp_path / name
+        with open(f, mode, encoding="utf-8") as fh:
+            yield fh
+        written.append(f.read_text(encoding="utf-8"))
+
+    job = DummyJob()
+    job.status.set(category="PASS", outcome="SUCCESS")
+    job.stdout = "canary-out.txt"
+    job.workspace = SimpleNamespace(openfile=openfile)
+
+    try:
+        raise RuntimeError("boom in finish")
+    except RuntimeError as e:
+        _record_finish_failure(job, e)
+
+    # Status is untouched: the job keeps its canary_runtest outcome.
+    assert job.status.outcome.name == "SUCCESS"
+    assert job.status.category.value == "PASS"
+
+    # The failure and its traceback are recorded to the job's output file.
+    assert written, "expected the failure to be written to the job output file"
+    output = written[0]
+    assert "canary_runtest_finish hook failed" in output
+    assert "RuntimeError: boom in finish" in output
