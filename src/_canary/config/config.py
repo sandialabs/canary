@@ -103,8 +103,9 @@ class Config:
         if env_scope := get_env_scope():
             data = merge(data, env_scope)  # type: ignore
         bootstrap = Schema({Optional("plugins"): [str]}, ignore_extra_keys=True).validate(data)
+        anchor = workspace_anchor()
         for plugin in bootstrap.get("plugins", []):
-            self.pluginmanager.consider_plugin(plugin)
+            self._consider_persisted_plugin(plugin, anchor=anchor)
         self.pluginmanager.hook.canary_addconfig(config=self)
         self.resource_manager.clear()
         self.data = config_schema.validate(data)
@@ -165,9 +166,29 @@ class Config:
 
     def _load_plugins_from_data(self) -> None:
         # Load plugins listed in current self.data, then let them add config sections
+        anchor = workspace_anchor()
         for plugin in self.data.get("plugins", []):
-            self.pluginmanager.consider_plugin(plugin)
+            self._consider_persisted_plugin(plugin, anchor=anchor)
         self.pluginmanager.hook.canary_addconfig(config=self)
+
+    def _consider_persisted_plugin(self, plugin: str, *, anchor: Path | None) -> None:
+        """Load a plugin recorded in persisted config, best-effort.
+
+        Relative paths are resolved against the workspace *anchor* (the single
+        rule for relative paths in ``.canary/config.yaml``).  A load failure is
+        downgraded to a warning rather than crashing every command in the
+        workspace: a stale or unresolvable persisted plugin must not brick the
+        CLI.  Plugins requested on the CURRENT command line still surface hard
+        errors because they flow through ``consider_plugin`` directly.
+        """
+        resolved = resolve_plugin(plugin, anchor=anchor)
+        try:
+            self.pluginmanager.consider_plugin(resolved)
+        except Exception as e:
+            logger.warning(
+                f"failed to load plugin {plugin!r} recorded in workspace config: {e}; "
+                "continuing without it (pass -p explicitly to force an error)"
+            )
 
     @staticmethod
     def _set_log_level(config: "Config") -> None:
@@ -398,6 +419,75 @@ def get_scope_filename(scope: str) -> Path:
             f"not a Canary workspace (or any of its parent directories): {Path.cwd()}"
         )
     raise ValueError(f"Could not determine filename for scope {scope!r}")
+
+
+def is_plugin_path(name: str) -> bool:
+    """Return True if *name* denotes a filesystem path rather than a dotted module.
+
+    A plugin spec is treated as a path when it looks like a ``.py`` file or when
+    it contains a path separator (``os.sep`` or ``/``).  Bare dotted module names
+    (e.g. ``mypkg.hooks``) are never treated as paths.  A leading ``no:`` prefix
+    (used to *block* a plugin) is stripped before the test.
+    """
+    if name.startswith("no:"):
+        name = name[3:]
+    if name.endswith(".py"):
+        return True
+    return os.sep in name or "/" in name
+
+
+def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str:
+    """Normalize a plugin spec for persistence in a workspace ``config.yaml``.
+
+    Path-like plugins are stored RELATIVE to the workspace *anchor* (the
+    directory containing ``.canary``) when they live inside that tree, so the
+    same workspace resolves them regardless of the absolute mount point through
+    which it is accessed (e.g. ``/gpfs`` on the host vs ``/projects`` in a
+    container).  Paths outside the anchor tree are stored as absolute paths.
+    Dotted module names and ``no:`` block directives are stored verbatim.
+    """
+    if not is_plugin_path(name):
+        return name
+    prefix = ""
+    raw = name
+    if raw.startswith("no:"):
+        prefix, raw = "no:", raw[3:]
+    abspath = os.path.abspath(os.path.join(str(anchor), raw)) if not os.path.isabs(raw) else raw
+    anchor_abs = os.path.abspath(str(anchor))
+    try:
+        if os.path.commonpath([abspath, anchor_abs]) == anchor_abs:
+            return f"{prefix}{os.path.relpath(abspath, anchor_abs)}"
+    except ValueError:
+        # Different drives / uncomparable paths — fall back to absolute.
+        pass
+    return f"{prefix}{abspath}"
+
+
+def resolve_plugin(name: str, *, anchor: str | Path | None) -> str:
+    """Resolve a persisted plugin spec to something loadable in this process.
+
+    A relative path is resolved against the workspace *anchor* (the directory
+    containing ``.canary``); this is the single hard rule for relative paths in
+    ``.canary/config.yaml``.  Absolute paths, dotted module names, and ``no:``
+    block directives are returned unchanged.  Returns *name* unchanged when no
+    anchor is available.
+    """
+    if anchor is None or not is_plugin_path(name):
+        return name
+    prefix = ""
+    raw = name
+    if raw.startswith("no:"):
+        prefix, raw = "no:", raw[3:]
+    if os.path.isabs(raw):
+        return name
+    return f"{prefix}{os.path.abspath(os.path.join(str(anchor), raw))}"
+
+
+def workspace_anchor() -> Path | None:
+    """Return the workspace anchor (directory containing ``.canary``) or None."""
+    from ..workspace import Workspace
+
+    return Workspace.find_anchor()
 
 
 def get_env_scope() -> dict[str, Any]:

@@ -5,6 +5,7 @@
 import pytest
 
 import _canary.workspace as _workspace_module
+from _canary.util.filesystem import working_dir
 from _canary.workspace import NotAWorkspaceError
 from _canary.workspace import Workspace
 from _canary.workspace import WorkspaceExistsError
@@ -333,3 +334,101 @@ def test_latest_view_survives_unknown_view_settings_key(tmp_path):
     assert loaded is not None
     assert isinstance(loaded.settings, ViewSettings)
     assert loaded.settings.name == "TestResults"
+
+
+# --------------------------------------------------------------------------- #
+# Portable plugin persistence in .canary/config.yaml (host/container mounts)   #
+# --------------------------------------------------------------------------- #
+
+
+def _create_with_plugins(anchor, plugins):
+    """Create a workspace at *anchor* with config_mods carrying *plugins*."""
+    import argparse
+
+    from _canary import config
+
+    with config.override():
+        config._config.options = argparse.Namespace(config_mods={"plugins": list(plugins)})
+        return Workspace.create(anchor)
+
+
+def test_create_persists_plugin_path_relative_to_anchor(tmp_path):
+    """A path-like plugin under the workspace tree is persisted RELATIVE to the
+    anchor so the workspace is portable across absolute mount points."""
+    import yaml
+
+    proj = tmp_path / "run17"
+    (proj / "analysis").mkdir(parents=True)
+    (proj / "analysis" / "reverify.py").write_text("X = 1\n")
+
+    # Pass the plugin as an ABSOLUTE path, as a host shell would.
+    _create_with_plugins(proj, [str(proj / "analysis" / "reverify.py")])
+
+    cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
+    assert cfg["canary"]["plugins"] == ["analysis/reverify.py"]
+
+
+def test_create_keeps_module_name_plugin_verbatim(tmp_path):
+    import yaml
+
+    proj = tmp_path / "run17"
+    proj.mkdir()
+    _create_with_plugins(proj, ["mypkg.hooks"])
+
+    cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
+    assert cfg["canary"]["plugins"] == ["mypkg.hooks"]
+
+
+def test_persisted_relative_plugin_loads_after_tree_moved(tmp_path):
+    """Emulate the /gpfs (host) vs /projects (container) mount mismatch: create a
+    workspace under one prefix, move the whole tree to another, and confirm the
+    persisted relative plugin still loads via Config.load()."""
+    import argparse
+
+    from _canary import config
+
+    host = tmp_path / "gpfs" / "run17"
+    (host / "analysis").mkdir(parents=True)
+    (host / "analysis" / "hookmod.py").write_text(
+        "import canary\n\n@canary.hookimpl\ndef canary_addoption(parser):\n    pass\n"
+    )
+    _create_with_plugins(host, [str(host / "analysis" / "hookmod.py")])
+
+    # Relocate the entire tree to a different absolute prefix.
+    container = tmp_path / "projects" / "run17"
+    container.parent.mkdir(parents=True)
+    host.rename(container)
+
+    with config.override(), working_dir(container):
+        config._config.options = argparse.Namespace()
+        config._config.load()
+        assert config._config.pluginmanager.get_plugin("hookmod") is not None
+
+
+def test_stale_persisted_plugin_warns_and_does_not_crash(tmp_path, monkeypatch):
+    """A stale/unresolvable plugin in .canary/config.yaml must degrade to a
+    warning rather than raising and bricking every command in the workspace."""
+    import argparse
+
+    import _canary.config.config as _cfgmod
+    from _canary import config
+
+    proj = tmp_path / "run17"
+    proj.mkdir()
+    _create_with_plugins(proj, [])
+    # Inject plugins that cannot possibly load (missing file + bogus module).
+    (proj / ".canary" / "config.yaml").write_text(
+        "canary:\n  plugins:\n  - analysis/missing.py\n  - totally.bogus.module\n"
+    )
+
+    warnings: list[str] = []
+    monkeypatch.setattr(_cfgmod.logger, "warning", lambda msg, *a, **k: warnings.append(str(msg)))
+
+    with config.override(), working_dir(proj):
+        config._config.options = argparse.Namespace()
+        # Must NOT raise even though every persisted plugin fails to load.
+        config._config.load()
+
+    joined = "\n".join(warnings)
+    assert "analysis/missing.py" in joined
+    assert "totally.bogus.module" in joined

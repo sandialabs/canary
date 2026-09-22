@@ -216,3 +216,63 @@ def test_consider_plugin_directory_path_loads_plugin(tmp_path, pm):
     pkg = _write_package(tmp_path, "consider_pkg", "X = 1\n")
     pm.consider_plugin(str(pkg))
     assert pm.get_plugin("consider_pkg") is not None
+
+
+# --------------------------------------------------------------------------- #
+# Plugin-path normalization / resolution (portable .canary/config.yaml)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_is_plugin_path_distinguishes_paths_from_modules():
+    from _canary.config.config import is_plugin_path
+
+    assert is_plugin_path("hook.py") is True
+    assert is_plugin_path("analysis/reverify.py") is True
+    assert is_plugin_path("no:analysis/reverify.py") is True
+    assert is_plugin_path("mypkg.hooks") is False
+    assert is_plugin_path("plugin") is False
+
+
+def test_normalize_plugin_for_storage_makes_inside_tree_relative(tmp_path):
+    """A path inside the workspace anchor is stored relative to the anchor,
+    whether the caller passed it relative or as an absolute path."""
+    from _canary.config.config import normalize_plugin_for_storage as norm
+
+    anchor = tmp_path / "run17"
+    (anchor / "analysis").mkdir(parents=True)
+    (anchor / "analysis" / "reverify.py").write_text("X = 1\n")
+
+    assert norm("analysis/reverify.py", anchor=anchor) == "analysis/reverify.py"
+    assert norm(str(anchor / "analysis" / "reverify.py"), anchor=anchor) == "analysis/reverify.py"
+
+
+def test_normalize_plugin_for_storage_keeps_module_and_outside_paths(tmp_path):
+    from _canary.config.config import normalize_plugin_for_storage as norm
+
+    anchor = tmp_path / "run17"
+    anchor.mkdir()
+    # dotted module names are never treated as paths
+    assert norm("mypkg.hooks", anchor=anchor) == "mypkg.hooks"
+    # a no:<module> directive is preserved verbatim
+    assert norm("no:mypkg.hooks", anchor=anchor) == "no:mypkg.hooks"
+    # a path outside the anchor tree is stored absolute
+    outside = tmp_path / "elsewhere" / "x.py"
+    assert norm(str(outside), anchor=anchor) == str(outside)
+
+
+def test_resolve_plugin_resolves_relative_against_anchor(tmp_path):
+    """resolve_plugin turns a stored relative path into an absolute one anchored
+    at the *current* workspace location (portable across mount points)."""
+    from _canary.config.config import resolve_plugin
+
+    anchor = tmp_path / "container_mount"
+    assert resolve_plugin("analysis/reverify.py", anchor=anchor) == str(
+        anchor / "analysis" / "reverify.py"
+    )
+    assert resolve_plugin("no:analysis/reverify.py", anchor=anchor) == "no:" + str(
+        anchor / "analysis" / "reverify.py"
+    )
+    # module names, absolute paths, and a missing anchor are returned unchanged
+    assert resolve_plugin("mypkg.hooks", anchor=anchor) == "mypkg.hooks"
+    assert resolve_plugin("/opt/hooks/x.py", anchor=anchor) == "/opt/hooks/x.py"
+    assert resolve_plugin("analysis/reverify.py", anchor=None) == "analysis/reverify.py"

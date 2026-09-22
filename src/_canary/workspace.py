@@ -39,6 +39,7 @@ from . import rules
 from . import select
 from . import version
 from .collect import Collector
+from .config import config as config_mod
 from .database import WorkspaceDatabase
 from .error import StopExecution
 from .error import notests_exit_status
@@ -324,15 +325,18 @@ class Workspace:
         (self.cache_dir / "view").write_text(json.dumps(view, indent=2))
 
     @staticmethod
-    def find_anchor(start: str | Path = Path.cwd()) -> Path | None:
+    def find_anchor(start: str | Path | None = None) -> Path | None:
         """Searches upwards from start to find the directory containing the workspace.
 
         Args:
-            start: The directory to start the search from.
+            start: The directory to start the search from.  Defaults to the
+                current working directory, resolved at call time.
 
         Returns:
             The anchor Path if found, otherwise None.
         """
+        if start is None:
+            start = Path.cwd()
         current_path = Path(start).absolute()
         if current_path.stem == workspace_path:
             return current_path.parent
@@ -345,11 +349,12 @@ class Workspace:
         return None
 
     @staticmethod
-    def find_workspace(start: str | Path = Path.cwd()) -> Path | None:
+    def find_workspace(start: str | Path | None = None) -> Path | None:
         """Locates the .canary workspace directory.
 
         Args:
-            start: The directory to start the search from.
+            start: The directory to start the search from.  Defaults to the
+                current working directory, resolved at call time.
 
         Returns:
             The path to the workspace directory if found, otherwise None.
@@ -398,6 +403,14 @@ class Workspace:
         cfg: dict[str, Any] = {}
         if mods := config.getoption("config_mods"):
             cfg.update(mods)
+        # Persist plugin paths RELATIVE to the workspace anchor (the directory
+        # containing .canary) so the same tree resolves them regardless of the
+        # absolute mount point it is accessed through (e.g. /gpfs on the host
+        # vs /projects in a container).  See _canary.config.config.resolve_plugin.
+        if plugins := cfg.get("plugins"):
+            cfg["plugins"] = [
+                config_mod.normalize_plugin_for_storage(p, anchor=path) for p in plugins
+            ]
         with open(file, "w") as fh:
             yaml.dump({"canary": cfg}, fh, default_flow_style=False)
 
