@@ -140,12 +140,28 @@ class Config:
 
     def _apply_snapshot(self, snapshot: dict[str, Any]) -> None:
         self.invocation_dir = snapshot["invocation_dir"]
+        self._restore_sys_path(snapshot.get("sys_path", []))
         self.options = argparse.Namespace(**snapshot["options"])
         self.data.clear()
         self.data.update(snapshot["data"])
         self.resource_manager.clear()
         if resource_manager_snapshot := snapshot.get("resource_manager"):
             self.resource_manager.load_snapshot(resource_manager_snapshot)
+
+    @staticmethod
+    def _restore_sys_path(entries: list[str]) -> None:
+        """Prepend snapshot ``sys.path`` entries missing from the child.
+
+        A snapshot must be self-contained: a consumer (an HPC batch child, a
+        flux job, a worker process) may run from a different working directory
+        and without the parent's ``PYTHONPATH``, so plugins listed in the
+        snapshot could otherwise be unimportable.  Prepending the parent's
+        (absolute) path entries makes them importable without relying on the
+        child's environment or on reading a workspace config file.
+        """
+        for entry in reversed(entries):
+            if entry and entry not in sys.path:
+                sys.path.insert(0, entry)
 
     def _load_plugins_from_data(self) -> None:
         # Load plugins listed in current self.data, then let them add config sections
@@ -168,8 +184,27 @@ class Config:
             "options": vars(self.options),
             "data": self.data,
             "resource_manager": self.resource_manager.snapshot(),
+            "sys_path": self._snapshot_sys_path(),
         }
         return snapshot
+
+    def _snapshot_sys_path(self) -> list[str]:
+        """Capture ``sys.path`` as absolute entries for a self-contained snapshot.
+
+        Relative entries are resolved against the invocation directory so a
+        consumer running from a different working directory resolves them the
+        same way the parent did.
+        """
+        invocation_dir = str(self.invocation_dir)
+        resolved: list[str] = []
+        for entry in sys.path:
+            if not entry:
+                continue
+            if os.path.isabs(entry):
+                resolved.append(entry)
+            else:
+                resolved.append(os.path.abspath(os.path.join(invocation_dir, entry)))
+        return resolved
 
     def serialize(self) -> str:
         return serialize(self.snapshot())

@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import os
+import sys
 from typing import Any
 
 import pytest
@@ -10,6 +12,7 @@ import pytest
 import _canary.util.json_helper as json
 from _canary import config
 from _canary.config.argparsing import make_argument_parser
+from _canary.config.config import Config
 from _canary.subcommands.run import RequestBuilder
 from _canary.subcommands.run import RequestNode
 from _canary.subcommands.run import ScanPathsRequest
@@ -128,3 +131,45 @@ def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, mon
     envdir = tmp_path / "env"
     monkeypatch.setenv("CANARY_CACHE_DIR", str(envdir))
     assert find_cache_dir(start=ws) == envdir
+
+
+def test_snapshot_captures_absolute_sys_path(tmp_path, monkeypatch):
+    """The snapshot records sys.path so a consumer need not read config.yaml."""
+    with config.override():
+        config._config.invocation_dir = str(tmp_path)
+        monkeypatch.syspath_prepend("relative/hooks")
+        monkeypatch.syspath_prepend(str(tmp_path / "abs_hooks"))
+        snapshot = config.snapshot()
+
+    entries = snapshot["sys_path"]
+    # Every recorded entry is absolute.
+    assert all(os.path.isabs(p) for p in entries)
+    # The relative entry was resolved against the invocation directory.
+    assert os.path.join(str(tmp_path), "relative", "hooks") in entries
+    assert str(tmp_path / "abs_hooks") in entries
+
+
+def test_apply_snapshot_restores_missing_sys_path_entries(tmp_path, monkeypatch):
+    """Applying a snapshot re-inserts its sys.path entries into the consumer."""
+    new_entry = str(tmp_path / "plugin_dir")
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p != new_entry])
+    assert new_entry not in sys.path
+
+    snapshot = {
+        "invocation_dir": str(tmp_path),
+        "options": {},
+        "data": {},
+        "resource_manager": {},
+        "sys_path": [new_entry],
+    }
+    cfg = Config(loadini=False)
+    cfg._apply_snapshot(snapshot)
+
+    assert new_entry in sys.path
+
+
+def test_apply_snapshot_without_sys_path_key_is_noop(tmp_path):
+    """A legacy snapshot lacking 'sys_path' still applies cleanly."""
+    snapshot = {"invocation_dir": str(tmp_path), "options": {}, "data": {}, "resource_manager": {}}
+    cfg = Config(loadini=False)
+    cfg._apply_snapshot(snapshot)  # must not raise
