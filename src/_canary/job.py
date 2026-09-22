@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
@@ -27,6 +28,7 @@ from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
 from .expression import Expression
+from .jobspec import BaselineScriptAction
 from .launcher import Launcher
 from .status import Status
 from .testexec import ExecutionSpace
@@ -34,6 +36,7 @@ from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
+from .util.executable import Executable
 from .util.string import SimpleTemplate
 
 if TYPE_CHECKING:
@@ -804,10 +807,29 @@ class Job(BaseJob):
             self.state.phase = JobPhase.DONE
 
     def do_baseline(self) -> None:
+        """Apply this case's declared baseline actions.
+
+        The default :func:`canary_runtest_rebaseline` implementation calls this,
+        mirroring how the default ``canary_runtest`` calls :meth:`run`.
+        """
         if not self.spec.baseline:
             return
-        logger.info(f"Rebaselining {self.spec.display_name()}")
-        config.pluginmanager.hook.canary_runtest_rebaseline(case=self)
+        with self.workspace.enter():
+            for b in self.spec.baseline:
+                if isinstance(b, BaselineScriptAction):
+                    # Run the baseline script with the job's runtime environment
+                    # (PYTHONPATH includes the execution directory) so generated
+                    # helpers such as vvtest_util are importable, matching a run.
+                    env = dict(os.environ)
+                    self.set_runtime_env(env)
+                    exe = Executable(b.script[0])
+                    exe(*b.script[1:], env=env, fail_on_error=False)
+                else:
+                    src = self.workspace.dir / b.src
+                    dst = self.spec.file.parent / b.dst
+                    if src.exists():
+                        logger.debug(f"    Replacing {dst} with {src}\n")
+                        copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
         from .status import Outcome

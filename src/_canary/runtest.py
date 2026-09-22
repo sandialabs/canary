@@ -39,13 +39,11 @@ the ``canary_runtests`` hook.  The default implementation is registered with
 import dataclasses
 import datetime
 import io
-import os
 import sys
 import threading
 import time
 import traceback
 from contextlib import contextmanager
-from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
@@ -55,11 +53,9 @@ import rich
 
 from . import config
 from .hookspec import hookimpl
-from .jobspec import BaselineScriptAction
 from .queue import ResourceQueue
 from .util import glyphs
 from .util import logging
-from .util.executable import Executable
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 
@@ -348,24 +344,10 @@ def canary_runtest_rebaseline(case: "Job") -> None:
 
     Registered ``trylast`` so plugin implementations (e.g. the vvtest plugin
     refreshing ``vvtest_util.py``) run first and can prepare the working
-    directory before any baseline script is executed here.
+    directory before any baseline script is executed.  Mirrors how the default
+    ``canary_runtest`` delegates to :meth:`Job.run`.
     """
-    with case.workspace.enter():
-        for b in case.spec.baseline:
-            if isinstance(b, BaselineScriptAction):
-                # Run the baseline script with the job's runtime environment
-                # (PYTHONPATH includes the execution directory) so generated
-                # helpers such as vvtest_util are importable, matching a run.
-                env = dict(os.environ)
-                case.set_runtime_env(env)
-                exe = Executable(b.script[0])
-                exe(*b.script[1:], env=env, fail_on_error=False)
-            else:
-                src = case.workspace.dir / b.src
-                dst = case.spec.file.parent / b.dst
-                if src.exists():
-                    logger.debug(f"    Replacing {dst} with {src}\n")
-                    copyfile(src, dst)
+    case.do_baseline()
 
 
 @hookimpl

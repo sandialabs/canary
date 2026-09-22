@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .. import config
 from ..hookspec import hookimpl
 from ..rules import KeywordRule
 from ..util import json_helper as json
@@ -62,7 +63,7 @@ class Rebaseline(CanarySubcommand):
 
         for job in jobs:
             logger.info(f"[bold]Rebaselining[/] {job.display_name(style='rich', resolve=True)}")
-            job.do_baseline()
+            config.pluginmanager.hook.canary_runtest_rebaseline(case=job)
 
         logger.info(f"[bold]Rebaselined[/] {len(jobs)} job(s)")
         return 0

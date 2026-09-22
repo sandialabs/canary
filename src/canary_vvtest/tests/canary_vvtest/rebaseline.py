@@ -44,7 +44,9 @@ def _run_and_rebaseline(tmp_path: Path, filename: str, body: str) -> None:
     # do_baseline consults config for the active command; rebaseline sets it.
     _canary.config._config.options.command = "rebaseline"
     for job in workspace.load_jobs():
-        job.do_baseline()
+        # Fire the hook exactly as the rebaseline subcommand does, so plugin
+        # preparation (vvtest_util regeneration) runs before the default.
+        _canary.config.pluginmanager.hook.canary_runtest_rebaseline(case=job)
 
 
 def test_vvt_rebaseline_copy(tmp_path):
