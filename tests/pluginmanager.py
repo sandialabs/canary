@@ -279,27 +279,31 @@ def test_resolve_plugin_resolves_relative_against_base(tmp_path):
 
 
 def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
-    """A relative plugin in a config SNAPSHOT resolves against the snapshot's
-    invocation_dir, not the (different) cwd of an HPC batch child.
+    """A relative plugin in a config snapshot resolves against the workspace
+    anchor even when loaded from an HPC batch child's cwd.
 
-    Reproduces the batched-Slurm case: the batch child runs from its own
-    workspace dir (deep under .canary/sessions/.../batches/<B>, which has its
-    OWN .canary), while the deck-local ``analysis/reverify.py`` lives only under
-    the run's invocation_dir.  Resolving against the workspace anchor would look
-    in the batch dir and fail; resolving against invocation_dir succeeds so the
+    Reproduces the batched-Slurm case: the batch child runs from its execution
+    dir deep under ``.canary/sessions/.../batches/<B>`` (which is NOT itself a
+    ``.canary`` workspace — only the deck root is), and loads config from the
+    snapshot rather than from the deck's config.yaml.  Walking up from the batch
+    dir finds the deck's ``.canary`` — the same anchor the relative plugin was
+    stored against — so ``analysis/reverify.py`` resolves and the
     canary_runtest_finish hook registers.
     """
     from _canary import config
     from _canary.util.filesystem import working_dir
 
     deck = tmp_path / "deckroot"
-    (deck / "analysis").mkdir(parents=True)
+    # The deck root is the ONLY .canary workspace.
+    (deck / ".canary").mkdir(parents=True)
+    (deck / "analysis").mkdir()
     (deck / "analysis" / "reverify.py").write_text(
         "import canary\n\n@canary.hookimpl\ndef canary_runtest_finish(case):\n    pass\n"
     )
-    # Batch child workspace dir with its OWN .canary (as in --workspace=<batchdir>).
+    # The batch child's execution dir: inside the deck's .canary tree, with no
+    # .canary of its own (as created for an HPC batch ExecutionSpace).
     batch = deck / ".canary" / "sessions" / "S" / "batches" / "B"
-    (batch / ".canary").mkdir(parents=True)
+    batch.mkdir(parents=True)
 
     # Build a realistic snapshot from the deck root, then inject the relative
     # plugin exactly as the HPC batch writer does.
