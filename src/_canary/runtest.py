@@ -227,7 +227,9 @@ class JobExecutor:
             queue.put({"event": "job_staged", "timestamp": staged_at})
 
             try:
+                logger.debug("canary_runteststart: begin [%s]", job.id[:7])
                 pm.canary_runteststart(case=job)
+                logger.debug("canary_runteststart: end   [%s]", job.id[:7])
             except Exception as e:
                 mark_broken("Test setup", e)
                 return
@@ -239,7 +241,9 @@ class JobExecutor:
             queue.put({"event": "job_started", "timestamp": started_at})
 
             try:
+                logger.debug("canary_runtest: begin [%s]", job.id[:7])
                 pm.canary_runtest(case=job)
+                logger.debug("canary_runtest: end   [%s]", job.id[:7])
             except Exception as e:
                 # Job.run() normally catches user-test exceptions and sets status.
                 # If an exception escapes the hook layer, treat it as an execution
@@ -257,7 +261,9 @@ class JobExecutor:
                 queue.put({"event": "job_stopped", "timestamp": stopped_at})
 
             try:
+                logger.debug("canary_runtest_finish: begin [%s]", job.id[:7])
                 pm.canary_runtest_finish(case=job)
+                logger.debug("canary_runtest_finish: end   [%s]", job.id[:7])
             except Exception as e:
                 # A finish/teardown hook failure must not change the job's
                 # outcome: the job keeps the status produced by canary_runtest.
@@ -289,7 +295,7 @@ def _record_finish_failure(job: "Job", exc: Exception) -> None:
     is appended so the failing finish/teardown hook can be traced.
     """
     detail = f"{exc.__class__.__name__}: {exc}"
-    logger.error("canary_runtest_finish hook failed for %s: %s", job.id[:7], detail)
+    logger.error("canary_runtest_finish hook failed for %s: %s", job.id[:7], detail, exc_info=True)
     tb = traceback.format_exc()
     try:
         with job.workspace.openfile(job.stdout, "a") as fh:

@@ -451,7 +451,14 @@ class ResourceQueueExecutor:
         self._store["logging_queue"] = logging_queue = mp.Queue(-1)
         root = logging.get_logger("root")
         handlers: list[logging.builtin_logging.Handler] = []
-        handlers.append(logging.stream_handler())
+        # The listener's stream handler must stay at INFO or above even when
+        # -d is active.  The listener runs in the parent process in a daemon
+        # thread that is *not* under LiveReporter's Rich console, so any
+        # sub-INFO records it emits would write raw text directly to stderr
+        # and corrupt the live table.  DEBUG records from worker processes
+        # are therefore routed only to the JSON log file (below), which is
+        # the correct durable destination for per-job debug output.
+        handlers.append(logging.stream_handler(logging.INFO))
         for h in root.handlers:
             if isinstance(h, logging.FileHandler) and isinstance(
                 h.formatter, logging.JsonFormatter

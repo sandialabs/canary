@@ -371,11 +371,19 @@ def flux_exec(args: argparse.Namespace) -> int:
     try:
         job.timekeeper.reset()
         job.on_submit(at=time.time())
+        logger.debug("canary_runteststart: begin [%s]", job.id[:7])
         pm.canary_runteststart(case=job)
+        logger.debug("canary_runteststart: end   [%s]", job.id[:7])
+        logger.debug("canary_runtest: begin [%s]", job.id[:7])
         pm.canary_runtest(case=job)
+        logger.debug("canary_runtest: end   [%s]", job.id[:7])
     finally:
         try:
+            logger.debug("canary_runtest_finish: begin [%s]", job.id[:7])
             pm.canary_runtest_finish(case=job)
+            logger.debug("canary_runtest_finish: end   [%s]", job.id[:7])
+        except Exception:
+            logger.error("canary_runtest_finish hook failed for %s", job.id[:7], exc_info=True)
         finally:
             job.on_finish(at=time.time())
             job.save()
