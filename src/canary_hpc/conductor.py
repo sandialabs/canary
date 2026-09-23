@@ -27,6 +27,7 @@ from _canary.util.multiprocessing import SimpleQueue
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
+from .argparsing import DeprecatedArg
 from .batching import BatchingSpec
 from .batching import CountTarget
 from .batching import allocate_partition_counts
@@ -543,10 +544,8 @@ class CanaryHPCConductor:
         parser.add_argument(
             "--batch-timeout-strategy",
             dest="hpc_batch_timeout_strategy",
-            metavar="STRATEGY",
-            choices=("aggressive", "conservative"),
-            help="Estimate batch runtime (queue time) conservatively or aggressively "
-            "[alias: -b timeout=STRATEGY] [default: aggressive]",
+            action=DeprecatedArg,
+            help=argparse.SUPPRESS,
         )
         parser.add_argument(
             "--batch-exact-estimate",

@@ -239,6 +239,12 @@ class CanaryHPCBatchSpec(argparse.Action):
         return description
 
 
+class DeprecatedArg(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        arg = option_string or self.option_strings[0]
+        logger.warning("Ignoring deprecated argument: %s", arg)
+
+
 class CanaryHPCResourceSetter(argparse.Action):
     """Set all options from -b option. This is kept for backward compatibility."""
 
@@ -284,11 +290,7 @@ class CanaryHPCResourceSetter(argparse.Action):
 
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
-            if raw == "agressive":
-                raw = "aggressive"
-            if raw not in ("conservative", "aggressive"):
-                raise ValueError(f"Incorrect batch timeout choice: {raw}")
-            setattr(namespace, "hpc_batch_timeout_strategy", raw)
+            logger.warning("-b timeout=%s is deprecated and has no effect on batching", raw)
 
         elif match := re.search(r"^queue[_-]?timeout[:=](.+)$", value):
             # Backward compatibility: -b queue_timeout=T is the deprecated spelling
