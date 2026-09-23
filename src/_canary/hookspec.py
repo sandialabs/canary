@@ -584,16 +584,16 @@ def canary_runteststart(case: "Job") -> None:
     """Perform the setup phase for a test case.
 
     This is a normal (non-firstresult) hook: every implementation runs.  The
-    default implementation (``tryfirst``) creates the case workspace and runs
-    ``case.setup()`` first; plugin implementations then run and may build on the
-    prepared workspace (e.g. writing files into ``case.workspace.dir`` or
-    setting ``case.variables``).
+    default implementation (``tryfirst``) runs ``case.setup()`` first; plugin
+    implementations then run and may build on the prepared workspace (e.g.
+    writing files into ``case.workspace.dir`` or setting ``case.variables``).
 
     Args:
         The test case.
 
     Note:
-      This function is called inside the test case's working directory
+      The workspace directory is created before this hook fires and every
+      implementation runs with ``cwd`` set to ``case.workspace.dir``.
     """
 
 
@@ -631,7 +631,9 @@ def canary_runtest_finish(case: "Job") -> None:
         The test case.
 
     Note:
-      This function is called inside the test case's working directory
+      Every implementation runs with ``cwd`` set to ``case.workspace.dir``,
+      so relative paths (e.g. output files written by the test) resolve
+      correctly without needing to reference ``case.workspace.dir`` explicitly.
     """
 
 

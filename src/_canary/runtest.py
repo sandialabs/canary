@@ -39,11 +39,13 @@ the ``canary_runtests`` hook.  The default implementation is registered with
 import dataclasses
 import datetime
 import io
+import os
 import sys
 import threading
 import time
 import traceback
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
@@ -226,6 +228,11 @@ class JobExecutor:
             job.timekeeper.stage(at=staged_at)
             queue.put({"event": "job_staged", "timestamp": staged_at})
 
+            # Fire canary_runteststart.  The builtin tryfirst impl creates
+            # the workspace and calls case.setup(); it then chdirs into the
+            # workspace so that all subsequent (user) hookimpls run with cwd
+            # = case.workspace.dir.  JobExecutor restores the cwd afterwards.
+            _pre_start_cwd = Path.cwd()
             try:
                 logger.debug("canary_runteststart: begin [%s]", job.id[:7])
                 pm.canary_runteststart(case=job)
@@ -233,6 +240,8 @@ class JobExecutor:
             except Exception as e:
                 mark_broken("Test setup", e)
                 return
+            finally:
+                os.chdir(_pre_start_cwd)
 
             # Actual test runtime begins here.
             started_at = time.time()
@@ -262,7 +271,8 @@ class JobExecutor:
 
             try:
                 logger.debug("canary_runtest_finish: begin [%s]", job.id[:7])
-                pm.canary_runtest_finish(case=job)
+                with job.workspace.enter():
+                    pm.canary_runtest_finish(case=job)
                 logger.debug("canary_runtest_finish: end   [%s]", job.id[:7])
             except Exception as e:
                 # A finish/teardown hook failure must not change the job's
@@ -313,6 +323,10 @@ def canary_runteststart(case: "Job") -> None:
     case.workspace.create(exist_ok=True)
     case.setup()
     case.save()
+    # Enter the workspace so that all subsequent (user) hookimpls run with
+    # cwd = case.workspace.dir.  JobExecutor is responsible for restoring
+    # the cwd after the full hook call returns.
+    os.chdir(case.workspace.dir)
 
 
 @hookimpl(trylast=True)
