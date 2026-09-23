@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .job import Job
     from .launcher import Launcher
     from .pluginmanager import CanaryPluginManager
+    from .reporters.reporter import CanaryReporter
     from .resource_pool.rpool import Outcome
     from .runtest import Runner
     from .select import RuntimeSelector

@@ -16,10 +16,10 @@ import re
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_skills() -> dict:
     data = importlib.resources.files("canary").joinpath("data/skills.json").read_text()
@@ -34,6 +34,7 @@ def _load_capabilities() -> dict:
 def _hookspec_firstresult() -> dict[str, bool]:
     """Return {hook_name: firstresult} for every @hookspec in hookspec.py."""
     import pluggy
+
     from _canary import hookspec as hs_module
 
     pm = pluggy.PluginManager("canary")
@@ -51,6 +52,7 @@ def _hookspec_firstresult() -> dict[str, bool]:
 # skills.json correctness
 # ---------------------------------------------------------------------------
 
+
 class TestSkillsJson:
     def setup_method(self):
         self.skills = _load_skills()
@@ -64,7 +66,10 @@ class TestSkillsJson:
         canary_runtest_finish is firstresult=True."""
         body = self._extension_dev_body()
         # The sentence "canary_runtest_finish` is `firstresult=True`" must be gone
-        assert "`firstresult=True`" not in body or "canary_runtest_finish" not in body.split("`firstresult=True`")[0][-200:], (
+        assert (
+            "`firstresult=True`" not in body
+            or "canary_runtest_finish" not in body.split("`firstresult=True`")[0][-200:]
+        ), (
             "skills.json canary-extension-development incorrectly describes "
             "canary_runtest_finish as firstresult=True"
         )
@@ -81,7 +86,7 @@ class TestSkillsJson:
             if ref_idx != -1:
                 break
         assert ref_idx != -1, "canary_runtest_finish reference section not found in skill body"
-        section = body[ref_idx: ref_idx + 400]
+        section = body[ref_idx : ref_idx + 400]
         assert "False" in section, (
             "canary_runtest_finish reference block does not mention False firstresult"
         )
@@ -101,7 +106,7 @@ class TestSkillsJson:
                 break
         if ref_idx == -1:
             pytest.skip("reference section not found")
-        section = body[ref_idx: ref_idx + 400]
+        section = body[ref_idx : ref_idx + 400]
         assert "-> None" in section, (
             "canary_runtest_finish reference block shows wrong return type (should be -> None)"
         )
@@ -125,6 +130,7 @@ class TestSkillsJson:
 # ---------------------------------------------------------------------------
 # capabilities.json correctness
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilitiesJson:
     def setup_method(self):
@@ -189,8 +195,9 @@ KNOWN_PHANTOM_FREE_HOOKS = [
 @pytest.mark.parametrize("hook_name", KNOWN_PHANTOM_FREE_HOOKS)
 def test_documented_hook_exists_in_hookspec(hook_name):
     """Every hook referenced in docs/skills/capabilities must exist in hookspec.py."""
-    from _canary import hookspec as hs_module
     import pluggy
+
+    from _canary import hookspec as hs_module
 
     pm = pluggy.PluginManager("canary")
     pm.add_hookspecs(hs_module)
