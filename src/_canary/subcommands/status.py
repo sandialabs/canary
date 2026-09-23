@@ -31,6 +31,11 @@ logger = logging.get_logger(__name__)
 # Number of jobs below which the full table is always shown (unless --failed).
 _AUTO_EXPAND_THRESHOLD = 20
 
+# Default columns for the concise auto-expand view (small runs, ≤ threshold).
+_DEFAULT_COLS_CONCISE = "ID,Name,Status,Duration,Details"
+# Default columns for the full explicit table (--all or --failed).
+_DEFAULT_COLS_FULL = "ID,Name,Session,Exit Code,Duration,Status,Details"
+
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
@@ -56,9 +61,11 @@ class Status(CanarySubcommand):
         parser.add_argument(
             "-o",
             dest="format_cols",
-            default="ID,Name,Session,Exit Code,Duration,Status,Details",
+            default=None,
             action=StatusFormatAction,
-            help="Comma separated list of fields to print to the screen [default: %(default)s]. "
+            help="Comma separated list of fields to print to the screen "
+            f"[default for small runs: {_DEFAULT_COLS_CONCISE}; "
+            f"default for large runs / --all / --failed: {_DEFAULT_COLS_FULL}]. "
             "Choices are:\n\n"
             "• ID: the job ID (7-char prefix by default; use --full-ids for full 64-char ID)\n\n"
             "• Name: the job name\n\n"
@@ -143,17 +150,24 @@ class Status(CanarySubcommand):
         total = len(all_rows)
         show_all: bool = getattr(args, "show_all", False)
         show_failed_only: bool = getattr(args, "show_failed_only", False)
+        user_cols: str | None = args.format_cols  # None means "use smart default"
 
         # Determine which rows to show in the detail table.
         if show_failed_only:
-            # Explicit --failed: always failures-only (current default behavior).
+            # Explicit --failed: always failures-only.
             detail_rows = filter_by_status(all_rows, args.report_chars)
+            cols = user_cols or _DEFAULT_COLS_FULL
         elif show_all or total <= _AUTO_EXPAND_THRESHOLD:
-            # --all flag or small run: show every row.
+            # --all flag or small run: show every row with concise columns.
             detail_rows = filter_by_status(all_rows, "A")
+            cols = user_cols or _DEFAULT_COLS_CONCISE
         else:
             # Large run default: failures/diffs/timeouts/not-run/skipped only.
             detail_rows = filter_by_status(all_rows, args.report_chars)
+            cols = user_cols or _DEFAULT_COLS_FULL
+
+        # Inject the resolved column choice so get_status_table_from_rows picks it up.
+        args.format_cols = cols
 
         # Build outcome counts for the summary line.
         summary_line = _build_summary_line(all_rows)
@@ -170,6 +184,18 @@ class Status(CanarySubcommand):
         if not detail_rows:
             # All jobs passed (or nothing matched the filter) — nothing more to print.
             return 0
+
+        # For large runs (non-all, non-small), print the analyst-friendly failure
+        # grouping summary before the raw table.
+        show_failure_summary = (
+            not show_all
+            and total > _AUTO_EXPAND_THRESHOLD
+            and not getattr(args, "output_json", False)
+        )
+        if show_failure_summary:
+            non_pass = [r for r in all_rows if not r["status"].is_success()]
+            if non_pass:
+                console.print(_build_failure_summary(non_pass))
 
         table = self.get_status_table_from_rows(detail_rows, args)
         from ..util.pager import page_rich
@@ -407,6 +433,73 @@ def get_attribute(row: dict[str, Any], attr: str, *, full_ids: bool = False) -> 
     elif attr == "status_reason":
         return row["status"].reason or ""
     raise AttributeError(attr)
+
+
+def _group_failures(rows: list[dict]) -> list[tuple[str, str | None, list[dict]]]:
+    """Group non-pass rows by ``(outcome_name, reason)`` for the failure summary.
+
+    Returns a list of ``(outcome_label, reason, matching_rows)`` tuples sorted
+    by descending group size.  BLOCKED rows are handled specially: their reason
+    is replaced with a human-readable "upstream dependency failed" message that
+    names the upstream job when the reason string contains one.
+    """
+    from ..status import Outcome
+
+    groups: dict[tuple[str, str | None], list[dict]] = {}
+    for row in rows:
+        status: _Status = row["status"]
+        outcome_name = status.outcome.name if status.outcome is not None else "UNKNOWN"
+        reason: str | None = status.reason or None
+
+        # Normalise BLOCKED reason: the raw reason can be a long internal string;
+        # extract the upstream name if present, otherwise use a generic label.
+        if status.outcome == Outcome.BLOCKED:
+            if reason and ("failed" in reason.lower() or "blocked" in reason.lower()):
+                # Keep it but trim to a reasonable length
+                reason = reason[:120] if reason and len(reason) > 120 else reason
+            else:
+                reason = "upstream dependency failed"
+
+        key = (outcome_name, reason)
+        groups.setdefault(key, []).append(row)
+
+    return sorted(((k[0], k[1], v) for k, v in groups.items()), key=lambda kv: -len(kv[2]))
+
+
+def _build_failure_summary(rows: list[dict]) -> str:
+    """Return a Rich-markup failure-summary block for *rows* (non-pass results).
+
+    Groups failures by ``(outcome, reason)`` and shows the job names in each
+    group.  Includes hint lines for the next actions an analyst should take.
+    """
+    groups = _group_failures(rows)
+    total = len(rows)
+    noun = "job" if total == 1 else "jobs"
+
+    lines: list[str] = [f"[bold]Failure summary[/bold] ({total} {noun}):"]
+    for outcome, reason, group_rows in groups:
+        count = len(group_rows)
+        names = ", ".join(r["spec_name"] for r in group_rows[:4])
+        if count > 4:
+            names += f", … (+{count - 4} more)"
+        outcome_color = {
+            "FAILED": "red",
+            "ERROR": "red",
+            "BROKEN": "red",
+            "TIMEOUT": "yellow",
+            "DIFFED": "yellow",
+            "BLOCKED": "dim",
+            "CANCELLED": "dim",
+            "INTERRUPTED": "dim",
+        }.get(outcome, "dim")
+        outcome_label = f"[{outcome_color}]{outcome}[/{outcome_color}]"
+        reason_str = f'  "[italic]{reason}[/italic]"' if reason else ""
+        lines.append(f"  {outcome_label}{reason_str}  ×{count}   {names}")
+
+    lines.append("")
+    lines.append("  To view a job's output:  [bold]canary log[/bold] [dim]<ID>[/dim]")
+    lines.append("  To rerun failures:       [bold]canary run --only failed[/bold]")
+    return "\n".join(lines)
 
 
 class ReportCharAction(argparse.Action):

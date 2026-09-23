@@ -285,7 +285,7 @@ def test_log(setup, monkeypatch):
 
     with working_dir(setup.results_path), canary.config.override():
         args = argparse.Namespace(
-            error=False, workspace_file=None, raw=False, testspec=setup.f_a1_id
+            error=False, workspace_file=None, raw=False, tail=None, testspec=setup.f_a1_id
         )
         assert Log().execute(args) == 0
 

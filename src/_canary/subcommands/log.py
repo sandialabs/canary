@@ -32,7 +32,7 @@ class Log(CanarySubcommand):
     description = "Show the session or a job's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
-        """Register ``testspec``, ``-e/--error``, ``-l/--lock``, ``-f/--file``, and ``--raw`` arguments."""
+        """Register ``testspec``, ``-e/--error``, ``-l/--lock``, ``-f/--file``, ``--tail``, and ``--raw`` arguments."""
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-e",
@@ -56,6 +56,13 @@ class Log(CanarySubcommand):
             dest="workspace_file",
             metavar="PATH",
             help="Display PATH from the test's workspace",
+        )
+        parser.add_argument(
+            "--tail",
+            metavar="N",
+            type=int,
+            default=None,
+            help="Show only the last N lines of the log file (useful for finding errors quickly)",
         )
         parser.add_argument(
             "--raw",
@@ -99,6 +106,8 @@ class Log(CanarySubcommand):
                     text = open(file).read()
                 else:
                     text = reconstruct_log(file)
+                if args.tail is not None:
+                    text = tail_text(text, args.tail)
                 page_text(text)
                 return 0
             raise ValueError(f"no log file found in {workspace.root}")
@@ -106,7 +115,7 @@ class Log(CanarySubcommand):
         job = workspace.find(job=args.testspec)
         f = self.get_file_from_workspace(job, args)
         if f:
-            display_file(f)
+            display_file(f, tail=args.tail)
         return 0
 
 
@@ -126,11 +135,27 @@ def reconstruct_log(file: str | Path) -> str:
     return fp.getvalue()
 
 
-def display_file(file: Path) -> None:
+def tail_text(text: str, n: int) -> str:
+    """Return the last *n* lines of *text*, preserving the trailing newline."""
+    lines = text.splitlines()
+    tail = lines[-n:] if n > 0 and len(lines) > n else lines
+    skipped = len(lines) - len(tail)
+    result = "\n".join(tail)
+    if skipped > 0:
+        result = (
+            f"[... {skipped} lines omitted — use canary log without --tail to see all ...]\n"
+            + result
+        )
+    return result
+
+
+def display_file(file: Path, *, tail: int | None = None) -> None:
     """Print *file*'s path header and page its contents, raising if the file is missing."""
     if not file.exists():
         raise FileNotFoundError(file)
     text = file.read_text().rstrip()
+    if tail is not None:
+        text = tail_text(text, tail)
     print(f"{file}:")
     page_text(text)
 
