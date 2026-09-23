@@ -70,11 +70,25 @@ Add plugins to configuration files:
 Command-Line Plugins
 --------------------
 
-Load plugins directly from command line:
+Load plugins directly from the command line with the global ``-p`` flag:
 
 .. code-block:: console
 
    $ canary -p my_plugin run .
+
+.. warning::
+
+   ``-p`` is a **global** option and must appear **before** the subcommand.
+   ``canary run -p my_plugin .`` does **not** load a plugin — the run-level
+   ``-p`` is a parameter-expression filter, not a plugin loader.
+
+   .. code-block:: console
+
+      # CORRECT
+      $ canary -p my_plugin run .
+
+      # WRONG — run-level -p is a parameter filter
+      $ canary run -p my_plugin .
 
 Plugin Disabling
 ----------------
@@ -104,6 +118,77 @@ Plugin Hooks
 ------------
 
 Plugins implement hooks defined in Canary's hook specification. See :doc:`hooks` for complete reference.
+
+Plugin Propagation to Workers and HPC Batch Children
+-----------------------------------------------------
+
+Plugins loaded via ``-p``, the ``plugins`` config key, or entry points are
+automatically propagated to every execution context: the parent process,
+spawned worker processes (``canary run``), and HPC batch children (``canary
+hpc run``).  No extra configuration is needed.
+
+How it works
+~~~~~~~~~~~~
+
+Before submitting an HPC batch or spawning a worker process, Canary serialises
+its full configuration — including the list of loaded plugins — into a JSON
+snapshot.  The child process receives this snapshot via the ``CANARYCFGFILE``
+environment variable, restores the configuration, and re-loads every plugin
+listed in it.
+
+``PYTHONPATH`` is forwarded automatically with all relative entries resolved
+to absolute paths against the invocation directory, so plugin modules that are
+importable in the parent are importable in the child even when the child runs
+from a different working directory (e.g. inside an HPC batch workspace).
+
+If a plugin fails to load in a child process it is downgraded to a ``WARNING``
+and the child continues without it — it does not crash the batch.  If you need
+load failures to be hard errors, pass ``-p MODULE`` explicitly on the inner
+``canary hpc exec`` invocation (rarely needed in practice).
+
+Diagnosing hooks that do not fire in HPC jobs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If a ``canary_runtest_finish`` (or any other) hook appears not to run in a
+Slurm/HPC batch job:
+
+1. **Check the batch log** — errors loading or calling the plugin are logged at
+   ``ERROR`` level in the per-batch JSON log file:
+
+   .. code-block:: console
+
+      $ canary hpc log BATCH_ID
+
+2. **Verify PYTHONPATH** — the plugin module must be importable.  Run a quick
+   local check:
+
+   .. code-block:: console
+
+      $ PYTHONPATH=src/hooks python -c "import my_plugin"
+
+3. **Avoid module-level plugin registration** — do not call
+   ``canary.config.pluginmanager.register(...)`` at module import time.  The
+   plugin manager is rebuilt from the snapshot during child startup; any
+   registrations made before ``load_snapshot()`` completes are discarded.  Use
+   ``canary_addconfig`` instead (see :doc:`configuration`).
+
+4. **Run with** ``-d`` **and inspect the JSON log** — debug-level hook
+   lifecycle messages (``canary_runteststart: begin``, etc.) are written to
+   ``.canary/logs/canary.<batch>.log``.
+
+Debugging hook plugins
+~~~~~~~~~~~~~~~~~~~~~~
+
+During ``canary run``, ``logger.debug(...)`` calls inside plugin hooks execute
+in spawned worker processes.  These debug records are **not** printed to the
+terminal even with ``-d``/``--debug``.  They are routed only to the JSON log
+file to avoid corrupting the live progress table.
+
+To see debug output from a hook interactively:
+
+- Use ``canary exec JOBID`` — this runs the job in-process with no worker
+  pool, and all log levels reach the terminal.
+- Use ``canary hpc log BATCH_ID`` to inspect the batch log after an HPC run.
 
 Plugin Best Practices
 ---------------------
@@ -178,9 +263,8 @@ Plugin Examples
    import canary
 
    @canary.hookimpl
-   def canary_runtest_setup(job):
-       job.environment["CUSTOM_VAR"] = "value"
-       job.environment["PATH"] = "/custom/bin:" + job.environment.get("PATH", "")
+   def canary_runteststart(case):
+       case.variables["CUSTOM_VAR"] = "value"
 
 Plugin Development Workflow
 ---------------------------

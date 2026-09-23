@@ -111,7 +111,17 @@ def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespac
 
 
 @hookspec
-def canary_cmdline_modifyargs(parser: "Parser", args: argparse.Namespace) -> None: ...
+def canary_cmdline_modifyargs(parser: "Parser", args: "argparse.Namespace") -> None:
+    """Modify parsed command-line arguments before they are applied to config.
+
+    Called after ``canary_cmdline_parse`` has produced a namespace.  Plugins
+    may inspect or modify ``args`` in place to normalise values or inject
+    defaults before ``config.set_main_options`` runs.
+
+    Args:
+        parser: The argument parser.
+        args: The parsed argument namespace; mutate in place as needed.
+    """
 
 
 @hookspec
@@ -223,7 +233,48 @@ def canary_fetch_execute(args: "argparse.Namespace") -> "int | None":
 
 
 @hookspec
-def canary_addconfig(config: "CanaryConfig") -> None: ...
+def canary_addconfig(config: "CanaryConfig") -> None:
+    """Register configuration sections and schemas, and perform early plugin setup.
+
+    Called during every startup path — including when a worker process or HPC
+    batch child restores configuration from a snapshot.  This makes it the
+    correct place to:
+
+    * Register a config section with a schema via ``config.add_section()``.
+    * Register additional plugin objects that must be present in every
+      execution context (worker processes, HPC batch children).
+
+    Do **not** read command-line options here; they are not yet parsed when
+    this hook fires.  Use :func:`canary_configure` for option-dependent work.
+
+    Example — registering a config section::
+
+        MY_SCHEMA = {"enabled": bool, "threshold": float}
+
+        @canary.hookimpl
+        def canary_addconfig(config):
+            config.add_section(name="my_plugin", schema=MY_SCHEMA)
+
+    Example — registering an extra plugin object that must exist in all
+    execution contexts (workers, HPC batch children)::
+
+        class _MyExtraHook:
+            @canary.hookimpl
+            def canary_runtest_finish(self, case):
+                ...
+
+        @canary.hookimpl
+        def canary_addconfig(config):
+            pm = config.pluginmanager
+            if not pm.get_plugin("my_extra_hook"):
+                pm.register(_MyExtraHook(), name="my_extra_hook")
+
+    Args:
+        config: The canary config object.
+
+    Note:
+        This hook is incompatible with ``hookwrapper=True``.
+    """
 
 
 @hookspec
@@ -302,15 +353,49 @@ def canary_skills() -> dict[str, Any] | None:
 
 
 @hookspec
-def canary_finish(config: "CanaryConfig") -> None: ...
+def canary_finish(config: "CanaryConfig") -> None:
+    """Called after a session completes to allow plugins to release resources.
+
+    Use this hook to close file handles, flush caches, disconnect from external
+    services, or perform any other cleanup that must happen at the end of a run.
+
+    Args:
+        config: The canary config object.
+    """
 
 
 @hookspec
-def canary_sessionstart(session: "Session") -> None: ...
+def canary_sessionstart(session: "Session") -> None:
+    """Called when a new session starts, before any jobs are submitted.
+
+    Use this hook to record session-level metadata or perform setup that
+    applies to the entire run::
+
+        @canary.hookimpl
+        def canary_sessionstart(session):
+            session.add_measurement("campaign", "my-run-17")
+
+    Args:
+        session: The session object.  Call ``session.add_measurement(name,
+            value)`` to attach structured data queryable via
+            ``canary query session latest measurements.<name>``.
+    """
 
 
 @hookspec
-def canary_sessionfinish(session: "Session") -> None: ...
+def canary_sessionfinish(session: "Session") -> None:
+    """Called after all jobs in a session have finished.
+
+    Use this hook to aggregate results, notify external systems, or archive
+    outputs::
+
+        @canary.hookimpl
+        def canary_sessionfinish(session):
+            session.add_measurement("total_jobs", len(session.job_ids))
+
+    Args:
+        session: The completed session object.
+    """
 
 
 # -------------------------------------------------------------------------
@@ -623,3 +708,37 @@ def canary_resource_pool_types() -> list[str]:
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
     raise NotImplementedError
+
+
+# -------------------------------------------------------------------------
+# Reporter hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_reporter() -> "CanaryReporter | None":
+    """Return a reporter instance contributed by this plugin.
+
+    Implement this hook to register a custom reporter that ``canary report``
+    can invoke.  Return a :class:`~canary.CanaryReporter` instance, or
+    ``None`` if the plugin does not provide a reporter.
+
+    All non-``None`` return values are collected; ``canary report <type>``
+    selects the reporter whose ``type`` attribute matches the requested format.
+
+    Example::
+
+        from canary import CanaryReporter
+
+        class MyReporter(CanaryReporter):
+            type = "myformat"
+            description = "Custom report format"
+
+            def create(self, output=None):
+                ...
+
+        @canary.hookimpl
+        def canary_reporter():
+            return MyReporter()
+
+    """

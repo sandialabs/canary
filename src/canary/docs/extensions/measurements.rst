@@ -48,12 +48,12 @@ Add measurements in lifecycle hooks:
        session.add_measurement("duration", calculate_duration())
 
    @canary.hookimpl
-   def canary_runtest_setup(job):
-       # Pre-execution measurements
-       job.add_measurement("initial_resources", get_resources())
+   def canary_runteststart(case):
+       # Pre-execution measurements (before the job command runs)
+       case.add_measurement("initial_resources", get_resources())
 
-   @canary.hookimpl
-   def canary_runtest_finish(job):
+   @canary.hookimpl(trylast=True)
+   def canary_runtest_finish(case):
        # Post-execution measurements
        job.add_measurement("final_resources", get_resources())
 

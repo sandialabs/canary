@@ -230,10 +230,10 @@ Resource Integration
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_setup(job):
+   def canary_runteststart(case):
        # Set environment variables for allocated resources
-       if "fpgas" in job.resources:
-           job.environment["FPGA_DEVICES"] = ",".join(job.resources["fpgas"])
+       if "fpgas" in case.resources:
+           case.environment["FPGA_DEVICES"] = ",".join(case.resources["fpgas"])
 
 **Resource Validation**:
 

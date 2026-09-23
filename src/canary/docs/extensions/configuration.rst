@@ -20,15 +20,38 @@ Configuration Hooks
    def canary_addoption(parser):
        parser.add_argument("--my-option", help="Custom option")
 
-**canary_addconfig**: Add configuration sections
+**canary_addconfig**: Register configuration sections and schemas
+
+``canary_addconfig`` fires early in every startup path — including inside
+spawned worker processes and HPC batch children that restore from a config
+snapshot.  It is the correct place to:
+
+- Register a config section with a schema via ``config.add_section()``.
+- Register additional plugin objects that must exist in every execution
+  context (see :ref:`registering-extra-plugin-objects` below).
+
+Do **not** use ``canary_addconfig`` to read command-line options; those are
+not yet parsed when this hook fires.
 
 .. code-block:: python
 
+   import canary
+   from canary import schema  # or voluptuous / jsonschema, etc.
+
+   MY_SCHEMA = {
+       "enabled": bool,
+       "threshold": float,
+   }
+
    @canary.hookimpl
    def canary_addconfig(config):
-       config.data["my_section"] = {"key": "default_value"}
+       config.add_section(name="my_plugin", schema=MY_SCHEMA)
 
-**canary_configure**: Modify configuration
+**canary_configure**: Validate and apply configuration after option parsing
+
+``canary_configure`` fires after command-line arguments have been parsed.
+Use it to read options, validate them, and trigger any side effects that
+depend on the parsed values.
 
 .. code-block:: python
 
@@ -123,6 +146,45 @@ Configuration Best Practices
 - Provide examples
 - Explain interactions
 
+.. _registering-extra-plugin-objects:
+
+Registering Extra Plugin Objects
+---------------------------------
+
+A plugin *module* can only supply one function per hook name.  When you need
+multiple independent implementations of the same hook (e.g. several
+``canary_runtest_finish`` post-processors), register them as separate plugin
+objects via ``canary_addconfig``:
+
+.. code-block:: python
+
+   import canary
+
+   class _MyExtraPostprocessor:
+       @canary.hookimpl
+       def canary_runtest_finish(self, case):
+           case.add_measurement("extra_metric", compute_metric(case))
+
+   @canary.hookimpl
+   def canary_addconfig(config):
+       pm = config.pluginmanager
+       if not pm.get_plugin("my_extra_postprocessor"):
+           pm.register(_MyExtraPostprocessor(), name="my_extra_postprocessor")
+
+The ``if not pm.get_plugin(...)`` guard prevents double-registration because
+``canary_addconfig`` fires once per plugin registration and the module itself
+is also a plugin.
+
+.. warning::
+
+   Do **not** call ``canary.config.pluginmanager.register(...)`` at module
+   import time.  When Canary restores a config snapshot in a worker process or
+   HPC batch child, it rebuilds the plugin manager from scratch.  Any
+   registrations made at import time — before ``load_snapshot()`` completes —
+   are made against the old plugin manager and are silently discarded.
+   ``canary_addconfig`` is called after the new plugin manager is ready and is
+   the safe alternative.
+
 Configuration Examples
 ----------------------
 
@@ -130,15 +192,15 @@ Configuration Examples
 
 .. code-block:: python
 
+   MY_RESOURCE_SCHEMA = {"accelerators": list}
+
    @canary.hookimpl
    def canary_addoption(parser):
        parser.add_argument("--custom-resource", help="Custom resource type")
 
    @canary.hookimpl
    def canary_addconfig(config):
-       config.data["custom_resources"] = {
-           "accelerators": config.getoption("custom_resource") or []
-       }
+       config.add_section(name="custom_resources", schema=MY_RESOURCE_SCHEMA)
 
 **Timeout Configuration Plugin**:
 
@@ -168,11 +230,11 @@ Configuration Integration
 
 .. code-block:: python
 
+   MY_SECTION_SCHEMA = {"key": str, "extra": str}
+
    @canary.hookimpl
    def canary_addconfig(config):
-       # Merge with existing configuration
-       existing = config.data.get("my_section", {})
-       config.data["my_section"] = {**existing, **new_config}
+       config.add_section(name="my_section", schema=MY_SECTION_SCHEMA)
 
 Configuration Troubleshooting
 -----------------------------

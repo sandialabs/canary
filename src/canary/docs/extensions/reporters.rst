@@ -34,12 +34,12 @@ Implement ``CanaryReporter`` to create custom reporters:
 Reporter Registration
 ---------------------
 
-Register reporters using ``canary_session_reporter`` hook:
+Register reporters using the ``canary_reporter`` hook:
 
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_session_reporter():
+   def canary_reporter():
        return MyReporter()
 
 Built-in Reporters

@@ -9,6 +9,183 @@ Hooks
 
 Canary's hook system provides extension points throughout the execution lifecycle. Hooks allow plugins to integrate with Canary's workflow at specific phases.
 
+Hook Reference Table
+--------------------
+
+The table below lists every hookspec with its ``firstresult`` setting and the
+default implementation ordering.  ``firstresult=True`` means only the first
+non-``None`` return value is used; ``firstresult=False`` (the default) means
+every implementation runs.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 12 18 35
+
+   * - Hook
+     - firstresult
+     - Default impl
+     - Purpose
+   * - ``canary_addhooks``
+     - False
+     - —
+     - Register additional hookspecs
+   * - ``canary_addoption``
+     - False
+     - —
+     - Add command-line options
+   * - ``canary_addcommand``
+     - False
+     - —
+     - Add CLI subcommands
+   * - ``canary_addconfig``
+     - False
+     - —
+     - Register config sections/schemas; register extra plugin objects
+   * - ``canary_configure``
+     - False
+     - —
+     - Validate/apply config after option parsing
+   * - ``canary_finish``
+     - False
+     - —
+     - Clean up after a session
+   * - ``canary_cmdline_parse``
+     - **True**
+     - —
+     - Override command-line parsing
+   * - ``canary_cmdline_modifyargs``
+     - False
+     - —
+     - Modify parsed args
+   * - ``canary_addcommand``
+     - False
+     - —
+     - Add a CLI subcommand
+   * - ``canary_query_subcommand``
+     - False
+     - —
+     - Add a ``canary query`` subcommand
+   * - ``canary_query_execute``
+     - **True**
+     - —
+     - Execute a ``canary query`` subcommand
+   * - ``canary_fetch_subcommand``
+     - False
+     - —
+     - Register a fetchable asset
+   * - ``canary_fetch_execute``
+     - **True**
+     - —
+     - Execute a ``canary fetch`` request
+   * - ``canary_capabilities``
+     - False
+     - —
+     - Contribute to ``canary learn capabilities``
+   * - ``canary_skills``
+     - False
+     - —
+     - Contribute to ``canary learn skills``
+   * - ``canary_sessionstart``
+     - False
+     - —
+     - Session started
+   * - ``canary_sessionfinish``
+     - False
+     - —
+     - Session finished
+   * - ``canary_collectstart``
+     - False
+     - —
+     - Collection phase started
+   * - ``canary_collect_modifyitems``
+     - False
+     - —
+     - Filter/reorder collected files
+   * - ``canary_collect_report``
+     - False
+     - —
+     - Report collection results
+   * - ``canary_testcase_generator``
+     - **True**
+     - —
+     - Return a generator for a file
+   * - ``canary_generatestart``
+     - False
+     - —
+     - Generation phase started
+   * - ``canary_generate_modifyitems``
+     - False
+     - —
+     - Filter/modify generated specs
+   * - ``canary_generate_report``
+     - False
+     - —
+     - Report generation results
+   * - ``canary_selectstart``
+     - False
+     - —
+     - Selection phase started
+   * - ``canary_select_modifyitems``
+     - False
+     - —
+     - Filter/mask specs at selection time
+   * - ``canary_rtselectstart``
+     - False
+     - —
+     - Runtime selection started
+   * - ``canary_rtselect_modifyitems``
+     - False
+     - —
+     - Filter/mask specs at runtime
+   * - ``canary_runtests_start``
+     - False
+     - —
+     - Test session execution started
+   * - ``canary_runtests``
+     - **True**
+     - trylast (default runner)
+     - Provide a test-session execution backend
+   * - ``canary_runtests_report``
+     - False
+     - —
+     - Session-level reporting
+   * - ``canary_runtest_launcher``
+     - **True**
+     - —
+     - Return a launcher for a specific job
+   * - ``canary_runteststart``
+     - False
+     - tryfirst (built-in setup)
+     - Per-job setup; runs before the job command
+   * - ``canary_runtest``
+     - **True**
+     - trylast (default runner)
+     - Execute the job command
+   * - ``canary_runtest_finish``
+     - False
+     - tryfirst (built-in finish)
+     - Per-job post-processing; runs after the job command
+   * - ``canary_runtest_rebaseline``
+     - False
+     - trylast (built-in rebaseline)
+     - Rebaseline a job from its results
+   * - ``canary_resource_pool_fill``
+     - **True**
+     - —
+     - Provide the initial resource pool
+   * - ``canary_resource_pool_update``
+     - False
+     - —
+     - Augment/mutate the resource pool
+   * - ``canary_resource_pool_accommodates``
+     - **True**
+     - —
+     - Check whether a job can be accommodated
+   * - ``canary_resource_pool_types``
+     - **True**
+     - —
+     - Return available resource type names
+
 Hook Lifecycle Groups
 ---------------------
 
@@ -147,38 +324,44 @@ Selection Hooks
            if should_mask(spec):
                spec.mask = canary.Mask.masked("Reason")
 
-Runtime Selection Hooks
-~~~~~~~~~~~~~~~~~~~~~~~
-
-**canary_runtest_setup**: Setup before test execution
-
-.. code-block:: python
-
-   @canary.hookimpl
-   def canary_runtest_setup(job):
-       # Setup test environment
-       pass
-
-**canary_runtest_finish**: Cleanup after test execution
-
-.. code-block:: python
-
-   @canary.hookimpl
-   def canary_runtest_finish(job):
-       # Process test results
-       job.add_measurement("custom_metric", calculate_metric())
-
 Execution Hooks
 ~~~~~~~~~~~~~~~
 
-**canary_execute_modifyitems**: Modify execution plan
+**canary_runteststart**: Setup before test execution (``firstresult=False``)
+
+Called inside the job's working directory before the job command runs.  Every
+registered implementation fires.  The built-in default (``tryfirst``) creates
+the workspace and calls ``case.setup()``.  Plugin implementations run
+afterwards and may write files into the workspace or set ``case.variables``.
 
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_execute_modifyitems(executor):
-       # Adjust execution order or parameters
+   def canary_runteststart(case):
+       # e.g. write an input file into the job workspace before execution
        pass
+
+**canary_runtest**: Execute the job (``firstresult=True``)
+
+The first non-``None`` return claims execution.  The built-in runner is
+registered ``trylast`` so plugins may override how a job is executed.  Return
+``None`` to fall through to the default runner.
+
+**canary_runtest_finish**: Post-processing after test execution (``firstresult=False``)
+
+Called inside the job's working directory after the job command finishes.
+Every registered implementation fires — this is a broadcast hook, not
+first-result.  The built-in default (``tryfirst``) calls ``case.finish()`` and
+saves the job first; plugin implementations run afterwards.  Use
+``@canary.hookimpl(trylast=True)`` to guarantee your implementation runs after
+all other registered finish hooks.
+
+.. code-block:: python
+
+   @canary.hookimpl(trylast=True)
+   def canary_runtest_finish(case):
+       # Post-process results, read output files, add measurements
+       case.add_measurement("custom_metric", calculate_metric())
 
 Resource Pool Hooks
 ~~~~~~~~~~~~~~~~~~~
@@ -225,17 +408,19 @@ Hook Types and Behavior
 
 .. code-block:: python
 
-   @canary.hookimpl(firstresult=True)
+   @canary.hookimpl
    def canary_testcase_generator(root, path):
-       # First matching generator wins
-       pass
+       # First matching generator wins; return None to pass to the next
+       if path and path.endswith(".myformat"):
+           return MyGenerator(root, path)
+       return None
 
 **Wrapper Hooks**: Wrap other hook implementations
 
 .. code-block:: python
 
    @canary.hookimpl(hookwrapper=True)
-   def canary_runtest_setup(job):
+   def canary_runteststart(case):
        # Setup before other hooks
        yield
        # Cleanup after other hooks
@@ -312,14 +497,14 @@ Hook Examples
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_setup(job):
-       # Record initial resource usage
-       job.add_measurement("initial_memory", get_memory_usage())
+   def canary_runteststart(case):
+       # Record initial resource usage before the job runs
+       case.add_measurement("initial_memory", get_memory_usage())
 
-   @canary.hookimpl
-   def canary_runtest_finish(job):
-       # Record final resource usage
-       job.add_measurement("final_memory", get_memory_usage())
+   @canary.hookimpl(trylast=True)
+   def canary_runtest_finish(case):
+       # Record final resource usage after the job runs
+       case.add_measurement("final_memory", get_memory_usage())
 
 Hook Troubleshooting
 --------------------
