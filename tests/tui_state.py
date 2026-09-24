@@ -154,6 +154,63 @@ def test_viewport_windowing_keeps_cursor_visible():
     assert 0 <= st.window_cursor < 5
 
 
+def test_mark_toggles_and_advances():
+    st = ExplorerState()
+    st.update_jobs(_rows())  # a (PASS), b (FAIL), c (PASS)
+    st.handle_key("x")  # mark a, advance to b
+    assert st.marked_ids == {"aaaaaaaa1"}
+    assert st.cursor == 1
+    st.handle_key("x")  # mark b, advance to c
+    assert st.marked_ids == {"aaaaaaaa1", "bbbbbbbb2"}
+    st.move_home()
+    st.handle_key("x")  # unmark a
+    assert st.marked_ids == {"bbbbbbbb2"}
+
+
+def test_marks_survive_refresh_and_prune_missing():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key("x")  # mark a
+    st.move(1)
+    st.handle_key("x")  # mark b
+    # A refresh that drops 'b' should keep 'a' marked and forget the absent 'b'.
+    st.update_jobs([_view("a", "PASS", id="aaaaaaaa1")])
+    assert st.rerun_target_ids() == ["aaaaaaaa1"]
+
+
+def test_clear_marks():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key("x")
+    assert st.marked_ids
+    st.handle_key("c")
+    assert st.marked_ids == set()
+
+
+def test_rerun_targets_cursor_when_nothing_marked():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.move_end()  # cursor on c
+    assert st.marked_ids == set()
+    assert st.rerun_target_ids() == ["cccccccc3"]
+
+
+def test_rerun_request_is_edge_triggered():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key("x")  # mark a
+    assert st.handle_key("r") is True
+    assert st.consume_rerun_request() == ["aaaaaaaa1"]
+    # Consumed once; a second consume yields nothing until requested again.
+    assert st.consume_rerun_request() == []
+
+
+def test_rerun_key_ignored_when_no_target():
+    st = ExplorerState()  # empty view
+    assert st.handle_key("r") is False
+    assert st.consume_rerun_request() == []
+
+
 def test_handle_key_unknown_returns_false():
     st = ExplorerState()
     st.update_jobs(_rows())

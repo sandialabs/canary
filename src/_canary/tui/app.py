@@ -116,6 +116,19 @@ class ExplorerModel:
     def counts(self) -> dict[str, int]:
         return queries.status_counts(self.state.jobs)
 
+    def rerun(self, spec_ids: list[str]) -> int:
+        """Rerun the given jobs by spec id through the application layer.
+
+        Uses the same ``app.run`` path as ``canary run <spec_id> ...``, which
+        computes the rerun closure (upstream deps) itself.  Returns the run's
+        exit code.  This is a heavy, blocking operation with its own console
+        output, so the runner tears the live display down before calling it.
+        """
+        from ..app.pathspec import SpecIdsRequest
+        from ..app.run import run as run_session
+
+        return run_session(SpecIdsRequest(value=list(spec_ids)))
+
     def summary(self) -> "WorkspaceSummary":
         """The workspace summary cached at the last :meth:`refresh`.
 
@@ -213,6 +226,7 @@ def run(
     reader = threading.Thread(target=_read_keys, args=(stop, keys), daemon=True)
     reader.start()
 
+    pending_rerun: list[str] = []
     last_refresh = time.monotonic()
     try:
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
@@ -233,6 +247,11 @@ def run(
                             dirty = True
                         elif model.state.handle_key(key):
                             dirty = True
+                # A rerun request leaves the live display: the run is heavy and
+                # owns the console.  Exit the loop and perform it after teardown.
+                pending_rerun = model.state.consume_rerun_request()
+                if pending_rerun:
+                    break
                 now = time.monotonic()
                 # Refresh on a job event (live session progress) or the timer,
                 # whichever comes first; both re-read authoritative rows from the DB.
@@ -248,6 +267,13 @@ def run(
         model.unsubscribe()
         stop.set()
         reader.join(timeout=1.0)
+
+    if pending_rerun:
+        # The Live display and raw-mode reader are torn down; the rerun now runs
+        # with the normal console.  (In-place/background rerun is future work;
+        # the selection + command are identical, only the execution changes.)
+        return model.rerun(pending_rerun)
+    return 0
     return 0
 
 

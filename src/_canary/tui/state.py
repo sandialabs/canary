@@ -39,6 +39,10 @@ class ExplorerState:
         log_lines: The selected job's log split into lines, in log mode.
         log_top: Scroll offset (first visible line) within the log.
         log_title: Header text for the log pane (job name/stream).
+        marked_ids: Spec ids the user has marked (multi-select) for a bulk
+            action such as rerun; independent of the cursor.
+        rerun_requested: Edge-triggered flag the runner consumes to launch a
+            rerun of the marked jobs (or the cursor row when none are marked).
         quit: Set by :meth:`handle_key` when the user asks to exit.
     """
 
@@ -52,6 +56,8 @@ class ExplorerState:
     log_lines: list[str] = field(default_factory=list)
     log_top: int = 0
     log_title: str = ""
+    marked_ids: set[str] = field(default_factory=set)
+    rerun_requested: bool = False
     quit: bool = False
 
     # -- data updates -------------------------------------------------------
@@ -145,6 +151,49 @@ class ExplorerState:
     def toggle_detail(self) -> None:
         self.show_detail = not self.show_detail
 
+    # -- multi-select -------------------------------------------------------
+
+    def toggle_mark(self) -> None:
+        """Add/remove the cursor row's spec id from the marked set."""
+        sid = self.selected_id
+        if sid is None:
+            return
+        if sid in self.marked_ids:
+            self.marked_ids.discard(sid)
+        else:
+            self.marked_ids.add(sid)
+
+    def clear_marks(self) -> None:
+        """Unmark all rows."""
+        self.marked_ids.clear()
+
+    def is_marked(self, spec_id: str) -> bool:
+        return spec_id in self.marked_ids
+
+    def rerun_target_ids(self) -> list[str]:
+        """Spec ids a rerun would act on: the marked set, or the cursor row.
+
+        Marks may reference jobs no longer present (a refresh dropped them), so
+        the marked set is intersected with the current rows; when nothing valid
+        is marked, the single cursor row is the target.
+        """
+        present = {j["id"] for j in self.jobs}
+        marked = [j["id"] for j in self.jobs if j["id"] in self.marked_ids and j["id"] in present]
+        if marked:
+            return marked
+        sid = self.selected_id
+        return [sid] if sid is not None else []
+
+    def consume_rerun_request(self) -> list[str]:
+        """Return the rerun target ids if a rerun was requested, else an empty list.
+
+        Edge-triggered: clears the request flag so the runner acts on it once.
+        """
+        if not self.rerun_requested:
+            return []
+        self.rerun_requested = False
+        return self.rerun_target_ids()
+
     def _clamp_cursor(self) -> None:
         rows = self.visible_jobs
         self.cursor = 0 if not rows else max(0, min(self.cursor, len(rows) - 1))
@@ -197,6 +246,9 @@ class ExplorerState:
         * ``g`` -- top;   ``G`` -- bottom;   pageup/pagedown -- by window
         * ``enter`` / ``space`` -- open the selected job's log
         * ``d`` -- toggle the inline detail pane
+        * ``x`` -- mark/unmark the row for rerun (and advance)
+        * ``c`` -- clear all marks
+        * ``r`` -- rerun the marked rows (or the cursor row if none marked)
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
         * ``q`` / ``escape`` -- quit
@@ -239,6 +291,20 @@ class ExplorerState:
         if key in ("f", "F"):
             self._cycle_filter()
             return True
+        if key in ("x", "X"):
+            self.toggle_mark()
+            self.move(1)  # marking advances, so a run of rows is quick to select
+            return True
+        if key in ("c", "C"):
+            self.clear_marks()
+            return True
+        if key in ("r", "R"):
+            # The runner performs the actual run (heavy I/O) when it observes
+            # the request; the state only records intent, doing no I/O itself.
+            if self.rerun_target_ids():
+                self.rerun_requested = True
+                return True
+            return False
         return False
 
     def _handle_key_log(self, key: str) -> bool:

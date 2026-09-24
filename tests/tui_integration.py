@@ -146,3 +146,16 @@ def test_model_open_selected_log_enters_log_mode(tmp_path):
     assert model.state.mode == "log"
     assert model.state.log_lines  # never empty -- falls back to a placeholder
     assert model.state.selected is not None
+
+
+def test_model_rerun_reexecutes_marked_jobs(tmp_path):
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.refresh()
+        ids = [j["id"] for j in model.state.jobs]
+        rc = model.rerun(ids)
+        assert rc == 0
+        # The jobs still pass after the rerun.
+        after = {j["id"]: j["status"] for j in queries.list_jobs()}
+    assert all(after[i] == "PASS" for i in ids)

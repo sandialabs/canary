@@ -26,7 +26,9 @@ if TYPE_CHECKING:
     from ..app.queries import WorkspaceSummary
     from .state import ExplorerState
 
-_HELP = "[dim]j/k move · g/G top/bottom · enter log · d detail · f filter · a all · q quit[/dim]"
+_HELP = (
+    "[dim]j/k move · enter log · x mark · r rerun · c clear · d detail · f filter · q quit[/dim]"
+)
 _LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
 
 #: Rows a Rich table spends on its own frame regardless of body length: the top
@@ -80,9 +82,14 @@ def render_header(summary: "WorkspaceSummary", counts: dict[str, int]) -> Panel:
 
 
 def render_table(state: "ExplorerState") -> Table:
-    """Render the visible job rows (the scrolled window), highlighting the selected one."""
+    """Render the visible job rows (the scrolled window).
+
+    The first column shows the cursor (``›``); the second shows a mark
+    (``✓``) for rows selected for a bulk action such as rerun.
+    """
     table = Table(expand=True)
     table.add_column("", width=1, no_wrap=True)  # cursor marker
+    table.add_column("", width=1, no_wrap=True)  # multi-select mark
     table.add_column("Job", ratio=3, no_wrap=True)
     table.add_column("ID", width=8, no_wrap=True)
     table.add_column("Status", width=18, no_wrap=True)
@@ -91,17 +98,19 @@ def render_table(state: "ExplorerState") -> Table:
 
     rows = state.window()
     if not rows:
-        table.add_row("", Text("no matching jobs", style="dim"), "", "", "", "")
+        table.add_row("", "", Text("no matching jobs", style="dim"), "", "", "", "")
         return table
 
     window_cursor = state.window_cursor
     for i, job in enumerate(rows):
         selected = i == window_cursor
-        marker = "›" if selected else " "
+        cursor_marker = "›" if selected else " "
+        mark = Text("✓", style="bold cyan") if state.is_marked(job["id"]) else Text(" ")
         name = Text(job["name"])
         row_style = "reverse" if selected else None
         table.add_row(
-            marker,
+            cursor_marker,
+            mark,
             name,
             job["short_id"],
             Text.from_markup(job["status_markup"]),
@@ -144,6 +153,8 @@ def render_footer(state: "ExplorerState") -> Text:
     rows = state.visible_jobs
     if rows:
         parts.append(f"   {min(state.cursor, len(rows) - 1) + 1}/{len(rows)}", style="dim")
+    if state.marked_ids:
+        parts.append(f"   marked: {len(state.marked_ids)}", style="bold cyan")
     parts.append("   ")
     parts.append(Text.from_markup(_HELP))
     return parts
