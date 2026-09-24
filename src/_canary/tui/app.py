@@ -201,18 +201,46 @@ class ExplorerModel:
         """Cancel the in-flight run, if any, terminating its child process.
 
         Returns ``True`` if a run was cancelled.  Best-effort: the child is
-        terminated and the model refreshed from the database (jobs that finished
-        before cancellation keep their results; the rest reconcile on the next
-        session load).  Safe to call when no run is active (returns ``False``).
+        terminated, a ``job_cancelled`` event is published for each job that was
+        still in flight (so subscribers see the cancellation as an event, not
+        only via the database), and the model is refreshed from the database
+        (jobs that finished before cancellation keep their results; the rest
+        reconcile on the next session load).  Safe to call when no run is active
+        (returns ``False``).
         """
         if self._run is None:
             return False
+        # Snapshot the in-flight jobs before ending the tally so we can announce
+        # each one as cancelled.  The child is terminated abruptly, so it cannot
+        # emit these itself; the parent synthesizes them onto the same bus.
+        in_flight = self.progress.running_jobs()
         self._run.terminate()
         self._run = None
         self.state.running = False
         self.progress.end()
+        self._announce_cancelled(in_flight)
         self.refresh()
         return True
+
+    def _announce_cancelled(self, jobs: "list[dict[str, Any]]") -> None:
+        """Publish a ``job_cancelled`` event for each still-running *job* payload.
+
+        No-op when not subscribed to a bus.  Each payload is a flat
+        :class:`~_canary.events.JobEvent`-shaped dict carried on the run's
+        events; its status fields are overwritten to reflect cancellation so a
+        subscriber can render the row without a follow-up query.
+        """
+        if self._bus is None or not jobs:
+            return
+        from ..events import Event
+
+        for job in jobs:
+            payload = dict(job)
+            payload["status"] = "CANCELLED"
+            payload["status_label"] = "CANCELLED"
+            payload["status_markup"] = "[yellow]CANCELLED[/]"
+            payload["reason"] = payload.get("reason") or "cancelled by user"
+            self._bus.publish(Event("job_cancelled", {"job": payload}))
 
     #: The editor the TUI launches to edit a test file.  The TUI deliberately
     #: hardcodes ``vim`` rather than honoring ``$VISUAL``/``$EDITOR`` (as the CLI

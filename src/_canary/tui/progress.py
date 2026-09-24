@@ -89,6 +89,10 @@ class RunProgress:
         self._running: set[str] = set()
         self._finished: set[str] = set()
         self._by_status: dict[str, int] = {}
+        #: Last-seen flat payload for each currently-running job, so a cancel can
+        #: synthesize a terminal ``job_cancelled`` event with the job's identity
+        #: (see :meth:`running_jobs`).  Keyed by job id.
+        self._running_payloads: dict[str, dict] = {}
 
     def begin(self, total: int = 0) -> None:
         """Start tracking a new run, resetting all tallies.
@@ -104,6 +108,7 @@ class RunProgress:
             self._running.clear()
             self._finished.clear()
             self._by_status.clear()
+            self._running_payloads.clear()
 
     def end(self) -> None:
         """Stop tracking; :meth:`snapshot` will report ``active=False``."""
@@ -131,8 +136,11 @@ class RunProgress:
                 return
             if event.name == _START_EVENT:
                 self._running.add(job_id)
+                if isinstance(job, dict):
+                    self._running_payloads[job_id] = dict(job)
             elif event.name in _TERMINAL_EVENTS:
                 self._running.discard(job_id)
+                self._running_payloads.pop(job_id, None)
                 if job_id not in self._finished:
                     self._finished.add(job_id)
                     status = ""
@@ -152,3 +160,13 @@ class RunProgress:
                 elapsed=elapsed,
                 active=self._active,
             )
+
+    def running_jobs(self) -> list[dict]:
+        """Flat payloads of jobs that started but have not reported a terminal event.
+
+        Returned as a copy under the lock so a caller (the cancel path) can
+        synthesize ``job_cancelled`` events for exactly the jobs that were still
+        in flight when the run was stopped.
+        """
+        with self._lock:
+            return [dict(p) for p in self._running_payloads.values()]

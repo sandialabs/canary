@@ -98,3 +98,27 @@ def test_progress_tolerates_missing_payload():
     p.on_event(Event("job_started", {}))
     p.on_event(Event("job_finished", {"job": {}}))
     assert p.snapshot().finished == 0
+
+
+def test_running_jobs_reports_in_flight_payloads():
+    """running_jobs() returns the payloads of started-but-not-finished jobs."""
+    p = RunProgress()
+    p.begin(total=3)
+    p.on_event(_ev("job_started", "a", qsize=3, status="RUNNING"))
+    p.on_event(_ev("job_started", "b", qsize=3, status="RUNNING"))
+    p.on_event(_ev("job_started", "c", qsize=3, status="RUNNING"))
+    p.on_event(_ev("job_finished", "b", qsize=3, status="PASS"))
+    running = {j["id"] for j in p.running_jobs()}
+    assert running == {"a", "c"}  # b finished, so it drops out
+    # The returned dicts are copies -- mutating them must not corrupt state.
+    p.running_jobs()[0]["id"] = "mutated"
+    assert {j["id"] for j in p.running_jobs()} == {"a", "c"}
+
+
+def test_running_jobs_cleared_on_begin():
+    p = RunProgress()
+    p.begin(total=1)
+    p.on_event(_ev("job_started", "a", qsize=1))
+    assert p.running_jobs()
+    p.begin(total=1)  # a fresh run resets the in-flight set
+    assert p.running_jobs() == []

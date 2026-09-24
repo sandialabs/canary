@@ -40,6 +40,13 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** Cancellation now surfaces as events. `ExplorerModel.cancel_run()`
+  publishes a `job_cancelled` event (status `CANCELLED`) for each job the run
+  had started but not finished, using the in-flight payloads retained by
+  `RunProgress.running_jobs()`. The terminated child cannot emit these itself,
+  so the parent synthesizes them onto the same bus the TUI (and any future
+  GUI/REST subscriber) observes. Tests: `tui_progress` running-jobs bookkeeping;
+  `tui_integration` asserts the event is published on cancel.
 - **DONE** First-class cancellation (roadmap item 3). `q`/`escape` while a run
   is in flight now *cancels the run* instead of quitting: `ExplorerState`
   records the intent (`cancel_requested`, edge-triggered via
@@ -412,10 +419,12 @@ Ordered, each step independently useful:
    flight. Future: per-row phase animation in the table, worker-slot occupancy.
 3. **First-class cancellation** -- **DONE:** a cancel key (`q`/`esc` while
    running) that stops the running session by terminating the child run process
-   (`RunHandle.terminate`) and settling the model from the DB. Follow-up: emit a
-   `job_cancelled` event for the in-flight jobs (the bus already reserves the
-   name, `events/bus.py:37`) so the cancel is reflected as an event, not only a
-   DB reconcile.
+   (`RunHandle.terminate`) and settling the model from the DB. On cancel the
+   parent now also publishes a `job_cancelled` event for each job that was still
+   in flight (`ExplorerModel._announce_cancelled`, fed by
+   `RunProgress.running_jobs()`), so the cancellation is visible on the bus --
+   not only via the DB reconcile -- for any subscriber (TUI today, GUI/REST
+   later).
 4. **Start a run from scratch in the TUI** -- not just rerun: pick scanpaths /
    a selection/tag, build a `RunOptions`, and launch. This is the last piece for
    a full `canary run` front end (the app layer already accepts scanpaths/tag

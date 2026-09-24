@@ -219,8 +219,13 @@ def test_model_cancel_run_terminates_child_and_clears_state(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        bus = queries.get_event_bus()
+        model.subscribe(bus)
         model.refresh()
+
+        # Observe job_cancelled events published on cancel.
+        cancelled: list = []
+        bus.subscribe(lambda e: cancelled.append(e), name="job_cancelled")
 
         handle = FakeHandle()
         model._launch = lambda *a, **k: handle  # type: ignore[method-assign]
@@ -228,13 +233,24 @@ def test_model_cancel_run_terminates_child_and_clears_state(tmp_path):
         assert model.begin_rerun(ids) is True
         assert model.run_active is True
 
+        # Feed a job_started so the progress tracker has an in-flight job to
+        # announce as cancelled (the real child would emit this over the spool).
+        from _canary.events import Event
+
+        started_id = ids[0]
+        bus.publish(Event("job_started", {"job": {"id": started_id, "qsize": len(ids)}}))
+
         # Cancel: the child is terminated and the model settles.
         assert model.cancel_run() is True
         assert handle.terminated is True
         assert model.run_active is False
         assert model.state.running is False
-        # Cancelling again is a safe no-op.
+        # The in-flight job was announced as cancelled on the bus.
+        assert [e.payload["job"]["id"] for e in cancelled] == [started_id]
+        assert cancelled[0].payload["job"]["status"] == "CANCELLED"
+        # Cancelling again is a safe no-op (no run, no new events).
         assert model.cancel_run() is False
+        assert len(cancelled) == 1
         model.unsubscribe()
 
 
