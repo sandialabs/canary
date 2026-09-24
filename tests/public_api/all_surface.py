@@ -80,6 +80,12 @@ EXPECTED_PUBLIC_NAMES = frozenset(
         "Workspace",
         "NotAWorkspaceError",
         "ViewSettings",
+        "ScanPathsRequest",
+        # domain result model
+        "Status",
+        # knowledge-base + test helpers for extension authors
+        "load_query_data",
+        "CanaryCommand",
         # CLI entry point
         "console_main",
         # rendering / graph helper

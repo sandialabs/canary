@@ -80,6 +80,7 @@ __all__ = [
     "app",
     "config",
     "status",
+    "Status",
     "enums",
     "Parser",
     "Config",
@@ -134,6 +135,9 @@ __all__ = [
     "Session",
     "ViewSettings",
     "Workspace",
+    "ScanPathsRequest",
+    "load_query_data",
+    "CanaryCommand",
     "directives",
     "patterns",
 ]
@@ -206,6 +210,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     "Workspace": ("_canary.session.workspace", "Workspace"),
     "ViewSettings": ("_canary.view", "ViewSettings"),
     "print_spec_graph": ("_canary.core.jobspec_graph", "print_spec_graph"),
+    "Status": ("_canary.core.status", "Status"),
+    "ScanPathsRequest": ("_canary.app.pathspec", "ScanPathsRequest"),
+    "load_query_data": ("_canary.util.query_data", "load_query_data"),
+    "CanaryCommand": ("_canary.util.testing", "CanaryCommand"),
     "app": ("_canary.app", None),
 }
 

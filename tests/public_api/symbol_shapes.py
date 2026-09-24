@@ -51,3 +51,25 @@ def test_runtime_lookup_helpers_and_testcase_alias():
 def test_version_shape():
     assert isinstance(canary.version, str)
     assert isinstance(canary.version_info, tuple)
+
+
+def test_status_is_the_domain_result_type():
+    """``canary.Status`` is the public alias for the core result model."""
+    from _canary.core.status import Status as _Status
+
+    assert canary.Status is _Status
+    assert isinstance(canary.Status, type)
+
+
+def test_scan_paths_request_is_public():
+    """The path-scan request object used by run adapters (e.g. canary-sierra)."""
+    from _canary.app.pathspec import ScanPathsRequest as _ScanPathsRequest
+
+    assert canary.ScanPathsRequest is _ScanPathsRequest
+    assert isinstance(canary.ScanPathsRequest, type)
+
+
+def test_extension_author_helpers():
+    """Knowledge-base loading and the command test-harness are part of the contract."""
+    assert callable(canary.load_query_data)
+    assert isinstance(canary.CanaryCommand, type)
