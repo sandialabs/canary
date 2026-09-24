@@ -360,19 +360,28 @@ class ResourceCapacityRule(RuntimeRule):
 
 
 class RerunRule(RuntimeRule):
-    STRATEGIES = ("all", "failed", "not_pass", "not_run", "changed", "ids:...")
+    """Mask jobs that a rerun strategy says should not run this session.
+
+    The five named strategies (``all``, ``not_pass``, ``failed``, ``not_run``,
+    ``changed``) are defined once in :mod:`_canary.rerun` and shared with the
+    database root-selection so the two layers cannot diverge.  The ``ids:<a,b>``
+    form is not a rerun strategy but an explicit allow-list: only the listed
+    spec IDs run.
+    """
 
     def __init__(self, strategy: str = "not_pass", priority: int = 0) -> None:
+        from . import rerun
+
         super().__init__(priority=priority)
         self.strategy: str
         self._ids: list[str] = []
+        self._impl: "rerun.Strategy | None" = None
         if strategy.startswith("ids:"):
             self.strategy = "ids"
             self._ids.extend(set(strategy[4:].split(",")))
         else:
             self.strategy = strategy
-            if self.strategy not in self.STRATEGIES:
-                raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
+            self._impl = rerun.get_strategy(strategy)
 
     def __repr__(self) -> str:
         return f"RerunRule(strategy={self.strategy})"
@@ -390,29 +399,9 @@ class RerunRule(RuntimeRule):
             else:
                 ids = [id[:7] for id in self._ids]
             return RuleOutcome(False, reason="test ID not in [bold]%s[/]" % ", ".join(ids))
-        elif self.strategy == "all":
-            return RuleOutcome(ok=True)
-        elif self.strategy == "changed":
-            t = job.timekeeper._started
-            if t < 0 or job.spec.file.stat().st_mtime > t:
-                return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason="job spec has not changed since last run")
-        elif self.strategy == "not_pass":
-            if not job.status.is_success():
-                return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {job.status.outcome.name}")
-        elif self.strategy == "failed":
-            if job.status.is_failure():
-                return RuleOutcome(ok=True)
-            return RuleOutcome(
-                ok=False, reason=f"previous result = {job.status.outcome.name} != FAIL"
-            )
-        elif self.strategy == "not_run":
-            if job.status.is_unset():
-                return RuleOutcome(ok=True)
-            return RuleOutcome(ok=False, reason=f"previous result = {job.status.category!r}")
-        else:
-            raise ValueError(f"Unknown rerun strategy {self.strategy!r}")
+        assert self._impl is not None
+        decision = self._impl.should_run(job)
+        return RuleOutcome(ok=decision.run, reason=decision.reason)
 
 
 class SessionTimeoutRule(RuntimeRule):

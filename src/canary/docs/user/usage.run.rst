@@ -169,7 +169,7 @@ Run configuration summary
 
    * - Option
      - Purpose
-   * - ``--only {all,failed,not_pass,not_run}``
+   * - ``--only {all,changed,failed,not_pass,not_run}``
      - Rerun strategy (see :ref:`usage-rerun`)
    * - ``--empty-ok``
      - Allow empty test set (no error on zero matches)

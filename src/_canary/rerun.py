@@ -2,41 +2,191 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Rerun strategy registry and spec-set computation.
+"""Rerun strategies: which previously-known jobs a new ``canary run`` executes.
 
-A *rerun strategy* is a named function that queries the workspace database and
-returns the set of spec IDs that should be re-executed.  Strategies are
-registered via the :func:`rerun_strategy` decorator and are listed in the
-``STRATEGIES`` dict.
+A *rerun strategy* answers one question — "given the results of the previous
+session, which jobs should run this time?" — at two points in the pipeline:
 
-The :func:`get_specs` entry point resolves a strategy name to the matching
-function, computes the root spec set, and then expands it to include all
-downstream dependents (and their upstream prerequisites) via
-:func:`compute_rerun_closure`.
+1. **Root selection** (this module): query the workspace database for the spec
+   IDs that seed the run.  :func:`get_specs` expands those seeds into a closed
+   spec list via :func:`compute_rerun_closure` (downstream dependents are added
+   and run; upstream prerequisites are loaded but masked).
+2. **Runtime masking** (:class:`~_canary.rules.RerunRule`): after jobs are
+   reconstructed, mask the ones the strategy says should not run.
+
+Both points share a single :class:`Strategy` definition so their behavior
+cannot drift.  A strategy therefore owns three things: its ``name``, its help
+text, and the two predicates :meth:`Strategy.selects_root` (over a
+:class:`~_canary.database.PartialSpec`) and :meth:`Strategy.should_run` (over a
+runtime :class:`~_canary.job.Job`).
 
 Built-in strategies:
 
-- ``all`` — every spec in the workspace (or tag).
-- ``changed`` — specs whose source file is newer than their last result.
-- ``failed`` — specs whose last result category is FAIL, plus BLOCKED specs.
-- ``not_pass`` — specs with no result or a non-PASS result.
-- ``not_run`` — specs that have never produced a result.
+- ``all`` — run every spec in the workspace (or tag).
+- ``not_pass`` *(default)* — run specs whose latest result is not a pass
+  (failed, diffed, timed out, aborted, or never run).
+- ``failed`` — run specs whose latest result failed.
+- ``not_run`` — run specs that have never produced a result.
+- ``changed`` — run specs whose source file changed since the last run.
 """
 
 from typing import TYPE_CHECKING
-from typing import Callable
 from typing import Iterable
 from typing import Literal
 
+from .database import PartialSpec
 from .database import WorkspaceDatabase
 from .jobspec import Mask
 
 if TYPE_CHECKING:
+    from .job import Job
     from .jobspec import JobSpec
 
 
-StrategyType = Literal["changed", "all"]
-STRATEGIES: dict[str, Callable[..., set[str]]] = {}
+StrategyType = Literal["all", "not_pass", "failed", "not_run", "changed"]
+
+# Category name of a passing result.  ``PartialSpec.result_category`` stores the
+# string name of the latest result's ``Category``; PASS covers SUCCESS as well
+# as the expected-failure outcomes (XFAIL/XDIFF).
+_PASS = "PASS"  # nosec B105 - result Category name, not a secret
+_FAIL = "FAIL"
+_NEVER_RUN = (None, "NONE")
+
+
+class Strategy:
+    """A named rerun strategy shared by root selection and runtime masking.
+
+    Subclasses implement :meth:`selects_root` and :meth:`should_run`; the two
+    must encode the same intent so that the set of jobs seeded from the database
+    matches the set left unmasked at runtime.  Where the two layers must differ
+    (for example, ``failed`` seeds BLOCKED specs so they load, but relies on
+    mask propagation rather than the rule to re-run them), the difference is
+    documented on the strategy itself.
+    """
+
+    name: str
+    help: str
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        """Return ``True`` if *pspec* should seed the rerun (root selection)."""
+        raise NotImplementedError
+
+    def should_run(self, job: "Job") -> "RunDecision":
+        """Return whether *job* should run, with a reason when it should not."""
+        raise NotImplementedError
+
+
+class RunDecision:
+    """Result of :meth:`Strategy.should_run`: run the job, or skip it with a reason."""
+
+    __slots__ = ("run", "reason")
+
+    def __init__(self, run: bool, reason: str | None = None) -> None:
+        self.run = run
+        self.reason = reason
+
+    def __bool__(self) -> bool:
+        return self.run
+
+
+STRATEGIES: dict[str, Strategy] = {}
+
+
+def register(strategy: Strategy) -> Strategy:
+    """Register *strategy* under its ``name`` in :data:`STRATEGIES`."""
+    if strategy.name in STRATEGIES:
+        raise RuntimeError(f"Duplicate rerun strategy: {strategy.name}")
+    STRATEGIES[strategy.name] = strategy
+    return strategy
+
+
+def get_strategy(name: str) -> Strategy:
+    """Return the registered :class:`Strategy` named *name*.
+
+    Raises:
+        ValueError: If *name* is not a registered strategy.
+    """
+    try:
+        return STRATEGIES[name]
+    except KeyError:
+        raise ValueError(f"Unknown rerun strategy: {name!r}") from None
+
+
+class _All(Strategy):
+    name = "all"
+    help = "run all selected tests, even if they already passed"
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        return True
+
+    def should_run(self, job: "Job") -> RunDecision:
+        return RunDecision(True)
+
+
+class _NotPass(Strategy):
+    name = "not_pass"
+    help = "run tests whose latest result did not pass (default)"
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        return pspec.result_category != _PASS
+
+    def should_run(self, job: "Job") -> RunDecision:
+        if not job.status.is_success():
+            return RunDecision(True)
+        return RunDecision(False, reason=f"previous result = {job.status.outcome.name}")
+
+
+class _Failed(Strategy):
+    name = "failed"
+    help = "run only tests whose latest result failed"
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        # Seed FAIL specs directly, and BLOCKED specs so they are loaded; a
+        # BLOCKED downstream is re-run via mask propagation from its (re-run)
+        # failed upstream rather than by should_run below.
+        return pspec.result_category == _FAIL or pspec.result_outcome == "BLOCKED"
+
+    def should_run(self, job: "Job") -> RunDecision:
+        if job.status.is_failure():
+            return RunDecision(True)
+        return RunDecision(False, reason=f"previous result = {job.status.outcome.name} != FAIL")
+
+
+class _NotRun(Strategy):
+    name = "not_run"
+    help = "run only tests that have never been executed"
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        return pspec.result_category in _NEVER_RUN
+
+    def should_run(self, job: "Job") -> RunDecision:
+        if job.status.is_unset():
+            return RunDecision(True)
+        return RunDecision(False, reason=f"previous result = {job.status.category!r}")
+
+
+class _Changed(Strategy):
+    name = "changed"
+    help = "run tests whose source file changed since the last run"
+
+    def selects_root(self, pspec: "PartialSpec") -> bool:
+        mtime = pspec.file.stat().st_mtime
+        # A never-run spec (started_at <= 0) has no prior run to compare
+        # against, so it is treated as changed and seeded.
+        return pspec.started_at <= 0 or mtime > pspec.started_at
+
+    def should_run(self, job: "Job") -> RunDecision:
+        started = job.timekeeper._started
+        if started < 0 or job.spec.file.stat().st_mtime > started:
+            return RunDecision(True)
+        return RunDecision(False, reason="job spec has not changed since last run")
+
+
+register(_All())
+register(_NotPass())
+register(_Failed())
+register(_NotRun())
+register(_Changed())
 
 
 def compute_rerun_closure(db: WorkspaceDatabase, roots: Iterable[str]) -> list["JobSpec"]:
@@ -90,7 +240,7 @@ def get_specs(
 
     Args:
         db: The workspace database to query.
-        strategy: Name of a registered rerun strategy (see :func:`rerun_strategy`).
+        strategy: Name of a registered rerun strategy (see :data:`STRATEGIES`).
         tag: Optional workspace tag to restrict the query to a named selection.
 
     Returns:
@@ -99,100 +249,35 @@ def get_specs(
     Raises:
         ValueError: If *strategy* is not a registered strategy name.
     """
-    try:
-        selector = STRATEGIES[strategy]
-    except KeyError:
-        raise ValueError(f"Unknown rerun strategy: {strategy!r}")
-    roots = selector(db, tag=tag)
+    strat = get_strategy(strategy)
+    pspecs = db.get_partial_specs(tag=tag)
+    roots = {pspec.id for pspec in pspecs if strat.selects_root(pspec)}
     if not roots:
         return []
     return compute_rerun_closure(db, roots=roots)
 
 
-def rerun_strategy(fn: Callable[..., set[str]]) -> Callable[..., set[str]]:
-    """Decorator that registers a function as a named rerun strategy.
-
-    The function name becomes the strategy key in ``STRATEGIES``.  Duplicate
-    names raise ``RuntimeError``.
-
-    Args:
-        fn: A callable ``(db, *, tag) -> set[str]`` that returns spec IDs.
-
-    Returns:
-        The original function, unchanged.
-    """
-    name = fn.__name__
-    if name in STRATEGIES:
-        raise RuntimeError(f"Duplicate rerun strategy: {name}")
-    STRATEGIES[name] = fn
-    return fn
-
-
-@rerun_strategy
-def changed(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
-    """Specs whose source file mtime is newer than the timestamp of their latest result."""
-    pspecs = db.get_partial_specs(tag=tag)
-    ids: set[str] = set()
-    for pspec in pspecs:
-        mtime = pspec.file.stat().st_mtime
-        if pspec.started_at > 0 and mtime > pspec.started_at:
-            ids.add(pspec.id)
-    return ids
-
-
-@rerun_strategy
-def not_pass(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
-    """Specs with no result or a non-PASS result category."""
-    ids: set[str] = set()
-    pspecs = db.get_partial_specs(tag=tag)
-    for pspec in pspecs:
-        if pspec.result_category != "PASS":
-            ids.add(pspec.id)
-    return ids
-
-
-@rerun_strategy
-def failed(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
-    """Specs whose latest result category is FAIL, plus specs that are BLOCKED."""
-    ids: set[str] = set()
-    pspecs = db.get_partial_specs(tag=tag)
-    for pspec in pspecs:
-        if pspec.result_category == "FAIL":
-            ids.add(pspec.id)
-        elif pspec.result_outcome == "BLOCKED":
-            ids.add(pspec.id)
-    return ids
-
-
-@rerun_strategy
-def not_run(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
-    """Specs that have never produced a result (result category is ``None`` or ``'NONE'``)."""
-    ids: set[str] = set()
-    pspecs = db.get_partial_specs(tag=tag)
-    for pspec in pspecs:
-        if pspec.result_category in (None, "NONE"):
-            ids.add(pspec.id)
-    return ids
-
-
-@rerun_strategy
-def all(db: WorkspaceDatabase, *, tag: str | None = None) -> set[str]:
-    """All specs in the workspace (or tag) — re-run everything."""
-    pspecs = db.get_partial_specs(tag=tag)
-    return {c.id for c in pspecs}
+def only_help() -> str:
+    """Return the ``--only`` help text, one aligned line per strategy."""
+    order = ("all", "failed", "not_run", "changed", "not_pass")
+    width = max(len(name) for name in order)
+    lines = ["Which previously-known tests to run after selection\n"]
+    lines.extend(f"  {STRATEGIES[name].name:<{width}} - {STRATEGIES[name].help}" for name in order)
+    return "\n\n".join(lines)
 
 
 def setup_parser(parser) -> None:
-    """Add the ``--only`` argument for choosing a rerun strategy to *parser*."""
+    """Add the ``--only`` argument for choosing a rerun strategy to *parser*.
+
+    The default is left as ``None`` so callers can distinguish an explicit
+    ``--only`` from the unset case; ``run`` resolves the effective default
+    (``not_pass`` in general, ``all`` when re-running specific tests by ID or
+    view path).
+    """
     parser.add_argument(
         "--only",
         dest="only",
         choices=sorted(STRATEGIES.keys()),
-        default="not_pass",
-        help="Which tests to run after selection\n\n"
-        "  all      - run all selected tests, even if already passing\n\n"
-        "  failed   - run only previously failing tests\n\n"
-        "  not_run  - run tests that have never been executed\n\n"
-        "  changed  - run tests that whose specs have newer modification time\n\n"
-        "  not_pass - run tests whose status is not 'SUCCESS' (default)",
+        default=None,
+        help=only_help() + "\n\n  [default: not_pass]",
     )

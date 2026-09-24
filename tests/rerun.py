@@ -229,6 +229,107 @@ def test_blocked_downstream_included_in_failed_rerun(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# --only resolution (CLI default selection)
+# ---------------------------------------------------------------------------
+
+
+def test_explicit_only_always_wins_over_request_default():
+    """An explicit --only is honored regardless of the request kind."""
+    from _canary.subcommands.run import SpecIdsRequest
+    from _canary.subcommands.run import resolve_rerun_strategy
+
+    request = SpecIdsRequest(value=["a" * 64])
+    assert resolve_rerun_strategy("failed", request) == "failed"
+
+
+def test_id_and_view_requests_default_to_all():
+    """Re-running by ID or view path defaults to 'all' when --only is unset."""
+    from _canary.subcommands.run import SpecIdsRequest
+    from _canary.subcommands.run import ViewPathsRequest
+    from _canary.subcommands.run import resolve_rerun_strategy
+
+    assert resolve_rerun_strategy(None, SpecIdsRequest(value=["a" * 64])) == "all"
+    assert resolve_rerun_strategy(None, ViewPathsRequest(value=["p/%"])) == "all"
+
+
+def test_other_requests_default_to_not_pass():
+    """Scan-path and tag requests keep the not_pass default when --only is unset."""
+    from _canary.subcommands.run import ScanPathsRequest
+    from _canary.subcommands.run import TagRequest
+    from _canary.subcommands.run import resolve_rerun_strategy
+
+    assert resolve_rerun_strategy(None, ScanPathsRequest(value={})) == "not_pass"
+    assert resolve_rerun_strategy(None, TagRequest(value="smoke")) == "not_pass"
+
+
+# ---------------------------------------------------------------------------
+# Strategy registry (shared root-selection + runtime-mask definitions)
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_strategy_is_rejected_consistently():
+    """Both the registry lookup and RerunRule reject an unknown strategy name."""
+    import pytest as _pytest
+
+    from _canary import rerun
+
+    with _pytest.raises(ValueError):
+        rerun.get_strategy("bogus")
+    with _pytest.raises(ValueError):
+        RerunRule("bogus")
+
+
+def test_not_pass_root_selection_and_runtime_mask_agree(tmp_path):
+    """The 'not_pass' strategy masks the same jobs its root predicate rejects.
+
+    This guards the invariant that motivated unifying the two layers: a job the
+    database root-selection would not seed (a passing job) is exactly the job
+    the runtime rule masks, and vice versa.
+    """
+    from _canary import rerun
+
+    strat = rerun.get_strategy("not_pass")
+    passed = make_job(tmp_path, "passed", outcome="SUCCESS", started_at=1.0)
+    failed = make_job(tmp_path, "failed", outcome="FAILED", started_at=1.0)
+
+    # Runtime layer: should_run mirrors the root predicate (category != PASS).
+    assert not strat.should_run(passed).run
+    assert strat.should_run(failed).run
+
+
+def test_changed_seeds_never_run_specs(tmp_path):
+    """'changed' treats a never-run spec as changed at both layers.
+
+    Previously the database root-selection required a prior run timestamp while
+    the runtime rule re-ran never-run jobs, so the two disagreed for a spec that
+    had never executed.  Both now seed/run it.
+    """
+    from _canary import rerun
+    from _canary.database import PartialSpec
+
+    spec_file = tmp_path / "case.pyt"
+    spec_file.write_text("# stub\n")
+    never_run = PartialSpec(
+        id="c" * 64,
+        file=spec_file,
+        view="case",
+        result_category="NONE",
+        result_outcome="NONE",
+        started_at=-1.0,
+    )
+
+    strat = rerun.get_strategy("changed")
+    assert strat.selects_root(never_run)
+
+    job = make_job(tmp_path, "case", outcome="NONE")
+    job.spec = JobSpec(
+        file_root=tmp_path, file_path=spec_file, family="case", id="c" * 64, timeout=10.0
+    )
+    job.timekeeper._started = -1.0
+    assert strat.should_run(job).run
+
+
+# ---------------------------------------------------------------------------
 # Integration tests — require actual job execution (1 workspace.run() each)
 # ---------------------------------------------------------------------------
 

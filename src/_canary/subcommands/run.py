@@ -189,11 +189,9 @@ class Run(CanarySubcommand):
                     sids = [*sids[:2], "…", sids[-1]]
                 logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
                 specs = rerun.compute_rerun_closure(workspace.db, roots=specids)
-                args.only = "all"
             elif isinstance(request, ViewPathsRequest):
                 logger.info("[bold]Running[/] tests from view paths")
                 specs = rerun.get_specs_from_view(workspace.db, prefixes=request.value)
-                args.only = "all"
             else:
                 assert isinstance(request, TagRequest)
                 tag = request.value
@@ -210,7 +208,8 @@ class Run(CanarySubcommand):
         view_t: ViewSettings | None = None
         if user_view_args := args.view:
             view_t = ViewSettings(**user_view_args)
-        session = workspace.run(specs, inplace=inplace, only=args.only or "not_pass", view_t=view_t)
+        only = resolve_rerun_strategy(args.only, request)
+        session = workspace.run(specs, inplace=inplace, only=only, view_t=view_t)
         return session.returncode
 
 
@@ -221,6 +220,25 @@ def setdefault(obj, attr, default):
     elif getattr(obj, attr) is None:
         setattr(obj, attr, default)
     return getattr(obj, attr)
+
+
+def resolve_rerun_strategy(requested: str | None, request: "RequestNode") -> str:
+    """Return the effective ``--only`` rerun strategy for *request*.
+
+    An explicit ``--only`` always wins.  When it is unset, re-running specific
+    tests by ID or view path defaults to ``all`` (run exactly what was named,
+    even if it already passed) while every other request defaults to
+    ``not_pass``.  The ID/view default is logged so it is not a silent override
+    of the usual default.
+    """
+    if requested is not None:
+        return requested
+    if isinstance(request, (SpecIdsRequest, ViewPathsRequest)):
+        logger.info(
+            "Re-running the requested tests with [bold]--only all[/] (pass --only to change)"
+        )
+        return "all"
+    return "not_pass"
 
 
 class StyleAction(argparse.Action):
