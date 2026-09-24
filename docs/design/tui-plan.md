@@ -40,11 +40,24 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** In-place rerun (steps 1-3). `r` now runs the marked/cursor tests in a
+  **child process** whose events stream back onto the app `EventBus` via the
+  durable spool; the TUI keeps its `Live` display up, shows a "running…" footer,
+  refuses a concurrent rerun, and refreshes on completion. No console handoff.
+  (`ExplorerModel.begin_rerun`/`poll_run`, `_live_session` polls the run.)
+- **DONE** Unified cross-process transport on a durable spool bus
+  (`events/spool.py`: `SpoolBus`/`SpoolListener`), replacing the ad-hoc mp.Queue
+  bridge that deadlocked on the Queue feeder thread. `FSQueue` now orders by a
+  monotonic filename key (was mtime) so event streams drain in order. Commit
+  `275287f7`.
+- **DONE** `app.run_in_subprocess` + `RunHandle`: spawn a child that runs the
+  session, redirects its stdout/stderr, publishes events to the spool; parent
+  reads the return code from the process exit code.
+- **DONE** `fix(app): expose absolute file_path in JobView` -- the TUI edit
+  action opened a path relative to the scan root, not CWD. `JobView.file_path`
+  is now `file_root/file_path`. Commit `968f675a`.
 - **DONE** `fix(tui): edit test files with vim instead of $EDITOR/$VISUAL`
-  (c81fce86). The TUI hardcodes `vim` (`ExplorerModel.EDITOR`) rather than the
-  environment-driven `editor()` used by `canary edit`, so it never lands on a
-  GUI editor that would detach from the terminal. Full suite (1051) + ruff +
-  mypy + bandit green.
+  (c81fce86).
 - **DONE** `feat(tui): edit a test file (e) and rerun the edit` (c238e9a1).
 - **DONE** `feat(tui): multi-select jobs and rerun the selection` (2b35b59c).
 - **DONE** scrolling viewport + job-log drill-down (f4d06c58, e51f050f).
@@ -57,8 +70,8 @@ Events only mark dirty; the DB remains the source of truth for row content.
 - Status filter cycle (`f`) / clear (`a`).
 - Multi-select (`x` mark/advance, `c` clear).
 - Edit (`e`) the selected test's file in vim; auto-marks the edited test for rerun.
-- Rerun (`r`) the marked set (or cursor row) -- **currently out-of-process**
-  (see next section).
+- Rerun (`r`) the marked set (or cursor row) **in place** -- runs in a child
+  process, streams live into the table, TUI never leaves the screen.
 - Quit (`q`/`escape`).
 
 ---

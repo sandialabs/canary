@@ -149,6 +149,8 @@ def render_detail(job: "JobView") -> Panel:
 def render_footer(state: "ExplorerState") -> Text:
     """Render the status/help footer line."""
     parts = Text()
+    if state.running:
+        parts.append("running… ", style="bold yellow")
     filt = state.status_filter or "all"
     parts.append(f"filter: {filt}", style="bold")
     rows = state.visible_jobs

@@ -173,12 +173,28 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
         model.refresh()
         ids = [j["id"] for j in model.state.jobs]
-        rc = model.rerun(ids)
-        assert rc == 0
-        # The jobs still pass after the rerun.
+
+        # In-place rerun: launches a child process that streams events back.
+        assert model.begin_rerun(ids) is True
+        assert model.run_active is True
+        # A second rerun is refused while one is in flight.
+        assert model.begin_rerun(ids) is False
+
+        # Poll to completion (the child runs and exits; poll refreshes rows).
+        import time
+
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            if model.poll_run():
+                break
+            time.sleep(0.05)
+        assert model.run_active is False
+
         after = {j["id"]: j["status"] for j in queries.list_jobs()}
+        model.unsubscribe()
     assert all(after[i] == "PASS" for i in ids)
 
 

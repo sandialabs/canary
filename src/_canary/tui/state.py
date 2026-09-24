@@ -45,6 +45,8 @@ class ExplorerState:
             rerun of the marked jobs (or the cursor row when none are marked).
         edit_requested: Edge-triggered flag the runner consumes to open the
             cursor row's test file in an editor.
+        running: Whether an in-place rerun is currently executing (shown in the
+            footer); set by the runner, cleared when the run finishes.
         quit: Set by :meth:`handle_key` when the user asks to exit.
     """
 
@@ -61,6 +63,7 @@ class ExplorerState:
     marked_ids: set[str] = field(default_factory=set)
     rerun_requested: bool = False
     edit_requested: bool = False
+    running: bool = False
     quit: bool = False
 
     # -- data updates -------------------------------------------------------

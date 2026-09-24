@@ -43,6 +43,7 @@ from .state import ExplorerState
 if TYPE_CHECKING:
     from ..app.queries import JobView
     from ..app.queries import WorkspaceSummary
+    from ..app.run_subprocess import RunHandle
     from ..events import Event
     from ..events import EventBus
 
@@ -65,6 +66,7 @@ class ExplorerModel:
         self._dirty = threading.Event()
         self._bus: "EventBus | None" = None
         self._summary: "WorkspaceSummary | None" = None
+        self._run: "RunHandle | None" = None
 
     def refresh(self) -> None:
         """Pull the latest job rows and workspace summary into the UI state."""
@@ -118,18 +120,56 @@ class ExplorerModel:
     def counts(self) -> dict[str, int]:
         return queries.status_counts(self.state.jobs)
 
-    def rerun(self, spec_ids: list[str]) -> int:
-        """Rerun the given jobs by spec id through the application layer.
+    def start_rerun(self, spec_ids: list[str]) -> "RunHandle":
+        """Start an in-place rerun of *spec_ids* in a child process.
 
-        Uses the same ``app.run`` path as ``canary run <spec_id> ...``, which
-        computes the rerun closure (upstream deps) itself.  Returns the run's
-        exit code.  This is a heavy, blocking operation with its own console
-        output, so the runner tears the live display down before calling it.
+        Uses :func:`_canary.app.run_in_subprocess`, which runs the same
+        ``app.run`` path as ``canary run <spec_id> ...`` (it computes the rerun
+        closure itself) but in a separate process so the TUI keeps its live
+        display, the terminal, and signal handling.  The child streams its
+        job-lifecycle events back onto the application event bus this model is
+        already subscribed to, so progress appears live without a console
+        handoff.  Returns a :class:`~_canary.app.run_subprocess.RunHandle` the
+        runner polls for completion.
         """
         from ..app.pathspec import SpecIdsRequest
-        from ..app.run import run as run_session
+        from ..app.run_subprocess import run_in_subprocess
 
-        return run_session(SpecIdsRequest(value=list(spec_ids)))
+        return run_in_subprocess(SpecIdsRequest(value=list(spec_ids)))
+
+    @property
+    def run_active(self) -> bool:
+        """Whether an in-place rerun is currently executing."""
+        return self._run is not None
+
+    def begin_rerun(self, spec_ids: list[str]) -> bool:
+        """Start an in-place rerun, unless one is already running.
+
+        Returns ``True`` if a run was started.  The child streams events onto
+        the bus this model subscribes to, so the runner's live loop repaints as
+        progress arrives; the runner calls :meth:`poll_run` to detect completion.
+        """
+        if self._run is not None or not spec_ids:
+            return False
+        self._run = self.start_rerun(spec_ids)
+        self.state.running = True
+        return True
+
+    def poll_run(self) -> bool:
+        """Return ``True`` when a started run has finished, refreshing rows.
+
+        Non-blocking.  On completion the run handle is cleared and the model is
+        refreshed so the final results are shown; returns ``False`` while the
+        run is still in flight or when no run is active.
+        """
+        if self._run is None:
+            return False
+        if self._run.poll() is None:
+            return False
+        self._run = None
+        self.state.running = False
+        self.refresh()
+        return True
 
     #: The editor the TUI launches to edit a test file.  The TUI deliberately
     #: hardcodes ``vim`` rather than honoring ``$VISUAL``/``$EDITOR`` (as the CLI
@@ -256,12 +296,13 @@ def run(
         model.unsubscribe()
         return 0
 
-    # Interactive session: a live display that can pause to hand the terminal to
-    # an external program (an editor) and resume, or exit to perform a rerun.
+    # Interactive session: a live display that stays up across an in-place rerun
+    # (the run executes in a child process and streams events back), and pauses
+    # only to hand the terminal to an external editor.
     while True:
         action, payload = _live_session(console, model, refresh_interval)
         if action == "edit":
-            # $EDITOR is full-screen: the live display and raw-mode reader are
+            # vim is full-screen: the live display and raw-mode reader are
             # already torn down by _live_session before it returned.  Edit, then
             # loop back to re-enter the display with fresh data.
             changed = model.edit_file(payload)
@@ -273,12 +314,6 @@ def run(
                 # surprising re-execution on every save.
                 model.state.marked_ids = {edited["id"]}
             continue
-        if action == "rerun":
-            model.unsubscribe()
-            # Display and raw-mode reader are down; the rerun owns the console.
-            # (In-place/background rerun is future work; the selection + command
-            # are identical, only the execution mechanism changes.)
-            return model.rerun(payload)
         # action == "quit"
         model.unsubscribe()
         return 0
@@ -287,13 +322,15 @@ def run(
 def _live_session(
     console: Console, model: "ExplorerModel", refresh_interval: float
 ) -> tuple[str, Any]:
-    """Run the live display until the user quits or requests an action.
+    """Run the live display until the user quits or requests an editor.
 
     Returns ``(reason, payload)`` where *reason* is ``"quit"`` (payload
-    ``None``), ``"rerun"`` (payload = list of spec ids), or ``"edit"`` (payload =
-    file path).  The ``Live`` display and the raw-mode keyboard reader are fully
-    torn down before returning, so the caller may safely run a full-screen
-    external program or a session with its own console output.
+    ``None``) or ``"edit"`` (payload = file path).  A rerun does **not** end the
+    session: it is launched in place (a child process, see
+    :meth:`ExplorerModel.begin_rerun`) and the loop keeps drawing as the child's
+    events arrive, until the run finishes.  The ``Live`` display and the
+    raw-mode keyboard reader are fully torn down before returning, so the caller
+    may safely run a full-screen external editor.
     """
     keys: "queue.Queue[str]" = queue.Queue()
     stop = threading.Event()
@@ -327,9 +364,14 @@ def _live_session(
                     reason, payload = "edit", edit_path
                     break
                 rerun_ids = model.state.consume_rerun_request()
-                if rerun_ids:
-                    reason, payload = "rerun", rerun_ids
-                    break
+                if rerun_ids and model.begin_rerun(rerun_ids):
+                    # In-place: the child streams events; keep drawing.  Clear
+                    # any marks so the "running" set is unambiguous.
+                    model.state.clear_marks()
+                    dirty = True
+                # A finished in-place run refreshes rows and clears the flag.
+                if model.poll_run():
+                    dirty = True
                 now = time.monotonic()
                 # Refresh on a job event (live session progress) or the timer,
                 # whichever comes first; both re-read authoritative rows from the DB.
