@@ -142,6 +142,59 @@ def test_log_mode_scroll_and_return():
     assert st.quit is False
 
 
+def test_log_follow_pins_to_tail_and_updates():
+    st = ExplorerState()
+    st.set_viewport_height(3)
+    st.open_log("job", "l1\nl2\nl3\nl4", spec_id="abc", follow=True)
+    # Following opens pinned to the bottom.
+    assert st.log_follow is True
+    assert st.log_spec_id == "abc"
+    assert st.log_top == max(0, 4 - 3)
+    # New output arrives; the view re-pins to the new tail.
+    assert st.update_log("l1\nl2\nl3\nl4\nl5\nl6") is True
+    assert st.log_top == max(0, 6 - 3)
+    # Identical text is a no-op (no needless repaint).
+    assert st.update_log("l1\nl2\nl3\nl4\nl5\nl6") is False
+
+
+def test_log_scroll_up_stops_following_then_G_resumes():
+    st = ExplorerState()
+    st.set_viewport_height(3)
+    st.open_log("job", "\n".join(f"l{i}" for i in range(10)), spec_id="abc", follow=True)
+    assert st.log_follow is True
+    st.handle_key("k")  # scroll up -> stop following, freeze the view
+    assert st.log_follow is False
+    top_after_scroll = st.log_top
+    # A refresh while frozen must not yank the view to the bottom.
+    st.update_log("\n".join(f"l{i}" for i in range(20)))
+    assert st.log_top == top_after_scroll
+    # G jumps to the bottom and resumes following.
+    st.handle_key("G")
+    assert st.log_follow is True
+    assert st.log_top == max(0, 20 - 3)
+
+
+def test_log_f_toggles_follow():
+    st = ExplorerState()
+    st.set_viewport_height(3)
+    st.open_log("job", "l1\nl2\nl3\nl4\nl5", spec_id="abc", follow=False)
+    assert st.log_follow is False
+    st.handle_key("f")
+    assert st.log_follow is True
+    assert st.log_top == max(0, 5 - 3)  # enabling jumps to the tail
+    st.handle_key("f")
+    assert st.log_follow is False
+
+
+def test_close_log_clears_follow_state():
+    st = ExplorerState()
+    st.open_log("job", "l1\nl2", spec_id="abc", follow=True)
+    st.close_log()
+    assert st.mode == "list"
+    assert st.log_spec_id is None
+    assert st.log_follow is False
+
+
 def test_viewport_windowing_keeps_cursor_visible():
     st = ExplorerState()
     st.update_jobs([_view(f"j{i}", "PASS", id=f"{i:09d}") for i in range(30)])

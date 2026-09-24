@@ -34,7 +34,7 @@ _HELP = (
 #: Footer help shown while a run is in flight: q/escape cancels the run rather
 #: than quitting the TUI, so the hint changes to make that discoverable.
 _RUNNING_HELP = "[dim]j/k move · d detail · f filter · q/esc cancel run[/dim]"
-_LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
+_LOG_HELP = "[dim]j/k scroll · g/G top/bottom · f follow · pgup/pgdn page · q/enter back[/dim]"
 #: Rows a Rich table spends on its own frame regardless of body length: the top
 #: border, the column-header row, the header/body separator, and the bottom
 #: border.  Used to convert an available line budget into a row budget.
@@ -196,10 +196,15 @@ def render_log(state: "ExplorerState") -> Group:
     total = len(state.log_lines)
     shown_end = min(state.log_top + len(window), total)
     footer = Text()
+    if state.log_follow:
+        footer.append("following ", style="bold green")
     footer.append(f"lines {state.log_top + 1}-{shown_end}/{total}", style="dim")
     footer.append("   ")
     footer.append(Text.from_markup(_LOG_HELP))
-    return Group(Panel(body, title=state.log_title or "log", title_align="left"), footer)
+    title = state.log_title or "log"
+    if state.log_follow:
+        title = f"{title}  [green]● live[/green]"
+    return Group(Panel(body, title=Text.from_markup(title), title_align="left"), footer)
 
 
 def render_run_progress(progress: "RunProgressView") -> Panel:

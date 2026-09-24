@@ -169,6 +169,39 @@ def test_model_open_selected_log_enters_log_mode(tmp_path):
     assert model.state.selected is not None
 
 
+def test_model_refresh_log_follows_a_running_jobs_output(tmp_path):
+    """While following, refresh_log re-reads the job's output and updates state."""
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
+        model.refresh()
+        model.state.set_viewport_height(5)
+
+        # Drive the log source ourselves to simulate a growing output file.
+        chunks = ["line 1\nline 2\n"]
+        model.fetch_log = lambda spec_id, **k: chunks[-1]  # type: ignore[method-assign]
+
+        sid = model.state.jobs[0]["id"]
+        # Open following (as open_selected_log does while a run is active).
+        model.state.open_log("job", chunks[0], spec_id=sid, follow=True)
+        assert model.state.log_lines == ["line 1", "line 2"]
+
+        # A follow tick picks up the appended line and re-pins to the tail.
+        chunks.append("line 1\nline 2\nline 3\n")
+        assert model.refresh_log() is True
+        assert model.state.log_lines[-1] == "line 3"
+
+        # No change -> no repaint.
+        assert model.refresh_log() is False
+
+        # Not following -> refresh_log is a no-op even if the source changed.
+        model.state.log_follow = False
+        chunks.append("line 1\nline 2\nline 3\nline 4\n")
+        assert model.refresh_log() is False
+        model.unsubscribe()
+
+
 def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():

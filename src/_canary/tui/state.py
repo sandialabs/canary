@@ -39,6 +39,11 @@ class ExplorerState:
         log_lines: The selected job's log split into lines, in log mode.
         log_top: Scroll offset (first visible line) within the log.
         log_title: Header text for the log pane (job name/stream).
+        log_spec_id: Spec id of the job whose log is open, so the runner can
+            re-fetch it while following a running job.
+        log_follow: Whether the open log auto-follows the tail (re-fetched on
+            each refresh and pinned to the bottom); toggled with ``f`` in log
+            mode.
         marked_ids: Spec ids the user has marked (multi-select) for a bulk
             action such as rerun; independent of the cursor.
         rerun_requested: Edge-triggered flag the runner consumes to launch a
@@ -68,6 +73,12 @@ class ExplorerState:
     log_lines: list[str] = field(default_factory=list)
     log_top: int = 0
     log_title: str = ""
+    #: Spec id of the job whose log is open (``log`` mode), so the runner can
+    #: re-fetch it to follow a running job's output.
+    log_spec_id: str | None = None
+    #: Whether the open log follows the tail (auto-scroll + periodic re-fetch);
+    #: toggled with ``f`` in log mode, on by default for a still-running job.
+    log_follow: bool = False
     marked_ids: set[str] = field(default_factory=set)
     rerun_requested: bool = False
     edit_requested: bool = False
@@ -261,21 +272,70 @@ class ExplorerState:
 
     # -- log mode -----------------------------------------------------------
 
-    def open_log(self, title: str, text: str) -> None:
-        """Enter log mode showing *text* (under header *title*) from the top."""
+    def open_log(
+        self, title: str, text: str, *, spec_id: str | None = None, follow: bool = False
+    ) -> None:
+        """Enter log mode showing *text* (under header *title*).
+
+        With *follow* set (typically for a job that is still running), the view
+        pins to the tail and the runner re-fetches the log on each refresh via
+        :meth:`update_log`; otherwise it opens at the top and stays put.
+        *spec_id* records which job the runner should re-fetch.
+        """
         self.mode = "log"
         self.log_title = title
         self.log_lines = text.splitlines() or ["(no output)"]
+        self.log_spec_id = spec_id
+        self.log_follow = follow
         self.log_top = 0
+        if follow:
+            self._scroll_log_to_end()
+
+    def update_log(self, text: str) -> bool:
+        """Replace the open log's text (runner re-fetch while following).
+
+        Returns ``True`` if the content changed.  When following, the view is
+        re-pinned to the tail so new output stays visible; a user who scrolls up
+        turns following off (see :meth:`scroll_log`), freezing the view.
+        """
+        lines = text.splitlines() or ["(no output)"]
+        if lines == self.log_lines:
+            return False
+        self.log_lines = lines
+        if self.log_follow:
+            self._scroll_log_to_end()
+        else:
+            # Keep the offset valid if the log shrank.
+            self.scroll_log(0)
+        return True
+
+    def toggle_log_follow(self) -> None:
+        """Toggle tail-follow; enabling it jumps to and pins the bottom."""
+        self.log_follow = not self.log_follow
+        if self.log_follow:
+            self._scroll_log_to_end()
+
+    def _scroll_log_to_end(self) -> None:
+        height = self.viewport_height if self.viewport_height > 0 else len(self.log_lines)
+        self.log_top = max(0, len(self.log_lines) - max(1, height))
 
     def close_log(self) -> None:
         """Return to the job list."""
         self.mode = "list"
         self.log_lines = []
         self.log_top = 0
+        self.log_spec_id = None
+        self.log_follow = False
 
     def scroll_log(self, delta: int) -> None:
-        """Scroll the log by *delta* lines, clamped, keeping a page on screen."""
+        """Scroll the log by *delta* lines, clamped, keeping a page on screen.
+
+        Scrolling up (a negative *delta*) turns tail-follow off so the user can
+        read back through history without being yanked to the bottom on the next
+        refresh; re-enable it with ``G`` or ``f``.
+        """
+        if delta < 0:
+            self.log_follow = False
         height = self.viewport_height if self.viewport_height > 0 else len(self.log_lines)
         max_top = max(0, len(self.log_lines) - max(1, height))
         self.log_top = max(0, min(self.log_top + delta, max_top))
@@ -285,8 +345,10 @@ class ExplorerState:
     def handle_key(self, key: str) -> bool:
         """Apply a single key press; return ``True`` if it changed state.
 
-        In log mode ``j/k`` (and arrows/page keys) scroll the log and
-        ``enter``/``escape``/``q`` return to the list.  In list mode:
+        In log mode ``j/k`` (and arrows/page keys) scroll the log, ``g``/``G``
+        jump to the top/bottom (``G`` resumes tail-follow), ``f`` toggles
+        tail-follow, and ``enter``/``escape``/``q`` return to the list.  In list
+        mode:
 
         * ``j`` / down arrow -- move down;   ``k`` / up arrow -- move up
         * ``g`` -- top;   ``G`` -- bottom;   pageup/pagedown -- by window
@@ -446,10 +508,17 @@ class ExplorerState:
             self.scroll_log(-self._page())
             return True
         if key == "g":
+            self.log_follow = False  # jumping to the top stops following
             self.log_top = 0
             return True
         if key == "G":
-            self.scroll_log(len(self.log_lines))
+            # Jump to the bottom and resume following (the common "catch up on a
+            # running job" gesture).
+            self.log_follow = True
+            self._scroll_log_to_end()
+            return True
+        if key in ("f", "F"):
+            self.toggle_log_follow()
             return True
         return False
 

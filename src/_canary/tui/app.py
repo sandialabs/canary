@@ -115,13 +115,34 @@ class ExplorerModel:
         """Fetch the selected job's log and switch the state into log mode.
 
         This is the model's single log-related I/O point; the pure state machine
-        holds the resulting text but never reads the workspace itself.
+        holds the resulting text but never reads the workspace itself.  When a
+        run is in flight the log opens in tail-follow mode so a running job's
+        output streams in (the runner re-fetches it via :meth:`refresh_log`).
         """
         job = self.state.selected
         if job is None:
             return
         text = self.fetch_log(job["id"])
-        self.state.open_log(f"{job['name']}  ({job['short_id']})", text)
+        self.state.open_log(
+            f"{job['name']}  ({job['short_id']})", text, spec_id=job["id"], follow=self.run_active
+        )
+
+    def refresh_log(self) -> bool:
+        """Re-fetch the open log's text while following; return whether it changed.
+
+        Called by the runner on each refresh tick.  A no-op (returns ``False``)
+        unless the log pane is open, following, and knows its job id -- so a
+        frozen (scrolled-up) or closed log costs nothing.  Tolerates a job whose
+        output file has vanished (returns the empty text the query yields).
+        """
+        st = self.state
+        if st.mode != "log" or not st.log_follow or st.log_spec_id is None:
+            return False
+        try:
+            text = self.fetch_log(st.log_spec_id)
+        except Exception:  # noqa: BLE001 - a transient read race must not crash the UI
+            return False
+        return st.update_log(text)
 
     def counts(self) -> dict[str, int]:
         return queries.status_counts(self.state.jobs)
@@ -541,6 +562,10 @@ def _live_session(
                 # whichever comes first; both re-read authoritative rows from the DB.
                 if model.consume_dirty() or now - last_refresh >= refresh_interval:
                     model.refresh()
+                    # Follow a running job's log: re-read its output file so the
+                    # tail streams in while the run is in flight.
+                    if model.refresh_log():
+                        dirty = True
                     last_refresh = now
                     dirty = True
                 if dirty:

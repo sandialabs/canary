@@ -40,6 +40,15 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** Live log tailing (roadmap item 5). Opening a job's log while a run is
+  active follows the tail: the runner re-reads the output file each refresh
+  (`ExplorerModel.refresh_log`) and re-pins to the bottom. New state
+  (`log_spec_id`, `log_follow`, `open_log(spec_id=, follow=)`, `update_log`,
+  `toggle_log_follow`); `f` toggles follow, `G` resumes it, scrolling up freezes
+  the view; the log panel shows a `● live` / `following` indicator. Chosen as a
+  file tail over the existing `job_log` query (no new event / hot-path change).
+  Tests: `tui_state` pin/update/no-op/scroll-freeze/toggle/close; `tui_integration`
+  follow re-reads a growing output source.
 - **DONE** Start a run from scratch in the TUI (roadmap item 4). A `:` opens a
   run prompt; the typed line (path/dir/tag/spec id) is classified with the CLI's
   `classify_pathspec` and launched in place via
@@ -106,12 +115,15 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ### Implemented UI capabilities (see `state.py` key map)
 - Navigate (`j/k`, arrows, `g/G`, page keys), scroll viewport sized to terminal.
-- Detail pane toggle (`d`); log drill-down (`enter`/`space`), log scrolling.
+- Detail pane toggle (`d`); log drill-down (`enter`/`space`), log scrolling,
+  and tail-follow of a running job's log (`f` toggle, `G` resume).
 - Status filter cycle (`f`) / clear (`a`).
 - Multi-select (`x` mark/advance, `c` clear).
 - Edit (`e`) the selected test's file in vim; auto-marks the edited test for rerun.
 - Rerun (`r`) the marked set (or cursor row) **in place** -- runs in a child
   process, streams live into the table, TUI never leaves the screen.
+- Start a run from scratch (`:`) -- type a path/dir/tag/spec id and launch it
+  in place, like `canary run`.
 - Cancel (`q`/`escape` while running) the in-flight run -- terminates the child
   and settles from the DB, leaving the user in the explorer.
 - Quit (`q`/`escape` when idle).
@@ -442,9 +454,15 @@ Ordered, each step independently useful:
    `canary run` front end (paths on launch + reruns + ad-hoc runs). Future: a
    richer form (tag/selection picker, `RunOptions` toggles) instead of a raw
    line.
-5. **Live log tailing** -- stream a running job's output into the log pane
-   (needs a `job_output` event or file tail; noted as an open question in the
-   redesign doc, section 10.4).
+5. **Live log tailing** -- **DONE:** opening a job's log while a run is in
+   flight enters tail-follow mode: the runner re-reads the job's output file on
+   each refresh (`ExplorerModel.refresh_log` -> `queries.job_log`) and pins the
+   view to the bottom. `f` toggles follow, `G` jumps to the tail and resumes it,
+   scrolling up freezes the view. Implemented as a file tail over the existing
+   `job_log` query rather than a new `job_output` event -- the output file is
+   already the single source of truth and this adds no execution-hot-path
+   plumbing. A push-based `job_output` event remains a future option (redesign
+   §10.4) if sub-refresh-interval latency is ever needed.
 
 ---
 
