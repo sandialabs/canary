@@ -17,6 +17,8 @@ from .facade import collect
 from .facade import create_workspace
 from .facade import delete_selection
 from .facade import get_event_bus
+from .facade import get_tag_info
+from .facade import get_workspace_info
 from .facade import is_selection
 from .facade import open_workspace
 from .facade import rename_selection
@@ -35,4 +37,6 @@ __all__ = [
     "delete_selection",
     "rename_selection",
     "is_selection",
+    "get_workspace_info",
+    "get_tag_info",
 ]

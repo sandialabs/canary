@@ -102,3 +102,20 @@ def select(
     if from_tag is not None:
         return workspace.select_from_tag(tag, from_tag, **filters)
     return workspace.select(tag, **filters)
+
+
+def get_workspace_info() -> dict:
+    """Return summary information about the current workspace.
+
+    Delegates to :meth:`Workspace.info`; see it for the returned keys.
+    """
+    return open_workspace().info()
+
+
+def get_tag_info(tag: str) -> dict:
+    """Return metadata and unmasked specs for selection *tag*.
+
+    Delegates to :meth:`Workspace.tag_info`.  Raises
+    :class:`~_canary.database.NotASelection` if *tag* is not a selection.
+    """
+    return open_workspace().tag_info(tag)

@@ -608,6 +608,25 @@ class Workspace:
         p = Path(path).absolute()
         return p.is_relative_to(self.sessions_dir)
 
+    def tag_info(self, tag: str) -> dict[str, Any]:
+        """Return metadata and the (unmasked) specs for selection *tag*.
+
+        Args:
+            tag: The selection tag to describe.
+
+        Returns:
+            A dict with ``tag``, ``created_on`` (popped from metadata),
+            ``metadata`` (the remaining selection metadata), and ``specs`` (the
+            list of unmasked :class:`~_canary.jobspec.JobSpec` in the tag).
+
+        Raises:
+            NotASelection: If *tag* is not a selection.
+        """
+        specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
+        metadata = self.db.get_selection_metadata(tag)
+        created_on = metadata.pop("created_on", None)
+        return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
+
     def info(self) -> dict[str, Any]:
         """Returns summary information about the workspace.
 

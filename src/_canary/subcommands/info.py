@@ -61,13 +61,12 @@ class Info(CanarySubcommand):
 
     def print_tag_info_json(self, tag: str) -> None:
         """Emit JSON with spec count, creation date, and metadata for *tag* to stdout."""
-        workspace = app.open_workspace()
-        specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
-        selection = workspace.db.get_selection_metadata(tag)
+        info = app.get_tag_info(tag)
+        specs = info["specs"]
         out = {
             "tag": tag,
-            "created_on": selection.pop("created_on", None),
-            "metadata": selection,
+            "created_on": info["created_on"],
+            "metadata": info["metadata"],
             "spec_count": len(specs),
             "specs": [{"id": spec.id, "name": spec.display_name(resolve=True)} for spec in specs],
         }
@@ -76,12 +75,12 @@ class Info(CanarySubcommand):
 
     def print_tag_info(self, tag: str) -> None:
         """Print a rich table of tag metadata and the specs it contains."""
-        workspace = app.open_workspace()
+        info = app.get_tag_info(tag)
+        specs = info["specs"]
+        selection = dict(info["metadata"])
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        specs = [spec for spec in workspace.db.load_specs_by_tagname(tag) if not spec.mask]
-        selection = workspace.db.get_selection_metadata(tag)
-        fh.write(f"Created on: {selection.pop('created_on')}\n")
+        fh.write(f"Created on: {info['created_on']}\n")
         for key in list(selection.keys()):
             value = selection.pop(key)
             if value is not None:
@@ -99,8 +98,7 @@ class Info(CanarySubcommand):
 
     def print_workspace_info_json(self) -> None:
         """Emit JSON with root, version, spec count, test roots, sessions, and tags to stdout."""
-        workspace = app.open_workspace()
-        info = workspace.info()
+        info = app.get_workspace_info()
         unique_test_roots = sorted({spec.file_root.as_posix() for spec in info["specs"]})
         out = {
             "root": info["root"],
@@ -116,8 +114,7 @@ class Info(CanarySubcommand):
 
     def print_workspace_info(self) -> None:
         """Print a rich summary table of the current workspace."""
-        workspace = app.open_workspace()
-        info = workspace.info()
+        info = app.get_workspace_info()
         unique_test_roots = {spec.file_root.as_posix() for spec in info["specs"]}
         table = rich.table.Table(show_header=False)
         table.add_row("Workspace", info["root"])
