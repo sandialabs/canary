@@ -20,7 +20,7 @@ import rich
 
 from .. import config
 from ..config.argparsing import Parser
-from ..generator import AbstractTestGenerator
+from ..generation.generator import AbstractTestGenerator
 from ..session.workspace import Session
 from ..session.workspace import Workspace
 from ..third_party.monkeypatch import monkeypatch

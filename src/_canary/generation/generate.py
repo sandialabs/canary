@@ -43,17 +43,17 @@ from typing import Iterable
 if TYPE_CHECKING:
     pass
 
-from . import config
-from .core.resolve_dependency import resolve
-from .plugins.hookspec import hookimpl
-from .util import logging
-from .util.multiprocessing import starmap
-from .util.string import pluralize
+from .. import config
+from ..core.resolve_dependency import resolve
+from ..plugins.hookspec import hookimpl
+from ..util import logging
+from ..util.multiprocessing import starmap
+from ..util.string import pluralize
 
 if TYPE_CHECKING:
-    from .config.argparsing import Parser
-    from .core.jobspec import JobSpec
-    from .core.jobspec_ir import JobSpecIR
+    from ..config.argparsing import Parser
+    from ..core.jobspec import JobSpec
+    from ..core.jobspec_ir import JobSpecIR
     from .generator import AbstractTestGenerator
 
 

@@ -5,7 +5,7 @@
 from pathlib import Path
 from typing import Any
 
-from _canary.generator import AbstractSpecGenerator
+from _canary.generation.generator import AbstractSpecGenerator
 from _canary.plugins.hookspec import hookimpl
 from _canary.util.query_data import load_query_data
 
@@ -45,7 +45,7 @@ class PYTSpecGenerator(AbstractSpecGenerator):
         import os
 
         from _canary.core.jobspec_graph import print_spec_graph
-        from _canary.generate import resolve
+        from _canary.generation.generate import resolve
         from _canary.util import logging
         from _canary.util.field import Field
         from _canary.util.string import pluralize

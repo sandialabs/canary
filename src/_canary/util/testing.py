@@ -148,8 +148,8 @@ def generate_random_jobspecs(
     Returns:
         List of ``JobSpec`` objects.
     """
-    from ..collect import Collector
-    from ..generate import Generator
+    from ..generation.collect import Collector
+    from ..generation.generate import Generator
 
     generate_random_test_files(
         root / "tests", count=count, max_params=max_params, max_rows=max_rows

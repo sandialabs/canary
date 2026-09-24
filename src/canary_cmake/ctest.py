@@ -15,7 +15,7 @@ import schema
 
 import canary
 from _canary.core.status import Status
-from _canary.generator import AbstractTestGenerator
+from _canary.generation.generator import AbstractTestGenerator
 
 warning_cache: set[str] = set()
 
@@ -133,7 +133,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                             fixture.dependencies.append(dep)
 
     def resolve_inter_dependencies(self, irs: list["canary.JobSpecIR"]) -> list["canary.JobSpec"]:
-        from _canary.generate import resolve
+        from _canary.generation.generate import resolve
 
         resolved = resolve(irs)
         return resolved

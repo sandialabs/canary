@@ -904,8 +904,8 @@
         "_canary.core.jobspec_ir.JobSpecIR"
       ],
       "generators": [
-        "_canary.generator.AbstractSpecGenerator",
-        "_canary.generate.Generator"
+        "_canary.generation.generator.AbstractSpecGenerator",
+        "_canary.generation.generate.Generator"
       ],
       "workspace": [
         "_canary.session.workspace.Workspace",

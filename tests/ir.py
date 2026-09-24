@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 import _canary.core.jobspec as js
-from _canary import generate
 from _canary.core import jobspec_ir as ir
+from _canary.generation import generate
 from _canary.util.filesystem import working_dir
 
 

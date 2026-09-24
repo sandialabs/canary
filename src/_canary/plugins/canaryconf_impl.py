@@ -83,7 +83,7 @@ from ..util import logging
 from .hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ..generate import Generator
+    from ..generation.generate import Generator
 
 logger = logging.get_logger(__name__)
 

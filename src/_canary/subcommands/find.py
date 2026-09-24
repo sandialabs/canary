@@ -16,10 +16,10 @@ from rich.columns import Columns
 from rich.rule import Rule
 
 from .. import config
-from ..collect import Collector
 from ..core import rules
 from ..error import StopExecution
-from ..generate import Generator
+from ..generation.collect import Collector
+from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json

@@ -12,7 +12,7 @@ import yaml
 
 from .. import app
 from .. import config
-from ..collect import Collector
+from ..generation.collect import Collector
 from ..plugins.hookspec import hookimpl
 from ..util.rich import colorize
 from ..util.serialize import serialize
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
     from ..core.jobspec import JobSpec
-    from ..generator import AbstractTestGenerator
+    from ..generation.generator import AbstractTestGenerator
 
 
 @hookimpl

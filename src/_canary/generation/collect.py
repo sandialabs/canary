@@ -34,13 +34,13 @@ from typing import Iterable
 from typing import Iterator
 from typing import Type
 
-from . import config
-from .config.argparsing import Parser
-from .config.schemas import testpaths_schema
+from .. import config
+from ..config.argparsing import Parser
+from ..config.schemas import testpaths_schema
+from ..plugins.hookspec import hookimpl
+from ..util import logging
+from ..util.filesystem import working_dir
 from .generator import AbstractTestGenerator
-from .plugins.hookspec import hookimpl
-from .util import logging
-from .util.filesystem import working_dir
 
 logger = logging.get_logger(__name__)
 

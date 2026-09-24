@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 import _canary.config as config
-from _canary import collect
 from _canary import select
 from _canary.core import rules
-from _canary.generate import Generator as CanaryGenerator
+from _canary.generation import collect
+from _canary.generation.generate import Generator as CanaryGenerator
 from _canary.util.filesystem import working_dir
 from canary_vvtest.vvt import VVTestAdapter
 from canary_vvtest.vvt import VVTestLoader

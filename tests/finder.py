@@ -6,12 +6,12 @@ from pathlib import Path
 
 import _canary.config as config
 import canary
-from _canary import collect
 from _canary import select
 from _canary.core import job as cj
 from _canary.core import rules
 from _canary.execution import testexec
-from _canary.generate import Generator
+from _canary.generation import collect
+from _canary.generation.generate import Generator
 from _canary.plugins.hookspec import hookimpl
 from _canary.resource_pool.rpool import Outcome
 from _canary.util.filesystem import mkdirp

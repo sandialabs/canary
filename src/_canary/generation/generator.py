@@ -22,14 +22,14 @@ except ImportError:
 from schema import Schema
 from schema import Type
 
-from .core.jobspec_ir import JobSpecIR
-from .util import json_helper as json
-from .util import reducer
-from .util.logging import get_logger
-from .util.reducer import unique
+from ..core.jobspec_ir import JobSpecIR
+from ..util import json_helper as json
+from ..util import reducer
+from ..util.logging import get_logger
+from ..util.reducer import unique
 
 if TYPE_CHECKING:
-    from .core.jobspec import JobSpec
+    from ..core.jobspec import JobSpec
 
 
 WhenType = str | dict[str, str]
@@ -153,7 +153,7 @@ class AbstractSpecGenerator(ABC):
 
     @staticmethod
     def create(root: str, path: str | None = None) -> "AbstractTestGenerator":
-        from . import config
+        from .. import config
 
         if generator := config.pluginmanager.hook.canary_testcase_generator(root=root, path=path):
             return generator

@@ -11,14 +11,14 @@ from typing import Type
 import pluggy
 
 if TYPE_CHECKING:
-    from ..collect import Collector
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..core.job import Job
     from ..execution.launcher import Launcher
     from ..execution.runtest import Runner
-    from ..generate import Generator
-    from ..generator import AbstractTestGenerator
+    from ..generation.collect import Collector
+    from ..generation.generate import Generator
+    from ..generation.generator import AbstractTestGenerator
     from ..reporters.reporter import CanaryReporter
     from ..resource_pool.rpool import Outcome
     from ..select import RuntimeSelector

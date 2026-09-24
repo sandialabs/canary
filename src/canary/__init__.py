@@ -35,7 +35,7 @@ from _canary.core.rules import RuleOutcome
 from _canary.core.rules import RuntimeRule
 from _canary.execution.launcher import Launcher
 from _canary.execution.launcher import SubprocessLauncher
-from _canary.generator import AbstractSpecGenerator
+from _canary.generation.generator import AbstractSpecGenerator
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.hookspec import hookspec
 from _canary.testinst import LockFileNotFoundError
@@ -202,9 +202,9 @@ _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     "CanarySubcommand": ("_canary.subcommands.base", "CanarySubcommand"),
     "CanaryReporter": ("_canary.reporters.reporter", "CanaryReporter"),
     "CanaryPluginManager": ("_canary.plugins.pluginmanager", "CanaryPluginManager"),
-    "Collector": ("_canary.collect", "Collector"),
+    "Collector": ("_canary.generation.collect", "Collector"),
     "console_main": ("_canary.main", "console_main"),
-    "Generator": ("_canary.generate", "Generator"),
+    "Generator": ("_canary.generation.generate", "Generator"),
     "RuntimeSelector": ("_canary.select", "RuntimeSelector"),
     "Selector": ("_canary.select", "Selector"),
     "Runner": ("_canary.execution.runtest", "Runner"),

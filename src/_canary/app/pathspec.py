@@ -29,7 +29,7 @@ from typing import Any
 from typing import Literal
 from typing import Optional
 
-from ..collect import vc_prefixes
+from ..generation.collect import vc_prefixes
 from ..session.workspace import NotAWorkspaceError
 from ..session.workspace import Workspace
 

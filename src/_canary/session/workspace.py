@@ -36,7 +36,6 @@ import yaml
 from .. import config
 from .. import select
 from .. import version
-from ..collect import Collector
 from ..config import config as config_mod
 from ..core import jobspec
 from ..core import rules
@@ -48,8 +47,9 @@ from ..error import notests_exit_status
 from ..execution.runtest import Runner
 from ..execution.runtest import canary_runtests
 from ..execution.testexec import ExecutionSpace
-from ..generate import Generator
-from ..generator import AbstractTestGenerator
+from ..generation.collect import Collector
+from ..generation.generate import Generator
+from ..generation.generator import AbstractTestGenerator
 from ..persistence.database import WorkspaceDatabase
 from ..util import json_helper as json
 from ..util import logging

@@ -23,7 +23,7 @@ from ..app.pathspec import classify_pathspec
 from ..app.run import RunOptions
 from ..app.run import run as app_run
 from ..config.schemas import testpaths_schema
-from ..generate import Generator
+from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json

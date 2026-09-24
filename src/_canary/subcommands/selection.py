@@ -6,8 +6,8 @@ import argparse
 from typing import TYPE_CHECKING
 
 from .. import app
-from ..collect import Collector
-from ..generate import Generator
+from ..generation.collect import Collector
+from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
