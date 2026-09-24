@@ -14,6 +14,7 @@ TUI, GUI, and REST all sit on the same ``canary.app`` surface).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
@@ -47,6 +48,12 @@ class JobView(TypedDict):
     name: str
     fullname: str
     file_path: str
+    """Absolute path to the test's source file (``file_root/file_path``).
+
+    Stored split in the DB (a scan root plus a path relative to it), but joined
+    here so interfaces get a path they can open or display directly, independent
+    of the process's current working directory.
+    """
     phase: str
     status: str
     status_label: str
@@ -73,12 +80,17 @@ def _job_view(result: dict[str, Any]) -> JobView:
     category = getattr(status.category, "value", "") or ""
     outcome = getattr(getattr(status, "outcome", None), "name", "") or ""
     spec_id = result["id"]
+    # ``file_path`` is stored relative to ``file_root``; join them so the view
+    # carries an absolute path openable regardless of the caller's CWD.
+    file_root = result.get("file_root") or ""
+    rel_path = result.get("file_path") or ""
+    abs_path = str(Path(file_root) / rel_path) if file_root else str(rel_path)
     return JobView(
         id=spec_id,
         short_id=spec_id[:8],
         name=result["spec_name"],
         fullname=result["spec_fullname"],
-        file_path=result["file_path"],
+        file_path=abs_path,
         phase=state.phase.name,
         status=category,
         status_label=status.display_name(),

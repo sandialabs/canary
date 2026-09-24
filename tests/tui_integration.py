@@ -56,6 +56,25 @@ def test_list_jobs_projects_results(tmp_path):
         assert isinstance(j["duration"], float)
 
 
+def test_job_view_file_path_is_absolute_and_exists(tmp_path):
+    """file_path must be an absolute path to the real source file.
+
+    It is stored split (file_root + a relative path) in the DB; the query
+    surface joins them so an interface can open the file regardless of its CWD.
+    The TUI's edit action broke when this was the bare relative path.
+    """
+    _make_workspace(tmp_path)
+    # Query from a *different* CWD to prove the path is not CWD-relative.
+    with working_dir(str(tmp_path / ".canary")), canary.config.override():
+        jobs = queries.list_jobs()
+
+    for j in jobs:
+        p = j["file_path"]
+        assert os.path.isabs(p), p
+        assert os.path.exists(p), p
+        assert os.path.basename(p) == "basic.pyt"
+
+
 def test_workspace_summary_and_counts(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
