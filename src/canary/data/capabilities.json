@@ -915,6 +915,7 @@
       "application": [
         "canary.app.open_workspace",
         "canary.app.create_workspace",
+        "canary.app.collect",
         "canary.app.get_event_bus"
       ],
       "resources": [

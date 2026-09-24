@@ -13,8 +13,9 @@ This module is a facade: it delegates to the existing implementation
 (:class:`~_canary.workspace.Workspace`) and adds no behavior of its own.
 """
 
+from .facade import collect
 from .facade import create_workspace
 from .facade import get_event_bus
 from .facade import open_workspace
 
-__all__ = ["create_workspace", "open_workspace", "get_event_bus"]
+__all__ = ["collect", "create_workspace", "open_workspace", "get_event_bus"]

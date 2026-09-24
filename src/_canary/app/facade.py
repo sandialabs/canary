@@ -7,9 +7,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..events import EventBus
 from ..workspace import Workspace
+
+if TYPE_CHECKING:
+    from ..jobspec import JobSpec
 
 _event_bus = EventBus()
 
@@ -38,3 +42,15 @@ def create_workspace(path: str | Path = Path.cwd(), force: bool = False) -> Work
     Delegates to :meth:`Workspace.create`.
     """
     return Workspace.create(path, force=force)
+
+
+def collect(
+    scanpaths: dict[str, list[str]], on_options: list[str] | None = None
+) -> list["JobSpec"]:
+    """Discover test generators under *scanpaths* and store the resolved specs.
+
+    Opens the nearest existing workspace, runs collection, and returns the
+    resolved :class:`~_canary.jobspec.JobSpec` objects.  Raises
+    :class:`~_canary.workspace.NotAWorkspaceError` when no workspace exists.
+    """
+    return open_workspace().collect(scanpaths, on_options=on_options)

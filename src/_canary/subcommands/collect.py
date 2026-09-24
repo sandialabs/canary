@@ -38,6 +38,5 @@ class Collect(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Collect test cases from ``args.scanpaths`` into the current workspace."""
-        workspace = app.open_workspace()
-        workspace.collect(args.scanpaths, on_options=args.on_options)
+        app.collect(args.scanpaths, on_options=args.on_options)
         return 0
