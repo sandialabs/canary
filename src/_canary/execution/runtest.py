@@ -14,8 +14,8 @@ session timing and return-code aggregation.  The public
 * ``canary_runtests_report``
 
 The default ``canary_runtests`` hook implementation, :func:`default_runtests`,
-executes jobs through :class:`~_canary.queue_executor.ResourceQueueExecutor`.
-Jobs are placed into a :class:`~_canary.queue.ResourceQueue` backed by the
+executes jobs through :class:`~_canary.execution.queue_executor.ResourceQueueExecutor`.
+Jobs are placed into a :class:`~_canary.execution.queue.ResourceQueue` backed by the
 resource pool owned by ``config.resource_manager``.  Completed jobs are reported
 back to the workspace via the executor listener mechanism so result persistence
 and live view updates remain centralized in the parent process.

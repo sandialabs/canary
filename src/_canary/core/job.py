@@ -23,8 +23,6 @@ from typing import Literal
 from typing import MutableMapping
 
 from .. import config
-from ..execution.launcher import Launcher
-from ..execution.testexec import ExecutionSpace
 from ..util import json_helper as json
 from ..util import logging
 from ..util.compression import compress_str
@@ -40,6 +38,8 @@ from .status import Status
 from .timekeeper import Timekeeper
 
 if TYPE_CHECKING:
+    from ..execution.launcher import Launcher
+    from ..execution.testexec import ExecutionSpace
     from ..resource_pool.rpool import NodeRequest
     from .jobspec import JobSpec
     from .jobspec import Mask
@@ -301,7 +301,7 @@ class Job(BaseJob):
     def __init__(
         self,
         spec: "JobSpec",
-        workspace: ExecutionSpace,
+        workspace: "ExecutionSpace",
         dependencies: list[Dependency] | None = None,
         rparameters: dict[str, int] | None = None,
     ) -> None:
@@ -315,7 +315,7 @@ class Job(BaseJob):
         # transient during a run and would otherwise raise spuriously.
         self.rparameters = spec.rparameters if rparameters is None else rparameters
         pm = config.pluginmanager.hook
-        self.launcher: Launcher = pm.canary_runtest_launcher(case=self)
+        self.launcher: "Launcher" = pm.canary_runtest_launcher(case=self)
         self._mask: Mask | None = None
 
         # Resources assigned to this test during execution
