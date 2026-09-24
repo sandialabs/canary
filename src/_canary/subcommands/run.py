@@ -18,16 +18,16 @@ import yaml
 
 from .. import config
 from .. import rerun
+from ..app.run import RunOptions
+from ..app.run import run as app_run
 from ..collect import vc_prefixes
 from ..config.schemas import testpaths_schema
 from ..generate import Generator
 from ..hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json
-from ..util import logging
 from ..util.filesystem import working_dir
 from ..util.rich import bold
-from ..util.string import pluralize
 from ..view import ViewSettings
 from ..workspace import NotAWorkspaceError
 from ..workspace import Workspace
@@ -36,9 +36,6 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..jobspec import JobSpec
-
-logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -144,7 +141,7 @@ class Run(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        """Resolve the run request, load or create a workspace, run the session, and return its exit code."""
+        """Build the run request and options from *args* and delegate to ``app.run``."""
         request: RequestNode
         if req := getattr(args, "request", None):
             request = req
@@ -153,64 +150,20 @@ class Run(CanarySubcommand):
         if isinstance(request, TagRequest) and not request.value:
             request = TagRequest(value=config.get("run:default_tag"))
 
-        work_tree = args.work_tree or os.getcwd()
-        if args.wipe_workspace:
-            if not isinstance(request, ScanPathsRequest):
-                raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
-            Workspace.remove(work_tree)
-
-        workspace: Workspace
-        try:
-            workspace = Workspace.load(start=work_tree)
-        except NotAWorkspaceError:
-            workspace = Workspace.create(path=work_tree)
-        f = workspace.logs_dir / "canary.0.log"
-        h = logging.json_file_handler(f)
-        logging.add_handler(h)
-        # start, specids, runtag, and scanpaths are mutually exclusive
-        specs: list["JobSpec"]
-
-        if isinstance(request, ScanPathsRequest):
-            specs = workspace.create_selection(
-                tag=args.tag,
-                scanpaths=request.value,
-                on_options=args.on_options,
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                owners=args.owners,
-                regex=args.regex_filter,
-            )
-        else:
-            if isinstance(request, SpecIdsRequest):
-                specids = request.value
-                workspace.db.resolve_spec_ids(specids)
-                sids = [id[:7] for id in specids]
-                if len(sids) > 3:
-                    sids = [*sids[:2], "…", sids[-1]]
-                logger.info(f"[bold]Running[/] {pluralize('spec', len(sids))} {', '.join(sids)}")
-                specs = rerun.compute_rerun_closure(workspace.db, roots=specids)
-            elif isinstance(request, ViewPathsRequest):
-                logger.info("[bold]Running[/] tests from view paths")
-                specs = rerun.get_specs_from_view(workspace.db, prefixes=request.value)
-            else:
-                assert isinstance(request, TagRequest)
-                tag = request.value
-                logger.info(f"[bold]Running[/] tests in tag {tag}")
-                specs = rerun.get_specs(workspace.db, tag=tag)
-            workspace.apply_selection_rules(
-                specs,
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                owners=args.owners,
-                regex=args.regex_filter,
-            )
-        inplace: bool = isinstance(request, ViewPathsRequest)
-        view_t: ViewSettings | None = None
-        if user_view_args := args.view:
-            view_t = ViewSettings(**user_view_args)
-        only = resolve_rerun_strategy(args.only, request)
-        session = workspace.run(specs, inplace=inplace, only=only, view_t=view_t)
-        return session.returncode
+        view = ViewSettings(**args.view) if args.view else None
+        options = RunOptions(
+            tag=args.tag,
+            on_options=args.on_options,
+            keyword_exprs=args.keyword_exprs,
+            parameter_expr=args.parameter_expr,
+            owners=args.owners,
+            regex=args.regex_filter,
+            only=args.only,
+            view=view,
+            wipe_workspace=bool(args.wipe_workspace),
+            work_tree=args.work_tree,
+        )
+        return app_run(request, options)
 
 
 def setdefault(obj, attr, default):
@@ -220,25 +173,6 @@ def setdefault(obj, attr, default):
     elif getattr(obj, attr) is None:
         setattr(obj, attr, default)
     return getattr(obj, attr)
-
-
-def resolve_rerun_strategy(requested: str | None, request: "RequestNode") -> str:
-    """Return the effective ``--only`` rerun strategy for *request*.
-
-    An explicit ``--only`` always wins.  When it is unset, re-running specific
-    tests by ID or view path defaults to ``all`` (run exactly what was named,
-    even if it already passed) while every other request defaults to
-    ``not_pass``.  The ID/view default is logged so it is not a silent override
-    of the usual default.
-    """
-    if requested is not None:
-        return requested
-    if isinstance(request, (SpecIdsRequest, ViewPathsRequest)):
-        logger.info(
-            "Re-running the requested tests with [bold]--only all[/] (pass --only to change)"
-        )
-        return "all"
-    return "not_pass"
 
 
 class StyleAction(argparse.Action):

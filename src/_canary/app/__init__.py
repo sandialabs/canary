@@ -17,5 +17,7 @@ from .facade import collect
 from .facade import create_workspace
 from .facade import get_event_bus
 from .facade import open_workspace
+from .run import RunOptions
+from .run import run
 
-__all__ = ["collect", "create_workspace", "open_workspace", "get_event_bus"]
+__all__ = ["collect", "create_workspace", "open_workspace", "get_event_bus", "run", "RunOptions"]

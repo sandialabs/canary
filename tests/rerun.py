@@ -233,33 +233,27 @@ def test_blocked_downstream_included_in_failed_rerun(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_explicit_only_always_wins_over_request_default():
+def test_explicit_only_always_wins_over_request_kind():
     """An explicit --only is honored regardless of the request kind."""
-    from _canary.subcommands.run import SpecIdsRequest
-    from _canary.subcommands.run import resolve_rerun_strategy
+    from _canary.app.run import resolve_only
 
-    request = SpecIdsRequest(value=["a" * 64])
-    assert resolve_rerun_strategy("failed", request) == "failed"
+    assert resolve_only("failed", "specids") == "failed"
 
 
 def test_id_and_view_requests_default_to_all():
     """Re-running by ID or view path defaults to 'all' when --only is unset."""
-    from _canary.subcommands.run import SpecIdsRequest
-    from _canary.subcommands.run import ViewPathsRequest
-    from _canary.subcommands.run import resolve_rerun_strategy
+    from _canary.app.run import resolve_only
 
-    assert resolve_rerun_strategy(None, SpecIdsRequest(value=["a" * 64])) == "all"
-    assert resolve_rerun_strategy(None, ViewPathsRequest(value=["p/%"])) == "all"
+    assert resolve_only(None, "specids") == "all"
+    assert resolve_only(None, "viewpaths") == "all"
 
 
 def test_other_requests_default_to_not_pass():
     """Scan-path and tag requests keep the not_pass default when --only is unset."""
-    from _canary.subcommands.run import ScanPathsRequest
-    from _canary.subcommands.run import TagRequest
-    from _canary.subcommands.run import resolve_rerun_strategy
+    from _canary.app.run import resolve_only
 
-    assert resolve_rerun_strategy(None, ScanPathsRequest(value={})) == "not_pass"
-    assert resolve_rerun_strategy(None, TagRequest(value="smoke")) == "not_pass"
+    assert resolve_only(None, "scanpaths") == "not_pass"
+    assert resolve_only(None, "tag") == "not_pass"
 
 
 # ---------------------------------------------------------------------------
