@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
     from ..execution.runtest import Runner
-    from ..workspace import Workspace
+    from ..session.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -91,7 +91,7 @@ class JsonReportCommand(CanaryReporter):
         return 0
 
     def run_create(self, args: Namespace) -> None:
-        from ..workspace import Workspace
+        from ..session.workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()

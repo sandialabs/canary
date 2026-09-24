@@ -33,38 +33,38 @@ from typing import Any
 
 import yaml
 
-from . import config
-from . import select
-from . import version
-from .collect import Collector
-from .config import config as config_mod
-from .core import jobspec
-from .core import rules
-from .core.job import Dependency
-from .core.job import Job
-from .core.job import Measurements
-from .error import StopExecution
-from .error import notests_exit_status
-from .execution.runtest import Runner
-from .execution.runtest import canary_runtests
-from .execution.testexec import ExecutionSpace
-from .generate import Generator
-from .generator import AbstractTestGenerator
-from .persistence.database import WorkspaceDatabase
-from .util import json_helper as json
-from .util import logging
-from .util.filesystem import async_rmtree
-from .util.filesystem import force_remove
-from .util.filesystem import write_directory_tag
-from .util.names import unique_random_name
-from .view import ResultsView
-from .view import ViewManager
-from .view import ViewSettings
+from .. import config
+from .. import select
+from .. import version
+from ..collect import Collector
+from ..config import config as config_mod
+from ..core import jobspec
+from ..core import rules
+from ..core.job import Dependency
+from ..core.job import Job
+from ..core.job import Measurements
+from ..error import StopExecution
+from ..error import notests_exit_status
+from ..execution.runtest import Runner
+from ..execution.runtest import canary_runtests
+from ..execution.testexec import ExecutionSpace
+from ..generate import Generator
+from ..generator import AbstractTestGenerator
+from ..persistence.database import WorkspaceDatabase
+from ..util import json_helper as json
+from ..util import logging
+from ..util.filesystem import async_rmtree
+from ..util.filesystem import force_remove
+from ..util.filesystem import write_directory_tag
+from ..util.names import unique_random_name
+from ..view import ResultsView
+from ..view import ViewManager
+from ..view import ViewSettings
 
 if TYPE_CHECKING:
-    from .core.jobspec import JobSpec
-    from .execution.queue_executor import EventTypes
-    from .persistence.database import ResultListener
+    from ..core.jobspec import JobSpec
+    from ..execution.queue_executor import EventTypes
+    from ..persistence.database import ResultListener
 
 logger = logging.get_logger(__name__)
 
@@ -891,7 +891,7 @@ class Workspace:
         Returns:
             A list of Job objects in static dependency order.
         """
-        from .core.jobspec_graph import make_spec_graph
+        from ..core.jobspec_graph import make_spec_graph
 
         lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
@@ -984,7 +984,7 @@ class Workspace:
         Returns:
             A list of constructed Job objects.
         """
-        from .core.jobspec_graph import make_spec_graph
+        from ..core.jobspec_graph import make_spec_graph
 
         lookup: dict[str, Job] = {}
         jobs: list[Job] = []

@@ -339,7 +339,7 @@ def flux_exec(args: argparse.Namespace) -> int:
 
     from _canary import config
     from _canary.core.job import Job
-    from _canary.workspace import Workspace
+    from _canary.session.workspace import Workspace
 
     workspace = Workspace.load()
     session_dir = workspace.sessions_dir / args.session

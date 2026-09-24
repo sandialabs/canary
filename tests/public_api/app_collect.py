@@ -12,7 +12,7 @@ scan paths, persists them, and returns the resolved specs -- the same contract
 
 import canary
 from _canary import app
-from _canary.workspace import NotAWorkspaceError
+from _canary.session.workspace import NotAWorkspaceError
 
 PYT_BODY = """\
 import sys

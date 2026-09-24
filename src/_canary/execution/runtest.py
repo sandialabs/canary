@@ -64,7 +64,7 @@ from .queue import ResourceQueue
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
-    from ..workspace import Workspace
+    from ..session.workspace import Workspace
 
 
 logger = logging.get_logger(__name__)

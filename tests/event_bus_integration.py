@@ -16,8 +16,8 @@ import argparse
 import canary
 from _canary import app
 from _canary.events import Event
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 PYT_BODY = """\
 import sys

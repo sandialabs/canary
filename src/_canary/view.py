@@ -39,8 +39,8 @@ from .util import logging
 from .util.filesystem import force_remove
 
 if TYPE_CHECKING:
-    from .workspace import Session
-    from .workspace import Workspace
+    from .session.workspace import Session
+    from .session.workspace import Workspace
 
 ViewWhen = Literal["always", "never", "on_success", "on_failure"]
 ViewOnly = Literal["all", "failed", "not_pass", "passed"]

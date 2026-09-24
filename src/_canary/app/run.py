@@ -23,11 +23,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .. import rerun
+from ..session.workspace import NotAWorkspaceError
+from ..session.workspace import Workspace
 from ..util import logging
 from ..util.string import pluralize
 from ..view import ViewSettings
-from ..workspace import NotAWorkspaceError
-from ..workspace import Workspace
 
 logger = logging.get_logger(__name__)
 

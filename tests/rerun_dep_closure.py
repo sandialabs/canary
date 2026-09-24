@@ -20,7 +20,7 @@ from _canary.core.job import JobPhase
 from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import SpecDependency
 from _canary.core.status import Status
-from _canary.workspace import Workspace
+from _canary.session.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

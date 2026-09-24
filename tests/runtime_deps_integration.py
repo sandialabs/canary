@@ -22,7 +22,7 @@ from _canary.core.job import Dependency
 from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
 from _canary.execution.testexec import ExecutionSpace
-from _canary.workspace import Workspace
+from _canary.session.workspace import Workspace
 
 
 def make_job(tmp_path: Path, name: str, timeout: float = 10.0) -> Job:

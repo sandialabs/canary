@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from .resource_pool.rpool import Outcome
     from .select import RuntimeSelector
     from .select import Selector
+    from .session.workspace import Session
     from .subcommands.base import CanarySubcommand
-    from .workspace import Session
 
 
 project_name = "canary"

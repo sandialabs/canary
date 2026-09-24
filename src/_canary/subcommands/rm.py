@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..hookspec import hookimpl
+from ..session.workspace import Workspace
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 logger = logging.get_logger(__name__)

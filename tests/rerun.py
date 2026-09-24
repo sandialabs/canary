@@ -30,8 +30,8 @@ from _canary.core.jobspec import JobSpec
 from _canary.core.rules import RerunRule
 from _canary.execution.testexec import ExecutionSpace
 from _canary.select import RuntimeSelector
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 # ---------------------------------------------------------------------------
 # Helpers

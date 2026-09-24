@@ -147,7 +147,7 @@ def two(job):
 
 def test_setup_teardown_run_end_to_end(tmp_path):
     import canary
-    from _canary.workspace import Workspace
+    from _canary.session.workspace import Workspace
 
     root = tmp_path / "suite"
     root.mkdir()

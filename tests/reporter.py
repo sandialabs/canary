@@ -19,8 +19,8 @@ from _canary.reporters.junit import JunitReportRequest
 from _canary.reporters.markdown import MarkdownReporter
 from _canary.reporters.markdown import MarkdownReportRequest
 from _canary.reporters.reporter import running_in_ci
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 
 @pytest.fixture(scope="module")

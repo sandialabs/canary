@@ -19,8 +19,8 @@ from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
 from _canary.error import StopExecution
 from _canary.execution.testexec import ExecutionSpace
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 
 def write(path: Path, text: str) -> None:

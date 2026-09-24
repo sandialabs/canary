@@ -30,8 +30,8 @@ from typing import Literal
 from typing import Optional
 
 from ..collect import vc_prefixes
-from ..workspace import NotAWorkspaceError
-from ..workspace import Workspace
+from ..session.workspace import NotAWorkspaceError
+from ..session.workspace import Workspace
 
 ScanPathPayload = dict[str, list[str]]  # root -> [files]; empty list means "scan all"
 ViewPathPayload = list[str]  # e.g. ["rel/path/%", ...]

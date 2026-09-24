@@ -4,13 +4,13 @@
 
 """Canary application layer.
 
-A single in-process entry point for opening a Canary :class:`~_canary.workspace.Workspace`
+A single in-process entry point for opening a Canary :class:`~_canary.session.workspace.Workspace`
 and observing application events, intended to be shared by every interface
 (CLI, and future TUI/GUI/VS Code) so business logic lives here rather than in
 any one interface.
 
 This module is a facade: it delegates to the existing implementation
-(:class:`~_canary.workspace.Workspace`) and adds no behavior of its own.
+(:class:`~_canary.session.workspace.Workspace`) and adds no behavior of its own.
 """
 
 from .exec_ import exec_job

@@ -7,11 +7,11 @@ import json
 import os
 
 import canary
+from _canary.session.workspace import Workspace
 from _canary.subcommands.run import PathSpec
 from _canary.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 
 def test_pathspec_parse_new(tmpdir):

@@ -7,8 +7,8 @@ import importlib.resources
 from pathlib import Path
 
 import _canary.config as config
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 from canary_hpc.conductor import CanaryHPCConductor
 
 

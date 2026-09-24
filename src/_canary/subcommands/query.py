@@ -59,11 +59,11 @@ from typing import Any
 import canary
 
 from ..hookspec import hookimpl
+from ..session.workspace import Workspace
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
 from ..util.query_data import print_query_paths
 from ..util.query_data import query_json
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
