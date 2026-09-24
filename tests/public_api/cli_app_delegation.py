@@ -34,6 +34,7 @@ FACADE_ROUTED_COMMANDS = {
     "info": {"open_workspace"},
     "status": {"open_workspace"},
     "rebaseline": {"rebaseline"},
+    "exec": {"exec_job"},
 }
 
 
@@ -73,6 +74,7 @@ NO_DIRECT_DB_COMMANDS = {
     "info",
     "status",
     "rebaseline",
+    "exec",
 }
 
 

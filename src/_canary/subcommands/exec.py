@@ -5,21 +5,19 @@
 """Implements the ``canary exec`` subcommand for running a single job directly."""
 
 import argparse
-import datetime
 from typing import TYPE_CHECKING
 
 import rich
 
+from .. import app
 from .. import config
 from ..hookspec import hookimpl
-from ..job import Job
-from ..runtest import JobExecutor
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
+    from ..job import Job
 
 logger = logging.get_logger(__name__)
 
@@ -42,67 +40,39 @@ class Exec(CanarySubcommand):
         parser.add_argument("spec", help="Run this spec ID")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        """Resolve the spec, verify it is ready to run, execute it, and persist the result."""
-        workspace = Workspace.load()
-        now = datetime.datetime.now()
-        session_name = args.session or now.isoformat(timespec="microseconds").replace(":", "-")
-        session_dir = workspace.sessions_dir / session_name
-        spec = workspace.find_jobspec(args.spec)
-        specs = workspace.db.load_specs(ids=[spec.id], include_upstreams=True)
-        jobs = workspace.construct_jobs(specs, session_dir)
-        job: Job = next(j for j in jobs if j.id == spec.id)
-        job.status.reset()
-        job.state.reset()
-        if job.is_ready():
-            self.run_job(job)
-            workspace.db.put_results(job)
-        else:
-            raise RuntimeError(f"{job}: job is not ready to run")
+        """Run the requested job through the app, rendering its live status."""
+        renderer = _StatusRenderer()
+        job = app.exec_job(args.spec, session=args.session, observer=renderer)
+        renderer.print_final(job)
         return 0
 
-    def run_job(self, job: Job) -> None:
-        """Stage, run, and tear down *job*, printing live status updates.
 
-        Delegates the phase orchestration to :class:`JobExecutor` so that hook
-        exception handling and the final ``job.save()`` behave identically to
-        the in-session scheduler.  A small event sink renders the live status
-        lines from the executor's event stream.
-        """
-        style = config.getoption("console_style") or {}
-        namefmt = style.get("name", "short")
-        display_name = job.display_name(style="rich", resolve=namefmt == "long")
+class _StatusRenderer:
+    """Render ``canary exec``'s live status lines from executor events.
 
-        sink = _StatusSink(job, display_name)
-        JobExecutor()(job, sink)
-        sink.print_final()
-
-
-class _StatusSink:
-    """Adapt :class:`JobExecutor` events to ``canary exec``'s live status lines.
-
-    In the in-session scheduler these events drive job phase transitions via the
-    executor's slot; here there is no slot, so this sink applies the same
-    transitions to the job and renders the live status lines.
+    The application layer applies the job's phase transitions; this observer
+    only reacts to events for display.  The job's display name is resolved lazily
+    on the first rendered event so it reflects the current console style.
     """
 
-    def __init__(self, job: Job, display_name: str) -> None:
-        self.job = job
-        self.display_name = display_name
+    def __init__(self) -> None:
+        self._display_name: str | None = None
 
-    def put(self, event: dict) -> None:
+    def __call__(self, event: dict) -> None:
         name = event.get("event")
-        at = event.get("timestamp")
-        if name == "job_submitted":
-            self.job.on_submit(at=at)
-        elif name == "job_staged":
-            self.job.on_stage(at=at)
-            rich.print(f"{self.display_name}: [blue]STARTING[/]")
-        elif name == "job_started":
-            self.job.on_start(at=at)
-            rich.print(f"{self.display_name}: [blue]RUNNING[/]")
-        elif name == "job_stopped":
-            self.job.on_stop(at=at)
+        job = event.get("job")
+        if name == "job_staged" and job is not None:
+            rich.print(f"{self._name(job)}: [blue]STARTING[/]")
+        elif name == "job_started" and job is not None:
+            rich.print(f"{self._name(job)}: [blue]RUNNING[/]")
 
-    def print_final(self) -> None:
-        st = self.job.status.display_name(style="rich")
-        rich.print(f"{self.display_name}: {st}")
+    def print_final(self, job: "Job") -> None:
+        status = job.status.display_name(style="rich")
+        rich.print(f"{self._name(job)}: {status}")
+
+    def _name(self, job: "Job") -> str:
+        if self._display_name is None:
+            style = config.getoption("console_style") or {}
+            resolve = style.get("name", "short") == "long"
+            self._display_name = job.display_name(style="rich", resolve=resolve)
+        return self._display_name

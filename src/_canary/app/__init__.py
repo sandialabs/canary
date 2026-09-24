@@ -13,6 +13,7 @@ This module is a facade: it delegates to the existing implementation
 (:class:`~_canary.workspace.Workspace`) and adds no behavior of its own.
 """
 
+from .exec_ import exec_job
 from .facade import collect
 from .facade import create_workspace
 from .facade import delete_selection
@@ -37,6 +38,7 @@ __all__ = [
     "run",
     "RunOptions",
     "rebaseline",
+    "exec_job",
     "select",
     "delete_selection",
     "rename_selection",
