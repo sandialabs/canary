@@ -119,3 +119,20 @@ def get_tag_info(tag: str) -> dict:
     :class:`~_canary.database.NotASelection` if *tag* is not a selection.
     """
     return open_workspace().tag_info(tag)
+
+
+def get_results(ids: list[str] | None = None, include_upstreams: bool = False) -> dict[str, dict]:
+    """Return the latest result record for each spec in the current workspace.
+
+    Delegates to :meth:`WorkspaceDatabase.get_results`; see it for the returned
+    mapping and the meaning of *ids*/*include_upstreams*.
+    """
+    return open_workspace().db.get_results(ids, include_upstreams=include_upstreams)
+
+
+def get_result_history(spec_id: str) -> list:
+    """Return all historical result records for *spec_id*, oldest first.
+
+    Delegates to :meth:`WorkspaceDatabase.get_result_history`.
+    """
+    return open_workspace().db.get_result_history(spec_id)

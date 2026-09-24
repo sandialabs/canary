@@ -139,8 +139,7 @@ class Status(CanarySubcommand):
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
-        workspace = app.open_workspace()
-        results = workspace.db.get_results()
+        results = app.get_results()
 
         if getattr(args, "output_json", False):
             self.print_json(results, args)
@@ -297,12 +296,11 @@ class Status(CanarySubcommand):
 
     def print_spec_status_history(self, ids: list[str], args: "argparse.Namespace") -> None:
         """Print the full history of results across sessions for each spec ID in *ids*."""
-        workspace = app.open_workspace()
         table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for id in ids:
-            results = workspace.db.get_result_history(id)
+            results = app.get_result_history(id)
             for entry in results:
                 row: list[str] = []
                 row.append(entry["spec_name"])

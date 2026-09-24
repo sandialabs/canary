@@ -72,3 +72,27 @@ def test_wipe_requires_scanpaths(tmp_path, monkeypatch):
             pass
         else:
             raise AssertionError("wipe with a non-scanpaths request must raise")
+
+
+def test_results_are_readable_through_facade_after_a_run(tmp_path, monkeypatch):
+    """After a run, app.get_results/get_result_history expose the persisted results.
+
+    This is the read seam the status command depends on instead of touching
+    ``workspace.db`` directly.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "a.pyt").write_text(PYT_BODY)
+
+    with canary.config.override():
+        rc = app.run(_Request(kind="scanpaths", value={str(tmp_path): []}))
+        assert rc == 0
+
+        results = app.get_results()
+        assert len(results) == 1
+        (spec_id, record) = next(iter(results.items()))
+        assert record["spec_name"] == "a"
+        assert record["status"].is_success()
+
+        history = app.get_result_history(spec_id)
+        assert len(history) >= 1
+        assert history[-1]["id"] == spec_id

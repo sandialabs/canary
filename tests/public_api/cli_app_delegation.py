@@ -58,3 +58,19 @@ def test_clean_subcommand_does_not_call_workspace_directly(modname):
 
     assert "Workspace.load(" not in source, f"{modname} should route load through app"
     assert "Workspace.create(" not in source, f"{modname} should route create through app"
+
+
+# Commands whose domain data access has been fully hoisted behind the facade:
+# they must not reach into the repository (``workspace.db``) directly.
+NO_DIRECT_DB_COMMANDS = {"collect", "gc", "init", "view", "select", "selection", "info", "status"}
+
+
+@pytest.mark.parametrize("modname", sorted(NO_DIRECT_DB_COMMANDS))
+def test_migrated_subcommand_does_not_touch_the_database_directly(modname):
+    """Guard against reintroducing raw ``workspace.db`` access in a migrated command."""
+    module = importlib.import_module(f"_canary.subcommands.{modname}")
+    source = inspect.getsource(module)
+
+    assert ".db." not in source, (
+        f"{modname} should read/write through the app facade, not workspace.db"
+    )
