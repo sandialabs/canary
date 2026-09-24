@@ -99,3 +99,30 @@ def test_tui_run_once_is_noninteractive_and_returns_zero(tmp_path):
 def test_public_app_exposes_query_surface():
     for name in ("list_jobs", "job_history", "workspace_summary", "status_counts"):
         assert hasattr(canary.app, name)
+
+
+def test_model_marks_dirty_on_bus_event():
+    """A job event flips the model's dirty flag so the runner refreshes promptly."""
+    from _canary.events import EventBus
+
+    bus = EventBus()
+    model = tui.ExplorerModel()
+    model.subscribe(bus)
+    try:
+        assert model.consume_dirty() is False  # nothing yet
+        bus.emit("job_started")
+        assert model.consume_dirty() is True  # event observed
+        assert model.consume_dirty() is False  # flag cleared (edge-triggered)
+    finally:
+        model.unsubscribe()
+
+
+def test_model_unsubscribe_stops_marking_dirty():
+    from _canary.events import EventBus
+
+    bus = EventBus()
+    model = tui.ExplorerModel()
+    model.subscribe(bus)
+    model.unsubscribe()
+    bus.emit("job_finished")
+    assert model.consume_dirty() is False

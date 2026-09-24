@@ -36,20 +36,53 @@ from .state import ExplorerState
 if TYPE_CHECKING:
     from ..app.queries import JobView
     from ..app.queries import WorkspaceSummary
+    from ..events import Event
+    from ..events import EventBus
 
 
 class ExplorerModel:
     """Bridges the application query surface to the pure UI state.
 
     Kept separate from the runner so it can be exercised without a terminal.
+
+    When :meth:`subscribe` is given an :class:`~_canary.events.EventBus`, job
+    events flip a thread-safe *dirty* flag; the runner polls
+    :meth:`consume_dirty` so a live session's progress is reflected promptly
+    without waiting for the periodic timer.  Event delivery only marks the model
+    dirty -- the authoritative rows still come from :meth:`refresh` (the DB),
+    keeping the database the source of truth.
     """
 
     def __init__(self) -> None:
         self.state = ExplorerState()
+        self._dirty = threading.Event()
+        self._bus: "EventBus | None" = None
 
     def refresh(self) -> None:
         """Pull the latest job rows from the application into the UI state."""
         self.state.update_jobs(self.fetch_jobs())
+
+    def subscribe(self, bus: "EventBus") -> None:
+        """Subscribe to *bus*; any job event marks the model dirty for refresh."""
+        self._bus = bus
+        bus.subscribe(self._on_event)
+
+    def unsubscribe(self) -> None:
+        """Detach from the event bus, if subscribed."""
+        if self._bus is not None:
+            self._bus.unsubscribe(self._on_event)
+            self._bus = None
+
+    def _on_event(self, event: "Event") -> None:
+        # Runs on the publisher's thread; only sets a flag (no query/render I/O).
+        self._dirty.set()
+
+    def consume_dirty(self) -> bool:
+        """Return whether an event arrived since the last call, clearing the flag."""
+        if self._dirty.is_set():
+            self._dirty.clear()
+            return True
+        return False
 
     # These thin wrappers exist so tests can subclass/patch the data source.
     def fetch_jobs(self) -> "list[JobView]":
@@ -134,11 +167,13 @@ def run(
     """
     console = console or Console(stderr=True)
     model = ExplorerModel()
+    model.subscribe(queries.get_event_bus())
     model.refresh()
 
     interactive = (not once) and sys.stdin.isatty() and console.is_terminal
     if not interactive:
         console.print(model.frame())
+        model.unsubscribe()
         return 0
 
     keys: "queue.Queue[str]" = queue.Queue()
@@ -157,7 +192,9 @@ def run(
                         if model.state.handle_key(key):
                             dirty = True
                 now = time.monotonic()
-                if now - last_refresh >= refresh_interval:
+                # Refresh on a job event (live session progress) or the timer,
+                # whichever comes first; both re-read authoritative rows from the DB.
+                if model.consume_dirty() or now - last_refresh >= refresh_interval:
                     model.refresh()
                     last_refresh = now
                     dirty = True
@@ -166,6 +203,7 @@ def run(
                 else:
                     time.sleep(0.05)
     finally:
+        model.unsubscribe()
         stop.set()
         reader.join(timeout=1.0)
     return 0

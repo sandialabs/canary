@@ -49,7 +49,12 @@ def test_run_publishes_job_lifecycle_events_to_bus(tmp_path):
         assert expected in names, f"missing {expected}; saw {names}"
     assert names.index("job_submitted") < names.index("job_started") < names.index("job_finished")
 
-    # Each lifecycle event carries the execution slot (hence the job).
+    # Each lifecycle event carries a primitives-only JobEvent projection -- no
+    # _canary runtime object crosses the bus (the interface boundary contract).
     finished = next(e for e in received if e.name == "job_finished")
-    assert "slot" in finished.payload
-    assert finished.payload["slot"].job is not None
+    job_event = finished.payload["job"]
+    assert isinstance(job_event, dict)
+    assert job_event["phase"] == "DONE"
+    assert job_event["status"] == "PASS"
+    assert isinstance(job_event["id"], str) and job_event["id"]
+    assert all(not type(v).__module__.startswith("_canary") for v in job_event.values())

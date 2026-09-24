@@ -24,6 +24,7 @@ from ..core.job import JobPhase
 from ..error import StopExecution
 from ..events import Event
 from ..events import EventBus
+from ..events import project_job_event
 from ..util import logging
 from ..util import multiprocessing as mp
 from ..util.misc import boolean
@@ -558,8 +559,30 @@ class ResourceQueueExecutor:
         for cb in self.listeners:
             cb(event, *args)
         if self.event_bus is not None:
-            payload = {"slot": args[0]} if args else {}
-            self.event_bus.publish(Event(name=event, payload=payload))
+            self.event_bus.publish(Event(name=event, payload=self._event_payload(args)))
+
+    @staticmethod
+    def _event_payload(args: tuple[Any, ...]) -> dict[str, Any]:
+        """Project the (slot,) notify args into a primitives-only bus payload.
+
+        The internal listener path above still receives the live ``ExecutionSlot``;
+        the bus gets a :class:`~_canary.events.JobEvent` so no runtime object
+        crosses the interface boundary.  Returns an empty payload when there is
+        no slot (e.g. session-level events).
+        """
+        if not args:
+            return {}
+        slot = args[0]
+        job = getattr(slot, "job", None)
+        if job is None:
+            return {}
+        job_event = project_job_event(
+            job,
+            qrank=getattr(slot, "qrank", -1),
+            qsize=getattr(slot, "qsize", -1),
+            worker_id=getattr(slot, "worker_id", -1),
+        )
+        return {"job": job_event}
 
     def _check_finished_processes(self) -> None:
 

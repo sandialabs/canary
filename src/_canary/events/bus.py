@@ -7,9 +7,14 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Literal
+from typing import TypedDict
+
+if TYPE_CHECKING:
+    from ..core.job import BaseJob
 
 # ``job_submitted`` .. ``job_died`` are the names the execution layer emits
 # today (see the ``queue.put({"event": ...})`` sites in ``queue_executor`` and
@@ -48,13 +53,80 @@ JOB_LIFECYCLE_EVENTS: tuple[str, ...] = (
 class Event:
     """An immutable record that something happened.
 
-    ``payload`` carries event-specific data; for job events it typically holds
-    the job (or ``ExecutionSlot``) and a timestamp, mirroring the dict payloads
-    used by the current protocol.
+    ``payload`` carries event-specific data.  For job-lifecycle events the
+    payload is a :class:`JobEvent` -- a flat, primitives-only projection of the
+    job so that subscribers (TUI, GUI, and a future REST/WS bridge) never touch
+    a ``_canary`` runtime object.  This keeps the bus a stable interface
+    boundary: the same payload can be delivered in-process or serialized across
+    a transport without change.
     """
 
     name: str
     payload: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
+class JobEvent(TypedDict):
+    """A flat, primitives-only projection of a job at the moment an event fired.
+
+    Field set intentionally mirrors :class:`_canary.app.queries.JobView` so an
+    interface can update a table row directly from an event without a follow-up
+    query.  Every value is a ``str``/``float``/``int``; no ``_canary`` type
+    leaks onto the bus.
+    """
+
+    id: str
+    short_id: str
+    name: str
+    fullname: str
+    phase: str
+    status: str
+    status_label: str
+    status_markup: str
+    status_glyph: str
+    reason: str
+    duration: float
+    qrank: int
+    qsize: int
+    worker_id: int
+    at: float
+
+
+def project_job_event(
+    job: "BaseJob", *, qrank: int = -1, qsize: int = -1, worker_id: int = -1, at: float = 0.0
+) -> JobEvent:
+    """Project a runtime :class:`~_canary.core.job.BaseJob` into a :class:`JobEvent`.
+
+    Reads only through the job's public accessors and tolerates partially
+    populated jobs (an event can fire before timing is recorded), so it never
+    raises on the execution hot path.
+    """
+    status = job.status
+    state = job.state
+    try:
+        duration = float(job.timekeeper.total())
+    except Exception:  # noqa: BLE001 - timing is advisory; never break the bus
+        duration = 0.0
+    if duration < 0:
+        duration = 0.0
+    category = getattr(getattr(status, "category", None), "value", "") or ""
+    spec_id = job.id
+    return JobEvent(
+        id=spec_id,
+        short_id=spec_id[:8],
+        name=getattr(job, "name", ""),
+        fullname=getattr(job, "fullname", ""),
+        phase=getattr(getattr(state, "phase", None), "name", "") or "",
+        status=category,
+        status_label=status.display_name(),
+        status_markup=status.display_name(style="rich"),
+        status_glyph=status.glyph(),
+        reason=getattr(status, "reason", None) or "",
+        duration=duration,
+        qrank=qrank,
+        qsize=qsize,
+        worker_id=worker_id,
+        at=at,
+    )
 
 
 Subscriber = Callable[[Event], None]

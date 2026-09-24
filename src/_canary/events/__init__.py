@@ -23,6 +23,8 @@ layer.
 from .bus import Event
 from .bus import EventBus
 from .bus import EventName
+from .bus import JobEvent
 from .bus import Subscriber
+from .bus import project_job_event
 
-__all__ = ["Event", "EventBus", "EventName", "Subscriber"]
+__all__ = ["Event", "EventBus", "EventName", "JobEvent", "Subscriber", "project_job_event"]

@@ -21,8 +21,13 @@ _event_bus = EventBus()
 def get_event_bus() -> EventBus:
     """Return the process-wide application :class:`~_canary.events.EventBus`.
 
-    The bus has no publishers wired to it yet; it is the subscription point
-    future interfaces (and the execution layer) will use for live updates.
+    During an in-process run the executor publishes job-lifecycle events here
+    (see :meth:`ResourceQueueExecutor.notify_listeners`), each carrying a
+    primitives-only :class:`~_canary.events.JobEvent` payload.  Interfaces (the
+    TUI today; a future GUI/REST bridge) subscribe to observe live progress.
+    Cross-process delivery -- when the observing interface is a separate process
+    from the run -- is out of scope for this in-process bus and belongs to a
+    future transport.
     """
     return _event_bus
 

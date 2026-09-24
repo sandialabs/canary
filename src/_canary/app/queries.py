@@ -17,9 +17,20 @@ from __future__ import annotations
 from typing import Any
 from typing import TypedDict
 
+from .facade import get_event_bus
 from .facade import get_result_history
 from .facade import get_results
 from .facade import get_workspace_info
+
+__all__ = [
+    "JobView",
+    "WorkspaceSummary",
+    "get_event_bus",
+    "job_history",
+    "list_jobs",
+    "status_counts",
+    "workspace_summary",
+]
 
 
 class JobView(TypedDict):

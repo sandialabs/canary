@@ -15,6 +15,7 @@ import pytest
 
 from _canary.events import Event
 from _canary.events import EventBus
+from _canary.events import JobEvent
 from _canary.events.bus import JOB_LIFECYCLE_EVENTS
 from _canary.execution.queue_executor import EventTypes
 
@@ -79,3 +80,13 @@ def test_canonical_names_cover_every_executor_event():
     executor_names = set(getattr(EventTypes, "__args__", ()))
     assert executor_names, "expected EventTypes to be a Literal with names"
     assert executor_names.issubset(set(JOB_LIFECYCLE_EVENTS))
+
+
+def test_job_event_field_set_matches_job_view_shape():
+    """JobEvent mirrors JobView so an interface can update a row without a re-query."""
+    from _canary.app.queries import JobView
+
+    shared = set(JobEvent.__annotations__) & set(JobView.__annotations__)
+    # The status/identity/timing fields an interface renders must appear in both.
+    for field in ("id", "short_id", "name", "fullname", "phase", "status", "duration"):
+        assert field in shared
