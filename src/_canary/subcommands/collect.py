@@ -7,11 +7,11 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..collect import Collector
 from ..generate import Generator
 from ..hookspec import hookimpl
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -38,6 +38,6 @@ class Collect(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Collect test cases from ``args.scanpaths`` into the current workspace."""
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         workspace.collect(args.scanpaths, on_options=args.on_options)
         return 0

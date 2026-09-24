@@ -15,12 +15,12 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+from .. import app
 from ..hookspec import hookimpl
 from ..job import JobState
 from ..status import Status as _Status
 from ..util import glyphs
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -139,7 +139,7 @@ class Status(CanarySubcommand):
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         results = workspace.db.get_results()
 
         if getattr(args, "output_json", False):
@@ -297,7 +297,7 @@ class Status(CanarySubcommand):
 
     def print_spec_status_history(self, ids: list[str], args: "argparse.Namespace") -> None:
         """Print the full history of results across sessions for each spec ID in *ids*."""
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)

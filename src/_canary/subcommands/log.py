@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -96,7 +96,7 @@ class Log(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         """Display the session log or a specific job log file, paging if needed."""
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
 
         if not args.testspec:
             file = workspace.logs_dir / "canary.0.log"

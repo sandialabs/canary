@@ -5,9 +5,9 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
 from ..view import ViewSettings
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -43,6 +43,6 @@ class View(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         if args.view_subcommand in ("refresh", "create"):
             view_t = ViewSettings(when="always", only=args.only, mode=args.mode, name=args.name)
-            workspace = Workspace.load()
+            workspace = app.open_workspace()
             workspace.rebuild_view(view_t=view_t)
         return 0

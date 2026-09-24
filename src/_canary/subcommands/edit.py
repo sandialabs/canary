@@ -8,10 +8,10 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
 from ..util.editor import editor
 from ..workspace import NotAWorkspaceError
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ class Edit(CanarySubcommand):
 def find_file(testspec: str) -> str | None:
     """Return the source file path for *testspec* from the current workspace, or ``None``."""
     try:
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
     except NotAWorkspaceError:
         return None
     spec = workspace.find(spec=testspec)

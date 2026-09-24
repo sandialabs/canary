@@ -5,12 +5,12 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..collect import Collector
 from ..generate import Generator
 from ..hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class Selection(CanarySubcommand):
         p.add_argument("new", help="New tag name")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         if args.select_command == "create":
             if workspace.is_tag(args.tag):
                 raise ValueError(

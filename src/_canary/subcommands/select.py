@@ -5,10 +5,10 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -48,7 +48,7 @@ class Select(CanarySubcommand):
         Selector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         if args.delete_tag:
             workspace.db.delete_selection(args.tag)
         elif args.move_tag:

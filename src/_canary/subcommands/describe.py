@@ -10,12 +10,12 @@ from typing import Any
 
 import yaml
 
+from .. import app
 from .. import config
 from ..collect import Collector
 from ..hookspec import hookimpl
 from ..util.rich import colorize
 from ..util.serialize import serialize
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -58,7 +58,7 @@ class Describe(CanarySubcommand):
                 return 0
 
         # could be a job in the test session?
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         try:
             job_or_spec = workspace.find(job=args.testspec)
         except Exception:

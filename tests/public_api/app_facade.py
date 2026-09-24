@@ -56,12 +56,18 @@ def test_app_is_not_on_the_eager_import_path():
     """
     import importlib
 
-    for mod in ("canary", "_canary.app"):
-        sys.modules.pop(mod, None)
+    saved = {name: sys.modules[name] for name in ("canary", "_canary.app") if name in sys.modules}
+    try:
+        for name in ("canary", "_canary.app"):
+            sys.modules.pop(name, None)
 
-    importlib.import_module("canary")
-    assert "_canary.app" not in sys.modules
+        importlib.import_module("canary")
+        assert "_canary.app" not in sys.modules
 
-    import canary
+        import canary
 
-    assert canary.app is importlib.import_module("_canary.app")
+        assert canary.app is importlib.import_module("_canary.app")
+    finally:
+        # Restore the original module objects so later tests that captured
+        # ``_canary.app`` at import time keep identity with the live module.
+        sys.modules.update(saved)

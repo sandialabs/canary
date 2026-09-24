@@ -7,8 +7,8 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -36,6 +36,6 @@ class GarbageCollect(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         """Run garbage collection on the current workspace, respecting ``--dryrun``."""
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         workspace.gc(dryrun=args.dryrun)
         return 0

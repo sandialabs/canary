@@ -6,8 +6,8 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .. import app
 from ..hookspec import hookimpl
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -61,7 +61,7 @@ If no options are give, -x is assumed."""
         from ..job import Job
         from ..jobspec import JobSpec
 
-        workspace = Workspace.load()
+        workspace = app.open_workspace()
         f: Path | str
         if args.show_input or args.show_source_dir:
             spec: JobSpec = workspace.find(spec=args.testspec)
