@@ -10,6 +10,8 @@ Runs a tiny suite, then checks that the application query surface
 adapter over ``canary.app``; these tests pin that contract end-to-end.
 """
 
+import os
+
 import canary
 from _canary import tui
 from _canary.app import queries
@@ -161,29 +163,59 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     assert all(after[i] == "PASS" for i in ids)
 
 
-def test_model_edit_file_invokes_editor_and_detects_change(tmp_path, monkeypatch):
+def test_edit_uses_vim_and_ignores_env(tmp_path, monkeypatch):
+    """edit_file must launch vim, never $EDITOR/$VISUAL.
+
+    Inside a full-screen TUI, $VISUAL/$EDITOR are often a GUI editor (e.g.
+    ``code``) that detaches instead of blocking, so the TUI hardcodes vim
+    (see ExplorerModel.EDITOR).
+    """
+    import subprocess
+
+    # A GUI-ish editor is configured in the environment; it must NOT be used.
+    monkeypatch.setenv("EDITOR", "code --wait")
+    monkeypatch.setenv("VISUAL", "code --wait")
+
     target = tmp_path / "edit_me.pyt"
     target.write_text("original\n")
-    editor = tmp_path / "fake_editor.sh"
-    editor.write_text('#!/bin/bash\necho appended >> "$1"\n')
-    editor.chmod(0o755)
-    monkeypatch.setenv("EDITOR", str(editor))
-    monkeypatch.delenv("VISUAL", raising=False)
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        # Simulate the editor writing to the file with a later mtime (a real
+        # editor session takes far longer than the clock resolution).
+        target.write_text("original\nappended\n")
+        st = target.stat()
+        os.utime(target, (st.st_atime, st.st_mtime + 5))
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     changed = tui.ExplorerModel().edit_file(str(target))
 
     assert changed is True
-    assert target.read_text().splitlines()[-1] == "appended"
+    # vim was launched with the file -- not "code --wait".
+    assert calls == [["vim", str(target)]]
 
 
-def test_model_edit_file_reports_no_change_when_editor_leaves_file(tmp_path, monkeypatch):
+def test_edit_reports_no_change_when_file_untouched(tmp_path, monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 0))
     target = tmp_path / "untouched.pyt"
     target.write_text("original\n")
-    # An editor that exits without writing (e.g. :q) leaves the mtime intact.
-    editor = tmp_path / "noop_editor.sh"
-    editor.write_text("#!/bin/bash\ntrue\n")
-    editor.chmod(0o755)
-    monkeypatch.setenv("EDITOR", str(editor))
-    monkeypatch.delenv("VISUAL", raising=False)
+
+    assert tui.ExplorerModel().edit_file(str(target)) is False
+
+
+def test_edit_is_noop_when_editor_not_found(tmp_path, monkeypatch):
+    import subprocess
+
+    def raise_not_found(argv, **kw):
+        raise FileNotFoundError(argv[0])
+
+    monkeypatch.setattr(subprocess, "run", raise_not_found)
+    target = tmp_path / "x.pyt"
+    target.write_text("original\n")
 
     assert tui.ExplorerModel().edit_file(str(target)) is False

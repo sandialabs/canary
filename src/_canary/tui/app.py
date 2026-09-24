@@ -131,25 +131,34 @@ class ExplorerModel:
 
         return run_session(SpecIdsRequest(value=list(spec_ids)))
 
-    def edit_file(self, path: str) -> bool:
-        """Open *path* in the user's editor, returning whether it changed on disk.
+    #: The editor the TUI launches to edit a test file.  The TUI deliberately
+    #: hardcodes ``vim`` rather than honoring ``$VISUAL``/``$EDITOR`` (as the CLI
+    #: does): the TUI owns the full screen, and those variables frequently point
+    #: at a GUI editor (e.g. ``code``) that would detach instead of blocking,
+    #: making an in-terminal "edit" appear to do nothing.
+    EDITOR = "vim"
 
-        Resolves the editor from ``$VISUAL``/``$EDITOR`` (falling back to a
-        common default) and blocks until it exits.  The editor is a full-screen
-        program, so the runner suspends the live display and hands over the
-        terminal before calling this.  The mtime is compared so the runner can
-        offer to rerun only when the file was actually modified.
+    def edit_file(self, path: str) -> bool:
+        """Open *path* in ``vim``, returning whether it changed on disk.
+
+        The TUI uses ``vim`` directly (see :attr:`EDITOR`) instead of canary's
+        environment-driven editor selection, so it never lands on a GUI editor
+        that would detach.  The editor blocks, so the runner suspends the live
+        display and hands over the terminal first; the mtime is compared so a
+        rerun is offered only when the file actually changed.
+
+        Returns ``False`` (a no-op) when the editor could not be launched.
         """
-        import os
-        import shlex
-        import subprocess  # nosec B404 - launching the user's own $EDITOR
+        # The TUI launches vim (not $EDITOR/$VISUAL) so it never lands on a GUI
+        # editor that would detach from the terminal.
+        import subprocess  # nosec B404
 
         p = Path(path)
         before = p.stat().st_mtime if p.exists() else None
-        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
-        cmd = [*shlex.split(editor), str(p)]
+        # Run the editor as a blocking child (not os.execv, which would replace
+        # this process) and treat a clean exit as success.
         try:
-            subprocess.run(cmd, check=False)  # nosec B603 - editor from user env
+            subprocess.run([self.EDITOR, str(p)], check=False)  # nosec B603
         except FileNotFoundError:
             return False
         after = p.stat().st_mtime if p.exists() else None
