@@ -8,8 +8,8 @@ from typing import cast
 
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
+from _canary.execution.testexec import ExecutionSpace
 from _canary.resource_pool.rpool import NodeRequest
-from _canary.testexec import ExecutionSpace
 from canary_dist.batchspec import TestBatch as DistBatch
 from canary_hpc.batchspec import BatchSpec
 

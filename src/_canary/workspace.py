@@ -43,6 +43,7 @@ from .core import jobspec
 from .database import WorkspaceDatabase
 from .error import StopExecution
 from .error import notests_exit_status
+from .execution.testexec import ExecutionSpace
 from .generate import Generator
 from .generator import AbstractTestGenerator
 from .job import Dependency
@@ -50,7 +51,6 @@ from .job import Job
 from .job import Measurements
 from .runtest import Runner
 from .runtest import canary_runtests
-from .testexec import ExecutionSpace
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import async_rmtree

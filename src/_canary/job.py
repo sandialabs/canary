@@ -31,8 +31,8 @@ from .core.expression import Expression
 from .core.jobspec import BaselineScriptAction
 from .core.status import Status
 from .core.timekeeper import Timekeeper
-from .launcher import Launcher
-from .testexec import ExecutionSpace
+from .execution.launcher import Launcher
+from .execution.testexec import ExecutionSpace
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str

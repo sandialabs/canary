@@ -5,12 +5,12 @@
 from pathlib import Path
 
 from _canary.core.jobspec import JobSpec
+from _canary.execution.testexec import ExecutionSpace
 from _canary.job import Job
 from _canary.rules import RerunRule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule
 from _canary.select import RuntimeSelector
-from _canary.testexec import ExecutionSpace
 
 
 class RejectByName(RuntimeRule):

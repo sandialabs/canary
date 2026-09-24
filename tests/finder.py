@@ -10,7 +10,7 @@ from _canary import collect
 from _canary import job as cj
 from _canary import rules
 from _canary import select
-from _canary import testexec
+from _canary.execution import testexec
 from _canary.generate import Generator
 from _canary.hookspec import hookimpl
 from _canary.resource_pool.rpool import Outcome

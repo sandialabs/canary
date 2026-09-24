@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from _canary.testexec import ExecutionSpace
+from _canary.execution.testexec import ExecutionSpace
 
 
 def test_joinpath_rejects_absolute_path(tmp_path):

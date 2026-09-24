@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.execution.testexec import ExecutionSpace
 from _canary.job import Job
 from _canary.resource_pool import ResourcePool
-from _canary.testexec import ExecutionSpace
 from _canary.util.executable import Executable
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import set_executable

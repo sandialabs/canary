@@ -14,10 +14,10 @@ if TYPE_CHECKING:
     from .collect import Collector
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
+    from .execution.launcher import Launcher
     from .generate import Generator
     from .generator import AbstractTestGenerator
     from .job import Job
-    from .launcher import Launcher
     from .pluginmanager import CanaryPluginManager
     from .reporters.reporter import CanaryReporter
     from .resource_pool.rpool import Outcome

@@ -25,15 +25,15 @@ from typing import TextIO
 
 import psutil
 
-from . import config
-from .core.error import TestTimedOut
-from .hookspec import hookimpl
-from .util import logging
-from .util.module import load as load_module
-from .util.shell import source_rcfile
+from .. import config
+from ..core.error import TestTimedOut
+from ..hookspec import hookimpl
+from ..util import logging
+from ..util.module import load as load_module
+from ..util.shell import source_rcfile
 
 if TYPE_CHECKING:
-    from .job import Job
+    from ..job import Job
 
 logger = logging.get_logger(__name__)
 StdErrorT = TextIO | int
@@ -157,8 +157,8 @@ class PythonFunctionLauncher(Launcher):
     """
 
     def run(self, job: "Job") -> int:
-        from .canaryconf_impl import ROLE_TO_FUNCTION
-        from .testinst import from_job
+        from ..canaryconf_impl import ROLE_TO_FUNCTION
+        from ..testinst import from_job
 
         logger.debug(f"Starting {job.display_name()} on pid {os.getpid()} (python function)")
 

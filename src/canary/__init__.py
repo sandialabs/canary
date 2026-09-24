@@ -28,13 +28,13 @@ from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import Mask
 from _canary.core.jobspec_ir import DependencySelector
 from _canary.core.jobspec_ir import JobSpecIR
+from _canary.execution.launcher import Launcher
+from _canary.execution.launcher import SubprocessLauncher
 from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
 from _canary.job import BaseJob
 from _canary.job import Job
-from _canary.launcher import Launcher
-from _canary.launcher import SubprocessLauncher
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule

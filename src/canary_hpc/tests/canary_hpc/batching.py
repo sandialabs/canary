@@ -40,13 +40,13 @@ def make_jobs(tmp_path: Path, cpus: int = 1, nodes: int = 1) -> list:
     Total: 25 jobs (20 leaf + 5 aggregates).
     """
     import _canary.core.jobspec
+    import _canary.execution.testexec
     import _canary.job
-    import _canary.testexec
 
     Dependency = _canary.job.Dependency
     Job = _canary.job.Job
     JobSpec = _canary.core.jobspec.JobSpec
-    ExecutionSpace = _canary.testexec.ExecutionSpace
+    ExecutionSpace = _canary.execution.testexec.ExecutionSpace
 
     ws = ExecutionSpace(tmp_path, Path("session"))
     lookup: dict[str, Job] = {}  # type: ignore[valid-type]

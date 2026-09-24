@@ -423,8 +423,8 @@ def test_hookimpl_registered():
 
 def test_launcher_selected_for_conftest_jobs():
     """canaryconf jobs get a PythonFunctionLauncher; others get None from the hook."""
-    from _canary.launcher import PythonFunctionLauncher
-    from _canary.launcher import canaryconf_job_launcher
+    from _canary.execution.launcher import PythonFunctionLauncher
+    from _canary.execution.launcher import canaryconf_job_launcher
 
     conftest_case = SimpleNamespace(
         get_attribute=lambda name, *a: {"role": "setup"} if name == "canary_conftest" else None
@@ -437,7 +437,7 @@ def test_launcher_selected_for_conftest_jobs():
 
 def test_import_source_reads_functions(tmp_path):
     """PythonFunctionLauncher._import_source loads a canaryconf.py by path."""
-    from _canary.launcher import PythonFunctionLauncher
+    from _canary.execution.launcher import PythonFunctionLauncher
 
     cf = tmp_path / CANARYCONF_FILENAME
     cf.write_text(

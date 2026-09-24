@@ -32,9 +32,9 @@ has already run.  It:
    user code at generation time*.
 3. Creates synthetic :class:`~_canary.core.jobspec.JobSpec` objects for setup and/or
    teardown.  These specs carry *no* ``command``: they are dispatched
-   in-process by :class:`~_canary.launcher.PythonFunctionLauncher`, which
+   in-process by :class:`~_canary.execution.launcher.PythonFunctionLauncher`, which
    imports the ``canaryconf.py`` file and calls ``canary_setup(ctx)`` /
-   ``canary_teardown(ctx)`` directly (see :mod:`_canary.launcher`).  The
+   ``canary_teardown(ctx)`` directly (see :mod:`_canary.execution.launcher`).  The
    synthetic spec's ``exec_path`` is set to a dedicated ``__setup__`` /
    ``__teardown__`` directory beneath the governing directory so the function
    runs in the session tree location mirroring the ``canaryconf.py``.
@@ -153,7 +153,7 @@ def _make_synthetic_spec(
     """Build a synthetic setup or teardown :class:`JobSpec`.
 
     The spec carries no ``command``.  It is dispatched in-process by
-    :class:`~_canary.launcher.PythonFunctionLauncher`, which imports the
+    :class:`~_canary.execution.launcher.PythonFunctionLauncher`, which imports the
     ``canaryconf.py`` file and calls the function named by ``role`` (see
     :data:`ROLE_TO_FUNCTION`) with the job's ``TestInstance`` as ``ctx``.
 
