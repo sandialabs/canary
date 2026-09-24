@@ -72,9 +72,9 @@ from schema import Schema
 from . import config
 from .config.argparsing import Parser
 from .core.jobspec import Mask
+from .core.jobspec_graph import make_spec_graph
 from .hookspec import hookimpl
 from .job_graph import make_job_graph
-from .jobspec_graph import make_spec_graph
 from .rules import Rule
 from .rules import RuntimeRule
 from .util import json_helper as json

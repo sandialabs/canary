@@ -891,7 +891,7 @@ class Workspace:
         Returns:
             A list of Job objects in static dependency order.
         """
-        from .jobspec_graph import make_spec_graph
+        from .core.jobspec_graph import make_spec_graph
 
         lookup: dict[str, Job] = {}
         latest = self.db.get_results(ids, include_upstreams=True)
@@ -984,7 +984,7 @@ class Workspace:
         Returns:
             A list of constructed Job objects.
         """
-        from .jobspec_graph import make_spec_graph
+        from .core.jobspec_graph import make_spec_graph
 
         lookup: dict[str, Job] = {}
         jobs: list[Job] = []

@@ -16,8 +16,8 @@ from typing import Sequence
 from typing import TextIO
 from typing import TypeAlias
 
-from .core.jobspec import JobSpec
-from .util.level_graph import LevelGraph
+from ..util.level_graph import LevelGraph
+from .jobspec import JobSpec
 
 SpecGraph: TypeAlias = LevelGraph[JobSpec]
 

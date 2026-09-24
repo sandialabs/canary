@@ -44,8 +44,8 @@ if TYPE_CHECKING:
     pass
 
 from . import config
+from .core.resolve_dependency import resolve
 from .hookspec import hookimpl
-from .resolve_dependency import resolve
 from .util import logging
 from .util.multiprocessing import starmap
 from .util.string import pluralize

@@ -9,13 +9,13 @@ from types import SimpleNamespace
 from typing import Any
 
 from _canary.core.status import Status
+from _canary.core.timekeeper import Timekeeper
 from _canary.job import BaseJob
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.runtest import Runner
 from _canary.runtest import _record_finish_failure
 from _canary.runtest import reconcile_unfinished_jobs
-from _canary.timekeeper import Timekeeper
 
 
 class DummyJob(BaseJob):

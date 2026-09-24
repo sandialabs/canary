@@ -7,11 +7,11 @@ from typing import Callable
 from typing import cast
 
 from _canary.core.status import Status
+from _canary.core.timekeeper import Timekeeper
 from _canary.job import BaseJob
 from _canary.job import JobState
 from _canary.queue_executor import ExecutionSlot
 from _canary.queue_executor import ResourceQueueExecutor
-from _canary.timekeeper import Timekeeper
 
 
 class DummyJob(BaseJob):

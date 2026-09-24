@@ -205,7 +205,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     "Session": ("_canary.workspace", "Session"),
     "Workspace": ("_canary.workspace", "Workspace"),
     "ViewSettings": ("_canary.view", "ViewSettings"),
-    "print_spec_graph": ("_canary.jobspec_graph", "print_spec_graph"),
+    "print_spec_graph": ("_canary.core.jobspec_graph", "print_spec_graph"),
     "app": ("_canary.app", None),
 }
 

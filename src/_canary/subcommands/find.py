@@ -161,7 +161,7 @@ def pprint_keywords(specs: list["JobSpec"]) -> None:
 
 def pprint_graph(specs: list["JobSpec"]) -> None:
     """Print the dependency DAG of *specs* in text form."""
-    from _canary.jobspec_graph import format_spec_graph
+    from _canary.core.jobspec_graph import format_spec_graph
 
     from ..util.pager import page
 

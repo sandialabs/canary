@@ -161,7 +161,7 @@ def test_depends_on_param_subs(tmpdir):
 
 
 def test_depends_on_missing(tmpdir):
-    from _canary.resolve_dependency import UnresolvedDependenciesErrors
+    from _canary.core.resolve_dependency import UnresolvedDependenciesErrors
 
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")

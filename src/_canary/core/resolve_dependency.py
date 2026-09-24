@@ -26,11 +26,11 @@ from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Sequence
 
-from .core.jobspec import JobSpec
-from .core.jobspec_ir import JobSpecIR
+from .jobspec import JobSpec
+from .jobspec_ir import JobSpecIR
 
 if TYPE_CHECKING:
-    from .core.jobspec_ir import DependencySelector
+    from .jobspec_ir import DependencySelector
 
 
 @dataclass(frozen=True, slots=True)

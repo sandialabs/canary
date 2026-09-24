@@ -11,13 +11,13 @@ from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import Mask
 from _canary.core.jobspec import SpecDependency
 from _canary.core.status import Status
+from _canary.core.timekeeper import Timekeeper
 from _canary.job import BaseJob
 from _canary.job import Dependency
 from _canary.job import Job
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.job import Measurements
-from _canary.timekeeper import Timekeeper
 from _canary.util import json_helper as json
 
 

@@ -38,10 +38,10 @@ from typing import Iterable
 
 from .core import jobspec
 from .core.jobspec import JobSpec
+from .core.jobspec_graph import make_spec_graph
 from .core.status import Status
 from .job import JobPhase
 from .job import JobState
-from .jobspec_graph import make_spec_graph
 from .util import json_helper as json
 from .util import logging
 from .util.multiprocessing import FSQueue
@@ -730,7 +730,7 @@ class WorkspaceDatabase:
         ``file_root``, ``file_path``, ``session``, ``workspace``, ``state``
         (:class:`~_canary.job.JobState`), ``status``
         (:class:`~_canary.core.status.Status`), ``timekeeper``
-        (:class:`~_canary.timekeeper.Timekeeper`), and ``measurements``.
+        (:class:`~_canary.core.timekeeper.Timekeeper`), and ``measurements``.
         """
         d: dict[str, Any] = {}
         d["id"] = row[0]

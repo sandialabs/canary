@@ -7,11 +7,11 @@ from typing import Any
 
 from _canary.core.status import Outcome
 from _canary.core.status import Status
+from _canary.core.timekeeper import Timekeeper
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.resource_pool.rpool import NodeRequest
 from _canary.testexec import ExecutionSpace
-from _canary.timekeeper import Timekeeper
 from canary_hpc.batchexec import HPCConnectRunner
 from canary_hpc.batchexec import _all_children_finished
 from canary_hpc.batchspec import BatchSpec

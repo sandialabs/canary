@@ -44,8 +44,8 @@ class PYTSpecGenerator(AbstractSpecGenerator):
         import io
         import os
 
+        from _canary.core.jobspec_graph import print_spec_graph
         from _canary.generate import resolve
-        from _canary.jobspec_graph import print_spec_graph
         from _canary.util import logging
         from _canary.util.field import Field
         from _canary.util.string import pluralize

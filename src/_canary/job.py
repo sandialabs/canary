@@ -26,13 +26,13 @@ from . import config
 from .core.expression import Expression
 from .core.jobspec import BaselineScriptAction
 from .core.status import Status
+from .core.timekeeper import Timekeeper
 from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
 from .launcher import Launcher
 from .testexec import ExecutionSpace
-from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
