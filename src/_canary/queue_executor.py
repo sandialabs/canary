@@ -20,6 +20,8 @@ from typing import cast
 
 from . import config
 from .error import StopExecution
+from .events import Event
+from .events import EventBus
 from .job import BaseJob
 from .job import JobPhase
 from .queue import Busy
@@ -338,11 +340,13 @@ class ResourceQueueExecutor:
         executor: Callable,
         max_workers: int = -1,
         busy_wait_time: float = 0.01,
+        event_bus: EventBus | None = None,
     ):
         self.max_workers = mp.max_workers(hint=max_workers)
         self.queue: ResourceQueue = queue
         self.executor = executor
         self.busy_wait_time = busy_wait_time
+        self.event_bus = event_bus
 
         self.submitted: dict[str, ExecutionSlot] = {}
         self.running: dict[str, ExecutionSlot] = {}
@@ -553,6 +557,9 @@ class ResourceQueueExecutor:
     def notify_listeners(self, event: EventTypes, *args: Any) -> None:
         for cb in self.listeners:
             cb(event, *args)
+        if self.event_bus is not None:
+            payload = {"slot": args[0]} if args else {}
+            self.event_bus.publish(Event(name=event, payload=payload))
 
     def _check_finished_processes(self) -> None:
 
