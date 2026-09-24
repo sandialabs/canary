@@ -7,7 +7,7 @@ What is a job?
 
 A job
 
-* is an instance of :class:`~_canary.job.Job`;
+* is an instance of :class:`~_canary.core.job.Job`;
 * is generated from an implementation of :class:`~_canary.generator.AbstractTestGenerator`; and
 * is the concrete realization of the test files's body, executed with specific values for each parameter.
 
@@ -36,4 +36,4 @@ Example
 
 .. note::
 
-   :class:`~_canary.testinst.TestInstance` is a read-only mirror of the :class:`~_canary.job.Job`, made available by :func:`canary.get_instance`.  The test instance contains all relevant information about the test case being executed.
+   :class:`~_canary.testinst.TestInstance` is a read-only mirror of the :class:`~_canary.core.job.Job`, made available by :func:`canary.get_instance`.  The test instance contains all relevant information about the test case being executed.
