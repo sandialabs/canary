@@ -38,7 +38,6 @@ from _canary.execution.launcher import SubprocessLauncher
 from _canary.generator import AbstractSpecGenerator
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.hookspec import hookspec
-from _canary.testcase import TestCase
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
 from _canary.testinst import TestInstance
@@ -63,6 +62,10 @@ get_logger = logging.get_logger
 
 ResolvedSpec = JobSpec
 AbstractTestGenerator = AbstractSpecGenerator
+# ``TestCase`` is the historical name for ``Job``; kept for backward
+# compatibility (still used by plugins).  Formerly re-exported from the
+# now-removed ``_canary.testcase`` shim.
+TestCase = Job
 
 
 # ---------------------------------------------------------------------------
