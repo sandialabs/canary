@@ -26,6 +26,7 @@ from .facade import is_selection
 from .facade import open_workspace
 from .facade import rename_selection
 from .facade import select
+from .pathspec import classify_pathspec
 from .rebaseline import rebaseline
 from .run import RunOptions
 from .run import run
@@ -39,6 +40,7 @@ __all__ = [
     "RunOptions",
     "rebaseline",
     "exec_job",
+    "classify_pathspec",
     "select",
     "delete_selection",
     "rename_selection",

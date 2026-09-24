@@ -6,11 +6,8 @@
 
 import argparse
 import os
-from dataclasses import dataclass
-from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Literal
 from typing import Optional
 from typing import Sequence
 
@@ -18,9 +15,13 @@ import yaml
 
 from .. import config
 from .. import rerun
+from ..app.pathspec import RequestBuilder
+from ..app.pathspec import RequestNode
+from ..app.pathspec import ScanPathsRequest
+from ..app.pathspec import TagRequest
+from ..app.pathspec import classify_pathspec
 from ..app.run import RunOptions
 from ..app.run import run as app_run
-from ..collect import vc_prefixes
 from ..config.schemas import testpaths_schema
 from ..generate import Generator
 from ..hookspec import hookimpl
@@ -29,8 +30,6 @@ from ..util import json_helper as json
 from ..util.filesystem import working_dir
 from ..util.rich import bold
 from ..view import ViewSettings
-from ..workspace import NotAWorkspaceError
-from ..workspace import Workspace
 from .base import CanarySubcommand
 from .common import add_resource_arguments
 
@@ -224,7 +223,11 @@ class DeprecatedStoreAction(argparse.Action):
 
 
 class WipeAction(argparse.Action):
-    """Remove the existing workspace directory when ``-w`` is supplied."""
+    """Record that the workspace should be wiped before running (``-w``).
+
+    The wipe itself is performed by :func:`_canary.app.run.run` when it opens
+    the workspace, so no filesystem access happens during argument parsing.
+    """
 
     def __call__(
         self,
@@ -233,110 +236,7 @@ class WipeAction(argparse.Action):
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
     ) -> None:
-        if getattr(namespace, self.dest, False):
-            return
-        try:
-            workspace = Workspace.load()
-        except NotAWorkspaceError:
-            return
-        workspace.rmf()
         setattr(namespace, self.dest, True)
-
-
-ScanPathPayload = dict[str, list[str]]  # root -> [files]; empty list means “scan all”
-ViewPathPayload = list[str]  # e.g. ["rel/path/%", ...]
-SpecIdPayload = list[str]  # full spec ids
-
-
-@dataclass(frozen=True, slots=True)
-class RequestNode:
-    """Abstract base for a typed run-request carrying a payload value.
-
-    Attributes:
-        kind: One of ``"scanpaths"``, ``"viewpaths"``, ``"specids"``, or ``"tag"``.
-        value: The request payload, whose type depends on ``kind``.
-    """
-
-    kind: Literal["scanpaths", "viewpaths", "specids", "tag"]
-    value: Any
-
-    def __serialize__(self) -> dict[str, Any]:
-        return {"kind": self.kind, "value": self.value}
-
-    @classmethod
-    def __deserialize__(cls, d: dict) -> "RequestNode":
-        return cls(**d)
-
-
-@dataclass(frozen=True, slots=True)
-class ScanPathsRequest(RequestNode):
-    """Run request that scans directories/files for test generators."""
-
-    kind: Literal["scanpaths"] = "scanpaths"
-    value: ScanPathPayload = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class ViewPathsRequest(RequestNode):
-    """Run request that re-runs tests from a previous session view."""
-
-    kind: Literal["viewpaths"] = "viewpaths"
-    value: ViewPathPayload = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class SpecIdsRequest(RequestNode):
-    """Run request that re-runs specific tests by spec ID."""
-
-    kind: Literal["specids"] = "specids"
-    value: SpecIdPayload = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class TagRequest(RequestNode):
-    """Run request that re-runs tests belonging to a named tag."""
-
-    kind: Literal["tag"] = "tag"
-    value: str = ""
-
-
-@dataclass
-class RequestBuilder:
-    """Mutable accumulator that collects pathspec items and produces a :class:`RequestNode`."""
-
-    kind: str | None = None
-    scanpaths: ScanPathPayload = field(default_factory=dict)
-    viewpaths: ViewPathPayload = field(default_factory=list)
-    specids: SpecIdPayload = field(default_factory=list)
-    tag: Optional[str] = None
-
-    def __serialize__(self) -> dict[str, Any]:
-        return vars(self)
-
-    @classmethod
-    def __deserialize__(cls, d: dict) -> "RequestBuilder":
-        return cls(**d)
-
-    def require_kind(self, k: str, errors: list[str], what: str) -> None:
-        """Assert that the request kind is *k*, recording a conflict error if it differs."""
-        if self.kind is None:
-            self.kind = k
-        elif self.kind != k:
-            errors.append(f"Cannot mix {self.kind} with {what}")
-
-    def finalize(self) -> RequestNode | None:
-        """Convert the accumulated state into an immutable :class:`RequestNode`, or ``None``."""
-        if self.kind is None:
-            return None
-        if self.kind == "tag":
-            return TagRequest(value=self.tag or "")
-        if self.kind == "scanpaths":
-            return ScanPathsRequest(value=self.scanpaths)
-        if self.kind == "viewpaths":
-            return ViewPathsRequest(value=self.viewpaths)
-        if self.kind == "specids":
-            return SpecIdsRequest(value=self.specids)
-        raise RuntimeError(f"Unknown request kind: {self.kind!r}")
 
 
 class PathSpec(argparse.Action):
@@ -368,87 +268,14 @@ class PathSpec(argparse.Action):
                 values = values[:i]
                 break
 
-        workspace: Workspace | None = None
-        try:
-            workspace = Workspace.load()
-        except NotAWorkspaceError:
-            pass
+        # Classifying items against the workspace (tags/view paths/spec ids)
+        # requires workspace access and is application logic, so it lives behind
+        # the facade.  Errors are returned on the builder and re-raised here as a
+        # usage error.
+        classify_pathspec(list(values), builder=builder)
 
-        errors: list[str] = []
-        possible_specs: list[str] = []
-        for item in values:
-            abspath = os.path.abspath(item)
-
-            # --- Lock file not supported ---
-            if os.path.isfile(item) and item.endswith("testcases.lock"):
-                errors.append(f"{item}: lock file scanning not implemented")
-                continue
-
-            # --- Tag ---
-            if workspace and workspace.is_tag(item):
-                builder.require_kind("tag", errors, f"tag {item}")
-                builder.tag = item
-                continue
-
-            # --- View path ---
-            if workspace and (rel_path := workspace.relative_to_view(abspath)):
-                builder.require_kind("viewpaths", errors, f"viewpaths {abspath}")
-                p = rel_path if os.path.isfile(abspath) else rel_path.rstrip("/") + "/%"
-                builder.viewpaths.append(p)
-                continue
-
-            # --- Directory scanpaths ---
-            if os.path.isdir(abspath):
-                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
-                builder.scanpaths.setdefault(abspath, [])
-                continue
-
-            # --- File scanpaths ---
-            elif os.path.isfile(abspath):
-                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
-                root, name = os.path.split(abspath)
-                builder.scanpaths.setdefault(root, []).append(name)
-                continue
-
-            # --- Version control prefix ---
-            if item.startswith(vc_prefixes):
-                path_part = item.partition("@")[2]
-                if not os.path.isdir(path_part):
-                    errors.append(f"{path_part}: no such directory")
-                    continue
-                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
-                builder.scanpaths.setdefault(item, [])
-                continue
-
-            # --- root:name style ---
-            if os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
-                builder.require_kind("scanpaths", errors, f"scanpaths {abspath}")
-                root, name = item.split(os.pathsep, 1)
-                builder.scanpaths.setdefault(os.path.abspath(root), []).append(
-                    name.replace(os.pathsep, os.path.sep)
-                )
-                continue
-
-            # --- Treat as possible test ID ---
-            possible_specs.append(item)
-
-        # --- Handle possible specs ---
-        if possible_specs:
-            if workspace is not None:
-                builder.require_kind("specids", errors, "specids")
-                found_ids: list[str | None] = workspace.find_specids(possible_specs)
-                valid_ids: list[str] = []
-                for i, fid in enumerate(found_ids):
-                    if fid is None:
-                        errors.append(f"{possible_specs[i]}: not a valid test identifier")
-                    else:
-                        valid_ids.append(fid)
-                builder.specids.extend(valid_ids)
-            else:
-                errors.append("Spec IDs require an active workspace")
-
-        if errors:
-            raise argparse.ArgumentError(self, "\n".join(errors))
+        if builder.errors:
+            raise argparse.ArgumentError(self, "\n".join(builder.errors))
 
         request = builder.finalize()
         setattr(namespace, "request", request)
@@ -556,10 +383,9 @@ class ReadPathsFromFile(argparse.Action):
     ) -> None:
         assert isinstance(values, str)
         builder: RequestBuilder = setdefault(namespace, "request_builder", RequestBuilder())
-        errors: list[str] = []
-        builder.require_kind("scanpaths", errors, f"file {values}")
-        if errors:
-            raise argparse.ArgumentError(self, errors[0])
+        builder.require_kind("scanpaths", f"file {values}")
+        if builder.errors:
+            raise argparse.ArgumentError(self, builder.errors[0])
         builder.scanpaths.update(self.read_paths(values))
         request = builder.finalize()
         setattr(namespace, "request", request)
