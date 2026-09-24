@@ -77,13 +77,13 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .core.jobspec import JobSpec
-from .core.jobspec import SpecDependency
+from ..core.jobspec import JobSpec
+from ..core.jobspec import SpecDependency
+from ..util import logging
 from .hookspec import hookimpl
-from .util import logging
 
 if TYPE_CHECKING:
-    from .generate import Generator
+    from ..generate import Generator
 
 logger = logging.get_logger(__name__)
 

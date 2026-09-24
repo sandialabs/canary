@@ -9,7 +9,7 @@ import os
 from typing import TYPE_CHECKING
 
 from .. import app
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..session.workspace import NotAWorkspaceError
 from ..util.editor import editor
 from .base import CanarySubcommand

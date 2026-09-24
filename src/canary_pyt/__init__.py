@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from _canary.generator import AbstractSpecGenerator
-from _canary.hookspec import hookimpl
+from _canary.plugins.hookspec import hookimpl
 from _canary.util.query_data import load_query_data
 
 from . import directives

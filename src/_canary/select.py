@@ -76,7 +76,7 @@ from .core.jobspec import Mask
 from .core.jobspec_graph import make_spec_graph
 from .core.rules import Rule
 from .core.rules import RuntimeRule
-from .hookspec import hookimpl
+from .plugins.hookspec import hookimpl
 from .util import json_helper as json
 from .util import logging
 from .util.string import pluralize

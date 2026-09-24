@@ -11,21 +11,21 @@ from typing import Type
 import pluggy
 
 if TYPE_CHECKING:
-    from .collect import Collector
-    from .config.argparsing import Parser
-    from .config.config import Config as CanaryConfig
-    from .core.job import Job
-    from .execution.launcher import Launcher
-    from .execution.runtest import Runner
-    from .generate import Generator
-    from .generator import AbstractTestGenerator
+    from ..collect import Collector
+    from ..config.argparsing import Parser
+    from ..config.config import Config as CanaryConfig
+    from ..core.job import Job
+    from ..execution.launcher import Launcher
+    from ..execution.runtest import Runner
+    from ..generate import Generator
+    from ..generator import AbstractTestGenerator
+    from ..reporters.reporter import CanaryReporter
+    from ..resource_pool.rpool import Outcome
+    from ..select import RuntimeSelector
+    from ..select import Selector
+    from ..session.workspace import Session
+    from ..subcommands.base import CanarySubcommand
     from .pluginmanager import CanaryPluginManager
-    from .reporters.reporter import CanaryReporter
-    from .resource_pool.rpool import Outcome
-    from .select import RuntimeSelector
-    from .select import Selector
-    from .session.workspace import Session
-    from .subcommands.base import CanarySubcommand
 
 
 project_name = "canary"

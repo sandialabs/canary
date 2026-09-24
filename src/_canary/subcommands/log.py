@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import app
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:

@@ -20,7 +20,7 @@ from ..collect import Collector
 from ..core import rules
 from ..error import StopExecution
 from ..generate import Generator
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json
 from ..util import logging

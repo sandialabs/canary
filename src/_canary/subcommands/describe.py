@@ -13,7 +13,7 @@ import yaml
 from .. import app
 from .. import config
 from ..collect import Collector
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util.rich import colorize
 from ..util.serialize import serialize
 from .base import CanarySubcommand

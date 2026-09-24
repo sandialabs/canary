@@ -6,7 +6,7 @@
 
 This module is **not** part of the installed canary package.  It lives in the
 ``dev/`` directory at the repository root and is only loaded by
-:class:`_canary.pluginmanager.CanaryPluginManager` when canary is running from
+:class:`_canary.plugins.pluginmanager.CanaryPluginManager` when canary is running from
 an editable checkout that has the ``dev/`` directory present next to ``.git/``.
 
 The public surface exposed to canary's plugin system is the
@@ -585,7 +585,7 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
     import importlib.metadata as importlib_metadata
     import importlib.resources as importlib_resources
 
-    from _canary.hookspec import project_name
+    from _canary.plugins.hookspec import project_name
 
     root = root.resolve()
 
@@ -652,7 +652,7 @@ def canary_entry_point_modules(root: Path) -> dict[str, str]:
     """Return ``{entry_point_name: module}`` for the ``canary`` entry-point group."""
     import importlib.metadata as importlib_metadata
 
-    from _canary.hookspec import project_name
+    from _canary.plugins.hookspec import project_name
 
     modules: dict[str, str] = {}
 

@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import TypedDict
 
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
 

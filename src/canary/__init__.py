@@ -36,8 +36,8 @@ from _canary.core.rules import RuntimeRule
 from _canary.execution.launcher import Launcher
 from _canary.execution.launcher import SubprocessLauncher
 from _canary.generator import AbstractSpecGenerator
-from _canary.hookspec import hookimpl
-from _canary.hookspec import hookspec
+from _canary.plugins.hookspec import hookimpl
+from _canary.plugins.hookspec import hookspec
 from _canary.testcase import TestCase
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
@@ -194,7 +194,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     # name -> (module_path, attribute_in_module); attribute None imports the module itself
     "CanarySubcommand": ("_canary.subcommands.base", "CanarySubcommand"),
     "CanaryReporter": ("_canary.reporters.reporter", "CanaryReporter"),
-    "CanaryPluginManager": ("_canary.pluginmanager", "CanaryPluginManager"),
+    "CanaryPluginManager": ("_canary.plugins.pluginmanager", "CanaryPluginManager"),
     "Collector": ("_canary.collect", "Collector"),
     "console_main": ("_canary.main", "console_main"),
     "Generator": ("_canary.generate", "Generator"),

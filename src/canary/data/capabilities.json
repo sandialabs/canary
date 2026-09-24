@@ -281,7 +281,7 @@
         "rerun": "Synthetic jobs have stable spec IDs, so a setup that passed previously is skipped by rerun strategies like --only not_pass. Teardown re-runs whenever any governed test re-runs (its always edges keep it unready until those tests finish)."
       },
       "implementation": {
-        "module": "_canary.canaryconf_impl (registered as builtin.canaryconf_impl plugin). In-process dispatch uses _canary.execution.launcher.PythonFunctionLauncher, selected via the canary_runtest_launcher hook for jobs carrying the canary_conftest attribute.",
+        "module": "_canary.plugins.canaryconf_impl (registered as builtin.canaryconf_impl plugin). In-process dispatch uses _canary.execution.launcher.PythonFunctionLauncher, selected via the canary_runtest_launcher hook for jobs carrying the canary_conftest attribute.",
         "hook": "canary_generate_modifyitems, which runs after dependency resolution and injects the synthetic specs into generator.specs.",
         "idempotent": "Re-running the hook does not add duplicate synthetic jobs or duplicate dependency edges."
       },
@@ -491,8 +491,8 @@
       "summary": "Canary extensions use pluggy hooks to add commands, generators, resource behavior, launchers, runtime behavior, reports, measurements, lifecycle actions, capabilities, and skills.",
       "registration": {
         "entry_point_group": "canary",
-        "plugin_manager": "_canary.pluginmanager.CanaryPluginManager",
-        "marker": "canary.hookimpl or _canary.hookspec.hookimpl"
+        "plugin_manager": "_canary.plugins.pluginmanager.CanaryPluginManager",
+        "marker": "canary.hookimpl or _canary.plugins.hookspec.hookimpl"
       },
       "authoring": {
         "summary": "How to write and load a project-local plugin without installing a package.",
@@ -925,7 +925,7 @@
         "_canary.resource_pool.manager.ResourceManager"
       ],
       "hooks": [
-        "_canary.hookspec"
+        "_canary.plugins.hookspec"
       ],
       "measurements": [
         "_canary.core.job.Measurements",

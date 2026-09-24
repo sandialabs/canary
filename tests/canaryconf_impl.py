@@ -2,25 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for _canary.canaryconf_impl — directory-scoped setup/teardown via canaryconf.py."""
+"""Tests for _canary.plugins.canaryconf_impl — directory-scoped setup/teardown via canaryconf.py."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
 
-from _canary.canaryconf_impl import CANARYCONF_FILENAME
-from _canary.canaryconf_impl import CONFTEST_KEYWORD
-from _canary.canaryconf_impl import ROLE_TO_FUNCTION
-from _canary.canaryconf_impl import SETUP_FUNCTION
-from _canary.canaryconf_impl import TEARDOWN_FUNCTION
-from _canary.canaryconf_impl import _find_canaryconf
-from _canary.canaryconf_impl import _has_setup
-from _canary.canaryconf_impl import _has_teardown
-from _canary.canaryconf_impl import _inject_conftest_jobs
-from _canary.canaryconf_impl import _make_synthetic_spec
-from _canary.canaryconf_impl import _top_level_functions
 from _canary.core.jobspec import JobSpec
+from _canary.plugins.canaryconf_impl import CANARYCONF_FILENAME
+from _canary.plugins.canaryconf_impl import CONFTEST_KEYWORD
+from _canary.plugins.canaryconf_impl import ROLE_TO_FUNCTION
+from _canary.plugins.canaryconf_impl import SETUP_FUNCTION
+from _canary.plugins.canaryconf_impl import TEARDOWN_FUNCTION
+from _canary.plugins.canaryconf_impl import _find_canaryconf
+from _canary.plugins.canaryconf_impl import _has_setup
+from _canary.plugins.canaryconf_impl import _has_teardown
+from _canary.plugins.canaryconf_impl import _inject_conftest_jobs
+from _canary.plugins.canaryconf_impl import _make_synthetic_spec
+from _canary.plugins.canaryconf_impl import _top_level_functions
 
 # ---------------------------------------------------------------------------
 # helpers — cheap JobSpec factory
@@ -408,7 +408,7 @@ def test_inject_no_duplicate_dependencies(tmp_path):
 
 def test_hookimpl_registered():
     """canaryconf_impl exposes canary_generate_modifyitems as a hookimpl."""
-    import _canary.canaryconf_impl as sh
+    import _canary.plugins.canaryconf_impl as sh
 
     assert hasattr(sh, "canary_generate_modifyitems")
     # pluggy marks hookimpl callables with a special attribute

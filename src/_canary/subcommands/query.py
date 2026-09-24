@@ -25,7 +25,7 @@ db "<SQL>"               Execute a read-only SQL query, return JSON rows
 
 The built-in subcommands (job, session, sessions, jobs, db) are implemented as
 ``@hookimpl(trylast=True, specname="canary_query_execute")`` functions in
-``_canary.hooks``.  Extension subcommands are registered via the
+``_canary.plugins.hooks``.  Extension subcommands are registered via the
 ``canary_query_subcommand`` hook and dispatched via ``canary_query_execute``.
 
 Common flags
@@ -58,7 +58,7 @@ from typing import Any
 
 import canary
 
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..session.workspace import Workspace
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
@@ -463,7 +463,7 @@ def _parse_where(expr: str) -> Any:
 
 # ---------------------------------------------------------------------------
 # Built-in canary_query_execute implementations
-# (registered in _canary.hooks with @hookimpl trylast=True)
+# (registered in _canary.plugins.hooks with @hookimpl trylast=True)
 # ---------------------------------------------------------------------------
 # The implementations live in _canary/hooks.py so that they follow the
 # established pattern for built-in hook implementations and canary_query_execute

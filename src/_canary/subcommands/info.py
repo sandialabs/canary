@@ -16,7 +16,7 @@ import rich.table
 import yaml
 
 from .. import app
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:

@@ -24,7 +24,7 @@ from ..app.run import RunOptions
 from ..app.run import run as app_run
 from ..config.schemas import testpaths_schema
 from ..generate import Generator
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json
 from ..util.filesystem import working_dir

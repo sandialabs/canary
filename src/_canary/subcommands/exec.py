@@ -11,7 +11,7 @@ import rich
 
 from .. import app
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
 

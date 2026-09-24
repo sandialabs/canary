@@ -12,7 +12,7 @@ from _canary.core import job as cj
 from _canary.core import rules
 from _canary.execution import testexec
 from _canary.generate import Generator
-from _canary.hookspec import hookimpl
+from _canary.plugins.hookspec import hookimpl
 from _canary.resource_pool.rpool import Outcome
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir

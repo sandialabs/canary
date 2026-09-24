@@ -54,7 +54,7 @@ from typing import Generator
 import rich
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import glyphs
 from ..util import logging
 from ..util.returncode import compute_returncode

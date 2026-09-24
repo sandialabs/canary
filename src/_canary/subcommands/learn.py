@@ -10,7 +10,7 @@ from typing import Any
 from .. import config
 from ..config.schemas import capabilities_provider_schema
 from ..config.schemas import skills_provider_schema
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util.query_data import display_query_prefix
 from ..util.query_data import iter_skill_objects
 from ..util.query_data import list_json_object_paths

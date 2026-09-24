@@ -18,7 +18,7 @@ from rich.table import Table
 from .. import app
 from ..core.job import JobState
 from ..core.status import Status as _Status
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import glyphs
 from ..util import logging
 from .base import CanarySubcommand

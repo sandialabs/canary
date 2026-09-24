@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
-from _canary.hookspec import hookimpl
+from _canary.plugins.hookspec import hookimpl
 from _canary.util.rich import bold
 from _canary.util.time import time_in_seconds
 

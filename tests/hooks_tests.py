@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for _canary.hooks — alias expansion, html report, summary formatters."""
+"""Tests for _canary.plugins.hooks — alias expansion, html report, summary formatters."""
 
-from _canary.hooks import generate_html_report
-from _canary.hooks import get_canary_prefix
-from _canary.hooks import job_finish_summary
-from _canary.hooks import job_start_summary
+from _canary.plugins.hooks import generate_html_report
+from _canary.plugins.hooks import get_canary_prefix
+from _canary.plugins.hooks import job_finish_summary
+from _canary.plugins.hooks import job_start_summary
 
 # ---------------------------------------------------------------------------
 # get_canary_prefix
@@ -193,7 +193,7 @@ def test_alias_expansion_no_aliases():
     import argparse
 
     import _canary.config
-    from _canary.hooks import canary_cmdline_parse
+    from _canary.plugins.hooks import canary_cmdline_parse
 
     with _canary.config.override():
         parser = argparse.ArgumentParser()
@@ -208,7 +208,7 @@ def test_alias_expansion_with_alias(monkeypatch):
     import argparse
 
     import _canary.config
-    from _canary.hooks import canary_cmdline_parse
+    from _canary.plugins.hooks import canary_cmdline_parse
 
     with _canary.config.override() as cfg:
         cfg.set("aliases", {"r": "run"})
@@ -224,7 +224,7 @@ def test_alias_expansion_with_dollar_at(monkeypatch):
     import argparse
 
     import _canary.config
-    from _canary.hooks import canary_cmdline_parse
+    from _canary.plugins.hooks import canary_cmdline_parse
 
     with _canary.config.override() as cfg:
         cfg.set("aliases", {"rw": "run $@"})

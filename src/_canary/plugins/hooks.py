@@ -18,23 +18,23 @@ from typing import Literal
 
 import rich
 
-from . import config
-from .config.argparsing import Parser
-from .generator import AbstractTestGenerator
+from .. import config
+from ..config.argparsing import Parser
+from ..generator import AbstractTestGenerator
+from ..session.workspace import Session
+from ..session.workspace import Workspace
+from ..third_party.monkeypatch import monkeypatch
+from ..util import logging
+from ..util.query_data import load_query_data
+from ..util.sendmail import sendmail
+from ..util.string import pluralize
+from ..util.term import terminal_size
 from .hookspec import hookimpl
-from .session.workspace import Session
-from .session.workspace import Workspace
-from .third_party.monkeypatch import monkeypatch
-from .util import logging
-from .util.query_data import load_query_data
-from .util.sendmail import sendmail
-from .util.string import pluralize
-from .util.term import terminal_size
 
 if TYPE_CHECKING:
-    from .config.argparsing import Parser
-    from .core.job import Job
-    from .session.workspace import Session
+    from ..config.argparsing import Parser
+    from ..core.job import Job
+    from ..session.workspace import Session
 
 
 logger = logging.get_logger(__name__)
@@ -122,7 +122,7 @@ def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespac
         RuntimeError: If an alias uses ``$canary`` and the Canary package
             prefix cannot be determined.
     """
-    from . import config
+    from .. import config
 
     if aliases := config.get("aliases"):
         canary_prefix = get_canary_prefix()
@@ -364,7 +364,7 @@ def repeat_until_pass(case: "Job") -> bool | None:
     ultimately the default runner) when the option is not set, so this only
     takes over execution when the user asked for it.
     """
-    from .execution.runtest import run_once
+    from ..execution.runtest import run_once
 
     count = config.getoption("repeat_until_pass")
     if not count:
@@ -387,7 +387,7 @@ def repeat_until_pass(case: "Job") -> bool | None:
 @hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "Job") -> bool | None:
     """Run *case*, retrying up to ``--repeat-after-timeout`` times on timeout."""
-    from .execution.runtest import run_once
+    from ..execution.runtest import run_once
 
     count = config.getoption("repeat_after_timeout")
     if not count:
@@ -413,7 +413,7 @@ def repeat_until_fail(case: "Job") -> bool | None:
 
     Stops early as soon as a run does not succeed.
     """
-    from .execution.runtest import run_once
+    from ..execution.runtest import run_once
 
     count = config.getoption("repeat_until_fail")
     if not count:
@@ -501,7 +501,7 @@ def query_execute_job(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query job``."""
     if getattr(args, "query_subcmd", None) != "job":
         return None
-    from .subcommands.query import _exec_job
+    from ..subcommands.query import _exec_job
 
     return _exec_job(args)
 
@@ -511,7 +511,7 @@ def query_execute_session(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query session``."""
     if getattr(args, "query_subcmd", None) != "session":
         return None
-    from .subcommands.query import _exec_session
+    from ..subcommands.query import _exec_session
 
     return _exec_session(args)
 
@@ -521,7 +521,7 @@ def query_execute_sessions(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query sessions``."""
     if getattr(args, "query_subcmd", None) != "sessions":
         return None
-    from .subcommands.query import _exec_sessions
+    from ..subcommands.query import _exec_sessions
 
     return _exec_sessions(args)
 
@@ -531,7 +531,7 @@ def query_execute_db(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query db``."""
     if getattr(args, "query_subcmd", None) != "db":
         return None
-    from .subcommands.query import _exec_db
+    from ..subcommands.query import _exec_db
 
     return _exec_db(args)
 
@@ -541,7 +541,7 @@ def query_execute_jobs(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query jobs``."""
     if getattr(args, "query_subcmd", None) != "jobs":
         return None
-    from .subcommands.query import _exec_jobs
+    from ..subcommands.query import _exec_jobs
 
     return _exec_jobs(args)
 
@@ -572,7 +572,7 @@ def fetch_execute_examples(args: "argparse.Namespace") -> "int | None":
     import importlib.resources as ir
     import os
 
-    from .util.filesystem import force_copy
+    from ..util.filesystem import force_copy
 
     path = str(ir.files("canary").joinpath("docs/examples"))
     if os.path.exists("examples"):

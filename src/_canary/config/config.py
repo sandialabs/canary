@@ -15,7 +15,7 @@ import yaml
 from schema import Optional
 from schema import Schema
 
-from ..pluginmanager import CanaryPluginManager
+from ..plugins.pluginmanager import CanaryPluginManager
 from ..resource_pool.manager import ResourceManager
 from ..util import json_helper as json
 from ..util import logging

@@ -6,7 +6,7 @@ import argparse
 from typing import TYPE_CHECKING
 
 from .. import app
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..view import ViewSettings
 from .base import CanarySubcommand
 

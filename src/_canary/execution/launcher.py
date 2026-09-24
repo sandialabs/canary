@@ -27,7 +27,7 @@ import psutil
 
 from .. import config
 from ..core.error import TestTimedOut
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from ..util.module import load as load_module
 from ..util.shell import source_rcfile
@@ -141,7 +141,7 @@ class PythonFunctionLauncher(Launcher):
     """Launcher that imports a Python file and calls a function *in-process*.
 
     Used for the synthetic setup/teardown jobs injected from ``canaryconf.py``
-    (see :mod:`_canary.canaryconf_impl`).  Rather than spawning
+    (see :mod:`_canary.plugins.canaryconf_impl`).  Rather than spawning
     ``python canaryconf.py`` as a subprocess, this launcher imports the file
     named by the job's ``canary_conftest["source_file"]`` attribute and calls
     the function selected by ``canary_conftest["role"]`` (``canary_setup`` or
@@ -157,7 +157,7 @@ class PythonFunctionLauncher(Launcher):
     """
 
     def run(self, job: "Job") -> int:
-        from ..canaryconf_impl import ROLE_TO_FUNCTION
+        from ..plugins.canaryconf_impl import ROLE_TO_FUNCTION
         from ..testinst import from_job
 
         logger.debug(f"Starting {job.display_name()} on pid {os.getpid()} (python function)")

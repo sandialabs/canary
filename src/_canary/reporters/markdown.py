@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from typing import TextIO
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import json_helper as json
 from ..util import logging
 from ..util.filesystem import mkdirp

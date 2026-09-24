@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import cpu_count
 from ..util import logging
 from .rpool import Outcome

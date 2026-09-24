@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from ..util.filesystem import mkdirp
 from .reporter import CanaryReporter

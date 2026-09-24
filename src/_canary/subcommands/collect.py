@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .. import app
 from ..collect import Collector
 from ..generate import Generator
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
 
