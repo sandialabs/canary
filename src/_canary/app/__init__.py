@@ -37,6 +37,8 @@ from .queries import workspace_summary
 from .rebaseline import rebaseline
 from .run import RunOptions
 from .run import run
+from .run_subprocess import RunHandle
+from .run_subprocess import run_in_subprocess
 
 __all__ = [
     "collect",
@@ -45,6 +47,8 @@ __all__ = [
     "get_event_bus",
     "run",
     "RunOptions",
+    "run_in_subprocess",
+    "RunHandle",
     "rebaseline",
     "exec_job",
     "classify_pathspec",

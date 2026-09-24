@@ -295,6 +295,69 @@ below):
 
 **Awaiting nothing further -- implementing B incrementally per 4.6.**
 
+### 4.8 Transport pivot: unify on a durable spool bus (supersedes 4.5/4.6 transport)
+
+**Why:** the first cut of B used a fresh `multiprocessing.Queue` for the child ->
+parent event stream and immediately hit the classic mp.Queue deadlock -- a
+`Queue`'s background *feeder thread* blocks process exit until every buffered
+item is flushed to and consumed from the pipe, so a child that produces a burst
+of events cannot cleanly exit unless the parent perfectly drains it. Working
+around it (`cancel_join_thread`, sentinels, control-queue ordering) is fragile.
+
+Stepping back, Canary already has **several bespoke cross-process queues built
+in isolation**: worker->parent job events (`mp.Pipe` + `_handle_worker_payload`),
+logging (`mp.Queue` + `QueueHandler`), HPC batch events (`SimpleQueue`), and the
+durable result spool (`FSQueue` + `ResultListener`). Three share one shape:
+*a producer in another process; a daemon thread in the parent drains into a
+sink.* Crucially, the **only** one that already crosses a fully independent
+`canary` process boundary without feeder-flush deadlocks is the disk-backed
+`FSQueue` (`util/multiprocessing.py:334`), drained by `ResultListener`
+(`database.py:1028-1060`) -- because files have no feeder thread and atomic
+rename makes it multi-writer safe.
+
+**Decision (maintainer):** generalize that proven pattern into a reusable
+**durable spool bus** and route job events through it, instead of adding an Nth
+ad-hoc mp queue. This benefits the core CLI run path (one transport to reason
+about) and the TUI (deadlock-free child->parent streaming), while leaving CLI
+behavior and the test-author API unchanged.
+
+**Design:**
+- `events/spool.py`:
+  - `SpoolBus(dir)` -- wraps an `FSQueue`; `publish(Event)` pickles a
+    ``(name, payload)`` record to the spool (safe from any process, including a
+    fully independent `canary` child).
+  - `SpoolListener(dir, bus)` -- a daemon thread (mirrors `ResultListener`) that
+    `drain()`s the spool FIFO-by-mtime and republishes each record onto an
+    in-process `EventBus`. `start()` / `stop()`.
+- The child run installs a bus subscriber that writes to `SpoolBus`; the parent
+  runs a `SpoolListener` onto `app.get_event_bus()`. No mp.Queue, no feeder
+  deadlock, no sentinels. Return code/errors come from the child *process exit
+  code* (already reliable), not an in-band control queue.
+- Spool location: `<workspace>/.canary/tmp/events` (sibling to the DB spool at
+  `tmp/db`), so events and result records never mix.
+- **Follow-up (not now, tracked here):** migrate the logging queue and,
+  eventually, the worker event pipe onto the same `SpoolBus`/listener shape so
+  there is a single cross-process channel abstraction. Gated on not regressing
+  the hot CLI run path; measured before/after. The worker<->parent *pipe* is the
+  latency-sensitive one and may stay as-is if the spool adds measurable overhead
+  to the inner loop -- to be decided with numbers, not assumptions.
+
+**Superseded:** the `QueueForwarder`/`EventBridge` (mp.Queue) added in step 1 and
+the mp.Queue plumbing in `run_in_subprocess` are replaced by `SpoolBus`/
+`SpoolListener`. The `EventBus`, `Event`, `JobEvent`, and `project_job_event`
+types are unchanged.
+
+### 4.9 Revised implementation steps
+
+1. **DONE (revised):** `events/spool.py` -- `SpoolBus` + `SpoolListener`, unit
+   tested (two buses + a real temp dir; burst of events; stop semantics).
+2. `app/run_subprocess.py` -- child publishes to `SpoolBus`; parent runs a
+   `SpoolListener`; return code from `process.exitcode`. Headless integration
+   test: events observed on the parent bus, correct rc, DB updated, **child
+   exits cleanly** (the regression that motivated the pivot).
+3. TUI uses the subprocess run and keeps `Live` up (unchanged from 4.6 step 3).
+4. Cancellation (unchanged from 4.6 step 4).
+
 ---
 
 ## 5. Roadmap toward "full TUI front end to canary run"

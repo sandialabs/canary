@@ -20,22 +20,22 @@ The bus does not own any delivery mechanism: the cross-process transport
 layer.
 """
 
-from .bridge import EventBridge
-from .bridge import QueueForwarder
 from .bus import Event
 from .bus import EventBus
 from .bus import EventName
 from .bus import JobEvent
 from .bus import Subscriber
 from .bus import project_job_event
+from .spool import SpoolBus
+from .spool import SpoolListener
 
 __all__ = [
     "Event",
-    "EventBridge",
     "EventBus",
     "EventName",
     "JobEvent",
-    "QueueForwarder",
+    "SpoolBus",
+    "SpoolListener",
     "Subscriber",
     "project_job_event",
 ]

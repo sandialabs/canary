@@ -11,6 +11,7 @@ messaging, and ``initialize`` for setting the preferred start method.
 """
 
 import contextlib
+import itertools
 import multiprocessing
 import multiprocessing.context
 import multiprocessing.queues
@@ -18,6 +19,7 @@ import multiprocessing.reduction
 import os
 import pickle  # nosec B403
 import sys
+import time
 import traceback
 from multiprocessing.process import BaseProcess
 from pathlib import Path
@@ -337,7 +339,19 @@ class FSQueue:
 
     Items are pickled to disk, multiple processes can safely put items,
     and a listener can consume them in FIFO order.
+
+    Ordering is by a monotonic key embedded in each filename
+    (``<time_ns>-<counter>-<uniq>.pkl``), not by file mtime: mtime has
+    coarse resolution, so a burst of puts can share a timestamp and be drained
+    out of order.  A nanosecond clock plus a per-process counter gives a stable
+    total order across processes, which matters for ordered event streams (a
+    ``job_finished`` must not overtake its ``job_started``).
     """
+
+    #: Per-process, monotonically increasing tiebreaker for puts that land in
+    #: the same nanosecond.  Combined with ``time.time_ns`` this yields a stable
+    #: cross-process ordering without any shared lock.
+    _counter = itertools.count()
 
     def __init__(self, root: Path):
         """Initialize the queue rooted at ``root``, creating the directory if needed."""
@@ -354,7 +368,10 @@ class FSQueue:
                 pickle.dump(obj, tf)
                 tf.flush()
                 tf.fileno()  # ensure file is written to disk
-            final_file = self.root / f"{temp_file.stem}.pkl"
+            # Order-preserving name: zero-padded nanosecond clock + per-process
+            # counter, so a lexical sort reproduces put order across processes.
+            order_key = f"{time.time_ns():020d}-{next(self._counter):010d}"
+            final_file = self.root / f"{order_key}-{temp_file.stem}.pkl"
             temp_file.replace(final_file)  # atomic rename
         except Exception as e:
             if temp_file and temp_file.exists():
@@ -362,8 +379,8 @@ class FSQueue:
             raise RuntimeError(f"Failed to put item in FSQueue: {e}")
 
     def _refill_cache(self) -> None:
-        """Populate the internal cache from disk, sorted by modification time."""
-        files = sorted(self.root.glob("*.pkl"), key=lambda f: f.stat().st_mtime)
+        """Populate the internal cache from disk, in put order (see class docs)."""
+        files = sorted(self.root.glob("*.pkl"), key=lambda f: f.name)
         self._cache = files
 
     def empty(self) -> bool:
