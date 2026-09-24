@@ -11,7 +11,6 @@ lives behind the app facade.  These tests pin the classification and, in
 particular, the error reporting the CLI turns into a usage error.
 """
 
-
 import canary
 from _canary import app
 from _canary.app.pathspec import RequestBuilder

@@ -215,7 +215,7 @@ def make_api_docs(prefix: str):
         skip_dirs=["third_party"],
         exclude_members={
             "_canary.select": ["rules"],
-            "_canary.expression": ["type"],
+            "_canary.core.expression": ["type"],
             "_canary.reporters.html": ["type"],
             "_canary.reporters.json": ["type"],
             "_canary.reporters.junit": ["type"],

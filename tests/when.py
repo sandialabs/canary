@@ -6,9 +6,9 @@ import sys
 
 import pytest
 
-from _canary.when import InvalidSyntax
-from _canary.when import When
-from _canary.when import when as when_func
+from _canary.core.when import InvalidSyntax
+from _canary.core.when import When
+from _canary.core.when import when as when_func
 
 
 def test_when_platform():
@@ -83,7 +83,7 @@ def test_when_parameters():
 
 # Security test: ParameterExpression should block code execution via builtins
 def test_parameterexpression_blocks_builtins():
-    from _canary.expression import ParameterExpression
+    from _canary.core.expression import ParameterExpression
 
     # Try to access a builtin (should be blocked)
     expr = ParameterExpression("__import__('os').system('echo hacked')")

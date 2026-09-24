@@ -24,7 +24,7 @@ from typing import Type
 from schema import Schema
 
 from . import config
-from . import when
+from .core import when
 from .util import filesystem
 from .util import json_helper as json
 from .util import logging

@@ -23,11 +23,11 @@ from typing import Literal
 from typing import MutableMapping
 
 from . import config
+from .core.expression import Expression
 from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
-from .expression import Expression
 from .jobspec import BaselineScriptAction
 from .launcher import Launcher
 from .status import Status
