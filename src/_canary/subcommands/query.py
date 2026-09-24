@@ -349,22 +349,15 @@ def _resolve_session_dir(workspace: Workspace, session: str) -> Path:
 
 def _db_results_for_session(workspace: Workspace, session_name: str) -> list[dict[str, Any]]:
     """Return all result rows for a given session from the workspace DB."""
-    rows = workspace.db.connection.execute(
-        "SELECT * FROM results WHERE session = ? ORDER BY spec_name", (session_name,)
-    ).fetchall()
-    return [workspace.db._reconstruct_results(row) for row in rows]
+    return workspace.db.get_results_for_session(session_name)
 
 
 def _db_outcome_counts_for_session(workspace: Workspace, session_name: str) -> dict[str, int]:
     """Return {outcome_name: count} for all jobs in a session."""
     from ..status import Outcome
 
-    rows = workspace.db.connection.execute(
-        "SELECT status_outcome, COUNT(*) FROM results WHERE session = ? GROUP BY status_outcome",
-        (session_name,),
-    ).fetchall()
     result: dict[str, int] = {}
-    for raw_outcome, count in rows:
+    for raw_outcome, count in workspace.db.get_outcome_counts_for_session(session_name).items():
         try:
             name = Outcome.factory(raw_outcome).name
         except (ValueError, KeyError):
@@ -959,55 +952,23 @@ def _exec_db(args: argparse.Namespace) -> int:
     keyword = db_args[0].lower().strip()
 
     if keyword == "schema":
-        con = sqlite3.connect(workspace.db.path)
-        rows = con.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
-        ).fetchall()
-        con.close()
-        out = {name: ddl for name, ddl in rows}
-        print_json(out, terse=args.terse)
+        print_json(workspace.db.get_schema(), terse=args.terse)
         return 0
 
     if keyword == "stats":
-        con = sqlite3.connect(workspace.db.path)
-        total = con.execute("SELECT COUNT(*) FROM results").fetchone()[0]
-        outcome_rows = con.execute(
-            "SELECT status_outcome, COUNT(*) FROM results "
-            "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
-            "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
-        ).fetchall()
-        session_count = con.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
-        latest = con.execute("SELECT MAX(session) FROM results").fetchone()[0]
-        spec_count = con.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
-        con.close()
-        outcomes = {outcome: count for outcome, count in outcome_rows}
-        out_stats = {
-            "spec_count": spec_count,
-            "result_count": total,
-            "session_count": session_count,
-            "latest_session": latest,
-            "outcomes": outcomes,
-        }
-        print_json(out_stats, terse=args.terse)
+        print_json(workspace.db.get_stats(), terse=args.terse)
         return 0
 
     # Arbitrary SELECT
     sql = " ".join(db_args)
-    sql_stripped = sql.strip().lower()
-    if not sql_stripped.startswith("select"):
+    try:
+        out_sql = workspace.db.select(sql)
+    except ValueError:
         sys.stderr.write("canary query db: only SELECT statements are permitted\n")
         return 1
-
-    con = sqlite3.connect(workspace.db.path)
-    con.row_factory = sqlite3.Row
-    try:
-        rows_sql = con.execute(sql).fetchall()
     except sqlite3.Error as e:
         sys.stderr.write(f"canary query db: SQL error: {e}\n")
-        con.close()
         return 1
-    con.close()
 
-    out_sql = [dict(row) for row in rows_sql]
     print_json(out_sql, terse=args.terse)
     return 0

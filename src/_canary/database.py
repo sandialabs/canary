@@ -129,7 +129,7 @@ class WorkspaceDatabase:
             self._connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
             self._connection.execute("PRAGMA journal_mode=MEMORY;")
             self._connection.execute("PRAGMA synchronous=OFF;")
-            self._connection.execute("PRAGMA foreign_key=ON;")
+            self._connection.execute("PRAGMA foreign_keys=ON;")
         assert self._connection is not None
         conn = self._connection
         with conn:
@@ -153,7 +153,7 @@ class WorkspaceDatabase:
               spec_id TEXT NOT NULL,
               dep_id TEXT NOT NULL,
               PRIMARY KEY (spec_id, dep_id),
-              FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
+              FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE,
               FOREIGN KEY (dep_id)  REFERENCES specs(spec_id)
             )"""
             conn.execute(sql)
@@ -168,7 +168,7 @@ class WorkspaceDatabase:
               tag TEXT,
               spec_id TEXT,
               PRIMARY KEY (tag, spec_id),
-              FOREIGN KEY (tag) REFERENCES selections(spec_id) ON DELETE CASCADE
+              FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
             )"""
             conn.execute(sql)
 
@@ -639,6 +639,89 @@ class WorkspaceDatabase:
             d = self._reconstruct_results(row)
             data.append(d)
         return data
+
+    def get_results_for_session(self, session: str) -> list[dict[str, Any]]:
+        """Return all result records for *session*, ordered by spec name.
+
+        Args:
+            session: The session identifier.
+
+        Returns:
+            List of result dicts (see :meth:`_reconstruct_results` for the dict
+            schema), ordered by ``spec_name``.
+        """
+        rows = self.connection.execute(
+            "SELECT * FROM results WHERE session = ? ORDER BY spec_name", (session,)
+        ).fetchall()
+        return [self._reconstruct_results(row) for row in rows]
+
+    def get_outcome_counts_for_session(self, session: str) -> dict[str, int]:
+        """Return ``{status_outcome: count}`` for all results in *session*.
+
+        The keys are the raw ``status_outcome`` values as stored in the
+        ``results`` table; callers are responsible for mapping them to
+        human-readable outcome names.
+        """
+        rows = self.connection.execute(
+            "SELECT status_outcome, COUNT(*) FROM results WHERE session = ? GROUP BY status_outcome",
+            (session,),
+        ).fetchall()
+        return {outcome: count for outcome, count in rows}
+
+    def get_schema(self) -> dict[str, str]:
+        """Return a mapping of table name → ``CREATE TABLE`` DDL for the DB."""
+        rows = self.connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        return {name: ddl for name, ddl in rows}
+
+    def get_stats(self) -> dict[str, Any]:
+        """Return summary statistics about the workspace database.
+
+        Returns:
+            A dict with keys ``spec_count``, ``result_count``,
+            ``session_count``, ``latest_session``, and ``outcomes`` (a mapping
+            of raw ``status_outcome`` → count for the latest result of each
+            spec).
+        """
+        conn = self.connection
+        total = conn.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+        outcome_rows = conn.execute(
+            "SELECT status_outcome, COUNT(*) FROM results "
+            "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
+            "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
+        ).fetchall()
+        session_count = conn.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
+        latest = conn.execute("SELECT MAX(session) FROM results").fetchone()[0]
+        spec_count = conn.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
+        return {
+            "spec_count": spec_count,
+            "result_count": total,
+            "session_count": session_count,
+            "latest_session": latest,
+            "outcomes": {outcome: count for outcome, count in outcome_rows},
+        }
+
+    def select(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        """Execute a read-only ``SELECT`` statement and return rows as dicts.
+
+        Only ``SELECT`` statements are permitted; any other statement raises
+        :class:`ValueError`.  Rows are returned as dictionaries keyed by column
+        name.
+
+        Args:
+            sql: A single ``SELECT`` statement.
+            params: Optional bound parameters for the statement.
+
+        Raises:
+            ValueError: If *sql* is not a ``SELECT`` statement.
+            sqlite3.Error: If the statement fails to execute.
+        """
+        if not sql.strip().lower().startswith("select"):
+            raise ValueError("only SELECT statements are permitted")
+        cursor = self.connection.execute(sql, params)
+        columns = [c[0] for c in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def _reconstruct_results(self, row: tuple[Any, ...]) -> dict[str, Any]:
         """Convert a raw ``results`` table row into a structured result dict.

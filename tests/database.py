@@ -271,3 +271,111 @@ def test_select_from_view_glob(db: WorkspaceDatabase, make_random_specs: MakeRan
     prefix = specs[0].file.parent.parent.as_posix() + "/%"
     ids = db.select_from_view([prefix])
     assert isinstance(ids, list)
+
+
+# -----------------------------------------------------------------------------
+# Foreign-key enforcement
+#
+# Foreign keys are only enforced when the connection sets ``PRAGMA
+# foreign_keys=ON`` *and* the schema declares the constraints correctly.  These
+# tests exercise the schema contract directly because that is the layer that
+# regressed: a misspelled pragma plus a malformed constraint previously left
+# these cascades silently disabled.
+# -----------------------------------------------------------------------------
+
+
+def test_deleting_spec_cascades_to_dependency_edges(db: WorkspaceDatabase):
+    conn = db.connection
+    conn.execute("INSERT INTO specs (spec_id, data) VALUES ('parent', '{}')")
+    conn.execute("INSERT INTO specs (spec_id, data) VALUES ('dep', '{}')")
+    conn.execute("INSERT INTO spec_deps (spec_id, dep_id) VALUES ('parent', 'dep')")
+
+    conn.execute("DELETE FROM specs WHERE spec_id = 'parent'")
+
+    remaining = conn.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
+    assert remaining == []
+
+
+def test_deleting_depended_upon_spec_is_rejected(db: WorkspaceDatabase):
+    import sqlite3
+
+    conn = db.connection
+    conn.execute("INSERT INTO specs (spec_id, data) VALUES ('parent', '{}')")
+    conn.execute("INSERT INTO specs (spec_id, data) VALUES ('dep', '{}')")
+    conn.execute("INSERT INTO spec_deps (spec_id, dep_id) VALUES ('parent', 'dep')")
+
+    # 'dep' is referenced by the edge's dep_id (RESTRICT), so removing it while
+    # a dependent edge exists would leave a dangling reference.
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("DELETE FROM specs WHERE spec_id = 'dep'")
+
+
+def test_deleting_spec_cascades_to_selection(db: WorkspaceDatabase):
+    conn = db.connection
+    conn.execute("INSERT INTO specs (spec_id, data) VALUES ('s1', '{}')")
+    conn.execute("INSERT INTO selections (tag, spec_id) VALUES ('smoke', 's1')")
+
+    conn.execute("DELETE FROM specs WHERE spec_id = 's1'")
+
+    remaining = conn.execute("SELECT tag, spec_id FROM selections").fetchall()
+    assert remaining == []
+
+
+# -----------------------------------------------------------------------------
+# Read-only query surface (schema / stats / select)
+# -----------------------------------------------------------------------------
+
+
+def test_select_rejects_non_select_statements(db: WorkspaceDatabase):
+    for statement in (
+        "DELETE FROM specs",
+        "DROP TABLE specs",
+        "INSERT INTO specs VALUES ('x','{}')",
+    ):
+        with pytest.raises(ValueError):
+            db.select(statement)
+
+
+def test_select_returns_rows_as_dicts(db: WorkspaceDatabase, make_random_specs: MakeRandomSpecs):
+    specs = make_random_specs(db.path.parent, count=3)
+    db.put_specs(specs)
+
+    rows = db.select("SELECT spec_id FROM specs ORDER BY spec_id")
+
+    assert {row["spec_id"] for row in rows} == spec_ids(specs)
+
+
+def test_schema_reports_table_definitions(db: WorkspaceDatabase):
+    schema = db.get_schema()
+
+    assert {"specs", "spec_deps", "selections", "results"} <= set(schema)
+    assert schema["specs"].strip().upper().startswith("CREATE TABLE")
+
+
+def test_results_for_session_filters_by_session(db: WorkspaceDatabase, make_session):
+    session = make_session(db.path.parent)
+    for job in session.jobs:
+        job.workspace.session = "s1"
+    db.put_results(*session.jobs)
+
+    rows = db.get_results_for_session("s1")
+
+    assert {row["id"] for row in rows} == {job.id for job in session.jobs}
+    assert db.get_results_for_session("does-not-exist") == []
+
+
+def test_stats_reports_latest_session_outcomes(db: WorkspaceDatabase, make_session):
+    session = make_session(db.path.parent)
+    for job in session.jobs:
+        job.workspace.session = "s1"
+    db.put_specs([job.spec for job in session.jobs])
+    db.put_results(*session.jobs)
+
+    stats = db.get_stats()
+
+    assert stats["spec_count"] == len(session.jobs)
+    assert stats["session_count"] == 1
+    assert stats["latest_session"] == "s1"
+    # make_session sets every job to SUCCESS, so the latest-session histogram
+    # must attribute all specs to a single outcome bucket.
+    assert sum(stats["outcomes"].values()) == len(session.jobs)
