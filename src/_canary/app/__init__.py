@@ -27,6 +27,12 @@ from .facade import open_workspace
 from .facade import rename_selection
 from .facade import select
 from .pathspec import classify_pathspec
+from .queries import JobView
+from .queries import WorkspaceSummary
+from .queries import job_history
+from .queries import list_jobs
+from .queries import status_counts
+from .queries import workspace_summary
 from .rebaseline import rebaseline
 from .run import RunOptions
 from .run import run
@@ -49,4 +55,10 @@ __all__ = [
     "get_tag_info",
     "get_results",
     "get_result_history",
+    "list_jobs",
+    "job_history",
+    "workspace_summary",
+    "status_counts",
+    "JobView",
+    "WorkspaceSummary",
 ]

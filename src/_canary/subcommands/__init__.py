@@ -37,6 +37,7 @@ from . import select
 from . import selection
 from . import status
 from . import tree
+from . import tui
 from . import view
 
 plugins = [
@@ -65,6 +66,7 @@ plugins = [
     selection,
     status,
     tree,
+    tui,
     view,
 ]
 
