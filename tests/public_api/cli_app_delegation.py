@@ -33,6 +33,7 @@ FACADE_ROUTED_COMMANDS = {
     "edit": {"open_workspace"},
     "info": {"open_workspace"},
     "status": {"open_workspace"},
+    "rebaseline": {"rebaseline"},
 }
 
 
@@ -62,7 +63,17 @@ def test_clean_subcommand_does_not_call_workspace_directly(modname):
 
 # Commands whose domain data access has been fully hoisted behind the facade:
 # they must not reach into the repository (``workspace.db``) directly.
-NO_DIRECT_DB_COMMANDS = {"collect", "gc", "init", "view", "select", "selection", "info", "status"}
+NO_DIRECT_DB_COMMANDS = {
+    "collect",
+    "gc",
+    "init",
+    "view",
+    "select",
+    "selection",
+    "info",
+    "status",
+    "rebaseline",
+}
 
 
 @pytest.mark.parametrize("modname", sorted(NO_DIRECT_DB_COMMANDS))

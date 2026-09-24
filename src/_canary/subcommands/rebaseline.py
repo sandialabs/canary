@@ -3,23 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .. import config
+from .. import app
 from ..hookspec import hookimpl
-from ..rules import KeywordRule
-from ..util import json_helper as json
-from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..job import Job
-
-
-logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -52,75 +43,5 @@ class Rebaseline(CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        workspace = Workspace.load()
-
-        jobs = list(resolve_rebaseline_jobs(workspace, args.target))
-        jobs = filter_jobs_by_keywords(jobs, args.keyword_exprs)
-
-        if not jobs:
-            logger.warning("No jobs selected for rebaseline")
-            return 0
-
-        for job in jobs:
-            logger.info(f"[bold]Rebaselining[/] {job.display_name(style='rich', resolve=True)}")
-            config.pluginmanager.hook.canary_runtest_rebaseline(case=job)
-
-        logger.info(f"[bold]Rebaselined[/] {len(jobs)} job(s)")
+        app.rebaseline(args.target, keyword_exprs=args.keyword_exprs)
         return 0
-
-
-def resolve_rebaseline_jobs(workspace: Workspace, target: str) -> list["Job"]:
-    path = Path(target)
-
-    if path.exists():
-        return jobs_from_path(workspace, path)
-
-    return [workspace.find(job=target)]
-
-
-def jobs_from_path(workspace: Workspace, path: Path) -> list["Job"]:
-    lockfiles = list(iter_lockfiles(path))
-    jobs: list["Job"] = []
-    seen: set[str] = set()
-
-    for lockfile in lockfiles:
-        lock_data = json.loads(lockfile.read_text())
-        job_id = lock_data.spec.id
-        if job_id in seen:
-            continue
-        seen.add(job_id)
-        jobs.append(workspace.find(job=job_id))
-
-    return jobs
-
-
-def iter_lockfiles(path: Path):
-    import os
-
-    if path.is_file():
-        if path.name != "testcase.lock":
-            raise ValueError(f"{path}: expected testcase.lock")
-        yield path
-        return
-
-    if not path.is_dir():
-        raise ValueError(f"{path}: no such file or directory")
-
-    for root, dirs, files in os.walk(path, followlinks=True):
-        if "testcase.lock" in files:
-            yield Path(root) / "testcase.lock"
-
-
-def filter_jobs_by_keywords(jobs: list["Job"], keyword_exprs: list[str] | None) -> list["Job"]:
-    if not keyword_exprs:
-        return jobs
-
-    rule = KeywordRule(keyword_exprs)
-    selected: list["Job"] = []
-
-    for job in jobs:
-        outcome = rule(job.spec)
-        if outcome:
-            selected.append(job)
-
-    return selected
