@@ -198,6 +198,25 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     assert all(after[i] == "PASS" for i in ids)
 
 
+def test_tui_discovers_and_runs_paths_on_launch(tmp_path):
+    """'canary tui PATH --once' discovers, runs, and then shows the results.
+
+    This is the bridge that lets a run be started from the TUI: an initial
+    scanpaths request creates the workspace and runs the tests before the
+    explorer renders, all in one invocation.
+    """
+    from _canary.app.pathspec import ScanPathsRequest
+
+    (tmp_path / "basic.pyt").write_text(PYT_BODY)
+    with working_dir(str(tmp_path)), canary.config.override():
+        # No workspace yet; the initial request must create and populate it.
+        request = ScanPathsRequest(value={str(tmp_path): []})
+        rc = tui.run(once=True, request=request)
+        assert rc == 0
+        jobs = {j["name"]: j["status"] for j in queries.list_jobs()}
+    assert jobs == {"basic.x=1": "PASS", "basic.x=2": "PASS"}
+
+
 def test_inplace_rerun_tracks_live_progress(tmp_path):
     """The live progress tracker reflects the run fed by the event stream."""
     import time

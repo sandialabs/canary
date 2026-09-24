@@ -138,31 +138,47 @@ class ExplorerModel:
         runner polls for completion.
         """
         from ..app.pathspec import SpecIdsRequest
+
+        return self._launch(SpecIdsRequest(value=list(spec_ids)))
+
+    def _launch(self, request: Any, options: Any = None) -> "RunHandle":
+        """Run *request* in a child process, streaming events to this model's bus."""
         from ..app.run_subprocess import run_in_subprocess
 
-        return run_in_subprocess(SpecIdsRequest(value=list(spec_ids)))
+        return run_in_subprocess(request, options)
 
     @property
     def run_active(self) -> bool:
-        """Whether an in-place rerun is currently executing."""
+        """Whether a run (rerun or an initial discover-and-run) is executing."""
         return self._run is not None
 
-    def begin_rerun(self, spec_ids: list[str]) -> bool:
-        """Start an in-place rerun, unless one is already running.
+    def begin_run(self, request: Any, options: Any = None, *, total_hint: int = 0) -> bool:
+        """Start an in-place run of *request*, unless one is already running.
 
-        Returns ``True`` if a run was started.  The child streams events onto
-        the bus this model subscribes to, so the runner's live loop repaints as
-        progress arrives; the runner calls :meth:`poll_run` to detect completion.
+        Generalizes :meth:`begin_rerun` to any run request (a ``scanpaths``
+        request to discover and run tests under a path, a ``tag``/``specids``
+        request, etc.).  Returns ``True`` if a run was started.  The child
+        streams events onto the bus this model subscribes to, so the runner's
+        live loop repaints as progress arrives; the runner calls
+        :meth:`poll_run` to detect completion.
         """
-        if self._run is not None or not spec_ids:
+        if self._run is not None:
             return False
         # Begin the live tally before launching so the first events (which may
-        # arrive immediately) are counted; the hint is the number of jobs asked
-        # for, refined from event qsize as the run progresses.
-        self.progress.begin(total=len(spec_ids))
-        self._run = self.start_rerun(spec_ids)
+        # arrive immediately) are counted.  For discovery runs the total is
+        # unknown up front; it is refined from event qsize as the run proceeds.
+        self.progress.begin(total=total_hint)
+        self._run = self._launch(request, options)
         self.state.running = True
         return True
+
+    def begin_rerun(self, spec_ids: list[str]) -> bool:
+        """Start an in-place rerun of *spec_ids* (convenience over :meth:`begin_run`)."""
+        if not spec_ids:
+            return False
+        from ..app.pathspec import SpecIdsRequest
+
+        return self.begin_run(SpecIdsRequest(value=list(spec_ids)), total_hint=len(spec_ids))
 
     def poll_run(self) -> bool:
         """Return ``True`` when a started run has finished, refreshing rows.
@@ -219,9 +235,21 @@ class ExplorerModel:
 
         Cached so the runner can size the layout each frame (which needs the
         header height) without issuing an extra workspace query per frame.
+        Tolerates a not-yet-created workspace (an initial discovery run creates
+        it) by returning a placeholder summary until the first successful fetch.
         """
         if self._summary is None:
-            self._summary = self.fetch_summary()
+            try:
+                self._summary = self.fetch_summary()
+            except Exception:  # noqa: BLE001 - workspace may not exist yet
+                return {
+                    "root": "(starting run…)",
+                    "session_count": 0,
+                    "latest_session": "",
+                    "spec_count": 0,
+                    "tags": [],
+                    "version": "",
+                }
         return self._summary
 
     def frame(self):
@@ -282,7 +310,11 @@ def _read_escape_sequence() -> str:
 
 
 def run(
-    *, console: Console | None = None, refresh_interval: float = 2.0, once: bool = False
+    *,
+    console: Console | None = None,
+    refresh_interval: float = 2.0,
+    once: bool = False,
+    request: Any = None,
 ) -> int:
     """Launch the explorer TUI over the current workspace.
 
@@ -291,6 +323,10 @@ def run(
         refresh_interval: Seconds between automatic data refreshes.
         once: Render a single frame and return (used for non-interactive
             environments and tests).
+        request: An optional initial run request (e.g. a ``scanpaths`` request
+            from ``canary tui <path>``) to discover and run on entry, streaming
+            live into the explorer.  When given, the run is launched inside the
+            live display; the workspace it creates is then explored as usual.
 
     Returns:
         Process exit code (``0``).
@@ -298,19 +334,35 @@ def run(
     console = console or Console(stderr=True)
     model = ExplorerModel()
     model.subscribe(queries.get_event_bus())
-    model.refresh()
+    # A workspace may not exist yet when an initial discovery run was requested
+    # (the run creates it); tolerate that and let the run populate the model.
+    try:
+        model.refresh()
+    except Exception:  # noqa: BLE001 - no workspace yet; the initial run creates it
+        if request is None:
+            model.unsubscribe()
+            raise
 
     interactive = (not once) and sys.stdin.isatty() and console.is_terminal
     if not interactive:
+        # Non-interactive: run the requested tests (if any) to completion, then
+        # render a single frame of the resulting workspace.
+        if request is not None:
+            handle = model._launch(request)
+            handle.wait(timeout=None)
+            with contextlib.suppress(Exception):
+                model.refresh()
         console.print(model.frame())
         model.unsubscribe()
         return 0
 
-    # Interactive session: a live display that stays up across an in-place rerun
+    # Interactive session: a live display that stays up across an in-place run
     # (the run executes in a child process and streams events back), and pauses
-    # only to hand the terminal to an external editor.
+    # only to hand the terminal to an external editor.  An initial request is
+    # launched on first entry to the live display.
     while True:
-        action, payload = _live_session(console, model, refresh_interval)
+        action, payload = _live_session(console, model, refresh_interval, initial_request=request)
+        request = None  # only launch the initial request once
         if action == "edit":
             # vim is full-screen: the live display and raw-mode reader are
             # already torn down by _live_session before it returned.  Edit, then
@@ -330,7 +382,11 @@ def run(
 
 
 def _live_session(
-    console: Console, model: "ExplorerModel", refresh_interval: float
+    console: Console,
+    model: "ExplorerModel",
+    refresh_interval: float,
+    *,
+    initial_request: Any = None,
 ) -> tuple[str, Any]:
     """Run the live display until the user quits or requests an editor.
 
@@ -338,9 +394,11 @@ def _live_session(
     ``None``) or ``"edit"`` (payload = file path).  A rerun does **not** end the
     session: it is launched in place (a child process, see
     :meth:`ExplorerModel.begin_rerun`) and the loop keeps drawing as the child's
-    events arrive, until the run finishes.  The ``Live`` display and the
-    raw-mode keyboard reader are fully torn down before returning, so the caller
-    may safely run a full-screen external editor.
+    events arrive, until the run finishes.  When *initial_request* is given it is
+    launched on entry (e.g. a ``scanpaths`` discovery run from
+    ``canary tui <path>``), streaming live like any rerun.  The ``Live`` display
+    and the raw-mode keyboard reader are fully torn down before returning, so
+    the caller may safely run a full-screen external editor.
     """
     keys: "queue.Queue[str]" = queue.Queue()
     stop = threading.Event()
@@ -350,6 +408,8 @@ def _live_session(
     reason: str = "quit"
     payload: Any = None
     last_refresh = time.monotonic()
+    if initial_request is not None:
+        model.begin_run(initial_request)
     try:
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
             while not model.state.quit:

@@ -40,6 +40,14 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** Discover-and-run bridge: `canary tui <path>...` classifies the paths
+  into a run request (same classifier as `canary run`), launches it on entry,
+  and drops into the live explorer -- so a run can be *started* from the TUI,
+  not just reruns of existing specs. Works even with no workspace yet (the run
+  creates it). `ExplorerModel.begin_run` generalizes `begin_rerun` to any
+  request; `tui.run(request=...)` / `_live_session(initial_request=...)` launch
+  it. (First bridge toward the full launcher; arbitrary in-TUI path entry via a
+  LineEditor is still future.)
 - **DONE** Live-run monitoring (roadmap item 2, first cut). While an in-place
   rerun executes, a yellow "running" panel shows a progress bar
   (finished/total + %), running/pending counts, per-status tallies, and elapsed
