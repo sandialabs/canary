@@ -15,9 +15,24 @@ This module is a facade: it delegates to the existing implementation
 
 from .facade import collect
 from .facade import create_workspace
+from .facade import delete_selection
 from .facade import get_event_bus
+from .facade import is_selection
 from .facade import open_workspace
+from .facade import rename_selection
+from .facade import select
 from .run import RunOptions
 from .run import run
 
-__all__ = ["collect", "create_workspace", "open_workspace", "get_event_bus", "run", "RunOptions"]
+__all__ = [
+    "collect",
+    "create_workspace",
+    "open_workspace",
+    "get_event_bus",
+    "run",
+    "RunOptions",
+    "select",
+    "delete_selection",
+    "rename_selection",
+    "is_selection",
+]

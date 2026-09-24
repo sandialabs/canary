@@ -48,24 +48,14 @@ class Select(CanarySubcommand):
         Selector.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = app.open_workspace()
         if args.delete_tag:
-            workspace.db.delete_selection(args.tag)
+            app.delete_selection(args.tag)
         elif args.move_tag:
-            workspace.db.rename_selection(args.move_tag, args.tag)
+            app.rename_selection(args.move_tag, args.tag)
         elif args.from_tag:
-            resolved = workspace.db.load_specs_by_tagname(args.from_tag)
-            specs = workspace.select_from_specs(
-                resolved,
-                prefixes=args.from_root,
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                owners=args.owners,
-                regex=args.regex_filter,
-            )
-            workspace.db.put_selection(
+            app.select(
                 args.tag,
-                specs,
+                from_tag=args.from_tag,
                 prefixes=args.from_root,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
@@ -73,9 +63,9 @@ class Select(CanarySubcommand):
                 regex=args.regex_filter,
             )
         else:
-            if workspace.is_tag(args.tag):
+            if app.is_selection(args.tag):
                 raise ValueError(logging.colorize(f"Selection {args.tag!r} already exists"))
-            workspace.select(
+            app.select(
                 args.tag,
                 prefixes=args.from_root,
                 keyword_exprs=args.keyword_exprs,

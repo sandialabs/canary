@@ -42,9 +42,8 @@ class Selection(CanarySubcommand):
         p.add_argument("new", help="New tag name")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = app.open_workspace()
         if args.select_command == "create":
-            if workspace.is_tag(args.tag):
+            if app.is_selection(args.tag):
                 raise ValueError(
                     logging.colorize(
                         f"Selection {args.tag!r} already exists, run "
@@ -53,7 +52,7 @@ class Selection(CanarySubcommand):
                 )
             if not args.scanpaths:
                 raise ValueError("No paths to search")
-            workspace.create_selection(
+            app.open_workspace().create_selection(
                 args.tag,
                 args.scanpaths,
                 on_options=args.on_options,
@@ -64,9 +63,9 @@ class Selection(CanarySubcommand):
             )
             logger.info(f"To run this selection execute '[bold]canary run {args.tag}[/]'")
         elif args.select_command == "rm":
-            workspace.db.delete_selection(args.tag)
+            app.delete_selection(args.tag)
         elif args.select_command == "rename":
-            workspace.db.rename_selection(args.old, args.new)
+            app.rename_selection(args.old, args.new)
         else:
             raise ValueError(f"Unknown command canary selection {args.select_command}")
         return 0

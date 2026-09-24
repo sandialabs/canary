@@ -54,3 +54,51 @@ def collect(
     :class:`~_canary.workspace.NotAWorkspaceError` when no workspace exists.
     """
     return open_workspace().collect(scanpaths, on_options=on_options)
+
+
+def delete_selection(tag: str) -> None:
+    """Delete the named selection *tag* from the current workspace."""
+    open_workspace().db.delete_selection(tag)
+
+
+def is_selection(tag: str) -> bool:
+    """Return ``True`` if *tag* names an existing selection in the current workspace."""
+    return open_workspace().is_tag(tag)
+
+
+def rename_selection(old: str, new: str) -> None:
+    """Rename selection *old* to *new* in the current workspace."""
+    open_workspace().db.rename_selection(old, new)
+
+
+def select(
+    tag: str,
+    *,
+    from_tag: str | None = None,
+    prefixes: list[str] | None = None,
+    keyword_exprs: list[str] | None = None,
+    parameter_expr: str | None = None,
+    owners: list[str] | None = None,
+    regex: str | None = None,
+) -> list["JobSpec"]:
+    """Create a named selection *tag* from filtered specs.
+
+    Draws candidate specs from every spec in the workspace, or from the specs of
+    *from_tag* when given, applies the filters, stores the result under *tag*,
+    and returns the selected specs.  Callers that must reject an existing *tag*
+    should check :func:`is_selection` first.
+
+    Raises:
+        ~_canary.workspace.NotAWorkspaceError: If no workspace exists.
+    """
+    workspace = open_workspace()
+    filters: dict = dict(
+        prefixes=prefixes,
+        keyword_exprs=keyword_exprs,
+        parameter_expr=parameter_expr,
+        owners=owners,
+        regex=regex,
+    )
+    if from_tag is not None:
+        return workspace.select_from_tag(tag, from_tag, **filters)
+    return workspace.select(tag, **filters)

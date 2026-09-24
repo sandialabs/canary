@@ -736,6 +736,54 @@ class Workspace:
         specs = selector.run()
         return specs
 
+    def select_from_tag(
+        self,
+        tag: str,
+        source_tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Create selection *tag* by filtering the specs already in *source_tag*.
+
+        Unlike :meth:`select`, which draws from every spec in the workspace, this
+        starts from the specs stored under *source_tag* and applies the given
+        filters before saving the result as *tag*.
+
+        Args:
+            tag: The name of the selection tag to create.
+            source_tag: The existing tag whose specs are filtered.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The list of selected JobSpecs.
+        """
+        resolved = self.db.load_specs_by_tagname(source_tag)
+        specs = self.select_from_specs(
+            resolved,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        self.db.put_selection(
+            tag,
+            specs,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        return specs
+
     def create_selection(
         self,
         tag: str | None,
