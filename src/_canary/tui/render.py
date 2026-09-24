@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .state import ExplorerState
 
 _HELP = (
-    "[dim]j/k move · enter log · x mark · r rerun · e edit · c clear · "
+    "[dim]j/k move · enter log · x mark · r rerun · : run · e edit · c clear · "
     "d detail · f filter · q quit[/dim]"
 )
 #: Footer help shown while a run is in flight: q/escape cancels the run rather
@@ -152,6 +152,11 @@ def render_detail(job: "JobView") -> Panel:
 def render_footer(state: "ExplorerState") -> Text:
     """Render the status/help footer line."""
     parts = Text()
+    if state.notice:
+        # A transient message (e.g. a rejected run prompt) takes the footer for
+        # one frame; it is cleared on the next key press.
+        parts.append(state.notice, style="bold red")
+        parts.append("   ")
     if state.running:
         parts.append("running… ", style="bold yellow")
     filt = state.status_filter or "all"
@@ -165,6 +170,22 @@ def render_footer(state: "ExplorerState") -> Text:
     # While a run is in flight q/escape cancels it (not quit); advertise that.
     parts.append(Text.from_markup(_RUNNING_HELP if state.running else _HELP))
     return parts
+
+
+def render_prompt(state: "ExplorerState") -> Panel:
+    """Render the run-prompt input line (a path/dir/tag/spec id to run)."""
+    body = Text()
+    body.append("run › ", style="bold cyan")
+    body.append(state.prompt_buffer)
+    body.append("▏", style="dim")  # cursor
+    return Panel(
+        body,
+        title="start a run",
+        title_align="left",
+        subtitle="[dim]enter run · esc cancel[/dim]",
+        subtitle_align="right",
+        border_style="cyan",
+    )
 
 
 def render_log(state: "ExplorerState") -> Group:
@@ -220,15 +241,18 @@ def render_frame(
 ) -> Group:
     """Compose the full frame for the current mode.
 
-    In ``list`` mode: header, optional live-run progress panel, scrolled job
-    table, optional detail pane, footer.  In ``log`` mode: the header plus the
-    scrolled log view.  The live-run panel appears only while *progress* reports
-    an active run.
+    In ``list`` mode: header, optional run prompt, optional live-run progress
+    panel, scrolled job table, optional detail pane, footer.  In ``log`` mode:
+    the header plus the scrolled log view.  The run-prompt panel appears while
+    the user is typing a run to start; the live-run panel appears only while
+    *progress* reports an active run.
     """
     header = render_header(summary, counts)
     if state.mode == "log":
         return Group(header, render_log(state))
     parts: list[RenderableType] = [header]
+    if state.mode == "prompt":
+        parts.append(render_prompt(state))
     if progress is not None and progress.active:
         parts.append(render_run_progress(progress))
     parts.append(render_table(state))

@@ -254,6 +254,52 @@ def test_model_cancel_run_terminates_child_and_clears_state(tmp_path):
         model.unsubscribe()
 
 
+def test_model_begin_run_from_input_launches_a_run(tmp_path):
+    """The ':' run prompt launches a run from a typed path, like canary run."""
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
+        model.refresh()
+
+        # A typed directory is classified into a scanpaths run and launched.
+        started, message = model.begin_run_from_input(str(tmp_path))
+        assert started is True, message
+        assert message == ""
+        assert model.run_active is True
+
+        # A second run is refused while one is in flight.
+        started2, message2 = model.begin_run_from_input(str(tmp_path))
+        assert started2 is False
+        assert "already in flight" in message2
+
+        import time
+
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            if model.poll_run():
+                break
+            time.sleep(0.05)
+        assert model.run_active is False
+        after = {j["name"]: j["status"] for j in queries.list_jobs()}
+        model.unsubscribe()
+    assert after == {"basic.x=1": "PASS", "basic.x=2": "PASS"}
+
+
+def test_model_begin_run_from_input_reports_classification_error(tmp_path):
+    """A bogus run-prompt line is rejected with a message, no run launched."""
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
+        model.refresh()
+        started, message = model.begin_run_from_input("no-such-thing-xyz")
+        assert started is False
+        assert message  # a non-empty explanation
+        assert model.run_active is False
+        model.unsubscribe()
+
+
 def test_tui_discovers_and_runs_paths_on_launch(tmp_path):
     """'canary tui PATH --once' discovers, runs, and then shows the results.
 

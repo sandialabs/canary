@@ -266,6 +266,61 @@ def test_handle_key_unknown_returns_false():
     assert st.handle_key("z") is False
 
 
+def test_run_prompt_opens_types_and_submits():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    assert st.handle_key(":") is True
+    assert st.mode == "prompt"
+    for ch in "examples":
+        assert st.handle_key(ch) is True
+    assert st.prompt_buffer == "examples"
+    assert st.handle_key("backspace") is True
+    assert st.prompt_buffer == "example"
+    assert st.handle_key("enter") is True
+    # Submitting leaves prompt mode and records the (edge-triggered) request.
+    assert st.mode == "list"
+    assert st.consume_run_input_request() == "example"
+    assert st.consume_run_input_request() is None
+
+
+def test_run_prompt_escape_cancels_without_request():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key(":")
+    for ch in "foo":
+        st.handle_key(ch)
+    assert st.handle_key("escape") is True
+    assert st.mode == "list"
+    assert st.consume_run_input_request() is None
+
+
+def test_run_prompt_empty_submit_is_noop():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key(":")
+    st.handle_key("enter")  # nothing typed
+    assert st.mode == "list"
+    assert st.consume_run_input_request() is None
+
+
+def test_run_prompt_ignores_control_key_names():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.handle_key(":")
+    # Logical multi-char key names (arrows, page keys) are not input characters.
+    assert st.handle_key("down") is False
+    assert st.handle_key("pagedown") is False
+    assert st.prompt_buffer == ""
+
+
+def test_run_prompt_refused_while_running():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.running = True
+    assert st.handle_key(":") is False
+    assert st.mode == "list"
+
+
 def test_empty_state_is_safe():
     st = ExplorerState()
     assert st.selected is None

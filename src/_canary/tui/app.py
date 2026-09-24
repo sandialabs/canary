@@ -39,6 +39,7 @@ from .render import render_detail
 from .render import render_footer
 from .render import render_frame
 from .render import render_header
+from .render import render_prompt
 from .render import render_run_progress
 from .state import ExplorerState
 
@@ -179,6 +180,31 @@ class ExplorerModel:
         from ..app.pathspec import SpecIdsRequest
 
         return self.begin_run(SpecIdsRequest(value=list(spec_ids)), total_hint=len(spec_ids))
+
+    def begin_run_from_input(self, text: str) -> tuple[bool, str]:
+        """Classify a typed run line and launch it, like ``canary run <text>``.
+
+        The line is tokenized on whitespace and classified with the same
+        :func:`~_canary.app.pathspec.classify_pathspec` the ``canary run`` /
+        ``canary tui PATH`` CLI uses, so a directory, a test file, a tag, a view
+        path, or a spec id all work and are validated identically.  Returns
+        ``(started, message)``: on a classification error (or an empty/ambiguous
+        request) ``started`` is ``False`` and *message* explains why; otherwise
+        the run is launched in place (a child process streaming events) and
+        *message* is empty.  Refused (``False``) while a run is already active.
+        """
+        if self._run is not None:
+            return False, "a run is already in flight"
+        from ..app.pathspec import classify_pathspec
+
+        builder = classify_pathspec(text.split())
+        if builder.errors:
+            return False, "; ".join(str(e) for e in builder.errors)
+        request = builder.finalize()
+        if request is None:
+            return False, f"nothing to run for {text!r}"
+        started = self.begin_run(request)
+        return (started, "" if started else "could not start the run")
 
     def poll_run(self) -> bool:
         """Return ``True`` when a started run has finished, refreshing rows.
@@ -325,6 +351,8 @@ def _read_keys(stop: threading.Event, out: "queue.Queue[str]") -> None:
             if ch == "\x1b":  # escape or an escape sequence
                 seq = _read_escape_sequence()
                 out.put(seq)
+            elif ch in ("\x7f", "\b"):  # DEL / BS -> logical backspace
+                out.put("backspace")
             else:
                 out.put(ch)
     finally:
@@ -496,6 +524,15 @@ def _live_session(
                     # any marks so the "running" set is unambiguous.
                     model.state.clear_marks()
                     dirty = True
+                run_line = model.state.consume_run_input_request()
+                if run_line is not None:
+                    # A run started from scratch (the ':' prompt): classify the
+                    # typed path/dir/tag/spec id and launch it in place.  A
+                    # classification error surfaces as a transient footer notice.
+                    started, message = model.begin_run_from_input(run_line)
+                    if not started:
+                        model.state.notice = message
+                    dirty = True
                 # A finished in-place run refreshes rows and clears the flag.
                 if model.poll_run():
                     dirty = True
@@ -533,6 +570,9 @@ def _body_height(console: Console, state: "ExplorerState", summary, counts, prog
         available = console.size.height - used - 4
         return max(1, available)
     used += measure_height(console, render_footer(state))
+    # The run prompt, when open, occupies a panel above the table; subtract it.
+    if state.mode == "prompt":
+        used += measure_height(console, render_prompt(state))
     # The live-run progress panel, when active, occupies real lines above the
     # table; subtract them so the table still fits.
     if progress is not None and progress.active:

@@ -47,6 +47,12 @@ class ExplorerState:
             cursor row's test file in an editor.
         cancel_requested: Edge-triggered flag the runner consumes to cancel an
             in-flight run (set by ``esc``/``q`` while :attr:`running`).
+        prompt_buffer: The text typed into the run prompt while in ``prompt``
+            mode; the runner classifies it into a run request on submit.
+        run_input_requested: Edge-triggered; the submitted run-prompt line the
+            runner consumes to start a run from scratch (a path/dir/tag/spec id).
+        notice: A transient footer message (e.g. an error from a rejected run
+            prompt); cleared on the next key press.
         running: Whether an in-place rerun is currently executing (shown in the
             footer); set by the runner, cleared when the run finishes.
         quit: Set by :meth:`handle_key` when the user asks to exit.
@@ -58,7 +64,7 @@ class ExplorerState:
     viewport_height: int = 0
     status_filter: str | None = None
     show_detail: bool = False
-    mode: Literal["list", "log"] = "list"
+    mode: Literal["list", "log", "prompt"] = "list"
     log_lines: list[str] = field(default_factory=list)
     log_top: int = 0
     log_title: str = ""
@@ -66,6 +72,15 @@ class ExplorerState:
     rerun_requested: bool = False
     edit_requested: bool = False
     cancel_requested: bool = False
+    #: Text buffer for the run prompt (``prompt`` mode); the runner classifies it
+    #: into a run request on submit.
+    prompt_buffer: str = ""
+    #: Non-empty when the user submitted the run prompt: the typed line the
+    #: runner consumes (tokenize -> classify -> launch).  Edge-triggered.
+    run_input_requested: str | None = None
+    #: Transient message shown in the footer (e.g. a classification error from a
+    #: rejected run prompt); cleared on the next key.
+    notice: str = ""
     running: bool = False
     quit: bool = False
 
@@ -283,11 +298,20 @@ class ExplorerState:
         * ``e`` -- edit the cursor row's test file
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
+        * ``:`` -- open the run prompt to start a run from a path/dir/tag/spec id
         * ``q`` / ``escape`` -- cancel the in-flight run if one is running,
           otherwise quit
+
+        In prompt mode, printable characters extend the input, ``backspace``
+        deletes, ``enter`` submits (the runner classifies and launches), and
+        ``escape`` cancels back to the list.
         """
+        # Any key clears a transient notice from a previous action.
+        self.notice = ""
         if self.mode == "log":
             return self._handle_key_log(key)
+        if self.mode == "prompt":
+            return self._handle_key_prompt(key)
         return self._handle_key_list(key)
 
     def _handle_key_list(self, key: str) -> bool:
@@ -352,7 +376,58 @@ class ExplorerState:
                 self.edit_requested = True
                 return True
             return False
+        if key == ":":
+            # Open the run prompt: the user types a path/dir/tag/spec id and the
+            # runner classifies+launches it -- a run started from scratch, not a
+            # rerun.  Refused while a run is already in flight.
+            if not self.running:
+                self.open_prompt()
+                return True
+            return False
         return False
+
+    def open_prompt(self) -> None:
+        """Enter run-prompt mode with an empty input buffer."""
+        self.mode = "prompt"
+        self.prompt_buffer = ""
+
+    def close_prompt(self) -> None:
+        """Leave run-prompt mode, discarding the input, back to the job list."""
+        self.mode = "list"
+        self.prompt_buffer = ""
+
+    def _handle_key_prompt(self, key: str) -> bool:
+        if key == "escape":
+            self.close_prompt()
+            return True
+        if key in ("enter", "\r", "\n"):
+            text = self.prompt_buffer.strip()
+            self.close_prompt()
+            if text:
+                # Edge-triggered: the runner tokenizes, classifies, and launches.
+                self.run_input_requested = text
+            return True
+        if key in ("backspace", "\x7f", "\b"):
+            self.prompt_buffer = self.prompt_buffer[:-1]
+            return True
+        # Accept a single printable character (control keys and multi-char
+        # logical names like "up"/"pagedown" are ignored in the input line).
+        if len(key) == 1 and key.isprintable():
+            self.prompt_buffer += key
+            return True
+        return False
+
+    def consume_run_input_request(self) -> str | None:
+        """Return the submitted run-prompt line if any, clearing the flag.
+
+        Edge-triggered, mirroring the other ``consume_*`` methods: the runner
+        acts on it once (classify + launch).
+        """
+        if self.run_input_requested is None:
+            return None
+        text = self.run_input_requested
+        self.run_input_requested = None
+        return text
 
     def _handle_key_log(self, key: str) -> bool:
         if key in ("q", "Q", "escape", "enter", "\r", "\n"):

@@ -40,6 +40,14 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** Start a run from scratch in the TUI (roadmap item 4). A `:` opens a
+  run prompt; the typed line (path/dir/tag/spec id) is classified with the CLI's
+  `classify_pathspec` and launched in place via
+  `ExplorerModel.begin_run_from_input`. Errors show as a transient footer
+  notice; the prompt is refused mid-run. New `prompt` state mode (buffer +
+  edge-triggered `run_input_requested`), `render_prompt` panel, and a
+  `backspace` key from the raw reader. Tests: `tui_state` prompt open/type/
+  submit/escape/empty/refused; `tui_integration` launch + classification error.
 - **DONE** Cancellation now surfaces as events. `ExplorerModel.cancel_run()`
   publishes a `job_cancelled` event (status `CANCELLED`) for each job the run
   had started but not finished, using the in-flight payloads retained by
@@ -425,10 +433,15 @@ Ordered, each step independently useful:
    `RunProgress.running_jobs()`), so the cancellation is visible on the bus --
    not only via the DB reconcile -- for any subscriber (TUI today, GUI/REST
    later).
-4. **Start a run from scratch in the TUI** -- not just rerun: pick scanpaths /
-   a selection/tag, build a `RunOptions`, and launch. This is the last piece for
-   a full `canary run` front end (the app layer already accepts scanpaths/tag
-   requests, `app/run.py:99-135`).
+4. **Start a run from scratch in the TUI** -- **DONE:** a `:` run prompt lets
+   the user type a path/dir/tag/spec id; the runner tokenizes it and classifies
+   it with the same `classify_pathspec` the CLI uses
+   (`ExplorerModel.begin_run_from_input`), then launches it in place like any
+   rerun. Classification errors surface as a transient footer notice; the prompt
+   is refused while a run is already in flight. This makes `canary tui` a full
+   `canary run` front end (paths on launch + reruns + ad-hoc runs). Future: a
+   richer form (tag/selection picker, `RunOptions` toggles) instead of a raw
+   line.
 5. **Live log tailing** -- stream a running job's output into the log pane
    (needs a `job_output` event or file tail; noted as an open question in the
    redesign doc, section 10.4).
