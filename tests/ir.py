@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import _canary.jobspec as js
+import _canary.core.jobspec as js
 from _canary import generate
-from _canary import ir
+from _canary.core import jobspec_ir as ir
 from _canary.util.filesystem import working_dir
 
 

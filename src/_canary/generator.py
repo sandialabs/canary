@@ -22,14 +22,14 @@ except ImportError:
 from schema import Schema
 from schema import Type
 
-from .ir import JobSpecIR
+from .core.jobspec_ir import JobSpecIR
 from .util import json_helper as json
 from .util import reducer
 from .util.logging import get_logger
 from .util.reducer import unique
 
 if TYPE_CHECKING:
-    from .jobspec import JobSpec
+    from .core.jobspec import JobSpec
 
 
 WhenType = str | dict[str, str]

@@ -17,16 +17,16 @@ from typing import ClassVar
 from typing import Literal
 from typing import Sequence
 
+from _canary.core.jobspec import Artifact
+from _canary.core.jobspec import Asset
+from _canary.core.jobspec import BaselineAction
+from _canary.core.jobspec import BaselineCopyAction
+from _canary.core.jobspec import BaselineScriptAction
+from _canary.core.jobspec import Mask
+from _canary.core.jobspec_ir import DependencySelector
+from _canary.core.jobspec_ir import JobSpecIR
 from _canary.core.status import Outcome
 from _canary.error import diff_exit_status
-from _canary.ir import DependencySelector
-from _canary.ir import JobSpecIR
-from _canary.jobspec import Artifact
-from _canary.jobspec import Asset
-from _canary.jobspec import BaselineAction
-from _canary.jobspec import BaselineCopyAction
-from _canary.jobspec import BaselineScriptAction
-from _canary.jobspec import Mask
 from _canary.third_party.monkeypatch import monkeypatch
 from _canary.util import logging
 from _canary.util import reducer
@@ -39,7 +39,7 @@ from canary_pyt.enums import enums
 from canary_pyt.paramset import ParameterSet
 
 if TYPE_CHECKING:
-    from _canary.jobspec import JobSpec
+    from _canary.core.jobspec import JobSpec
 
 
 WhenType = str | dict[str, str]

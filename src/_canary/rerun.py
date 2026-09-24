@@ -34,13 +34,13 @@ from typing import TYPE_CHECKING
 from typing import Iterable
 from typing import Literal
 
+from .core.jobspec import Mask
 from .database import PartialSpec
 from .database import WorkspaceDatabase
-from .jobspec import Mask
 
 if TYPE_CHECKING:
+    from .core.jobspec import JobSpec
     from .job import Job
-    from .jobspec import JobSpec
 
 
 StrategyType = Literal["all", "not_pass", "failed", "not_run", "changed"]
@@ -205,7 +205,7 @@ def compute_rerun_closure(db: WorkspaceDatabase, roots: Iterable[str]) -> list["
         roots: Spec IDs that are the seeds of the rerun.
 
     Returns:
-        A list of :class:`~_canary.jobspec.JobSpec` objects.  Upstream specs
+        A list of :class:`~_canary.core.jobspec.JobSpec` objects.  Upstream specs
         that are not in the run set have ``spec.mask`` set to a skip mask.
     """
     roots = set(roots)

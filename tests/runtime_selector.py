@@ -4,8 +4,8 @@
 
 from pathlib import Path
 
+from _canary.core.jobspec import JobSpec
 from _canary.job import Job
-from _canary.jobspec import JobSpec
 from _canary.rules import RerunRule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule

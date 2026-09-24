@@ -226,8 +226,8 @@ def test_adapter_baseline_flag_and_copy(tmp_path: Path) -> None:
     assert len(b) == 2
     assert isinstance(b[0], type(b[0]))  # sanity: baseline actions exist
     # One should be BaselineCopyAction
-    from _canary.jobspec import BaselineCopyAction
-    from _canary.jobspec import BaselineScriptAction
+    from _canary.core.jobspec import BaselineCopyAction
+    from _canary.core.jobspec import BaselineScriptAction
 
     assert any(isinstance(x, BaselineCopyAction) for x in b)
     assert any(isinstance(x, BaselineScriptAction) for x in b)

@@ -16,7 +16,7 @@ from _canary.util.testing import generate_random_jobs
 from _canary.util.testing import generate_random_jobspecs
 
 if TYPE_CHECKING:
-    from _canary.jobspec import JobSpec
+    from _canary.core.jobspec import JobSpec
 
 
 class MakeRandomSpecs(Protocol):

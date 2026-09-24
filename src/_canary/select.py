@@ -71,9 +71,9 @@ from schema import Schema
 
 from . import config
 from .config.argparsing import Parser
+from .core.jobspec import Mask
 from .hookspec import hookimpl
 from .job_graph import make_job_graph
-from .jobspec import Mask
 from .jobspec_graph import make_spec_graph
 from .rules import Rule
 from .rules import RuntimeRule
@@ -83,8 +83,8 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .core.jobspec import JobSpec
     from .job import Job
-    from .jobspec import JobSpec
 
 
 logger = logging.get_logger(__name__)

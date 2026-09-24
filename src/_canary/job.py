@@ -24,12 +24,12 @@ from typing import MutableMapping
 
 from . import config
 from .core.expression import Expression
+from .core.jobspec import BaselineScriptAction
 from .core.status import Status
 from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
-from .jobspec import BaselineScriptAction
 from .launcher import Launcher
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
@@ -40,8 +40,8 @@ from .util.executable import Executable
 from .util.string import SimpleTemplate
 
 if TYPE_CHECKING:
-    from .jobspec import JobSpec
-    from .jobspec import Mask
+    from .core.jobspec import JobSpec
+    from .core.jobspec import Mask
     from .resource_pool.rpool import NodeRequest
 
 logger = logging.get_logger(__name__)
@@ -947,7 +947,7 @@ class Job(BaseJob):
         """store relevant information for this run"""
         if not self.status.is_success():
             return
-        from .jobspec import _GlobalSpecCache
+        from .core.jobspec import _GlobalSpecCache
         from .util.filesystem import atomic_write
         from .util.filesystem import file_lock
 

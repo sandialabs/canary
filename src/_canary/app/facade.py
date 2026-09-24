@@ -13,7 +13,7 @@ from ..events import EventBus
 from ..workspace import Workspace
 
 if TYPE_CHECKING:
-    from ..jobspec import JobSpec
+    from ..core.jobspec import JobSpec
 
 _event_bus = EventBus()
 
@@ -50,7 +50,7 @@ def collect(
     """Discover test generators under *scanpaths* and store the resolved specs.
 
     Opens the nearest existing workspace, runs collection, and returns the
-    resolved :class:`~_canary.jobspec.JobSpec` objects.  Raises
+    resolved :class:`~_canary.core.jobspec.JobSpec` objects.  Raises
     :class:`~_canary.workspace.NotAWorkspaceError` when no workspace exists.
     """
     return open_workspace().collect(scanpaths, on_options=on_options)

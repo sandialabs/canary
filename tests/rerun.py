@@ -24,9 +24,9 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.core.jobspec import JobSpec
 from _canary.job import Dependency
 from _canary.job import Job
-from _canary.jobspec import JobSpec
 from _canary.rules import RerunRule
 from _canary.select import RuntimeSelector
 from _canary.testexec import ExecutionSpace

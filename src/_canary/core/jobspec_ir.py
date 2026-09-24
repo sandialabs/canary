@@ -6,7 +6,7 @@
 
 :class:`JobSpecIR` is a mutable, pre-resolution form of a job specification.
 It is produced by test generators (e.g. the PYT directive parser) and holds
-all the raw field values needed to eventually construct a :class:`~_canary.jobspec.JobSpec`.
+all the raw field values needed to eventually construct a :class:`~_canary.core.jobspec.JobSpec`.
 The key difference from ``JobSpec`` is that dependencies are still expressed as
 :class:`DependencySelector` patterns rather than resolved spec references.
 
@@ -24,6 +24,8 @@ from typing import Any
 from typing import Literal
 from typing import Sequence
 
+from ..util import logging
+from ..util.string import stringify
 from .jobspec import NULL_PATH
 from .jobspec import Artifact
 from .jobspec import Asset
@@ -33,8 +35,6 @@ from .jobspec import Mask
 from .jobspec import SpecDependency
 from .jobspec import build_spec_id
 from .jobspec import default_timeout
-from .util import logging
-from .util.string import stringify
 
 FileResourceT = dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]]
 logger = logging.get_logger(__name__)
@@ -129,7 +129,7 @@ class JobSpecIR:
     name, file path, and non-runtime parameters immediately on construction so
     it remains stable across the collection phase.
 
-    Call :meth:`finalize` to produce a fully resolved :class:`~_canary.jobspec.JobSpec`.
+    Call :meth:`finalize` to produce a fully resolved :class:`~_canary.core.jobspec.JobSpec`.
 
     Args:
         file_root: Absolute path to the collection root directory.
@@ -271,7 +271,7 @@ class JobSpecIR:
     def finalize(
         self, lookup: dict[str, "JobSpec"], resolved: Sequence[tuple[int, Sequence[str]]] = ()
     ) -> "JobSpec":
-        """Construct the final :class:`~_canary.jobspec.JobSpec` from this IR.
+        """Construct the final :class:`~_canary.core.jobspec.JobSpec` from this IR.
 
         Args:
             lookup: Mapping of spec ID → ``JobSpec`` for all collected specs,
@@ -282,7 +282,7 @@ class JobSpecIR:
                 the list of matching spec IDs.
 
         Returns:
-            A fully resolved, immutable :class:`~_canary.jobspec.JobSpec`.
+            A fully resolved, immutable :class:`~_canary.core.jobspec.JobSpec`.
         """
         deps: list[SpecDependency] = []
         for dp_index, ids in resolved:

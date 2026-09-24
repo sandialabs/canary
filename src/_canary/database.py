@@ -7,7 +7,7 @@
 The :class:`WorkspaceDatabase` manages a single ``workspace.sqlite3`` file at
 the workspace root.  It stores four main collections:
 
-* **specs** — serialised :class:`~_canary.jobspec.JobSpec` blobs indexed by
+* **specs** — serialised :class:`~_canary.core.jobspec.JobSpec` blobs indexed by
   content-independent spec ID.
 * **spec_deps** — dependency edges between specs.
 * **results** — per-job execution results keyed by ``(spec_id, session)``.
@@ -36,11 +36,11 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from . import jobspec
+from .core import jobspec
+from .core.jobspec import JobSpec
 from .core.status import Status
 from .job import JobPhase
 from .job import JobState
-from .jobspec import JobSpec
 from .jobspec_graph import make_spec_graph
 from .util import json_helper as json
 from .util import logging
@@ -365,7 +365,7 @@ class WorkspaceDatabase:
     def load_specs(
         self, ids: list[str] | None = None, include_upstreams: bool = False
     ) -> list[JobSpec]:
-        """Load and deserialise :class:`~_canary.jobspec.JobSpec` objects from the database.
+        """Load and deserialise :class:`~_canary.core.jobspec.JobSpec` objects from the database.
 
         Args:
             ids: Spec IDs to load.  ``None`` loads all specs.  Short prefixes

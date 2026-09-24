@@ -30,7 +30,7 @@ has already run.  It:
 2. For each ``canaryconf.py`` found, uses ``ast.parse`` to check whether
    ``canary_setup`` and/or ``canary_teardown`` are defined *without executing
    user code at generation time*.
-3. Creates synthetic :class:`~_canary.jobspec.JobSpec` objects for setup and/or
+3. Creates synthetic :class:`~_canary.core.jobspec.JobSpec` objects for setup and/or
    teardown.  These specs carry *no* ``command``: they are dispatched
    in-process by :class:`~_canary.launcher.PythonFunctionLauncher`, which
    imports the ``canaryconf.py`` file and calls ``canary_setup(ctx)`` /
@@ -38,7 +38,7 @@ has already run.  It:
    synthetic spec's ``exec_path`` is set to a dedicated ``__setup__`` /
    ``__teardown__`` directory beneath the governing directory so the function
    runs in the session tree location mirroring the ``canaryconf.py``.
-4. Wires :class:`~_canary.jobspec.SpecDependency` edges:
+4. Wires :class:`~_canary.core.jobspec.SpecDependency` edges:
    - Every test in scope: ``test.dependencies += [SpecDependency(setup, "on_success")]``
    - Teardown spec: ``teardown.dependencies += [SpecDependency(test, "always")]``
      for every test in scope.
@@ -64,7 +64,7 @@ spec's keyword list so users can filter them immediately with
 Rerun behaviour
 ---------------
 Synthetic specs have stable IDs (derived from ``family`` + ``file_root`` +
-``file_path`` via :func:`~_canary.jobspec.build_spec_id`), identical to
+``file_path`` via :func:`~_canary.core.jobspec.build_spec_id`), identical to
 regular jobs.  A setup job that passed in a previous session will therefore be
 correctly skipped by ``--only not_pass`` or ``--only failed`` rerun strategies.
 Teardown re-runs whenever any downstream test re-runs, because the
@@ -77,9 +77,9 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .core.jobspec import JobSpec
+from .core.jobspec import SpecDependency
 from .hookspec import hookimpl
-from .jobspec import JobSpec
-from .jobspec import SpecDependency
 from .util import logging
 
 if TYPE_CHECKING:

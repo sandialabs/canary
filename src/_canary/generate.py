@@ -52,9 +52,9 @@ from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .core.jobspec import JobSpec
+    from .core.jobspec_ir import JobSpecIR
     from .generator import AbstractTestGenerator
-    from .ir import JobSpecIR
-    from .jobspec import JobSpec
 
 
 logger = logging.get_logger(__name__)

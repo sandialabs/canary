@@ -34,12 +34,12 @@ from typing import Any
 import yaml
 
 from . import config
-from . import jobspec
 from . import rules
 from . import select
 from . import version
 from .collect import Collector
 from .config import config as config_mod
+from .core import jobspec
 from .database import WorkspaceDatabase
 from .error import StopExecution
 from .error import notests_exit_status
@@ -62,8 +62,8 @@ from .view import ViewManager
 from .view import ViewSettings
 
 if TYPE_CHECKING:
+    from .core.jobspec import JobSpec
     from .database import ResultListener
-    from .jobspec import JobSpec
     from .queue_executor import EventTypes
 
 logger = logging.get_logger(__name__)
@@ -617,7 +617,7 @@ class Workspace:
         Returns:
             A dict with ``tag``, ``created_on`` (popped from metadata),
             ``metadata`` (the remaining selection metadata), and ``specs`` (the
-            list of unmasked :class:`~_canary.jobspec.JobSpec` in the tag).
+            list of unmasked :class:`~_canary.core.jobspec.JobSpec` in the tag).
 
         Raises:
             NotASelection: If *tag* is not a selection.

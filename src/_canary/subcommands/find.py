@@ -30,7 +30,7 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..jobspec import JobSpec
+    from ..core.jobspec import JobSpec
 
 logger = logging.get_logger(__name__)
 

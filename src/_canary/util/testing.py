@@ -21,8 +21,8 @@ from typing import Any
 from typing import Iterable
 
 if TYPE_CHECKING:
+    from ..core.jobspec import JobSpec
     from ..job import Job
-    from ..jobspec import JobSpec
 
 
 class CanaryCommand:

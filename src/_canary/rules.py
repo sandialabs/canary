@@ -30,8 +30,8 @@ from .util import json_helper as json
 from .util import logging
 
 if TYPE_CHECKING:
+    from .core.jobspec import JobSpec
     from .job import Job
-    from .jobspec import JobSpec
     from .resource_pool.rpool import NodeRequest
 
 

@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.core.jobspec import JobSpec
 from _canary.error import StopExecution
 from _canary.job import Job
-from _canary.jobspec import JobSpec
 from _canary.testexec import ExecutionSpace
 from _canary.util.filesystem import working_dir
 from _canary.workspace import Workspace

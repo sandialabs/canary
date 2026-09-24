@@ -17,13 +17,13 @@ from typing import Literal
 from typing import MutableSequence
 from typing import TextIO
 
-from . import config
-from .util import cpu_count
-from .util import logging
-from .util.string import stringify
+from .. import config
+from ..util import cpu_count
+from ..util import logging
+from ..util.string import stringify
 
 if TYPE_CHECKING:
-    from .core.status import Status
+    from .status import Status
 
 logger = logging.get_logger(__name__)
 select_sygil = "/"
@@ -89,7 +89,7 @@ class Artifact:
         return NotImplemented
 
     def active(self, status: "Status") -> bool:
-        from .core.status import Category
+        from .status import Category
 
         if self.when == "never":
             return False

@@ -20,7 +20,7 @@ from _canary.canaryconf_impl import _has_teardown
 from _canary.canaryconf_impl import _inject_conftest_jobs
 from _canary.canaryconf_impl import _make_synthetic_spec
 from _canary.canaryconf_impl import _top_level_functions
-from _canary.jobspec import JobSpec
+from _canary.core.jobspec import JobSpec
 
 # ---------------------------------------------------------------------------
 # helpers — cheap JobSpec factory

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Dependency graph construction and rendering helpers for :class:`~_canary.jobspec.JobSpec` objects.
+"""Dependency graph construction and rendering helpers for :class:`~_canary.core.jobspec.JobSpec` objects.
 
 Wraps :class:`~_canary.util.level_graph.LevelGraph` with spec-specific ID and
 dependency accessor functions.  Also provides :func:`print_spec_graph` and
@@ -16,7 +16,7 @@ from typing import Sequence
 from typing import TextIO
 from typing import TypeAlias
 
-from .jobspec import JobSpec
+from .core.jobspec import JobSpec
 from .util.level_graph import LevelGraph
 
 SpecGraph: TypeAlias = LevelGraph[JobSpec]
@@ -43,7 +43,7 @@ def spec_sort_key(spec: JobSpec) -> tuple[str, str]:
 
 
 def make_spec_graph(specs: Sequence[JobSpec], *, require_closed: bool = True) -> SpecGraph:
-    """Build a dependency graph from a flat sequence of :class:`~_canary.jobspec.JobSpec` objects.
+    """Build a dependency graph from a flat sequence of :class:`~_canary.core.jobspec.JobSpec` objects.
 
     Args:
         specs: All specs to include in the graph.
@@ -107,7 +107,7 @@ def print_spec_graph(
     Args:
         specs: Specs to include in the graph.
         file: Output stream; defaults to ``sys.stdout``.
-        style: Rendering style passed through to :meth:`~_canary.jobspec.JobSpec.print`.
+        style: Rendering style passed through to :meth:`~_canary.core.jobspec.JobSpec.print`.
         level: Maximum depth to render (``-1`` for unlimited).
         require_closed: Forwarded to :func:`make_spec_graph`.
     """

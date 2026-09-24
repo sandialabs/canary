@@ -108,7 +108,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         return tests
 
     def resolve_fixtures(self, specs: list["canary.JobSpec"]) -> None:
-        from _canary.jobspec import SpecDependency
+        from _canary.core.jobspec import SpecDependency
 
         setup_fixtures: dict[str, list[canary.JobSpec]] = {}
         cleanup_fixtures: dict[str, list[canary.JobSpec]] = {}

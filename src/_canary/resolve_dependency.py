@@ -2,18 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Dependency resolution: match :class:`~_canary.ir.DependencySelector` patterns to spec IDs.
+"""Dependency resolution: match :class:`~_canary.core.jobspec_ir.DependencySelector` patterns to spec IDs.
 
 The entry point is :func:`resolve`, which accepts a mixed list of already-resolved
-:class:`~_canary.jobspec.JobSpec` objects and unresolved
-:class:`~_canary.ir.JobSpecIR` objects, matches each IR spec's dependency
+:class:`~_canary.core.jobspec.JobSpec` objects and unresolved
+:class:`~_canary.core.jobspec_ir.JobSpecIR` objects, matches each IR spec's dependency
 patterns against the full collection, and returns a fully resolved list of
 ``JobSpec`` objects in topological order.
 
 Internally, :class:`DependencyResolver` uses either serial or parallel pattern
 matching (controlled by the ``CANARY_SERIAL_SPEC_RESOLUTION`` environment
 variable) and then finalises each IR spec via
-:meth:`~_canary.ir.JobSpecIR.finalize` in topological order.
+:meth:`~_canary.core.jobspec_ir.JobSpecIR.finalize` in topological order.
 """
 
 import os
@@ -26,11 +26,11 @@ from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Sequence
 
-from .ir import JobSpecIR
-from .jobspec import JobSpec
+from .core.jobspec import JobSpec
+from .core.jobspec_ir import JobSpecIR
 
 if TYPE_CHECKING:
-    from .ir import DependencySelector
+    from .core.jobspec_ir import DependencySelector
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +116,7 @@ def _resolve_dependencies_serial(
         - ``edges_by_id``: ``{spec_id: [dep_id, ...]}`` flat dependency lists.
         - ``groups_by_id``: ``{spec_id: [(dep_index, [dep_id, ...]), ...]}``
           grouped by dependency selector index.
-        - ``errors``: List of error strings from :meth:`~_canary.ir.DependencySelector.verify`.
+        - ``errors``: List of error strings from :meth:`~_canary.core.jobspec_ir.DependencySelector.verify`.
     """
     edges_by_id: dict[str, list[str]] = {}
     groups_by_id: dict[str, list[tuple[int, list[str]]]] = {}
@@ -262,7 +262,7 @@ def resolve(specs: Sequence["JobSpecIR | JobSpec"]) -> list["JobSpec"]:
     3. :class:`DependencyResolver` matches patterns for the remaining IR specs.
     4. IR specs are finalised in topological order so that upstream
        dependencies are available as ``JobSpec`` objects when a downstream
-       spec calls :meth:`~_canary.ir.JobSpecIR.finalize`.
+       spec calls :meth:`~_canary.core.jobspec_ir.JobSpecIR.finalize`.
 
     Args:
         specs: Mixed sequence of ``JobSpec`` and ``JobSpecIR`` objects.
