@@ -17,6 +17,17 @@ from _canary.tui.render import render_table
 from _canary.tui.state import ExplorerState
 
 
+def _summary(root="/ws/.canary"):
+    return {
+        "root": root,
+        "session_count": 1,
+        "latest_session": "2026-01-01T00-00-00",
+        "spec_count": 3,
+        "tags": [],
+        "version": "0.0.0",
+    }
+
+
 def _view(name, status, *, id=None, duration=0.0, phase="DONE"):
     sid = id or (name + "0000000")
     return {
@@ -199,3 +210,32 @@ def test_render_frame_shows_detail_when_open():
     out = console.export_text()
     assert "detail" in out
     assert "boom" in out  # the FAIL row's reason
+
+
+def _rendered_line_count(console, renderable):
+    options = console.options.update(height=None)
+    return len(console.render_lines(renderable, options, pad=False))
+
+
+def test_frame_fits_terminal_height_when_sized():
+    """With the body sized by the runner, the frame must not exceed the terminal.
+
+    Regression guard: a fixed chrome estimate under-counted the wrapping
+    header/footer, so more jobs than fit rendered past the bottom of a short
+    terminal instead of scrolling.
+    """
+    from _canary.tui.app import _body_height
+
+    st = ExplorerState()
+    st.update_jobs([_view(f"j{i:02d}", "PASS", id=f"{i:09d}") for i in range(40)])
+    summary = _summary(root="/a/deliberately/long/workspace/path/that/wraps/.canary")
+    counts = {"PASS": 40}
+
+    for height in (12, 20, 40):
+        console = Console(width=80, height=height)
+        st.set_viewport_height(_body_height(console, st, summary, counts))
+        st.move_end()  # worst case: cursor forces a scroll to the last window
+        rendered = _rendered_line_count(console, render_frame(st, summary, counts))
+        assert rendered <= height, f"frame overflowed at LINES={height}: {rendered} lines"
+        # And the selected (last) row is within the visible window.
+        assert 0 <= st.window_cursor < max(1, st.viewport_height)

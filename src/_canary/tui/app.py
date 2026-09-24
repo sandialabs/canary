@@ -30,7 +30,12 @@ from rich.console import Console
 from rich.live import Live
 
 from ..app import queries
+from .render import TABLE_FRAME_ROWS
+from .render import measure_height
+from .render import render_detail
+from .render import render_footer
 from .render import render_frame
+from .render import render_header
 from .state import ExplorerState
 
 if TYPE_CHECKING:
@@ -57,10 +62,12 @@ class ExplorerModel:
         self.state = ExplorerState()
         self._dirty = threading.Event()
         self._bus: "EventBus | None" = None
+        self._summary: "WorkspaceSummary | None" = None
 
     def refresh(self) -> None:
-        """Pull the latest job rows from the application into the UI state."""
+        """Pull the latest job rows and workspace summary into the UI state."""
         self.state.update_jobs(self.fetch_jobs())
+        self._summary = self.fetch_summary()
 
     def subscribe(self, bus: "EventBus") -> None:
         """Subscribe to *bus*; any job event marks the model dirty for refresh."""
@@ -109,9 +116,19 @@ class ExplorerModel:
     def counts(self) -> dict[str, int]:
         return queries.status_counts(self.state.jobs)
 
+    def summary(self) -> "WorkspaceSummary":
+        """The workspace summary cached at the last :meth:`refresh`.
+
+        Cached so the runner can size the layout each frame (which needs the
+        header height) without issuing an extra workspace query per frame.
+        """
+        if self._summary is None:
+            self._summary = self.fetch_summary()
+        return self._summary
+
     def frame(self):
         """Render the current model to a Rich renderable."""
-        return render_frame(self.state, self.fetch_summary(), self.counts())
+        return render_frame(self.state, self.summary(), self.counts())
 
 
 def _read_keys(stop: threading.Event, out: "queue.Queue[str]") -> None:
@@ -201,9 +218,11 @@ def run(
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
             while not model.state.quit:
                 dirty = False
-                # Size the table window to the terminal so rows never spill off
-                # the bottom; recomputed each frame so it tracks resizes.
-                model.state.set_viewport_height(_body_height(console, model.state))
+                # Size the scrollable region to the terminal so rows never spill
+                # off the bottom; recomputed each frame so it tracks resizes.
+                model.state.set_viewport_height(
+                    _body_height(console, model.state, model.summary(), model.counts())
+                )
                 with contextlib.suppress(queue.Empty):
                     while True:
                         key = keys.get_nowait()
@@ -232,22 +251,24 @@ def run(
     return 0
 
 
-# Non-body chrome rendered around the scrollable region: header panel (border +
-# two content lines + border) and, in list mode, the footer line.  Detail pane,
-# when open, consumes further rows; a conservative reserve keeps the cursor row
-# on screen rather than fighting for an exact count.
-_LIST_CHROME = 5
-_DETAIL_CHROME = 8
-_LOG_CHROME = 6
+def _body_height(console: Console, state: "ExplorerState", summary, counts) -> int:
+    """Rows the scrollable region can show after the real chrome is accounted for.
 
-
-def _body_height(console: Console, state: "ExplorerState") -> int:
-    """Rows available for the scrollable region given the console height."""
-    total = console.size.height
+    The header/detail/footer wrap unpredictably (long workspace paths, narrow
+    terminals), so their heights are *measured* at the current width rather than
+    guessed; the scrollable region gets exactly the remaining lines.  This keeps
+    the table (or log) filling down toward the bottom of the pane and makes it
+    scroll once the cursor reaches the last visible row, instead of overrunning
+    the terminal.
+    """
+    used = measure_height(console, render_header(summary, counts))
     if state.mode == "log":
-        reserve = _LOG_CHROME
-    elif state.show_detail:
-        reserve = _DETAIL_CHROME
-    else:
-        reserve = _LIST_CHROME
-    return max(1, total - reserve)
+        # Log view: a panel (top border, title, bottom border = 3) plus a footer
+        # line under it; the panel body gets whatever remains.
+        available = console.size.height - used - 4
+        return max(1, available)
+    used += measure_height(console, render_footer(state))
+    if state.show_detail and state.selected is not None:
+        used += measure_height(console, render_detail(state.selected))
+    available = console.size.height - used - TABLE_FRAME_ROWS
+    return max(1, available)

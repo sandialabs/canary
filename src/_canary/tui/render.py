@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from rich.console import Console
 from rich.console import Group
 from rich.console import RenderableType
 from rich.panel import Panel
@@ -27,6 +28,22 @@ if TYPE_CHECKING:
 
 _HELP = "[dim]j/k move · g/G top/bottom · enter log · d detail · f filter · a all · q quit[/dim]"
 _LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
+
+#: Rows a Rich table spends on its own frame regardless of body length: the top
+#: border, the column-header row, the header/body separator, and the bottom
+#: border.  Used to convert an available line budget into a row budget.
+TABLE_FRAME_ROWS = 4
+
+
+def measure_height(console: Console, renderable: RenderableType) -> int:
+    """Return how many terminal lines *renderable* occupies at *console*'s width.
+
+    Used by the runner to size the scrollable table to the space actually left
+    by the (variable-height, wrapping) header/detail/footer, so the frame never
+    exceeds the terminal height.
+    """
+    options = console.options.update(height=None)
+    return len(console.render_lines(renderable, options, pad=False))
 
 
 def _fmt_duration(seconds: float) -> str:
