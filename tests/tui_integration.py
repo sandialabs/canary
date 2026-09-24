@@ -159,3 +159,31 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
         # The jobs still pass after the rerun.
         after = {j["id"]: j["status"] for j in queries.list_jobs()}
     assert all(after[i] == "PASS" for i in ids)
+
+
+def test_model_edit_file_invokes_editor_and_detects_change(tmp_path, monkeypatch):
+    target = tmp_path / "edit_me.pyt"
+    target.write_text("original\n")
+    editor = tmp_path / "fake_editor.sh"
+    editor.write_text('#!/bin/bash\necho appended >> "$1"\n')
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    monkeypatch.delenv("VISUAL", raising=False)
+
+    changed = tui.ExplorerModel().edit_file(str(target))
+
+    assert changed is True
+    assert target.read_text().splitlines()[-1] == "appended"
+
+
+def test_model_edit_file_reports_no_change_when_editor_leaves_file(tmp_path, monkeypatch):
+    target = tmp_path / "untouched.pyt"
+    target.write_text("original\n")
+    # An editor that exits without writing (e.g. :q) leaves the mtime intact.
+    editor = tmp_path / "noop_editor.sh"
+    editor.write_text("#!/bin/bash\ntrue\n")
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    monkeypatch.delenv("VISUAL", raising=False)
+
+    assert tui.ExplorerModel().edit_file(str(target)) is False

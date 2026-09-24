@@ -24,7 +24,9 @@ import queue
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 
 from rich.console import Console
 from rich.live import Live
@@ -129,6 +131,30 @@ class ExplorerModel:
 
         return run_session(SpecIdsRequest(value=list(spec_ids)))
 
+    def edit_file(self, path: str) -> bool:
+        """Open *path* in the user's editor, returning whether it changed on disk.
+
+        Resolves the editor from ``$VISUAL``/``$EDITOR`` (falling back to a
+        common default) and blocks until it exits.  The editor is a full-screen
+        program, so the runner suspends the live display and hands over the
+        terminal before calling this.  The mtime is compared so the runner can
+        offer to rerun only when the file was actually modified.
+        """
+        import os
+        import shlex
+        import subprocess  # nosec B404 - launching the user's own $EDITOR
+
+        p = Path(path)
+        before = p.stat().st_mtime if p.exists() else None
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+        cmd = [*shlex.split(editor), str(p)]
+        try:
+            subprocess.run(cmd, check=False)  # nosec B603 - editor from user env
+        except FileNotFoundError:
+            return False
+        after = p.stat().st_mtime if p.exists() else None
+        return before != after
+
     def summary(self) -> "WorkspaceSummary":
         """The workspace summary cached at the last :meth:`refresh`.
 
@@ -221,12 +247,52 @@ def run(
         model.unsubscribe()
         return 0
 
+    # Interactive session: a live display that can pause to hand the terminal to
+    # an external program (an editor) and resume, or exit to perform a rerun.
+    while True:
+        action, payload = _live_session(console, model, refresh_interval)
+        if action == "edit":
+            # $EDITOR is full-screen: the live display and raw-mode reader are
+            # already torn down by _live_session before it returned.  Edit, then
+            # loop back to re-enter the display with fresh data.
+            changed = model.edit_file(payload)
+            model.refresh()
+            edited = model.state.selected
+            if changed and edited is not None:
+                # Offer an immediate rerun of the edited test by pre-marking it;
+                # the user still confirms with 'r'.  Keeping it explicit avoids
+                # surprising re-execution on every save.
+                model.state.marked_ids = {edited["id"]}
+            continue
+        if action == "rerun":
+            model.unsubscribe()
+            # Display and raw-mode reader are down; the rerun owns the console.
+            # (In-place/background rerun is future work; the selection + command
+            # are identical, only the execution mechanism changes.)
+            return model.rerun(payload)
+        # action == "quit"
+        model.unsubscribe()
+        return 0
+
+
+def _live_session(
+    console: Console, model: "ExplorerModel", refresh_interval: float
+) -> tuple[str, Any]:
+    """Run the live display until the user quits or requests an action.
+
+    Returns ``(reason, payload)`` where *reason* is ``"quit"`` (payload
+    ``None``), ``"rerun"`` (payload = list of spec ids), or ``"edit"`` (payload =
+    file path).  The ``Live`` display and the raw-mode keyboard reader are fully
+    torn down before returning, so the caller may safely run a full-screen
+    external program or a session with its own console output.
+    """
     keys: "queue.Queue[str]" = queue.Queue()
     stop = threading.Event()
     reader = threading.Thread(target=_read_keys, args=(stop, keys), daemon=True)
     reader.start()
 
-    pending_rerun: list[str] = []
+    reason: str = "quit"
+    payload: Any = None
     last_refresh = time.monotonic()
     try:
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
@@ -247,10 +313,13 @@ def run(
                             dirty = True
                         elif model.state.handle_key(key):
                             dirty = True
-                # A rerun request leaves the live display: the run is heavy and
-                # owns the console.  Exit the loop and perform it after teardown.
-                pending_rerun = model.state.consume_rerun_request()
-                if pending_rerun:
+                edit_path = model.state.consume_edit_request()
+                if edit_path is not None:
+                    reason, payload = "edit", edit_path
+                    break
+                rerun_ids = model.state.consume_rerun_request()
+                if rerun_ids:
+                    reason, payload = "rerun", rerun_ids
                     break
                 now = time.monotonic()
                 # Refresh on a job event (live session progress) or the timer,
@@ -264,17 +333,9 @@ def run(
                 else:
                     time.sleep(0.05)
     finally:
-        model.unsubscribe()
         stop.set()
         reader.join(timeout=1.0)
-
-    if pending_rerun:
-        # The Live display and raw-mode reader are torn down; the rerun now runs
-        # with the normal console.  (In-place/background rerun is future work;
-        # the selection + command are identical, only the execution changes.)
-        return model.rerun(pending_rerun)
-    return 0
-    return 0
+    return reason, payload
 
 
 def _body_height(console: Console, state: "ExplorerState", summary, counts) -> int:

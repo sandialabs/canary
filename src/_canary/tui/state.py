@@ -43,6 +43,8 @@ class ExplorerState:
             action such as rerun; independent of the cursor.
         rerun_requested: Edge-triggered flag the runner consumes to launch a
             rerun of the marked jobs (or the cursor row when none are marked).
+        edit_requested: Edge-triggered flag the runner consumes to open the
+            cursor row's test file in an editor.
         quit: Set by :meth:`handle_key` when the user asks to exit.
     """
 
@@ -58,6 +60,7 @@ class ExplorerState:
     log_title: str = ""
     marked_ids: set[str] = field(default_factory=set)
     rerun_requested: bool = False
+    edit_requested: bool = False
     quit: bool = False
 
     # -- data updates -------------------------------------------------------
@@ -194,6 +197,17 @@ class ExplorerState:
         self.rerun_requested = False
         return self.rerun_target_ids()
 
+    def consume_edit_request(self) -> str | None:
+        """Return the cursor row's file path if an edit was requested, else ``None``.
+
+        Edge-triggered: clears the request flag so the runner acts on it once.
+        """
+        if not self.edit_requested:
+            return None
+        self.edit_requested = False
+        row = self.selected
+        return row["file_path"] if row is not None else None
+
     def _clamp_cursor(self) -> None:
         rows = self.visible_jobs
         self.cursor = 0 if not rows else max(0, min(self.cursor, len(rows) - 1))
@@ -249,6 +263,7 @@ class ExplorerState:
         * ``x`` -- mark/unmark the row for rerun (and advance)
         * ``c`` -- clear all marks
         * ``r`` -- rerun the marked rows (or the cursor row if none marked)
+        * ``e`` -- edit the cursor row's test file
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
         * ``q`` / ``escape`` -- quit
@@ -303,6 +318,14 @@ class ExplorerState:
             # the request; the state only records intent, doing no I/O itself.
             if self.rerun_target_ids():
                 self.rerun_requested = True
+                return True
+            return False
+        if key in ("e", "E"):
+            # Editing is I/O (spawns $EDITOR); the runner does it, the state
+            # only records intent.  Requires a cursor row with a file.
+            row = self.selected
+            if row is not None and row.get("file_path"):
+                self.edit_requested = True
                 return True
             return False
         return False

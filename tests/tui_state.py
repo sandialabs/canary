@@ -211,6 +211,23 @@ def test_rerun_key_ignored_when_no_target():
     assert st.consume_rerun_request() == []
 
 
+def test_edit_request_returns_cursor_file_path():
+    st = ExplorerState()
+    st.update_jobs(_rows())  # each _view has file_path /tests/<name>.pyt
+    assert st.handle_key("e") is True
+    assert st.consume_edit_request() == "/tests/a.pyt"
+    # Edge-triggered: consumed once.
+    assert st.consume_edit_request() is None
+
+
+def test_edit_key_ignored_without_a_file():
+    st = ExplorerState()
+    st.update_jobs([_view("a", "PASS", id="aaaaaaaa1")])
+    st.jobs[0]["file_path"] = ""  # a row with no editable file
+    assert st.handle_key("e") is False
+    assert st.consume_edit_request() is None
+
+
 def test_handle_key_unknown_returns_false():
     st = ExplorerState()
     st.update_jobs(_rows())

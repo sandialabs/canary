@@ -27,7 +27,8 @@ if TYPE_CHECKING:
     from .state import ExplorerState
 
 _HELP = (
-    "[dim]j/k move · enter log · x mark · r rerun · c clear · d detail · f filter · q quit[/dim]"
+    "[dim]j/k move · enter log · x mark · r rerun · e edit · c clear · "
+    "d detail · f filter · q quit[/dim]"
 )
 _LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
 
