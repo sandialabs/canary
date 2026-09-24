@@ -10,7 +10,7 @@ from _canary.core.job import BaseJob
 from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
-from _canary.reporter import Reporter
+from _canary.execution.console import Reporter
 
 
 class DummyJob(BaseJob):

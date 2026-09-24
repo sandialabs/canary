@@ -19,12 +19,12 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from . import config
-from .core.job import BaseJob
-from .util import logging
+from .. import config
+from ..core.job import BaseJob
+from ..util import logging
 
 if TYPE_CHECKING:
-    from .execution.queue_executor import ExecutionSlot
+    from .queue_executor import ExecutionSlot
 
 
 logger = logging.get_logger(__name__)

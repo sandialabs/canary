@@ -413,7 +413,7 @@ def print_final_table(runner: Runner) -> None:
     """
     from rich import print as rprint
 
-    from ..reporter import build_final_table
+    from .console import build_final_table
 
     footer = _build_footer_text(runner)
     table_group = build_final_table(runner.jobs, footer_text=footer)

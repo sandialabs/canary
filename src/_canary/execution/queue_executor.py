@@ -24,12 +24,12 @@ from ..core.job import JobPhase
 from ..error import StopExecution
 from ..events import Event
 from ..events import EventBus
-from ..reporter import EventReporter
-from ..reporter import LiveReporter
 from ..util import logging
 from ..util import multiprocessing as mp
 from ..util.misc import boolean
 from ..util.returncode import compute_returncode
+from .console import EventReporter
+from .console import LiveReporter
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue

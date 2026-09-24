@@ -230,7 +230,7 @@ def test_markdown_report_updates_in_place(setup):
 
 
 def test_fmt_secs_negative_is_placeholder():
-    from _canary.reporter import fmt_secs
+    from _canary.execution.console import fmt_secs
 
     # Negative values (= "not yet measured") render as the HH:MM:SS placeholder.
     assert fmt_secs(-1.0) == "--:--:--"
@@ -238,7 +238,7 @@ def test_fmt_secs_negative_is_placeholder():
 
 
 def test_fmt_secs_seconds_tier():
-    from _canary.reporter import fmt_secs
+    from _canary.execution.console import fmt_secs
 
     # Below hhmmss threshold (2.0 s): sub-second precision included.
     assert fmt_secs(0.0) == "00:00:00.00"
@@ -251,7 +251,7 @@ def test_fmt_secs_seconds_tier():
 
 
 def test_fmt_secs_minutes_tier():
-    from _canary.reporter import fmt_secs
+    from _canary.execution.console import fmt_secs
 
     # Minutes range — seconds field must still be present.
     assert fmt_secs(600.0) == "00:10:00"
@@ -260,7 +260,7 @@ def test_fmt_secs_minutes_tier():
 
 
 def test_fmt_secs_hours_tier():
-    from _canary.reporter import fmt_secs
+    from _canary.execution.console import fmt_secs
 
     # Hours range — seconds field is still present (the key fix).
     assert fmt_secs(3600.0) == "01:00:00"
@@ -271,7 +271,7 @@ def test_fmt_secs_hours_tier():
 
 
 def test_fmt_secs_seconds_always_present():
-    from _canary.reporter import fmt_secs
+    from _canary.execution.console import fmt_secs
 
     # The whole point of the fix: seconds must appear at ALL magnitudes.
     # Old format dropped seconds past 1 hour — verify it no longer does.
