@@ -24,6 +24,7 @@ from rich.text import Text
 if TYPE_CHECKING:
     from ..app.queries import JobView
     from ..app.queries import WorkspaceSummary
+    from .progress import RunProgressView
     from .state import ExplorerState
 
 _HELP = (
@@ -177,18 +178,57 @@ def render_log(state: "ExplorerState") -> Group:
     return Group(Panel(body, title=state.log_title or "log", title_align="left"), footer)
 
 
+def render_run_progress(progress: "RunProgressView") -> Panel:
+    """Render a live progress bar + tallies for an in-flight run.
+
+    Shown only while a run is active.  Fed by the event stream (see
+    :class:`~_canary.tui.progress.RunProgress`), so it updates immediately as
+    jobs start and finish, ahead of the authoritative database refresh.
+    """
+    bar_width = 30
+    if progress.total > 0:
+        filled = int(round(progress.fraction * bar_width))
+        bar = Text()
+        bar.append("█" * filled, style="green")
+        bar.append("░" * (bar_width - filled), style="dim")
+        head = Text()
+        head.append(f"{progress.finished}/{progress.total} ", style="bold")
+        head.append(bar)
+        head.append(f" {int(progress.fraction * 100)}%", style="bold")
+    else:
+        # Total not yet known (no qsize seen); show an indeterminate line.
+        head = Text(f"{progress.finished} finished", style="bold")
+
+    detail = Text()
+    detail.append(f"running: {progress.running}", style="cyan")
+    detail.append(f"   pending: {progress.pending}", style="dim")
+    for status, n in sorted(progress.by_status.items()):
+        detail.append(f"   {status or 'DONE'}={n}")
+    detail.append(f"   elapsed: {_fmt_duration(progress.elapsed)}", style="dim")
+
+    return Panel(Group(head, detail), title="running", title_align="left", border_style="yellow")
+
+
 def render_frame(
-    state: "ExplorerState", summary: "WorkspaceSummary", counts: dict[str, int]
+    state: "ExplorerState",
+    summary: "WorkspaceSummary",
+    counts: dict[str, int],
+    progress: "RunProgressView | None" = None,
 ) -> Group:
     """Compose the full frame for the current mode.
 
-    In ``list`` mode: header, scrolled job table, optional detail pane, footer.
-    In ``log`` mode: the header plus the scrolled log view.
+    In ``list`` mode: header, optional live-run progress panel, scrolled job
+    table, optional detail pane, footer.  In ``log`` mode: the header plus the
+    scrolled log view.  The live-run panel appears only while *progress* reports
+    an active run.
     """
     header = render_header(summary, counts)
     if state.mode == "log":
         return Group(header, render_log(state))
-    parts: list[RenderableType] = [header, render_table(state)]
+    parts: list[RenderableType] = [header]
+    if progress is not None and progress.active:
+        parts.append(render_run_progress(progress))
+    parts.append(render_table(state))
     if state.show_detail and state.selected is not None:
         parts.append(render_detail(state.selected))
     parts.append(render_footer(state))

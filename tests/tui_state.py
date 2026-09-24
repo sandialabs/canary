@@ -291,6 +291,35 @@ def _rendered_line_count(console, renderable):
     return len(console.render_lines(renderable, options, pad=False))
 
 
+def test_render_frame_shows_run_progress_when_active():
+    """While a run is active, the frame includes the live progress panel."""
+    from _canary.tui.progress import RunProgress
+
+    st = ExplorerState()
+    st.update_jobs([_view("basic.x=1", "PASS", id="000000001")])
+    summary = _summary()
+
+    p = RunProgress()
+    p.begin(total=2)
+    from _canary.events import Event
+
+    p.on_event(Event("job_started", {"job": {"id": "a", "qsize": 2, "status": ""}}))
+    p.on_event(Event("job_finished", {"job": {"id": "a", "qsize": 2, "status": "PASS"}}))
+
+    console = Console(width=80, height=40)
+    with console.capture() as cap:
+        console.print(render_frame(st, summary, {"PASS": 1}, p.snapshot()))
+    out = cap.get()
+    assert "running" in out
+    assert "1/2" in out  # finished/total
+
+    # When no run is active, the panel is absent.
+    p.end()
+    with console.capture() as cap:
+        console.print(render_frame(st, summary, {"PASS": 1}, p.snapshot()))
+    assert "running:" not in cap.get()
+
+
 def test_frame_fits_terminal_height_when_sized():
     """With the body sized by the runner, the frame must not exceed the terminal.
 

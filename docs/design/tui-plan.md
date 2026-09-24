@@ -40,6 +40,13 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** Live-run monitoring (roadmap item 2, first cut). While an in-place
+  rerun executes, a yellow "running" panel shows a progress bar
+  (finished/total + %), running/pending counts, per-status tallies, and elapsed
+  time -- fed by the event stream, not the DB (`tui/progress.py` `RunProgress`,
+  `render_run_progress`). The tracker learns the total from event `qsize`, is
+  idempotent on duplicate terminal events, and is thread-safe (updated on the
+  publisher thread, snapshotted on the render thread).
 - **DONE** In-place rerun (steps 1-3). `r` now runs the marked/cursor tests in a
   **child process** whose events stream back onto the app `EventBus` via the
   durable spool; the TUI keeps its `Live` display up, shows a "running…" footer,
@@ -378,9 +385,9 @@ types are unchanged.
 Ordered, each step independently useful:
 
 1. **In-place rerun** (section 4) -- run without leaving the explorer.
-2. **Live-run view** -- a mode that shows the in-flight session (queued/running/
-   finished counts, per-job phase) fed purely by `EventBus` events, not just a
-   post-hoc DB refresh. Foundations exist (`JobEvent` carries phase/qrank/qsize).
+2. **Live-run view** -- **DONE (first cut):** a progress panel fed purely by
+   `EventBus` events (counts, per-job status, elapsed) shown while a run is in
+   flight. Future: per-row phase animation in the table, worker-slot occupancy.
 3. **First-class cancellation** -- a cancel key that stops the running session
    (`ResourceQueue.clear` + signal), surfaced as `job_cancelled` events (the bus
    already reserves the name, `events/bus.py:37`).

@@ -198,6 +198,35 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     assert all(after[i] == "PASS" for i in ids)
 
 
+def test_inplace_rerun_tracks_live_progress(tmp_path):
+    """The live progress tracker reflects the run fed by the event stream."""
+    import time
+
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
+        model.refresh()
+        ids = [j["id"] for j in model.state.jobs]
+
+        assert model.begin_rerun(ids) is True
+        assert model.progress.snapshot().active is True
+
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            if model.poll_run():
+                break
+            time.sleep(0.05)
+
+        snap = model.progress.snapshot()
+        model.unsubscribe()
+
+    # After completion the tracker is inactive, and it observed every job finish.
+    assert snap.active is False
+    assert snap.finished == len(ids)
+    assert snap.by_status.get("PASS", 0) == len(ids)
+
+
 def test_edit_uses_vim_and_ignores_env(tmp_path, monkeypatch):
     """edit_file must launch vim, never $EDITOR/$VISUAL.
 

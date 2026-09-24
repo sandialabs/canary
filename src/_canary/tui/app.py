@@ -32,12 +32,14 @@ from rich.console import Console
 from rich.live import Live
 
 from ..app import queries
+from .progress import RunProgress
 from .render import TABLE_FRAME_ROWS
 from .render import measure_height
 from .render import render_detail
 from .render import render_footer
 from .render import render_frame
 from .render import render_header
+from .render import render_run_progress
 from .state import ExplorerState
 
 if TYPE_CHECKING:
@@ -67,6 +69,7 @@ class ExplorerModel:
         self._bus: "EventBus | None" = None
         self._summary: "WorkspaceSummary | None" = None
         self._run: "RunHandle | None" = None
+        self.progress = RunProgress()
 
     def refresh(self) -> None:
         """Pull the latest job rows and workspace summary into the UI state."""
@@ -85,7 +88,9 @@ class ExplorerModel:
             self._bus = None
 
     def _on_event(self, event: "Event") -> None:
-        # Runs on the publisher's thread; only sets a flag (no query/render I/O).
+        # Runs on the publisher's thread; fold into the live progress tally and
+        # set a flag (no query/render I/O here).
+        self.progress.on_event(event)
         self._dirty.set()
 
     def consume_dirty(self) -> bool:
@@ -151,6 +156,10 @@ class ExplorerModel:
         """
         if self._run is not None or not spec_ids:
             return False
+        # Begin the live tally before launching so the first events (which may
+        # arrive immediately) are counted; the hint is the number of jobs asked
+        # for, refined from event qsize as the run progresses.
+        self.progress.begin(total=len(spec_ids))
         self._run = self.start_rerun(spec_ids)
         self.state.running = True
         return True
@@ -168,6 +177,7 @@ class ExplorerModel:
             return False
         self._run = None
         self.state.running = False
+        self.progress.end()
         self.refresh()
         return True
 
@@ -216,7 +226,7 @@ class ExplorerModel:
 
     def frame(self):
         """Render the current model to a Rich renderable."""
-        return render_frame(self.state, self.summary(), self.counts())
+        return render_frame(self.state, self.summary(), self.counts(), self.progress.snapshot())
 
 
 def _read_keys(stop: threading.Event, out: "queue.Queue[str]") -> None:
@@ -347,7 +357,13 @@ def _live_session(
                 # Size the scrollable region to the terminal so rows never spill
                 # off the bottom; recomputed each frame so it tracks resizes.
                 model.state.set_viewport_height(
-                    _body_height(console, model.state, model.summary(), model.counts())
+                    _body_height(
+                        console,
+                        model.state,
+                        model.summary(),
+                        model.counts(),
+                        model.progress.snapshot(),
+                    )
                 )
                 with contextlib.suppress(queue.Empty):
                     while True:
@@ -389,7 +405,7 @@ def _live_session(
     return reason, payload
 
 
-def _body_height(console: Console, state: "ExplorerState", summary, counts) -> int:
+def _body_height(console: Console, state: "ExplorerState", summary, counts, progress=None) -> int:
     """Rows the scrollable region can show after the real chrome is accounted for.
 
     The header/detail/footer wrap unpredictably (long workspace paths, narrow
@@ -406,6 +422,10 @@ def _body_height(console: Console, state: "ExplorerState", summary, counts) -> i
         available = console.size.height - used - 4
         return max(1, available)
     used += measure_height(console, render_footer(state))
+    # The live-run progress panel, when active, occupies real lines above the
+    # table; subtract them so the table still fits.
+    if progress is not None and progress.active:
+        used += measure_height(console, render_run_progress(progress))
     if state.show_detail and state.selected is not None:
         used += measure_height(console, render_detail(state.selected))
     available = console.size.height - used - TABLE_FRAME_ROWS
