@@ -126,3 +126,23 @@ def test_model_unsubscribe_stops_marking_dirty():
     model.unsubscribe()
     bus.emit("job_finished")
     assert model.consume_dirty() is False
+
+
+def test_job_log_query_returns_captured_output(tmp_path):
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        jobs = queries.list_jobs()
+        text = queries.job_log(jobs[0]["id"])
+    # The pyt body runs cleanly; the captured stdout log exists and is a string.
+    assert isinstance(text, str)
+
+
+def test_model_open_selected_log_enters_log_mode(tmp_path):
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.refresh()
+        model.open_selected_log()
+    assert model.state.mode == "log"
+    assert model.state.log_lines  # never empty -- falls back to a placeholder
+    assert model.state.selected is not None

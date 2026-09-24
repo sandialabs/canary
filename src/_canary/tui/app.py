@@ -91,6 +91,21 @@ class ExplorerModel:
     def fetch_summary(self) -> "WorkspaceSummary":
         return queries.workspace_summary()
 
+    def fetch_log(self, spec_id: str) -> str:
+        return queries.job_log(spec_id)
+
+    def open_selected_log(self) -> None:
+        """Fetch the selected job's log and switch the state into log mode.
+
+        This is the model's single log-related I/O point; the pure state machine
+        holds the resulting text but never reads the workspace itself.
+        """
+        job = self.state.selected
+        if job is None:
+            return
+        text = self.fetch_log(job["id"])
+        self.state.open_log(f"{job['name']}  ({job['short_id']})", text)
+
     def counts(self) -> dict[str, int]:
         return queries.status_counts(self.state.jobs)
 
@@ -186,10 +201,18 @@ def run(
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
             while not model.state.quit:
                 dirty = False
+                # Size the table window to the terminal so rows never spill off
+                # the bottom; recomputed each frame so it tracks resizes.
+                model.state.set_viewport_height(_body_height(console, model.state))
                 with contextlib.suppress(queue.Empty):
                     while True:
                         key = keys.get_nowait()
-                        if model.state.handle_key(key):
+                        # Enter/space in list mode is a request to view the log,
+                        # which is I/O -- the model performs it, not the state.
+                        if model.state.wants_log(key):
+                            model.open_selected_log()
+                            dirty = True
+                        elif model.state.handle_key(key):
                             dirty = True
                 now = time.monotonic()
                 # Refresh on a job event (live session progress) or the timer,
@@ -207,3 +230,24 @@ def run(
         stop.set()
         reader.join(timeout=1.0)
     return 0
+
+
+# Non-body chrome rendered around the scrollable region: header panel (border +
+# two content lines + border) and, in list mode, the footer line.  Detail pane,
+# when open, consumes further rows; a conservative reserve keeps the cursor row
+# on screen rather than fighting for an exact count.
+_LIST_CHROME = 5
+_DETAIL_CHROME = 8
+_LOG_CHROME = 6
+
+
+def _body_height(console: Console, state: "ExplorerState") -> int:
+    """Rows available for the scrollable region given the console height."""
+    total = console.size.height
+    if state.mode == "log":
+        reserve = _LOG_CHROME
+    elif state.show_detail:
+        reserve = _DETAIL_CHROME
+    else:
+        reserve = _LIST_CHROME
+    return max(1, total - reserve)

@@ -18,6 +18,7 @@ from typing import Any
 from typing import TypedDict
 
 from .facade import get_event_bus
+from .facade import get_job_log
 from .facade import get_result_history
 from .facade import get_results
 from .facade import get_workspace_info
@@ -27,6 +28,7 @@ __all__ = [
     "WorkspaceSummary",
     "get_event_bus",
     "job_history",
+    "job_log",
     "list_jobs",
     "status_counts",
     "workspace_summary",
@@ -106,6 +108,16 @@ def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> 
 def job_history(spec_id: str) -> list[JobView]:
     """Return every historical result for *spec_id* as :class:`JobView`, oldest first."""
     return [_job_view(r) for r in get_result_history(spec_id)]
+
+
+def job_log(spec_id: str, *, stream: str = "stdout") -> str:
+    """Return a job's captured *stream* output as text (empty if none).
+
+    A thin pass-through to the application facade so interfaces read job output
+    through the same ``canary.app`` surface as everything else, never touching
+    the workspace layout directly.
+    """
+    return get_job_log(spec_id, stream=stream)
 
 
 class WorkspaceSummary(TypedDict):

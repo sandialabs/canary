@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field
 from typing import TYPE_CHECKING
+from typing import Literal
 
 if TYPE_CHECKING:
     from ..app.queries import JobView
@@ -23,20 +24,34 @@ if TYPE_CHECKING:
 
 @dataclass
 class ExplorerState:
-    """Selection, filtering, and detail state for the job explorer.
+    """Selection, filtering, scrolling, and detail state for the job explorer.
 
     Attributes:
         jobs: The most recent full list of job rows from the application.
         cursor: Index of the highlighted row within the *filtered* view.
+        top: Index of the first visible row -- the scroll offset that keeps the
+            cursor inside a window of ``viewport_height`` rows.
+        viewport_height: Rows the table body can show; the runner sets this from
+            the terminal height each frame.  0 means "unbounded" (show all).
         status_filter: When set, only rows whose ``status`` equals this are shown.
         show_detail: Whether the detail pane for the selected row is open.
+        mode: ``"list"`` (the job table) or ``"log"`` (a single job's output).
+        log_lines: The selected job's log split into lines, in log mode.
+        log_top: Scroll offset (first visible line) within the log.
+        log_title: Header text for the log pane (job name/stream).
         quit: Set by :meth:`handle_key` when the user asks to exit.
     """
 
     jobs: list["JobView"] = field(default_factory=list)
     cursor: int = 0
+    top: int = 0
+    viewport_height: int = 0
     status_filter: str | None = None
     show_detail: bool = False
+    mode: Literal["list", "log"] = "list"
+    log_lines: list[str] = field(default_factory=list)
+    log_top: int = 0
+    log_title: str = ""
     quit: bool = False
 
     # -- data updates -------------------------------------------------------
@@ -54,6 +69,7 @@ class ExplorerState:
                 self._clamp_cursor()
         else:
             self._clamp_cursor()
+        self._scroll_into_view()
 
     # -- derived views ------------------------------------------------------
 
@@ -63,6 +79,22 @@ class ExplorerState:
         if self.status_filter is None:
             return self.jobs
         return [j for j in self.jobs if j["status"] == self.status_filter]
+
+    def window(self) -> list["JobView"]:
+        """The slice of :attr:`visible_jobs` that fits the current viewport.
+
+        With ``viewport_height <= 0`` the whole filtered list is returned; this
+        keeps single-frame/``--once`` rendering and tests unbounded.
+        """
+        rows = self.visible_jobs
+        if self.viewport_height <= 0:
+            return rows
+        return rows[self.top : self.top + self.viewport_height]
+
+    @property
+    def window_cursor(self) -> int:
+        """Cursor position relative to the top of the visible window."""
+        return min(self.cursor, len(self.visible_jobs) - 1) - self.top
 
     @property
     def selected(self) -> "JobView | None":
@@ -88,18 +120,27 @@ class ExplorerState:
             self.cursor = 0
             return
         self.cursor = max(0, min(self.cursor + delta, len(rows) - 1))
+        self._scroll_into_view()
 
     def move_home(self) -> None:
         self.cursor = 0
+        self._scroll_into_view()
 
     def move_end(self) -> None:
         rows = self.visible_jobs
         self.cursor = max(0, len(rows) - 1)
+        self._scroll_into_view()
+
+    def set_viewport_height(self, height: int) -> None:
+        """Set the visible row count (from the terminal) and re-scroll if needed."""
+        self.viewport_height = max(0, height)
+        self._scroll_into_view()
 
     def set_filter(self, status: str | None) -> None:
         """Set (or clear with ``None``) the status filter and reset the cursor."""
         self.status_filter = status
         self.cursor = 0
+        self.top = 0
 
     def toggle_detail(self) -> None:
         self.show_detail = not self.show_detail
@@ -108,20 +149,63 @@ class ExplorerState:
         rows = self.visible_jobs
         self.cursor = 0 if not rows else max(0, min(self.cursor, len(rows) - 1))
 
+    def _scroll_into_view(self) -> None:
+        """Adjust :attr:`top` so the cursor stays within the visible window."""
+        rows = self.visible_jobs
+        if self.viewport_height <= 0 or not rows:
+            self.top = 0
+            return
+        cursor = min(self.cursor, len(rows) - 1)
+        if cursor < self.top:
+            self.top = cursor
+        elif cursor >= self.top + self.viewport_height:
+            self.top = cursor - self.viewport_height + 1
+        # Keep the window full when scrolled near the end.
+        max_top = max(0, len(rows) - self.viewport_height)
+        self.top = min(self.top, max_top)
+
+    # -- log mode -----------------------------------------------------------
+
+    def open_log(self, title: str, text: str) -> None:
+        """Enter log mode showing *text* (under header *title*) from the top."""
+        self.mode = "log"
+        self.log_title = title
+        self.log_lines = text.splitlines() or ["(no output)"]
+        self.log_top = 0
+
+    def close_log(self) -> None:
+        """Return to the job list."""
+        self.mode = "list"
+        self.log_lines = []
+        self.log_top = 0
+
+    def scroll_log(self, delta: int) -> None:
+        """Scroll the log by *delta* lines, clamped, keeping a page on screen."""
+        height = self.viewport_height if self.viewport_height > 0 else len(self.log_lines)
+        max_top = max(0, len(self.log_lines) - max(1, height))
+        self.log_top = max(0, min(self.log_top + delta, max_top))
+
     # -- key handling -------------------------------------------------------
 
     def handle_key(self, key: str) -> bool:
         """Apply a single key press; return ``True`` if it changed state.
 
-        Recognised keys (case-insensitive where sensible):
+        In log mode ``j/k`` (and arrows/page keys) scroll the log and
+        ``enter``/``escape``/``q`` return to the list.  In list mode:
 
         * ``j`` / down arrow -- move down;   ``k`` / up arrow -- move up
-        * ``g`` -- top;   ``G`` -- bottom
-        * ``enter`` / ``space`` -- toggle the detail pane
+        * ``g`` -- top;   ``G`` -- bottom;   pageup/pagedown -- by window
+        * ``enter`` / ``space`` -- open the selected job's log
+        * ``d`` -- toggle the inline detail pane
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
         * ``q`` / ``escape`` -- quit
         """
+        if self.mode == "log":
+            return self._handle_key_log(key)
+        return self._handle_key_list(key)
+
+    def _handle_key_list(self, key: str) -> bool:
         if key in ("q", "Q", "escape"):
             self.quit = True
             return True
@@ -132,10 +216,10 @@ class ExplorerState:
             self.move(-1)
             return True
         if key in ("pagedown",):
-            self.move(10)
+            self.move(self._page())
             return True
         if key in ("pageup",):
-            self.move(-10)
+            self.move(-self._page())
             return True
         if key == "g":
             self.move_home()
@@ -144,6 +228,9 @@ class ExplorerState:
             self.move_end()
             return True
         if key in ("enter", "\r", "\n", " ", "space"):
+            # The runner performs the log fetch (I/O) when it sees log_request.
+            return self.selected is not None
+        if key in ("d", "D"):
             self.toggle_detail()
             return True
         if key in ("a", "A"):
@@ -153,6 +240,46 @@ class ExplorerState:
             self._cycle_filter()
             return True
         return False
+
+    def _handle_key_log(self, key: str) -> bool:
+        if key in ("q", "Q", "escape", "enter", "\r", "\n"):
+            self.close_log()
+            return True
+        if key in ("j", "down"):
+            self.scroll_log(1)
+            return True
+        if key in ("k", "up"):
+            self.scroll_log(-1)
+            return True
+        if key in ("pagedown", " ", "space"):
+            self.scroll_log(self._page())
+            return True
+        if key == "pageup":
+            self.scroll_log(-self._page())
+            return True
+        if key == "g":
+            self.log_top = 0
+            return True
+        if key == "G":
+            self.scroll_log(len(self.log_lines))
+            return True
+        return False
+
+    def wants_log(self, key: str) -> bool:
+        """Whether *key* in list mode should open the selected job's log.
+
+        The runner uses this to know when to perform the (I/O) log fetch, since
+        the state machine itself does no I/O.
+        """
+        return (
+            self.mode == "list"
+            and key in ("enter", "\r", "\n", " ", "space")
+            and self.selected is not None
+        )
+
+    def _page(self) -> int:
+        """A page step: the viewport height, or a sane default when unbounded."""
+        return self.viewport_height if self.viewport_height > 0 else 10
 
     def _cycle_filter(self) -> None:
         """Advance the status filter to the next distinct status (then to 'all')."""

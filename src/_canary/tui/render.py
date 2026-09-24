@@ -25,7 +25,8 @@ if TYPE_CHECKING:
     from ..app.queries import WorkspaceSummary
     from .state import ExplorerState
 
-_HELP = "[dim]j/k move · g/G top/bottom · enter detail · f filter · a all · q quit[/dim]"
+_HELP = "[dim]j/k move · g/G top/bottom · enter log · d detail · f filter · a all · q quit[/dim]"
+_LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -62,7 +63,7 @@ def render_header(summary: "WorkspaceSummary", counts: dict[str, int]) -> Panel:
 
 
 def render_table(state: "ExplorerState") -> Table:
-    """Render the visible job rows, highlighting the selected one."""
+    """Render the visible job rows (the scrolled window), highlighting the selected one."""
     table = Table(expand=True)
     table.add_column("", width=1, no_wrap=True)  # cursor marker
     table.add_column("Job", ratio=3, no_wrap=True)
@@ -71,16 +72,17 @@ def render_table(state: "ExplorerState") -> Table:
     table.add_column("Phase", width=10, no_wrap=True)
     table.add_column("Time", width=8, justify="right", no_wrap=True)
 
-    rows = state.visible_jobs
+    rows = state.window()
     if not rows:
         table.add_row("", Text("no matching jobs", style="dim"), "", "", "", "")
         return table
 
-    selected_idx = min(state.cursor, len(rows) - 1)
+    window_cursor = state.window_cursor
     for i, job in enumerate(rows):
-        marker = "›" if i == selected_idx else " "
+        selected = i == window_cursor
+        marker = "›" if selected else " "
         name = Text(job["name"])
-        row_style = "reverse" if i == selected_idx else None
+        row_style = "reverse" if selected else None
         table.add_row(
             marker,
             name,
@@ -130,11 +132,32 @@ def render_footer(state: "ExplorerState") -> Text:
     return parts
 
 
+def render_log(state: "ExplorerState") -> Group:
+    """Render the log view: a scrolled window of the selected job's output."""
+    height = state.viewport_height if state.viewport_height > 0 else len(state.log_lines)
+    window = state.log_lines[state.log_top : state.log_top + height] if height else state.log_lines
+    body = Text("\n".join(window) or "(no output)")
+    total = len(state.log_lines)
+    shown_end = min(state.log_top + len(window), total)
+    footer = Text()
+    footer.append(f"lines {state.log_top + 1}-{shown_end}/{total}", style="dim")
+    footer.append("   ")
+    footer.append(Text.from_markup(_LOG_HELP))
+    return Group(Panel(body, title=state.log_title or "log", title_align="left"), footer)
+
+
 def render_frame(
     state: "ExplorerState", summary: "WorkspaceSummary", counts: dict[str, int]
 ) -> Group:
-    """Compose the full explorer frame (header, table, optional detail, footer)."""
-    parts: list[RenderableType] = [render_header(summary, counts), render_table(state)]
+    """Compose the full frame for the current mode.
+
+    In ``list`` mode: header, scrolled job table, optional detail pane, footer.
+    In ``log`` mode: the header plus the scrolled log view.
+    """
+    header = render_header(summary, counts)
+    if state.mode == "log":
+        return Group(header, render_log(state))
+    parts: list[RenderableType] = [header, render_table(state)]
     if state.show_detail and state.selected is not None:
         parts.append(render_detail(state.selected))
     parts.append(render_footer(state))

@@ -95,12 +95,52 @@ def test_handle_key_quit_and_detail_toggle():
     st = ExplorerState()
     st.update_jobs(_rows())
     assert st.show_detail is False
-    assert st.handle_key("enter") is True
+    assert st.handle_key("d") is True
     assert st.show_detail is True
-    assert st.handle_key("enter") is True
+    assert st.handle_key("d") is True
     assert st.show_detail is False
     assert st.handle_key("q") is True
     assert st.quit is True
+
+
+def test_enter_requests_log_not_detail():
+    """Enter opens the log (I/O the runner performs); it must not toggle detail."""
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    assert st.wants_log("enter") is True
+    st.handle_key("enter")
+    # State stays in list mode until the runner supplies the log text.
+    assert st.mode == "list"
+    assert st.show_detail is False
+
+
+def test_log_mode_scroll_and_return():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.set_viewport_height(3)
+    st.open_log("a", "l1\nl2\nl3\nl4\nl5\nl6")
+    assert st.mode == "log" and st.log_top == 0
+    st.handle_key("j")
+    assert st.log_top == 1  # scrolled down one line
+    st.handle_key("G")
+    assert st.log_top == max(0, 6 - 3)  # clamped to last page
+    st.handle_key("g")
+    assert st.log_top == 0
+    st.handle_key("q")
+    assert st.mode == "list"  # q returns to the list, does not quit
+    assert st.quit is False
+
+
+def test_viewport_windowing_keeps_cursor_visible():
+    st = ExplorerState()
+    st.update_jobs([_view(f"j{i}", "PASS", id=f"{i:09d}") for i in range(30)])
+    st.set_viewport_height(5)
+    assert len(st.window()) == 5
+    assert st.window()[0]["name"] == "j0"  # rows kept in the given order
+    st.move_end()
+    # The window has scrolled so the last (selected) row is visible.
+    assert st.window()[-1]["name"] == "j29"
+    assert 0 <= st.window_cursor < 5
 
 
 def test_handle_key_unknown_returns_false():

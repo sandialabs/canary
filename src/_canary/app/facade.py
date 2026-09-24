@@ -141,3 +141,29 @@ def get_result_history(spec_id: str) -> list:
     Delegates to :meth:`WorkspaceDatabase.get_result_history`.
     """
     return open_workspace().db.get_result_history(spec_id)
+
+
+def get_job_log(spec_id: str, *, stream: str = "stdout") -> str:
+    """Return the captured output of a job's execution as text.
+
+    Resolves the job for *spec_id* in the current workspace and reads the file
+    for the requested *stream* (``"stdout"`` or ``"stderr"``) from the job's
+    execution directory.  Returns an empty string when the job has not produced
+    that stream (e.g. it never ran, or wrote no stderr), so callers -- an
+    interface showing a not-yet-run job -- do not have to special-case a missing
+    file.
+
+    Raises:
+        ValueError: If *spec_id* matches no job in the workspace.
+    """
+    job = open_workspace().find(job=spec_id)
+    if stream == "stderr":
+        relpath = job.stderr
+    else:
+        relpath = job.stdout
+    if relpath is None:
+        return ""
+    path = job.workspace.joinpath(relpath)
+    if not path.exists():
+        return ""
+    return path.read_text()
