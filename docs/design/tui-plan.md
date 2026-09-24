@@ -221,8 +221,79 @@ the "separate process" feel), and treat **C** as the follow-up that unlocks true
 live streaming (feeding roadmap item 2, the live-run view). **B** only if a
 remote/child-process run is wanted for other reasons.
 
-**Awaiting maintainer choice among A / B / C before touching the shared run
-path or execution threading.**
+**DECISION (maintainer):** Build **B** -- subprocess + event bridge. Rationale:
+the `canary tui` command is a stepping stone to a *general* TUI that hosts and
+interacts with `canary run`, `status`, etc. That requires true live streaming
+while the TUI keeps the screen, and a run that is isolated from the TUI's
+process (no shared `os.chdir`/signal/terminal contention). B is the only option
+that generalizes to a remote/GUI client later; A and C are in-process dead ends
+for that goal.
+
+### 4.5 Chosen design (B): child-process run + event bridge
+
+Grounded in the existing machinery (see the research map in the commit history /
+below):
+
+- **Wire format already exists.** Workers emit `{"event": <EventName>, ...}`
+  dicts; `_handle_worker_payload` -> `notify_listeners` -> `event_bus.publish`
+  already turns those into `Event(name, {"job": JobEvent})` on the app
+  `EventBus` (`queue_executor.py:558-585`). We reuse this verbatim.
+- **The bridge mirrors `ResultListener`** (`database.py:1028-1060`): a
+  parent-side daemon thread that drains a cross-process transport fed by the
+  child run and republishes each item onto the parent's `EventBus` via
+  `get_event_bus().publish(...)`. The TUI already subscribes to that bus, so no
+  TUI-side change is needed to *observe* -- only to *launch*.
+- **Transport.** `multiprocessing` with an explicit spawn context so parent and
+  child share an `mp.Queue`: the child target calls `app.run(...)` after
+  installing a bus subscriber that forwards every `Event` onto the shared queue;
+  the parent's bridge thread drains it. (`FSQueue`,
+  `util/multiprocessing.py:334`, is the disk-backed fallback if a shared mp
+  context proves impractical, e.g. a fully independent `python -m canary run`.)
+- **DB single-writer stays intact.** The child run is its own process at
+  `canary_level == 0`, so it legitimately owns the `ResultListener` and SQLite
+  writer for its session (`workspace.py:527-531`). The parent TUI only *reads*
+  the DB (separate connection) and consumes events -- it must **not** also run a
+  writer for that session. This side-steps the two-writer hazard by keeping the
+  writer in the child.
+- **Console suppression in the child.** The child sets `CANARY_LIVE=0` (honored
+  at `queue_executor.py:374`) so it uses `EventReporter`, not `LiveReporter`;
+  its stdout/stderr are captured/redirected (not shared with the TUI terminal).
+
+### 4.6 Incremental implementation plan (each step usable, tests as we go)
+
+1. **`_canary/events/`: a process-boundary forwarder.** Add a small helper that,
+   given an `mp.Queue`, subscribes to a bus and puts each `Event` (name +
+   primitives-only payload) on the queue; and a parent-side `EventBridge`
+   daemon thread that drains the queue and republishes onto a target bus.
+   Pure, unit-testable with two in-process buses + a real `mp.Queue`.
+2. **`_canary/app/`: a `run_in_subprocess(request, options)` use case.** Spawns
+   a child (spawn context) that: reconstructs config, installs the forwarder on
+   its bus, sets `CANARY_LIVE=0`, calls `app.run.run(...)`, and returns the
+   exit code via the queue/sentinel. Parent starts the `EventBridge` onto
+   `get_event_bus()` and returns a handle (poll/return-code + join). Headless
+   test: events observed on the parent bus; correct return code; DB updated.
+3. **`_canary/tui/app.py`: use the subprocess run, keep `Live` up.** Replace the
+   teardown-then-`rerun` path: launch via the app use case, keep the live loop
+   drawing (the dirty-flag subscription already repaints on each forwarded
+   event), show a "running…" footer, guard re-entrancy, `refresh()` on
+   completion. Integration test with `once=`-style/headless harness.
+4. **Cancellation hook (roadmap item 3) becomes natural**: cancel = terminate
+   the child (or signal it), emit `job_cancelled`. Deferred to its own step.
+
+### 4.7 Risks specific to B
+
+- **Config reconstruction in the child** must reproduce the parent's workspace
+  and plugins (`config.snapshot()`/`CANARYCFGFILE`, `canary_addconfig`; see
+  `config.py:118-134,213-239`). Spawn (not fork) means no inherited state, so
+  the snapshot handoff must be complete.
+- **Payload must stay primitives-only** across the queue (pickle): `JobEvent`
+  already is (`bus.py:68-92`); ensure no `_canary` object is forwarded.
+- **Child lifecycle**: orphan/zombie prevention on TUI exit or crash (join /
+  terminate in a `finally`); the bridge thread must stop when the child ends.
+- **Ordering/backpressure**: an `mp.Queue` preserves per-producer order; the bus
+  is best-effort cross-job today, which matches current behavior.
+
+**Awaiting nothing further -- implementing B incrementally per 4.6.**
 
 ---
 
