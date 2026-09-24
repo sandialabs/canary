@@ -77,7 +77,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         file.write(f"File: {self.file}\n")
         jobs = self.lock(on_options=on_options)
         file.write(f"{len(jobs)} test jobs:\n")
-        canary.graph.print(jobs, file=file)
+        canary.print_spec_graph(jobs, file=file)
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:

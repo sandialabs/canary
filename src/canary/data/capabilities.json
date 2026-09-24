@@ -912,6 +912,11 @@
         "_canary.workspace.Session",
         "_canary.database.WorkspaceDatabase"
       ],
+      "application": [
+        "canary.app.open_workspace",
+        "canary.app.create_workspace",
+        "canary.app.get_event_bus"
+      ],
       "resources": [
         "_canary.resource_pool.rpool.ResourcePool",
         "_canary.resource_pool.rpool.Node",

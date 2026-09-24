@@ -76,7 +76,7 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
         file.write(f"{len(cases)} test cases:\n")
-        canary.graph.print(cases, file=file)
+        canary.print_spec_graph(cases, file=file)
         return file.getvalue()
 
 

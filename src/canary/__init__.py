@@ -77,6 +77,7 @@ __all__ = [
     "schema",
     "Generator",
     "Collector",
+    "app",
     "config",
     "status",
     "enums",
@@ -121,7 +122,7 @@ __all__ = [
     "color",
     "difflib",
     "filesystem",
-    "graph",
+    "print_spec_graph",
     "module",
     "shell",
     "string",
@@ -189,8 +190,8 @@ get_testcase = get_job
 # fast for test subprocesses while remaining fully transparent to CLI code and
 # extension authors.
 
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    # name -> (module_path, attribute_in_module)
+_LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
+    # name -> (module_path, attribute_in_module); attribute None imports the module itself
     "CanarySubcommand": ("_canary.subcommands.base", "CanarySubcommand"),
     "CanaryReporter": ("_canary.reporters.reporter", "CanaryReporter"),
     "CanaryPluginManager": ("_canary.pluginmanager", "CanaryPluginManager"),
@@ -204,6 +205,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Session": ("_canary.workspace", "Session"),
     "Workspace": ("_canary.workspace", "Workspace"),
     "ViewSettings": ("_canary.view", "ViewSettings"),
+    "print_spec_graph": ("_canary.jobspec_graph", "print_spec_graph"),
+    "app": ("_canary.app", None),
 }
 
 
@@ -213,7 +216,7 @@ def __getattr__(name: str):
 
         mod_path, attr = _LAZY_IMPORTS[name]
         mod = importlib.import_module(mod_path)
-        value = getattr(mod, attr)
+        value = mod if attr is None else getattr(mod, attr)
         # Cache in module globals so subsequent accesses skip __getattr__
         globals()[name] = value
         return value
