@@ -26,7 +26,7 @@ from typing import TextIO
 import psutil
 
 from . import config
-from .error import TestTimedOut
+from .core.error import TestTimedOut
 from .hookspec import hookimpl
 from .util import logging
 from .util.module import load as load_module

@@ -23,14 +23,14 @@ from typing import Literal
 from typing import MutableMapping
 
 from . import config
+from .core.error import TestDiffed
+from .core.error import TestFailed
+from .core.error import TestSkipped
+from .core.error import TestTimedOut
 from .core.expression import Expression
 from .core.jobspec import BaselineScriptAction
 from .core.status import Status
 from .core.timekeeper import Timekeeper
-from .error import TestDiffed
-from .error import TestFailed
-from .error import TestSkipped
-from .error import TestTimedOut
 from .launcher import Launcher
 from .testexec import ExecutionSpace
 from .util import json_helper as json

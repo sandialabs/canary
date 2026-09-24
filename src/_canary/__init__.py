@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-from .error import TestDiffed  # noqa: F401
-from .error import TestFailed  # noqa: F401
-from .error import TestSkipped  # noqa: F401
+from .core.error import TestDiffed  # noqa: F401
+from .core.error import TestFailed  # noqa: F401
+from .core.error import TestSkipped  # noqa: F401
 from .util.logging import setup_logging
 
 setup_logging()

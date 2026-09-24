@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from _canary.core.error import diff_exit_status
 from _canary.core.jobspec import BaselineCopyAction
 from _canary.core.jobspec_ir import DependencySelector
-from _canary.error import diff_exit_status
 from canary_pyt.paramset import ParameterSet
 from canary_pyt.pyt import PYTAdapter
 from canary_pyt.pyt import PYTLoader
