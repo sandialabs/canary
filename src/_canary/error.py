@@ -23,7 +23,7 @@ internally by the executor; they do not derive from :class:`MyException`.
 
 import sys
 
-from . import status
+from .core import status
 
 skip_exit_status = status.Outcome.SKIPPED.value
 diff_exit_status = status.Outcome.DIFFED.value
@@ -38,7 +38,7 @@ del status
 class MyException(Exception):
     """Base class for all Canary test-outcome exceptions.
 
-    Subclasses set ``exit_code`` to the appropriate :class:`~_canary.status.Outcome`
+    Subclasses set ``exit_code`` to the appropriate :class:`~_canary.core.status.Outcome`
     integer value so the custom ``excepthook`` can propagate it to the process.
     """
 

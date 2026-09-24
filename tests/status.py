@@ -5,12 +5,12 @@
 
 import pytest
 
-from _canary.status import Category
-from _canary.status import Outcome
-from _canary.status import Status
-from _canary.status import get_category
-from _canary.status import get_default_outcome
-from _canary.status import get_possible_outcomes
+from _canary.core.status import Category
+from _canary.core.status import Outcome
+from _canary.core.status import Status
+from _canary.core.status import get_category
+from _canary.core.status import get_default_outcome
+from _canary.core.status import get_possible_outcomes
 
 
 def test_status_set_outcome_infers_category_and_default_code():

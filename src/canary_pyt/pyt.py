@@ -17,6 +17,7 @@ from typing import ClassVar
 from typing import Literal
 from typing import Sequence
 
+from _canary.core.status import Outcome
 from _canary.error import diff_exit_status
 from _canary.ir import DependencySelector
 from _canary.ir import JobSpecIR
@@ -26,7 +27,6 @@ from _canary.jobspec import BaselineAction
 from _canary.jobspec import BaselineCopyAction
 from _canary.jobspec import BaselineScriptAction
 from _canary.jobspec import Mask
-from _canary.status import Outcome
 from _canary.third_party.monkeypatch import monkeypatch
 from _canary.util import logging
 from _canary.util import reducer

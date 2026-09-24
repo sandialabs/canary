@@ -381,11 +381,11 @@ def test_status_failed_flag(setup, capsys):
 
 def test_status_build_summary_all_pass():
     """_build_summary_line returns green all-pass message when every row passes."""
+    from _canary.core.status import Category
+    from _canary.core.status import Outcome
+    from _canary.core.status import Status as _Status
     from _canary.job import JobPhase
     from _canary.job import JobState
-    from _canary.status import Category
-    from _canary.status import Outcome
-    from _canary.status import Status as _Status
     from _canary.subcommands.status import _build_summary_line
 
     def _make_row(outcome):
@@ -403,11 +403,11 @@ def test_status_build_summary_all_pass():
 
 def test_status_build_summary_reports_running():
     """_build_summary_line counts RUNNING jobs distinctly (not as 'not run')."""
+    from _canary.core.status import Category
+    from _canary.core.status import Outcome
+    from _canary.core.status import Status as _Status
     from _canary.job import JobPhase
     from _canary.job import JobState
-    from _canary.status import Category
-    from _canary.status import Outcome
-    from _canary.status import Status as _Status
     from _canary.subcommands.status import _build_summary_line
 
     rows = [
@@ -429,9 +429,9 @@ def test_status_build_summary_reports_running():
 
 def test_status_filter_by_status_running_char():
     """filter_by_status honors the (r)unning report char."""
+    from _canary.core.status import Status as _Status
     from _canary.job import JobPhase
     from _canary.job import JobState
-    from _canary.status import Status as _Status
     from _canary.subcommands.status import filter_by_status
 
     running = {"status": _Status(), "state": JobState(phase=JobPhase.RUNNING)}

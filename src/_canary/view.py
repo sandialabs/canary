@@ -158,7 +158,7 @@ class ViewManifestEntry:
         view_path: Path of the entry relative to the view root directory.
         source: Absolute path to the job's workspace directory.
         session: Session ID string when this entry was last written.
-        outcome: String name of the job's :class:`~_canary.status.Outcome`.
+        outcome: String name of the job's :class:`~_canary.core.status.Outcome`.
         updated: ISO 8601 UTC timestamp of when this entry was last updated.
     """
 

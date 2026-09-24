@@ -23,7 +23,7 @@ from .util import logging
 from .util.string import stringify
 
 if TYPE_CHECKING:
-    from .status import Status
+    from .core.status import Status
 
 logger = logging.get_logger(__name__)
 select_sygil = "/"
@@ -89,7 +89,7 @@ class Artifact:
         return NotImplemented
 
     def active(self, status: "Status") -> bool:
-        from .status import Category
+        from .core.status import Category
 
         if self.when == "never":
             return False

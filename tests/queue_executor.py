@@ -6,11 +6,11 @@ from typing import Any
 from typing import Callable
 from typing import cast
 
+from _canary.core.status import Status
 from _canary.job import BaseJob
 from _canary.job import JobState
 from _canary.queue_executor import ExecutionSlot
 from _canary.queue_executor import ResourceQueueExecutor
-from _canary.status import Status
 from _canary.timekeeper import Timekeeper
 
 

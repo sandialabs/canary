@@ -8,9 +8,9 @@ from dataclasses import field
 from typing import Any
 
 import canary
-from _canary.status import Category
-from _canary.status import Outcome
-from _canary.status import Status
+from _canary.core.status import Category
+from _canary.core.status import Outcome
+from _canary.core.status import Status
 
 
 @dataclass(slots=True)

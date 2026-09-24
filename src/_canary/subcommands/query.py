@@ -354,7 +354,7 @@ def _db_results_for_session(workspace: Workspace, session_name: str) -> list[dic
 
 def _db_outcome_counts_for_session(workspace: Workspace, session_name: str) -> dict[str, int]:
     """Return {outcome_name: count} for all jobs in a session."""
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     result: dict[str, int] = {}
     for raw_outcome, count in workspace.db.get_outcome_counts_for_session(session_name).items():

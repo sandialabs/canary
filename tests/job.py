@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from _canary.core.status import Status
 from _canary.job import BaseJob
 from _canary.job import Dependency
 from _canary.job import Job
@@ -16,7 +17,6 @@ from _canary.job import Measurements
 from _canary.jobspec import JobSpec
 from _canary.jobspec import Mask
 from _canary.jobspec import SpecDependency
-from _canary.status import Status
 from _canary.timekeeper import Timekeeper
 from _canary.util import json_helper as json
 

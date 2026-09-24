@@ -41,7 +41,7 @@ LAZY_ONLY_MODULES = frozenset(
 EAGER_RUNTIME_MODULES = frozenset(
     {
         "_canary.config",
-        "_canary.status",
+        "_canary.core.status",
         "_canary.job",
         "_canary.jobspec",
         "_canary.testinst",

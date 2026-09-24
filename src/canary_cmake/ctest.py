@@ -14,8 +14,8 @@ from typing import Any
 import schema
 
 import canary
+from _canary.core.status import Status
 from _canary.generator import AbstractTestGenerator
-from _canary.status import Status
 
 warning_cache: set[str] = set()
 

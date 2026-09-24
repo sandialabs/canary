@@ -37,11 +37,11 @@ from typing import Any
 from typing import Iterable
 
 from . import jobspec
+from .core.status import Status
 from .job import JobPhase
 from .job import JobState
 from .jobspec import JobSpec
 from .jobspec_graph import make_spec_graph
-from .status import Status
 from .util import json_helper as json
 from .util import logging
 from .util.multiprocessing import FSQueue
@@ -539,15 +539,15 @@ class WorkspaceDatabase:
 
         Args:
             session: The session whose rows should be reconciled.
-            outcome: The :class:`~_canary.status.Outcome` name to assign.
+            outcome: The :class:`~_canary.core.status.Outcome` name to assign.
             reason: The status reason to record.
 
         Returns:
             The number of rows updated.
         """
-        from .status import Category
-        from .status import Outcome
-        from .status import get_category
+        from .core.status import Category
+        from .core.status import Outcome
+        from .core.status import get_category
 
         o = Outcome.factory(outcome)
         category: Category = get_category(o)
@@ -729,7 +729,7 @@ class WorkspaceDatabase:
         Returns a dict with keys: ``id``, ``spec_name``, ``spec_fullname``,
         ``file_root``, ``file_path``, ``session``, ``workspace``, ``state``
         (:class:`~_canary.job.JobState`), ``status``
-        (:class:`~_canary.status.Status`), ``timekeeper``
+        (:class:`~_canary.core.status.Status`), ``timekeeper``
         (:class:`~_canary.timekeeper.Timekeeper`), and ``measurements``.
         """
         d: dict[str, Any] = {}

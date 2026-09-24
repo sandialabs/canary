@@ -276,7 +276,7 @@ def build_final_table(
     """
     from collections import defaultdict
 
-    from _canary.status import Category
+    from _canary.core.status import Category
 
     _CATEGORY_ORDER = [
         Category.FAIL,

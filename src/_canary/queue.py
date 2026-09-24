@@ -206,8 +206,8 @@ class ResourceQueue:
         return [slot.job for slot in self._heap]
 
     def status(self, start: float | None = None) -> str:
-        from .status import Category
-        from .status import Outcome
+        from .core.status import Category
+        from .core.status import Outcome
 
         def sortkey(x):
             n = 0 if x[0] == Category.PASS else 2 if x[0] == Category.FAIL else 1

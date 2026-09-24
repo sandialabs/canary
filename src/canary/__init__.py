@@ -15,7 +15,7 @@ from pathlib import Path
 import schema
 
 import _canary.config as config
-import _canary.status as status
+import _canary.core.status as status
 import canary_pyt.enums as enums
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config

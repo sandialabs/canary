@@ -422,7 +422,7 @@ def print_final_table(runner: Runner) -> None:
 
 def _build_footer_text(runner: Runner) -> str:
     """Return a Rich-markup summary line for the session: totals + elapsed time."""
-    from . import status as _status
+    from .core import status as _status
 
     def sortkey(x: tuple[_status.Category, _status.Outcome]) -> tuple[int, _status.Outcome]:
         n = 0 if x[0] == _status.Category.PASS else 2 if x[0] == _status.Category.FAIL else 1
@@ -455,7 +455,7 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: Runner, title: str) -> None:
     """Return a short, high-level, summary of test results"""
-    from . import status
+    from .core import status
 
     def sortkey(x: tuple[status.Category, status.Outcome]) -> tuple[int, status.Outcome]:
         n = 0 if x[0] == status.Category.PASS else 2 if x[0] == status.Category.FAIL else 1

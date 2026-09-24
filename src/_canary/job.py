@@ -24,13 +24,13 @@ from typing import MutableMapping
 
 from . import config
 from .core.expression import Expression
+from .core.status import Status
 from .error import TestDiffed
 from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
 from .jobspec import BaselineScriptAction
 from .launcher import Launcher
-from .status import Status
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
 from .util import json_helper as json
@@ -96,7 +96,7 @@ class Dependency:
         return cls(**d)
 
     def is_satisfied(self) -> bool:
-        from .status import Category
+        from .core.status import Category
 
         if not self.job.is_done():
             return False
@@ -726,7 +726,7 @@ class Job(BaseJob):
                     raise
 
     def run(self) -> None:
-        from .status import Outcome
+        from .core.status import Outcome
 
         code: int
         xstatus = self.spec.xstatus
@@ -832,7 +832,7 @@ class Job(BaseJob):
                         copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
-        from .status import Outcome
+        from .core.status import Outcome
 
         if isinstance(code, str):
             code = 1

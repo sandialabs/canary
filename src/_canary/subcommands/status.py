@@ -16,9 +16,9 @@ from rich.console import Console
 from rich.table import Table
 
 from .. import app
+from ..core.status import Status as _Status
 from ..hookspec import hookimpl
 from ..job import JobState
-from ..status import Status as _Status
 from ..util import glyphs
 from ..util import logging
 from .base import CanarySubcommand
@@ -332,7 +332,7 @@ def _build_summary_line(rows: list[dict]) -> str:
     Always non-empty. When everything passes the line is green; when there are
     failures it names each non-pass category.
     """
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     total = len(rows)
     counts: dict[str, int] = {}
@@ -441,7 +441,7 @@ def _group_failures(rows: list[dict]) -> list[tuple[str, str | None, list[dict]]
     is replaced with a human-readable "upstream dependency failed" message that
     names the upstream job when the reason string contains one.
     """
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     groups: dict[tuple[str, str | None], list[dict]] = {}
     for row in rows:
@@ -549,7 +549,7 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
 
 def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
     """Return the subset of *rows* whose status matches the report-character filter *chars*."""
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     chars = chars or "dftnrs"
     if "A" in chars:

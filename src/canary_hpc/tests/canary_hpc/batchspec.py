@@ -5,11 +5,11 @@
 from pathlib import Path
 from typing import Any
 
+from _canary.core.status import Outcome
+from _canary.core.status import Status
 from _canary.job import JobPhase
 from _canary.job import JobState
 from _canary.resource_pool.rpool import NodeRequest
-from _canary.status import Outcome
-from _canary.status import Status
 from _canary.testexec import ExecutionSpace
 from _canary.timekeeper import Timekeeper
 from canary_hpc.batchexec import HPCConnectRunner

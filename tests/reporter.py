@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from _canary.core.status import Status
 from _canary.job import Job
 from _canary.reporters.html import HTMLReporter
 from _canary.reporters.html import HTMLReportRequest
@@ -18,7 +19,6 @@ from _canary.reporters.junit import JunitReportRequest
 from _canary.reporters.markdown import MarkdownReporter
 from _canary.reporters.markdown import MarkdownReportRequest
 from _canary.reporters.reporter import running_in_ci
-from _canary.status import Status
 from _canary.util.filesystem import working_dir
 from _canary.workspace import Workspace
 
