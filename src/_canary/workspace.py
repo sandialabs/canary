@@ -43,7 +43,6 @@ from .core import rules
 from .core.job import Dependency
 from .core.job import Job
 from .core.job import Measurements
-from .database import WorkspaceDatabase
 from .error import StopExecution
 from .error import notests_exit_status
 from .execution.runtest import Runner
@@ -51,6 +50,7 @@ from .execution.runtest import canary_runtests
 from .execution.testexec import ExecutionSpace
 from .generate import Generator
 from .generator import AbstractTestGenerator
+from .persistence.database import WorkspaceDatabase
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import async_rmtree
@@ -63,8 +63,8 @@ from .view import ViewSettings
 
 if TYPE_CHECKING:
     from .core.jobspec import JobSpec
-    from .database import ResultListener
     from .execution.queue_executor import EventTypes
+    from .persistence.database import ResultListener
 
 logger = logging.get_logger(__name__)
 

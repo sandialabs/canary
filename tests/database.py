@@ -10,8 +10,8 @@ from typing import Protocol
 
 import pytest
 
-from _canary.database import NotASelection
-from _canary.database import WorkspaceDatabase
+from _canary.persistence.database import NotASelection
+from _canary.persistence.database import WorkspaceDatabase
 from _canary.util.testing import generate_random_jobs
 from _canary.util.testing import generate_random_jobspecs
 

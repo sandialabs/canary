@@ -17,7 +17,7 @@ session, which jobs should run this time?" — at two points in the pipeline:
 Both points share a single :class:`Strategy` definition so their behavior
 cannot drift.  A strategy therefore owns three things: its ``name``, its help
 text, and the two predicates :meth:`Strategy.selects_root` (over a
-:class:`~_canary.database.PartialSpec`) and :meth:`Strategy.should_run` (over a
+:class:`~_canary.persistence.database.PartialSpec`) and :meth:`Strategy.should_run` (over a
 runtime :class:`~_canary.core.job.Job`).
 
 Built-in strategies:
@@ -35,8 +35,8 @@ from typing import Iterable
 from typing import Literal
 
 from .core.jobspec import Mask
-from .database import PartialSpec
-from .database import WorkspaceDatabase
+from .persistence.database import PartialSpec
+from .persistence.database import WorkspaceDatabase
 
 if TYPE_CHECKING:
     from .core.job import Job

@@ -299,7 +299,7 @@ def test_changed_seeds_never_run_specs(tmp_path):
     had never executed.  Both now seed/run it.
     """
     from _canary import rerun
-    from _canary.database import PartialSpec
+    from _canary.persistence.database import PartialSpec
 
     spec_file = tmp_path / "case.pyt"
     spec_file.write_text("# stub\n")

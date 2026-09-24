@@ -116,7 +116,7 @@ def get_tag_info(tag: str) -> dict:
     """Return metadata and unmasked specs for selection *tag*.
 
     Delegates to :meth:`Workspace.tag_info`.  Raises
-    :class:`~_canary.database.NotASelection` if *tag* is not a selection.
+    :class:`~_canary.persistence.database.NotASelection` if *tag* is not a selection.
     """
     return open_workspace().tag_info(tag)
 

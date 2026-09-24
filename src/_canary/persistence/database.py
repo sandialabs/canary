@@ -36,18 +36,18 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from .core import jobspec
-from .core.job import JobPhase
-from .core.job import JobState
-from .core.jobspec import JobSpec
-from .core.jobspec_graph import make_spec_graph
-from .core.status import Status
-from .util import json_helper as json
-from .util import logging
-from .util.multiprocessing import FSQueue
+from ..core import jobspec
+from ..core.job import JobPhase
+from ..core.job import JobState
+from ..core.jobspec import JobSpec
+from ..core.jobspec_graph import make_spec_graph
+from ..core.status import Status
+from ..util import json_helper as json
+from ..util import logging
+from ..util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
-    from .core.job import Job
+    from ..core.job import Job
 
 
 logger = logging.get_logger(__name__)
@@ -545,9 +545,9 @@ class WorkspaceDatabase:
         Returns:
             The number of rows updated.
         """
-        from .core.status import Category
-        from .core.status import Outcome
-        from .core.status import get_category
+        from ..core.status import Category
+        from ..core.status import Outcome
+        from ..core.status import get_category
 
         o = Outcome.factory(outcome)
         category: Category = get_category(o)
