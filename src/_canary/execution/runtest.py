@@ -53,18 +53,18 @@ from typing import Generator
 
 import rich
 
-from . import config
-from .hookspec import hookimpl
+from .. import config
+from ..hookspec import hookimpl
+from ..util import glyphs
+from ..util import logging
+from ..util.returncode import compute_returncode
+from ..util.time import hhmmss
 from .queue import ResourceQueue
-from .util import glyphs
-from .util import logging
-from .util.returncode import compute_returncode
-from .util.time import hhmmss
 
 if TYPE_CHECKING:
-    from .config.argparsing import Parser
-    from .job import Job
-    from .workspace import Workspace
+    from ..config.argparsing import Parser
+    from ..job import Job
+    from ..workspace import Workspace
 
 
 logger = logging.get_logger(__name__)
@@ -146,7 +146,7 @@ def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> i
 
     Returns the number of jobs that were reconciled.
     """
-    from .job import JobPhase
+    from ..job import JobPhase
 
     n = 0
     for job in runner.jobs:
@@ -187,7 +187,7 @@ def default_runtests(runner: Runner) -> bool:
       The session returncode (0 for success)
 
     """
-    from . import app
+    from .. import app
     from .queue_executor import ResourceQueueExecutor
 
     try:
@@ -413,7 +413,7 @@ def print_final_table(runner: Runner) -> None:
     """
     from rich import print as rprint
 
-    from .reporter import build_final_table
+    from ..reporter import build_final_table
 
     footer = _build_footer_text(runner)
     table_group = build_final_table(runner.jobs, footer_text=footer)
@@ -422,7 +422,7 @@ def print_final_table(runner: Runner) -> None:
 
 def _build_footer_text(runner: Runner) -> str:
     """Return a Rich-markup summary line for the session: totals + elapsed time."""
-    from .core import status as _status
+    from ..core import status as _status
 
     def sortkey(x: tuple[_status.Category, _status.Outcome]) -> tuple[int, _status.Outcome]:
         n = 0 if x[0] == _status.Category.PASS else 2 if x[0] == _status.Category.FAIL else 1
@@ -455,7 +455,7 @@ def runtests_footer(runner: Runner) -> None:
 
 def print_footer(runner: Runner, title: str) -> None:
     """Return a short, high-level, summary of test results"""
-    from .core import status
+    from ..core import status
 
     def sortkey(x: tuple[status.Category, status.Outcome]) -> tuple[int, status.Outcome]:
         n = 0 if x[0] == status.Category.PASS else 2 if x[0] == status.Category.FAIL else 1

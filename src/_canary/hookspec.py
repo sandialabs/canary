@@ -15,13 +15,13 @@ if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .config.config import Config as CanaryConfig
     from .execution.launcher import Launcher
+    from .execution.runtest import Runner
     from .generate import Generator
     from .generator import AbstractTestGenerator
     from .job import Job
     from .pluginmanager import CanaryPluginManager
     from .reporters.reporter import CanaryReporter
     from .resource_pool.rpool import Outcome
-    from .runtest import Runner
     from .select import RuntimeSelector
     from .select import Selector
     from .subcommands.base import CanarySubcommand

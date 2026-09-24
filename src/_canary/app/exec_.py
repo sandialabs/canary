@@ -22,7 +22,7 @@ import datetime
 from typing import TYPE_CHECKING
 from typing import Callable
 
-from ..runtest import JobExecutor
+from ..execution.runtest import JobExecutor
 from .facade import open_workspace
 
 if TYPE_CHECKING:
@@ -84,7 +84,7 @@ def _default_session_name() -> str:
 class _PhaseTrackingSink:
     """Advance a job's lifecycle from executor events, forwarding each to an observer.
 
-    :class:`~_canary.runtest.JobExecutor` drives a job by ``put``-ing event
+    :class:`~_canary.execution.runtest.JobExecutor` drives a job by ``put``-ing event
     dicts onto a queue-like sink.  In the session scheduler that sink advances
     the job's phase via an :class:`ExecutionSlot`; ``exec`` has no slot, so this
     sink applies the same ``on_submit``/``on_stage``/``on_start``/``on_stop``

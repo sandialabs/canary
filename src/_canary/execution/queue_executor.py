@@ -18,21 +18,21 @@ from typing import Literal
 from typing import Protocol
 from typing import cast
 
-from . import config
-from .error import StopExecution
-from .events import Event
-from .events import EventBus
-from .job import BaseJob
-from .job import JobPhase
+from .. import config
+from ..error import StopExecution
+from ..events import Event
+from ..events import EventBus
+from ..job import BaseJob
+from ..job import JobPhase
+from ..reporter import EventReporter
+from ..reporter import LiveReporter
+from ..util import logging
+from ..util import multiprocessing as mp
+from ..util.misc import boolean
+from ..util.returncode import compute_returncode
 from .queue import Busy
 from .queue import Empty
 from .queue import ResourceQueue
-from .reporter import EventReporter
-from .reporter import LiveReporter
-from .util import logging
-from .util import multiprocessing as mp
-from .util.misc import boolean
-from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 

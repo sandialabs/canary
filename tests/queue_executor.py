@@ -8,10 +8,10 @@ from typing import cast
 
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
+from _canary.execution.queue_executor import ExecutionSlot
+from _canary.execution.queue_executor import ResourceQueueExecutor
 from _canary.job import BaseJob
 from _canary.job import JobState
-from _canary.queue_executor import ExecutionSlot
-from _canary.queue_executor import ResourceQueueExecutor
 
 
 class DummyJob(BaseJob):
@@ -248,8 +248,8 @@ def test_resource_queue_clear_cancels_pending_jobs_terminally() -> None:
     import heapq
     import threading
 
-    from _canary.queue import HeapSlot
-    from _canary.queue import ResourceQueue
+    from _canary.execution.queue import HeapSlot
+    from _canary.execution.queue import ResourceQueue
 
     class FakePool:
         def accommodates(self, req):
@@ -276,8 +276,8 @@ def test_resource_queue_clear_default_cancelled() -> None:
     import heapq
     import threading
 
-    from _canary.queue import HeapSlot
-    from _canary.queue import ResourceQueue
+    from _canary.execution.queue import HeapSlot
+    from _canary.execution.queue import ResourceQueue
 
     class FakePool:
         def accommodates(self, req):

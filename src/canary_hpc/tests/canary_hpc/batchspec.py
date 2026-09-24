@@ -349,7 +349,7 @@ class _FakeSlot:
 def test_finish_abnormal_slot_all_children_pass_uses_child_status(tmp_path):
     """When all child jobs passed, _finish_abnormal_slot should derive SUCCESS
     from children instead of stamping TIMEOUT/ERROR on the batch."""
-    from _canary.queue_executor import ResourceQueueExecutor
+    from _canary.execution.queue_executor import ResourceQueueExecutor
 
     jobs = [FakeJob(id="j1", outcome=Outcome.SUCCESS), FakeJob(id="j2", outcome=Outcome.SUCCESS)]
     slot = _FakeSlot(_FakeSlotJob(jobs))
@@ -368,7 +368,7 @@ def test_finish_abnormal_slot_all_children_pass_uses_child_status(tmp_path):
 def test_finish_abnormal_slot_child_failed_uses_abnormal_outcome(tmp_path):
     """When a child job failed, _finish_abnormal_slot should NOT override
     with child-derived status — the abnormal event is the right outcome."""
-    from _canary.queue_executor import ResourceQueueExecutor
+    from _canary.execution.queue_executor import ResourceQueueExecutor
 
     jobs = [FakeJob(id="j1", outcome=Outcome.SUCCESS), FakeJob(id="j2", outcome=Outcome.FAILED)]
     slot = _FakeSlot(_FakeSlotJob(jobs))
@@ -386,7 +386,7 @@ def test_finish_abnormal_slot_child_failed_uses_abnormal_outcome(tmp_path):
 def test_finish_abnormal_slot_no_finalize_method_falls_through(tmp_path):
     """For non-batch jobs (no finalize_status_from_child_jobs), the original
     behaviour is preserved: set_status is called with the abnormal outcome."""
-    from _canary.queue_executor import ResourceQueueExecutor
+    from _canary.execution.queue_executor import ResourceQueueExecutor
 
     class PlainJob:
         id = "plain-job-id"

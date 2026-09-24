@@ -17,7 +17,7 @@ from _canary.util.time import time_in_seconds
 if TYPE_CHECKING:
     from _canary.config.argparsing import Parser
     from _canary.config.config import Config as CanaryConfig
-    from _canary.runtest import Runner
+    from _canary.execution.runtest import Runner
 
 
 logger = canary.get_logger(__name__)

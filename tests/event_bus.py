@@ -16,7 +16,7 @@ import pytest
 from _canary.events import Event
 from _canary.events import EventBus
 from _canary.events.bus import JOB_LIFECYCLE_EVENTS
-from _canary.queue_executor import EventTypes
+from _canary.execution.queue_executor import EventTypes
 
 
 def test_name_subscriber_receives_only_matching_events():

@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from .job import BaseJob
-from .resource_pool.rpool import ResourceUnavailable
-from .util import logging
-from .util.time import hhmmss
+from ..job import BaseJob
+from ..resource_pool.rpool import ResourceUnavailable
+from ..util import logging
+from ..util.time import hhmmss
 
 if TYPE_CHECKING:
-    from .resource_pool.rpool import NodeRequest
-    from .resource_pool.rpool import ResourcePool
+    from ..resource_pool.rpool import NodeRequest
+    from ..resource_pool.rpool import ResourcePool
 
 logger = logging.get_logger(__name__)
 
@@ -159,7 +159,7 @@ class ResourceQueue:
         job, so an interrupted-while-pending job could surface as ``NONE
         (NONE)``.
         """
-        from .job import JobPhase
+        from ..job import JobPhase
 
         if reason is None:
             reason = (
@@ -206,8 +206,8 @@ class ResourceQueue:
         return [slot.job for slot in self._heap]
 
     def status(self, start: float | None = None) -> str:
-        from .core.status import Category
-        from .core.status import Outcome
+        from ..core.status import Category
+        from ..core.status import Outcome
 
         def sortkey(x):
             n = 0 if x[0] == Category.PASS else 2 if x[0] == Category.FAIL else 1

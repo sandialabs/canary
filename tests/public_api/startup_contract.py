@@ -29,8 +29,8 @@ LAZY_ONLY_MODULES = frozenset(
         "_canary.database",
         "_canary.collect",
         "_canary.select",
-        "_canary.runtest",
-        "_canary.queue_executor",
+        "_canary.execution.runtest",
+        "_canary.execution.queue_executor",
         "_canary.reporters.reporter",
         "_canary.subcommands.run",
     }

@@ -8,7 +8,7 @@ from collections import Counter
 from typing import TypeAlias
 
 import canary
-from _canary import queue
+from _canary.execution import queue
 from _canary.job import BaseJob
 from _canary.job import JobPhase
 from _canary.util.time import hhmmss

@@ -364,7 +364,7 @@ def repeat_until_pass(case: "Job") -> bool | None:
     ultimately the default runner) when the option is not set, so this only
     takes over execution when the user asked for it.
     """
-    from .runtest import run_once
+    from .execution.runtest import run_once
 
     count = config.getoption("repeat_until_pass")
     if not count:
@@ -387,7 +387,7 @@ def repeat_until_pass(case: "Job") -> bool | None:
 @hookimpl(specname="canary_runtest")
 def repeat_after_timeout(case: "Job") -> bool | None:
     """Run *case*, retrying up to ``--repeat-after-timeout`` times on timeout."""
-    from .runtest import run_once
+    from .execution.runtest import run_once
 
     count = config.getoption("repeat_after_timeout")
     if not count:
@@ -413,7 +413,7 @@ def repeat_until_fail(case: "Job") -> bool | None:
 
     Stops early as soon as a run does not succeed.
     """
-    from .runtest import run_once
+    from .execution.runtest import run_once
 
     count = config.getoption("repeat_until_fail")
     if not count:

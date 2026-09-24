@@ -31,8 +31,8 @@ from .reporter import enabled
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
+    from ..execution.runtest import Runner
     from ..job import Job
-    from ..runtest import Runner
     from ..workspace import Workspace
 
 logger = logging.get_logger(__name__)

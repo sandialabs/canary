@@ -68,10 +68,10 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import generate
         from . import hooks
         from . import reporters
-        from . import runtest
         from . import select
         from . import subcommands
         from .execution import launcher
+        from .execution import runtest
         from .resource_pool import gpu_select
         from .resource_pool import hooks as rp_hooks
 

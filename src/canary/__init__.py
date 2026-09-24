@@ -200,7 +200,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     "Generator": ("_canary.generate", "Generator"),
     "RuntimeSelector": ("_canary.select", "RuntimeSelector"),
     "Selector": ("_canary.select", "Selector"),
-    "Runner": ("_canary.runtest", "Runner"),
+    "Runner": ("_canary.execution.runtest", "Runner"),
     "NotAWorkspaceError": ("_canary.workspace", "NotAWorkspaceError"),
     "Session": ("_canary.workspace", "Session"),
     "Workspace": ("_canary.workspace", "Workspace"),

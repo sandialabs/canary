@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 
-from _canary.queue import ResourceQueue
-from _canary.queue_executor import ResourceQueueExecutor
+from _canary.execution.queue import ResourceQueue
+from _canary.execution.queue_executor import ResourceQueueExecutor
 from _canary.reporter import ReporterExecutorProtocol
 from _canary.resource_pool import ResourcePool
 

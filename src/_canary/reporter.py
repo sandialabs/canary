@@ -24,7 +24,7 @@ from .job import BaseJob
 from .util import logging
 
 if TYPE_CHECKING:
-    from .queue_executor import ExecutionSlot
+    from .execution.queue_executor import ExecutionSlot
 
 
 logger = logging.get_logger(__name__)

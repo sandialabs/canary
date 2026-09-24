@@ -6,7 +6,7 @@
 
 Canary's execution layer emits job-lifecycle events as dicts
 (``{"event": "job_started", ...}``) that the parent process routes through
-:class:`~_canary.queue_executor.ResourceQueueExecutor` and fans out to
+:class:`~_canary.execution.queue_executor.ResourceQueueExecutor` and fans out to
 registered listeners.  This package provides a typed equivalent:
 
 * :data:`~_canary.events.bus.EventName` -- canonical event-name literals kept in
