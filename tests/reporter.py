@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from _canary.core.job import Job
 from _canary.core.status import Status
-from _canary.job import Job
 from _canary.reporters.html import HTMLReporter
 from _canary.reporters.html import HTMLReportRequest
 from _canary.reporters.json import JsonReporter

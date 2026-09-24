@@ -63,7 +63,7 @@ class FakeJob:
 
 
 def make_batch(tmp_path: Path, jobs: list[FakeJob]) -> DistBatch:
-    from _canary.job import Job
+    from _canary.core.job import Job
 
     spec = BatchSpec(layout="flat", jobs=cast(list[Job], jobs))
     workspace = ExecutionSpace(root=tmp_path, path=Path("batch"))

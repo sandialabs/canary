@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.core.job import Job
 from _canary.execution.testexec import ExecutionSpace
-from _canary.job import Job
 from _canary.resource_pool import ResourcePool
 from _canary.util.executable import Executable
 from _canary.util.filesystem import mkdirp

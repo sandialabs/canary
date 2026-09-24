@@ -5,9 +5,9 @@
 from pathlib import Path
 
 import canary
+from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
 from _canary.execution.testexec import ExecutionSpace
-from _canary.job import Job
 from _canary.workspace import Workspace
 
 

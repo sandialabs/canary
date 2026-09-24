@@ -22,22 +22,22 @@ from _canary.config.config import Config
 from _canary.core.error import TestDiffed
 from _canary.core.error import TestFailed
 from _canary.core.error import TestSkipped
+from _canary.core.job import BaseJob
+from _canary.core.job import Job
 from _canary.core.jobspec import Artifact
 from _canary.core.jobspec import Asset
 from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import Mask
 from _canary.core.jobspec_ir import DependencySelector
 from _canary.core.jobspec_ir import JobSpecIR
+from _canary.core.rules import Rule
+from _canary.core.rules import RuleOutcome
+from _canary.core.rules import RuntimeRule
 from _canary.execution.launcher import Launcher
 from _canary.execution.launcher import SubprocessLauncher
 from _canary.generator import AbstractSpecGenerator
 from _canary.hookspec import hookimpl
 from _canary.hookspec import hookspec
-from _canary.job import BaseJob
-from _canary.job import Job
-from _canary.rules import Rule
-from _canary.rules import RuleOutcome
-from _canary.rules import RuntimeRule
 from _canary.testcase import TestCase
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
@@ -170,7 +170,7 @@ def get_instance(arg_path: Path | str | None = None) -> TestInstance | MissingTe
 
 
 def get_job(arg_path: Path | str | None = None) -> Job | None:
-    from _canary.job import load_job_from_file
+    from _canary.core.job import load_job_from_file
 
     try:
         job = load_job_from_file(arg_path)

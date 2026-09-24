@@ -17,7 +17,7 @@ Paging is disabled when any of the following is true:
 3. the ``config:no_pager`` config key is set,
 4. the ``CANARY_NO_PAGER`` environment variable is set to a truthy value.
 
-The resolution order mirrors :func:`_canary.job.find_cache_dir`: environment
+The resolution order mirrors :func:`_canary.core.job.find_cache_dir`: environment
 variable first, then config/flag.
 """
 

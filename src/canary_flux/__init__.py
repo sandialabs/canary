@@ -338,7 +338,7 @@ def flux_exec(args: argparse.Namespace) -> int:
     import time
 
     from _canary import config
-    from _canary.job import Job
+    from _canary.core.job import Job
     from _canary.workspace import Workspace
 
     workspace = Workspace.load()

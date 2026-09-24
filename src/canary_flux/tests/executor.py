@@ -9,10 +9,10 @@ from typing import Any
 from typing import cast
 
 import canary_flux.executor as ex
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
-from _canary.job import JobPhase
-from _canary.job import JobState
 
 
 class FakeWorkspace:

@@ -9,10 +9,10 @@ import threading
 from typing import Any
 from typing import cast
 
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.execution.queue import HeapSlot
-from _canary.job import JobPhase
-from _canary.job import JobState
 from canary_hpc.queue import ResourceQueue
 
 

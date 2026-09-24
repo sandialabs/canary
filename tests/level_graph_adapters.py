@@ -11,13 +11,13 @@ from typing import cast
 
 import pytest
 
+from _canary.core.job import Job
+from _canary.core.job_graph import make_job_graph
+from _canary.core.job_graph import make_job_graph_from_levels
 from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import SpecDependency
 from _canary.core.jobspec_graph import make_spec_graph
 from _canary.core.jobspec_graph import make_spec_graph_from_levels
-from _canary.job import Job
-from _canary.job_graph import make_job_graph
-from _canary.job_graph import make_job_graph_from_levels
 
 
 def graph_level_ids(graph) -> list[list[str]]:

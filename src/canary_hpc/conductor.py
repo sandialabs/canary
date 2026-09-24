@@ -476,7 +476,7 @@ class CanaryHPCConductor:
 
         The shared executor works with :class:`TestBatch` objects, so the
         default per-job ``testcase_done_callback`` cannot be used directly.  This
-        listener instead spools each child :class:`~_canary.job.Job` of a batch
+        listener instead spools each child :class:`~_canary.core.job.Job` of a batch
         to the results database as the batch is submitted, starts running, and
         finishes, so that ``canary status`` reflects in-progress HPC jobs
         mid-run.  Only the parent process (which owns the running

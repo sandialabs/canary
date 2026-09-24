@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
 
+from .core.job import JobState
 from .core.jobspec import BaselineAction
 from .core.status import Status
-from .job import JobState
 from .util import json_helper as json
 from .util.paramview import MultiParameters
 from .util.paramview import Parameters
 
 if TYPE_CHECKING:
+    from .core.job import Job
     from .core.jobspec import JobSpec
-    from .job import Job
 
 
 @dataclasses.dataclass(frozen=True)

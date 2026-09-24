@@ -63,7 +63,7 @@ from .queue import ResourceQueue
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..job import Job
+    from ..core.job import Job
     from ..workspace import Workspace
 
 
@@ -146,7 +146,7 @@ def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> i
 
     Returns the number of jobs that were reconciled.
     """
-    from ..job import JobPhase
+    from ..core.job import JobPhase
 
     n = 0
     for job in runner.jobs:

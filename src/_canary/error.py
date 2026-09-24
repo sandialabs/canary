@@ -34,7 +34,7 @@ class FailFast(Exception):
     Carries the list of failed jobs so callers can report them.
 
     Args:
-        failed: A single :class:`~_canary.job.Job` or an iterable of jobs that
+        failed: A single :class:`~_canary.core.job.Job` or an iterable of jobs that
             triggered the fail-fast condition.
     """
 

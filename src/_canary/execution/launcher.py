@@ -33,7 +33,7 @@ from ..util.module import load as load_module
 from ..util.shell import source_rcfile
 
 if TYPE_CHECKING:
-    from ..job import Job
+    from ..core.job import Job
 
 logger = logging.get_logger(__name__)
 StdErrorT = TextIO | int
@@ -450,7 +450,7 @@ def _write_env_json(job: "Job") -> None:
     """Write the current ``os.environ`` to ``env.json`` in the job workspace.
 
     Called from :meth:`SubprocessLauncher.context` immediately after
-    :meth:`~_canary.job.Job.set_runtime_env` has injected the job's variables
+    :meth:`~_canary.core.job.Job.set_runtime_env` has injected the job's variables
     into ``os.environ`` — capturing exactly the environment the test subprocess
     will inherit.  Written best-effort; failures are logged at DEBUG and do not
     affect job execution.

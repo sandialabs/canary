@@ -23,7 +23,7 @@ from .schemas import resource_pool_schema
 if TYPE_CHECKING:
     from ..config import Config as CanaryConfig
     from ..config.argparsing import Parser
-    from ..job import Job
+    from ..core.job import Job
     from .rpool import ResourcePool
 
 

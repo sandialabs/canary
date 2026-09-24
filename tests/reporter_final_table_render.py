@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from typing import Any
 from typing import Callable
 
+from _canary.core.job import BaseJob
+from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
-from _canary.job import BaseJob
-from _canary.job import JobState
 from _canary.reporter import Reporter
 
 

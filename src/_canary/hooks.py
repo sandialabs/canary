@@ -33,7 +33,7 @@ from .workspace import Workspace
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
-    from .job import Job
+    from .core.job import Job
     from .workspace import Session
 
 

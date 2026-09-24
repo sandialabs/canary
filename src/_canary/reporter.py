@@ -20,7 +20,7 @@ from rich.table import Table
 from rich.text import Text
 
 from . import config
-from .job import BaseJob
+from .core.job import BaseJob
 from .util import logging
 
 if TYPE_CHECKING:

@@ -21,8 +21,8 @@ from typing import Any
 from typing import Iterable
 
 if TYPE_CHECKING:
+    from ..core.job import Job
     from ..core.jobspec import JobSpec
-    from ..job import Job
 
 
 class CanaryCommand:
@@ -110,10 +110,10 @@ def generate_random_jobs(
     Returns:
         List of ``Job`` objects in topological order.
     """
+    from ..core.job import Dependency
+    from ..core.job import Job
     from ..core.jobspec_graph import make_spec_graph
     from ..execution.testexec import ExecutionSpace
-    from ..job import Dependency
-    from ..job import Job
 
     session = root / "session"
     lookup: dict[str, Job] = {}

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
-from ..job import BaseJob
+from ..core.job import BaseJob
 from ..resource_pool.rpool import ResourceUnavailable
 from ..util import logging
 from ..util.time import hhmmss
@@ -159,7 +159,7 @@ class ResourceQueue:
         job, so an interrupted-while-pending job could surface as ``NONE
         (NONE)``.
         """
-        from ..job import JobPhase
+        from ..core.job import JobPhase
 
         if reason is None:
             reason = (

@@ -71,20 +71,20 @@ from schema import Schema
 
 from . import config
 from .config.argparsing import Parser
+from .core.job_graph import make_job_graph
 from .core.jobspec import Mask
 from .core.jobspec_graph import make_spec_graph
+from .core.rules import Rule
+from .core.rules import RuntimeRule
 from .hookspec import hookimpl
-from .job_graph import make_job_graph
-from .rules import Rule
-from .rules import RuntimeRule
 from .util import json_helper as json
 from .util import logging
 from .util.string import pluralize
 
 if TYPE_CHECKING:
     from .config.argparsing import Parser
+    from .core.job import Job
     from .core.jobspec import JobSpec
-    from .job import Job
 
 
 logger = logging.get_logger(__name__)

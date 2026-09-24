@@ -16,9 +16,9 @@ from typing import Protocol
 from typing import cast
 
 import canary
+from _canary.core.job import BaseJob
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.queue_executor import ExecutionSlot
-from _canary.job import BaseJob
 from _canary.reporter import EventReporter
 from _canary.reporter import LiveReporter
 from _canary.util.misc import boolean

@@ -22,27 +22,27 @@ from typing import Generator
 from typing import Literal
 from typing import MutableMapping
 
-from . import config
-from .core.error import TestDiffed
-from .core.error import TestFailed
-from .core.error import TestSkipped
-from .core.error import TestTimedOut
-from .core.expression import Expression
-from .core.jobspec import BaselineScriptAction
-from .core.status import Status
-from .core.timekeeper import Timekeeper
-from .execution.launcher import Launcher
-from .execution.testexec import ExecutionSpace
-from .util import json_helper as json
-from .util import logging
-from .util.compression import compress_str
-from .util.executable import Executable
-from .util.string import SimpleTemplate
+from .. import config
+from ..execution.launcher import Launcher
+from ..execution.testexec import ExecutionSpace
+from ..util import json_helper as json
+from ..util import logging
+from ..util.compression import compress_str
+from ..util.executable import Executable
+from ..util.string import SimpleTemplate
+from .error import TestDiffed
+from .error import TestFailed
+from .error import TestSkipped
+from .error import TestTimedOut
+from .expression import Expression
+from .jobspec import BaselineScriptAction
+from .status import Status
+from .timekeeper import Timekeeper
 
 if TYPE_CHECKING:
-    from .core.jobspec import JobSpec
-    from .core.jobspec import Mask
-    from .resource_pool.rpool import NodeRequest
+    from ..resource_pool.rpool import NodeRequest
+    from .jobspec import JobSpec
+    from .jobspec import Mask
 
 logger = logging.get_logger(__name__)
 
@@ -96,7 +96,7 @@ class Dependency:
         return cls(**d)
 
     def is_satisfied(self) -> bool:
-        from .core.status import Category
+        from .status import Category
 
         if not self.job.is_done():
             return False
@@ -597,7 +597,7 @@ class Job(BaseJob):
         return freed
 
     def required_resources(self) -> list["NodeRequest"]:
-        from .resource_pool.rpool import NodeRequest
+        from ..resource_pool.rpool import NodeRequest
 
         nodes = int(self.rparameters.get("nodes") or 1)
         if nodes <= 0:
@@ -726,7 +726,7 @@ class Job(BaseJob):
                     raise
 
     def run(self) -> None:
-        from .core.status import Outcome
+        from .status import Outcome
 
         code: int
         xstatus = self.spec.xstatus
@@ -832,7 +832,7 @@ class Job(BaseJob):
                         copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int | str) -> None:
-        from .core.status import Outcome
+        from .status import Outcome
 
         if isinstance(code, str):
             code = 1
@@ -947,9 +947,9 @@ class Job(BaseJob):
         """store relevant information for this run"""
         if not self.status.is_success():
             return
-        from .core.jobspec import _GlobalSpecCache
-        from .util.filesystem import atomic_write
-        from .util.filesystem import file_lock
+        from ..util.filesystem import atomic_write
+        from ..util.filesystem import file_lock
+        from .jobspec import _GlobalSpecCache
 
         if cache_dir := find_cache_dir(start=self.workspace.root):
             file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"

@@ -17,14 +17,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import config
-from ..rules import KeywordRule
+from ..core.rules import KeywordRule
 from ..util import json_helper as json
 from ..util import logging
 from ..workspace import Workspace
 from .facade import open_workspace
 
 if TYPE_CHECKING:
-    from ..job import Job
+    from ..core.job import Job
 
 logger = logging.get_logger(__name__)
 

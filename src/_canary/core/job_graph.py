@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Dependency graph construction helpers for :class:`~_canary.job.Job` objects.
+"""Dependency graph construction helpers for :class:`~_canary.core.job.Job` objects.
 
 Wraps :class:`~_canary.util.level_graph.LevelGraph` with job-specific ID and
 dependency accessor functions.  The resulting ``JobGraph`` is used by the
@@ -14,8 +14,8 @@ from typing import Iterable
 from typing import Sequence
 from typing import TypeAlias
 
+from ..util.level_graph import LevelGraph
 from .job import Job
-from .util.level_graph import LevelGraph
 
 JobGraph: TypeAlias = LevelGraph[Job]
 
@@ -41,7 +41,7 @@ def job_sort_key(job: Job) -> tuple[str, str]:
 
 
 def make_job_graph(jobs: Sequence[Job], *, require_closed: bool = True) -> JobGraph:
-    """Build a dependency graph from a flat sequence of :class:`~_canary.job.Job` objects.
+    """Build a dependency graph from a flat sequence of :class:`~_canary.core.job.Job` objects.
 
     Args:
         jobs: All jobs to include in the graph.

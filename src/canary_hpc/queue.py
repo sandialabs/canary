@@ -8,9 +8,9 @@ from collections import Counter
 from typing import TypeAlias
 
 import canary
+from _canary.core.job import BaseJob
+from _canary.core.job import JobPhase
 from _canary.execution import queue
-from _canary.job import BaseJob
-from _canary.job import JobPhase
 from _canary.util.time import hhmmss
 
 logger = canary.get_logger(__name__)

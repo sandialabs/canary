@@ -4,12 +4,12 @@
 
 from pathlib import Path
 
+from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
+from _canary.core.rules import RerunRule
+from _canary.core.rules import RuleOutcome
+from _canary.core.rules import RuntimeRule
 from _canary.execution.testexec import ExecutionSpace
-from _canary.job import Job
-from _canary.rules import RerunRule
-from _canary.rules import RuleOutcome
-from _canary.rules import RuntimeRule
 from _canary.select import RuntimeSelector
 
 

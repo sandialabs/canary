@@ -21,7 +21,7 @@ __all__ = ["add_filter_arguments", "add_resource_arguments"]
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...job import Job
+    from ...core.job import Job
 
 logger = logging.get_logger(__name__)
 

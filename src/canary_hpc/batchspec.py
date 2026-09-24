@@ -18,11 +18,11 @@ import hpc_connect
 
 import _canary.util.json_helper as json
 import canary
+from _canary.core.job import BaseJob
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.execution.testexec import ExecutionSpace
-from _canary.job import BaseJob
-from _canary.job import JobPhase
-from _canary.job import JobState
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.serialize import serialize
 from _canary.util.time import time_in_seconds

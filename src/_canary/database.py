@@ -37,17 +37,17 @@ from typing import Any
 from typing import Iterable
 
 from .core import jobspec
+from .core.job import JobPhase
+from .core.job import JobState
 from .core.jobspec import JobSpec
 from .core.jobspec_graph import make_spec_graph
 from .core.status import Status
-from .job import JobPhase
-from .job import JobState
 from .util import json_helper as json
 from .util import logging
 from .util.multiprocessing import FSQueue
 
 if TYPE_CHECKING:
-    from .job import Job
+    from .core.job import Job
 
 
 logger = logging.get_logger(__name__)
@@ -506,7 +506,7 @@ class WorkspaceDatabase:
         session overwrite the previous entry.
 
         Args:
-            *jobs: One or more :class:`~_canary.job.Job` objects to persist.
+            *jobs: One or more :class:`~_canary.core.job.Job` objects to persist.
         """
 
         rows = [self.format_single_result(job) for job in jobs]
@@ -728,7 +728,7 @@ class WorkspaceDatabase:
 
         Returns a dict with keys: ``id``, ``spec_name``, ``spec_fullname``,
         ``file_root``, ``file_path``, ``session``, ``workspace``, ``state``
-        (:class:`~_canary.job.JobState`), ``status``
+        (:class:`~_canary.core.job.JobState`), ``status``
         (:class:`~_canary.core.status.Status`), ``timekeeper``
         (:class:`~_canary.core.timekeeper.Timekeeper`), and ``measurements``.
         """

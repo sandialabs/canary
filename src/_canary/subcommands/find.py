@@ -16,8 +16,8 @@ from rich.columns import Columns
 from rich.rule import Rule
 
 from .. import config
-from .. import rules
 from ..collect import Collector
+from ..core import rules
 from ..error import StopExecution
 from ..generate import Generator
 from ..hookspec import hookimpl

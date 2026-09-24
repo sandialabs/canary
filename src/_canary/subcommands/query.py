@@ -305,7 +305,7 @@ def _job_lockfile(workspace: Workspace, jobid: str) -> Path:
 
 def _find_cache_path(workspace: Workspace, spec_id: str) -> Path | None:
     """Return the path to the per-job timing cache file, or None if absent."""
-    from ..job import find_cache_dir
+    from ..core.job import find_cache_dir
 
     cache_dir = find_cache_dir(start=workspace.root)
     if cache_dir is None:

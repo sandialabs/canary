@@ -112,7 +112,7 @@ def test_run_cache_dir_config_settable():
 
 
 def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, monkeypatch):
-    from _canary.job import find_cache_dir
+    from _canary.core.job import find_cache_dir
 
     ws = tmp_path / "ws"
     ws.mkdir()

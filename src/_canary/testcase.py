@@ -1,10 +1,10 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-from .job import Dependency  # noqa: F401
-from .job import Job
-from .job import load_job_from_file
-from .job import load_job_from_state
+from .core.job import Dependency  # noqa: F401
+from .core.job import Job
+from .core.job import load_job_from_file
+from .core.job import load_job_from_state
 
 # Legacy/backward compatiblity
 TestCase = Job

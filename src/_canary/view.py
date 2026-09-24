@@ -34,7 +34,7 @@ from typing import Literal
 from typing import cast
 
 from . import config
-from .job import Job
+from .core.job import Job
 from .util import logging
 from .util.filesystem import force_remove
 

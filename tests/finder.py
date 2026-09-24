@@ -7,9 +7,9 @@ from pathlib import Path
 import _canary.config as config
 import canary
 from _canary import collect
-from _canary import job as cj
-from _canary import rules
 from _canary import select
+from _canary.core import job as cj
+from _canary.core import rules
 from _canary.execution import testexec
 from _canary.generate import Generator
 from _canary.hookspec import hookimpl

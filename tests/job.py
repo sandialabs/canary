@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
+from _canary.core.job import BaseJob
+from _canary.core.job import Dependency
+from _canary.core.job import Job
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
+from _canary.core.job import Measurements
 from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import Mask
 from _canary.core.jobspec import SpecDependency
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
-from _canary.job import BaseJob
-from _canary.job import Dependency
-from _canary.job import Job
-from _canary.job import JobPhase
-from _canary.job import JobState
-from _canary.job import Measurements
 from _canary.util import json_helper as json
 
 
@@ -386,7 +386,7 @@ def test_job_runtime_falls_back_to_floor_when_no_cache(spec: JobSpec, space):
     real runtime); using it as the cold-cache estimate over-inflates the batch
     makespan on first runs.  We use ``timeout * _RUNTIME_FLOOR_FRACTION`` instead.
     """
-    from _canary.job import _RUNTIME_FLOOR_FRACTION
+    from _canary.core.job import _RUNTIME_FLOOR_FRACTION
 
     job = Job(spec=spec, workspace=space)
     assert job.runtime == spec.timeout * _RUNTIME_FLOOR_FRACTION
@@ -416,7 +416,7 @@ def test_job_runtime_caps_stale_cache_at_timeout(spec: JobSpec, space, tmp_path)
 
 def test_job_runtime_floors_very_fast_cache(spec: JobSpec, space, tmp_path):
     """A cached mean well below the floor is raised to timeout * floor_fraction."""
-    from _canary.job import _RUNTIME_FLOOR_FRACTION
+    from _canary.core.job import _RUNTIME_FLOOR_FRACTION
 
     (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
     _write_job_cache(tmp_path / "cache", spec.id, mean=1.0)  # 1s actual on 300s declared job
@@ -439,7 +439,7 @@ def test_job_runtime_stale_cache_logs_debug(spec: JobSpec, space, tmp_path, capl
     """A stale cached mean (> timeout) emits a debug-level log message."""
     import logging
 
-    import _canary.job as job_module
+    import _canary.core.job as job_module
 
     (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
     _write_job_cache(tmp_path / "cache", spec.id, mean=750.0)  # 2.5x the 300s timeout
@@ -447,7 +447,7 @@ def test_job_runtime_stale_cache_logs_debug(spec: JobSpec, space, tmp_path, capl
     # Reset the once-per-process log flag so this test is order-independent.
     job_module._cache_dir_logged = False
 
-    with caplog.at_level(logging.DEBUG, logger="_canary.job"):
+    with caplog.at_level(logging.DEBUG, logger="_canary.core.job"):
         job = Job(spec=spec, workspace=space)
         _ = job.runtime  # trigger cached_property
 

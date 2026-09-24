@@ -34,12 +34,15 @@ from typing import Any
 import yaml
 
 from . import config
-from . import rules
 from . import select
 from . import version
 from .collect import Collector
 from .config import config as config_mod
 from .core import jobspec
+from .core import rules
+from .core.job import Dependency
+from .core.job import Job
+from .core.job import Measurements
 from .database import WorkspaceDatabase
 from .error import StopExecution
 from .error import notests_exit_status
@@ -48,9 +51,6 @@ from .execution.runtest import canary_runtests
 from .execution.testexec import ExecutionSpace
 from .generate import Generator
 from .generator import AbstractTestGenerator
-from .job import Dependency
-from .job import Job
-from .job import Measurements
 from .util import json_helper as json
 from .util import logging
 from .util.filesystem import async_rmtree

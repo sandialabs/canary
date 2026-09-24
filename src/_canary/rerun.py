@@ -11,14 +11,14 @@ session, which jobs should run this time?" — at two points in the pipeline:
    IDs that seed the run.  :func:`get_specs` expands those seeds into a closed
    spec list via :func:`compute_rerun_closure` (downstream dependents are added
    and run; upstream prerequisites are loaded but masked).
-2. **Runtime masking** (:class:`~_canary.rules.RerunRule`): after jobs are
+2. **Runtime masking** (:class:`~_canary.core.rules.RerunRule`): after jobs are
    reconstructed, mask the ones the strategy says should not run.
 
 Both points share a single :class:`Strategy` definition so their behavior
 cannot drift.  A strategy therefore owns three things: its ``name``, its help
 text, and the two predicates :meth:`Strategy.selects_root` (over a
 :class:`~_canary.database.PartialSpec`) and :meth:`Strategy.should_run` (over a
-runtime :class:`~_canary.job.Job`).
+runtime :class:`~_canary.core.job.Job`).
 
 Built-in strategies:
 
@@ -39,8 +39,8 @@ from .database import PartialSpec
 from .database import WorkspaceDatabase
 
 if TYPE_CHECKING:
+    from .core.job import Job
     from .core.jobspec import JobSpec
-    from .job import Job
 
 
 StrategyType = Literal["all", "not_pass", "failed", "not_run", "changed"]

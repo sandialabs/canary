@@ -214,7 +214,7 @@ def test_result_history(db: WorkspaceDatabase, make_session):
 
 def test_reconcile_running_jobs_flips_non_terminal_rows(db: WorkspaceDatabase, make_session):
     """Non-terminal (running/pending) rows are flipped to a terminal failure."""
-    from _canary.job import JobPhase
+    from _canary.core.job import JobPhase
 
     session = make_session(db.path.parent)
     # Simulate a mix: some jobs finished (DONE/SUCCESS), some left running/pending.
@@ -246,7 +246,7 @@ def test_reconcile_running_jobs_flips_non_terminal_rows(db: WorkspaceDatabase, m
 
 def test_reconcile_running_jobs_noop_when_all_terminal(db: WorkspaceDatabase, make_session):
     """Reconciliation does nothing when every row is already terminal."""
-    from _canary.job import JobPhase
+    from _canary.core.job import JobPhase
 
     session = make_session(db.path.parent)
     for job in session.jobs:

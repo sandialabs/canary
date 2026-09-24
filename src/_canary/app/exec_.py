@@ -12,7 +12,7 @@ CLI subcommand is a thin adapter that only supplies live-status rendering.
     Because there is no scheduler slot to advance the job's lifecycle, the job's
     phase transitions are driven here from the executor's event stream.  Callers
     that want to render live status pass an *observer*; it receives each event
-    (with the :class:`~_canary.job.Job` added under the ``"job"`` key) after the
+    (with the :class:`~_canary.core.job.Job` added under the ``"job"`` key) after the
     phase transition has been applied.
 """
 
@@ -26,7 +26,7 @@ from ..execution.runtest import JobExecutor
 from .facade import open_workspace
 
 if TYPE_CHECKING:
-    from ..job import Job
+    from ..core.job import Job
 
 #: An observer receives each raw executor event dict as it occurs.
 JobEventObserver = Callable[[dict], None]
@@ -50,7 +50,7 @@ def exec_job(
             ``"job"``) as the job progresses, for live status rendering.
 
     Returns:
-        The executed :class:`~_canary.job.Job`, carrying its final status.
+        The executed :class:`~_canary.core.job.Job`, carrying its final status.
 
     Raises:
         RuntimeError: If the resolved job is not ready to run (e.g. an upstream

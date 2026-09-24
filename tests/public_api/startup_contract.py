@@ -43,7 +43,7 @@ EAGER_RUNTIME_MODULES = frozenset(
         "_canary.config",
         "_canary.core.status",
         "_canary.core.error",
-        "_canary.job",
+        "_canary.core.job",
         "_canary.core.jobspec",
         "_canary.testinst",
         "_canary.hookspec",

@@ -24,11 +24,11 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.core.job import Dependency
+from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
+from _canary.core.rules import RerunRule
 from _canary.execution.testexec import ExecutionSpace
-from _canary.job import Dependency
-from _canary.job import Job
-from _canary.rules import RerunRule
 from _canary.select import RuntimeSelector
 from _canary.util.filesystem import working_dir
 from _canary.workspace import Workspace

@@ -23,16 +23,16 @@ from typing import Type
 
 from schema import Schema
 
-from . import config
-from .core import when
-from .util import filesystem
-from .util import json_helper as json
-from .util import logging
+from .. import config
+from ..util import filesystem
+from ..util import json_helper as json
+from ..util import logging
+from . import when
 
 if TYPE_CHECKING:
-    from .core.jobspec import JobSpec
+    from ..resource_pool.rpool import NodeRequest
     from .job import Job
-    from .resource_pool.rpool import NodeRequest
+    from .jobspec import JobSpec
 
 
 ResourceSetCacheKey = tuple[tuple[bool, tuple[tuple[str, int], ...]], ...]
@@ -370,7 +370,7 @@ class RerunRule(RuntimeRule):
     """
 
     def __init__(self, strategy: str = "not_pass", priority: int = 0) -> None:
-        from . import rerun
+        from .. import rerun
 
         super().__init__(priority=priority)
         self.strategy: str

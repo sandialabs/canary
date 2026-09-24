@@ -19,11 +19,11 @@ from typing import Protocol
 from typing import cast
 
 from .. import config
+from ..core.job import BaseJob
+from ..core.job import JobPhase
 from ..error import StopExecution
 from ..events import Event
 from ..events import EventBus
-from ..job import BaseJob
-from ..job import JobPhase
 from ..reporter import EventReporter
 from ..reporter import LiveReporter
 from ..util import logging

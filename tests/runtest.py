@@ -8,14 +8,14 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
+from _canary.core.job import BaseJob
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.runtest import Runner
 from _canary.execution.runtest import _record_finish_failure
 from _canary.execution.runtest import reconcile_unfinished_jobs
-from _canary.job import BaseJob
-from _canary.job import JobPhase
-from _canary.job import JobState
 
 
 class DummyJob(BaseJob):
