@@ -45,6 +45,8 @@ class ExplorerState:
             rerun of the marked jobs (or the cursor row when none are marked).
         edit_requested: Edge-triggered flag the runner consumes to open the
             cursor row's test file in an editor.
+        cancel_requested: Edge-triggered flag the runner consumes to cancel an
+            in-flight run (set by ``esc``/``q`` while :attr:`running`).
         running: Whether an in-place rerun is currently executing (shown in the
             footer); set by the runner, cleared when the run finishes.
         quit: Set by :meth:`handle_key` when the user asks to exit.
@@ -63,6 +65,7 @@ class ExplorerState:
     marked_ids: set[str] = field(default_factory=set)
     rerun_requested: bool = False
     edit_requested: bool = False
+    cancel_requested: bool = False
     running: bool = False
     quit: bool = False
 
@@ -211,6 +214,17 @@ class ExplorerState:
         row = self.selected
         return row["file_path"] if row is not None else None
 
+    def consume_cancel_request(self) -> bool:
+        """Return whether a run cancellation was requested, clearing the flag.
+
+        Edge-triggered: the runner acts on it once (terminating the child run),
+        mirroring :meth:`consume_rerun_request` / :meth:`consume_edit_request`.
+        """
+        if not self.cancel_requested:
+            return False
+        self.cancel_requested = False
+        return True
+
     def _clamp_cursor(self) -> None:
         rows = self.visible_jobs
         self.cursor = 0 if not rows else max(0, min(self.cursor, len(rows) - 1))
@@ -269,7 +283,8 @@ class ExplorerState:
         * ``e`` -- edit the cursor row's test file
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
-        * ``q`` / ``escape`` -- quit
+        * ``q`` / ``escape`` -- cancel the in-flight run if one is running,
+          otherwise quit
         """
         if self.mode == "log":
             return self._handle_key_log(key)
@@ -277,6 +292,12 @@ class ExplorerState:
 
     def _handle_key_list(self, key: str) -> bool:
         if key in ("q", "Q", "escape"):
+            # While a run is in flight, q/escape cancels it (edge-triggered flag
+            # the runner consumes) rather than quitting the TUI; the user quits
+            # once the run has settled.  The runner does the actual (I/O) cancel.
+            if self.running:
+                self.cancel_requested = True
+                return True
             self.quit = True
             return True
         if key in ("j", "down"):

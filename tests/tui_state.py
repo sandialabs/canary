@@ -228,6 +228,38 @@ def test_edit_key_ignored_without_a_file():
     assert st.consume_edit_request() is None
 
 
+def test_cancel_requested_while_running_does_not_quit():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.running = True
+    # q/escape while a run is in flight requests cancellation, not quit.
+    assert st.handle_key("q") is True
+    assert st.quit is False
+    assert st.cancel_requested is True
+    assert st.consume_cancel_request() is True
+    # Edge-triggered: consumed once.
+    assert st.consume_cancel_request() is False
+
+
+def test_escape_also_requests_cancel_while_running():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    st.running = True
+    assert st.handle_key("escape") is True
+    assert st.quit is False
+    assert st.consume_cancel_request() is True
+
+
+def test_quit_when_not_running():
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    assert st.running is False
+    assert st.handle_key("q") is True
+    assert st.quit is True
+    assert st.cancel_requested is False
+    assert st.consume_cancel_request() is False
+
+
 def test_handle_key_unknown_returns_false():
     st = ExplorerState()
     st.update_jobs(_rows())
@@ -318,6 +350,22 @@ def test_render_frame_shows_run_progress_when_active():
     with console.capture() as cap:
         console.print(render_frame(st, summary, {"PASS": 1}, p.snapshot()))
     assert "running:" not in cap.get()
+
+
+def test_footer_hint_switches_to_cancel_while_running():
+    """The footer advertises q/esc as cancel (not quit) while a run is active."""
+    from _canary.tui.render import render_footer
+
+    st = ExplorerState()
+    st.update_jobs(_rows())
+    console = Console(width=100, record=True)
+    console.print(render_footer(st))
+    assert "cancel run" not in console.export_text()
+
+    st.running = True
+    console = Console(width=100, record=True)
+    console.print(render_footer(st))
+    assert "cancel run" in console.export_text()
 
 
 def test_frame_fits_terminal_height_when_sized():

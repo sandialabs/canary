@@ -197,6 +197,23 @@ class ExplorerModel:
         self.refresh()
         return True
 
+    def cancel_run(self) -> bool:
+        """Cancel the in-flight run, if any, terminating its child process.
+
+        Returns ``True`` if a run was cancelled.  Best-effort: the child is
+        terminated and the model refreshed from the database (jobs that finished
+        before cancellation keep their results; the rest reconcile on the next
+        session load).  Safe to call when no run is active (returns ``False``).
+        """
+        if self._run is None:
+            return False
+        self._run.terminate()
+        self._run = None
+        self.state.running = False
+        self.progress.end()
+        self.refresh()
+        return True
+
     #: The editor the TUI launches to edit a test file.  The TUI deliberately
     #: hardcodes ``vim`` rather than honoring ``$VISUAL``/``$EDITOR`` (as the CLI
     #: does): the TUI owns the full screen, and those variables frequently point
@@ -439,6 +456,12 @@ def _live_session(
                 if edit_path is not None:
                     reason, payload = "edit", edit_path
                     break
+                if model.state.consume_cancel_request() and model.cancel_run():
+                    # The user asked to stop the in-flight run (q/escape while
+                    # running).  cancel_run terminates the child and refreshes
+                    # from the DB; keep the display up so the user stays in the
+                    # explorer with whatever completed before cancellation.
+                    dirty = True
                 rerun_ids = model.state.consume_rerun_request()
                 if rerun_ids and model.begin_rerun(rerun_ids):
                     # In-place: the child streams events; keep drawing.  Clear

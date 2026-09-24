@@ -198,6 +198,46 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     assert all(after[i] == "PASS" for i in ids)
 
 
+def test_model_cancel_run_terminates_child_and_clears_state(tmp_path):
+    """Cancelling an in-flight run terminates the child and settles the model.
+
+    Uses a fake run handle so the wiring is exercised without racing a real
+    subprocess: begin a run, then cancel it, and assert the handle was
+    terminated, the run is no longer active, and rows are refreshed.
+    """
+
+    class FakeHandle:
+        def __init__(self):
+            self.terminated = False
+
+        def poll(self):
+            return None  # still running until cancelled
+
+        def terminate(self):
+            self.terminated = True
+
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.subscribe(queries.get_event_bus())
+        model.refresh()
+
+        handle = FakeHandle()
+        model._launch = lambda *a, **k: handle  # type: ignore[method-assign]
+        ids = [j["id"] for j in model.state.jobs]
+        assert model.begin_rerun(ids) is True
+        assert model.run_active is True
+
+        # Cancel: the child is terminated and the model settles.
+        assert model.cancel_run() is True
+        assert handle.terminated is True
+        assert model.run_active is False
+        assert model.state.running is False
+        # Cancelling again is a safe no-op.
+        assert model.cancel_run() is False
+        model.unsubscribe()
+
+
 def test_tui_discovers_and_runs_paths_on_launch(tmp_path):
     """'canary tui PATH --once' discovers, runs, and then shows the results.
 

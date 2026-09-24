@@ -40,6 +40,16 @@ Events only mark dirty; the DB remains the source of truth for row content.
 
 ## 2. Progress log (most recent first)
 
+- **DONE** First-class cancellation (roadmap item 3). `q`/`escape` while a run
+  is in flight now *cancels the run* instead of quitting: `ExplorerState`
+  records the intent (`cancel_requested`, edge-triggered via
+  `consume_cancel_request`), and the runner consumes it in `_live_session` and
+  calls `ExplorerModel.cancel_run()`, which terminates the child via
+  `RunHandle.terminate()`, clears `state.running`, ends the progress tally, and
+  refreshes rows from the DB (jobs that finished keep their results). The footer
+  swaps its hint to `q/esc cancel run` while running. When no run is active,
+  `q`/`escape` quits as before. Tests: `tui_state` cancel-vs-quit + footer hint;
+  `tui_integration` model-level cancel with a fake handle.
 - **DONE** Discover-and-run bridge: `canary tui <path>...` classifies the paths
   into a run request (same classifier as `canary run`), launches it on entry,
   and drops into the live explorer -- so a run can be *started* from the TUI,
@@ -87,7 +97,9 @@ Events only mark dirty; the DB remains the source of truth for row content.
 - Edit (`e`) the selected test's file in vim; auto-marks the edited test for rerun.
 - Rerun (`r`) the marked set (or cursor row) **in place** -- runs in a child
   process, streams live into the table, TUI never leaves the screen.
-- Quit (`q`/`escape`).
+- Cancel (`q`/`escape` while running) the in-flight run -- terminates the child
+  and settles from the DB, leaving the user in the explorer.
+- Quit (`q`/`escape` when idle).
 
 ---
 
@@ -384,7 +396,9 @@ types are unchanged.
    test: events observed on the parent bus, correct rc, DB updated, **child
    exits cleanly** (the regression that motivated the pivot).
 3. TUI uses the subprocess run and keeps `Live` up (unchanged from 4.6 step 3).
-4. Cancellation (unchanged from 4.6 step 4).
+4. Cancellation -- **DONE** (see progress log): `q`/`esc` while running
+   terminates the child run and settles the model. Follow-up: surface a
+   `job_cancelled` event.
 
 ---
 
@@ -396,9 +410,12 @@ Ordered, each step independently useful:
 2. **Live-run view** -- **DONE (first cut):** a progress panel fed purely by
    `EventBus` events (counts, per-job status, elapsed) shown while a run is in
    flight. Future: per-row phase animation in the table, worker-slot occupancy.
-3. **First-class cancellation** -- a cancel key that stops the running session
-   (`ResourceQueue.clear` + signal), surfaced as `job_cancelled` events (the bus
-   already reserves the name, `events/bus.py:37`).
+3. **First-class cancellation** -- **DONE:** a cancel key (`q`/`esc` while
+   running) that stops the running session by terminating the child run process
+   (`RunHandle.terminate`) and settling the model from the DB. Follow-up: emit a
+   `job_cancelled` event for the in-flight jobs (the bus already reserves the
+   name, `events/bus.py:37`) so the cancel is reflected as an event, not only a
+   DB reconcile.
 4. **Start a run from scratch in the TUI** -- not just rerun: pick scanpaths /
    a selection/tag, build a `RunOptions`, and launch. This is the last piece for
    a full `canary run` front end (the app layer already accepts scanpaths/tag

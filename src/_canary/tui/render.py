@@ -31,8 +31,10 @@ _HELP = (
     "[dim]j/k move · enter log · x mark · r rerun · e edit · c clear · "
     "d detail · f filter · q quit[/dim]"
 )
+#: Footer help shown while a run is in flight: q/escape cancels the run rather
+#: than quitting the TUI, so the hint changes to make that discoverable.
+_RUNNING_HELP = "[dim]j/k move · d detail · f filter · q/esc cancel run[/dim]"
 _LOG_HELP = "[dim]j/k scroll · g/G top/bottom · pgup/pgdn page · q/enter back[/dim]"
-
 #: Rows a Rich table spends on its own frame regardless of body length: the top
 #: border, the column-header row, the header/body separator, and the bottom
 #: border.  Used to convert an available line budget into a row budget.
@@ -160,7 +162,8 @@ def render_footer(state: "ExplorerState") -> Text:
     if state.marked_ids:
         parts.append(f"   marked: {len(state.marked_ids)}", style="bold cyan")
     parts.append("   ")
-    parts.append(Text.from_markup(_HELP))
+    # While a run is in flight q/escape cancels it (not quit); advertise that.
+    parts.append(Text.from_markup(_RUNNING_HELP if state.running else _HELP))
     return parts
 
 
