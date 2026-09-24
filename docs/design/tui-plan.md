@@ -1,0 +1,259 @@
+# Canary TUI: Plan and Progress
+
+**Status:** Active development. This document is the single source of truth for
+the TUI effort and is updated as work lands, so an interrupted session can be
+resumed without rediscovery.
+
+**End goal:** A full TUI front end to `canary run` -- discover/select tests, see
+details, edit a test file, and (re)run tests *in place* inside the TUI with live
+progress, without shelling out to a separate process or tearing the display
+down.
+
+---
+
+## 1. Architecture recap (what the TUI stands on)
+
+The TUI is a thin **interface adapter** over the application layer
+(`canary.app`). It holds no business logic; all workspace access goes through
+`_canary.app.queries` (reads) and `_canary.app.run` (the run use case).
+
+Relevant modules:
+
+| Module | Role |
+|---|---|
+| `_canary/tui/state.py` | Pure, fully testable UI state machine (`ExplorerState`). No I/O. |
+| `_canary/tui/render.py` | Rich renderers (header/table/detail/footer/log). |
+| `_canary/tui/app.py` | The only I/O module: `ExplorerModel` (bridges queries+run to state) and `run()` (the runner loop, raw-mode key reader, `rich.live.Live`). |
+| `_canary/app/queries.py` | Read surface: `list_jobs`, `job_log`, `workspace_summary`, `status_counts`, `job_history`, `get_event_bus`. |
+| `_canary/app/run.py` | The run use case: `run(request, options)` -> exit code. |
+| `_canary/events/bus.py` | Process-wide `EventBus`; typed `Event`/`JobEvent`; `project_job_event`. |
+| `_canary/app/facade.py` | Holds the singleton `EventBus` (`get_event_bus`). |
+
+**Event flow (already wired):** during an in-process run the executor
+(`ResourceQueueExecutor`, `runtest.py:204`) publishes job-lifecycle events to the
+process-wide `EventBus` returned by `app.get_event_bus()`. The TUI's
+`ExplorerModel.subscribe()` already listens and flips a thread-safe *dirty* flag
+so the runner refreshes rows from the DB promptly (`tui/app.py:74-94, 248`).
+Events only mark dirty; the DB remains the source of truth for row content.
+
+---
+
+## 2. Progress log (most recent first)
+
+- **DONE** `fix(tui): edit test files with vim instead of $EDITOR/$VISUAL`
+  (c81fce86). The TUI hardcodes `vim` (`ExplorerModel.EDITOR`) rather than the
+  environment-driven `editor()` used by `canary edit`, so it never lands on a
+  GUI editor that would detach from the terminal. Full suite (1051) + ruff +
+  mypy + bandit green.
+- **DONE** `feat(tui): edit a test file (e) and rerun the edit` (c238e9a1).
+- **DONE** `feat(tui): multi-select jobs and rerun the selection` (2b35b59c).
+- **DONE** scrolling viewport + job-log drill-down (f4d06c58, e51f050f).
+- **DONE** project job events to primitive payloads; TUI subscribes (5ff56cb7).
+- **DONE** initial workspace-explorer TUI, Phase 8 (6e7d92fe).
+
+### Implemented UI capabilities (see `state.py` key map)
+- Navigate (`j/k`, arrows, `g/G`, page keys), scroll viewport sized to terminal.
+- Detail pane toggle (`d`); log drill-down (`enter`/`space`), log scrolling.
+- Status filter cycle (`f`) / clear (`a`).
+- Multi-select (`x` mark/advance, `c` clear).
+- Edit (`e`) the selected test's file in vim; auto-marks the edited test for rerun.
+- Rerun (`r`) the marked set (or cursor row) -- **currently out-of-process**
+  (see next section).
+- Quit (`q`/`escape`).
+
+---
+
+## 3. Current rerun behavior and the in-place goal
+
+### 3.1 How rerun works today (out-of-process feel)
+
+`ExplorerModel.rerun(spec_ids)` (`tui/app.py:121-132`) calls
+`_canary.app.run.run(SpecIdsRequest(...))`. The runner loop tears the live
+display and raw-mode reader **down** first, then calls `rerun`, which runs the
+session synchronously and returns an exit code (`tui/app.py:274-279`). The run
+is in the *same OS process*, but it owns the terminal: `workspace.run` installs
+a Rich `LiveReporter` that writes the live results table to stdout
+(`execution/console.py:397-502`), which would corrupt the TUI's own
+`rich.live.Live` display -- hence the teardown. After the run the TUI is
+re-entered with fresh data.
+
+So "separate process" is not literally true; the real issue is **two competing
+owners of the terminal** (the TUI's `Live` vs. the run's `LiveReporter`).
+
+### 3.2 What "in place" means
+
+Run the session **without tearing the TUI down**, streaming progress into the
+TUI's own table via the event bus the TUI already subscribes to, then leave the
+user in the explorer with updated rows -- no console handoff, no visible
+separate run output.
+
+### 3.3 The key seam (why this is tractable)
+
+`ResourceQueueExecutor` already chooses its reporter from a flag:
+
+```
+# queue_executor.py:502
+reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
+```
+
+`live_reporting` is derived in `__init__` (`queue_executor.py:368-379`) and is
+already forced **off** when `not sys.stdin.isatty()`, on `CANARY_LIVE=0`, in
+debug, in nested canary levels, etc. `EventReporter` does not own the screen; it
+just fans job events out. And crucially, **job events already flow to the
+process-wide `EventBus` regardless of which reporter is active** -- the TUI's
+live update does not depend on `LiveReporter` at all.
+
+Therefore: if we run the session with the executor's own `LiveReporter`
+suppressed, the run produces no competing terminal output, and the TUI updates
+itself from the events it already receives.
+
+---
+
+## 4. In-place rerun: scope and plan
+
+### 4.1 Chosen approach (in-process, suppress LiveReporter, TUI keeps the screen)
+
+Rationale: the events, the subscription, the DB-as-truth refresh, and the
+reporter seam **already exist**. This is the smallest change that reaches the
+goal and matches the redesign doc's "interfaces embed the app and subscribe to
+the bus" direction. A subprocess/thread-isolated run would add IPC and
+duplicate the event transport for no benefit at this stage.
+
+Steps:
+
+1. **A suppression switch for the executor's console reporter.** Add an
+   explicit, first-class way to run with `live_reporting=False` that does not
+   rely on the incidental `isatty()`/env heuristics. Options considered:
+   - (a) A `RunOptions.live_console: bool | None` threaded through
+     `app.run` -> `workspace.run` -> `Session.run` -> `default_runtests` ->
+     `ResourceQueueExecutor(live_reporting=...)`. **Preferred** -- explicit and
+     testable, no global state.
+   - (b) Set `CANARY_LIVE=0` in the environment around the call. Simpler but
+     process-global and racy; rejected except as a fallback.
+   The plumbing in (a) is several layers but each is a pass-through parameter.
+
+2. **Keep the TUI `Live` running during the rerun.** In `tui/app.py`, stop
+   tearing the display down for `rerun`. Instead, run the session on a
+   background thread while the live loop keeps drawing; the existing dirty-flag
+   subscription already repaints as events arrive. The raw-mode key reader can
+   keep running so the user can watch (and later cancel).
+
+3. **Concurrency care.** `workspace.run` mutates workspace/DB state and spawns
+   worker processes; the TUI refresh reads the DB. They already coexist during a
+   normal live run (the run process reads the DB while workers spool results
+   through the single-writer `ResultListener`). Running the session on a worker
+   thread within the TUI process needs: a run-in-progress guard (no second
+   rerun until the first finishes), and the footer reflecting "running…".
+
+4. **Restore/settle.** On completion, do a final `model.refresh()` and clear the
+   run guard; keep the user on the same cursor row (the state already preserves
+   the selected spec id across refreshes, `state.py:68-81`).
+
+### 4.2 Files expected to change
+
+- `_canary/app/run.py` -- add `live_console` to `RunOptions`, pass through.
+- `_canary/session/workspace.py` -- `run(..., live_console=...)` pass-through.
+- `_canary/execution/runtest.py` -- pass the flag into `ResourceQueueExecutor`.
+- `_canary/execution/queue_executor.py` -- honor an explicit `live_reporting`
+  argument over the heuristics.
+- `_canary/tui/app.py` -- run the session on a thread, keep `Live` up, guard
+  re-entrancy, refresh on completion.
+- `tests/tui_integration.py` -- a test that an in-place rerun updates rows
+  without a console handoff (assert `LiveReporter` is not constructed / the
+  event path drives the refresh).
+
+### 4.3 Risks / open considerations
+
+- **Terminal contention** is the whole ballgame: any stray stdout/stderr from
+  the run (log lines routed through Rich handlers, warnings) can still smear the
+  TUI. Mitigation: with `live_reporting=False` the `_LiveConsoleHandler` is not
+  installed; verify no other code writes to stdout during the run while the TUI
+  owns it. May need to route run-time logging to the workspace log file only
+  while the TUI is active.
+- **Threading vs. signals:** `ResourceQueueExecutor` installs SIGINT handling
+  for cancellation; signal handlers only work on the main thread. If the run is
+  on a background thread, cancellation/`Ctrl-C` semantics need checking. This
+  intersects with the planned in-TUI cancel key.
+- **Blocking `workspace.run`** holds a global lock (`global_lock`); ensure the
+  TUI's read queries don't deadlock against it (they read via a separate DB
+  connection today).
+
+### 4.4 Decision needed from maintainer (genuine tradeoff)
+
+Deeper scoping found two real complications that make this **not** a
+straightforward pass-through, so it is paused for a decision:
+
+1. **The reporter flag can't be a clean parameter.** `Session.run` invokes the
+   executor through a pluggy hook: `canary_runtests(runner=runner)`
+   (`workspace.py:195`). There is no argument channel from `app.run` to the
+   executor except via the global `config` (which is snapshotted into workers)
+   or by hanging state on the `Runner`/`Session`. So "plumb a `live_console`
+   parameter" really means either (a) add a config option that
+   `ResourceQueueExecutor.__init__` reads instead of / in addition to the
+   `isatty()` heuristics, or (b) set `CANARY_LIVE=0` in the environment around
+   the in-TUI run (already honored at `queue_executor.py:374`). (b) is a
+   one-line, isolated stopgap; (a) is the cleaner long-term switch but adds a
+   public-ish config option and touches the CLI run path.
+
+2. **`Session.run` calls `os.chdir()`** (`workspace.py:194,201`), which is
+   process-global and not thread-safe. Running the session on a background
+   thread while the TUI's main thread keeps drawing would race the CWD. So the
+   "keep `Live` up and run on a worker thread" plan (section 4.1 step 2) is
+   unsafe as written. Realistic options:
+   - **A. In-process, main thread, suppress the run's console; accept a brief
+     non-interactive pause.** Keep the TUI process, set the reporter off, run the
+     session on the *main* thread (TUI `Live` paused but not exited), and let the
+     final refresh repaint. Loses live streaming *during* the rerun but is safe
+     and small. Arguably barely different from today except no visible console
+     handoff.
+   - **B. Run the session in a child process** and have the TUI consume events
+     over a transport (pipe/socket). Gives true live in-place streaming and
+     isolates `os.chdir`/signals, but requires the cross-process event bridge
+     that `facade.get_event_bus` explicitly defers ("Cross-process delivery ...
+     belongs to a future transport"). Bigger effort.
+   - **C. Make `Session.run` not use `os.chdir`** (pass cwd per-job) so the run
+     is thread-safe, then run on a background thread with the `Live` display
+     staying fully live. Best UX, but changes core execution behavior and needs
+     its own care/tests.
+
+**Recommendation:** ship **A** now (safe, small, removes the console handoff and
+the "separate process" feel), and treat **C** as the follow-up that unlocks true
+live streaming (feeding roadmap item 2, the live-run view). **B** only if a
+remote/child-process run is wanted for other reasons.
+
+**Awaiting maintainer choice among A / B / C before touching the shared run
+path or execution threading.**
+
+---
+
+## 5. Roadmap toward "full TUI front end to canary run"
+
+Ordered, each step independently useful:
+
+1. **In-place rerun** (section 4) -- run without leaving the explorer.
+2. **Live-run view** -- a mode that shows the in-flight session (queued/running/
+   finished counts, per-job phase) fed purely by `EventBus` events, not just a
+   post-hoc DB refresh. Foundations exist (`JobEvent` carries phase/qrank/qsize).
+3. **First-class cancellation** -- a cancel key that stops the running session
+   (`ResourceQueue.clear` + signal), surfaced as `job_cancelled` events (the bus
+   already reserves the name, `events/bus.py:37`).
+4. **Start a run from scratch in the TUI** -- not just rerun: pick scanpaths /
+   a selection/tag, build a `RunOptions`, and launch. This is the last piece for
+   a full `canary run` front end (the app layer already accepts scanpaths/tag
+   requests, `app/run.py:99-135`).
+5. **Live log tailing** -- stream a running job's output into the log pane
+   (needs a `job_output` event or file tail; noted as an open question in the
+   redesign doc, section 10.4).
+
+---
+
+## 6. Verification commands
+
+```
+# from src/canary, using the agent venv
+../../venv.agent/bin/ruff check src/_canary/tui tests/tui_integration.py
+../../venv.agent/bin/ruff format --check src/_canary/tui tests/tui_integration.py
+../../venv.agent/bin/mypy src/_canary/tui
+../../venv.agent/bin/bandit -q -c pyproject.toml src/_canary/tui/app.py
+../../venv.agent/bin/python -m pytest tests/tui_integration.py tests/tui_state.py -q
+```
