@@ -24,7 +24,6 @@ from . import gc
 from . import help
 from . import info
 from . import init
-from . import install
 from . import learn
 from . import location
 from . import log
@@ -53,7 +52,6 @@ plugins = [
     help,
     info,
     init,
-    install,
     learn,
     location,
     log,
