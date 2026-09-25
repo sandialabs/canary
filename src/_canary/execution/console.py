@@ -413,6 +413,7 @@ class LiveReporter(Reporter):
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        self.live.update(self.dynamic_table(), refresh=True)
         self._stop.set()
         self._thread.join()
         self.live.__exit__(exc_type, exc, tb)

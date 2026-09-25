@@ -50,6 +50,7 @@ class Status(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser"):
         """Register ``--durations``, ``-o`` columns, ``-r`` report chars, ``--sort-by``, ``--json``, and ``--full-ids``."""
+        parser.add_argument("-i", "--interactive", action="store_true", help="Interactive status")
         parser.add_argument(
             "--durations",
             nargs="?",
@@ -136,6 +137,17 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Load workspace results and print the status table or JSON output, returning 0."""
+        from .. import tui
+        from ..error import StopExecution
+        from ..session.workspace import NotAWorkspaceError
+        from ..util.pager import page_rich
+
+        if getattr(args, "interactive", False):
+            try:
+                return tui.run(refresh_interval=2.0)
+            except NotAWorkspaceError:
+                raise StopExecution("canary status must be run inside a workspace", 1) from None
+
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
@@ -168,24 +180,22 @@ class Status(CanarySubcommand):
         # Inject the resolved column choice so get_status_table_from_rows picks it up.
         args.format_cols = cols
 
-        # Build outcome counts for the summary line.
-        summary_line = _build_summary_line(all_rows)
-
         console = Console()
 
         if total == 0:
             console.print("[dim]No results found in workspace.[/dim]")
             return 0
 
-        # Always print the summary line first.
-        console.print(summary_line)
-
+        summary_line = _build_summary_line(all_rows)
         if not detail_rows:
             # All jobs passed (or nothing matched the filter) — nothing more to print.
+            console.print(summary_line)
             return 0
 
-        # For large runs (non-all, non-small), print the analyst-friendly failure
-        # grouping summary before the raw table.
+        table = self.get_status_table_from_rows(detail_rows, args)
+        page_rich(console, table, table.row_count)
+        console.print(summary_line)
+
         show_failure_summary = (
             not show_all
             and total > _AUTO_EXPAND_THRESHOLD
@@ -194,12 +204,8 @@ class Status(CanarySubcommand):
         if show_failure_summary:
             non_pass = [r for r in all_rows if not r["status"].is_success()]
             if non_pass:
-                console.print(_build_failure_summary(non_pass))
+                console.print("\n" + _build_failure_summary(non_pass))
 
-        table = self.get_status_table_from_rows(detail_rows, args)
-        from ..util.pager import page_rich
-
-        page_rich(console, table, table.row_count)
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0
@@ -492,7 +498,7 @@ def _build_failure_summary(rows: list[dict]) -> str:
         }.get(outcome, "dim")
         outcome_label = f"[{outcome_color}]{outcome}[/{outcome_color}]"
         reason_str = f'  "[italic]{reason}[/italic]"' if reason else ""
-        lines.append(f"  {outcome_label}{reason_str}  ×{count}   {names}")
+        lines.append(f"  {outcome_label}{reason_str} ×{count} {names}")
 
     lines.append("")
     lines.append("  To view a job's output:  [bold]canary log[/bold] [dim]<ID>[/dim]")

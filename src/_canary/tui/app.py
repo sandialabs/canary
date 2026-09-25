@@ -202,6 +202,17 @@ class ExplorerModel:
 
         return self.begin_run(SpecIdsRequest(value=list(spec_ids)), total_hint=len(spec_ids))
 
+    def begin_rebaseline(self, spec_ids: list[str]) -> bool:
+        """Start an in-place rebaseline of *spec_ids*"""
+        if not spec_ids:
+            return False
+        from ..app.rebaseline import rebaseline
+
+        n = 0
+        for spec_id in spec_ids:
+            n += rebaseline(target=spec_id)
+        return n > 0
+
     def begin_run_from_input(self, text: str) -> tuple[bool, str]:
         """Classify a typed run line and launch it, like ``canary run <text>``.
 
@@ -541,6 +552,12 @@ def _live_session(
                     dirty = True
                 rerun_ids = model.state.consume_rerun_request()
                 if rerun_ids and model.begin_rerun(rerun_ids):
+                    # In-place: the child streams events; keep drawing.  Clear
+                    # any marks so the "running" set is unambiguous.
+                    model.state.clear_marks()
+                    dirty = True
+                rebaseline_ids = model.state.consume_rebaseline_request()
+                if rebaseline_ids and model.begin_rebaseline(rebaseline_ids):
                     # In-place: the child streams events; keep drawing.  Clear
                     # any marks so the "running" set is unambiguous.
                     model.state.clear_marks()

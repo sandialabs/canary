@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .state import ExplorerState
 
 _HELP = (
-    "[dim]j/k move · enter log · x mark · r rerun · : run · e edit · c clear · "
+    "[dim]j/k move · enter log · x mark · r rerun · : run · b rebaseline · e edit · c clear · "
     "d detail · f filter · q quit[/dim]"
 )
 #: Footer help shown while a run is in flight: q/escape cancels the run rather

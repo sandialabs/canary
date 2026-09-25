@@ -173,6 +173,9 @@ class TestBatch(BaseJob):
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
+    def on_finish(self, at: float | None = None) -> None:
+        super().on_finish(at=at)
+
     def find_approximate_runtime(self) -> float:
         """Return the batch runtime estimate."""
         if self.spec.estimated_runtime is not None:
@@ -650,5 +653,5 @@ class TestBatch(BaseJob):
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        # apply to the batch’s base status
+        # apply to the batch's base status
         self.status.set_base(category=category, outcome=outcome, reason=reason, code=code)

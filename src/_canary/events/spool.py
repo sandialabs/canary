@@ -35,6 +35,7 @@ import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import cast
 
 from ..util.multiprocessing import FSQueue
 from .bus import Event
@@ -109,7 +110,7 @@ class SpoolListener:
         if not isinstance(item, tuple) or len(item) != 2:
             return
         name, payload = item
-        self._bus.publish(Event(name=name, payload=payload or {}))
+        self._bus.publish(Event(name=cast(str, name), payload=cast(dict, payload or {})))
 
     def stop(self, *, timeout: float = 2.0) -> None:
         """Stop draining and join the thread; safe to call more than once."""

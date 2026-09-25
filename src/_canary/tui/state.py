@@ -52,6 +52,8 @@ class ExplorerState:
             cursor row's test file in an editor.
         cancel_requested: Edge-triggered flag the runner consumes to cancel an
             in-flight run (set by ``esc``/``q`` while :attr:`running`).
+        rebaseline_requested: Edge-triggered flag the runner consumes to launch a
+            rebaseline of the marked jobs (or the cursor row when none are marked).
         prompt_buffer: The text typed into the run prompt while in ``prompt``
             mode; the runner classifies it into a run request on submit.
         run_input_requested: Edge-triggered; the submitted run-prompt line the
@@ -83,6 +85,7 @@ class ExplorerState:
     rerun_requested: bool = False
     edit_requested: bool = False
     cancel_requested: bool = False
+    rebaseline_requested: bool = False
     #: Text buffer for the run prompt (``prompt`` mode); the runner classifies it
     #: into a run request on submit.
     prompt_buffer: str = ""
@@ -229,6 +232,30 @@ class ExplorerState:
         self.rerun_requested = False
         return self.rerun_target_ids()
 
+    def rebaseline_target_ids(self) -> list[str]:
+        """Spec ids a rebaseline would act on: the marked set, or the cursor row.
+
+        Marks may reference jobs no longer present (a refresh dropped them), so
+        the marked set is intersected with the current rows; when nothing valid
+        is marked, the single cursor row is the target.
+        """
+        present = {j["id"] for j in self.jobs}
+        marked = [j["id"] for j in self.jobs if j["id"] in self.marked_ids and j["id"] in present]
+        if marked:
+            return marked
+        sid = self.selected_id
+        return [sid] if sid is not None else []
+
+    def consume_rebaseline_request(self) -> list[str]:
+        """Return the rebaseline target ids if a rerun was requested, else an empty list.
+
+        Edge-triggered: clears the request flag so the runner acts on it once.
+        """
+        if not self.rebaseline_requested:
+            return []
+        self.rebaseline_requested = False
+        return self.rebaseline_target_ids()
+
     def consume_edit_request(self) -> str | None:
         """Return the cursor row's file path if an edit was requested, else ``None``.
 
@@ -357,6 +384,7 @@ class ExplorerState:
         * ``x`` -- mark/unmark the row for rerun (and advance)
         * ``c`` -- clear all marks
         * ``r`` -- rerun the marked rows (or the cursor row if none marked)
+        * ``b`` -- rebaseline the marked rows (or the cursor row if none marked)
         * ``e`` -- edit the cursor row's test file
         * ``a`` -- clear the status filter (show all)
         * ``f`` -- cycle the status filter through the statuses present
@@ -428,6 +456,12 @@ class ExplorerState:
             # the request; the state only records intent, doing no I/O itself.
             if self.rerun_target_ids():
                 self.rerun_requested = True
+                return True
+            return False
+        if key in ("b", "B"):
+            # The runner rebaselines tests
+            if self.rebaseline_target_ids():
+                self.rebaseline_requested = True
                 return True
             return False
         if key in ("e", "E"):

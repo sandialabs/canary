@@ -119,10 +119,10 @@ def canary_runtests(runner: Runner, listeners: list[Callable[..., None]] | None 
         # never show ``NONE (NONE)`` / phantom running jobs.
         interrupted = isinstance(sys.exc_info()[1], KeyboardInterrupt)
         reconcile_unfinished_jobs(runner, interrupted=interrupted)
-        logger.info(
-            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
-            f"with returncode {runner.returncode}"
-        )
+        #        logger.info(
+        #            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
+        #            f"with returncode {runner.returncode}"
+        #        )
         pm.canary_runtests_report(runner=runner)
     return
 
@@ -435,7 +435,7 @@ def _build_footer_text(runner: Runner) -> str:
         totals.setdefault(key, []).append(job)
 
     N = len(runner.jobs)
-    parts = [f"[bold blue]{N} total[/bold blue]:"]
+    parts = []
     for category, outcome in sorted(totals, key=sortkey):
         n = len(totals[(category, outcome)])
         if n:
@@ -443,7 +443,8 @@ def _build_footer_text(runner: Runner) -> str:
             t = category if outcome == _status.Outcome.SUCCESS else outcome
             parts.append(f"[{color}]{n} {t.name.lower()}[/{color}]")
     elapsed = hhmmss(None if duration < 0 else duration)
-    return " ".join(parts) + f"  in [bold]{elapsed}[/bold]"
+    s = f"[bold blue]{N} total[/bold blue]: " + ", ".join(parts)
+    return f"{s}\n[bold]Finished[/] session in {elapsed} with returncode {runner.returncode}"
 
 
 @hookimpl(specname="canary_runtests_report", trylast=True)
