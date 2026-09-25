@@ -398,7 +398,7 @@ class LiveReporter(Reporter):
     def __init__(self, executor: ReporterExecutorProtocol, **kwargs: Any) -> None:
         super().__init__(executor, **kwargs)
         console = Console(file=sys.stdout, force_terminal=True)
-        self.live = Live(refresh_per_second=1, console=console, transient=False, auto_refresh=False)
+        self.live = Live(refresh_per_second=1, console=console, transient=True, auto_refresh=False)
         self._filter = logging.MuteConsoleFilter()
         self._stream_handlers: list[logging.builtin_logging.StreamHandler] = []
         self._live_handlers: list[_LiveConsoleHandler] = []
