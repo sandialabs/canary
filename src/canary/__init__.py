@@ -51,6 +51,7 @@ from _canary.util import shell
 from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
+from _canary.util.query_data import load_query_data
 from canary_pyt.enums import centered_parameter_space
 from canary_pyt.enums import list_parameter_space
 from canary_pyt.enums import random_parameter_space
@@ -143,6 +144,11 @@ __all__ = [
     "CanaryCommand",
     "directives",
     "patterns",
+    "CanaryCommand",
+    "ScanPathsRequest",
+    "Status",
+    "load_query_data",
+    "print_spec_graph",
 ]
 
 
