@@ -105,19 +105,24 @@ canary_vvtest = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 target-version = "py311"
 line-length = 100
 
-format.indent-style = "space"
-format.quote-style = "double"
-format.line-ending = "auto"
-format.skip-magic-trailing-comma = true
-format.docstring-code-line-length = "dynamic"
-format.docstring-code-format = false
-lint.select = [ "F", "I" ]
-lint.ignore = [ "E731", "E741", "F841" ]
-lint.per-file-ignores."src/_canary/plugins/*/__init__.py" = [ "F401", "F403", "F405" ]
-lint.per-file-ignores."src/_canary/plugins/__init__.py" = [ "F401", "F403", "F405" ]
-lint.per-file-ignores."src/_canary/third_party/*.py" = [ "F401", "F403", "F405" ]
-lint.per-file-ignores."src/canary/__init__.py" = [ "F401" ]
-lint.isort.force-single-line = true
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+line-ending = "auto"
+skip-magic-trailing-comma = true
+docstring-code-line-length = "dynamic"
+docstring-code-format = false
+
+[tool.ruff.lint]
+select = [ "F", "I" ]
+ignore = [ "E731", "E741", "F841" ]
+per-file-ignores."src/canary/__init__.py" = [ "F401" ]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+force-single-line = true
+known-first-party = ["canary", "_canary"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 
 [tool.check-wheel-contents]
 # W009: Wheel contains multiple toplevel library entries
