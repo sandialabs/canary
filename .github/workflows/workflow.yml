@@ -82,6 +82,12 @@ jobs:
           pip install /tmp/canary-notebook
           pytest /tmp/canary-notebook/src/canary_notebook/tests
 
+      - name: Clone and test canary-yaml
+        run: |
+          git clone https://github.com/sandialabs/canary-yaml.git /tmp/canary-yaml
+          pip install /tmp/canary-yaml
+          pytest /tmp/canary-yaml/src/canary_yaml/tests
+
   slurm:
    runs-on: ubuntu-latest
    steps:
