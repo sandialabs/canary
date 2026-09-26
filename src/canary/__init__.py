@@ -33,11 +33,13 @@ from _canary.jobspec import Artifact
 from _canary.jobspec import Asset
 from _canary.jobspec import JobSpec
 from _canary.jobspec import Mask
+from _canary.jobspec_graph import print_spec_graph
 from _canary.launcher import Launcher
 from _canary.launcher import SubprocessLauncher
 from _canary.rules import Rule
 from _canary.rules import RuleOutcome
 from _canary.rules import RuntimeRule
+from _canary.status import Status
 from _canary.testcase import TestCase
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
@@ -52,6 +54,7 @@ from _canary.util import shell
 from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
+from _canary.util.query_data import load_query_data
 from canary_pyt.enums import centered_parameter_space
 from canary_pyt.enums import list_parameter_space
 from canary_pyt.enums import random_parameter_space
@@ -135,6 +138,11 @@ __all__ = [
     "Workspace",
     "directives",
     "patterns",
+    "CanaryCommand",
+    "ScanPathsRequest",
+    "Status",
+    "load_query_data",
+    "print_spec_graph",
 ]
 
 
@@ -204,6 +212,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Session": ("_canary.workspace", "Session"),
     "Workspace": ("_canary.workspace", "Workspace"),
     "ViewSettings": ("_canary.view", "ViewSettings"),
+    "CanaryCommand": ("_canary.util.testing", "CanaryCommand"),
+    "ScanPathsRequest": ("_canary.subcommands.run", "ScanPathsRequest"),
 }
 
 
