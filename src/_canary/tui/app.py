@@ -20,7 +20,9 @@ rendered frame, which keeps it usable in tests and pipelines.
 from __future__ import annotations
 
 import contextlib
+import os
 import queue
+import shlex
 import sys
 import threading
 import time
@@ -300,12 +302,8 @@ class ExplorerModel:
             payload["reason"] = payload.get("reason") or "cancelled by user"
             self._bus.publish(Event("job_cancelled", {"job": payload}))
 
-    #: The editor the TUI launches to edit a test file.  The TUI deliberately
-    #: hardcodes ``vim`` rather than honoring ``$VISUAL``/``$EDITOR`` (as the CLI
-    #: does): the TUI owns the full screen, and those variables frequently point
-    #: at a GUI editor (e.g. ``code``) that would detach instead of blocking,
-    #: making an in-terminal "edit" appear to do nothing.
-    EDITOR = "vim"
+    def get_editor(self) -> str:
+        return os.getenv("EDITOR") or "vim"
 
     def edit_file(self, path: str) -> bool:
         """Open *path* in ``vim``, returning whether it changed on disk.
@@ -318,8 +316,6 @@ class ExplorerModel:
 
         Returns ``False`` (a no-op) when the editor could not be launched.
         """
-        # The TUI launches vim (not $EDITOR/$VISUAL) so it never lands on a GUI
-        # editor that would detach from the terminal.
         import subprocess  # nosec B404
 
         p = Path(path)
@@ -327,7 +323,8 @@ class ExplorerModel:
         # Run the editor as a blocking child (not os.execv, which would replace
         # this process) and treat a clean exit as success.
         try:
-            subprocess.run([self.EDITOR, str(p)], check=False)  # nosec B603
+            editor = shlex.split(self.get_editor())
+            subprocess.run([*editor, str(p)], check=False)  # nosec B603
         except FileNotFoundError:
             return False
         after = p.stat().st_mtime if p.exists() else None
