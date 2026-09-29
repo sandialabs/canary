@@ -303,7 +303,7 @@ class ExplorerModel:
             self._bus.publish(Event("job_cancelled", {"job": payload}))
 
     def get_editor(self) -> str:
-        return os.getenv("EDITOR") or "vim"
+        return os.getenv("CANARY_EDITOR") or "vim"
 
     def edit_file(self, path: str) -> bool:
         """Open *path* in ``vim``, returning whether it changed on disk.
