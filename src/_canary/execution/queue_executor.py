@@ -15,12 +15,9 @@ from queue import Empty as QueueEmpty
 from typing import Any
 from typing import Callable
 from typing import Literal
-from typing import Protocol
-from typing import cast
 
 from .. import config
 from ..core.job import BaseJob
-from ..core.job import JobPhase
 from ..error import StopExecution
 from ..events import Event
 from ..events import EventBus
@@ -38,25 +35,6 @@ from .queue import ResourceQueue
 logger = logging.get_logger(__name__)
 
 EventTypes = Literal["job_submitted", "job_staged", "job_started", "job_stopped", "job_finished"]
-
-
-class _BatchJobProtocol(Protocol):
-    """Structural protocol for HPC batch jobs that support child-status reconciliation."""
-
-    _allocation: dict[str, Any]
-
-    def finalize_status_from_child_jobs(self) -> None: ...
-
-    @property
-    def status(self) -> Any: ...
-
-    @property
-    def state(self) -> Any: ...
-
-    def save(self) -> None: ...
-
-    @property
-    def id(self) -> str: ...
 
 
 @dataclasses.dataclass
@@ -755,34 +733,6 @@ class ResourceQueueExecutor:
             slot.job.refresh()
         except Exception as e:
             logger.debug("job.refresh failed during abnormal finish: %s", e)
-
-        # For HPC batches: check whether all child jobs finished successfully
-        # on disk before trusting the abnormal executor-level outcome.
-        if hasattr(slot.job, "finalize_status_from_child_jobs"):
-            batch_job = cast(_BatchJobProtocol, slot.job)
-            try:
-                batch_job.finalize_status_from_child_jobs()
-                if not batch_job.status.is_unset():
-                    # Children have a real terminal status — use it and warn.
-                    logger.warning(
-                        "Batch %s: abnormal executor event (%s: %s) but child "
-                        "jobs have terminal status %s — using child-derived "
-                        "status.  The worker process may have been killed after "
-                        "the scheduler job completed.",
-                        batch_job.id[:7],
-                        outcome,
-                        reason,
-                        batch_job.status.outcome.name,
-                    )
-                    batch_job.state.phase = JobPhase.DONE
-                    batch_job._allocation["state"] = "inactive"
-                    try:
-                        batch_job.save()
-                    except Exception as e:
-                        logger.debug("job.save failed after child reconciliation: %s", e)
-                    return
-            except Exception as e:
-                logger.debug("finalize_status_from_child_jobs failed during abnormal finish: %s", e)
 
         slot.on_finish(now)
         slot.job.set_status(outcome=outcome, reason=reason, code=code)

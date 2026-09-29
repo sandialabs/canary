@@ -16,7 +16,6 @@ from typing import TypedDict
 import hpc_connect
 
 import canary
-from _canary.execution.queue_executor import ResourceQueueExecutor
 from _canary.execution.runtest import Runner
 from _canary.execution.testexec import ExecutionSpace
 from _canary.resource_pool import ResourcePool
@@ -38,6 +37,7 @@ from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
 from .queue import ResourceQueue
+from .queue_executor import HPCResourceQueueExecutor
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
@@ -465,7 +465,7 @@ class CanaryHPCConductor:
         queue.prepare()
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
-        with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+        with HPCResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.add_listener(self._make_batch_result_listener(runner.workspace))
             ex.run(backend=self.backend.name)
 

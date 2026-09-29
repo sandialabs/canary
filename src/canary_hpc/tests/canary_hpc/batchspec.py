@@ -345,72 +345,72 @@ class _FakeSlot:
     def on_finish(self, t: float) -> None:
         self._finished_at = t
 
+    def test_finish_abnormal_slot_all_children_pass_uses_child_status(tmp_path):
+        """When all child jobs passed, _finish_abnormal_slot should derive SUCCESS
+        from children instead of stamping TIMEOUT/ERROR on the batch."""
+        from canary_hpc.queue_executor import HPCResourceQueueExecutor
 
-def test_finish_abnormal_slot_all_children_pass_uses_child_status(tmp_path):
-    """When all child jobs passed, _finish_abnormal_slot should derive SUCCESS
-    from children instead of stamping TIMEOUT/ERROR on the batch."""
-    from _canary.execution.queue_executor import ResourceQueueExecutor
+        jobs = [
+            FakeJob(id="j1", outcome=Outcome.SUCCESS),
+            FakeJob(id="j2", outcome=Outcome.SUCCESS),
+        ]
+        slot = _FakeSlot(_FakeSlotJob(jobs))
 
-    jobs = [FakeJob(id="j1", outcome=Outcome.SUCCESS), FakeJob(id="j2", outcome=Outcome.SUCCESS)]
-    slot = _FakeSlot(_FakeSlotJob(jobs))
+        # Use a minimal executor instance — only _finish_abnormal_slot is called.
+        ex = HPCResourceQueueExecutor.__new__(HPCResourceQueueExecutor)
+        ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
 
-    # Use a minimal executor instance — only _finish_abnormal_slot is called.
-    ex = ResourceQueueExecutor.__new__(ResourceQueueExecutor)
-    ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
+        # set_status() should NOT have been called (children provided the status)
+        assert slot.job._set_status_calls == []
+        assert slot.job.status.is_success()
+        assert slot.job._allocation["state"] == "inactive"
+        assert slot.job._saved is True
 
-    # set_status() should NOT have been called (children provided the status)
-    assert slot.job._set_status_calls == []
-    assert slot.job.status.is_success()
-    assert slot.job._allocation["state"] == "inactive"
-    assert slot.job._saved is True
+    def test_finish_abnormal_slot_child_failed_uses_abnormal_outcome(tmp_path):
+        """When a child job failed, _finish_abnormal_slot should NOT override
+        with child-derived status — the abnormal event is the right outcome."""
+        from canary_hpc.queue_executor import HPCResourceQueueExecutor
 
+        jobs = [FakeJob(id="j1", outcome=Outcome.SUCCESS), FakeJob(id="j2", outcome=Outcome.FAILED)]
+        slot = _FakeSlot(_FakeSlotJob(jobs))
 
-def test_finish_abnormal_slot_child_failed_uses_abnormal_outcome(tmp_path):
-    """When a child job failed, _finish_abnormal_slot should NOT override
-    with child-derived status — the abnormal event is the right outcome."""
-    from _canary.execution.queue_executor import ResourceQueueExecutor
+        ex = HPCResourceQueueExecutor.__new__(HPCResourceQueueExecutor)
+        ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
 
-    jobs = [FakeJob(id="j1", outcome=Outcome.SUCCESS), FakeJob(id="j2", outcome=Outcome.FAILED)]
-    slot = _FakeSlot(_FakeSlotJob(jobs))
+        # finalize_status_from_child_jobs sets FAILED (one child failed).
+        # The is_unset() guard is False (FAILED != unset), so the child-derived
+        # path is taken but the status is FAILED — which is the correct outcome.
+        assert not slot.job.status.is_unset()
+        assert slot.job.status.is_failure()
 
-    ex = ResourceQueueExecutor.__new__(ResourceQueueExecutor)
-    ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
+    def test_finish_abnormal_slot_no_finalize_method_falls_through(tmp_path):
+        """For non-batch jobs (no finalize_status_from_child_jobs), the original
+        behaviour is preserved: set_status is called with the abnormal outcome."""
+        from canary_hpc.queue_executor import HPCResourceQueueExecutor
 
-    # finalize_status_from_child_jobs sets FAILED (one child failed).
-    # The is_unset() guard is False (FAILED != unset), so the child-derived
-    # path is taken but the status is FAILED — which is the correct outcome.
-    assert not slot.job.status.is_unset()
-    assert slot.job.status.is_failure()
+        class PlainJob:
+            id = "plain-job-id"
 
+            def refresh(self) -> None:
+                pass
 
-def test_finish_abnormal_slot_no_finalize_method_falls_through(tmp_path):
-    """For non-batch jobs (no finalize_status_from_child_jobs), the original
-    behaviour is preserved: set_status is called with the abnormal outcome."""
-    from _canary.execution.queue_executor import ResourceQueueExecutor
+            def set_status(self, *, outcome: str, reason: str, code: int = -1) -> None:
+                self.outcome = outcome
 
-    class PlainJob:
-        id = "plain-job-id"
+            def save(self) -> None:
+                pass
 
-        def refresh(self) -> None:
-            pass
+        class PlainSlot:
+            job = PlainJob()
 
-        def set_status(self, *, outcome: str, reason: str, code: int = -1) -> None:
-            self.outcome = outcome
+            def on_finish(self, t: float) -> None:
+                pass
 
-        def save(self) -> None:
-            pass
+        slot = PlainSlot()
+        ex = HPCResourceQueueExecutor.__new__(HPCResourceQueueExecutor)
+        ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
 
-    class PlainSlot:
-        job = PlainJob()
-
-        def on_finish(self, t: float) -> None:
-            pass
-
-    slot = PlainSlot()
-    ex = ResourceQueueExecutor.__new__(ResourceQueueExecutor)
-    ex._finish_abnormal_slot(slot, outcome="TIMEOUT", reason="watchdog")
-
-    assert slot.job.outcome == "TIMEOUT"
+        assert slot.job.outcome == "TIMEOUT"
 
 
 class _DummyBackend:
