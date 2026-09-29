@@ -60,8 +60,9 @@ class ExplorerState:
             runner consumes to start a run from scratch (a path/dir/tag/spec id).
         notice: A transient footer message (e.g. an error from a rejected run
             prompt); cleared on the next key press.
-        running: Whether an in-place rerun is currently executing (shown in the
-            footer); set by the runner, cleared when the run finishes.
+        running: Whether an in-place run/rerun is currently executing.
+        rebaselining: Whether an in-place rebaseline operation is currently executing.
+        rebaseline_total: Number of requested rebaseline targets for footer display.
         quit: Set by :meth:`handle_key` when the user asks to exit.
     """
 
@@ -97,6 +98,8 @@ class ExplorerState:
     notice: str = ""
     running: bool = False
     quit: bool = False
+    rebaselining: bool = False
+    rebaseline_total: int = 0
 
     # -- data updates -------------------------------------------------------
 
@@ -154,6 +157,11 @@ class ExplorerState:
         """Spec id of the highlighted row, or ``None``."""
         row = self.selected
         return row["id"] if row is not None else None
+
+    @property
+    def busy(self) -> bool:
+        """Whether an operation that should block new runs/rebaselines is active."""
+        return self.running or self.rebaselining
 
     # -- movement -----------------------------------------------------------
 
@@ -247,7 +255,7 @@ class ExplorerState:
         return [sid] if sid is not None else []
 
     def consume_rebaseline_request(self) -> list[str]:
-        """Return the rebaseline target ids if a rerun was requested, else an empty list.
+        """Return the rebaseline target ids if a rebaseline was requested, else an empty list.
 
         Edge-triggered: clears the request flag so the runner acts on it once.
         """
@@ -412,6 +420,9 @@ class ExplorerState:
             if self.running:
                 self.cancel_requested = True
                 return True
+            if self.rebaselining:
+                self.notice = "rebaseline in progress"
+                return True
             self.quit = True
             return True
         if key in ("j", "down"):
@@ -452,6 +463,9 @@ class ExplorerState:
             self.clear_marks()
             return True
         if key in ("r", "R"):
+            if self.busy:
+                self.notice = "operation already in flight"
+                return True
             # The runner performs the actual run (heavy I/O) when it observes
             # the request; the state only records intent, doing no I/O itself.
             if self.rerun_target_ids():
@@ -459,6 +473,8 @@ class ExplorerState:
                 return True
             return False
         if key in ("b", "B"):
+            if self.busy:
+                self.notice = "operation already in flight"
             # The runner rebaselines tests
             if self.rebaseline_target_ids():
                 self.rebaseline_requested = True
@@ -476,9 +492,10 @@ class ExplorerState:
             # Open the run prompt: the user types a path/dir/tag/spec id and the
             # runner classifies+launches it -- a run started from scratch, not a
             # rerun.  Refused while a run is already in flight.
-            if not self.running:
+            if not self.busy:
                 self.open_prompt()
                 return True
+            self.notice = "operation already in flight"
             return False
         return False
 

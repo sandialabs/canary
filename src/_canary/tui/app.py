@@ -17,8 +17,6 @@ spools to the database).  When stdin is not a TTY the loop degrades to a single
 rendered frame, which keeps it usable in tests and pipelines.
 """
 
-from __future__ import annotations
-
 import contextlib
 import os
 import queue
@@ -26,6 +24,8 @@ import shlex
 import sys
 import threading
 import time
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -72,6 +72,10 @@ class ExplorerModel:
         self._bus: "EventBus | None" = None
         self._summary: "WorkspaceSummary | None" = None
         self._run: "RunHandle | None" = None
+        self._rebaseline: Future[int] | None = None
+        self._rebaseline_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="canary-tui-rebaseline"
+        )
         self.progress = RunProgress()
 
     def refresh(self) -> None:
@@ -89,6 +93,7 @@ class ExplorerModel:
         if self._bus is not None:
             self._bus.unsubscribe(self._on_event)
             self._bus = None
+        self._rebaseline_executor.shutdown(wait=False, cancel_futures=True)
 
     def _on_event(self, event: "Event") -> None:
         # Runs on the publisher's thread; fold into the live progress tally and
@@ -186,7 +191,7 @@ class ExplorerModel:
         live loop repaints as progress arrives; the runner calls
         :meth:`poll_run` to detect completion.
         """
-        if self._run is not None:
+        if self._run is not None or self._rebaseline is not None:
             return False
         # Begin the live tally before launching so the first events (which may
         # arrive immediately) are counted.  For discovery runs the total is
@@ -205,15 +210,66 @@ class ExplorerModel:
         return self.begin_run(SpecIdsRequest(value=list(spec_ids)), total_hint=len(spec_ids))
 
     def begin_rebaseline(self, spec_ids: list[str]) -> bool:
-        """Start an in-place rebaseline of *spec_ids*"""
-        if not spec_ids:
+        """Start an in-place rebaseline of *spec_ids* in the background."""
+        if not spec_ids or self._run is not None or self._rebaseline is not None:
             return False
+        self.state.rebaselining = True
+        self.state.rebaseline_total = len(spec_ids)
+        self._rebaseline = self._rebaseline_executor.submit(self._rebaseline_many, list(spec_ids))
+        self._dirty.set()
+        return True
+
+    def _rebaseline_many(self, spec_ids: list[str]) -> int:
+        """Rebaseline each selected spec id and return the total job count."""
         from ..app.rebaseline import rebaseline
 
         n = 0
         for spec_id in spec_ids:
             n += rebaseline(target=spec_id)
-        return n > 0
+        return n
+
+    def load_request(self, request: Any) -> tuple[bool, str]:
+        """Load/discover specs for *request* without executing them.
+
+        For a scanpaths request, this collects/generates specs into the current
+        workspace and creates a selection, then refreshes the TUI.  Other request
+        kinds already refer to specs/selections in an existing workspace, so
+        they only need a refresh.
+        """
+        if request is None:
+            return False, "nothing to load"
+
+        kind = getattr(request, "kind", None)
+
+        try:
+            if kind == "scanpaths":
+                from ..session.workspace import NotAWorkspaceError
+                from ..session.workspace import Workspace
+
+                try:
+                    workspace = Workspace.load()
+                except NotAWorkspaceError:
+                    workspace = Workspace.create()
+
+                specs = workspace.create_selection(tag=None, scanpaths=request.value)
+                self.refresh()
+                n = len(specs)
+                msg = f"loaded {n} job"
+                if n > 1:
+                    msg += "s"
+                return True, msg
+
+            if kind in ("specids", "viewpaths", "tag"):
+                # These are already workspace-backed references.  There is
+                # nothing to discover; just refresh so the TUI shows the current
+                # workspace contents.
+                self.refresh()
+                return True, ""
+
+            return False, f"cannot load request kind {kind!r}"
+
+        except Exception as exc:  # noqa: BLE001 - surface load failures in footer
+            return False, f"load failed: {exc}"
 
     def begin_run_from_input(self, text: str) -> tuple[bool, str]:
         """Classify a typed run line and launch it, like ``canary run <text>``.
@@ -227,8 +283,8 @@ class ExplorerModel:
         the run is launched in place (a child process streaming events) and
         *message* is empty.  Refused (``False``) while a run is already active.
         """
-        if self._run is not None:
-            return False, "a run is already in flight"
+        if self._run is not None or self._rebaseline is not None:
+            return False, "an operation is already in flight"
         from ..app.pathspec import classify_pathspec
 
         builder = classify_pathspec(text.split())
@@ -254,6 +310,31 @@ class ExplorerModel:
         self._run = None
         self.state.running = False
         self.progress.end()
+        self.refresh()
+        return True
+
+    def poll_rebaseline(self) -> bool:
+        """Return True when a started rebaseline has finished, refreshing rows."""
+        if self._rebaseline is None:
+            return False
+        if not self._rebaseline.done():
+            return False
+
+        future = self._rebaseline
+        self._rebaseline = None
+        self.state.rebaselining = False
+        self.state.rebaseline_total = 0
+
+        try:
+            n = future.result()
+        except Exception as exc:  # noqa: BLE001 - surface hook/app failures in footer
+            self.state.notice = f"rebaseline failed: {exc}"
+        else:
+            if n:
+                self.state.notice = f"rebaselined {n} job(s)"
+            else:
+                self.state.notice = "no jobs rebaselined"
+
         self.refresh()
         return True
 
@@ -416,7 +497,7 @@ def run(
     console: Console | None = None,
     refresh_interval: float = 2.0,
     once: bool = False,
-    request: Any = None,
+    load_request: Any = None,
 ) -> int:
     """Launch the explorer TUI over the current workspace.
 
@@ -425,10 +506,10 @@ def run(
         refresh_interval: Seconds between automatic data refreshes.
         once: Render a single frame and return (used for non-interactive
             environments and tests).
-        request: An optional initial run request (e.g. a ``scanpaths`` request
-            from ``canary tui <path>``) to discover and run on entry, streaming
-            live into the explorer.  When given, the run is launched inside the
-            live display; the workspace it creates is then explored as usual.
+        load_request: An optional initial load request, usually a ``scanpaths``
+            request from ``canary tui <path>``.  When given, the TUI discovers/loads
+            tests into the workspace without executing them.  The user can then mark
+            rows with ``x`` and press ``r`` to run selected tests.
 
     Returns:
         Process exit code (``0``).
@@ -436,24 +517,27 @@ def run(
     console = console or Console(stderr=True)
     model = ExplorerModel()
     model.subscribe(queries.get_event_bus())
+
+    if load_request is not None:
+        loaded, message = model.load_request(load_request)
+        if message:
+            model.state.notice = message
+        if not loaded:
+            model.unsubscribe()
+            raise RuntimeError(message)
+
     # A workspace may not exist yet when an initial discovery run was requested
     # (the run creates it); tolerate that and let the run populate the model.
     try:
         model.refresh()
     except Exception:  # noqa: BLE001 - no workspace yet; the initial run creates it
-        if request is None:
-            model.unsubscribe()
-            raise
+        model.unsubscribe()
+        raise
 
     interactive = (not once) and sys.stdin.isatty() and console.is_terminal
     if not interactive:
         # Non-interactive: run the requested tests (if any) to completion, then
         # render a single frame of the resulting workspace.
-        if request is not None:
-            handle = model._launch(request)
-            handle.wait(timeout=None)
-            with contextlib.suppress(Exception):
-                model.refresh()
         console.print(model.frame())
         model.unsubscribe()
         return 0
@@ -461,9 +545,9 @@ def run(
     # Interactive session: a live display that stays up across an in-place run
     # (the run executes in a child process and streams events back), and pauses
     # only to hand the terminal to an external editor.  An initial request is
-    # launched on first entry to the live display.
+    # loaded on first entry to the live display.
     while True:
-        action, payload = _live_session(console, model, refresh_interval, initial_request=request)
+        action, payload = _live_session(console, model, refresh_interval)
         request = None  # only launch the initial request once
         if action == "edit":
             # vim is full-screen: the live display and raw-mode reader are
@@ -484,11 +568,7 @@ def run(
 
 
 def _live_session(
-    console: Console,
-    model: "ExplorerModel",
-    refresh_interval: float,
-    *,
-    initial_request: Any = None,
+    console: Console, model: "ExplorerModel", refresh_interval: float
 ) -> tuple[str, Any]:
     """Run the live display until the user quits or requests an editor.
 
@@ -496,11 +576,7 @@ def _live_session(
     ``None``) or ``"edit"`` (payload = file path).  A rerun does **not** end the
     session: it is launched in place (a child process, see
     :meth:`ExplorerModel.begin_rerun`) and the loop keeps drawing as the child's
-    events arrive, until the run finishes.  When *initial_request* is given it is
-    launched on entry (e.g. a ``scanpaths`` discovery run from
-    ``canary tui <path>``), streaming live like any rerun.  The ``Live`` display
-    and the raw-mode keyboard reader are fully torn down before returning, so
-    the caller may safely run a full-screen external editor.
+    events arrive, until the run finishes.
     """
     keys: "queue.Queue[str]" = queue.Queue()
     stop = threading.Event()
@@ -510,8 +586,6 @@ def _live_session(
     reason: str = "quit"
     payload: Any = None
     last_refresh = time.monotonic()
-    if initial_request is not None:
-        model.begin_run(initial_request)
     try:
         with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
             while not model.state.quit:
@@ -555,8 +629,8 @@ def _live_session(
                     dirty = True
                 rebaseline_ids = model.state.consume_rebaseline_request()
                 if rebaseline_ids and model.begin_rebaseline(rebaseline_ids):
-                    # In-place: the child streams events; keep drawing.  Clear
-                    # any marks so the "running" set is unambiguous.
+                    # In-place background operation; keep drawing and clear marks
+                    # so the target set is no longer ambiguous.
                     model.state.clear_marks()
                     dirty = True
                 run_line = model.state.consume_run_input_request()
@@ -570,6 +644,9 @@ def _live_session(
                     dirty = True
                 # A finished in-place run refreshes rows and clears the flag.
                 if model.poll_run():
+                    dirty = True
+                # A finished in-place rebaseline refreshes rows and clears the flag.
+                if model.poll_rebaseline():
                     dirty = True
                 now = time.monotonic()
                 # Refresh on a job event (live session progress) or the timer,

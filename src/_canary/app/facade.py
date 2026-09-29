@@ -126,6 +126,14 @@ def get_tag_info(tag: str) -> dict:
     return open_workspace().tag_info(tag)
 
 
+def get_specs(ids: list[str] | None = None, include_upstreams: bool = False) -> list["JobSpec"]:
+    """Return loaded job specs from the current workspace.
+
+    Unlike :func:`get_results`, this includes specs that have never been run.
+    """
+    return open_workspace().db.load_specs(ids, include_upstreams=include_upstreams)
+
+
 def get_results(ids: list[str] | None = None, include_upstreams: bool = False) -> dict[str, dict]:
     """Return the latest result record for each spec in the current workspace.
 

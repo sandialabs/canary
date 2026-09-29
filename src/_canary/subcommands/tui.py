@@ -26,14 +26,12 @@ class Tui(CanarySubcommand):
     description = "Explore the current workspace interactively in the terminal"
 
     def setup_parser(self, parser: "Parser") -> None:
-        """Register ``paths`` (optional discover-and-run), ``--refresh``, ``--once``."""
+        """Register ``paths`` (optional discover/load), ``--refresh``, ``--once``."""
         parser.add_argument(
             "paths",
             nargs="*",
             metavar="PATH",
-            help="Optional test paths to discover and run on launch, then explore "
-            "(like 'canary run PATH...' but inside the TUI). With no paths, open "
-            "the existing workspace.",
+            help="Optional test paths to discover and load on launch, then explore. ",
         )
         parser.add_argument(
             "--refresh",
@@ -55,7 +53,7 @@ class Tui(CanarySubcommand):
         from ..error import StopExecution
         from ..session.workspace import NotAWorkspaceError
 
-        request = None
+        load_request = None
         if getattr(args, "paths", None):
             # Turn the positional paths into a run request (the same classifier
             # 'canary run' uses), so 'canary tui examples' discovers and runs the
@@ -63,9 +61,9 @@ class Tui(CanarySubcommand):
             builder = classify_pathspec(list(args.paths))
             if builder.errors:
                 raise StopExecution("; ".join(str(e) for e in builder.errors), 1)
-            request = builder.finalize()
+            load_request = builder.finalize()
 
         try:
-            return tui.run(refresh_interval=args.refresh, once=args.once, request=request)
+            return tui.run(refresh_interval=args.refresh, once=args.once, load_request=load_request)
         except NotAWorkspaceError:
             raise StopExecution("canary tui must be run inside a workspace", 1) from None

@@ -34,6 +34,7 @@ _HELP = (
 #: Footer help shown while a run is in flight: q/escape cancels the run rather
 #: than quitting the TUI, so the hint changes to make that discoverable.
 _RUNNING_HELP = "[dim]j/k move · d detail · f filter · q/esc cancel run[/dim]"
+_REBASELINING_HELP = "[dim]j/k move · d detail · f filter · rebaseline in progress[/dim]"
 _LOG_HELP = "[dim]j/k scroll · g/G top/bottom · f follow · pgup/pgdn page · q/enter back[/dim]"
 #: Rows a Rich table spends on its own frame regardless of body length: the top
 #: border, the column-header row, the header/body separator, and the bottom
@@ -159,6 +160,11 @@ def render_footer(state: "ExplorerState") -> Text:
         parts.append("   ")
     if state.running:
         parts.append("running… ", style="bold yellow")
+    elif state.rebaselining:
+        if state.rebaseline_total:
+            parts.append(f"rebaselining {state.rebaseline_total} job(s)… ", style="bold yellow")
+        else:
+            parts.append("rebaselining… ", style="bold yellow")
     filt = state.status_filter or "all"
     parts.append(f"filter: {filt}", style="bold")
     rows = state.visible_jobs
@@ -168,7 +174,12 @@ def render_footer(state: "ExplorerState") -> Text:
         parts.append(f"   marked: {len(state.marked_ids)}", style="bold cyan")
     parts.append("   ")
     # While a run is in flight q/escape cancels it (not quit); advertise that.
-    parts.append(Text.from_markup(_RUNNING_HELP if state.running else _HELP))
+    help_text = _HELP
+    if state.running:
+        help_text = _RUNNING_HELP
+    elif state.rebaselining:
+        help_text = _REBASELINING_HELP
+    parts.append(Text.from_markup(help_text))
     return parts
 
 

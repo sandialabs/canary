@@ -22,6 +22,7 @@ from .facade import get_event_bus
 from .facade import get_job_log
 from .facade import get_result_history
 from .facade import get_results
+from .facade import get_specs
 from .facade import get_workspace_info
 
 __all__ = [
@@ -66,6 +67,27 @@ class JobView(TypedDict):
     session: str
 
 
+def _spec_view(spec: Any) -> JobView:
+    """Convert a loaded-but-unrun JobSpec into a renderable JobView."""
+    return JobView(
+        id=spec.id,
+        short_id=spec.id[:8],
+        name=spec.name,
+        fullname=spec.fullname,
+        file_path=str(spec.file),
+        phase="",
+        status="NOTRUN",
+        status_label="NOTRUN",
+        status_markup="[dim]NOTRUN[/]",
+        status_glyph="○",
+        category="NOTRUN",
+        outcome="",
+        reason="not run yet",
+        duration=0.0,
+        session="",
+    )
+
+
 def _job_view(result: dict[str, Any]) -> JobView:
     """Convert one ``get_results`` record into a :class:`JobView`."""
     status = result["status"]
@@ -104,22 +126,31 @@ def _job_view(result: dict[str, Any]) -> JobView:
     )
 
 
-def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> list[JobView]:
-    """Return a list of :class:`JobView` for the current workspace.
-
-    Each entry is the latest result for a spec, projected to primitives and
-    sorted by name.  Interfaces render these directly; the DB is never touched
-    by the caller.
-    """
-    results = get_results(ids, include_upstreams=include_upstreams)
-    views = [_job_view(r) for r in results.values()]
-    views.sort(key=lambda v: (v["name"], v["short_id"]))
-    return views
-
-
 def job_history(spec_id: str) -> list[JobView]:
     """Return every historical result for *spec_id* as :class:`JobView`, oldest first."""
     return [_job_view(r) for r in get_result_history(spec_id)]
+
+
+def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> list[JobView]:
+    """Return renderable rows for loaded specs in the current workspace.
+
+    Specs that have a latest result are projected from that result. Specs that
+    have been loaded/discovered but never run are still returned as NOTRUN rows
+    so interfaces can select and launch them.
+    """
+    specs = get_specs(ids, include_upstreams=include_upstreams)
+    results = get_results(ids, include_upstreams=include_upstreams)
+
+    views: list[JobView] = []
+    for spec in specs:
+        result = results.get(spec.id)
+        if result is not None:
+            views.append(_job_view(result))
+        else:
+            views.append(_spec_view(spec))
+
+    views.sort(key=lambda v: (v["name"], v["short_id"]))
+    return views
 
 
 def job_log(spec_id: str, *, stream: str = "stdout") -> str:

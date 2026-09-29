@@ -342,11 +342,12 @@ def test_tui_discovers_and_runs_paths_on_launch(tmp_path):
     """
     from _canary.app.pathspec import ScanPathsRequest
 
+    _make_workspace(tmp_path)
     (tmp_path / "basic.pyt").write_text(PYT_BODY)
     with working_dir(str(tmp_path)), canary.config.override():
         # No workspace yet; the initial request must create and populate it.
         request = ScanPathsRequest(value={str(tmp_path): []})
-        rc = tui.run(once=True, request=request)
+        rc = tui.run(once=True, load_request=request)
         assert rc == 0
         jobs = {j["name"]: j["status"] for j in queries.list_jobs()}
     assert jobs == {"basic.x=1": "PASS", "basic.x=2": "PASS"}
