@@ -35,9 +35,10 @@ import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import cast
 
-from ..util.multiprocessing import FSQueue
+from ..util.fsqueue import FSQueue
 from .bus import Event
 
 if TYPE_CHECKING:
@@ -45,38 +46,22 @@ if TYPE_CHECKING:
 
 
 class SpoolBus:
-    """Producer side: append events to a disk-backed spool directory.
-
-    Safe to construct and write from any process, including a fully independent
-    ``canary`` invocation, because :class:`~_canary.util.multiprocessing.FSQueue`
-    stores each record as an atomically-renamed pickle file (multi-writer safe,
-    no background feeder thread).
-    """
+    """Producer side: append events to a disk-backed spool directory."""
 
     def __init__(self, directory: str | Path) -> None:
         self._queue = FSQueue(Path(directory))
 
     def publish(self, event: Event) -> None:
-        """Append *event* (as a ``(name, payload)`` record) to the spool."""
-        self._queue.put((event.name, event.payload))
+        """Append *event* to the spool."""
+        self._queue.put({"name": event.name, "payload": event.payload})
 
     def forward(self, event: Event) -> None:
-        """Bus-subscriber alias for :meth:`publish` (usable with ``bus.subscribe``)."""
+        """Bus-subscriber alias for :meth:`publish`."""
         self.publish(event)
 
 
 class SpoolListener:
-    """Consumer side: drain a spool directory onto a local :class:`EventBus`.
-
-    A daemon thread reads ``(name, payload)`` records written by a
-    :class:`SpoolBus` in another process and republishes them onto *bus*, so
-    local subscribers observe the child's events as if they were local.
-
-    Modeled directly on :class:`~_canary.persistence.database.ResultListener`: a
-    daemon thread whose whole job is to move items from a cross-process spool
-    into an in-process sink, with a final drain after being asked to stop so no
-    trailing events are lost.
-    """
+    """Consumer side: drain a spool directory onto a local :class:`EventBus`."""
 
     def __init__(
         self, directory: str | Path, bus: "EventBus", *, poll_interval: float = 0.05
@@ -88,9 +73,10 @@ class SpoolListener:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Start the background drain thread (idempotent)."""
+        """Start the background drain thread."""
         if self._thread is not None:
             return
+        self._queue.requeue_stale(older_than=0)
         self._thread = threading.Thread(target=self._run, name="canary-event-spool", daemon=True)
         self._thread.start()
 
@@ -98,19 +84,48 @@ class SpoolListener:
         while not self._stop_event.is_set():
             self._drain_once()
             time.sleep(self._poll_interval)
+
         # Final drain so events written just before stop are not lost.
         self._drain_once()
 
     def _drain_once(self) -> None:
-        for item in self._queue.drain():
-            self._publish(item)
+        batch = self._queue.receive()
+        for path, item in batch:
+            if self._publish(item):
+                self._queue.ack(path)
+            else:
+                self._queue.fail(path, reason="malformed spool event")
 
-    def _publish(self, item: object) -> None:
-        # Tolerate a malformed record rather than kill the listener thread.
-        if not isinstance(item, tuple) or len(item) != 2:
-            return
-        name, payload = item
-        self._bus.publish(Event(name=cast(str, name), payload=cast(dict, payload or {})))
+    def _publish(self, item: object) -> bool:
+        if isinstance(item, dict):
+            record = cast(dict[str, object], item)
+
+            name = record.get("name")
+            payload_obj = record.get("payload")
+            if payload_obj is None:
+                payload_obj = {}
+
+            if not isinstance(name, str) or not isinstance(payload_obj, dict):
+                return False
+
+            payload = cast(dict[str, Any], payload_obj)
+            self._bus.publish(Event(name=name, payload=payload))
+            return True
+
+        if isinstance(item, (tuple, list)) and len(item) == 2:
+            name, payload_obj = item
+
+            if payload_obj is None:
+                payload_obj = {}
+
+            if not isinstance(name, str) or not isinstance(payload_obj, dict):
+                return False
+
+            payload = cast(dict[str, Any], payload_obj)
+            self._bus.publish(Event(name=name, payload=payload))
+            return True
+
+        return False
 
     def stop(self, *, timeout: float = 2.0) -> None:
         """Stop draining and join the thread; safe to call more than once."""

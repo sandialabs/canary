@@ -44,7 +44,7 @@ from ..core.jobspec_graph import make_spec_graph
 from ..core.status import Status
 from ..util import json_helper as json
 from ..util import logging
-from ..util.multiprocessing import FSQueue
+from ..util.fsqueue import FSQueue
 
 if TYPE_CHECKING:
     from ..core.job import Job
@@ -1035,24 +1035,42 @@ class ResultListener(threading.Thread):
         self.db = WorkspaceDatabase.load(db.root)
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
-        self._processed: set[str] = set()  # Track processed files
+        self._processed: set[str] = set()
 
     def run(self):
         """Main thread loop."""
         self.db.connect()
         try:
+            # Single-listener case: recover any records left claimed by a previous
+            # crashed listener before we start draining.
+            self.db.queue.requeue_stale(older_than=0)
+
             while not self._stop_event.is_set():
-                objs = self.db.queue.drain()
-                if objs:
-                    self.db.put_results(*objs)
-                    self._processed.update([obj.id for obj in objs])
+                self._drain_once()
                 time.sleep(self.poll_interval)
-            objs = self.db.queue.drain()
-            if objs:
-                self.db.put_results(*objs)
-                self._processed.update([obj.id for obj in objs])
+
+            # Final drain so records written just before stop are not lost.
+            self._drain_once()
         finally:
             self.db.close()
+
+    def _drain_once(self) -> None:
+        batch = self.db.queue.receive()
+        if not batch:
+            return
+
+        paths, objs = zip(*batch)
+
+        try:
+            self.db.put_results(*objs)
+        except Exception:
+            # Do not lose records if SQLite write fails. Return them to ready/
+            # so a later listener iteration/process can retry.
+            self.db.queue.release(list(paths))
+            raise
+
+        self.db.queue.ack(list(paths))
+        self._processed.update(obj.id for obj in objs)
 
     def stop_and_join(self):
         """Stop listener and wait for thread to finish."""
