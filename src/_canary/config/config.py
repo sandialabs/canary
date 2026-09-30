@@ -15,7 +15,7 @@ import yaml
 from schema import Optional
 from schema import Schema
 
-from ..pluginmanager import CanaryPluginManager
+from ..plugins.pluginmanager import CanaryPluginManager
 from ..resource_pool.manager import ResourceManager
 from ..util import json_helper as json
 from ..util import logging
@@ -409,7 +409,7 @@ def read_config_file(file: str | Path) -> dict[str, Any] | None:
 
 
 def get_scope_filename(scope: str) -> Path:
-    from ..workspace import Workspace
+    from ..session.workspace import Workspace
 
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
@@ -502,7 +502,7 @@ def resolve_plugin(name: str, *, base: str | Path | None) -> str:
 
 def workspace_anchor() -> Path | None:
     """Return the workspace anchor (directory containing ``.canary``) or None."""
-    from ..workspace import Workspace
+    from ..session.workspace import Workspace
 
     return Workspace.find_anchor()
 

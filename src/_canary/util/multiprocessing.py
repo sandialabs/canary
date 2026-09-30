@@ -16,13 +16,9 @@ import multiprocessing.context
 import multiprocessing.queues
 import multiprocessing.reduction
 import os
-import pickle  # nosec B403
 import sys
 import traceback
 from multiprocessing.process import BaseProcess
-from pathlib import Path
-from queue import Empty
-from tempfile import NamedTemporaryFile
 from typing import Any
 from typing import Callable
 from typing import Iterable
@@ -329,77 +325,3 @@ def starmap(
 def parent_process() -> BaseProcess | None:
     """Return the parent ``Process`` object, or ``None`` in the main process."""
     return multiprocessing.parent_process()
-
-
-class FSQueue:
-    """
-    A file-system-backed queue with caching.
-
-    Items are pickled to disk, multiple processes can safely put items,
-    and a listener can consume them in FIFO order.
-    """
-
-    def __init__(self, root: Path):
-        """Initialize the queue rooted at ``root``, creating the directory if needed."""
-        self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
-        self._cache: list[Path] = []
-
-    def put(self, obj: Any) -> None:
-        """Serialize and atomically store an object in the queue."""
-        temp_file: Path | None = None
-        try:
-            with NamedTemporaryFile(dir=self.root, delete=False, suffix=".tmp", mode="wb") as tf:
-                temp_file = Path(tf.name)
-                pickle.dump(obj, tf)
-                tf.flush()
-                tf.fileno()  # ensure file is written to disk
-            final_file = self.root / f"{temp_file.stem}.pkl"
-            temp_file.replace(final_file)  # atomic rename
-        except Exception as e:
-            if temp_file and temp_file.exists():
-                temp_file.unlink(missing_ok=True)
-            raise RuntimeError(f"Failed to put item in FSQueue: {e}")
-
-    def _refill_cache(self) -> None:
-        """Populate the internal cache from disk, sorted by modification time."""
-        files = sorted(self.root.glob("*.pkl"), key=lambda f: f.stat().st_mtime)
-        self._cache = files
-
-    def empty(self) -> bool:
-        """Return ``True`` if the queue contains no items."""
-        if not self._cache:
-            self._refill_cache()
-        return not bool(self._cache)
-
-    def get(self) -> Any:
-        """
-        Get the oldest item from the queue.
-
-        Raises:
-            Empty: if the queue is empty.
-        """
-        if not self._cache:
-            self._refill_cache()
-        if not self._cache:
-            raise Empty()
-        f = self._cache.pop(0)
-        try:
-            with f.open("rb") as fh:
-                obj = pickle.load(fh)  # nosec B301
-            f.unlink(missing_ok=True)
-            return obj
-        except Exception as e:
-            f.unlink(missing_ok=True)
-            raise RuntimeError(f"Failed to read item from FSQueue: {e}")
-
-    def drain(self) -> list[Any]:
-        """
-        Yield items from the queue until empty.
-        """
-        objs: list[Any] = []
-        while True:
-            try:
-                objs.append(self.get())
-            except Empty:
-                return objs

@@ -22,7 +22,7 @@ from typing import Literal
 
 import canary
 import canary_pyt.pyt as pyt
-from _canary.ir import DependencySelector
+from _canary.core.jobspec_ir import DependencySelector
 from _canary.util import string
 from canary_pyt.enums import list_parameter_space
 from canary_pyt.paramset import ParameterSet

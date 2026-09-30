@@ -9,7 +9,7 @@ import os
 import sys
 from typing import Any
 
-from ..error import diff_exit_status
+from ..core.error import diff_exit_status
 
 
 def unix_diff(file1: str, file2: str, ignore_whitespace: bool = False) -> None:

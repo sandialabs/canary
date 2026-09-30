@@ -15,7 +15,7 @@ from typing import Any
 import pluggy
 import yaml
 
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:

@@ -14,7 +14,7 @@ from typing import Any
 from typing import Generic
 from typing import TypeVar
 
-from .. import when as m_when
+from ..core import when as m_when
 
 WhenType = str | dict[str, str]
 T = TypeVar("T")

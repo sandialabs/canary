@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import _canary.jobspec as js
-from _canary import generate
-from _canary import ir
+import _canary.core.jobspec as js
+from _canary.core import jobspec_ir as ir
+from _canary.generation import generate
 from _canary.util.filesystem import working_dir
 
 
@@ -161,7 +161,7 @@ def test_depends_on_param_subs(tmpdir):
 
 
 def test_depends_on_missing(tmpdir):
-    from _canary.resolve_dependency import UnresolvedDependenciesErrors
+    from _canary.core.resolve_dependency import UnresolvedDependenciesErrors
 
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")

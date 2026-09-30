@@ -1,0 +1,699 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+"""The Canary explorer TUI runner.
+
+This is the only module in :mod:`_canary.tui` that performs I/O.  It is a thin
+interface adapter: it pulls render-ready rows from the application query
+surface (:mod:`_canary.app.queries`), feeds the pure
+:class:`~_canary.tui.state.ExplorerState`, and draws frames with
+:class:`rich.live.Live`.  It contains no business logic -- all workspace access
+goes through ``_canary.app``.
+
+Keyboard input is read from the terminal in raw mode on a background thread so
+the display can also refresh on a timer (picking up results a running session
+spools to the database).  When stdin is not a TTY the loop degrades to a single
+rendered frame, which keeps it usable in tests and pipelines.
+"""
+
+import contextlib
+import os
+import queue
+import shlex
+import sys
+import threading
+import time
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import TYPE_CHECKING
+from typing import Any
+
+from rich.console import Console
+from rich.live import Live
+
+from ..app import queries
+from .progress import RunProgress
+from .render import TABLE_FRAME_ROWS
+from .render import measure_height
+from .render import render_detail
+from .render import render_footer
+from .render import render_frame
+from .render import render_header
+from .render import render_prompt
+from .render import render_run_progress
+from .state import ExplorerState
+
+if TYPE_CHECKING:
+    from ..app.queries import JobView
+    from ..app.queries import WorkspaceSummary
+    from ..app.run_subprocess import RunHandle
+    from ..events import Event
+    from ..events import EventBus
+
+
+class ExplorerModel:
+    """Bridges the application query surface to the pure UI state.
+
+    Kept separate from the runner so it can be exercised without a terminal.
+
+    When :meth:`subscribe` is given an :class:`~_canary.events.EventBus`, job
+    events flip a thread-safe *dirty* flag; the runner polls
+    :meth:`consume_dirty` so a live session's progress is reflected promptly
+    without waiting for the periodic timer.  Event delivery only marks the model
+    dirty -- the authoritative rows still come from :meth:`refresh` (the DB),
+    keeping the database the source of truth.
+    """
+
+    def __init__(self) -> None:
+        self.state = ExplorerState()
+        self._dirty = threading.Event()
+        self._bus: "EventBus | None" = None
+        self._summary: "WorkspaceSummary | None" = None
+        self._run: "RunHandle | None" = None
+        self._rebaseline: Future[int] | None = None
+        self._rebaseline_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="canary-tui-rebaseline"
+        )
+        self.progress = RunProgress()
+
+    def refresh(self) -> None:
+        """Pull the latest job rows and workspace summary into the UI state."""
+        self.state.update_jobs(self.fetch_jobs())
+        self._summary = self.fetch_summary()
+
+    def subscribe(self, bus: "EventBus") -> None:
+        """Subscribe to *bus*; any job event marks the model dirty for refresh."""
+        self._bus = bus
+        bus.subscribe(self._on_event)
+
+    def unsubscribe(self) -> None:
+        """Detach from the event bus, if subscribed."""
+        if self._bus is not None:
+            self._bus.unsubscribe(self._on_event)
+            self._bus = None
+        self._rebaseline_executor.shutdown(wait=False, cancel_futures=True)
+
+    def _on_event(self, event: "Event") -> None:
+        # Runs on the publisher's thread; fold into the live progress tally and
+        # set a flag (no query/render I/O here).
+        self.progress.on_event(event)
+        self._dirty.set()
+
+    def consume_dirty(self) -> bool:
+        """Return whether an event arrived since the last call, clearing the flag."""
+        if self._dirty.is_set():
+            self._dirty.clear()
+            return True
+        return False
+
+    # These thin wrappers exist so tests can subclass/patch the data source.
+    def fetch_jobs(self) -> "list[JobView]":
+        return queries.list_jobs()
+
+    def fetch_summary(self) -> "WorkspaceSummary":
+        return queries.workspace_summary()
+
+    def fetch_log(self, spec_id: str) -> str:
+        return queries.job_log(spec_id)
+
+    def open_selected_log(self) -> None:
+        """Fetch the selected job's log and switch the state into log mode.
+
+        This is the model's single log-related I/O point; the pure state machine
+        holds the resulting text but never reads the workspace itself.  When a
+        run is in flight the log opens in tail-follow mode so a running job's
+        output streams in (the runner re-fetches it via :meth:`refresh_log`).
+        """
+        job = self.state.selected
+        if job is None:
+            return
+        text = self.fetch_log(job["id"])
+        self.state.open_log(
+            f"{job['name']}  ({job['short_id']})", text, spec_id=job["id"], follow=self.run_active
+        )
+
+    def refresh_log(self) -> bool:
+        """Re-fetch the open log's text while following; return whether it changed.
+
+        Called by the runner on each refresh tick.  A no-op (returns ``False``)
+        unless the log pane is open, following, and knows its job id -- so a
+        frozen (scrolled-up) or closed log costs nothing.  Tolerates a job whose
+        output file has vanished (returns the empty text the query yields).
+        """
+        st = self.state
+        if st.mode != "log" or not st.log_follow or st.log_spec_id is None:
+            return False
+        try:
+            text = self.fetch_log(st.log_spec_id)
+        except Exception:  # noqa: BLE001 - a transient read race must not crash the UI
+            return False
+        return st.update_log(text)
+
+    def counts(self) -> dict[str, int]:
+        return queries.status_counts(self.state.jobs)
+
+    def start_rerun(self, spec_ids: list[str]) -> "RunHandle":
+        """Start an in-place rerun of *spec_ids* in a child process.
+
+        Uses :func:`_canary.app.run_in_subprocess`, which runs the same
+        ``app.run`` path as ``canary run <spec_id> ...`` (it computes the rerun
+        closure itself) but in a separate process so the TUI keeps its live
+        display, the terminal, and signal handling.  The child streams its
+        job-lifecycle events back onto the application event bus this model is
+        already subscribed to, so progress appears live without a console
+        handoff.  Returns a :class:`~_canary.app.run_subprocess.RunHandle` the
+        runner polls for completion.
+        """
+        from ..app.pathspec import SpecIdsRequest
+
+        return self._launch(SpecIdsRequest(value=list(spec_ids)))
+
+    def _launch(self, request: Any, options: Any = None) -> "RunHandle":
+        """Run *request* in a child process, streaming events to this model's bus."""
+        from ..app.run_subprocess import run_in_subprocess
+
+        return run_in_subprocess(request, options)
+
+    @property
+    def run_active(self) -> bool:
+        """Whether a run (rerun or an initial discover-and-run) is executing."""
+        return self._run is not None
+
+    def begin_run(self, request: Any, options: Any = None, *, total_hint: int = 0) -> bool:
+        """Start an in-place run of *request*, unless one is already running.
+
+        Generalizes :meth:`begin_rerun` to any run request (a ``scanpaths``
+        request to discover and run tests under a path, a ``tag``/``specids``
+        request, etc.).  Returns ``True`` if a run was started.  The child
+        streams events onto the bus this model subscribes to, so the runner's
+        live loop repaints as progress arrives; the runner calls
+        :meth:`poll_run` to detect completion.
+        """
+        if self._run is not None or self._rebaseline is not None:
+            return False
+        # Begin the live tally before launching so the first events (which may
+        # arrive immediately) are counted.  For discovery runs the total is
+        # unknown up front; it is refined from event qsize as the run proceeds.
+        self.progress.begin(total=total_hint)
+        self._run = self._launch(request, options)
+        self.state.running = True
+        return True
+
+    def begin_rerun(self, spec_ids: list[str]) -> bool:
+        """Start an in-place rerun of *spec_ids* (convenience over :meth:`begin_run`)."""
+        if not spec_ids:
+            return False
+        from ..app.pathspec import SpecIdsRequest
+
+        return self.begin_run(SpecIdsRequest(value=list(spec_ids)), total_hint=len(spec_ids))
+
+    def begin_rebaseline(self, spec_ids: list[str]) -> bool:
+        """Start an in-place rebaseline of *spec_ids* in the background."""
+        if not spec_ids or self._run is not None or self._rebaseline is not None:
+            return False
+        self.state.rebaselining = True
+        self.state.rebaseline_total = len(spec_ids)
+        self._rebaseline = self._rebaseline_executor.submit(self._rebaseline_many, list(spec_ids))
+        self._dirty.set()
+        return True
+
+    def _rebaseline_many(self, spec_ids: list[str]) -> int:
+        """Rebaseline each selected spec id and return the total job count."""
+        from ..app.rebaseline import rebaseline
+
+        n = 0
+        for spec_id in spec_ids:
+            n += rebaseline(target=spec_id)
+        return n
+
+    def load_request(self, request: Any) -> tuple[bool, str]:
+        """Load/discover specs for *request* without executing them.
+
+        For a scanpaths request, this collects/generates specs into the current
+        workspace and creates a selection, then refreshes the TUI.  Other request
+        kinds already refer to specs/selections in an existing workspace, so
+        they only need a refresh.
+        """
+        if request is None:
+            return False, "nothing to load"
+
+        kind = getattr(request, "kind", None)
+
+        try:
+            if kind == "scanpaths":
+                from ..session.workspace import NotAWorkspaceError
+                from ..session.workspace import Workspace
+
+                try:
+                    workspace = Workspace.load()
+                except NotAWorkspaceError:
+                    workspace = Workspace.create()
+
+                specs = workspace.create_selection(tag=None, scanpaths=request.value)
+                self.refresh()
+                n = len(specs)
+                msg = f"loaded {n} job"
+                if n > 1:
+                    msg += "s"
+                return True, msg
+
+            if kind in ("specids", "viewpaths", "tag"):
+                # These are already workspace-backed references.  There is
+                # nothing to discover; just refresh so the TUI shows the current
+                # workspace contents.
+                self.refresh()
+                return True, ""
+
+            return False, f"cannot load request kind {kind!r}"
+
+        except Exception as exc:  # noqa: BLE001 - surface load failures in footer
+            return False, f"load failed: {exc}"
+
+    def begin_run_from_input(self, text: str) -> tuple[bool, str]:
+        """Classify a typed run line and launch it, like ``canary run <text>``.
+
+        The line is tokenized on whitespace and classified with the same
+        :func:`~_canary.app.pathspec.classify_pathspec` the ``canary run`` /
+        ``canary tui PATH`` CLI uses, so a directory, a test file, a tag, a view
+        path, or a spec id all work and are validated identically.  Returns
+        ``(started, message)``: on a classification error (or an empty/ambiguous
+        request) ``started`` is ``False`` and *message* explains why; otherwise
+        the run is launched in place (a child process streaming events) and
+        *message* is empty.  Refused (``False``) while a run is already active.
+        """
+        if self._run is not None or self._rebaseline is not None:
+            return False, "an operation is already in flight"
+        from ..app.pathspec import classify_pathspec
+
+        builder = classify_pathspec(text.split())
+        if builder.errors:
+            return False, "; ".join(str(e) for e in builder.errors)
+        request = builder.finalize()
+        if request is None:
+            return False, f"nothing to run for {text!r}"
+        started = self.begin_run(request)
+        return (started, "" if started else "could not start the run")
+
+    def poll_run(self) -> bool:
+        """Return ``True`` when a started run has finished, refreshing rows.
+
+        Non-blocking.  On completion the run handle is cleared and the model is
+        refreshed so the final results are shown; returns ``False`` while the
+        run is still in flight or when no run is active.
+        """
+        if self._run is None:
+            return False
+        if self._run.poll() is None:
+            return False
+        self._run = None
+        self.state.running = False
+        self.progress.end()
+        self.refresh()
+        return True
+
+    def poll_rebaseline(self) -> bool:
+        """Return True when a started rebaseline has finished, refreshing rows."""
+        if self._rebaseline is None:
+            return False
+        if not self._rebaseline.done():
+            return False
+
+        future = self._rebaseline
+        self._rebaseline = None
+        self.state.rebaselining = False
+        self.state.rebaseline_total = 0
+
+        try:
+            n = future.result()
+        except Exception as exc:  # noqa: BLE001 - surface hook/app failures in footer
+            self.state.notice = f"rebaseline failed: {exc}"
+        else:
+            if n:
+                self.state.notice = f"rebaselined {n} job(s)"
+            else:
+                self.state.notice = "no jobs rebaselined"
+
+        self.refresh()
+        return True
+
+    def cancel_run(self) -> bool:
+        """Cancel the in-flight run, if any, terminating its child process.
+
+        Returns ``True`` if a run was cancelled.  Best-effort: the child is
+        terminated, a ``job_cancelled`` event is published for each job that was
+        still in flight (so subscribers see the cancellation as an event, not
+        only via the database), and the model is refreshed from the database
+        (jobs that finished before cancellation keep their results; the rest
+        reconcile on the next session load).  Safe to call when no run is active
+        (returns ``False``).
+        """
+        if self._run is None:
+            return False
+        # Snapshot the in-flight jobs before ending the tally so we can announce
+        # each one as cancelled.  The child is terminated abruptly, so it cannot
+        # emit these itself; the parent synthesizes them onto the same bus.
+        in_flight = self.progress.running_jobs()
+        self._run.terminate()
+        self._run = None
+        self.state.running = False
+        self.progress.end()
+        self._announce_cancelled(in_flight)
+        self.refresh()
+        return True
+
+    def _announce_cancelled(self, jobs: "list[dict[str, Any]]") -> None:
+        """Publish a ``job_cancelled`` event for each still-running *job* payload.
+
+        No-op when not subscribed to a bus.  Each payload is a flat
+        :class:`~_canary.events.JobEvent`-shaped dict carried on the run's
+        events; its status fields are overwritten to reflect cancellation so a
+        subscriber can render the row without a follow-up query.
+        """
+        if self._bus is None or not jobs:
+            return
+        from ..events import Event
+
+        for job in jobs:
+            payload = dict(job)
+            payload["status"] = "CANCELLED"
+            payload["status_label"] = "CANCELLED"
+            payload["status_markup"] = "[yellow]CANCELLED[/]"
+            payload["reason"] = payload.get("reason") or "cancelled by user"
+            self._bus.publish(Event("job_cancelled", {"job": payload}))
+
+    def get_editor(self) -> str:
+        return os.getenv("CANARY_EDITOR") or "vim"
+
+    def edit_file(self, path: str) -> bool:
+        """Open *path* in ``vim``, returning whether it changed on disk.
+
+        The TUI uses ``vim`` directly (see :attr:`EDITOR`) instead of canary's
+        environment-driven editor selection, so it never lands on a GUI editor
+        that would detach.  The editor blocks, so the runner suspends the live
+        display and hands over the terminal first; the mtime is compared so a
+        rerun is offered only when the file actually changed.
+
+        Returns ``False`` (a no-op) when the editor could not be launched.
+        """
+        import subprocess  # nosec B404
+
+        p = Path(path)
+        before = p.stat().st_mtime if p.exists() else None
+        # Run the editor as a blocking child (not os.execv, which would replace
+        # this process) and treat a clean exit as success.
+        try:
+            editor = shlex.split(self.get_editor())
+            subprocess.run([*editor, str(p)], check=False)  # nosec B603
+        except FileNotFoundError:
+            return False
+        after = p.stat().st_mtime if p.exists() else None
+        return before != after
+
+    def summary(self) -> "WorkspaceSummary":
+        """The workspace summary cached at the last :meth:`refresh`.
+
+        Cached so the runner can size the layout each frame (which needs the
+        header height) without issuing an extra workspace query per frame.
+        Tolerates a not-yet-created workspace (an initial discovery run creates
+        it) by returning a placeholder summary until the first successful fetch.
+        """
+        if self._summary is None:
+            try:
+                self._summary = self.fetch_summary()
+            except Exception:  # noqa: BLE001 - workspace may not exist yet
+                return {
+                    "root": "(starting run…)",
+                    "session_count": 0,
+                    "latest_session": "",
+                    "spec_count": 0,
+                    "tags": [],
+                    "version": "",
+                }
+        return self._summary
+
+    def frame(self):
+        """Render the current model to a Rich renderable."""
+        return render_frame(self.state, self.summary(), self.counts(), self.progress.snapshot())
+
+
+def _read_keys(stop: threading.Event, out: "queue.Queue[str]") -> None:
+    """Read single key presses from a raw-mode TTY onto *out* until *stop* is set.
+
+    Arrow keys and Page keys arrive as escape sequences and are normalised to
+    the logical names :meth:`ExplorerState.handle_key` understands.
+    """
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while not stop.is_set():
+            import select as _select
+
+            r, _, _ = _select.select([sys.stdin], [], [], 0.2)
+            if not r:
+                continue
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":  # escape or an escape sequence
+                seq = _read_escape_sequence()
+                out.put(seq)
+            elif ch in ("\x7f", "\b"):  # DEL / BS -> logical backspace
+                out.put("backspace")
+            else:
+                out.put(ch)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _read_escape_sequence() -> str:
+    """Resolve a pending ANSI escape sequence to a logical key name."""
+    import select as _select
+
+    r, _, _ = _select.select([sys.stdin], [], [], 0.05)
+    if not r:
+        return "escape"
+    b1 = sys.stdin.read(1)
+    if b1 != "[":
+        return "escape"
+    b2 = sys.stdin.read(1)
+    return {
+        "A": "up",
+        "B": "down",
+        "C": "right",
+        "D": "left",
+        "H": "home",
+        "F": "end",
+        "5": "pageup",
+        "6": "pagedown",
+    }.get(b2, "escape")
+
+
+def run(
+    *,
+    console: Console | None = None,
+    refresh_interval: float = 2.0,
+    once: bool = False,
+    load_request: Any = None,
+) -> int:
+    """Launch the explorer TUI over the current workspace.
+
+    Args:
+        console: Rich console to draw on (defaults to a fresh stderr console).
+        refresh_interval: Seconds between automatic data refreshes.
+        once: Render a single frame and return (used for non-interactive
+            environments and tests).
+        load_request: An optional initial load request, usually a ``scanpaths``
+            request from ``canary tui <path>``.  When given, the TUI discovers/loads
+            tests into the workspace without executing them.  The user can then mark
+            rows with ``x`` and press ``r`` to run selected tests.
+
+    Returns:
+        Process exit code (``0``).
+    """
+    console = console or Console(stderr=True)
+    model = ExplorerModel()
+    model.subscribe(queries.get_event_bus())
+
+    if load_request is not None:
+        loaded, message = model.load_request(load_request)
+        if message:
+            model.state.notice = message
+        if not loaded:
+            model.unsubscribe()
+            raise RuntimeError(message)
+
+    # A workspace may not exist yet when an initial discovery run was requested
+    # (the run creates it); tolerate that and let the run populate the model.
+    try:
+        model.refresh()
+    except Exception:  # noqa: BLE001 - no workspace yet; the initial run creates it
+        model.unsubscribe()
+        raise
+
+    interactive = (not once) and sys.stdin.isatty() and console.is_terminal
+    if not interactive:
+        # Non-interactive: run the requested tests (if any) to completion, then
+        # render a single frame of the resulting workspace.
+        console.print(model.frame())
+        model.unsubscribe()
+        return 0
+
+    # Interactive session: a live display that stays up across an in-place run
+    # (the run executes in a child process and streams events back), and pauses
+    # only to hand the terminal to an external editor.  An initial request is
+    # loaded on first entry to the live display.
+    while True:
+        action, payload = _live_session(console, model, refresh_interval)
+        request = None  # only launch the initial request once
+        if action == "edit":
+            # vim is full-screen: the live display and raw-mode reader are
+            # already torn down by _live_session before it returned.  Edit, then
+            # loop back to re-enter the display with fresh data.
+            changed = model.edit_file(payload)
+            model.refresh()
+            edited = model.state.selected
+            if changed and edited is not None:
+                # Offer an immediate rerun of the edited test by pre-marking it;
+                # the user still confirms with 'r'.  Keeping it explicit avoids
+                # surprising re-execution on every save.
+                model.state.marked_ids = {edited["id"]}
+            continue
+        # action == "quit"
+        model.unsubscribe()
+        return 0
+
+
+def _live_session(
+    console: Console, model: "ExplorerModel", refresh_interval: float
+) -> tuple[str, Any]:
+    """Run the live display until the user quits or requests an editor.
+
+    Returns ``(reason, payload)`` where *reason* is ``"quit"`` (payload
+    ``None``) or ``"edit"`` (payload = file path).  A rerun does **not** end the
+    session: it is launched in place (a child process, see
+    :meth:`ExplorerModel.begin_rerun`) and the loop keeps drawing as the child's
+    events arrive, until the run finishes.
+    """
+    keys: "queue.Queue[str]" = queue.Queue()
+    stop = threading.Event()
+    reader = threading.Thread(target=_read_keys, args=(stop, keys), daemon=True)
+    reader.start()
+
+    reason: str = "quit"
+    payload: Any = None
+    last_refresh = time.monotonic()
+    try:
+        with Live(model.frame(), console=console, screen=True, auto_refresh=False) as live:
+            while not model.state.quit:
+                dirty = False
+                # Size the scrollable region to the terminal so rows never spill
+                # off the bottom; recomputed each frame so it tracks resizes.
+                model.state.set_viewport_height(
+                    _body_height(
+                        console,
+                        model.state,
+                        model.summary(),
+                        model.counts(),
+                        model.progress.snapshot(),
+                    )
+                )
+                with contextlib.suppress(queue.Empty):
+                    while True:
+                        key = keys.get_nowait()
+                        # Enter/space in list mode is a request to view the log,
+                        # which is I/O -- the model performs it, not the state.
+                        if model.state.wants_log(key):
+                            model.open_selected_log()
+                            dirty = True
+                        elif model.state.handle_key(key):
+                            dirty = True
+                edit_path = model.state.consume_edit_request()
+                if edit_path is not None:
+                    reason, payload = "edit", edit_path
+                    break
+                if model.state.consume_cancel_request() and model.cancel_run():
+                    # The user asked to stop the in-flight run (q/escape while
+                    # running).  cancel_run terminates the child and refreshes
+                    # from the DB; keep the display up so the user stays in the
+                    # explorer with whatever completed before cancellation.
+                    dirty = True
+                rerun_ids = model.state.consume_rerun_request()
+                if rerun_ids and model.begin_rerun(rerun_ids):
+                    # In-place: the child streams events; keep drawing.  Clear
+                    # any marks so the "running" set is unambiguous.
+                    model.state.clear_marks()
+                    dirty = True
+                rebaseline_ids = model.state.consume_rebaseline_request()
+                if rebaseline_ids and model.begin_rebaseline(rebaseline_ids):
+                    # In-place background operation; keep drawing and clear marks
+                    # so the target set is no longer ambiguous.
+                    model.state.clear_marks()
+                    dirty = True
+                run_line = model.state.consume_run_input_request()
+                if run_line is not None:
+                    # A run started from scratch (the ':' prompt): classify the
+                    # typed path/dir/tag/spec id and launch it in place.  A
+                    # classification error surfaces as a transient footer notice.
+                    started, message = model.begin_run_from_input(run_line)
+                    if not started:
+                        model.state.notice = message
+                    dirty = True
+                # A finished in-place run refreshes rows and clears the flag.
+                if model.poll_run():
+                    dirty = True
+                # A finished in-place rebaseline refreshes rows and clears the flag.
+                if model.poll_rebaseline():
+                    dirty = True
+                now = time.monotonic()
+                # Refresh on a job event (live session progress) or the timer,
+                # whichever comes first; both re-read authoritative rows from the DB.
+                if model.consume_dirty() or now - last_refresh >= refresh_interval:
+                    model.refresh()
+                    # Follow a running job's log: re-read its output file so the
+                    # tail streams in while the run is in flight.
+                    if model.refresh_log():
+                        dirty = True
+                    last_refresh = now
+                    dirty = True
+                if dirty:
+                    live.update(model.frame(), refresh=True)
+                else:
+                    time.sleep(0.05)
+    finally:
+        stop.set()
+        reader.join(timeout=1.0)
+    return reason, payload
+
+
+def _body_height(console: Console, state: "ExplorerState", summary, counts, progress=None) -> int:
+    """Rows the scrollable region can show after the real chrome is accounted for.
+
+    The header/detail/footer wrap unpredictably (long workspace paths, narrow
+    terminals), so their heights are *measured* at the current width rather than
+    guessed; the scrollable region gets exactly the remaining lines.  This keeps
+    the table (or log) filling down toward the bottom of the pane and makes it
+    scroll once the cursor reaches the last visible row, instead of overrunning
+    the terminal.
+    """
+    used = measure_height(console, render_header(summary, counts))
+    if state.mode == "log":
+        # Log view: a panel (top border, title, bottom border = 3) plus a footer
+        # line under it; the panel body gets whatever remains.
+        available = console.size.height - used - 4
+        return max(1, available)
+    used += measure_height(console, render_footer(state))
+    # The run prompt, when open, occupies a panel above the table; subtract it.
+    if state.mode == "prompt":
+        used += measure_height(console, render_prompt(state))
+    # The live-run progress panel, when active, occupies real lines above the
+    # table; subtract them so the table still fits.
+    if progress is not None and progress.active:
+        used += measure_height(console, render_run_progress(progress))
+    if state.show_detail and state.selected is not None:
+        used += measure_height(console, render_detail(state.selected))
+    available = console.size.height - used - TABLE_FRAME_ROWS
+    return max(1, available)

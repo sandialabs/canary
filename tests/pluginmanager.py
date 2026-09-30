@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from _canary.pluginmanager import CanaryPluginManager
+from _canary.plugins.pluginmanager import CanaryPluginManager
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #
@@ -28,7 +28,7 @@ from _canary.pluginmanager import CanaryPluginManager
 @pytest.fixture()
 def pm():
     """A bare PluginManager without builtins (faster, no side-effects)."""
-    from _canary import hookspec
+    from _canary.plugins import hookspec
 
     mgr = CanaryPluginManager(hookspec.project_name)
     mgr.add_hookspecs(hookspec)

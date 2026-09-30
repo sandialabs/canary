@@ -15,7 +15,7 @@ from typing import Sequence
 from . import logging
 
 if TYPE_CHECKING:
-    from ..job import BaseJob
+    from ..core.job import BaseJob
 
 logger = logging.get_logger(__name__)
 

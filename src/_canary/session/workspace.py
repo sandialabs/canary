@@ -1,0 +1,1207 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+"""
+Workspace management for Canary test execution.
+
+This module defines the `Workspace` and `Session` classes which handle the lifecycle of test
+execution environments. A Workspace acts as the central repository for test specifications, results
+databases, and "views" (consolidated results). Sessions represent a specific execution run of a set
+of jobs.
+
+Key functionalities include:
+    - Creating and loading persistent workspaces on disk.
+    - Managing a "View" of the latest test results via symlinks, hardlinks, or copies.
+    - Coordinating the execution of `Job` objects within a `Session`.
+    - Interfacing with the `WorkspaceDatabase` to store and retrieve job specifications.
+    - Providing selection mechanisms to filter tests by tags, regex, or owners.
+
+Example:
+    >>> ws = Workspace.create(path=".")
+    >>> specs = ws.collect(scanpaths={"/src/tests": []})
+    >>> session = ws.run(specs=specs)
+"""
+
+import dataclasses
+import datetime
+import fnmatch
+import os
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+from typing import Any
+
+import yaml
+
+from .. import config
+from .. import select
+from .. import version
+from ..config import config as config_mod
+from ..core import jobspec
+from ..core import rules
+from ..core.job import Dependency
+from ..core.job import Job
+from ..core.job import Measurements
+from ..error import StopExecution
+from ..error import notests_exit_status
+from ..execution.runtest import Runner
+from ..execution.runtest import canary_runtests
+from ..execution.testexec import ExecutionSpace
+from ..generation.collect import Collector
+from ..generation.generate import Generator
+from ..generation.generator import AbstractTestGenerator
+from ..persistence.database import WorkspaceDatabase
+from ..util import json_helper as json
+from ..util import logging
+from ..util.filesystem import async_rmtree
+from ..util.filesystem import force_remove
+from ..util.filesystem import write_directory_tag
+from ..util.names import unique_random_name
+from ..view import ResultsView
+from ..view import ViewManager
+from ..view import ViewSettings
+
+if TYPE_CHECKING:
+    from ..core.jobspec import JobSpec
+    from ..execution.queue_executor import EventTypes
+    from ..persistence.database import ResultListener
+
+logger = logging.get_logger(__name__)
+
+workspace_path = ".canary"
+workspace_tag = "WORKSPACE.TAG"
+workspace_log = "canary.log"
+
+# ---------------------------------------------------------------------------
+# Explicit workspace override
+# ---------------------------------------------------------------------------
+# When ``--canary-dir`` is passed on the CLI (or ``CANARY_DIR`` is set in the
+# environment) this module-level variable is set once at startup by
+# ``set_workspace_dir()``.  All subsequent ``Workspace.load()`` calls use this
+# path directly instead of walking upward from cwd.
+# ---------------------------------------------------------------------------
+_override_workspace_dir: Path | None = None
+
+
+def set_workspace_dir(path: str | Path) -> None:
+    """Override the workspace root used by all ``Workspace.load()`` calls.
+
+    This is the canary equivalent of ``git --git-dir=<path>``.  Once set,
+    every ``Workspace.load()`` in the current process uses *path* as the
+    workspace root without performing upward-directory discovery.
+
+    Args:
+        path: Path to the ``.canary`` workspace directory (or any directory
+              that contains ``WORKSPACE.TAG``).
+
+    Raises:
+        NotAWorkspaceError: If *path* does not contain a valid workspace.
+    """
+    global _override_workspace_dir
+    p = Path(path).absolute()
+    if not Workspace.exists_at(p):
+        raise NotAWorkspaceError(f"not a Canary workspace: {p}")
+    _override_workspace_dir = p
+
+
+@dataclasses.dataclass
+class Session:
+    name: str
+    jobs: list[Job]
+    prefix: Path
+    measurements: Measurements = dataclasses.field(default_factory=Measurements)
+    job_ids: list[str] = dataclasses.field(default_factory=list)
+
+    returncode: int = dataclasses.field(init=False, default=-1)
+    started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
+    finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
+
+    def __post_init__(self) -> None:
+        """Validates session jobs.
+
+        Raises:
+            ValueError: If any job in the session is unexpectedly masked.
+        """
+        if not self.job_ids:
+            self.job_ids = [job.id for job in self.jobs]
+
+        for job in self.jobs:
+            if job.mask:
+                raise ValueError(f"{job}: unexpectedly masked test job")
+
+    @property
+    def lockfile(self) -> Path:
+        return self.prefix / "session.lock"
+
+    def add_measurement(self, name: str, value: Any) -> None:
+        """Add or update a session-level measurement.
+
+        This mirrors the user/plugin-facing job measurement API. Session hooks
+        can call this to record workflow, environment, scheduler, agent, or
+        reporting metadata.
+        """
+        self.measurements.add_measurement(name, value)
+
+    def to_lock_data(self) -> dict[str, Any]:
+        """Return the session.lock manifest.
+
+        This is intentionally a manifest, not a full Session serialization.
+        Jobs are represented by ID only; authoritative job state lives in each
+        testcase.lock and in the workspace database.
+        """
+        return {
+            "name": self.name,
+            "prefix": str(self.prefix),
+            "job_ids": [job.id for job in self.jobs],
+            "returncode": self.returncode,
+            "started_on": self.started_on.isoformat(),
+            "finished_on": self.finished_on.isoformat(),
+            "argv": list(sys.argv),
+            "config": config.snapshot(),
+            "measurements": dict(self.measurements.data),
+        }
+
+    def save(self) -> None:
+        """Write session.lock as plain JSON."""
+        self.prefix.mkdir(parents=True, exist_ok=True)
+        json.safesave(self.lockfile, self.to_lock_data(), indent=2)
+
+    @staticmethod
+    def load_lock_data(path: str | Path) -> dict[str, Any]:
+        path = Path(path)
+        lockfile = path / "session.lock" if path.is_dir() else path
+        return json.loads(lockfile.read_text())
+
+    @property
+    def cases(self) -> list["Job"]:
+        return self.jobs
+
+    def run(self, workspace: "Workspace") -> None:
+        self.prefix.mkdir(parents=True, exist_ok=True)
+        ready = [job for job in self.jobs if job.is_runnable()]
+        runner = Runner(ready, self.name, workspace=workspace)
+
+        if not ready:
+            exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
+            raise StopExecution("no jobs to run", exit_code=exit_code)
+
+        parent_session = workspace.canary_level == 0
+        starting_dir = os.getcwd()
+        try:
+            self.started_on = datetime.datetime.now()
+            if parent_session:
+                self.save()
+            os.chdir(str(self.prefix))
+            canary_runtests(runner=runner)
+        except Exception:
+            logger.exception("session run failed")
+            self.returncode = 1
+        finally:
+            self.finished_on = datetime.datetime.now()
+            os.chdir(starting_dir)
+            self.returncode = runner.returncode
+            if parent_session:
+                self.save()
+
+
+class Workspace:
+    version_info = (1, 0, 0)
+
+    def __init__(self, anchor: str | Path = Path.cwd()) -> None:
+        """Internal constructor. Use `Workspace.create()` or `Workspace.load()`."""
+        # Even through this function is not meant to be called, we declare types so that code
+        # editors know what to work with.
+        self.root: Path
+
+        # Storage for pointers to test sessions
+        self.refs_dir: Path
+
+        # Storage for test sessions
+        self.sessions_dir: Path
+
+        # Mutable data
+        self.cache_dir: Path
+
+        # Temporary data
+        self.tmp_dir: Path
+
+        # Text logs
+        self.logs_dir: Path
+
+        # Reports
+        self.reports_dir: Path
+
+        self.db: WorkspaceDatabase
+
+        self.canary_level: int
+
+        self.view_manager: ViewManager | None
+
+        raise RuntimeError("Use Workspace factory methods create and load")
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.root})"
+
+    def initialize_properties(self, *, anchor: Path) -> None:
+        """Sets up the internal directory structure paths based on the anchor.
+
+        Args:
+            anchor: The base directory where the .canary folder resides.
+        """
+        self.root = anchor / workspace_path
+        self.refs_dir = self.root / "refs"
+        self.sessions_dir = self.root / "sessions"
+        self.cache_dir = self.root / "cache"
+        self.tmp_dir = self.root / "tmp"
+        self.logs_dir = self.root / "logs"
+        self.reports_dir = self.root / "reports"
+        self.canary_level = 0
+        self.view_manager = None
+        if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
+            self.canary_level = int(var)
+        elif var := os.getenv("CANARY_LEVEL"):
+            self.canary_level = int(var)
+
+    @staticmethod
+    def exists_at(p: Path) -> bool:
+        return (p / workspace_tag).exists()
+
+    @staticmethod
+    def remove(start: str | Path = Path.cwd()) -> Path | None:
+        """Deletes a workspace and its associated view.
+
+        Args:
+            start: Path to start searching for the workspace.
+
+        Returns:
+            The path to the removed workspace, or None if no workspace was found.
+        """
+        relpath = Path(start).absolute().relative_to(Path.cwd())
+        pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {relpath}")
+        anchor = Workspace.find_anchor(start=start)
+        if anchor is None:
+            pm.done("no workspace found")
+            return None
+        workspace = anchor / workspace_path
+        view: Path | None = None
+        cache_dir = workspace / "cache"
+        file = workspace / "cache/view"
+        if file.exists():
+            relpath = Path(file.read_text().strip())
+            view = cache_dir / relpath
+        if view is None or not view.exists():
+            if Workspace.exists_at(workspace):
+                force_remove(workspace)
+            pm.done()
+            return workspace
+        elif Workspace.exists_at(workspace) and ResultsView.exists_at(view):
+            force_remove(view)
+            force_remove(workspace)
+            pm.done()
+            return workspace
+        elif Workspace.exists_at(workspace) and view.exists():
+            raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
+        else:
+            pm.done(f"error: unable to remove {workspace}")
+            return None
+
+    def rmf(self) -> None:
+        """Dangerously removes the workspace and view directories from disk."""
+        if view := self.latest_view():
+            async_rmtree(view.dir)
+        async_rmtree(self.root)
+
+    def latest_view(self) -> ResultsView | None:
+        file = self.cache_dir / "view"
+        if file.exists():
+            view = json.loads(file.read_text())
+            # root is not persisted (it would go stale if the workspace moves).
+            # Inject the correct live anchor here so callers always get a usable view.
+            object.__setattr__(view, "root", self.root.parent)
+            return view
+        return None
+
+    def register_view(self, view: ResultsView) -> None:
+        (self.cache_dir / "view").write_text(json.dumps(view, indent=2))
+
+    @staticmethod
+    def find_anchor(start: str | Path | None = None) -> Path | None:
+        """Searches upwards from start to find the directory containing the workspace.
+
+        Args:
+            start: The directory to start the search from.  Defaults to the
+                current working directory, resolved at call time.
+
+        Returns:
+            The anchor Path if found, otherwise None.
+        """
+        if start is None:
+            start = Path.cwd()
+        current_path = Path(start).absolute()
+        if current_path.stem == workspace_path:
+            return current_path.parent
+        while True:
+            if (current_path / workspace_path).exists():
+                return current_path
+            if current_path.parent == current_path:
+                break
+            current_path = current_path.parent
+        return None
+
+    @staticmethod
+    def find_workspace(start: str | Path | None = None) -> Path | None:
+        """Locates the .canary workspace directory.
+
+        Args:
+            start: The directory to start the search from.  Defaults to the
+                current working directory, resolved at call time.
+
+        Returns:
+            The path to the workspace directory if found, otherwise None.
+        """
+        if anchor := Workspace.find_anchor(start=start):
+            return anchor / workspace_path
+        return None
+
+    @classmethod
+    def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
+        """Creates a new Canary workspace at the specified path.
+
+        Args:
+            path: The anchor directory for the workspace.
+            force: If True, remove existing workspace at path before creating.
+
+        Returns:
+            The newly created Workspace instance.
+        """
+        path = Path(path).absolute()
+        if path.stem == workspace_path:
+            raise ValueError(f"Don't include {workspace_path} in workspace path")
+        if force:
+            cls.remove(start=path)
+        wspath = path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
+        logger.info(f"[bold]Initializing[/] empty canary workspace at {wspath}")
+        self: Workspace = object.__new__(cls)
+        self.initialize_properties(anchor=path)
+        if self.root.exists():
+            logger.error("workspace already exists")
+            raise WorkspaceExistsError(path)
+        self.root.mkdir(parents=True)
+        write_directory_tag(self.root / workspace_tag)
+
+        self.refs_dir.mkdir(parents=True)
+        self.sessions_dir.mkdir(parents=True)
+        self.cache_dir.mkdir(parents=True)
+        self.tmp_dir.mkdir(parents=True)
+        self.logs_dir.mkdir(parents=True)
+        self.reports_dir.mkdir(parents=True)
+        version = self.root / "VERSION"
+        version.write_text(".".join(str(_) for _ in self.version_info))
+
+        self.db = WorkspaceDatabase.create(self.root)
+        file = self.root / "config.yaml"
+        cfg: dict[str, Any] = {}
+        if mods := config.getoption("config_mods"):
+            cfg.update(mods)
+        # Persist plugin paths RELATIVE to the workspace anchor (the directory
+        # containing .canary) so the same tree resolves them regardless of the
+        # absolute mount point it is accessed through (e.g. /gpfs on the host
+        # vs /projects in a container).  See _canary.config.config.resolve_plugin.
+        if plugins := cfg.get("plugins"):
+            cfg["plugins"] = [
+                config_mod.normalize_plugin_for_storage(p, anchor=path) for p in plugins
+            ]
+        with open(file, "w") as fh:
+            yaml.dump({"canary": cfg}, fh, default_flow_style=False)
+
+        return self
+
+    @classmethod
+    def load(cls, start: str | Path | None = None) -> "Workspace":
+        """Loads an existing workspace from the filesystem.
+
+        Workspace resolution order:
+        1. ``_override_workspace_dir`` — set by ``set_workspace_dir()`` when
+           ``--canary-dir`` or ``CANARY_DIR`` is in effect.  Points directly at
+           the ``.canary`` directory; no upward search is performed.
+        2. ``start`` argument — walk upward from *start* to find the nearest
+           ancestor that contains a ``.canary`` subdirectory.
+        3. ``cwd`` — same upward walk starting from the current working directory.
+
+        Args:
+            start: The directory to start searching for the workspace.
+                   Ignored when an explicit override is active.
+
+        Returns:
+            A loaded Workspace instance.
+
+        Raises:
+            NotAWorkspaceError: If no workspace is found.
+        """
+        if _override_workspace_dir is not None:
+            logger.debug(f"Loading Canary workspace from override: {_override_workspace_dir}")
+            ws: Workspace = object.__new__(cls)
+            # The override points at the .canary dir itself; its parent is the anchor.
+            ws.initialize_properties(anchor=_override_workspace_dir.parent)
+            ws.db = WorkspaceDatabase.load(ws.root)
+            return ws
+        start = Path(start or Path.cwd())
+        logger.debug(f"Loading Canary workspace from {start}")
+        anchor = cls.find_anchor(start=start)
+        if anchor is None:
+            raise NotAWorkspaceError(
+                f"not a Canary workspace (or any of its parent directories): {workspace_path}"
+            )
+        self: Workspace = object.__new__(cls)
+        self.initialize_properties(anchor=anchor)
+        self.db = WorkspaceDatabase.load(self.root)
+        return self
+
+    def run(
+        self,
+        specs: list["JobSpec"],
+        session: str | None = None,
+        inplace: bool = False,
+        view_t: ViewSettings | None = None,
+        only: str = "not_pass",
+    ) -> Session:
+        """Executes a set of job specifications in a new or existing session.
+
+        Args:
+            specs: List of job specs to run.
+            session: Optional existing session name to reuse.
+            inplace: If True, run jobs in their existing result directories.
+            view_t: View settings.
+            only: Rerun strategy (e.g., 'not_pass').
+
+        Returns:
+            The resulting Session object.
+        """
+        reuse_session: bool = session is not None
+        is_parent = self.canary_level == 0
+        if session is not None and not (self.sessions_dir / session).exists():
+            raise ValueError(f"Session {session} not found in {self.sessions_dir}")
+        now = datetime.datetime.now()
+        session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
+        session_dir = self.sessions_dir / session_name
+        jobs = self.construct_jobs(specs, session_dir)
+        selector = select.RuntimeSelector(jobs, workspace=self.root)
+        selector.add_rule(rules.ResourceCapacityRule())
+        selector.add_rule(rules.RerunRule(strategy=only))
+        if timeout := config.get_timeout_option("session"):
+            if fac := config.get_timeout_option("multiplier"):
+                timeout *= fac
+            selector.add_rule(rules.SessionTimeoutRule(timeout=timeout))
+        selector.run()
+
+        # At this point, test jobs have been reconstructed and, if previous results exist,
+        # restored to their last ran state.  If inplace, we leave the test job as is.
+        # Otherwise, we swap out the old session for the new.
+        ready: list["Job"] = []
+        for job in jobs:
+            if job.mask:
+                continue
+            elif inplace:
+                if not job.workspace.dir.exists():
+                    raise RuntimeError(f"{job}: requested to run in place but results do not exist")
+            else:
+                # Force override session dir
+                job.workspace.root = session_dir
+                job.workspace.session = session_dir.name
+                if session is not None:
+                    assert job.workspace.session == session, f"{job}: unexpected workspace"
+            ready.append(job)
+
+        s = Session(name=session_dir.name, prefix=session_dir, jobs=ready)
+        if is_parent and not reuse_session:
+            config.pluginmanager.hook.canary_sessionstart(session=s)
+            s.save()
+
+        # We need to take great care to only write results into the database from the parent process
+        # On the parent process, create a results listener that looks for results in the spool.
+        # As test jobs finish, the testcase_done_callback is called and the results put into the
+        # spool.  When the listener detects the results, it will write them to the database.  This
+        # way, the database is only receiving results from a single writer.  Otherwise, results can
+        # be written from many writers originating from many different processes (eg, a canary
+        # instance launched inside a HPC scheduler)
+        self.db.close()
+        listener: "ResultListener | None" = None
+        if self.canary_level == 0:
+            listener = self.db.listener()
+            listener.start()
+        if view_t is None:
+            last = self.latest_view()
+            view_t = last.settings if last is not None else ViewSettings.default()
+        view_manager = ViewManager(workspace=self, session=s, settings=view_t)
+        self.view_manager = view_manager
+        try:
+            self.view_manager.start()
+            s.run(workspace=self)
+        finally:
+            self.view_manager = None
+            if listener is not None:
+                listener.stop_and_join()
+                # Persist the authoritative final in-memory state of every job.
+                # Running/pending rows may have been spooled mid-run; writing the
+                # final state here overwrites them (INSERT OR REPLACE) so the DB
+                # reflects the true outcome.  ``s.jobs`` are the same objects the
+                # runner executed, so this is a cheap, correct upsert.
+                if s.jobs:
+                    self.db.put_results(*s.jobs)
+                # Any rows still non-terminal (e.g. the run was killed and a job
+                # never reported a terminal state) are flipped to a failure so we
+                # never leave phantom "running" jobs persisted in the database.
+                try:
+                    self.db.reconcile_running_jobs(s.name)
+                except Exception:
+                    logger.exception("Failed to reconcile non-terminal jobs for session %s", s.name)
+            view = view_manager.finish()
+            if view is not None:
+                self.register_view(view)
+        if is_parent and not reuse_session:
+            config.pluginmanager.hook.canary_sessionfinish(session=s)
+            s.save()
+        if is_parent:
+            self.register_latest_session(s)
+        return s
+
+    def register_latest_session(self, session: Session) -> None:
+        """Update latest results, view, and refs with results from ``session``"""
+        # Write meta data file refs/latest -> ../sessions/{session.root}
+        file = self.refs_dir / "latest"
+        file.unlink(missing_ok=True)
+        link = os.path.relpath(str(session.prefix), str(file.parent))
+        file.write_text(str(link))
+
+    def rebuild_view(self, view_t: ViewSettings | None = None) -> None:
+        if view_t is None:
+            last = self.latest_view()
+            view_t = last.settings if last is not None else ViewSettings.default()
+        manager = ViewManager(workspace=self, session=None, settings=view_t)
+        view = manager.rebuild()
+        if view is not None:
+            self.register_view(view)
+
+    def relative_to_view(self, path: str | os.PathLike[str]) -> str | None:
+        """
+        If `path` is inside TestResults, return the relative path (which
+        may include glob characters). Otherwise return None.
+
+        Examples:
+          /ws/TestResults/foo/bar/test.py  -> foo/bar/test.py
+        """
+        if latest_view := self.latest_view():
+            p = Path(path).absolute()
+            if p.is_relative_to(latest_view.dir):
+                return str(p.relative_to(latest_view.dir))
+        return None
+
+    def is_session_dir(self, path: str | os.PathLike[str]) -> bool:
+        """Checks if a path is located within the workspace's sessions directory.
+
+        Args:
+            path: The path to check.
+
+        Returns:
+            True if the path is inside the sessions directory, False otherwise.
+        """
+        p = Path(path).absolute()
+        return p.is_relative_to(self.sessions_dir)
+
+    def tag_info(self, tag: str) -> dict[str, Any]:
+        """Return metadata and the (unmasked) specs for selection *tag*.
+
+        Args:
+            tag: The selection tag to describe.
+
+        Returns:
+            A dict with ``tag``, ``created_on`` (popped from metadata),
+            ``metadata`` (the remaining selection metadata), and ``specs`` (the
+            list of unmasked :class:`~_canary.core.jobspec.JobSpec` in the tag).
+
+        Raises:
+            NotASelection: If *tag* is not a selection.
+        """
+        specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
+        metadata = self.db.get_selection_metadata(tag)
+        created_on = metadata.pop("created_on", None)
+        return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
+
+    def info(self) -> dict[str, Any]:
+        """Returns summary information about the workspace.
+
+        Returns:
+            A dictionary containing root, session count, latest session, and version.
+        """
+        latest_session: str | None = None
+        if (self.refs_dir / "latest").exists():
+            link = (self.refs_dir / "latest").read_text().strip()
+            path = self.refs_dir / link
+            latest_session = path.stem
+        info = {
+            "root": str(self.root),
+            "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
+            "latest_session": latest_session,
+            "tags": self.db.tags,
+            "specs": self.db.load_specs(),
+            "version": version.__version__,
+            "workspace_version": (self.root / "VERSION").read_text().strip(),
+        }
+        return info
+
+    def collect(
+        self, scanpaths: dict[str, list[str]], on_options: list[str] | None = None
+    ) -> list["JobSpec"]:
+        """Find test job generators in scan_paths and add them to this workspace.
+
+        Args:
+            scanpaths: Dictionary of root paths to scan.
+            on_options: Options used to filter tests by option.
+
+        Returns:
+            A list of resolved JobSpecs.
+        """
+        collector = Collector()
+        collector.add_scanpaths(scanpaths)
+        generators = collector.run()
+        resolved = self.generate_jobspecs(generators=generators, on_options=on_options)
+        self.store_specs(resolved)
+        return resolved
+
+    def store_specs(self, specs: list["JobSpec"]) -> None:
+        """Caches the provided job specifications into the workspace database.
+
+        Args:
+            specs: The resolved job specifications to store.
+        """
+        pm = logger.progress_monitor("[bold]Caching[/] test specs")
+        self.db.put_specs(specs)
+        pm.done()
+
+    def select(
+        self,
+        tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Selects job specifications from the database using filters and saves as a tag.
+
+        Args:
+            tag: The name of the selection tag to create.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The list of selected JobSpecs.
+        """
+        resolved = self.db.load_specs()
+        specs = self.select_from_specs(
+            resolved,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        self.db.put_selection(
+            tag,
+            specs,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        return specs
+
+    def select_from_specs(
+        self,
+        resolved: list["JobSpec"],
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Filters a list of JobSpecs using the provided rules.
+
+        Args:
+            resolved: The list of specs to filter.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The filtered list of JobSpecs.
+        """
+        selector = select.Selector(resolved, self.root)
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        if prefixes:
+            selector.add_rule(rules.PrefixRule(prefixes=prefixes))
+        specs = selector.run()
+        return specs
+
+    def select_from_tag(
+        self,
+        tag: str,
+        source_tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Create selection *tag* by filtering the specs already in *source_tag*.
+
+        Unlike :meth:`select`, which draws from every spec in the workspace, this
+        starts from the specs stored under *source_tag* and applies the given
+        filters before saving the result as *tag*.
+
+        Args:
+            tag: The name of the selection tag to create.
+            source_tag: The existing tag whose specs are filtered.
+            prefixes: Filter by path prefixes.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameter expressions.
+            owners: Filter by owners.
+            regex: Filter by regular expression.
+
+        Returns:
+            The list of selected JobSpecs.
+        """
+        resolved = self.db.load_specs_by_tagname(source_tag)
+        specs = self.select_from_specs(
+            resolved,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        self.db.put_selection(
+            tag,
+            specs,
+            prefixes=prefixes,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        return specs
+
+    def create_selection(
+        self,
+        tag: str | None,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Collects generators from paths and creates a tagged selection.
+
+        Args:
+            tag: Tag name (randomly generated if None).
+            scanpaths: Paths to scan for generators.
+            on_options: Options to filter tests by.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameters.
+            owners: Filter by owners.
+            regex: Filter by regex.
+
+        Returns:
+            The created selection of JobSpecs.
+        """
+        resolved = self.collect(scanpaths, on_options=on_options)
+        specs = self.select_from_specs(
+            resolved,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        tag = tag or unique_random_name(self.db.tags)
+        self.db.put_selection(
+            tag,
+            specs,
+            scanpaths=scanpaths,
+            on_options=on_options,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+        logger.info(f"[bold]Created[/] selection '[bold]{tag}[/]'")
+        return specs
+
+    def apply_selection_rules(
+        self,
+        specs: list["JobSpec"],
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+        ids: list[str] | None = None,
+    ) -> None:
+        """Filters the provided specs in-place using selection rules.
+
+        Args:
+            specs: The list of specs to filter.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameters.
+            owners: Filter by owners.
+            regex: Filter by regex.
+            ids: Filter by specific IDs.
+        """
+        selector = select.Selector(specs, self.root)
+        if keyword_exprs:
+            selector.add_rule(rules.KeywordRule(keyword_exprs))
+        if parameter_expr:
+            selector.add_rule(rules.ParameterRule(parameter_expr))
+        if owners:
+            selector.add_rule(rules.OwnersRule(owners))
+        if regex:
+            selector.add_rule(rules.RegexRule(regex))
+        if ids:
+            selector.add_rule(rules.IDsRule(ids))
+        if selector.rules:
+            selector.run()
+
+    def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
+        """Loads jobs from the database, reconstructing them with their latest results.
+
+        Args:
+            ids: Optional list of specific job IDs to load.
+
+        Returns:
+            A list of Job objects in static dependency order.
+        """
+        from ..core.jobspec_graph import make_spec_graph
+
+        lookup: dict[str, Job] = {}
+        latest = self.db.get_results(ids, include_upstreams=True)
+        specs = self.db.load_specs(ids, include_upstreams=True)
+        graph = make_spec_graph(specs)
+        for spec in graph.topo_order():
+            if mine := latest.get(spec.id):
+                deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+                space = ExecutionSpace(
+                    root=self.sessions_dir / mine["session"],
+                    path=Path(mine["workspace"]),
+                    session=mine["session"],
+                )
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+                job.status = mine["status"]
+                job.timekeeper = mine["timekeeper"]
+                job.measurements = mine["measurements"]
+                job.state = mine["state"]
+                lookup[spec.id] = job
+        if ids:
+            return [job for job in lookup.values() if job.id in ids]
+        return list(lookup.values())
+
+    def select_from_view(self, path: Path) -> list["JobSpec"]:
+        """Identifies JobSpecs based on 'testcase.lock' files found in the view.
+
+        Args:
+            path: The directory path to scan for lock files.
+
+        Returns:
+            A list of corresponding JobSpecs.
+        """
+        ids: list[str] = []
+        for file in path.rglob("*/testcase.lock"):
+            job = json.loads(file.read_text())
+            ids.append(job.spec.id)
+        resolved = self.db.load_specs(ids=ids)
+        return resolved
+
+    def remove_tag(self, tag: str) -> bool:
+        """Deletes a selection tag from the database.
+
+        Args:
+            tag: The tag name to remove.
+
+        Returns:
+            True if the tag was removed, False if it didn't exist.
+        """
+        if not self.db.is_selection(tag):
+            logger.error(f"{tag!r} is not a tag")
+            return False
+        self.db.delete_selection(tag)
+        return True
+
+    def is_tag(self, tag: str) -> bool:
+        """Checks if a given string is a valid selection tag.
+
+        Args:
+            tag: The string to check.
+
+        Returns:
+            True if it is a selection tag, False otherwise.
+        """
+        return self.db.is_selection(tag)
+
+    def generate_jobspecs(
+        self, generators: list["AbstractTestGenerator"], on_options: list[str] | None = None
+    ) -> list["JobSpec"]:
+        """Generate resolved test specs.
+
+        Args:
+            generators: List of test generators.
+            on_options: Used to filter tests by option.
+
+        Returns:
+            A list of resolved JobSpecs.
+        """
+        on_options = on_options or []
+        generator = Generator(generators, workspace=self.root, on_options=on_options or [])
+        resolved = generator.run()
+        return resolved
+
+    def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
+        """Creates Job objects from JobSpecs, attempting to link latest results.
+
+        Args:
+            specs: The specifications to turn into jobs.
+            session: The directory for the current session.
+
+        Returns:
+            A list of constructed Job objects.
+        """
+        from ..core.jobspec_graph import make_spec_graph
+
+        lookup: dict[str, Job] = {}
+        jobs: list[Job] = []
+        latest = self.db.get_results([spec.id for spec in specs])
+        graph = make_spec_graph(specs)
+        for spec in graph.topo_order():
+            deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
+            job: Job
+            if spec.id in latest:
+                # This job won't run, but it may be needed by dependents
+                mine = latest[spec.id]
+                space = ExecutionSpace(
+                    root=self.sessions_dir / mine["session"],
+                    path=Path(mine["workspace"]),
+                    session=mine["session"],
+                )
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+                job.status = mine["status"]
+                job.state = mine["state"]
+                job.timekeeper = mine["timekeeper"]
+                job.measurements = mine["measurements"]
+            else:
+                space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
+                job = Job(spec=spec, workspace=space, dependencies=deps)
+            lookup[spec.id] = job
+            jobs.append(job)
+        return jobs
+
+    def get_selection(self, tag: str | None) -> list["JobSpec"]:
+        """Retrieves a list of JobSpecs associated with a tag.
+
+        Args:
+            tag: The tag name, or None/:all: for all specs.
+
+        Returns:
+            A list of JobSpecs.
+        """
+        if tag is None or tag == ":all:":
+            return self.db.load_specs()
+        return self.db.load_specs_by_tagname(tag)
+
+    def gc(self, dryrun: bool = False) -> None:
+        """Garbage collects old result directories, keeping only the latest per job.
+
+        Args:
+            dryrun: If True, only log what would be removed without actually deleting.
+        """
+        raise NotImplementedError
+
+        def mtime(path: Path):
+            return path.stat().st_mtime
+
+        logger.info(f"Garbage collecting {self.root}")
+        latest: dict[str, Job] = {}
+        view: dict[str, tuple[str, str]] = {}
+        to_remove: list[Job] = []
+        for session in self.sessions():
+            for job in session.jobs:
+                if job.id not in latest:
+                    latest[job.id] = job
+                elif mtime(latest[job.id].workspace.dir) > mtime(job.workspace.dir):
+                    to_remove.append(latest[job.id])
+                    latest[job.id] = job
+                else:
+                    continue
+                ws_dir = latest[job.id].workspace.dir
+                relpath = ws_dir.relative_to(session.work_dir)
+                view[job.id] = (str(session.work_dir), str(relpath))
+        try:
+            for job in to_remove:
+                logger.info(f"gc: removing {job}::{job.workspace.dir}")
+                if not dryrun:
+                    job.workspace.remove()
+        finally:
+            logger.info(f"Garbage collected {len(to_remove)} test jobs")
+            if not dryrun:
+                view_entries: dict[Path, list[Path]] = {}
+                for root, path in view.values():
+                    view_entries.setdefault(Path(root), []).append(Path(path))
+                self.update_view(view_entries)
+
+    def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
+        """Locates a Job or JobSpec in the workspace.
+
+        Args:
+            job: Identifier to find a Job.
+            spec: Identifier to find a JobSpec.
+
+        Returns:
+            The found Job or JobSpec.
+        """
+        assert not (job and spec)
+        if job is not None:
+            return self.find_job(job)
+        if spec is not None:
+            return self.find_jobspec(spec)
+
+    def find_job(self, root: str) -> Job:
+        """Locates a Job by ID or matching pattern.
+
+        Args:
+            root: The ID or pattern to match.
+
+        Returns:
+            The matching Job object.
+
+        Raises:
+            ValueError: If no matching job is found.
+        """
+        id = self.db.resolve_spec_id(root)
+        if id is not None:
+            try:
+                return self.load_jobs([id])[0]
+            except IndexError:
+                raise ValueError(f"{id}: no matching test job found in {self.root}")
+        # Do the full (slow) lookup
+        candidates: list[Job] = []
+        jobs = self.load_jobs()
+        for job in jobs:
+            if job.spec.matches(root):
+                return job
+            elif job.spec.matches(root, fuzzy=True):
+                candidates.append(job)
+        if candidates:
+            return candidates[0]
+        raise ValueError(f"{root}: no matching test job found in {self.root}")
+
+    def find_jobspec(self, root: str) -> "JobSpec":
+        """Locates a JobSpec by ID or matching pattern.
+
+        Args:
+            root: The ID or pattern to match.
+
+        Returns:
+            The matching JobSpec object.
+
+        Raises:
+            ValueError: If no matching spec is found.
+        """
+        id = self.db.resolve_spec_id(root)
+        if id is not None:
+            try:
+                return self.db.load_specs([id])[0]
+            except IndexError:
+                raise ValueError(f"{id}: no matching spec found in {self.root}")
+        # Do the full (slow) lookup
+        specs = self.db.load_specs()
+        for spec in specs:
+            if spec.matches(root):
+                return spec
+        raise ValueError(f"{root}: no matching spec found in {self.root}")
+
+    def find_specids(self, ids: list[str]) -> list[str | None]:
+        """Resolves a list of potentially partial IDs or names to full spec IDs.
+
+        Args:
+            ids: List of strings to resolve.
+
+        Returns:
+            A list of resolved spec IDs, or None if not found.
+        """
+        specs = self.db.load_specs()
+        found: list[str | None] = []
+        for id in ids:
+            if id.startswith(jobspec.select_sygil):
+                id = id[1:]
+            for spec in specs:
+                if spec.id.startswith(id):
+                    found.append(spec.id)
+                    break
+                elif id in (spec.name, spec.display_name(), spec.display_name(resolve=True)):
+                    found.append(spec.id)
+                    break
+                elif fnmatch.fnmatch(id, spec.name):
+                    found.append(spec.id)
+                    break
+            else:
+                found.append(None)
+        return found
+
+    def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
+        """Callback to queue job results for database persistence.
+
+        Results are spooled to the database not only when a job finishes but
+        also when it is submitted or starts running, so that ``canary status``
+        (which reads the results database) reflects in-progress jobs mid-run.
+        The database uses ``INSERT OR REPLACE`` keyed on ``(spec_id, session)``,
+        so each transition simply overwrites the previous row for that job.
+
+        Args:
+            event: The event type.
+            *args: Event arguments, expected to contain the job's execution slot.
+        """
+        if event not in ("job_submitted", "job_started", "job_finished"):
+            return
+        job = args[0].job
+        self.db.queue.put(job)
+        if self.view_manager is not None:
+            try:
+                self.view_manager.sync(job)
+            except Exception:
+                logger.exception(f"Failed to update live view for job {job.id}")
+
+
+class WorkspaceExistsError(Exception):
+    """Raised when attempting to create a workspace in a directory that already exists."""
+
+    pass
+
+
+class NotAWorkspaceError(Exception):
+    """Raised when a directory is not recognized as a Canary workspace."""
+
+    pass
+
+
+class SpecNotFoundError(Exception):
+    """Raised when a requested JobSpec cannot be located in the workspace."""
+
+    pass

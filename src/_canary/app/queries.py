@@ -1,0 +1,196 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+"""Application read-model queries for interfaces (TUI/GUI/CLI).
+
+These functions project the workspace's persisted result records into plain,
+render-ready dictionaries (:data:`JobView`) so that an interface never has to
+touch the database, reconstruct domain objects, or know Canary's internal
+types.  This keeps the business logic in the application layer and the
+interfaces as thin adapters (see the redesign's interface architecture: CLI,
+TUI, GUI, and REST all sit on the same ``canary.app`` surface).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+from typing import TypedDict
+
+from .facade import get_event_bus
+from .facade import get_job_log
+from .facade import get_result_history
+from .facade import get_results
+from .facade import get_specs
+from .facade import get_workspace_info
+
+__all__ = [
+    "JobView",
+    "WorkspaceSummary",
+    "get_event_bus",
+    "job_history",
+    "job_log",
+    "list_jobs",
+    "status_counts",
+    "workspace_summary",
+]
+
+
+class JobView(TypedDict):
+    """A flat, render-ready projection of a job's latest result.
+
+    Every value is a primitive (``str``/``float``/``int``) so interfaces can
+    display it directly without importing any ``_canary`` type.
+    """
+
+    id: str
+    short_id: str
+    name: str
+    fullname: str
+    file_path: str
+    """Absolute path to the test's source file (``file_root/file_path``).
+
+    Stored split in the DB (a scan root plus a path relative to it), but joined
+    here so interfaces get a path they can open or display directly, independent
+    of the process's current working directory.
+    """
+    phase: str
+    status: str
+    status_label: str
+    status_markup: str
+    status_glyph: str
+    category: str
+    outcome: str
+    reason: str
+    duration: float
+    session: str
+
+
+def _spec_view(spec: Any) -> JobView:
+    """Convert a loaded-but-unrun JobSpec into a renderable JobView."""
+    return JobView(
+        id=spec.id,
+        short_id=spec.id[:8],
+        name=spec.name,
+        fullname=spec.fullname,
+        file_path=str(spec.file),
+        phase="",
+        status="NOTRUN",
+        status_label="NOTRUN",
+        status_markup="[dim]NOTRUN[/]",
+        status_glyph="○",
+        category="NOTRUN",
+        outcome="",
+        reason="not run yet",
+        duration=0.0,
+        session="",
+    )
+
+
+def _job_view(result: dict[str, Any]) -> JobView:
+    """Convert one ``get_results`` record into a :class:`JobView`."""
+    status = result["status"]
+    state = result["state"]
+    timekeeper = result["timekeeper"]
+    try:
+        duration = float(timekeeper.total())
+    except Exception:  # noqa: BLE001 - timing is advisory; never break the view
+        duration = 0.0
+    if duration < 0:
+        duration = 0.0
+    category = getattr(status.category, "value", "") or ""
+    outcome = getattr(getattr(status, "outcome", None), "name", "") or ""
+    spec_id = result["id"]
+    # ``file_path`` is stored relative to ``file_root``; join them so the view
+    # carries an absolute path openable regardless of the caller's CWD.
+    file_root = result.get("file_root") or ""
+    rel_path = result.get("file_path") or ""
+    abs_path = str(Path(file_root) / rel_path) if file_root else str(rel_path)
+    return JobView(
+        id=spec_id,
+        short_id=spec_id[:8],
+        name=result["spec_name"],
+        fullname=result["spec_fullname"],
+        file_path=abs_path,
+        phase=state.phase.name,
+        status=category,
+        status_label=status.display_name(),
+        status_markup=status.display_name(style="rich"),
+        status_glyph=status.glyph(),
+        category=category,
+        outcome=outcome,
+        reason=status.reason or "",
+        duration=duration,
+        session=str(result["session"]),
+    )
+
+
+def job_history(spec_id: str) -> list[JobView]:
+    """Return every historical result for *spec_id* as :class:`JobView`, oldest first."""
+    return [_job_view(r) for r in get_result_history(spec_id)]
+
+
+def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> list[JobView]:
+    """Return renderable rows for loaded specs in the current workspace.
+
+    Specs that have a latest result are projected from that result. Specs that
+    have been loaded/discovered but never run are still returned as NOTRUN rows
+    so interfaces can select and launch them.
+    """
+    specs = get_specs(ids, include_upstreams=include_upstreams)
+    results = get_results(ids, include_upstreams=include_upstreams)
+
+    views: list[JobView] = []
+    for spec in specs:
+        result = results.get(spec.id)
+        if result is not None:
+            views.append(_job_view(result))
+        else:
+            views.append(_spec_view(spec))
+
+    views.sort(key=lambda v: (v["name"], v["short_id"]))
+    return views
+
+
+def job_log(spec_id: str, *, stream: str = "stdout") -> str:
+    """Return a job's captured *stream* output as text (empty if none).
+
+    A thin pass-through to the application facade so interfaces read job output
+    through the same ``canary.app`` surface as everything else, never touching
+    the workspace layout directly.
+    """
+    return get_job_log(spec_id, stream=stream)
+
+
+class WorkspaceSummary(TypedDict):
+    """A render-ready summary of the current workspace."""
+
+    root: str
+    session_count: int
+    latest_session: str
+    spec_count: int
+    tags: list[str]
+    version: str
+
+
+def workspace_summary() -> WorkspaceSummary:
+    """Return a render-ready :class:`WorkspaceSummary` for the current workspace."""
+    info = get_workspace_info()
+    return WorkspaceSummary(
+        root=str(info.get("root", "")),
+        session_count=int(info.get("session_count", 0)),
+        latest_session=str(info.get("latest_session") or ""),
+        spec_count=len(info.get("specs", []) or []),
+        tags=list(info.get("tags", []) or []),
+        version=str(info.get("version", "")),
+    )
+
+
+def status_counts(views: list[JobView]) -> dict[str, int]:
+    """Tally :class:`JobView` rows by status category (for a summary line)."""
+    counts: dict[str, int] = {}
+    for v in views:
+        key = v["status"] or "UNKNOWN"
+        counts[key] = counts.get(key, 0) + 1
+    return counts

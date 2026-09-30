@@ -11,11 +11,11 @@ import pytest
 
 import _canary.util.json_helper as json
 from _canary import config
+from _canary.app.pathspec import RequestBuilder
+from _canary.app.pathspec import RequestNode
+from _canary.app.pathspec import ScanPathsRequest
 from _canary.config.argparsing import make_argument_parser
 from _canary.config.config import Config
-from _canary.subcommands.run import RequestBuilder
-from _canary.subcommands.run import RequestNode
-from _canary.subcommands.run import ScanPathsRequest
 
 
 def assert_json_serializable(obj: Any) -> None:
@@ -80,7 +80,7 @@ def test_argparse_defaults_do_not_store_live_command_objects() -> None:
 
 def test_request_builder_json_helper_roundtrip():
     builder = RequestBuilder()
-    builder.require_kind("scanpaths", [], "scanpaths")
+    builder.require_kind("scanpaths", "scanpaths")
     builder.scanpaths["/tmp/tests"] = ["a.pyt", "b.pyt"]
 
     text = json.dumps(builder)
@@ -112,7 +112,7 @@ def test_run_cache_dir_config_settable():
 
 
 def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, monkeypatch):
-    from _canary.job import find_cache_dir
+    from _canary.core.job import find_cache_dir
 
     ws = tmp_path / "ws"
     ws.mkdir()

@@ -21,8 +21,8 @@ import argparse
 from pathlib import Path
 
 import canary
+from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
-from _canary.workspace import Workspace
 
 
 def write(path: Path, text: str) -> None:

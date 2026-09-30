@@ -15,12 +15,12 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from ..hookspec import hookimpl
-from ..job import JobState
-from ..status import Status as _Status
+from .. import app
+from ..core.job import JobState
+from ..core.status import Status as _Status
+from ..plugins.hookspec import hookimpl
 from ..util import glyphs
 from ..util import logging
-from ..workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -50,6 +50,7 @@ class Status(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser"):
         """Register ``--durations``, ``-o`` columns, ``-r`` report chars, ``--sort-by``, ``--json``, and ``--full-ids``."""
+        parser.add_argument("-i", "--interactive", action="store_true", help="Interactive status")
         parser.add_argument(
             "--durations",
             nargs="?",
@@ -136,11 +137,21 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Load workspace results and print the status table or JSON output, returning 0."""
+        from .. import tui
+        from ..error import StopExecution
+        from ..session.workspace import NotAWorkspaceError
+        from ..util.pager import page_rich
+
+        if getattr(args, "interactive", False):
+            try:
+                return tui.run(refresh_interval=2.0)
+            except NotAWorkspaceError:
+                raise StopExecution("canary status must be run inside a workspace", 1) from None
+
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
-        workspace = Workspace.load()
-        results = workspace.db.get_results()
+        results = app.get_results()
 
         if getattr(args, "output_json", False):
             self.print_json(results, args)
@@ -169,24 +180,22 @@ class Status(CanarySubcommand):
         # Inject the resolved column choice so get_status_table_from_rows picks it up.
         args.format_cols = cols
 
-        # Build outcome counts for the summary line.
-        summary_line = _build_summary_line(all_rows)
-
         console = Console()
 
         if total == 0:
             console.print("[dim]No results found in workspace.[/dim]")
             return 0
 
-        # Always print the summary line first.
-        console.print(summary_line)
-
+        summary_line = _build_summary_line(all_rows)
         if not detail_rows:
             # All jobs passed (or nothing matched the filter) — nothing more to print.
+            console.print(summary_line)
             return 0
 
-        # For large runs (non-all, non-small), print the analyst-friendly failure
-        # grouping summary before the raw table.
+        table = self.get_status_table_from_rows(detail_rows, args)
+        page_rich(console, table, table.row_count)
+        console.print(summary_line)
+
         show_failure_summary = (
             not show_all
             and total > _AUTO_EXPAND_THRESHOLD
@@ -195,12 +204,8 @@ class Status(CanarySubcommand):
         if show_failure_summary:
             non_pass = [r for r in all_rows if not r["status"].is_success()]
             if non_pass:
-                console.print(_build_failure_summary(non_pass))
+                console.print("\n" + _build_failure_summary(non_pass))
 
-        table = self.get_status_table_from_rows(detail_rows, args)
-        from ..util.pager import page_rich
-
-        page_rich(console, table, table.row_count)
         if args.durations:
             console.print(format_durations(results, args.durations))
         return 0
@@ -297,12 +302,11 @@ class Status(CanarySubcommand):
 
     def print_spec_status_history(self, ids: list[str], args: "argparse.Namespace") -> None:
         """Print the full history of results across sessions for each spec ID in *ids*."""
-        workspace = Workspace.load()
         table = Table(expand=False, box=box.SQUARE)
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for id in ids:
-            results = workspace.db.get_result_history(id)
+            results = app.get_result_history(id)
             for entry in results:
                 row: list[str] = []
                 row.append(entry["spec_name"])
@@ -334,7 +338,7 @@ def _build_summary_line(rows: list[dict]) -> str:
     Always non-empty. When everything passes the line is green; when there are
     failures it names each non-pass category.
     """
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     total = len(rows)
     counts: dict[str, int] = {}
@@ -443,7 +447,7 @@ def _group_failures(rows: list[dict]) -> list[tuple[str, str | None, list[dict]]
     is replaced with a human-readable "upstream dependency failed" message that
     names the upstream job when the reason string contains one.
     """
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     groups: dict[tuple[str, str | None], list[dict]] = {}
     for row in rows:
@@ -494,7 +498,7 @@ def _build_failure_summary(rows: list[dict]) -> str:
         }.get(outcome, "dim")
         outcome_label = f"[{outcome_color}]{outcome}[/{outcome_color}]"
         reason_str = f'  "[italic]{reason}[/italic]"' if reason else ""
-        lines.append(f"  {outcome_label}{reason_str}  ×{count}   {names}")
+        lines.append(f"  {outcome_label}{reason_str} ×{count} {names}")
 
     lines.append("")
     lines.append("  To view a job's output:  [bold]canary log[/bold] [dim]<ID>[/dim]")
@@ -551,7 +555,7 @@ def match_case_insensitive(s: str, choices: list[str]) -> str | None:
 
 def filter_by_status(rows: list[dict], chars: str | None) -> list[dict]:
     """Return the subset of *rows* whose status matches the report-character filter *chars*."""
-    from ..status import Outcome
+    from ..core.status import Outcome
 
     chars = chars or "dftnrs"
     if "A" in chars:

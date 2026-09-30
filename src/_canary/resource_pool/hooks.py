@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import cpu_count
 from ..util import logging
 from .rpool import Outcome
@@ -23,7 +23,7 @@ from .schemas import resource_pool_schema
 if TYPE_CHECKING:
     from ..config import Config as CanaryConfig
     from ..config.argparsing import Parser
-    from ..job import Job
+    from ..core.job import Job
     from .rpool import ResourcePool
 
 

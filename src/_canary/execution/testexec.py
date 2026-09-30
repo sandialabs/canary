@@ -1,0 +1,127 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import dataclasses
+import os
+import shutil
+from contextlib import contextmanager
+from pathlib import Path
+from typing import IO
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import Generator
+
+from ..util import logging
+from ..util.filesystem import force_remove
+
+if TYPE_CHECKING:
+    pass
+
+logger = logging.get_logger(__name__)
+
+key_type = tuple[str, ...] | str
+index_type = tuple[int, ...] | int
+
+
+@dataclasses.dataclass
+class ExecutionSpace:
+    root: Path
+    path: Path
+    session: str | None = None
+
+    def __str__(self) -> str:
+        return str(self.dir)
+
+    def __post_init__(self) -> None:
+        self.root = Path(self.root)
+        self.path = Path(self.path)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"root": self.root, "path": self.path, "session": self.session}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "ExecutionSpace":
+        return cls(**d)
+
+    @classmethod
+    def from_dict(cls, state: dict[str, Any]) -> "ExecutionSpace":
+        return cls(root=Path(state["root"]), path=Path(state["path"]), session=state["session"])
+
+    @property
+    def dir(self) -> Path:
+        return self.root / self.path
+
+    def create(self, exist_ok: bool = False) -> None:
+        self.dir.mkdir(parents=True, exist_ok=exist_ok)
+
+    def remove(self, missing_ok: bool = False) -> None:
+        if self.exists():
+            force_remove(self.dir)
+        elif not missing_ok:
+            raise FileNotFoundError(self.dir)
+
+    @contextmanager
+    def enter(self) -> Generator[None, None, None]:
+        current_cwd = Path.cwd()
+        try:
+            os.chdir(self.dir)
+            yield
+        finally:
+            os.chdir(current_cwd)
+
+    def exists(self) -> bool:
+        return self.dir.exists()
+
+    def touch(self, name: Path | str, exist_ok: bool = False) -> None:
+        (self.dir / name).touch(exist_ok=exist_ok)
+
+    def unlink(self, name: Path | str, missing_ok: bool = False) -> None:
+        (self.dir / name).unlink(missing_ok=missing_ok)
+
+    def copy(self, src: Path, dst: Path | str | None = None) -> None:
+        """Copy the file at ``src`` to this workspace with name ``dst``"""
+        if src.is_dir():
+            return self.copytree(src, dst)
+        dest: Path = Path(dst or src.name)
+        target: Path = self.dir / dest.name
+        target.unlink(missing_ok=True)
+        shutil.copy(src, target)
+
+    def copytree(self, src: Path, dst: Path | str | None = None) -> None:
+        """Copy the directory at ``src`` to this workspace with name ``dst``."""
+        dest: Path = Path(dst or src.name)
+        target: Path = self.dir / dest.name
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink(missing_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, target)
+
+    def link(self, src: Path, dst: Path | str | None = None) -> None:
+        """Symlink the file at ``src`` to this workspace with name ``dst``"""
+        dest: Path = Path(dst or src.name)
+        target: Path = self.dir / dest.name
+        target.unlink(missing_ok=True)
+        target.symlink_to(src)
+
+    def joinpath(self, *parts: Path | str) -> Path:
+        base = self.dir.resolve()
+        p = base
+        for part in parts:
+            part = Path(part)
+            if part.is_absolute():
+                raise ValueError(f"absolute paths not allowed: {part}")
+            p = p / part
+        resolved = p.resolve()
+        if resolved != base and base not in resolved.parents:
+            raise ValueError(f"path escapes base directory: {resolved}")
+        return resolved
+
+    @contextmanager
+    def openfile(self, name: Path | str, mode: str = "r") -> Generator[IO[Any], None, None]:
+        path = self.joinpath(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open(mode) as fh:
+            yield fh

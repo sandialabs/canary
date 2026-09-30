@@ -1,0 +1,572 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import dataclasses
+import hashlib
+import itertools
+import re
+import sys
+import threading
+from functools import cached_property
+from functools import lru_cache
+from pathlib import Path
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import Literal
+from typing import MutableSequence
+from typing import TextIO
+
+from .. import config
+from ..util import cpu_count
+from ..util import logging
+from ..util.string import stringify
+
+if TYPE_CHECKING:
+    from .status import Status
+
+logger = logging.get_logger(__name__)
+select_sygil = "/"
+
+
+@dataclasses.dataclass
+class Asset:
+    src: Path
+    dst: str | None
+    action: Literal["copy", "link", "none"]
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"src": self.src, "dst": self.dst, "action": self.action}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Asset":
+        src = Path(d.pop("src"))
+        return cls(src=src, **d)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BaselineCopyAction:
+    src: Path
+    dst: str
+    kind: Literal["copy"] = dataclasses.field(default="copy", init=False)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"src": self.src, "dst": self.dst}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "BaselineCopyAction":
+        return cls(src=Path(d["src"]), dst=d["dst"])
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BaselineScriptAction:
+    script: list[str] = dataclasses.field(default_factory=list)
+    kind: Literal["script"] = dataclasses.field(default="script", init=False)
+
+    def __post_init__(self) -> None:
+        if not self.script:
+            raise TypeError("BaselineScriptAction requires non-empty script")
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"script": self.script}
+
+    @classmethod
+    def __deserialize__(cls, d: dict[str, Any]) -> "BaselineScriptAction":
+        return cls(script=list(d["script"]))
+
+
+BaselineAction = BaselineCopyAction | BaselineScriptAction
+
+
+@dataclasses.dataclass(frozen=True)
+class Artifact:
+    pattern: str
+    when: Literal["always", "never", "on_failure", "on_success"] = "always"
+
+    def __eq__(self, o):
+        if isinstance(o, Artifact):
+            return (o.pattern, o.when) == (self.pattern, self.when)
+        return NotImplemented
+
+    def active(self, status: "Status") -> bool:
+        from .status import Category
+
+        if self.when == "never":
+            return False
+        elif self.when == "always":
+            return True
+        elif self.when == "on_failure":
+            return status.category is Category.FAIL
+        elif self.when == "on_success":
+            return status.category is Category.PASS
+        return True
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"pattern": self.pattern, "when": self.when}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Artifact":
+        return cls(**d)
+
+
+@dataclasses.dataclass(frozen=True)
+class Mask:
+    value: bool
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.value and not self.reason:
+            raise TypeError("Mask(True) requires a reason")
+        elif not self.value and self.reason:
+            raise TypeError(f"Mask(False) not compatible with reason {self.reason!r}")
+
+    def __bool__(self) -> bool:
+        return self.value
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {"value": self.value, "reason": self.reason}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "Mask":
+        return cls(**d)
+
+    @classmethod
+    def masked(cls, reason: str) -> "Mask":
+        return cls(True, reason)
+
+    @classmethod
+    def unmasked(cls) -> "Mask":
+        return cls(False, None)
+
+
+@dataclasses.dataclass(slots=True)
+class SpecDependency:
+    spec: "JobSpec"
+    when: str = "on_success"
+
+    def __serialize__(self) -> dict[str, Any]:
+        # Store only the spec ID — the full spec object is stored separately in the
+        # specs table and its edges in spec_deps.  _reconstruct_specs re-wires the
+        # pointer after loading, so the full blob is never needed here.
+        return {"spec": {"id": self.spec.id}, "when": self.when}
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "SpecDependency":
+        return cls(**d)
+
+
+NULL_PATH = Path("\0")
+
+
+@dataclasses.dataclass
+class JobSpec:
+    # The search path containing the generated spec; typically the some version-control root
+    file_root: Path
+    # The path to the test file relative to `file_root`
+    file_path: Path
+    id: str = ""
+    family: str = ""
+    stdout: str = "canary-out.txt"
+    stderr: str | None = None  # combine stdout/stderr by default
+    dependencies: MutableSequence[SpecDependency] = dataclasses.field(default_factory=list)
+    parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
+    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    keywords: list[str] = dataclasses.field(default_factory=list)
+    assets: list[Asset] = dataclasses.field(default_factory=list)
+    baseline: list[BaselineAction] = dataclasses.field(default_factory=list)
+    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
+    exclusive: bool = False
+    timeout: float = -1.0
+    xstatus: int = 0
+    preload: str | None = None
+    modules: list[str] | None = None
+    rcfiles: list[str] | None = None
+    owners: list[str] | None = None
+    environment: dict[str, str | None] = dataclasses.field(default_factory=dict)
+    meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
+    command: list[str] = dataclasses.field(default_factory=list)
+    mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
+
+    exec_path: Path = dataclasses.field(default=NULL_PATH)
+    view_path: Path = dataclasses.field(default=NULL_PATH)
+
+    def __post_init__(self) -> None:
+        self.family = self.family or self.file.stem
+        if not self.id:
+            kwds = self.parameters | self.meta_parameters
+            kwds.pop("runtime", None)
+            self.id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
+        else:
+            validate_spec_id(self.id)
+        if self.exec_path == NULL_PATH:
+            self.exec_path = self.file_path.parent / self.name
+        self.exec_path = Path(self.exec_path)
+        if self.view_path == NULL_PATH:
+            self.view_path = self.file_path.parent / self.name
+        self.view_path = Path(self.view_path)
+        if self.timeout < 0:
+            self.timeout = default_timeout(self.keywords)
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
+    def __serialize__(self) -> dict[str, Any]:
+        return {
+            "file_root": self.file_root,
+            "file_path": self.file_path,
+            "id": self.id,
+            "family": self.family,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "dependencies": list(self.dependencies),
+            "parameters": self.parameters,
+            "attributes": self.attributes,
+            "keywords": self.keywords,
+            "assets": self.assets,
+            "baseline": self.baseline,
+            "artifacts": self.artifacts,
+            "exclusive": self.exclusive,
+            "timeout": self.timeout,
+            "xstatus": self.xstatus,
+            "preload": self.preload,
+            "modules": self.modules,
+            "rcfiles": self.rcfiles,
+            "owners": self.owners,
+            "environment": self.environment,
+            "meta_parameters": self.meta_parameters,
+            "command": self.command,
+            "mask": self.mask,
+            "exec_path": self.exec_path,
+            "view_path": self.view_path,
+        }
+
+    @classmethod
+    def __deserialize__(cls, d: dict) -> "JobSpec":
+        root = Path(d.pop("file_root"))
+        path = Path(d.pop("file_path"))
+        exec_path = Path(d.pop("exec_path"))
+        view_path = Path(d.pop("view_path"))
+        return cls(file_root=root, file_path=path, exec_path=exec_path, view_path=view_path, **d)
+
+    def compute_resource_parameters(self) -> dict[str, int]:
+        resource_types: set[str] = set(config.resource_manager.types())
+        p = self.parameters | self.meta_parameters
+        rparameters: dict[str, int] = {}
+        for key in p.keys() & (resource_types | {"nodes"}):
+            value = p[key]
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+            rparameters[key] = value
+        nodes = rparameters.get("nodes")
+        if nodes is None:
+            nodes = 1
+            for rtype, count in rparameters.items():
+                if rtype == "nodes":
+                    continue
+                if count <= 0:
+                    continue
+                slots_per_node = config.resource_manager.slots_per_node(rtype)
+                # CPU fallback for normal local cases.
+                if slots_per_node <= 0 and rtype in ("cpu", "cpus"):
+                    slots_per_node = cpu_count()
+                # If the resource is unknown/unavailable, leave node count alone.
+                # ResourceCapacityRule / ResourcePool.accommodates() will report
+                # the actual insufficiency later.
+                if slots_per_node <= 0:
+                    continue
+                nodes = max(nodes, ceil_div(count, slots_per_node))
+        rparameters["nodes"] = nodes
+        # Preserve default CPU/GPU resource parameters.
+        rparameters.setdefault("cpus", 1)
+        rparameters.setdefault("gpus", 0)
+        return rparameters
+
+    def print(
+        self,
+        level: int = -1,
+        file: TextIO = sys.stdout,
+        indent: str = "",
+        style: str = "none",
+        end: bool = False,
+    ):
+        """Given a list of test specs, print a visual tree structure"""
+        space = "    "
+        branch = "│   "
+        tee = "├── "
+        last = "└── "
+
+        def inner(spec: "JobSpec", prefix: str = "", level=-1):
+            if not level:
+                return  # 0, stop iterating
+            dependencies = spec.dependencies
+            pointers = [tee] * (len(dependencies) - 1) + [last]
+            for pointer, dependency in zip(pointers, dependencies):
+                if dependency.spec.dependencies:
+                    yield prefix + pointer + dependency.spec.display_name(style=style)
+                    extension = branch if pointer == tee else space
+                    yield from inner(dependency.spec, prefix=prefix + extension, level=level - 1)
+                else:
+                    yield prefix + pointer + dependency.spec.display_name(style=style)
+
+        file.write(f"{tee if not end else last}{indent}{self.display_name(style=style)}\n")
+        iterator = inner(self, level=level)
+        for line in iterator:
+            file.write(f"{branch}{indent}{line}\n")
+
+    def add_artifact(
+        self, pattern: str, when: Literal["always", "never", "on_failure", "on_success"] = "always"
+    ) -> None:
+        a = Artifact(pattern=pattern, when=when)
+        if a not in self.artifacts:
+            self.artifacts.append(a)
+
+    @cached_property
+    def rparameters(self) -> dict[str, int]:
+        return self.compute_resource_parameters()
+
+    @cached_property
+    def file(self) -> Path:
+        """Path to the test specification file"""
+        return self.file_root / self.file_path
+
+    @property
+    def mtime(self) -> float:
+        return self.file.stat().st_mtime
+
+    @cached_property
+    def name(self) -> str:
+        name = self.family
+        if p := self.s_params(sep="."):
+            name = f"{name}.{p}"
+        return name
+
+    @cached_property
+    def fullname(self) -> str:
+        return str(self.file_path.parent / self.name)
+
+    @lru_cache
+    def display_name(
+        self, style: Literal["none", "rich", "legacy-color"] = "none", resolve: bool = False
+    ) -> str:
+        if style == "none":
+            return self.name if not resolve else self.fullname
+        elif not self.parameters:
+            return self.family
+
+        colors = ["blue", "magenta", "green", "yellow", "cyan", "red"]
+        color_cycler: itertools.cycle
+        if style == "legacy-color":
+            color_cycler = itertools.cycle([_[0] for _ in colors])
+        else:
+            color_cycler = itertools.cycle(colors)
+        parts = []
+        params = [(p, stringify(self.parameters[p])) for p in sorted(self.parameters)]
+        for key, value in params:
+            value = stringify(self.parameters[key])
+            color = next(color_cycler)
+            if style == "legacy-color":
+                part = f"@{color}{{{key}={value}}}"
+            else:
+                part = f"[{color}]{key}={value}[/{color}]"
+            parts.append(part)
+        name = f"{self.family}.{'.'.join(parts)}"
+        if resolve:
+            name = f"{self.file_path.parent}/{name}"
+        return name
+
+    def s_params(self, sep: str = ",") -> str | None:
+        if self.parameters:
+            parts = [f"{p}={stringify(self.parameters[p])}" for p in sorted(self.parameters.keys())]
+            return sep.join(parts)
+        return None
+
+    @property
+    def implicit_keywords(self) -> set[str]:
+        """Implicit keywords, used for some filtering operations"""
+        return {self.name, self.family, str(self.file)}
+
+    def set_attribute(self, name: str, value: Any) -> None:
+        self.attributes[name] = value
+
+    def set_attributes(self, **kwds: Any) -> None:
+        self.attributes.update(**kwds)
+
+    def matches(self, arg: str, *, fuzzy: bool = False) -> bool:
+        s = arg.strip()
+        if not s:
+            return False
+
+        # Legacy: leading "/" indicates an ID prefix, but "/" is also a Unix root anchor.
+        # We therefore:
+        #   1) always attempt ID-prefix matching (with "/" stripped if present)
+        #   2) only treat paths as matching if they resolve to *this* spec's file
+        id_query = s[1:] if s.startswith(select_sygil) else s
+        if id_query and self.id.startswith(id_query):
+            return True
+
+        # If arg looks like a path, allow matching by file identity
+        # - absolute paths (Unix "/" anchor included)
+        # - any string containing a path separator
+        looks_like_path = (Path(s).is_absolute()) or ("/" in s) or ("\\" in s)
+        if looks_like_path:
+            p = Path(s)
+            try:
+                if p.exists() and p.resolve() == self.file.resolve():
+                    return True
+            except OSError:
+                pass
+            try:
+                pr = self.file_root / p
+                if pr.exists() and pr.resolve() == self.file.resolve():
+                    return True
+            except OSError:
+                pass
+
+        if s == self.fullname:
+            return True
+
+        if not fuzzy:
+            return False
+
+        if s == self.name:
+            return True
+
+        if s == self.family:
+            return True
+
+        # Suffix match on the spec file path (normalize separators for cross-platform use)
+        s_posix = s.replace("\\", "/")
+        if "/" in s_posix and self.file.as_posix().endswith(s_posix):
+            return True
+
+        return False
+
+
+class _GlobalSpecCache:
+    """Simple cache for storing re-used data feeding the spec ID"""
+
+    _key: dict[Path, Path] = {}
+    """Maps the input file path to a key index (absolute path)"""
+
+    _file_hash: dict[Path, bytes] = {}
+    _repo_root: dict[Path, bytes] = {}
+    _rel_repo: dict[Path, bytes] = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def _compute_repo_root(cls, path: Path) -> Path:
+        d = path.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists() or (d / ".canary-root").exists():
+                root = d
+                break
+            d = d.parent
+        else:
+            root = d
+        return root
+
+    @classmethod
+    def populate_cache(cls, path: Path) -> Path:
+        try:
+            return cls._key[path]
+        except KeyError:
+            pass
+
+        key = path.absolute()
+        h = hashlib.sha256()
+        h.update(key.read_bytes())
+        digest = h.digest()[:16]
+        root = cls._compute_repo_root(key)
+        rel = key.relative_to(root)
+
+        with cls._lock:
+            cls._repo_root[key] = str(root).encode()
+            cls._rel_repo[key] = str(rel).encode()
+            cls._file_hash[key] = digest.hex().encode()
+            return cls._key.setdefault(path, key)
+
+    @classmethod
+    def file_hash(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._file_hash[key]
+
+    @classmethod
+    def content_hash(cls, path: Path) -> str:
+        """Return the hex content hash of ``path``.
+
+        This is no longer part of the spec ID (see ``build_spec_id``) but is
+        exposed so callers can record it for staleness detection: a test whose
+        ID is unchanged but whose ``content_hash`` differs has been edited since
+        a cached result/runtime was recorded.
+        """
+        return cls.file_hash(path).decode()
+
+    @classmethod
+    def rel_repo(cls, path: Path) -> bytes:
+        key = cls.populate_cache(path)
+        return cls._rel_repo[key]
+
+
+def build_spec_id(*args: Any, **kwargs: Any) -> str:
+    # Hasher is used to build ID.
+    #
+    # The ID identifies a *logical* test: its family, its repo-relative location,
+    # and its parameter set.  It intentionally does NOT depend on the file's
+    # contents, so incidental edits (comments, formatting, tolerance tweaks) do
+    # not change a test's identity.  This keeps historical results and the
+    # per-job runtime cache associated with a test across such edits.  The file
+    # content hash is still available separately (see
+    # ``_GlobalSpecCache.content_hash``) for staleness detection.
+    float_fmt = "%.16e"
+    hasher = hashlib.sha256()
+    for arg in args:
+        if isinstance(arg, Path):
+            hasher.update(_GlobalSpecCache.rel_repo(arg))
+        else:
+            hasher.update(stringify(arg, float_fmt=float_fmt).encode())
+    for key in sorted(kwargs):
+        hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
+    return hasher.hexdigest()
+
+
+def default_timeout(keywords: list[str]) -> float:
+    if cli_timeouts := config.getoption("timeout"):
+        for keyword in keywords:
+            if t := cli_timeouts.get(keyword):
+                return float(t)
+        if t := cli_timeouts.get("*"):
+            return float(t)
+        elif t := cli_timeouts.get("default"):
+            return float(t)
+    for keyword in keywords:
+        if t := config.get(f"run:timeout:{keyword}"):
+            return float(t)
+    if t := config.get("run:timeout:all"):
+        return float(t)
+    return float(config.get("run:timeout:default"))
+
+
+def ceil_div(a: int, b: int) -> int:
+    assert b != 0, "denominator must not be 0"
+    return (a + b - 1) // b
+
+
+def validate_spec_id(id: str) -> str:
+    _spec_id_regex = re.compile(r"^[A-Za-z0-9_.:=+/\-]+$")
+    if not isinstance(id, str):
+        raise TypeError(f"JobSpec id expected str, got {type(id).__name__}")
+    value = id.strip()
+    if not value:
+        raise ValueError("JobSpec id must be non-empty")
+    if not _spec_id_regex.fullmatch(value):
+        raise ValueError(
+            "JobSpec id may only contain letters, digits, and these characters: "
+            "_.:=+/-; got {!r}".format(id)
+        )
+    return value
+
+
+class InvalidTypeError(Exception):
+    def __init__(self, name, value):
+        class_name = value.__class__.__name__
+        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")

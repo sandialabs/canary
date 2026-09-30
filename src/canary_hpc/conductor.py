@@ -16,11 +16,10 @@ from typing import TypedDict
 import hpc_connect
 
 import canary
-from _canary.queue_executor import ResourceQueueExecutor
+from _canary.execution.runtest import Runner
+from _canary.execution.testexec import ExecutionSpace
 from _canary.resource_pool import ResourcePool
-from _canary.runtest import Runner
 from _canary.subcommands.run import Run
-from _canary.testexec import ExecutionSpace
 from _canary.util import cpu_count
 from _canary.util.multiprocessing import SimpleQueue
 
@@ -38,6 +37,7 @@ from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
 from .queue import ResourceQueue
+from .queue_executor import HPCResourceQueueExecutor
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
@@ -465,7 +465,7 @@ class CanaryHPCConductor:
         queue.prepare()
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
-        with ResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
+        with HPCResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
             ex.add_listener(self._make_batch_result_listener(runner.workspace))
             ex.run(backend=self.backend.name)
 
@@ -476,7 +476,7 @@ class CanaryHPCConductor:
 
         The shared executor works with :class:`TestBatch` objects, so the
         default per-job ``testcase_done_callback`` cannot be used directly.  This
-        listener instead spools each child :class:`~_canary.job.Job` of a batch
+        listener instead spools each child :class:`~_canary.core.job.Job` of a batch
         to the results database as the batch is submitted, starts running, and
         finishes, so that ``canary status`` reflects in-progress HPC jobs
         mid-run.  Only the parent process (which owns the running

@@ -13,7 +13,7 @@ from importlib import resources
 from pathlib import Path
 
 from ..config.argparsing import Parser
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
 

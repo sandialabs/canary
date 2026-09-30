@@ -5,10 +5,10 @@
 from pathlib import Path
 
 import canary
-from _canary.job import Job
-from _canary.jobspec import JobSpec
-from _canary.testexec import ExecutionSpace
-from _canary.workspace import Workspace
+from _canary.core.job import Job
+from _canary.core.jobspec import JobSpec
+from _canary.execution.testexec import ExecutionSpace
+from _canary.session.workspace import Workspace
 
 
 def make_job(tmp_path: Path, name: str = "case") -> Job:

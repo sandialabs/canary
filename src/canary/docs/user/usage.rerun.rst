@@ -48,8 +48,8 @@ Optionally, a subdirectory of the workspace view argument can be passed to ``can
 Rerun strategies with ``--only``
 ---------------------------------
 
-The ``--only`` option provides explicit control over which jobs from a previous
-session are included in the new run:
+When you run in an existing workspace, ``canary`` re-runs a subset of the
+previously known jobs.  The ``--only`` option chooses which subset:
 
 .. list-table::
    :widths: 25 75
@@ -58,14 +58,23 @@ session are included in the new run:
    * - Strategy
      - Behaviour
    * - ``not_pass`` *(default)*
-     - Run jobs that did not pass in the previous session (failed, diffed, timed
-       out, or never ran)
+     - Run jobs whose latest result did not pass (failed, diffed, timed out,
+       aborted, or never run)
    * - ``all``
-     - Run all jobs regardless of previous status
+     - Run all selected jobs, even if they already passed
    * - ``failed``
-     - Run only jobs that failed in the previous session
+     - Run only jobs whose latest result failed
    * - ``not_run``
-     - Run only jobs that were not executed in the previous session
+     - Run only jobs that have never been executed
+   * - ``changed``
+     - Run only jobs whose source file changed since their last run (a job that
+       has never run counts as changed)
+
+When you re-run specific tests **by ID or by view path**, ``--only`` defaults to
+``all`` instead of ``not_pass`` — asking for a specific test by name means you
+want it to run even if it already passed.  Pass ``--only`` explicitly to
+override this (for example, ``canary run --only failed <id>``); ``canary`` logs
+a note when it applies the ``all`` default so the choice is visible.
 
 Examples:
 
@@ -74,3 +83,4 @@ Examples:
    canary run --only all .
    canary run --only failed .
    canary run --only not_run .
+   canary run --only changed .

@@ -4,12 +4,12 @@
 
 import pytest
 
-import _canary.workspace as _workspace_module
+import _canary.session.workspace as _workspace_module
+from _canary.session.workspace import NotAWorkspaceError
+from _canary.session.workspace import Workspace
+from _canary.session.workspace import WorkspaceExistsError
+from _canary.session.workspace import set_workspace_dir
 from _canary.util.filesystem import working_dir
-from _canary.workspace import NotAWorkspaceError
-from _canary.workspace import Workspace
-from _canary.workspace import WorkspaceExistsError
-from _canary.workspace import set_workspace_dir
 
 
 @pytest.fixture

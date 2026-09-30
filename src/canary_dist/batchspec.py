@@ -10,7 +10,7 @@ from typing import Any
 
 import canary
 import canary_hpc.batchspec as bs
-from _canary.testexec import ExecutionSpace
+from _canary.execution.testexec import ExecutionSpace
 from _canary.util.serialize import serialize
 
 if TYPE_CHECKING:

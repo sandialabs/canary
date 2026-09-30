@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from _canary.jobspec import Artifact
-from _canary.jobspec import Asset
-from _canary.jobspec import BaselineCopyAction
-from _canary.jobspec import BaselineScriptAction
-from _canary.jobspec import JobSpec
-from _canary.jobspec import Mask
-from _canary.jobspec import SpecDependency
+from _canary.core.jobspec import Artifact
+from _canary.core.jobspec import Asset
+from _canary.core.jobspec import BaselineCopyAction
+from _canary.core.jobspec import BaselineScriptAction
+from _canary.core.jobspec import JobSpec
+from _canary.core.jobspec import Mask
+from _canary.core.jobspec import SpecDependency
 from _canary.util import json_helper as json
 
 
@@ -151,8 +151,8 @@ def test_specdependency_serialize_is_compact(repo: Path):
 
 
 def test_build_spec_id_is_lowercase_hex(repo: Path):
-    from _canary.jobspec import build_spec_id
-    from _canary.jobspec import validate_spec_id
+    from _canary.core.jobspec import build_spec_id
+    from _canary.core.jobspec import validate_spec_id
 
     id = build_spec_id("fam", repo / "suite" / "test_x.py", a=1, b=2)
     assert len(id) == 64
@@ -162,8 +162,8 @@ def test_build_spec_id_is_lowercase_hex(repo: Path):
 
 
 def test_build_spec_id_stable_across_file_content_changes(tmp_path):
-    from _canary.jobspec import _GlobalSpecCache
-    from _canary.jobspec import build_spec_id
+    from _canary.core.jobspec import _GlobalSpecCache
+    from _canary.core.jobspec import build_spec_id
 
     root = tmp_path / "repo"
     (root / "suite").mkdir(parents=True)
@@ -192,7 +192,7 @@ def test_build_spec_id_stable_across_file_content_changes(tmp_path):
 
 
 def test_build_spec_id_distinguishes_family_and_parameters(repo: Path):
-    from _canary.jobspec import build_spec_id
+    from _canary.core.jobspec import build_spec_id
 
     f = repo / "suite" / "test_x.py"
     base = build_spec_id("fam", f, a=1, b=2)
@@ -202,8 +202,8 @@ def test_build_spec_id_distinguishes_family_and_parameters(repo: Path):
 
 def test_build_spec_id_uses_canary_root_anchor(tmp_path):
     """A .canary-root marker file should anchor the repo-relative path used in the spec ID."""
-    from _canary.jobspec import _GlobalSpecCache
-    from _canary.jobspec import build_spec_id
+    from _canary.core.jobspec import _GlobalSpecCache
+    from _canary.core.jobspec import build_spec_id
 
     def clear_cache():
         _GlobalSpecCache._key.clear()

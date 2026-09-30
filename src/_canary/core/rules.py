@@ -1,0 +1,426 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+"""Rules for selecting and filtering JobSpec objects.
+
+This module defines a set of Rule classes used to determine whether a JobSpec should be
+included in test execution. Each rule evaluates specific attributes—such as keywords, parameters,
+owners, IDs, file prefixes, regular expressions, or resource requirements—and returns a RuleOutcome
+object indicating whether the spec passed or failed the rule.
+
+Rules support serialization to and from dictionaries and JSON strings to allow persistence and
+reconstruction across sessions.
+"""
+
+import importlib
+import os
+import re
+from functools import cached_property
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import Iterable
+from typing import Type
+
+from schema import Schema
+
+from .. import config
+from ..util import filesystem
+from ..util import json_helper as json
+from ..util import logging
+from . import when
+
+if TYPE_CHECKING:
+    from ..resource_pool.rpool import NodeRequest
+    from .job import Job
+    from .jobspec import JobSpec
+
+
+ResourceSetCacheKey = tuple[tuple[bool, tuple[tuple[str, int], ...]], ...]
+
+logger = logging.get_logger(__name__)
+
+
+class RuleOutcome:
+    """Represents the result of evaluating a rule."""
+
+    __slots__ = ("ok", "reason")
+
+    def __init__(self, ok: bool = True, reason: str | None = None) -> None:
+        """The outcome of an evaluated rule
+
+        Args:
+            ok: Whether the rule evaluation succeeded.
+            reason: Optional explanation for a failure.
+        """
+        self.ok = ok
+        self.reason = reason
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    @classmethod
+    def failed(cls, reason: str) -> "RuleOutcome":
+        return cls(ok=False, reason=reason)
+
+
+class Rule:
+    """Base class for all selection rules.
+
+    Subclasses should override __call__ to evaluate whether a JobSpec satisfies the rule.
+    Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
+    """
+
+    def __init__(self, priority: int = 0) -> None:
+        self.priority = priority
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        raise NotImplementedError
+
+    def __str__(self):
+        return f"{self.__class__.__name__}: {self.__dict__}"
+
+    def asdict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the rule.
+
+        Returns:
+            dict: A mapping containing the parameters required to
+            reconstruct the rule.
+        """
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, params: dict[str, Any]) -> "Rule":
+        """Create a rule instance from serialized parameters.
+
+        Args:
+            params: A mapping of constructor parameters.
+
+        Returns:
+            Rule: A new rule instance with the given parameters.
+        """
+        return cls(**params)
+
+    @cached_property
+    def default_reason(self) -> str:
+        """Return the generic failure reason for the rule.
+
+        Returns:
+            str: A human-readable description of why the rule would
+            fail if no more specific reason is provided.
+        """
+        raise NotImplementedError
+
+    def serialize(self) -> str:
+        """Return a compact JSON string representing the rule.
+
+        Returns:
+            str: Serialized representation of the rule.
+        """
+        meta = {
+            "module": self.__class__.__module__,
+            "classname": self.__class__.__name__,
+            "params": self.asdict(),
+        }
+        return json.dumps_min(meta)
+
+    @staticmethod
+    def validate(data) -> Any:
+        schema = Schema({"module": str, "classname": str, "params": {str: object}})
+        return schema.validate(data)
+
+    @staticmethod
+    def reconstruct(serialized: str) -> "Rule":
+        """Reconstruct a rule from a serialized JSON string.
+
+        Args:
+            serialized: JSON string previously produced by serialize().
+
+        Returns:
+            Rule: The reconstructed rule instance.
+        """
+        meta = json.loads(serialized)
+        Rule.validate(meta)
+        module = importlib.import_module(meta["module"])
+        cls: Type[Rule] = getattr(module, meta["classname"])
+        if "default_reason" in meta["params"]:
+            meta["params"].pop("default_reason")
+        rule = cls.from_dict(meta["params"])
+        return rule
+
+
+class KeywordRule(Rule):
+    """Selects specs based on keyword expressions.
+
+    A spec passes if all keyword expressions match its explicit or implicit keywords, unless the
+    expression list contains '__all__' or ':all:', in which job all specs pass."""
+
+    def __init__(self, keyword_exprs: list[str], priority: int = 0):
+        super().__init__(priority=priority)
+        self.keyword_exprs = keyword_exprs
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "One or more keyword expressions did not match"
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        kwds = set(spec.keywords)
+        kwds.update(spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
+        kwd_all = contains_any(("__all__", ":all:"), self.keyword_exprs)
+        if not kwd_all:
+            for keyword_expr in self.keyword_exprs:
+                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                if not match:
+                    return RuleOutcome.failed(
+                        "keyword expression [bold]%r[/] did not match" % keyword_expr
+                    )
+        return RuleOutcome(True)
+
+
+class ParameterRule(Rule):
+    """Selects specs based on parameter expressions.
+
+    The spec passes if the parameter expression matches any of the spec's explicit or implicit
+    parameters."""
+
+    def __init__(self, parameter_expr: str, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.parameter_expr = parameter_expr
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "parameter expression [bold]%s[/] did not match" % self.parameter_expr
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        match = when.when(
+            {"parameters": self.parameter_expr},
+            parameters=spec.parameters | spec.meta_parameters | spec.rparameters,  # ty: ignore[unsupported-operator]
+        )
+        if match:
+            return RuleOutcome(True)
+        return RuleOutcome.failed(self.default_reason)
+
+
+class IDsRule(Rule):
+    """Selects specs based on test ID prefixes.
+
+    A spec passes if its ID begins with any of the configured prefixes.
+    """
+
+    def __init__(self, ids: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.ids = list(ids)
+
+    @cached_property
+    def default_reason(self) -> str:
+        if len(self.ids) > 4:
+            ids = [self.ids[0][:7], self.ids[1][:7], "…", self.ids[-1][:7]]
+        else:
+            ids = [id[:7] for id in self.ids]
+        return "test ID not in [bold]%s[/]" % ", ".join(ids)
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        if not any(spec.id.startswith(id) for id in self.ids):
+            return RuleOutcome.failed(self.default_reason)
+        return RuleOutcome(True)
+
+
+class OwnersRule(Rule):
+    """Selects specs based on declared owners.
+
+    A spec passes if at least one of its owners appears in the rule's
+    configured owner set.
+    """
+
+    def __init__(self, owners: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.owners = set(owners)
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "not owned by [bold]%s[/]" % ", ".join(self.owners)
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        if self.owners.intersection(spec.owners or []):
+            return RuleOutcome(True)
+        return RuleOutcome.failed(self.default_reason)
+
+
+class PrefixRule(Rule):
+    """Selects specs based on file path prefixes.
+
+    A spec passes if its underlying file path begins with any of the
+    configured prefixes.
+    """
+
+    def __init__(self, prefixes: Iterable[str] = (), priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.prefixes = list(prefixes)
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "test file not a child of %s" % ", ".join(self.prefixes)
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        if any(str(spec.file).startswith(prefix) for prefix in self.prefixes):
+            return RuleOutcome(True)
+        return RuleOutcome.failed(f"test file not in any of {', '.join(self.prefixes)}")
+
+
+class RegexRule(Rule):
+    """Selects specs by searching for a regular expression in test files.
+
+    A spec passes if the configured regular expression occurs in the spec's primary file or in any
+    referenced asset file.
+    """
+
+    def __init__(self, regex: str, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        logger.warning("Regular expression search can be slow for large test suites")
+        self.string: str = regex
+        self.rx: re.Pattern = re.compile(regex)
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "[bold]re.search(%r) is None[/] evaluated to [bold]True[/]" % self.string
+
+    def asdict(self) -> dict[str, Any]:
+        return {"regex": self.string}
+
+    def __call__(self, spec: "JobSpec") -> RuleOutcome:
+        if not filesystem.grep(self.rx, spec.file):
+            for asset in spec.assets:
+                if os.path.isfile(asset.src) and filesystem.grep(self.rx, asset.src):
+                    break
+            else:
+                return RuleOutcome.failed(self.default_reason)
+        return RuleOutcome(True)
+
+
+class RuntimeRule:
+    """Base class for all runtime selection rules.
+
+    Subclasses should override __call__ to evaluate whether a Job satisfies the rule.
+    Rules may also define a default_reason explaining why a spec is rejected when the rule fails.
+    """
+
+    def __init__(self, priority: int = 0) -> None:
+        self.priority = priority
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        raise NotImplementedError
+
+    @cached_property
+    def default_reason(self) -> str:
+        """Return the generic failure reason for the rule.
+
+        Returns:
+            str: A human-readable description of why the rule would
+            fail if no more specific reason is provided.
+        """
+        raise NotImplementedError
+
+
+class ResourceCapacityRule(RuntimeRule):
+    """Selects jobs based on system resource capacity.
+
+    This rule queries plugin hooks to determine whether the available resource pool can accommodate
+    the spec's declared resource needs.  Evaluation results are cached based on the resource set's
+    hashable representation.
+    """
+
+    def __init__(self, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.cache: dict[ResourceSetCacheKey, RuleOutcome] = {}
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "not enough resources"
+
+    def freeze_resource_set(self, resource_set: list["NodeRequest"]) -> ResourceSetCacheKey:
+        return tuple(request.freeze() for request in resource_set)
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        resource_set = job.required_resources()
+        frozen = self.freeze_resource_set(resource_set)
+        if frozen not in self.cache:
+            outcome: RuleOutcome | None = None
+            pm = config.pluginmanager.hook
+            try:
+                result = pm.canary_resource_pool_accommodates(case=job)
+                outcome = RuleOutcome(ok=result.ok, reason=result.reason)
+            except Exception as e:
+                outcome = RuleOutcome.failed("[bold]%s[/](%r)" % (e.__class__.__name__, e.args[0]))
+                if config.get("debug"):
+                    raise
+            finally:
+                if outcome is None:
+                    outcome = RuleOutcome.failed("Resource capacity evaluation failed")
+                self.cache[frozen] = outcome
+        return self.cache[frozen]
+
+
+class RerunRule(RuntimeRule):
+    """Mask jobs that a rerun strategy says should not run this session.
+
+    The five named strategies (``all``, ``not_pass``, ``failed``, ``not_run``,
+    ``changed``) are defined once in :mod:`_canary.rerun` and shared with the
+    database root-selection so the two layers cannot diverge.  The ``ids:<a,b>``
+    form is not a rerun strategy but an explicit allow-list: only the listed
+    spec IDs run.
+    """
+
+    def __init__(self, strategy: str = "not_pass", priority: int = 0) -> None:
+        from .. import rerun
+
+        super().__init__(priority=priority)
+        self.strategy: str
+        self._ids: list[str] = []
+        self._impl: "rerun.Strategy | None" = None
+        if strategy.startswith("ids:"):
+            self.strategy = "ids"
+            self._ids.extend(set(strategy[4:].split(",")))
+        else:
+            self.strategy = strategy
+            self._impl = rerun.get_strategy(strategy)
+
+    def __repr__(self) -> str:
+        return f"RerunRule(strategy={self.strategy})"
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "previous result is not empty"
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        if self.strategy == "ids":
+            if job.spec.id in self._ids:
+                return RuleOutcome(ok=True)
+            if len(self._ids) > 4:
+                ids = [self._ids[0][:7], self._ids[1][:7], "…", self._ids[-1][:7]]
+            else:
+                ids = [id[:7] for id in self._ids]
+            return RuleOutcome(False, reason="test ID not in [bold]%s[/]" % ", ".join(ids))
+        assert self._impl is not None
+        decision = self._impl.should_run(job)
+        return RuleOutcome(ok=decision.run, reason=decision.reason)
+
+
+class SessionTimeoutRule(RuntimeRule):
+    def __init__(self, timeout: float, priority: int = 0) -> None:
+        super().__init__(priority=priority)
+        self.timeout = timeout
+
+    def __repr__(self) -> str:
+        return f"TimeoutRule(timeout={self.timeout})"
+
+    @cached_property
+    def default_reason(self) -> str:
+        return "runtime of job exceeds session timeout"
+
+    def __call__(self, job: "Job") -> RuleOutcome:
+        if job.total_timeout() < self.timeout:
+            return RuleOutcome(ok=True)
+        return RuleOutcome.failed(self.default_reason)
+
+
+def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
+    return any(element in test_elements for element in elements)

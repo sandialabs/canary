@@ -16,11 +16,11 @@ import pytest
 
 import _canary.config
 from _canary import rerun
-from _canary.job import JobPhase
-from _canary.jobspec import JobSpec
-from _canary.jobspec import SpecDependency
-from _canary.status import Status
-from _canary.workspace import Workspace
+from _canary.core.job import JobPhase
+from _canary.core.jobspec import JobSpec
+from _canary.core.jobspec import SpecDependency
+from _canary.core.status import Status
+from _canary.session.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

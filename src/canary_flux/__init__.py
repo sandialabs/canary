@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 import canary
-from _canary.hookspec import hookimpl
+from _canary.plugins.hookspec import hookimpl
 from _canary.util.rich import bold
 from _canary.util.time import time_in_seconds
 
 if TYPE_CHECKING:
     from _canary.config.argparsing import Parser
     from _canary.config.config import Config as CanaryConfig
-    from _canary.runtest import Runner
+    from _canary.execution.runtest import Runner
 
 
 logger = canary.get_logger(__name__)
@@ -338,8 +338,8 @@ def flux_exec(args: argparse.Namespace) -> int:
     import time
 
     from _canary import config
-    from _canary.job import Job
-    from _canary.workspace import Workspace
+    from _canary.core.job import Job
+    from _canary.session.workspace import Workspace
 
     workspace = Workspace.load()
     session_dir = workspace.sessions_dir / args.session

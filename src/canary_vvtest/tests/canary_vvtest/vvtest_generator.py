@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 import _canary.config as config
-from _canary import collect
-from _canary import rules
 from _canary import select
-from _canary.generate import Generator as CanaryGenerator
+from _canary.core import rules
+from _canary.generation import collect
+from _canary.generation.generate import Generator as CanaryGenerator
 from _canary.util.filesystem import working_dir
 from canary_vvtest.vvt import VVTestAdapter
 from canary_vvtest.vvt import VVTestLoader
@@ -226,8 +226,8 @@ def test_adapter_baseline_flag_and_copy(tmp_path: Path) -> None:
     assert len(b) == 2
     assert isinstance(b[0], type(b[0]))  # sanity: baseline actions exist
     # One should be BaselineCopyAction
-    from _canary.jobspec import BaselineCopyAction
-    from _canary.jobspec import BaselineScriptAction
+    from _canary.core.jobspec import BaselineCopyAction
+    from _canary.core.jobspec import BaselineScriptAction
 
     assert any(isinstance(x, BaselineCopyAction) for x in b)
     assert any(isinstance(x, BaselineScriptAction) for x in b)

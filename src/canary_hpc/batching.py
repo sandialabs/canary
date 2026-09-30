@@ -661,7 +661,7 @@ def _partition_resource_capacity(
 
 def _topological_job_levels(jobs: list["canary.Job"]) -> list[list["canary.Job"]]:
     """Return global topological ready levels for jobs."""
-    from _canary.job_graph import make_job_graph
+    from _canary.core.job_graph import make_job_graph
 
     graph = make_job_graph(jobs)
     return [list(level) for level in graph.levels]

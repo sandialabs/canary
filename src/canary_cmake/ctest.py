@@ -14,8 +14,8 @@ from typing import Any
 import schema
 
 import canary
-from _canary.generator import AbstractTestGenerator
-from _canary.status import Status
+from _canary.core.status import Status
+from _canary.generation.generator import AbstractTestGenerator
 
 warning_cache: set[str] = set()
 
@@ -77,7 +77,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         file.write(f"File: {self.file}\n")
         jobs = self.lock(on_options=on_options)
         file.write(f"{len(jobs)} test jobs:\n")
-        canary.graph.print(jobs, file=file)
+        canary.print_spec_graph(jobs, file=file)
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
@@ -108,7 +108,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         return tests
 
     def resolve_fixtures(self, specs: list["canary.JobSpec"]) -> None:
-        from _canary.jobspec import SpecDependency
+        from _canary.core.jobspec import SpecDependency
 
         setup_fixtures: dict[str, list[canary.JobSpec]] = {}
         cleanup_fixtures: dict[str, list[canary.JobSpec]] = {}
@@ -133,7 +133,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                             fixture.dependencies.append(dep)
 
     def resolve_inter_dependencies(self, irs: list["canary.JobSpecIR"]) -> list["canary.JobSpec"]:
-        from _canary.generate import resolve
+        from _canary.generation.generate import resolve
 
         resolved = resolve(irs)
         return resolved

@@ -12,8 +12,8 @@ higher-level collection pipeline.
 import sys
 
 import canary_pyt.pyt as pyt
-from _canary.ir import DependencySelector
-from _canary.jobspec import BaselineCopyAction
+from _canary.core.jobspec import BaselineCopyAction
+from _canary.core.jobspec_ir import DependencySelector
 from _canary.util.filesystem import working_dir
 
 

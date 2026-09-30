@@ -4,7 +4,7 @@
 
 import pytest
 
-from _canary.timekeeper import Timekeeper
+from _canary.core.timekeeper import Timekeeper
 
 
 def test_timekeeper_initial_state() -> None:
@@ -394,7 +394,7 @@ def test_hpc_batch_queued_time_live_before_start(monkeypatch: pytest.MonkeyPatch
     tk = Timekeeper()
     tk.open(at=T0)  # submitted; _staged is still -1.0
 
-    monkeypatch.setattr("_canary.timekeeper.time", __import__("time"))
+    monkeypatch.setattr("_canary.core.timekeeper.time", __import__("time"))
     monkeypatch.setattr("time.time", lambda: T0 + 45.0)
 
     assert tk.pending(live=True) == pytest.approx(45.0), "live pending should grow while queued"

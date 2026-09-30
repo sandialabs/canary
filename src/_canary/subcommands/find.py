@@ -16,11 +16,11 @@ from rich.columns import Columns
 from rich.rule import Rule
 
 from .. import config
-from .. import rules
-from ..collect import Collector
+from ..core import rules
 from ..error import StopExecution
-from ..generate import Generator
-from ..hookspec import hookimpl
+from ..generation.collect import Collector
+from ..generation.generate import Generator
+from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import json_helper as json
 from ..util import logging
@@ -30,7 +30,7 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..jobspec import JobSpec
+    from ..core.jobspec import JobSpec
 
 logger = logging.get_logger(__name__)
 
@@ -161,7 +161,7 @@ def pprint_keywords(specs: list["JobSpec"]) -> None:
 
 def pprint_graph(specs: list["JobSpec"]) -> None:
     """Print the dependency DAG of *specs* in text form."""
-    from _canary.jobspec_graph import format_spec_graph
+    from _canary.core.jobspec_graph import format_spec_graph
 
     from ..util.pager import page
 

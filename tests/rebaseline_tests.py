@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for _canary.subcommands.rebaseline — iter_lockfiles and filter_jobs_by_keywords."""
+"""Tests for _canary.app.rebaseline — iter_lockfiles and filter_jobs_by_keywords."""
 
 import pytest
 
-from _canary.subcommands.rebaseline import filter_jobs_by_keywords
-from _canary.subcommands.rebaseline import iter_lockfiles
+from _canary.app.rebaseline import filter_jobs_by_keywords
+from _canary.app.rebaseline import iter_lockfiles
 
 # ---------------------------------------------------------------------------
 # iter_lockfiles

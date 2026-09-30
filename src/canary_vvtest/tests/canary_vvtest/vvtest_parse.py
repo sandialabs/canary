@@ -8,12 +8,12 @@ from pathlib import Path
 
 import _canary.util.filesystem as fs
 import canary_vvtest.vvt as vvt
-from _canary import collect
+from _canary.generation import collect
 from canary_pyt.enums import list_parameter_space
 
 
 def generate_specs(generators, on_options=None):
-    from _canary import generate
+    from _canary.generation import generate
 
     generator = generate.Generator(generators, workspace=Path.cwd(), on_options=on_options or [])
     specs = generator.run()

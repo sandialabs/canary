@@ -12,7 +12,7 @@ import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser

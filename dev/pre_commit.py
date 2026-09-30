@@ -6,7 +6,7 @@
 
 This module is **not** part of the installed canary package.  It lives in the
 ``dev/`` directory at the repository root and is only loaded by
-:class:`_canary.pluginmanager.CanaryPluginManager` when canary is running from
+:class:`_canary.plugins.pluginmanager.CanaryPluginManager` when canary is running from
 an editable checkout that has the ``dev/`` directory present next to ``.git/``.
 
 The public surface exposed to canary's plugin system is the
@@ -205,11 +205,6 @@ class Check(CanarySubcommand):
             ruff("format", "./dev")
             pm.done()
 
-            if os.path.isdir("./packages"):
-                pm = logger.progress_monitor(f"Formatting packages in {self.root}/packages")
-                ruff("format", "./packages")
-                pm.done()
-
     def lint_check_code(self, args: argparse.Namespace):
         """Run ``ruff check --fix`` over all source, docs, and test trees."""
         with working_dir(self.root):
@@ -242,11 +237,6 @@ class Check(CanarySubcommand):
             pm = logger.progress_monitor(f"Lint checking dev in {self.root}/dev")
             ruff_check("./dev")
             pm.done()
-
-            if os.path.isdir("./packages"):
-                pm = logger.progress_monitor(f"Lint checking packages in {self.root}/packages")
-                ruff_check("./packages")
-                pm.done()
 
     def security_check(self, args: argparse.Namespace):
         """Run bandit security scan over ``src/``."""
@@ -585,7 +575,7 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
     import importlib.metadata as importlib_metadata
     import importlib.resources as importlib_resources
 
-    from _canary.hookspec import project_name
+    from _canary.plugins.hookspec import project_name
 
     root = root.resolve()
 
@@ -640,10 +630,6 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
         except Exception as exc:
             logger.debug("Could not add tests for %s: %s", ep.name, exc)
 
-    # In-repo sub-packages: add tests from packages/ subdirectories when present.
-    for pkg_dir in sorted((root / "packages").iterdir()) if (root / "packages").is_dir() else []:
-        add(pkg_dir / "tests")
-
     logger.info("[bold]Discovered[/] %d pytest path(s): %s", len(paths), ", ".join(paths))
     return tuple(paths)
 
@@ -652,7 +638,7 @@ def canary_entry_point_modules(root: Path) -> dict[str, str]:
     """Return ``{entry_point_name: module}`` for the ``canary`` entry-point group."""
     import importlib.metadata as importlib_metadata
 
-    from _canary.hookspec import project_name
+    from _canary.plugins.hookspec import project_name
 
     modules: dict[str, str] = {}
 

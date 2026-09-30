@@ -7,13 +7,13 @@ from typing import Any
 from typing import Callable
 from typing import cast
 
-from _canary.job import BaseJob
-from _canary.job import JobState
-from _canary.queue_executor import ExecutionSlot
-from _canary.reporter import EventReporter
-from _canary.reporter import Reporter
-from _canary.status import Status
-from _canary.timekeeper import Timekeeper
+from _canary.core.job import BaseJob
+from _canary.core.job import JobState
+from _canary.core.status import Status
+from _canary.core.timekeeper import Timekeeper
+from _canary.execution.console import EventReporter
+from _canary.execution.console import Reporter
+from _canary.execution.queue_executor import ExecutionSlot
 
 
 class DummyJob(BaseJob):
@@ -236,7 +236,7 @@ def test_live_console_handler_emits_via_console():
 
     from rich.console import Console
 
-    from _canary.reporter import _LiveConsoleHandler
+    from _canary.execution.console import _LiveConsoleHandler
     from _canary.util.logging import Formatter
 
     buf = StringIO()
@@ -266,7 +266,7 @@ def test_live_console_handler_level_respected_via_logger():
 
     from rich.console import Console
 
-    from _canary.reporter import _LiveConsoleHandler
+    from _canary.execution.console import _LiveConsoleHandler
     from _canary.util.logging import Formatter
 
     buf = StringIO()
@@ -299,7 +299,7 @@ def test_mute_and_unmute_restores_handlers():
     from io import StringIO
     from unittest.mock import MagicMock
 
-    from _canary.reporter import LiveReporter
+    from _canary.execution.console import LiveReporter
 
     # Build a minimal fake executor
     job = DummyJob()
@@ -344,7 +344,7 @@ def test_mute_does_not_touch_file_handlers():
 
     from rich.console import Console
 
-    from _canary.reporter import LiveReporter
+    from _canary.execution.console import LiveReporter
     from _canary.util.logging import MuteConsoleFilter
 
     job = DummyJob()

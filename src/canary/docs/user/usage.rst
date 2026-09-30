@@ -21,6 +21,7 @@ canary usage
    usage.parameterize
    usage.status
    usage.log
+   usage.tui
    usage.rerun
    usage.rebaseline
    usage.location

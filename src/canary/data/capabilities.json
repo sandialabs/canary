@@ -281,7 +281,7 @@
         "rerun": "Synthetic jobs have stable spec IDs, so a setup that passed previously is skipped by rerun strategies like --only not_pass. Teardown re-runs whenever any governed test re-runs (its always edges keep it unready until those tests finish)."
       },
       "implementation": {
-        "module": "_canary.canaryconf_impl (registered as builtin.canaryconf_impl plugin). In-process dispatch uses _canary.launcher.PythonFunctionLauncher, selected via the canary_runtest_launcher hook for jobs carrying the canary_conftest attribute.",
+        "module": "_canary.plugins.canaryconf_impl (registered as builtin.canaryconf_impl plugin). In-process dispatch uses _canary.execution.launcher.PythonFunctionLauncher, selected via the canary_runtest_launcher hook for jobs carrying the canary_conftest attribute.",
         "hook": "canary_generate_modifyitems, which runs after dependency resolution and injects the synthetic specs into generator.specs.",
         "idempotent": "Re-running the hook does not add duplicate synthetic jobs or duplicate dependency edges."
       },
@@ -491,8 +491,8 @@
       "summary": "Canary extensions use pluggy hooks to add commands, generators, resource behavior, launchers, runtime behavior, reports, measurements, lifecycle actions, capabilities, and skills.",
       "registration": {
         "entry_point_group": "canary",
-        "plugin_manager": "_canary.pluginmanager.CanaryPluginManager",
-        "marker": "canary.hookimpl or _canary.hookspec.hookimpl"
+        "plugin_manager": "_canary.plugins.pluginmanager.CanaryPluginManager",
+        "marker": "canary.hookimpl or _canary.plugins.hookspec.hookimpl"
       },
       "authoring": {
         "summary": "How to write and load a project-local plugin without installing a package.",
@@ -899,18 +899,24 @@
     "apis": {
       "jobs": [
         "canary.Job",
-        "_canary.job.Job",
-        "_canary.jobspec.JobSpec",
-        "_canary.ir.JobSpecIR"
+        "_canary.core.job.Job",
+        "_canary.core.jobspec.JobSpec",
+        "_canary.core.jobspec_ir.JobSpecIR"
       ],
       "generators": [
-        "_canary.generator.AbstractSpecGenerator",
-        "_canary.generate.Generator"
+        "_canary.generation.generator.AbstractSpecGenerator",
+        "_canary.generation.generate.Generator"
       ],
       "workspace": [
-        "_canary.workspace.Workspace",
-        "_canary.workspace.Session",
-        "_canary.database.WorkspaceDatabase"
+        "_canary.session.workspace.Workspace",
+        "_canary.session.workspace.Session",
+        "_canary.persistence.database.WorkspaceDatabase"
+      ],
+      "application": [
+        "canary.app.open_workspace",
+        "canary.app.create_workspace",
+        "canary.app.collect",
+        "canary.app.get_event_bus"
       ],
       "resources": [
         "_canary.resource_pool.rpool.ResourcePool",
@@ -919,12 +925,12 @@
         "_canary.resource_pool.manager.ResourceManager"
       ],
       "hooks": [
-        "_canary.hookspec"
+        "_canary.plugins.hookspec"
       ],
       "measurements": [
-        "_canary.job.Measurements",
-        "_canary.job.Job.add_measurement",
-        "_canary.workspace.Session.add_measurement"
+        "_canary.core.job.Measurements",
+        "_canary.core.job.Job.add_measurement",
+        "_canary.session.workspace.Session.add_measurement"
       ]
     },
     "limitations": {

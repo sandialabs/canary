@@ -2,25 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for _canary.canaryconf_impl — directory-scoped setup/teardown via canaryconf.py."""
+"""Tests for _canary.plugins.canaryconf_impl — directory-scoped setup/teardown via canaryconf.py."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
 
-from _canary.canaryconf_impl import CANARYCONF_FILENAME
-from _canary.canaryconf_impl import CONFTEST_KEYWORD
-from _canary.canaryconf_impl import ROLE_TO_FUNCTION
-from _canary.canaryconf_impl import SETUP_FUNCTION
-from _canary.canaryconf_impl import TEARDOWN_FUNCTION
-from _canary.canaryconf_impl import _find_canaryconf
-from _canary.canaryconf_impl import _has_setup
-from _canary.canaryconf_impl import _has_teardown
-from _canary.canaryconf_impl import _inject_conftest_jobs
-from _canary.canaryconf_impl import _make_synthetic_spec
-from _canary.canaryconf_impl import _top_level_functions
-from _canary.jobspec import JobSpec
+from _canary.core.jobspec import JobSpec
+from _canary.plugins.canaryconf_impl import CANARYCONF_FILENAME
+from _canary.plugins.canaryconf_impl import CONFTEST_KEYWORD
+from _canary.plugins.canaryconf_impl import ROLE_TO_FUNCTION
+from _canary.plugins.canaryconf_impl import SETUP_FUNCTION
+from _canary.plugins.canaryconf_impl import TEARDOWN_FUNCTION
+from _canary.plugins.canaryconf_impl import _find_canaryconf
+from _canary.plugins.canaryconf_impl import _has_setup
+from _canary.plugins.canaryconf_impl import _has_teardown
+from _canary.plugins.canaryconf_impl import _inject_conftest_jobs
+from _canary.plugins.canaryconf_impl import _make_synthetic_spec
+from _canary.plugins.canaryconf_impl import _top_level_functions
 
 # ---------------------------------------------------------------------------
 # helpers — cheap JobSpec factory
@@ -408,7 +408,7 @@ def test_inject_no_duplicate_dependencies(tmp_path):
 
 def test_hookimpl_registered():
     """canaryconf_impl exposes canary_generate_modifyitems as a hookimpl."""
-    import _canary.canaryconf_impl as sh
+    import _canary.plugins.canaryconf_impl as sh
 
     assert hasattr(sh, "canary_generate_modifyitems")
     # pluggy marks hookimpl callables with a special attribute
@@ -423,8 +423,8 @@ def test_hookimpl_registered():
 
 def test_launcher_selected_for_conftest_jobs():
     """canaryconf jobs get a PythonFunctionLauncher; others get None from the hook."""
-    from _canary.launcher import PythonFunctionLauncher
-    from _canary.launcher import canaryconf_job_launcher
+    from _canary.execution.launcher import PythonFunctionLauncher
+    from _canary.execution.launcher import canaryconf_job_launcher
 
     conftest_case = SimpleNamespace(
         get_attribute=lambda name, *a: {"role": "setup"} if name == "canary_conftest" else None
@@ -437,7 +437,7 @@ def test_launcher_selected_for_conftest_jobs():
 
 def test_import_source_reads_functions(tmp_path):
     """PythonFunctionLauncher._import_source loads a canaryconf.py by path."""
-    from _canary.launcher import PythonFunctionLauncher
+    from _canary.execution.launcher import PythonFunctionLauncher
 
     cf = tmp_path / CANARYCONF_FILENAME
     cf.write_text(
@@ -466,8 +466,8 @@ def test_setup_teardown_run_in_process(tmp_path):
     teardown ran after it.
     """
     import canary
+    from _canary.session.workspace import Workspace
     from _canary.util.filesystem import working_dir
-    from _canary.workspace import Workspace
 
     root = tmp_path / "suite"
     root.mkdir()

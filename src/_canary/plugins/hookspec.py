@@ -1,0 +1,747 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+# mypy: disable-error-code=empty-body
+import argparse
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import Type
+
+import pluggy
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
+    from ..config.config import Config as CanaryConfig
+    from ..core.job import Job
+    from ..execution.launcher import Launcher
+    from ..execution.runtest import Runner
+    from ..generation.collect import Collector
+    from ..generation.generate import Generator
+    from ..generation.generator import AbstractTestGenerator
+    from ..reporters.reporter import CanaryReporter
+    from ..resource_pool.rpool import Outcome
+    from ..select import RuntimeSelector
+    from ..select import Selector
+    from ..session.workspace import Session
+    from ..subcommands.base import CanarySubcommand
+    from .pluginmanager import CanaryPluginManager
+
+
+project_name = "canary"
+hookspec = pluggy.HookspecMarker(project_name)
+hookimpl = pluggy.HookimplMarker(project_name)
+
+
+# -------------------------------------------------------------------------
+# Initialization hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
+    """Called at plugin registration time to allow adding new hooks via a call to
+    ``pluginmanager.add_hookspecs(module_or_class, prefix)``.
+
+    Args:
+      pluginmanager: The canary plugin manager.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    """
+
+
+@hookspec
+def canary_addoption(parser: "Parser") -> None:
+    """Register argparse options, called once at the beginning of a test run.
+
+    Args:
+      parser: To add command line options, call
+        :py:func:`parser.add_argument(...) <config.argparsing.Parser.add_argument>`.
+
+    Options can later be accessed through the :py:class:`config <canary.Config>` object:
+
+    - :py:func:`config.getoption(name) <canary.Config.getoption>` to
+      retrieve the value of a command line option.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    """
+
+
+@hookspec
+def canary_addcommand(parser: "Parser") -> None:
+    """Add a subcommand to Canary
+
+    Args:
+      parser: To add a command, call
+        :py:func:`parser.add_command(...) <config.argparsing.Parser.add_command>`.
+
+    .. note::
+        The command should be a subclass of :py:class:`canary.CanarySubcommand`
+
+    Example:
+
+    .. code-block:: python
+
+       import argparse
+       import canary
+
+       class MyCommand(canary.CanarySubcommand):
+           name = "my-command"
+           description = "my-command description"
+
+           def setup_parser(parser: canary.Parser) -> None:
+               parser.add_argument("--flag")
+
+           def execute(args: argparse.Namespace) -> int:
+               ...
+
+       @plugins.hookimpl
+       def canary_addcommand(parser: canary.Parser):
+           parser.add_command(MyCommand())
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_cmdline_parse(parser: "Parser", args: list[str]) -> argparse.Namespace:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_cmdline_modifyargs(parser: "Parser", args: "argparse.Namespace") -> None:
+    """Modify parsed command-line arguments before they are applied to config.
+
+    Called after ``canary_cmdline_parse`` has produced a namespace.  Plugins
+    may inspect or modify ``args`` in place to normalise values or inject
+    defaults before ``config.set_main_options`` runs.
+
+    Args:
+        parser: The argument parser.
+        args: The parsed argument namespace; mutate in place as needed.
+    """
+
+
+@hookspec
+def canary_subcommand() -> "CanarySubcommand":
+    """DEPRECATED: use canary_addcommand"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_query_subcommand(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Register additional subcommands under ``canary query``.
+
+    Extensions implement this hook to add their own ``canary query <name>``
+    subcommands.  The *subparsers* argument is the same ``add_subparsers``
+    action that the built-in ``job``, ``session``, ``sessions``, and ``db``
+    subcommands are registered on.  Use ``subparsers.add_parser(name, ...)``
+    to add a new sub-parser and populate it with arguments.
+
+    The plugin is responsible for dispatching execution: implement
+    ``canary_query_execute(args)`` on the same plugin object to handle
+    ``args.query_subcmd == name``.
+
+    Example::
+
+        @canary.hookimpl
+        def canary_query_subcommand(self, subparsers):
+            p = subparsers.add_parser("batch", help="Query batch records")
+            p.add_argument("batchid", nargs="?")
+
+        @canary.hookimpl
+        def canary_query_execute(self, args):
+            if args.query_subcmd == "batch":
+                ...
+                return 0  # handled
+            return None  # not handled
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_query_execute(args: "argparse.Namespace") -> "int | None":
+    """Execute an extension-provided ``canary query`` subcommand.
+
+    Called after the built-in subcommands (job, session, sessions, db) have
+    been checked.  Return an integer exit code if this plugin handled the
+    subcommand, or ``None`` to pass to the next plugin.
+
+    Args:
+      args: Parsed argument namespace.  ``args.query_subcmd`` contains the
+        subcommand name registered via ``canary_query_subcommand``.
+
+    Returns:
+      Integer exit code (0 for success) if handled, ``None`` otherwise.
+
+    """
+
+
+@hookspec
+def canary_fetch_subcommand(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Register additional fetchable assets under ``canary fetch``.
+
+    Extensions implement this hook to advertise assets that ``canary fetch``
+    can retrieve.  The *subparsers* argument is the ``add_subparsers`` action
+    that the built-in assets (``examples``, ``canary.cmake``) are registered
+    on.  Use ``subparsers.add_parser(name, ...)`` to add a new entry and
+    optionally populate it with flags (e.g. ``--dest``, ``--version``).
+
+    The plugin is responsible for dispatching execution: implement
+    ``canary_fetch_execute(args)`` on the same plugin object to handle
+    ``args.fetch_what == name``.
+
+    Example::
+
+        @canary.hookimpl
+        def canary_fetch_subcommand(self, subparsers):
+            subparsers.add_parser("myasset", help="Fetch MyAsset into the current directory")
+
+        @canary.hookimpl
+        def canary_fetch_execute(self, args):
+            if args.fetch_what == "myasset":
+                # copy the asset ...
+                return 0   # handled
+            return None    # not handled
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_fetch_execute(args: "argparse.Namespace") -> "int | None":
+    """Execute a ``canary fetch`` request for a named asset.
+
+    Called after ``canary fetch`` has parsed its subcommand.  Plugins check
+    ``args.fetch_what`` against the name(s) they registered in
+    ``canary_fetch_subcommand`` and return an integer exit code when they
+    handle the request, or ``None`` to pass to the next plugin.
+
+    Args:
+      args: Parsed argument namespace.  ``args.fetch_what`` contains the
+        subcommand name registered via ``canary_fetch_subcommand``.
+
+    Returns:
+      Integer exit code (0 for success) if handled, ``None`` otherwise.
+
+    """
+
+
+@hookspec
+def canary_addconfig(config: "CanaryConfig") -> None:
+    """Register configuration sections and schemas, and perform early plugin setup.
+
+    Called during every startup path — including when a worker process or HPC
+    batch child restores configuration from a snapshot.  This makes it the
+    correct place to:
+
+    * Register a config section with a schema via ``config.add_section()``.
+    * Register additional plugin objects that must be present in every
+      execution context (worker processes, HPC batch children).
+
+    Do **not** read command-line options here; they are not yet parsed when
+    this hook fires.  Use :func:`canary_configure` for option-dependent work.
+
+    Example — registering a config section::
+
+        MY_SCHEMA = {"enabled": bool, "threshold": float}
+
+        @canary.hookimpl
+        def canary_addconfig(config):
+            config.add_section(name="my_plugin", schema=MY_SCHEMA)
+
+    Example — registering an extra plugin object that must exist in all
+    execution contexts (workers, HPC batch children)::
+
+        class _MyExtraHook:
+            @canary.hookimpl
+            def canary_runtest_finish(self, case):
+                ...
+
+        @canary.hookimpl
+        def canary_addconfig(config):
+            pm = config.pluginmanager
+            if not pm.get_plugin("my_extra_hook"):
+                pm.register(_MyExtraHook(), name="my_extra_hook")
+
+    Args:
+        config: The canary config object.
+
+    Note:
+        This hook is incompatible with ``hookwrapper=True``.
+    """
+
+
+@hookspec
+def canary_configure(config: "CanaryConfig") -> None:
+    """Allow plugins to perform initial configuration.
+
+    This hook is called for every plugin and after command line options have been parsed.
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
+
+    Args:
+      config: The canary config object.
+
+    """
+
+
+# -------------------------------------------------------------------------
+# Query data hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_capabilities() -> dict[str, Any] | None:
+    """Return a Canary capabilities document contributed by this plugin.
+
+    The returned object should match one of the query capability schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary capabilities are loaded from package data. Extension plugins
+    should return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "namespace": "pyt",
+          "capabilities": {
+            "overview": {...},
+            ...
+          }
+        }
+
+    The extension namespace is inserted under ``capabilities.ext.<extension>``
+    by ``canary query``.
+
+    Return ``None`` if the plugin does not contribute capabilities.
+    """
+
+
+@hookspec
+def canary_skills() -> dict[str, Any] | None:
+    """Return a Canary skills document contributed by this plugin.
+
+    The returned object should match one of the query skill schemas in
+    ``_canary.config.schemas``.
+
+    Core Canary skills are loaded from package data. Extension plugins should
+    return documents of the form::
+
+        {
+          "schema_version": "2.0.0",
+          "namespace": "pyt",
+          "skills": {
+            "canary-pyt-authoring": {
+              "name": "canary-pyt-authoring",
+              "description": "...",
+              "body": "..."
+            }
+          }
+        }
+
+    The extension namespace is inserted under ``skills.ext.<extension>`` by
+    ``canary query``.
+
+    Return ``None`` if the plugin does not contribute skills.
+    """
+
+
+@hookspec
+def canary_finish(config: "CanaryConfig") -> None:
+    """Called after a session completes to allow plugins to release resources.
+
+    Use this hook to close file handles, flush caches, disconnect from external
+    services, or perform any other cleanup that must happen at the end of a run.
+
+    Args:
+        config: The canary config object.
+    """
+
+
+@hookspec
+def canary_sessionstart(session: "Session") -> None:
+    """Called when a new session starts, before any jobs are submitted.
+
+    Use this hook to record session-level metadata or perform setup that
+    applies to the entire run::
+
+        @canary.hookimpl
+        def canary_sessionstart(session):
+            session.add_measurement("campaign", "my-run-17")
+
+    Args:
+        session: The session object.  Call ``session.add_measurement(name,
+            value)`` to attach structured data queryable via
+            ``canary query session latest measurements.<name>``.
+    """
+
+
+@hookspec
+def canary_sessionfinish(session: "Session") -> None:
+    """Called after all jobs in a session have finished.
+
+    Use this hook to aggregate results, notify external systems, or archive
+    outputs::
+
+        @canary.hookimpl
+        def canary_sessionfinish(session):
+            session.add_measurement("total_jobs", len(session.job_ids))
+
+    Args:
+        session: The completed session object.
+    """
+
+
+# -------------------------------------------------------------------------
+# collection hooks
+# -------------------------------------------------------------------------
+@hookspec
+def canary_collectstart(collector: "Collector") -> None:
+    """Start collection.
+
+    Args:
+      collector: Add files and directories to the collector.
+
+    Notes:
+      To add generators to the collector call
+      :py:func:`collector.add_generator(...) <Collector.add_generator>`.  To add directory names
+      to skip call :py:func:`collector.add_skip_dirs(...) <Collector.add_skip_dirs>`.
+
+    """
+
+
+@hookspec
+def canary_collect_modifyitems(collector: "Collector") -> None:
+    """Called after collection of test files is complete.  May filter or re-order items in place"""
+    raise NotImplementedError
+
+
+@hookspec
+def canary_collect_report(collector: "Collector") -> None:
+    """Write a report to the console for collected items"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_testcase_generator(
+    root: str, path: str | None
+) -> "AbstractTestGenerator | Type[AbstractTestGenerator]":
+    """Returns an implementation of AbstractTestGenerator"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
+    """DEPRECATED: Use canary_testcase_generator"""
+    raise NotImplementedError
+
+
+# -------------------------------------------------------------------------
+# generation hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_generatestart(generator: "Generator") -> None:
+    """Starts the generate process.
+
+    Args:
+        generator: The generator to start.
+    """
+
+
+@hookspec
+def canary_generate_modifyitems(generator: "Generator") -> None:
+    """Modifies the generate items.
+
+    Args:
+        generator: The generator to modify.
+    """
+
+
+@hookspec
+def canary_generate_report(generator: "Generator") -> None:
+    """Reports the generation results.
+
+    Args:
+        generator: The generator to report on.
+    """
+
+
+# -------------------------------------------------------------------------
+# selection hooks
+# -------------------------------------------------------------------------
+@hookspec
+def canary_selectstart(selector: "Selector") -> None:
+    """Starts the selection process.
+
+    Args:
+        selector: The selector to start.
+    """
+
+
+@hookspec
+def canary_select_modifyitems(selector: "Selector") -> None:
+    """Modifies the selection items.
+
+    Args:
+        selector: The selector to modify.
+    """
+
+
+@hookspec
+def canary_select_report(selector: "Selector") -> None:
+    """Reports the selection results.
+
+    Args:
+        selector: The selector to report on.
+    """
+
+
+# -------------------------------------------------------------------------
+# runtime selection hooks
+# -------------------------------------------------------------------------
+@hookspec
+def canary_rtselectstart(selector: "RuntimeSelector") -> None:
+    """Starts the selection process.
+
+    Args:
+        selector: The selector to start.
+    """
+
+
+@hookspec
+def canary_rtselect_modifyitems(selector: "RuntimeSelector") -> None:
+    """Modifies the selection items.
+
+    Args:
+        selector: The selector to modify.
+    """
+
+
+@hookspec
+def canary_rtselect_report(selector: "RuntimeSelector") -> None:
+    """Reports the selection results.
+
+    Args:
+        selector: The selector to report on.
+    """
+
+
+# -------------------------------------------------------------------------
+# runtest hooks
+# -------------------------------------------------------------------------
+@hookspec
+def canary_runtests_start(runner: "Runner") -> bool:
+    """Called at the beginning of `canary run`"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_runtests(runner: "Runner") -> None:
+    """Runs the tests.
+
+    Args:
+        runner: The runner to run.
+
+    """
+
+
+@hookspec
+def canary_runtests_report(runner: "Runner") -> None:
+    """Reports the test results.
+
+    Args:
+        runner: The runner to report on.
+    """
+
+
+@hookspec(firstresult=True)
+def canary_runtest_launcher(case: "Job") -> "Launcher":
+    """Returns the launcher for a test case.
+
+    Args:
+        case: The test case.
+
+    Returns:
+        The launcher.
+
+    Note:
+
+    """
+    raise NotImplementedError
+
+
+@hookspec
+def canary_runteststart(case: "Job") -> None:
+    """Perform the setup phase for a test case.
+
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``tryfirst``) runs ``case.setup()`` first; plugin
+    implementations then run and may build on the prepared workspace (e.g.
+    writing files into ``case.workspace.dir`` or setting ``case.variables``).
+
+    Args:
+        The test case.
+
+    Note:
+      The workspace directory is created before this hook fires and every
+      implementation runs with ``cwd`` set to ``case.workspace.dir``.
+    """
+
+
+@hookspec(firstresult=True)
+def canary_runtest(case: "Job") -> bool:
+    """Run the test case.
+
+    This is a ``firstresult`` hook: implementations are tried in order and the
+    first one to return a non-``None`` value claims execution; no further
+    implementations run.  Canary registers the default runner as ``trylast`` so
+    that plugins (and the built-in ``--repeat-*`` implementations) can override
+    how a case is executed by returning a non-``None`` value.  An implementation
+    that does not wish to handle the case must return ``None`` to fall through to
+    the next implementation (ultimately the default runner).
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+    """
+    raise NotImplementedError
+
+
+@hookspec
+def canary_runtest_finish(case: "Job") -> None:
+    """Perform the finishing tasks for the test case.
+
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``tryfirst``) runs ``case.finish()`` first; plugin
+    implementations then run (e.g. capturing the environment or post-processing
+    results).
+
+    Args:
+        The test case.
+
+    Note:
+      Every implementation runs with ``cwd`` set to ``case.workspace.dir``,
+      so relative paths (e.g. output files written by the test) resolve
+      correctly without needing to reference ``case.workspace.dir`` explicitly.
+    """
+
+
+@hookspec
+def canary_runtest_rebaseline(case: "Job") -> None:
+    """Rebaseline a test case from its existing results.
+
+    This is a normal (non-firstresult) hook: every implementation runs.  The
+    default implementation (``trylast``) performs the case's declared baseline
+    actions -- copying produced files over their gold counterparts and running
+    baseline scripts with the job's runtime environment.  Plugin implementations
+    run first and may prepare generated helpers (e.g. the vvtest plugin
+    regenerates ``vvtest_util.py`` with ``is_baseline=True``) so the baseline
+    script observes that it is being rebaselined.
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+    """
+
+
+# -------------------------------------------------------------------------
+# resource pool hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_fill(config: "CanaryConfig") -> dict[str, Any] | None:
+    """Create the initial resource-pool specification.
+
+    Implementations should return a topology-aware resource-pool spec or None.
+
+    """
+    raise NotImplementedError
+
+
+@hookspec
+def canary_resource_pool_update(config: "CanaryConfig", pool: dict[str, Any]) -> None:
+    """Update an existing resource-pool specification.
+
+    Implementations may mutate ``pool`` in place. This hook is intended for
+    composable modifications such as GPU discovery, CTest resource specs,
+    command-line overrides, oversubscription, or metadata.
+    """
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_accommodates(case: "Job") -> "Outcome":
+    """Determine if there are sufficient resource to run ``job``."""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_count(type: str) -> int:
+    """Return the number resources available of type ``type``"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_count_per_node(type: str) -> int:
+    """Return the number resources available of type ``type`` per node"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_types() -> list[str]:
+    """Return the names of available resources"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_describe() -> str:
+    """Return a string describing the resource pool"""
+    raise NotImplementedError
+
+
+# -------------------------------------------------------------------------
+# Reporter hooks
+# -------------------------------------------------------------------------
+
+
+@hookspec
+def canary_reporter() -> "CanaryReporter | None":
+    """Return a reporter instance contributed by this plugin.
+
+    Implement this hook to register a custom reporter that ``canary report``
+    can invoke.  Return a :class:`~canary.CanaryReporter` instance, or
+    ``None`` if the plugin does not provide a reporter.
+
+    All non-``None`` return values are collected; ``canary report <type>``
+    selects the reporter whose ``type`` attribute matches the requested format.
+
+    Example::
+
+        from canary import CanaryReporter
+
+        class MyReporter(CanaryReporter):
+            type = "myformat"
+            description = "Custom report format"
+
+            def create(self, output=None):
+                ...
+
+        @canary.hookimpl
+        def canary_reporter():
+            return MyReporter()
+
+    """

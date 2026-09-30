@@ -16,11 +16,11 @@ from typing import Protocol
 from typing import cast
 
 import canary
-from _canary.job import BaseJob
-from _canary.queue_executor import ExecutionSlot
-from _canary.reporter import EventReporter
-from _canary.reporter import LiveReporter
-from _canary.timekeeper import Timekeeper
+from _canary.core.job import BaseJob
+from _canary.core.timekeeper import Timekeeper
+from _canary.execution.console import EventReporter
+from _canary.execution.console import LiveReporter
+from _canary.execution.queue_executor import ExecutionSlot
 from _canary.util.misc import boolean
 
 logger = canary.get_logger(__name__)
@@ -135,7 +135,7 @@ def inner_job(job: canary.BaseJob | FluxJob) -> canary.Job:
 
 class FluxReporterQueue:
     """
-    Minimal queue facade for _canary.queue_executor.LiveReporter/EventReporter.
+    Minimal queue facade for _canary.execution.queue_executor.LiveReporter/EventReporter.
 
     This is not a scheduling queue and does not do resource checkout.
     It only provides the queue-shaped methods/attributes the reporters expect.

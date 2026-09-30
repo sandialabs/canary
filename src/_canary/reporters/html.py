@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from typing import TextIO
 
 from .. import config
-from ..hookspec import hookimpl
+from ..plugins.hookspec import hookimpl
 from ..util import json_helper as json
 from ..util import logging
 from ..util.filesystem import mkdirp
@@ -31,9 +31,9 @@ from .reporter import enabled
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..job import Job
-    from ..runtest import Runner
-    from ..workspace import Workspace
+    from ..core.job import Job
+    from ..execution.runtest import Runner
+    from ..session.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -169,7 +169,7 @@ class HTMLReportCommand(CanaryReporter):
             self.run_create(args)
 
     def run_create(self, args: Namespace) -> None:
-        from ..workspace import Workspace
+        from ..session.workspace import Workspace
 
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
@@ -178,7 +178,7 @@ class HTMLReportCommand(CanaryReporter):
         HTMLReporter().write(request)
 
     def run_server(self, args: Namespace) -> None:
-        from ..workspace import Workspace
+        from ..session.workspace import Workspace
 
         entrypoint: Path
         if output_dir := getattr(args, "output_dir", None):

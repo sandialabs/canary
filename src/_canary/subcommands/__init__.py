@@ -24,7 +24,6 @@ from . import gc
 from . import help
 from . import info
 from . import init
-from . import install
 from . import learn
 from . import location
 from . import log
@@ -37,6 +36,7 @@ from . import select
 from . import selection
 from . import status
 from . import tree
+from . import tui
 from . import view
 
 plugins = [
@@ -52,7 +52,6 @@ plugins = [
     help,
     info,
     init,
-    install,
     learn,
     location,
     log,
@@ -65,6 +64,7 @@ plugins = [
     selection,
     status,
     tree,
+    tui,
     view,
 ]
 

@@ -35,7 +35,7 @@ def _hookspec_firstresult() -> dict[str, bool]:
     """Return {hook_name: firstresult} for every @hookspec in hookspec.py."""
     import pluggy
 
-    from _canary import hookspec as hs_module
+    from _canary.plugins import hookspec as hs_module
 
     pm = pluggy.PluginManager("canary")
     pm.add_hookspecs(hs_module)
@@ -197,7 +197,7 @@ def test_documented_hook_exists_in_hookspec(hook_name):
     """Every hook referenced in docs/skills/capabilities must exist in hookspec.py."""
     import pluggy
 
-    from _canary import hookspec as hs_module
+    from _canary.plugins import hookspec as hs_module
 
     pm = pluggy.PluginManager("canary")
     pm.add_hookspecs(hs_module)

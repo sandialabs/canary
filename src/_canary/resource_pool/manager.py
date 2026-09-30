@@ -14,7 +14,7 @@ from .rpool import make_resource_pool
 
 if TYPE_CHECKING:
     from ..config import Config as CanaryConfig
-    from ..job import Job
+    from ..core.job import Job
     from .rpool import NodeRequest
 
 
@@ -102,7 +102,7 @@ class ResourceManager:
             return 0
 
     def accommodates(self, case_or_request: "Job | list[NodeRequest]") -> Outcome:
-        from ..job import Job
+        from ..core.job import Job
 
         request: list["NodeRequest"]
         if isinstance(case_or_request, Job):

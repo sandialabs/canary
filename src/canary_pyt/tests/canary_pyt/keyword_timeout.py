@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
-from _canary.workspace import Workspace
+from _canary.session.workspace import Workspace
 
 HERE = Path(__file__).parent
 

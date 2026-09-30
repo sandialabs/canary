@@ -15,32 +15,29 @@ from pathlib import Path
 import schema
 
 import _canary.config as config
-import _canary.status as status
+import _canary.core.status as status
 import canary_pyt.enums as enums
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
-from _canary.error import TestDiffed
-from _canary.error import TestFailed
-from _canary.error import TestSkipped
-from _canary.generator import AbstractSpecGenerator
-from _canary.hookspec import hookimpl
-from _canary.hookspec import hookspec
-from _canary.ir import DependencySelector
-from _canary.ir import JobSpecIR
-from _canary.job import BaseJob
-from _canary.job import Job
-from _canary.jobspec import Artifact
-from _canary.jobspec import Asset
-from _canary.jobspec import JobSpec
-from _canary.jobspec import Mask
-from _canary.jobspec_graph import print_spec_graph
-from _canary.launcher import Launcher
-from _canary.launcher import SubprocessLauncher
-from _canary.rules import Rule
-from _canary.rules import RuleOutcome
-from _canary.rules import RuntimeRule
-from _canary.status import Status
-from _canary.testcase import TestCase
+from _canary.core.error import TestDiffed
+from _canary.core.error import TestFailed
+from _canary.core.error import TestSkipped
+from _canary.core.job import BaseJob
+from _canary.core.job import Job
+from _canary.core.jobspec import Artifact
+from _canary.core.jobspec import Asset
+from _canary.core.jobspec import JobSpec
+from _canary.core.jobspec import Mask
+from _canary.core.jobspec_ir import DependencySelector
+from _canary.core.jobspec_ir import JobSpecIR
+from _canary.core.rules import Rule
+from _canary.core.rules import RuleOutcome
+from _canary.core.rules import RuntimeRule
+from _canary.execution.launcher import Launcher
+from _canary.execution.launcher import SubprocessLauncher
+from _canary.generation.generator import AbstractSpecGenerator
+from _canary.plugins.hookspec import hookimpl
+from _canary.plugins.hookspec import hookspec
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
 from _canary.testinst import TestInstance
@@ -66,6 +63,10 @@ get_logger = logging.get_logger
 
 ResolvedSpec = JobSpec
 AbstractTestGenerator = AbstractSpecGenerator
+# ``TestCase`` is the historical name for ``Job``; kept for backward
+# compatibility (still used by plugins).  Formerly re-exported from the
+# now-removed ``_canary.testcase`` shim.
+TestCase = Job
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +81,10 @@ __all__ = [
     "schema",
     "Generator",
     "Collector",
+    "app",
     "config",
     "status",
+    "Status",
     "enums",
     "Parser",
     "Config",
@@ -124,7 +127,7 @@ __all__ = [
     "color",
     "difflib",
     "filesystem",
-    "graph",
+    "print_spec_graph",
     "module",
     "shell",
     "string",
@@ -136,6 +139,9 @@ __all__ = [
     "Session",
     "ViewSettings",
     "Workspace",
+    "ScanPathsRequest",
+    "load_query_data",
+    "CanaryCommand",
     "directives",
     "patterns",
     "CanaryCommand",
@@ -177,7 +183,7 @@ def get_instance(arg_path: Path | str | None = None) -> TestInstance | MissingTe
 
 
 def get_job(arg_path: Path | str | None = None) -> Job | None:
-    from _canary.job import load_job_from_file
+    from _canary.core.job import load_job_from_file
 
     try:
         job = load_job_from_file(arg_path)
@@ -197,23 +203,27 @@ get_testcase = get_job
 # fast for test subprocesses while remaining fully transparent to CLI code and
 # extension authors.
 
-_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
-    # name -> (module_path, attribute_in_module)
+_LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
+    # name -> (module_path, attribute_in_module); attribute None imports the module itself
     "CanarySubcommand": ("_canary.subcommands.base", "CanarySubcommand"),
     "CanaryReporter": ("_canary.reporters.reporter", "CanaryReporter"),
-    "CanaryPluginManager": ("_canary.pluginmanager", "CanaryPluginManager"),
-    "Collector": ("_canary.collect", "Collector"),
+    "CanaryPluginManager": ("_canary.plugins.pluginmanager", "CanaryPluginManager"),
+    "Collector": ("_canary.generation.collect", "Collector"),
     "console_main": ("_canary.main", "console_main"),
-    "Generator": ("_canary.generate", "Generator"),
+    "Generator": ("_canary.generation.generate", "Generator"),
     "RuntimeSelector": ("_canary.select", "RuntimeSelector"),
     "Selector": ("_canary.select", "Selector"),
-    "Runner": ("_canary.runtest", "Runner"),
-    "NotAWorkspaceError": ("_canary.workspace", "NotAWorkspaceError"),
-    "Session": ("_canary.workspace", "Session"),
-    "Workspace": ("_canary.workspace", "Workspace"),
+    "Runner": ("_canary.execution.runtest", "Runner"),
+    "NotAWorkspaceError": ("_canary.session.workspace", "NotAWorkspaceError"),
+    "Session": ("_canary.session.workspace", "Session"),
+    "Workspace": ("_canary.session.workspace", "Workspace"),
     "ViewSettings": ("_canary.view", "ViewSettings"),
+    "print_spec_graph": ("_canary.core.jobspec_graph", "print_spec_graph"),
+    "Status": ("_canary.core.status", "Status"),
+    "ScanPathsRequest": ("_canary.app.pathspec", "ScanPathsRequest"),
+    "load_query_data": ("_canary.util.query_data", "load_query_data"),
     "CanaryCommand": ("_canary.util.testing", "CanaryCommand"),
-    "ScanPathsRequest": ("_canary.subcommands.run", "ScanPathsRequest"),
+    "app": ("_canary.app", None),
 }
 
 
@@ -223,7 +233,7 @@ def __getattr__(name: str):
 
         mod_path, attr = _LAZY_IMPORTS[name]
         mod = importlib.import_module(mod_path)
-        value = getattr(mod, attr)
+        value = mod if attr is None else getattr(mod, attr)
         # Cache in module globals so subsequent accesses skip __getattr__
         globals()[name] = value
         return value

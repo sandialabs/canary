@@ -12,8 +12,8 @@ from schema import Schema
 import canary
 
 from ..config.argparsing import Parser
-from ..hookspec import hookimpl
-from ..hookspec import hookspec
+from ..plugins.hookspec import hookimpl
+from ..plugins.hookspec import hookspec
 
 if TYPE_CHECKING:
     from ..resource_pool.rpool import ResourcePool

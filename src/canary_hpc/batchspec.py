@@ -18,11 +18,11 @@ import hpc_connect
 
 import _canary.util.json_helper as json
 import canary
-from _canary.job import BaseJob
-from _canary.job import JobPhase
-from _canary.job import JobState
-from _canary.status import Status
-from _canary.testexec import ExecutionSpace
+from _canary.core.job import BaseJob
+from _canary.core.job import JobPhase
+from _canary.core.job import JobState
+from _canary.core.status import Status
+from _canary.execution.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.serialize import serialize
 from _canary.util.time import time_in_seconds
@@ -172,6 +172,9 @@ class TestBatch(BaseJob):
     @property
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
+
+    def on_finish(self, at: float | None = None) -> None:
+        super().on_finish(at=at)
 
     def find_approximate_runtime(self) -> float:
         """Return the batch runtime estimate."""
@@ -650,5 +653,5 @@ class TestBatch(BaseJob):
         reason: str | None = None,
         code: int = -1,
     ) -> None:
-        # apply to the batch’s base status
+        # apply to the batch's base status
         self.status.set_base(category=category, outcome=outcome, reason=reason, code=code)
