@@ -365,6 +365,7 @@ class TestBatch(BaseJob):
             self.timekeeper.maybe_close(at=now)
 
             self.refresh()
+            self.finalize_status_from_child_jobs()
             self.state.phase = JobPhase.DONE
 
             # Log completion with timing breakdown
@@ -477,7 +478,6 @@ class TestBatch(BaseJob):
             if not unfinished or time.monotonic() >= deadline:
                 break
             time.sleep(0.25)
-        self.finalize_status_from_child_jobs()
 
     def mark_children_running(self) -> None:
         """Advance not-yet-finished child jobs to the RUNNING phase.

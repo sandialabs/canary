@@ -6,12 +6,15 @@ import heapq
 import time
 from collections import Counter
 from typing import TypeAlias
+from typing import cast
 
 import canary
 from _canary.core.job import BaseJob
 from _canary.core.job import JobPhase
 from _canary.execution import queue
 from _canary.util.time import hhmmss
+
+from .batchspec import TestBatch
 
 logger = canary.get_logger(__name__)
 key_type: TypeAlias = tuple[canary.status.Category, canary.status.Outcome]
@@ -57,7 +60,7 @@ class ResourceQueue(queue.ResourceQueue):
                 if not batch.state.is_done():
                     batch.set_status(outcome=status, reason=reason, code=code)
                     batch.state.phase = JobPhase.DONE
-                for job in batch:  # ty: ignore[not-iterable]
+                for job in cast("TestBatch", batch):  # ty: ignore[not-iterable]
                     if job.state.is_done() and not job.status.is_unset():
                         continue
                     job.set_status(outcome=status, reason=child_reason, code=code)

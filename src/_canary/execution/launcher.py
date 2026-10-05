@@ -22,6 +22,7 @@ from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import TextIO
+from typing import cast
 
 import psutil
 
@@ -183,12 +184,14 @@ class PythonFunctionLauncher(Launcher):
             stdout: TextIO = open(job.stdout, "a")
             stderr: StdErrorT = open(job.stderr, "a") if job.stderr is not None else stdout
             try:
-                with redirect_stdout(stdout), redirect_stderr(stderr):
+                with redirect_stdout(stdout), redirect_stderr(cast(TextIO, stderr)):
                     func(ctx)
                 rc = 0
             except Exception:
-                traceback.print_exc(file=stderr)
+                # Cast stderr to TextIO for traceback.print_exc
+                traceback.print_exc(file=cast(TextIO, stderr))
                 rc = 1
+
             finally:
                 if stderr is not stdout and not isinstance(stderr, int):
                     stderr.close()
