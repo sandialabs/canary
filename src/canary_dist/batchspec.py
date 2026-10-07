@@ -20,8 +20,19 @@ logger = canary.get_logger(__name__)
 
 
 class TestBatch(bs.TestBatch):
-    def __init__(self, spec: bs.BatchSpec, workspace: ExecutionSpace) -> None:
-        super().__init__(spec=spec, workspace=workspace)
+    def __init__(
+        self,
+        spec: bs.BatchSpec,
+        workspace: ExecutionSpace,
+        dependencies: list[bs.TestBatch] | None = None,
+        backend_supports_dependencies: bool = False,
+    ) -> None:
+        super().__init__(
+            spec=spec,
+            workspace=workspace,
+            dependencies=dependencies,
+            backend_supports_dependencies=backend_supports_dependencies,
+        )
         self.hostname: str | None = None
         self.transaction_id: str | None = None
         self._cpus = max(job.cpus for job in self.jobs)

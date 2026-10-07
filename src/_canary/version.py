@@ -29,10 +29,16 @@ Module-level attributes ``version``, ``__version__``, ``version_info``, and
 
 import os
 import re
+import shutil
 import subprocess
 from importlib import metadata as im
+from typing import Any
 
 DIST_NAME = "canary-wm"
+
+
+class GitNotFoundError(Exception):
+    pass
 
 
 class GitRepoNotFoundError(Exception):
@@ -91,9 +97,23 @@ def _find_repo_root(start_dir: str) -> str | None:
         d = parent
 
 
+def git(
+    args: list[str], start_dir: str | None = None, **kwargs: Any
+) -> subprocess.CompletedProcess:
+    exe = shutil.which("git")
+    if exe is None:
+        raise GitNotFoundError
+    cmd: list[str] = [exe]
+    if start_dir is not None:
+        cmd.extend(["-C", start_dir])
+    cmd.extend(args)
+    return subprocess.run(cmd, **kwargs)
+
+
 def _git_toplevel(start_dir: str) -> str:
-    proc = subprocess.run(
-        ["git", "-C", start_dir, "rev-parse", "--show-toplevel"],
+    proc = git(
+        ["rev-parse", "--show-toplevel"],
+        start_dir=start_dir,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -104,8 +124,9 @@ def _git_toplevel(start_dir: str) -> str:
 
 
 def _git_short_sha(repo: str) -> str:
-    proc = subprocess.run(
-        ["git", "-C", repo, "rev-parse", "--short", "HEAD"],
+    proc = git(
+        ["rev-parse", "--short", "HEAD"],
+        start_dir=repo,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -116,14 +137,10 @@ def _git_short_sha(repo: str) -> str:
 
 
 def _git_is_dirty(repo: str) -> bool:
-    return (
-        subprocess.run(
-            ["git", "-C", repo, "diff", "--quiet"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode
-        != 0
+    proc = git(
+        ["diff", "--quiet"], start_dir=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
+    return proc.returncode != 0
 
 
 def git_local_label() -> str:
@@ -158,7 +175,7 @@ def get_version() -> str:
 
     try:
         return f"{base}+{git_local_label()}"
-    except (GitRepoNotFoundError, CannotDetermineVersionFromGitError):
+    except (GitNotFoundError, GitRepoNotFoundError, CannotDetermineVersionFromGitError):
         return base
 
 

@@ -632,7 +632,7 @@ def _exec_sessions(args: argparse.Namespace) -> int:
 def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> dict[str, float]:
     """Look up batch-level timings for a job whose own timekeeper is empty.
 
-    Scans ``sessions/<session>/batches/*/batch.lock`` files for one whose
+    Scans ``sessions/<session>/hpc.batches/*/batch.lock`` files for one whose
     ``jobs`` list contains *job_id*.  Returns a timings dict with keys
     ``pending``, ``setup``, ``running``, ``teardown``, ``total`` where
     available, defaulting to ``-1.0``.  Also includes ``_started_at`` and
@@ -656,7 +656,7 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
         "_started_at": -1.0,
         "_stopped_at": -1.0,
     }
-    batches_dir = workspace.sessions_dir / session / "batches"
+    batches_dir = workspace.sessions_dir / session / "hpc.batches"
     if not batches_dir.is_dir():
         return empty
 
@@ -702,14 +702,14 @@ def _batch_timings_for_job(workspace: Workspace, job_id: str, session: str) -> d
 def _batch_last_activity_for_job(workspace: Workspace, job_id: str, session: str) -> float | None:
     """Return the ``last_activity`` unix timestamp from the owning batch.lock.
 
-    Scans ``sessions/<session>/batches/*/batch.lock`` files for one whose
+    Scans ``sessions/<session>/hpc.batches/*/batch.lock`` files for one whose
     ``jobs`` list contains *job_id* and returns the ``last_activity`` field if
     present.  Returns ``None`` when no match is found or the field is absent
     (e.g. the batch has not started or was written by an older canary version).
     """
     import json as _json
 
-    batches_dir = workspace.sessions_dir / session / "batches"
+    batches_dir = workspace.sessions_dir / session / "hpc.batches"
     if not batches_dir.is_dir():
         return None
     for batch_lock in batches_dir.glob("*/batch.lock"):

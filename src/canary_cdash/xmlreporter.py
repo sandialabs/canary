@@ -13,6 +13,7 @@ from typing import IO
 from typing import Any
 
 import canary
+from _canary.util.compression import gzip_b64
 from _canary.util.compression import targz_compress
 from _canary.util.string import truncate_middle
 
@@ -300,7 +301,7 @@ class CDashXMLReporter:
                 else:
                     add_named_measurement(results, name, json.dumps(value))
             add_measurement(
-                results, job.read_output(compress=True), encoding="base64", compression="gzip"
+                results, gzip_b64(job.read_output()), encoding="base64", compression="gzip"
             )
             test_node.appendChild(results)
 

@@ -264,7 +264,7 @@ class DistributedResourcePoolAdapter:
             querystrings = urlencode(parameters)
             url += f"?{querystrings}"
 
-        args = ["curl", "-s", "-g", "--fail-with-body"]
+        args = ["curl", "-s", "-g", "--fail"]  # , "--fail-with-body"]
         args.extend(["-X", method])
         args.extend(["-H", f"X-User: {getpass.getuser()}"])
         args.extend(["-H", f"X-Host: {os.uname().nodename}"])

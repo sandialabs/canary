@@ -10,6 +10,7 @@ Key functions: ``compress64``/``expand64`` for raw string compression,
 """
 
 import base64
+import gzip
 import io
 import os
 import tarfile
@@ -78,6 +79,18 @@ def compress64(string: str) -> str:
     """
     compressed = zlib.compress(string.encode("utf-8"), level=zlib.Z_BEST_COMPRESSION)
     return base64.b64encode(compressed).decode("utf-8")
+
+
+def gzip_b64(string: str) -> str:
+    """Compress a UTF-8 string with gzip and encode the result as base-64.
+
+    Args:
+        string: Plain-text string to compress.
+
+    Returns:
+        Base-64-encoded gzip-compressed bytes as a string.
+    """
+    return base64.b64encode(gzip.compress(string.encode("utf-8"))).decode("utf-8")
 
 
 def expand64(raw: str) -> str:

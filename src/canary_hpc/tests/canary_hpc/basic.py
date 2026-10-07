@@ -28,7 +28,7 @@ def config(request):
 
 
 def glob_files_in_session(pattern):
-    return glob.glob(f".canary/sessions/*/batches/**/{pattern}", recursive=True)
+    return glob.glob(f".canary/sessions/*/hpc.batches/**/{pattern}", recursive=True)
 
 
 def assert_success(cp: subprocess.CompletedProcess) -> None:
@@ -253,7 +253,7 @@ def test_hpc_rerun_not_pass_skips_passing_jobs(tmpdir):
         )
         # Don't assert returncode — we expect 4 failures
 
-        session1_batches = glob.glob(".canary/sessions/*/batches/*/canary-out.txt")
+        session1_batches = glob.glob(".canary/sessions/*/hpc.batches/*/canary-out.txt")
         assert len(session1_batches) == 2, (
             f"Expected 2 batch output files after first run, got {len(session1_batches)}"
         )

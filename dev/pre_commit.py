@@ -70,6 +70,11 @@ class Check(CanarySubcommand):
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         """Register check flags (-f format, -c lint, -m type, -b bandit, -t test, etc.)."""
         parser.add_argument(
+            "--update-version",
+            action="store_true",
+            help="Update pyproject.toml project.version and exit without running checks.",
+        )
+        parser.add_argument(
             "-l", nargs=0, action=Action, help="add missing license headers (default)"
         )
         parser.add_argument("-f", nargs=0, action=Action, help="run ruff format (default)")
@@ -105,6 +110,11 @@ class Check(CanarySubcommand):
             raise ValueError("canary pre-commit must be run from an editable install of canary")
 
         self.root = os.path.normpath(str(root))
+
+        if getattr(args, "update_version", None) is not None:
+            self.stamp_version()
+            logger.info("Version update complete!")
+            return 0
 
         if not hasattr(args, "action"):
             args.action = set("lfcmbt")
@@ -147,14 +157,18 @@ class Check(CanarySubcommand):
 
         # All selected checks passed: stamp the date-based version
         # unconditionally.
-        self.stamp_version(args)
+        self.stamp_version()
 
         logger.info("All checks complete!")
 
         return 0
 
-    def stamp_version(self, args: argparse.Namespace) -> None:
-        """Update ``pyproject.toml`` project.version to today's YY.M.D value."""
+    def stamp_version(self) -> None:
+        """Update ``pyproject.toml`` project.version.
+
+        Defaults to today's ``YY.M.D`` value when *version* is ``None`` or the
+        ``--update-version`` sentinel ``"today"`` is supplied.
+        """
         today = datetime.date.today()
         version = f"{today.year % 100}.{today.month}.{today.day}"
         update_pyproject_version(Path(self.root), version)

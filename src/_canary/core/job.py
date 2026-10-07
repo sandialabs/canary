@@ -21,11 +21,11 @@ from typing import Any
 from typing import Generator
 from typing import Literal
 from typing import MutableMapping
+from typing import cast
 
 from .. import config
 from ..util import json_helper as json
 from ..util import logging
-from ..util.compression import compress_str
 from ..util.executable import Executable
 from ..util.string import SimpleTemplate
 from .error import TestDiffed
@@ -869,8 +869,8 @@ class Job(BaseJob):
     def refresh(self) -> None:
         obj: Job
         try:
-            obj = json.loads(self.workspace.joinpath("testcase.lock").read_text())
-        except (json.JSONDecodeError, FileNotFoundError):
+            obj = cast(Job, json.safeload(str(self.workspace.joinpath("testcase.lock"))))
+        except (json.JSONDecodeError, FileNotFoundError, json.FailedToLoadError):
             return
         self.measurements.update(obj.measurements)
         self.variables = obj.variables
@@ -917,7 +917,7 @@ class Job(BaseJob):
     def save(self) -> None:
         json.safesave(self.lockfile, self)
 
-    def read_output(self, compress: bool = False) -> str:
+    def read_output(self) -> str:
         if self.status.is_skipped():
             return f"Test skipped.  Reason: {self.status.reason}"
         file = self.workspace.joinpath(self.stdout)
@@ -930,11 +930,7 @@ class Job(BaseJob):
             if file.exists():
                 out.write("\nCaptured stderr:\n")
                 out.write(file.read_text(errors="ignore"))
-        text = out.getvalue()
-        if compress:
-            kb_to_keep = 2 if self.status.is_success() else 300
-            text = compress_str(text, kb_to_keep=kb_to_keep)
-        return text
+        return out.getvalue()
 
     def load_cached_runs(self) -> dict[str, Any] | None:
         if cache_dir := find_cache_dir(start=self.workspace.root):

@@ -431,7 +431,7 @@ class CanaryHPCConductor:
         fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt, len(batch_specs), key, len(runner.jobs))
         _log_batch_summary(batch_specs)
-        root = runner.workspace.sessions_dir / runner.session / "batches"
+        root = runner.workspace.sessions_dir / runner.session / "hpc.batches"
         logger.debug("Batch workspace root: %s", root)
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}

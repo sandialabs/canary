@@ -34,7 +34,7 @@ from concurrent.futures import as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Iterable
+from typing import Collection
 
 from ..core import jobspec
 from ..core.job import JobPhase
@@ -841,7 +841,7 @@ class WorkspaceDatabase:
         upstream = self.get_upstream_ids(downstream.union(seeds))
         return upstream, downstream
 
-    def get_downstream_ids(self, seeds: Iterable[str]) -> set[str]:
+    def get_downstream_ids(self, seeds: Collection[str]) -> set[str]:
         """Return all transitive dependants of *seeds* (specs that depend on them).
 
         Uses a recursive CTE to traverse ``spec_deps`` in the forward direction.
@@ -868,7 +868,7 @@ class WorkspaceDatabase:
             self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
 
-    def get_upstream_ids(self, seeds: Iterable[str]) -> set[str]:
+    def get_upstream_ids(self, seeds: Collection[str]) -> set[str]:
         """Return all transitive prerequisites of *seeds* (specs they depend on).
 
         Uses a recursive CTE to traverse ``spec_deps`` in the reverse direction.

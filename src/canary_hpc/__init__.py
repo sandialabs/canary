@@ -333,7 +333,7 @@ def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: st
 
     if session_arg is None:
         # Search all sessions for this batch ID prefix.
-        candidates = sorted(workspace.sessions_dir.glob(f"*/batches/{batch_id}*"))
+        candidates = sorted(workspace.sessions_dir.glob(f"*/hpc.batches/{batch_id}*"))
         if not candidates:
             raise FileNotFoundError(
                 f"No batch matching {batch_id!r} found under {workspace.sessions_dir}"
@@ -341,7 +341,7 @@ def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: st
         return candidates[0]
 
     session_dir = _resolve_session_dir(workspace, session_arg)
-    candidates = sorted((session_dir / "batches").glob(f"{batch_id}*"))
+    candidates = sorted((session_dir / "hpc.batches").glob(f"{batch_id}*"))
     if not candidates:
         raise FileNotFoundError(
             f"No batch matching {batch_id!r} found in session {session_dir.name!r}"
@@ -415,7 +415,7 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
     workspace = Workspace.load()
     session_arg = getattr(args, "session", "latest")
     session_dir = _resolve_session_dir(workspace, session_arg)
-    batches_dir = session_dir / "batches"
+    batches_dir = session_dir / "hpc.batches"
 
     if not batches_dir.exists():
         if getattr(args, "progress", False):
@@ -570,7 +570,7 @@ def display_batch_log(id: str) -> None:
 
     workspace = Workspace.load()
     # Search all sessions for a batch matching the given ID prefix.
-    candidates = sorted(workspace.sessions_dir.glob(f"*/batches/{id}*"))
+    candidates = sorted(workspace.sessions_dir.glob(f"*/hpc.batches/{id}*"))
     if not candidates:
         raise FileNotFoundError(f"No batch matching {id!r} found under {workspace.sessions_dir}")
     d = candidates[0]

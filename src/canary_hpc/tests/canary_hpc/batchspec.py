@@ -649,3 +649,27 @@ def test_unfinished_jobs_generic_reason_without_wall_limit(tmp_path):
     job = batch.jobs[0]
     assert job.status.outcome.name == "BROKEN"
     assert "final result" in (job.status.reason or "").lower()
+
+
+def test_finalize_status_tolerates_transient_child_lockfile_read_failure(tmp_path, monkeypatch):
+    """A transient testcase.lock read race should not force the generic BROKEN fallback."""
+    from _canary.util import json_helper
+
+    job = _FinalizableJob(id="j1", outcome=Outcome.SUCCESS)
+    batch = make_batch(tmp_path, [job])
+
+    real_safeload = json_helper.safeload
+    calls = {"n": 0}
+
+    def flaky_safeload(path: str, attempts: int = 8):
+        if path.endswith("testcase.lock") and calls["n"] == 0:
+            calls["n"] += 1
+            raise json_helper.FailedToLoadError("transient read race")
+        return real_safeload(path, attempts=attempts)
+
+    monkeypatch.setattr(json_helper, "safeload", flaky_safeload)
+
+    batch.finalize_status_from_child_jobs()
+
+    assert batch.status.is_success()
+    assert job.status.is_success()

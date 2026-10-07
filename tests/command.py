@@ -1374,7 +1374,7 @@ def batch_setup(tmp_path_factory):
     session_dirs = sorted((d / ".canary" / "sessions").glob("*"))
     assert session_dirs, "No session directories created"
     session_name = session_dirs[0].name
-    batch_dirs = sorted((session_dirs[0] / "batches").glob("*"))
+    batch_dirs = sorted((session_dirs[0] / "hpc.batches").glob("*"))
     assert len(batch_dirs) == 2, f"Expected 2 batch dirs, got {len(batch_dirs)}: {batch_dirs}"
 
     yield SimpleNamespace(
@@ -1890,7 +1890,7 @@ def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
         workspace = Workspace.load()
         # Create a fake batch.lock under sessions/<session>/batches/<id>/
         session_name = setup.session.name
-        batch_dir = workspace.sessions_dir / session_name / "batches" / "abc1234"
+        batch_dir = workspace.sessions_dir / session_name / "hpc.batches" / "abc1234"
         batch_dir.mkdir(parents=True, exist_ok=True)
         fake_job_id = "fakejobid" * 8  # 64 chars
         t_submitted = 1_700_000_000.0
@@ -1995,7 +1995,7 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
         job_id = first_row["id"]
 
         # Create a fake batch.lock that references this job
-        batch_dir = workspace.sessions_dir / session_name / "batches" / "testbatch1"
+        batch_dir = workspace.sessions_dir / session_name / "hpc.batches" / "testbatch1"
         batch_dir.mkdir(parents=True, exist_ok=True)
         expected_mtime = 1_700_010_000.0
         (batch_dir / "batch.lock").write_text(

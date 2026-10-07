@@ -6,8 +6,10 @@ import argparse
 import logging
 import os
 import threading
+from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 import hpc_connect
 
@@ -18,9 +20,9 @@ from _canary.execution.testexec import ExecutionSpace
 from _canary.subcommands.run import Run
 from _canary.util.multiprocessing import SimpleQueue
 from canary_hpc.batching import BatchingSpec
-from canary_hpc.batching import batch_jobs
-from canary_hpc.batching import set_batch_dependencies
 from canary_hpc.batchspec import BatchSpec
+from canary_hpc.batchspec import TestBatch as HPCTestBatch
+from canary_hpc.conductor import create_batch_specs
 
 from .adapter import DistributedResourcePoolAdapter
 from .batchspec import TestBatch
@@ -87,37 +89,49 @@ class DistributedPoolConductor:
         resource_capacity = self.dpool.max_capacity_by_type()
         resource_capacity["cpus"] = int(width)
 
-        batch_specs: list[BatchSpec] = batch_jobs(
+        batch_specs = create_batch_specs(
             jobs=runner.jobs,
-            width=width,
+            batchspec=batching_spec,
+            cpus_per_node=width,
             workers=workers,
-            spec=batching_spec,
-            resource_capacity=resource_capacity,
-            node_count=1,
+            resources_per_node=None,
             exact_final_estimate=bool(canary.config.getoption("dist_batch_exact_estimate")),
         )
 
-        set_batch_dependencies(batch_specs)
+        # set_batch_dependencies is called inside create_batch_specs
         if not batch_specs:
             raise ValueError("No test batches generated")
 
         fmt = "[bold]Generated[/] %d batches from %d jobs"
         logger.info(fmt % (len(batch_specs), len(runner.jobs)))
 
-        root = runner.workspace.cache_dir / "canary-dist"
-        batches: list[TestBatch] = []
-
+        root = runner.workspace.sessions_dir / runner.session / "dist.batches"
+        batches: dict[str, TestBatch] = {}
+        graph: dict[str, list[str]] = {}
+        specmap: dict[str, BatchSpec] = {}
         for batch_spec in batch_specs:
-            path = f"batches/{batch_spec.id[:7]}"
+            graph[batch_spec.id] = [d.id for d in batch_spec.dependencies]
+            specmap[batch_spec.id] = batch_spec
+
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            batch_spec = specmap[id]
+            path = batch_spec.id[:7]
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
-            batch = TestBatch(batch_spec, workspace=workspace)
+            dependencies = [batches[dep.id] for dep in batch_spec.dependencies]
+            batch = TestBatch(
+                batch_spec,
+                workspace=workspace,
+                dependencies=cast(list[HPCTestBatch], dependencies),
+                backend_supports_dependencies=self.backend.supports_dependencies(),
+            )
             if width > batch.cpus:
                 batch.cpus = width
-            batches.append(batch)
+            batches[batch.id] = batch
 
         try:
             queue = ResourceQueue(global_lock, resource_pool=self.dpool)  # type: ignore
-            queue.put(*batches)  # type: ignore
+            queue.put(*batches.values())  # type: ignore
             queue.prepare()
         except Exception:
             logger.exception("failed")

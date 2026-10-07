@@ -2,14 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
+import gzip
 import importlib.resources
 import os
 import subprocess
 import sys
+import xml.dom.minidom as dom
+from base64 import b64decode
 
 import pytest
 
 import _canary.config
+import canary
 from _canary.util.filesystem import working_dir
 
 
@@ -36,6 +40,109 @@ def test_report_cdash(tmpdir):
         run_canary("run", "default")
         run_canary("report", "cdash", "create")
         assert os.path.exists("TestResults/CDASH")
+
+
+def test_report_cdash_missing_log_payload_is_valid_gzip_base64(tmpdir):
+    with working_dir(tmpdir.strpath):
+        root = str(importlib.resources.files("canary"))
+        run_canary("init", ".")
+        run_canary(
+            "selection", "create", "-r", os.path.join(root, "docs/examples/basic"), "default"
+        )
+        run_canary("run", "default")
+
+        # Remove one stdout file so CDash must serialize the fallback "Log not found" payload.
+        workspace = canary.Workspace.load()
+        jobs = workspace.load_jobs()
+        assert jobs, "expected jobs to exist after run"
+        session = jobs[0].workspace.session
+        stdout_file = jobs[0].workspace.joinpath(jobs[0].stdout)
+        assert os.path.exists(stdout_file), "expected a stdout file for the regression case"
+        os.remove(stdout_file)
+
+        run_canary("report", "cdash", "create")
+
+        cdash_dir = os.path.join("TestResults", "CDASH")
+        test_xml = sorted(
+            os.path.join(cdash_dir, name)
+            for name in os.listdir(cdash_dir)
+            if name.startswith("Test")
+        )[0]
+        doc = dom.parse(test_xml)
+
+        values = doc.getElementsByTagName("Value")
+        payload = None
+        for value in values:
+            parent = value.parentNode
+            if (
+                value.getAttribute("encoding") == "base64"
+                and value.getAttribute("compression") == "gzip"
+                and parent is not None
+                and parent.nodeName == "Measurement"
+            ):
+                payload = "".join(
+                    node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
+                )
+                break
+
+        assert payload is not None
+        decoded = gzip.decompress(b64decode(payload)).decode("utf-8")
+        assert decoded == "Log not found"
+
+
+def test_report_cdash_skipped_log_payload_is_valid_gzip_base64(tmpdir):
+    with working_dir(tmpdir.strpath):
+        root = str(importlib.resources.files("canary"))
+        run_canary("init", ".")
+        run_canary(
+            "selection", "create", "-r", os.path.join(root, "docs/examples/basic"), "default"
+        )
+        run_canary("run", "default")
+
+        workspace = canary.Workspace.load()
+        jobs = workspace.load_jobs()
+        assert jobs, "expected jobs to exist after run"
+
+        job = jobs[0]
+        job.set_status(outcome="SKIPPED", reason="Synthetic skip for CDash payload test")
+        job.save()
+        workspace.db.put_results(job)
+
+        run_canary("report", "cdash", "create")
+
+        cdash_dir = os.path.join("TestResults", "CDASH")
+        test_xml = sorted(
+            os.path.join(cdash_dir, name)
+            for name in os.listdir(cdash_dir)
+            if name.startswith("Test")
+        )[0]
+        doc = dom.parse(test_xml)
+
+        payload = None
+        for test in doc.getElementsByTagName("Test"):
+            names = test.getElementsByTagName("Name")
+            if not names:
+                continue
+            if names[0].firstChild is None or names[0].firstChild.nodeValue != job.display_name():
+                continue
+            for value in test.getElementsByTagName("Value"):
+                parent = value.parentNode
+                if (
+                    value.getAttribute("encoding") == "base64"
+                    and value.getAttribute("compression") == "gzip"
+                    and parent is not None
+                    and parent.nodeName == "Measurement"
+                ):
+                    payload = "".join(
+                        node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
+                    )
+                    break
+            if payload is not None:
+                break
+
+        assert payload is not None
+        decoded = gzip.decompress(b64decode(payload)).decode("utf-8")
+        assert decoded == "Test skipped.  Reason: Synthetic skip for CDash payload test"
 
 
 def run_canary(command, *args, cwd=None):
