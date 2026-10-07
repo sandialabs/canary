@@ -232,11 +232,10 @@ class CDashXMLReporter:
             exit_value = job.status.code
             fail_reason = None
             if not job.state.is_done():
-                status = "notdone"
-                exit_code = "Not Done"
-                completion_status = "notrun"
+                exit_code = "Not Run"
+                status = completion_status = "notrun"
             elif job.status.is_skipped():
-                status = "notdone"
+                status = "notrun"
                 exit_code = "Skipped"
                 completion_status = "notrun"
             elif job.status.is_success():

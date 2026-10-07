@@ -719,14 +719,6 @@ class ResourceQueueExecutor:
         having started at submit/spawn time so the timer has a meaningful Running
         phase instead of a zero-duration finish.
 
-        For HPC batches (jobs that expose a ``finalize_status_from_child_jobs``
-        method) we first refresh child lockfiles from disk.  If all children
-        have already reached a terminal state the batch status is derived from
-        the real child outcomes rather than the abnormal executor event; the
-        abnormal event is recorded as a warning so the discrepancy is visible
-        in logs.  This handles the case where the worker process was killed by
-        the outer watchdog after the scheduler already completed the batch but
-        before the subprocess could send ``job_finished``.
         """
         now = time.time()
         try:

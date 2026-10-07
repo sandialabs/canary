@@ -172,7 +172,7 @@ class Check(CanarySubcommand):
     def add_licenses(self, args: argparse.Namespace):
         """Add missing SPDX license headers to source, docs, and test trees."""
         with working_dir(self.root):
-            pm = logger.progress_monitor(f"Adding missing license headers in {self.root}")
+            pm = logger.progress_monitor(f"[bold]Adding[/] missing license headers in {self.root}")
             for top in ("./src", "./docs", "./tests", "./bin", "./dev"):
                 if os.path.isdir(top):
                     add_licenses(top)
@@ -182,26 +182,26 @@ class Check(CanarySubcommand):
         """Run ``ruff format`` over all source, docs, and test trees."""
         with working_dir(self.root):
             pm = logger.progress_monitor(
-                f"Formatting examples in {self.root}/src/canary/docs/examples"
+                f"[bold]Formatting[/] examples in {self.root}/src/canary/docs/examples"
             )
             paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff("format", *paths)
             ruff("format", "./src/canary")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting examples in {self.root}/docs")
+            pm = logger.progress_monitor(f"[bold]Formatting[/] examples in {self.root}/docs")
             ruff("format", "./docs")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting tests in {self.root}/tests")
+            pm = logger.progress_monitor(f"[bold]Formatting[/] tests in {self.root}/tests")
             ruff("format", "./tests")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting source in {self.root}/src")
+            pm = logger.progress_monitor(f"[bold]Formatting[/] source in {self.root}/src")
             ruff("format", "./src")
             pm.done()
 
-            pm = logger.progress_monitor(f"Formatting dev in {self.root}/dev")
+            pm = logger.progress_monitor(f"[bold]Formatting[/] dev in {self.root}/dev")
             ruff("format", "./dev")
             pm.done()
 
@@ -209,7 +209,7 @@ class Check(CanarySubcommand):
         """Run ``ruff check --fix`` over all source, docs, and test trees."""
         with working_dir(self.root):
             pm = logger.progress_monitor(
-                f"Lint checking examples in {self.root}/src/canary/docs/examples"
+                f"[bold]Linting[/] examples in {self.root}/src/canary/docs/examples"
             )
             paths = Check.find_pyt_files("./src/canary/docs/examples")
             ruff_check(*paths)
@@ -221,34 +221,34 @@ class Check(CanarySubcommand):
             pm.done()
 
             pm = logger.progress_monitor(
-                f"Lint checking examples in {self.root}/docs/source/static"
+                f"[bold]Linting[/] examples in {self.root}/docs/source/static"
             )
             ruff_check("./docs/source/static")
             pm.done()
 
-            pm = logger.progress_monitor(f"Lint checking tests in {self.root}/tests")
+            pm = logger.progress_monitor(f"[bold]Linting[/] tests in {self.root}/tests")
             ruff_check("./tests")
             pm.done()
 
-            pm = logger.progress_monitor(f"Lint checking source in {self.root}/src")
+            pm = logger.progress_monitor(f"[bold]Linting[/] source in {self.root}/src")
             ruff_check("./src")
             pm.done()
 
-            pm = logger.progress_monitor(f"Lint checking dev in {self.root}/dev")
+            pm = logger.progress_monitor(f"[bold]Linting[/] dev in {self.root}/dev")
             ruff_check("./dev")
             pm.done()
 
     def security_check(self, args: argparse.Namespace):
         """Run bandit security scan over ``src/``."""
         with working_dir(self.root):
-            pm = logger.progress_monitor("Checking source for security violations")
+            pm = logger.progress_monitor("[bold]Checking[/] source for security violations")
             bandit("-c", "./pyproject.toml", "-r", "src/")
             pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
         """Run ty or mypy type checking over ``src/``."""
         with working_dir(self.root):
-            pm = logger.progress_monitor(f"Type checking source in {self.root}/src")
+            pm = logger.progress_monitor(f"[bold]Type checking[/] source in {self.root}/src")
             typecheck("./src", use_local_packages=args.use_local_packages == "yes")
             pm.done()
 
@@ -436,14 +436,16 @@ def run_pytests_parallel(
         for p in test_paths:
             ap = os.path.abspath(p)
             rp = os.path.relpath(ap, root)
-            logger.info(f"Submitting tests in ./{rp} to pytest")
+            logger.info(f"[bold]Submitting[/] tests in ./{rp} to pytest")
             fut = ex.submit(run_pytest_one, str(root), str(p), pytest_args)
             futures[fut] = str(p)
 
         for fut in as_completed(futures):
             res = fut.result()
             results.append(res)
-            logger.info(f"pytest finished: {res.path} ({res.elapsed_s:.1f}s) rc={res.returncode}")
+            logger.info(
+                f"[bold]Finished[/] pytest: {res.path} ({res.elapsed_s:.1f}s) rc={res.returncode}"
+            )
 
     return results
 
@@ -492,7 +494,7 @@ def add_python_license(file: str) -> None:
         content = fh.read()
     if "# Copyright NTESS" in content:
         return
-    logger.info(f"Adding license to {file}")
+    logger.info(f"[bold]Adding[/] license to {file}")
     with open(file, "w") as fh:
         if content.startswith("#!"):
             lines = content.splitlines(keepends=True)
@@ -513,7 +515,7 @@ def add_rst_license(file: str) -> None:
         content = fh.read()
     if ".. Copyright NTESS" in content:
         return
-    logger.info(f"Adding license to {file}")
+    logger.info(f"[bold]Adding[/] license to {file}")
     with open(file, "w") as fh:
         fh.write(license)
         fh.write(content)
@@ -630,7 +632,9 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
         except Exception as exc:
             logger.debug("Could not add tests for %s: %s", ep.name, exc)
 
-    logger.info("[bold]Discovered[/] %d pytest path(s): %s", len(paths), ", ".join(paths))
+    logger.info("[bold]Discovered[/] %d pytest path(s):", len(paths))
+    for p in paths:
+        logger.info("  • %s" % p)
     return tuple(paths)
 
 
