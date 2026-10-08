@@ -1,5 +1,215 @@
 {
-  "expected_results": {
+  "index": {
+    "alpha": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=1.b=2.cpus=1": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=1.b=2.cpus=2": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=2.b=3.cpus=1": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=2.b=3.cpus=2": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=4.b=5.cpus=1": {
+      "outcome": "SUCCESS"
+    },
+    "analyze_only/analyze_only.a=4.b=5.cpus=2": {
+      "outcome": "SUCCESS"
+    },
+    "artifact": {
+      "outcome": "SUCCESS"
+    },
+    "attributes": {
+      "outcome": "SUCCESS"
+    },
+    "basic/first/first": {
+      "outcome": "SUCCESS"
+    },
+    "basic/second/second": {
+      "outcome": "SUCCESS"
+    },
+    "beta": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=-10.b=0": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=-5.b=0": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=0.b=-1": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=0.b=-2": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=0.b=0": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=0.b=1": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=0.b=2": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=10.b=0": {
+      "outcome": "SUCCESS"
+    },
+    "centered_space/centered_space.a=5.b=0": {
+      "outcome": "SUCCESS"
+    },
+    "copy_and_link/copy_and_link": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/basic/a": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/basic/depends_on_a": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/blt": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/green_eggs_and_ham": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/ingredients.type=bacon": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/ingredients.type=eggs": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/ingredients.type=ham": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/ingredients.type=lettuce": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/ingredients.type=tomato": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/multi/kitchen_sink": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/parameter/breakfast.dish=eggs": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/parameter/breakfast.dish=ham": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/parameter/breakfast.dish=spam": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/parameter/lunch": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/result/depends_on_willfail": {
+      "outcome": "SUCCESS"
+    },
+    "depends_on/result/willfail": {
+      "outcome": "FAILED"
+    },
+    "exclusive": {
+      "outcome": "SUCCESS"
+    },
+    "execute_and_analyze/execute_and_analyze": {
+      "outcome": "SUCCESS"
+    },
+    "execute_and_analyze/execute_and_analyze.a=1": {
+      "outcome": "SUCCESS"
+    },
+    "execute_and_analyze/execute_and_analyze.a=2": {
+      "outcome": "SUCCESS"
+    },
+    "execute_and_analyze/execute_and_analyze.a=3": {
+      "outcome": "SUCCESS"
+    },
+    "instance_attributes/instance_attributes": {
+      "outcome": "SUCCESS"
+    },
+    "owners": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize1.a=1": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize1.a=4": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize2.a=1.b=2": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize2.a=5.b=6": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=1.b=100000": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=1.b=1e+06": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=1.b=1e+07": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=4.b=100000": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=4.b=1e+06": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize3.a=4.b=1e+07": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=1.b=100000.cpus=4": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=1.b=100000.cpus=8": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=2.b=1e+06.cpus=4": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=2.b=1e+06.cpus=8": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=3.b=1e+07.cpus=4": {
+      "outcome": "SUCCESS"
+    },
+    "parameterize/parameterize4.a=3.b=1e+07.cpus=8": {
+      "outcome": "SUCCESS"
+    },
+    "random_space/random_space.a=0.0374574.b=8.68625": {
+      "outcome": "SUCCESS"
+    },
+    "random_space/random_space.a=2.20366.b=8.32891": {
+      "outcome": "SUCCESS"
+    },
+    "random_space/random_space.a=4.55488.b=6.33575": {
+      "outcome": "SUCCESS"
+    },
+    "random_space/random_space.a=4.83227.b=9.75708": {
+      "outcome": "SUCCESS"
+    },
+    "rebaseline/rebaseline": {
+      "outcome": "SUCCESS"
+    },
+    "resources/cpus": {
+      "outcome": "SUCCESS"
+    },
+    "setup_teardown_example": {
+      "outcome": "SUCCESS"
+    },
     "status/diff": {
       "outcome": "DIFFED"
     },
@@ -17,6 +227,21 @@
     },
     "timeoutx/timeout": {
       "outcome": "TIMEOUT"
+    },
+    "vvt/include": {
+      "outcome": "SUCCESS"
+    },
+    "vvt/test_exec_dir.np=3.x=1.234e6": {
+      "outcome": "SUCCESS"
+    },
+    "vvt/test_exec_dir.np=4.x=1.234e7": {
+      "outcome": "SUCCESS"
+    },
+    "vvt/test_exec_dir.np=5.x=1.234e8": {
+      "outcome": "SUCCESS"
+    },
+    "vvt/test_exec_dir.np=6.x=1.23423476498e-2": {
+      "outcome": "SUCCESS"
     },
     "xstatus/xdiff": {
       "outcome": "XDIFF"

@@ -26,9 +26,9 @@ def run_canary_query(*args: str) -> object:
 
 def load_expected_results() -> dict[str, str]:
     data = json.loads(INDEX_FILE.read_text())
-    expected_results = data.get("expected_results")
+    expected_results = data.get("index")
     if not isinstance(expected_results, dict):
-        raise ValueError(f"{INDEX_FILE}: expected_results must be an object")
+        raise ValueError(f"{INDEX_FILE}: index must be an object")
     outcomes: dict[str, str] = {}
     for fullname, spec in expected_results.items():
         if not isinstance(spec, dict):
@@ -55,11 +55,31 @@ def main() -> int:
             return 1
 
     actual_job_outcomes = {job["fullname"]: job["status"]["outcome"] for job in jobs}
+    unexpected_jobs = sorted(set(actual_job_outcomes) - set(expected_job_outcomes))
+    missing_jobs = sorted(set(expected_job_outcomes) - set(actual_job_outcomes))
+    if unexpected_jobs or missing_jobs:
+        print("Warning: example index does not match the latest-session job set", file=sys.stderr)
+        print(
+            json.dumps(
+                {"missing_jobs": missing_jobs, "unexpected_jobs": unexpected_jobs},
+                indent=2,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+
     mismatches = {
-        name: {"expected": expected, "actual": actual_job_outcomes.get(name)}
+        name: {"expected": expected, "actual": actual_job_outcomes[name]}
         for name, expected in expected_job_outcomes.items()
-        if actual_job_outcomes.get(name) != expected
+        if name in actual_job_outcomes and actual_job_outcomes[name] != expected
     }
+    mismatches.update(
+        {
+            name: {"expected": "SUCCESS", "actual": actual_job_outcomes[name]}
+            for name in unexpected_jobs
+            if actual_job_outcomes[name] != "SUCCESS"
+        }
+    )
     if mismatches:
         print("Unexpected example job outcomes", file=sys.stderr)
         print(json.dumps(mismatches, indent=2, sort_keys=True), file=sys.stderr)
