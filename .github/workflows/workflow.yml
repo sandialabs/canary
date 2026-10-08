@@ -89,21 +89,23 @@ jobs:
           pytest /tmp/canary-yaml/src/canary_yaml/tests
 
   slurm:
-   runs-on: ubuntu-latest
-   steps:
-     - uses: actions/checkout@v4
-     - name: Pull the pre-built Slurm Docker image
-       run: |
-         docker pull ghcr.io/sandialabs/canary-slurm:latest
-     - name: Run Slurm tests
-       run: |
-         BRANCH_NAME=${GITHUB_REF#refs/heads/}
-         echo "Testing branch: $BRANCH_NAME"
-         docker run --rm \
-           -v /home/runner/work/canary/canary/.ci/slurm/test.sh:/root/test.sh \
-           -e BRANCH_NAME=$BRANCH_NAME \
-           ghcr.io/sandialabs/canary-slurm:latest \
-           /bin/bash -c "./test.sh $BRANCH_NAME"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull the pre-built Slurm Docker image
+        run: |
+          docker pull ghcr.io/sandialabs/canary-slurm:latest
+      - name: Run Slurm tests
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Testing branch: $BRANCH_NAME"
+          docker run --rm \
+            -v /home/runner/work/canary/canary/.ci/slurm/test.sh:/root/test.sh \
+            -v /home/runner/work/canary/canary/.ci/assert_example_results.py:/root/assert_example_results.py \
+            -e BRANCH_NAME=$BRANCH_NAME \
+            -e ASSERT_EXAMPLES=/root/assert_example_results.py \
+            ghcr.io/sandialabs/canary-slurm:latest \
+            /bin/bash -c "./test.sh $BRANCH_NAME"
 
   flux:
     runs-on: ubuntu-latest
@@ -116,7 +118,7 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm --user root -v /home/runner/work/canary/canary/.ci/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
+          docker run --rm --user root -v /home/runner/work/canary/canary/.ci/flux/test.sh:/home/fluxuser/test.sh -v /home/runner/work/canary/canary/.ci/assert_example_results.py:/home/fluxuser/assert_example_results.py -e BRANCH_NAME=$BRANCH_NAME -e ASSERT_EXAMPLES=/home/fluxuser/assert_example_results.py fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
 
   pbs:
     runs-on: ubuntu-latest
@@ -129,7 +131,7 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm --user root -h pbs -v /home/runner/work/canary/canary/.ci/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
+          docker run --rm --user root -h pbs -v /home/runner/work/canary/canary/.ci/pbs/test.sh:/tmp/testing/test.sh -v /home/runner/work/canary/canary/.ci/assert_example_results.py:/tmp/testing/assert_example_results.py -e BRANCH_NAME=$BRANCH_NAME -e ASSERT_EXAMPLES=/tmp/testing/assert_example_results.py -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
 
   lint:
     runs-on: ubuntu-latest

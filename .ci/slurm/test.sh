@@ -1,4 +1,5 @@
 BRANCH_NAME=$1
+ASSERT_EXAMPLES=${ASSERT_EXAMPLES:-.ci/assert_example_results.py}
 
 # The base Slurm image does not ship canary; install the branch under test
 # at runtime so a single pre-built image can be reused by every CI run.
@@ -25,9 +26,9 @@ echo " "
 # Test 2
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=slurm -b spec=count:3,nodes:any ./examples || exit_code=$?
-if [ "${exit_code}" -ne 14 ]; then
+python3 "$ASSERT_EXAMPLES" || {
   exit 1
-fi
+}
 
 echo " "
 echo " "

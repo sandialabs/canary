@@ -1,5 +1,6 @@
 # Install necessary dependencies
 set -x
+ASSERT_EXAMPLES=${ASSERT_EXAMPLES:-.ci/assert_example_results.py}
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
 whoami
@@ -52,13 +53,13 @@ echo " "
 # Test 1
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs ./examples || exit_code=$?
-if [ "${exit_code}" -ne 14 ]; then
+python3 "$ASSERT_EXAMPLES" || {
   cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
   cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
-fi
+}
 
 echo " "
 echo "------------------------Test 2----------------------"
@@ -66,13 +67,13 @@ echo " "
 # Test 2
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs -b spec=count:3,nodes:any ./examples || exit_code=$?
-if [ "${exit_code}" -ne 14 ]; then
+python3 "$ASSERT_EXAMPLES" || {
   cat .canary/cache/canary-hpc/batches/*/resource_pool.json || true
   cat .canary/cache/canary-hpc/batches/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
-fi
+}
 
 echo " "
 echo " "
