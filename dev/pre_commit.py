@@ -17,6 +17,7 @@ module contains the full implementation.
 import argparse
 import datetime
 import importlib.resources as ir
+import json
 import os
 import re
 import shutil
@@ -40,6 +41,9 @@ stdout: Any = subprocess.PIPE
 stderr: Any = subprocess.PIPE
 
 logger = logging.get_logger(__name__)
+
+EXAMPLE_INDEX_FILE = Path("examples") / "index.json"
+EXAMPLE_INDEX_KEY = "index"
 
 
 class Action(argparse.Action):
@@ -85,8 +89,13 @@ class Check(CanarySubcommand):
         )
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
-        parser.add_argument("-e", nargs=0, action=Action, help="run examples test")
+        parser.add_argument("-e", nargs=0, action=Action, help="run and check canary examples")
         parser.add_argument("-d", nargs=0, action=Action, help="make docs")
+        parser.add_argument(
+            "--remove-missing-example-jobs",
+            action="store_true",
+            help="when updating the example index, also remove indexed jobs missing from the latest session",
+        )
         parser.add_argument("--verbose", action="store_true", help="verbose")
         parser.add_argument(
             "--local-packages",
@@ -111,13 +120,26 @@ class Check(CanarySubcommand):
 
         self.root = os.path.normpath(str(root))
 
-        if getattr(args, "update_version", None) is not None:
+        if getattr(args, "update_version", False):
             self.stamp_version()
             logger.info("Version update complete!")
             return 0
 
-        if not hasattr(args, "action"):
+        has_example_commands = any(
+            (
+                "e" in getattr(args, "action", set()),
+                args.assert_example_results,
+                args.update_example_index,
+            )
+        )
+
+        if not hasattr(args, "action") and not has_example_commands:
             args.action = set("lfcmbt")
+        elif not hasattr(args, "action"):
+            args.action = set()
+
+        if args.remove_missing_example_jobs and "e" not in args.action:
+            raise ValueError("--remove-missing-example-jobs requires -e")
 
         if shutil.which("ruff") is None and "f" in args.action:
             raise ValueError("ruff must be on PATH to format and check code")
@@ -155,9 +177,15 @@ class Check(CanarySubcommand):
         if "d" in args.action:
             self.make_docs(args)
 
+        if "e" in args.action:
+            self.run_examples(args)
+            self.update_example_index(args)
+            self.assert_example_results(args)
+
         # All selected checks passed: stamp the date-based version
         # unconditionally.
-        self.stamp_version()
+        if args.action & set("lfcmbtdC"):
+            self.stamp_version()
 
         logger.info("All checks complete!")
 
@@ -268,9 +296,6 @@ class Check(CanarySubcommand):
 
     def run_tests(self, args: argparse.Namespace):
         """Discover and execute pytest suites, optionally with coverage collection."""
-        if "e" in args.action:
-            os.environ["CANARY_RUN_EXAMPLES_TEST"] = "1"
-
         with working_dir(self.root):
             test_paths = discover_test_paths(Path(self.root))
 
@@ -313,6 +338,75 @@ class Check(CanarySubcommand):
             make("api-docs")
             make("clean")
             make("html")
+
+    def run_examples(self, args: argparse.Namespace) -> None:
+        """Run Canary's packaged examples and report the session return code."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor(
+                f"[bold]Running[/] Canary examples in {self.root}/examples"
+            )
+            cp = canary("run", "-w", "./examples", check=False)
+            pm.done()
+            logger.info(f"Examples completed with return code {cp.returncode}")
+
+    def assert_example_results(self, args: argparse.Namespace) -> None:
+        """Validate the latest example session against the checked-in example index."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor(
+                "[bold]Asserting[/] example results against examples/index.json"
+            )
+            run_python(".ci/assert_example_results.py")
+            pm.done()
+
+    def update_example_index(self, args: argparse.Namespace) -> None:
+        """Add new latest-session jobs to the example index without rewriting old outcomes."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor(
+                "[bold]Updating[/] examples/index.json from the latest session"
+            )
+            expected_results = load_example_index(EXAMPLE_INDEX_FILE)
+            actual_job_outcomes = load_latest_job_outcomes()
+
+            updated_index = dict(expected_results)
+            added_jobs: list[str] = []
+            removed_jobs: list[str] = []
+            mismatched_jobs: dict[str, dict[str, str]] = {}
+
+            for name, outcome in actual_job_outcomes.items():
+                if name not in updated_index:
+                    updated_index[name] = {"outcome": outcome}
+                    added_jobs.append(name)
+                elif updated_index[name].get("outcome") != outcome:
+                    mismatched_jobs[name] = {
+                        "indexed": str(updated_index[name].get("outcome")),
+                        "actual": outcome,
+                    }
+
+            if args.remove_missing_example_jobs:
+                for name in sorted(set(expected_results) - set(actual_job_outcomes)):
+                    del updated_index[name]
+                    removed_jobs.append(name)
+
+            write_example_index(EXAMPLE_INDEX_FILE, updated_index)
+            pm.done()
+
+            logger.info(
+                "Example index updated: %d added, %d removed, %d existing outcome mismatch(es) left unchanged",
+                len(added_jobs),
+                len(removed_jobs),
+                len(mismatched_jobs),
+            )
+            for name in added_jobs:
+                logger.info("  [bold]Added[/] %s", name)
+            for name in removed_jobs:
+                logger.info("  [bold]Removed[/] %s", name)
+            for name, spec in sorted(mismatched_jobs.items()):
+                logger.warning(
+                    "Leaving existing example outcome unchanged for %s (indexed=%s, actual=%s)",
+                    name,
+                    spec["indexed"],
+                    spec["actual"],
+                )
 
 
 def make(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
@@ -481,6 +575,95 @@ def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
         raise ValueError(f"{' '.join(command)} failed!")
 
     return cp
+
+
+def canary(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``canary`` with the given arguments."""
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+
+    check = bool(kwargs.pop("check", True))
+    command = ["canary", *args]
+    cp = subprocess.run(command, **kwargs)
+
+    if check and cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+
+    return cp
+
+
+def run_python(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run the current Python interpreter with the given arguments."""
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+
+    command = [sys.executable, *args]
+    cp = subprocess.run(command, **kwargs)
+
+    if cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+
+    return cp
+
+
+def load_example_index(path: Path) -> dict[str, dict[str, str]]:
+    """Load ``examples/index.json`` and return its job mapping."""
+    data = json.loads(path.read_text())
+    index = data.get(EXAMPLE_INDEX_KEY)
+    if not isinstance(index, dict):
+        raise ValueError(f"{path}: {EXAMPLE_INDEX_KEY} must be an object")
+
+    normalized: dict[str, dict[str, str]] = {}
+    for fullname, spec in index.items():
+        if not isinstance(spec, dict):
+            raise ValueError(f"{path}: {fullname!r} must map to an object")
+        outcome = spec.get("outcome")
+        if not isinstance(outcome, str) or not outcome:
+            raise ValueError(f"{path}: {fullname!r} must define a non-empty outcome")
+        normalized[fullname] = {"outcome": outcome}
+
+    return normalized
+
+
+def write_example_index(path: Path, index: dict[str, dict[str, str]]) -> None:
+    """Write the normalized example index with stable formatting."""
+    ordered_index = {name: index[name] for name in sorted(index)}
+    path.write_text(json.dumps({EXAMPLE_INDEX_KEY: ordered_index}, indent=2, sort_keys=True) + "\n")
+
+
+def load_latest_job_outcomes() -> dict[str, str]:
+    """Query the latest Canary session and return ``fullname -> outcome``."""
+    cp = canary("query", "jobs", "--session", "latest", "--terse")
+    jobs = json.loads(cp.stdout)
+    if not isinstance(jobs, list):
+        raise ValueError("canary query jobs --session latest --terse did not return a list")
+
+    outcomes: dict[str, str] = {}
+    for job in jobs:
+        if not isinstance(job, dict):
+            raise ValueError("canary query jobs returned a non-object job entry")
+        fullname = job.get("fullname")
+        status = job.get("status")
+        if not isinstance(fullname, str) or not fullname:
+            raise ValueError("canary query jobs returned a job with invalid fullname")
+        if not isinstance(status, dict):
+            raise ValueError(f"canary query jobs returned invalid status for {fullname!r}")
+        outcome = status.get("outcome")
+        if not isinstance(outcome, str) or not outcome:
+            raise ValueError(f"canary query jobs returned invalid outcome for {fullname!r}")
+        outcomes[fullname] = outcome
+
+    return outcomes
 
 
 def add_licenses(path: str) -> None:
