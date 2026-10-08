@@ -22,7 +22,9 @@ The `slurm` job in `.github/workflows/workflow.yml` does:
 docker pull ghcr.io/sandialabs/canary-slurm:latest
 docker run --rm \
   -v .../.ci/slurm/test.sh:/root/test.sh \
+  -v .../.ci/assert_example_results.py:/root/assert_example_results.py \
   -e BRANCH_NAME=$BRANCH_NAME \
+  -e ASSERT_EXAMPLES=/root/assert_example_results.py \
   ghcr.io/sandialabs/canary-slurm:latest \
   /bin/bash -c "./test.sh $BRANCH_NAME"
 ```
@@ -32,33 +34,25 @@ and runs the Slurm scheduler tests.
 
 ## Rebuilding and publishing the image
 
-The image is rebuilt automatically by the
-`.github/workflows/build-slurm-container.yml` workflow whenever anything in
-`.ci/slurm/**` changes on `main`, or on demand via **Run workflow**. That
-workflow pushes to `ghcr.io/sandialabs/canary-slurm:latest`.
-
-### Building and pushing manually (from outside CI)
-
-If you need to build and push the image by hand (for example, the first
-time, before the workflow exists in `main`):
+Build manually with:
 
 ```console
-# 1. Build the base image
-docker build --file Dockerfile --tag ghcr.io/sandialabs/canary-slurm:latest .
+# Build only
+./rebuild.sh
 
-# 2. Log in to GHCR with a personal access token that has `write:packages`
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
-
-# 3. Push
-docker push ghcr.io/sandialabs/canary-slurm:latest
+# Build and push
+echo "$GHCR_TOKEN" | podman login ghcr.io -u <your-github-username> --password-stdin
+PUSH=1 ./rebuild.sh
 ```
 
 ### Running the image locally
 
 ```console
-docker run -it --rm \
+podman run -it --rm \
   -v "$PWD/test.sh:/root/test.sh" \
+  -v "$PWD/../assert_example_results.py:/root/assert_example_results.py" \
   -e BRANCH_NAME=main \
+  -e ASSERT_EXAMPLES=/root/assert_example_results.py \
   ghcr.io/sandialabs/canary-slurm:latest \
   /bin/bash -c "./test.sh main"
 ```

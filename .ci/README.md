@@ -1,17 +1,13 @@
-# Docker Containers
+# CI Assets
 
-This directory contains Docker containers that can be used for automated pull request testing. There are subdirectories for each scheduler type (i.e. slurm/). Additionally, the standalone directory contains just a Dockerfile for a canary container.
+This directory is intentionally small.
 
-## Pre-built vs. build-at-CI images
+Keep only:
+- scheduler test scripts used by GitHub/GitLab CI
+- the shared example-results verifier
+- rebuild/run helpers for containerized scheduler environments we need to recreate manually with `podman`
 
-- **Slurm** (`slurm/`): the image is **pre-built** and published to the
-  GitHub Container Registry (`ghcr.io/sandialabs/canary-slurm`). Building
-  Slurm from source on every CI run is too slow, so the `slurm` CI job pulls
-  the pre-built image and installs the canary branch under test at runtime.
-  See `slurm/README.md` and `.github/workflows/build-slurm-container.yml`.
-- **Flux** / **PBS**: pulled directly from upstream registries
-  (`fluxrm/flux-sched`, `pbspro/pbspro`) with canary installed at runtime.
-
-## Python Versions
-
-As of July 3rd, 2025, flux is running python 3.10 and the slurm container is running python 3.12. Upgrading python inside the flux container (for the CI pipeline) is not possible because it is pulled from flux's docker registry. However, with the `Dockerfile`, the slurm and flux (for container testing) python versions can be upgraded at any time.  
+Current model:
+- **Slurm** (`slurm/`): Canary-owned prebuilt image published to `ghcr.io/sandialabs/canary-slurm:latest`. CI pulls that image and installs the branch under test at runtime. The files under `slurm/` are the source of truth for rebuilding it with `podman`.
+- **Flux** (`flux/`): CI uses the upstream `fluxrm/flux-sched:latest` image and mounts `flux/test.sh` plus the shared verifier into the container.
+- **PBS** (`pbs/`): CI currently uses the upstream `pbspro/pbspro:latest` image and mounts `pbs/test.sh` plus the shared verifier into the container. The files under `pbs/` now also define a thin repo-owned image that can be rebuilt and pushed to `ghcr.io/sandialabs/canary-pbs:latest` with `podman` when we want to host our own copy.
