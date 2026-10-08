@@ -16,17 +16,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-
 INDEX_FILE = Path("examples") / "index.json"
 
 
 def run_canary_query(*args: str) -> object:
-    cp = subprocess.run(
-        ["canary", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    cp = subprocess.run(["canary", *args], check=True, capture_output=True, text=True)
     return json.loads(cp.stdout)
 
 
@@ -54,7 +48,10 @@ def main() -> int:
     by_name = Counter(job["fullname"] for job in jobs)
     for name, count in by_name.items():
         if count != 1:
-            print(f"Expected exactly one latest-session job named {name!r}, found {count}", file=sys.stderr)
+            print(
+                f"Expected exactly one latest-session job named {name!r}, found {count}",
+                file=sys.stderr,
+            )
             return 1
 
     actual_job_outcomes = {job["fullname"]: job["status"]["outcome"] for job in jobs}
