@@ -157,35 +157,71 @@ def safesave(file: str | os.PathLike[str], state: Any, *, indent: int | None = 2
                 pass
 
 
-def safeload(file: str, attempts: int = 8) -> dict[str, Any]:
-    """Load a JSON file with retries to guard against concurrent write races.
+#: Delay before the single retry of a missing file.  Covers a rename by another
+#: process that has not yet become visible on a shared filesystem.
+SAFELOAD_MISSING_RETRY_DELAY: float = 0.1
 
-    Retries up to ``attempts`` times with exponential back-off.
+#: Initial and maximum back-off between retries of an unreadable file.
+SAFELOAD_INITIAL_DELAY: float = 0.05
+SAFELOAD_MAX_DELAY: float = 0.5
+
+
+def safeload(file: str, attempts: int = 4) -> dict[str, Any]:
+    """Load a JSON file, retrying briefly to guard against concurrent write races.
+
+    Files written by :func:`safesave` are replaced atomically, so a reader sees
+    either the previous or the new complete file.  Retries therefore only cover
+    what atomic replacement does not:
+
+    * A missing file is retried once, after ``SAFELOAD_MISSING_RETRY_DELAY``
+      seconds, in case a rename on a shared filesystem is not yet visible.  If
+      it is still missing, :class:`FileNotFoundError` is raised.
+    * A file that cannot be read or parsed (``OSError``, e.g. a stale NFS
+      handle, or :class:`json.JSONDecodeError`) is retried up to ``attempts``
+      times with exponential back-off, starting at ``SAFELOAD_INITIAL_DELAY``
+      and capped at ``SAFELOAD_MAX_DELAY`` seconds per wait.
+
+    Any other error (e.g. the JSON decodes but cannot be deserialized) is not
+    transient and is raised immediately as :class:`FailedToLoadError`.
 
     Args:
         file: Path to the JSON file to load.
-        attempts: Maximum number of read attempts before raising.
+        attempts: Maximum number of retries after the first read.
 
     Returns:
         Parsed JSON object.
 
     Raises:
-        FailedToLoadError: If all attempts fail.
+        FileNotFoundError: If the file is still missing after one retry.
+        FailedToLoadError: If the file cannot be read or decoded.
     """
-    delay = 0.5
+    delay = SAFELOAD_INITIAL_DELAY
+    retried_missing = False
+    last_error: BaseException | None = None
     attempt = 0
     while attempt <= attempts:
-        # Guard against race condition when multiple batches are running at once
         attempt += 1
         try:
             with open(file, "r") as fh:
                 return load(fh)
-        except Exception:
+        except FileNotFoundError:
+            # The single missing-file retry is independent of ``attempts``.
+            if retried_missing:
+                raise
+            retried_missing = True
+            attempt -= 1
+            time.sleep(SAFELOAD_MISSING_RETRY_DELAY)
+        except (OSError, json.JSONDecodeError) as e:
+            last_error = e
+            if attempt > attempts:
+                break
             time.sleep(delay)
-            delay *= 2
+            delay = min(2.0 * delay, SAFELOAD_MAX_DELAY)
+        except Exception as e:
+            raise FailedToLoadError(f"Failed to load {file}: {e}") from e
     raise FailedToLoadError(
-        f"Failed to load {file} after {attempts} {pluralize('attempt', attempts)}"
-    )
+        f"Failed to load {file} after {attempt} {pluralize('attempt', attempt)}"
+    ) from last_error
 
 
 def try_loads(arg):

@@ -158,13 +158,89 @@ def test_safesave_removes_tmp_file(tmp_path: Path):
     assert not (tmp_path / ".state.json.tmp").exists()
 
 
-def test_safeload_raises_after_retries(tmp_path: Path):
-    missing = tmp_path / "missing.json"
+@pytest.fixture
+def sleeps(monkeypatch) -> list[float]:
+    """Record the delays ``safeload`` sleeps for, without actually sleeping."""
+    calls: list[float] = []
+    monkeypatch.setattr(json_helper.time, "sleep", calls.append)
+    return calls
 
-    # attempts=-1: loop condition (attempt <= -1) is False immediately,
-    # so FailedToLoadError is raised with no sleep delay.
+
+def test_safeload_missing_file_retries_once_then_raises(tmp_path: Path, sleeps):
+    with pytest.raises(FileNotFoundError):
+        json_helper.safeload(str(tmp_path / "missing.json"))
+    assert sleeps == [json_helper.SAFELOAD_MISSING_RETRY_DELAY]
+    assert json_helper.SAFELOAD_MISSING_RETRY_DELAY <= 0.1
+
+
+def test_safeload_missing_file_retry_ignores_attempts(tmp_path: Path, sleeps):
+    with pytest.raises(FileNotFoundError):
+        json_helper.safeload(str(tmp_path / "missing.json"), attempts=0)
+    assert sleeps == [json_helper.SAFELOAD_MISSING_RETRY_DELAY]
+
+
+def test_safeload_missing_file_that_appears_on_retry(tmp_path: Path, monkeypatch):
+    """A file renamed into place by another process during the retry delay is loaded."""
+    path = tmp_path / "late.json"
+
+    def write_then_return(_delay: float) -> None:
+        json_helper.safesave(str(path), {"late": True})
+
+    monkeypatch.setattr(json_helper.time, "sleep", write_then_return)
+    assert json_helper.safeload(str(path)) == {"late": True}
+
+
+def test_safeload_corrupt_file_retries_with_bounded_backoff(tmp_path: Path, sleeps):
+    path = tmp_path / "corrupt.json"
+    path.write_text("{not valid json")
+    with pytest.raises(json_helper.FailedToLoadError) as excinfo:
+        json_helper.safeload(str(path))
+    assert isinstance(excinfo.value.__cause__, json.JSONDecodeError)
+    assert sleeps == [0.05, 0.1, 0.2, 0.4]
+    assert all(delay <= json_helper.SAFELOAD_MAX_DELAY for delay in sleeps)
+    assert sum(sleeps) < 1.0
+
+
+def test_safeload_backoff_is_capped(tmp_path: Path, sleeps):
+    path = tmp_path / "corrupt.json"
+    path.write_text("{not valid json")
     with pytest.raises(json_helper.FailedToLoadError):
-        json_helper.safeload(str(missing), attempts=-1)
+        json_helper.safeload(str(path), attempts=6)
+    assert sleeps == [0.05, 0.1, 0.2, 0.4, 0.5, 0.5]
+
+
+def test_safeload_recovers_when_file_becomes_valid(tmp_path: Path, monkeypatch):
+    path = tmp_path / "state.json"
+    path.write_text("{partial")
+
+    def fix_file(_delay: float) -> None:
+        path.write_text('{"ok": true}')
+
+    monkeypatch.setattr(json_helper.time, "sleep", fix_file)
+    assert json_helper.safeload(str(path)) == {"ok": True}
+
+
+def test_safeload_does_not_retry_non_transient_errors(tmp_path: Path, sleeps, monkeypatch):
+    path = tmp_path / "state.json"
+    path.write_text('{"ok": true}')
+
+    def boom(_fh):
+        raise ValueError("cannot deserialize")
+
+    monkeypatch.setattr(json_helper, "load", boom)
+    with pytest.raises(json_helper.FailedToLoadError, match="cannot deserialize"):
+        json_helper.safeload(str(path))
+    assert sleeps == []
+
+
+def test_safeload_raises_after_retries(tmp_path: Path, sleeps):
+    path = tmp_path / "corrupt.json"
+    path.write_text("{not valid json")
+
+    # attempts=0: a single read, no retries and no sleep.
+    with pytest.raises(json_helper.FailedToLoadError, match="after 1 attempt"):
+        json_helper.safeload(str(path), attempts=0)
+    assert sleeps == []
 
 
 def test_safesave_supports_canary_serializable_object(tmp_path):
