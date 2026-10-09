@@ -242,6 +242,39 @@ def test_canary_dir_flag_eq_form(tmp_path, monkeypatch):
         assert ws2.root == ws.root
 
 
+def test_set_workspace_dir_supports_relocated_workspace_dir(tmp_path):
+    """Explicit workspace overrides must keep the exact workspace root path.
+
+    This covers relocated workspaces whose directory name is not `.canary`,
+    for example a copied snapshot named `canary.session`.
+    """
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+
+    moved = tmp_path / "canary.session"
+    ws.root.rename(moved)
+
+    set_workspace_dir(moved)
+    ws2 = Workspace.load()
+
+    assert ws2.root == moved
+    assert ws2.refs_dir == moved / "refs"
+    assert ws2.sessions_dir == moved / "sessions"
+
+
+def test_set_workspace_dir_accepts_anchor_dir(tmp_path):
+    """Explicit workspace overrides may point at the anchor, not just the root."""
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+
+    set_workspace_dir(proj)
+    ws2 = Workspace.load()
+
+    assert ws2.root == ws.root
+
+
 # ---------------------------------------------------------------------------
 # cache/view stale-root fix
 # ---------------------------------------------------------------------------

@@ -83,6 +83,28 @@ workspace_log = "canary.log"
 _override_workspace_dir: Path | None = None
 
 
+def _resolve_explicit_workspace_dir(path: str | Path) -> Path:
+    """Resolve an explicit workspace reference to the workspace root directory.
+
+    Accepts either:
+    - the workspace directory itself (contains ``WORKSPACE.TAG``), or
+    - an anchor directory that contains a ``.canary`` child.
+
+    Returns:
+        The workspace root directory.
+
+    Raises:
+        NotAWorkspaceError: If neither form resolves to a valid workspace.
+    """
+    p = Path(path).absolute()
+    if Workspace.exists_at(p):
+        return p
+    candidate = p / workspace_path
+    if Workspace.exists_at(candidate):
+        return candidate
+    raise NotAWorkspaceError(f"not a Canary workspace: {p}")
+
+
 def set_workspace_dir(path: str | Path) -> None:
     """Override the workspace root used by all ``Workspace.load()`` calls.
 
@@ -91,17 +113,16 @@ def set_workspace_dir(path: str | Path) -> None:
     workspace root without performing upward-directory discovery.
 
     Args:
-        path: Path to the ``.canary`` workspace directory (or any directory
-              that contains ``WORKSPACE.TAG``).
+        path: Path to either the workspace directory itself or an anchor
+              directory containing a ``.canary`` child. This may therefore be
+              a normal ``.canary`` directory, a relocated copy such as
+              ``canary.session``, or a project/worktree root.
 
     Raises:
         NotAWorkspaceError: If *path* does not contain a valid workspace.
     """
     global _override_workspace_dir
-    p = Path(path).absolute()
-    if not Workspace.exists_at(p):
-        raise NotAWorkspaceError(f"not a Canary workspace: {p}")
-    _override_workspace_dir = p
+    _override_workspace_dir = _resolve_explicit_workspace_dir(path)
 
 
 @dataclasses.dataclass
@@ -248,7 +269,16 @@ class Workspace:
         Args:
             anchor: The base directory where the .canary folder resides.
         """
-        self.root = anchor / workspace_path
+        self.initialize_properties_from_root(root=anchor / workspace_path)
+
+    def initialize_properties_from_root(self, *, root: Path) -> None:
+        """Sets up the internal directory structure paths from a workspace root.
+
+        Args:
+            root: The workspace directory itself (e.g. ``.canary`` or a
+                relocated workspace snapshot such as ``canary.session``).
+        """
+        self.root = root
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
@@ -441,8 +471,7 @@ class Workspace:
         if _override_workspace_dir is not None:
             logger.debug(f"Loading Canary workspace from override: {_override_workspace_dir}")
             ws: Workspace = object.__new__(cls)
-            # The override points at the .canary dir itself; its parent is the anchor.
-            ws.initialize_properties(anchor=_override_workspace_dir.parent)
+            ws.initialize_properties_from_root(root=_override_workspace_dir)
             ws.db = WorkspaceDatabase.load(ws.root)
             return ws
         start = Path(start or Path.cwd())
