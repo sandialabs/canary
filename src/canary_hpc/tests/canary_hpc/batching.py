@@ -166,6 +166,21 @@ def test_batch_t(tmp_path):
     assert all(hasattr(batch, "estimated_runtime") for batch in batches)
 
 
+def test_batching_uses_declared_timeout_not_cached_runtime(tmp_path):
+    jobs = make_jobs(tmp_path)
+
+    for job in jobs:
+        job.__dict__["runtime"] = 1.0
+
+    spec = batching_spec(layout="flat", nodes="any", count=5)
+    batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
+
+    timeouts = [float(job.timeout) for batch in batches for job in batch.jobs]
+    assert timeouts
+    assert 300.0 in timeouts
+    assert 30.0 in timeouts
+
+
 def test_partition_jobs_flat_nodes_any(tmp_path):
     jobs = make_jobs(tmp_path)
 

@@ -128,8 +128,8 @@ class Check(CanarySubcommand):
         has_example_commands = any(
             (
                 "e" in getattr(args, "action", set()),
-                args.assert_example_results,
-                args.update_example_index,
+                getattr(args, "assert_example_results", False),
+                getattr(args, "update_example_index", False),
             )
         )
 

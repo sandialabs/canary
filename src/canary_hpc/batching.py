@@ -22,6 +22,13 @@ from .schedulepack import pack_to_height_simulated
 logger = canary.get_logger(__name__)
 
 
+def _job_batch_duration(job: "canary.Job") -> float:
+    timeout = getattr(job, "timeout", None)
+    if timeout is not None:
+        return float(timeout)
+    return float(getattr(job, "runtime"))
+
+
 PartitionCount = int | None
 BatchLayout = Literal["flat", "atomic"]
 NodePolicy = Literal["same", "any"]
@@ -563,7 +570,7 @@ def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) 
     return ScheduleTask(
         id=job.id,
         width=max(1, int(job.cpus)),
-        duration=float(math.ceil(job.runtime)),
+        duration=float(math.ceil(_job_batch_duration(job))),
         dependencies=dependencies,
         priority=priority,
         payload=job,
@@ -598,7 +605,7 @@ def _partition_weight(jobs: list["canary.Job"], *, width: int) -> float:
     max_runtime = 0.0
 
     for job in jobs:
-        runtime = float(math.ceil(job.runtime))
+        runtime = float(math.ceil(_job_batch_duration(job)))
         cpus = max(1, int(job.cpus))
 
         work += cpus * runtime

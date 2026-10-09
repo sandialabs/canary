@@ -365,7 +365,7 @@ def test_job_save_uses_atomic_tmp_cleanup(spec: JobSpec, space):
 
 
 # ---------------------------------------------------------------------------
-# Tests for job.runtime clamping (cap + floor)
+# Tests for job.runtime cache behavior
 # ---------------------------------------------------------------------------
 
 
@@ -379,21 +379,14 @@ def _write_job_cache(cache_dir: Path, spec_id: str, mean: float) -> None:
     )
 
 
-def test_job_runtime_falls_back_to_floor_when_no_cache(spec: JobSpec, space):
-    """With no job cache, runtime falls back to the floor, not the full timeout.
-
-    The declared timeout is a safety ceiling (typically far larger than a job's
-    real runtime); using it as the cold-cache estimate over-inflates the batch
-    makespan on first runs.  We use ``timeout * _RUNTIME_FLOOR_FRACTION`` instead.
-    """
-    from _canary.core.job import _RUNTIME_FLOOR_FRACTION
-
+def test_job_runtime_falls_back_to_timeout_when_no_cache(spec: JobSpec, space):
+    """With no job cache, runtime falls back to the declared timeout."""
     job = Job(spec=spec, workspace=space)
-    assert job.runtime == spec.timeout * _RUNTIME_FLOOR_FRACTION
+    assert job.runtime == spec.timeout
 
 
 def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, tmp_path):
-    """A cached mean well below the timeout is used directly (subject to floor)."""
+    """A cached mean well below the timeout is used directly."""
 
     # find_cache_dir walks up from workspace.root (tmp_path/sessions/s1).
     # Place WORKSPACE.TAG at tmp_path so find_cache_dir resolves tmp_path/cache.
@@ -401,7 +394,6 @@ def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, t
     _write_job_cache(tmp_path / "cache", spec.id, mean=60.0)
 
     job = Job(spec=spec, workspace=space)
-    # floor = 300 * 0.1 = 30s; mean=60 > floor and < timeout → use 60
     assert job.runtime == 60.0
 
 
@@ -414,16 +406,13 @@ def test_job_runtime_caps_stale_cache_at_timeout(spec: JobSpec, space, tmp_path)
     assert job.runtime == spec.timeout  # capped at 300.0
 
 
-def test_job_runtime_floors_very_fast_cache(spec: JobSpec, space, tmp_path):
-    """A cached mean well below the floor is raised to timeout * floor_fraction."""
-    from _canary.core.job import _RUNTIME_FLOOR_FRACTION
-
+def test_job_runtime_preserves_very_fast_cache(spec: JobSpec, space, tmp_path):
+    """A cached mean well below the timeout is preserved."""
     (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
     _write_job_cache(tmp_path / "cache", spec.id, mean=1.0)  # 1s actual on 300s declared job
 
     job = Job(spec=spec, workspace=space)
-    expected_floor = spec.timeout * _RUNTIME_FLOOR_FRACTION  # 30.0
-    assert job.runtime == expected_floor
+    assert job.runtime == 1.0
 
 
 def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):

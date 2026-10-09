@@ -9,6 +9,9 @@ import pytest
 import canary
 from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
+from _canary.view import ResultsView
+from _canary.view import ViewManifest
+from _canary.view import ViewManifestEntry
 from _canary.view import ViewSettings
 
 
@@ -102,3 +105,55 @@ def test_rebuild_view_refuses_non_owning_directory(tmp_path):
             )
 
         assert (view / "user-file.txt").exists()
+
+
+def test_sync_tolerates_missing_manifest_target(tmp_path):
+    root = tmp_path / "view-missing-target"
+    root.mkdir()
+
+    write(
+        root / "a.pyt",
+        """\
+import sys
+
+def test():
+    pass
+
+if __name__ == "__main__":
+    sys.exit(test())
+""",
+    )
+
+    with working_dir(root), canary.config.override():
+        workspace = Workspace.create(root)
+        specs = workspace.collect({str(root): []})
+        session = workspace.run(specs, only="all")
+
+        assert session.returncode == 0
+        job = session.jobs[0]
+
+        view = ResultsView(root=root.parent, settings=ViewSettings(name="TestResults"))
+        manifest = ViewManifest(
+            settings=view.settings.__serialize__(),
+            entries={
+                job.id: ViewManifestEntry(
+                    job_id=job.id,
+                    view_path=str(job.view_path),
+                    source=str(job.workspace.dir),
+                    session=job.workspace.session or "unknown",
+                    outcome=job.status.outcome.name,
+                    updated="2026-10-08T00:00:00+00:00",
+                )
+            },
+        )
+
+        view.make(exist_ok=True)
+        view.save_manifest(manifest)
+
+        missing_dest = view.dir / job.view_path
+        missing_dest.unlink(missing_ok=True)
+
+        changed = view.sync(job)
+
+        assert changed is True
+        assert (view.dir / job.view_path).exists()

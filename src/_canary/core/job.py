@@ -46,13 +46,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# Fraction of the declared timeout used as the lower bound for the packing
-# runtime estimate.  Prevents very fast cached runtimes from collapsing the
-# per-batch CPU budget and producing overloaded batches.  The value 0.1 means
-# a job declared with a 300 s timeout will never be estimated below 30 s,
-# keeping the estimate range within a 10x band.
-_RUNTIME_FLOOR_FRACTION: float = 0.1
-
 
 class JobPhase(str, Enum):
     PENDING = "PENDING"
@@ -495,31 +488,17 @@ class Job(BaseJob):
 
     @cached_property
     def runtime(self) -> float:
-        """Return the estimated runtime used for batch packing decisions.
+        """Return the cached mean runtime for this job when one is available.
 
-        The estimate is clamped to ``[timeout * _RUNTIME_FLOOR_FRACTION, timeout]``
-        so that:
+        This property is no longer used by HPC batching.  It remains useful for
+        diagnostics and for callers that want a historical mean runtime signal
+        without changing the declared timeout semantics used for scheduling.
 
-        * Stale cache entries that exceed the declared timeout cannot inflate the
-          packer cost and produce unnecessary singleton batches.
-        * Very fast cached runtimes (common for analysis-script jobs) cannot
-          collapse the per-batch budget so far that the packer overfills batches,
-          causing contention-induced timeouts.
-
-        The clamping is intentionally lossy.  Batch packing does not need a
-        perfect runtime estimate — it needs *consistent* estimates that keep
-        batch sizes roughly uniform.
-
-        When there is *no* timing history (cold cache) we fall back to the floor
-        (``timeout * _RUNTIME_FLOOR_FRACTION``) rather than the full declared
-        ``timeout``.  The declared timeout is a safety *ceiling*, typically many
-        times a job's real runtime; using it as the estimate massively
-        over-inflates the batch makespan on the first run (e.g. a GPU-bound suite
-        estimated at ~10h instead of ~1h) and requests an oversized scheduler
-        wall.  Once a job runs, its cached mean supersedes this cold estimate.
+        The value is capped at the declared timeout so stale cache entries do
+        not report impossible runtimes after a timeout reduction.  When there is
+        no timing history we fall back to the declared timeout.
         """
         timeout = self.timeout
-        floor = timeout * _RUNTIME_FLOOR_FRACTION
         try:
             try:
                 if cache := self.load_cached_runs():
@@ -533,12 +512,12 @@ class Job(BaseJob):
                             timeout,
                             mean / timeout,
                         )
-                    return max(floor, min(mean, timeout))
+                    return min(mean, timeout)
             except KeyError:
                 pass
         except Exception:
             logger.debug("Failed to load historic timing data", exc_info=True)
-        return floor
+        return timeout
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]

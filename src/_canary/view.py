@@ -473,7 +473,7 @@ class ResultsView:
     def remove_path(self, path: Path) -> None:
         """Remove *path* from the view regardless of whether it is a file, symlink, or directory."""
         if path.is_symlink() or path.is_file():
-            path.unlink()
+            path.unlink(missing_ok=True)
         elif path.is_dir():
             force_remove(path)
 
