@@ -11,6 +11,7 @@ jobs) without any file I/O or subprocess overhead.
 """
 
 import hashlib
+import math
 from pathlib import Path
 
 import pytest
@@ -166,19 +167,54 @@ def test_batch_t(tmp_path):
     assert all(hasattr(batch, "estimated_runtime") for batch in batches)
 
 
-def test_batching_uses_declared_timeout_not_cached_runtime(tmp_path):
+def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
+    """Packing durations and the stored bounds follow canary_hpc.estimate, not raw timeouts."""
+    from canary_hpc import estimate
+
     jobs = make_jobs(tmp_path)
+    seen: list[str] = []
 
-    for job in jobs:
-        job.__dict__["runtime"] = 1.0
+    def fake_estimate(job):
+        seen.append(job.id)
+        return 0.1 * float(job.timeout)
 
-    spec = batching_spec(layout="flat", nodes="any", count=5)
+    monkeypatch.setattr(batching, "estimate_runtime", fake_estimate)
+    spec = batching_spec(layout="atomic", nodes="any", count=1)
+    (batch,) = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
+
+    assert set(seen) == {job.id for job in jobs}
+    # 20 leafs at 30 s on 64 cpus, then 5 aggregates at 3 s: never the 300 s timeout.
+    assert batch.estimated_runtime is not None and batch.estimated_runtime < 300.0
+    assert batch.runtime_upper_bound is not None
+    assert batch.runtime_upper_bound >= batch.estimated_runtime
+    assert batch.schedule_metadata["runtime_upper_bound"] == batch.runtime_upper_bound
+    assert estimate.DEFAULT_COLD_RUNTIME_FRACTION > 0.1
+
+
+def test_batching_cold_jobs_use_cold_fraction_of_timeout(tmp_path):
+    """With no timing history, every job is packed at cold_fraction * timeout."""
+    from canary_hpc import estimate
+
+    jobs = make_jobs(tmp_path)
+    spec = batching_spec(layout="flat", nodes="any", count=len(jobs))
     batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
-    timeouts = [float(job.timeout) for batch in batches for job in batch.jobs]
-    assert timeouts
-    assert 300.0 in timeouts
-    assert 30.0 in timeouts
+    fraction = estimate.DEFAULT_COLD_RUNTIME_FRACTION
+    for batch in batches:
+        (job,) = batch.jobs
+        assert batch.estimated_runtime == pytest.approx(math.ceil(fraction * job.timeout))
+
+
+def test_exclusive_jobs_occupy_full_batch_width(tmp_path):
+    jobs = make_jobs(tmp_path)
+    leaf = jobs[0]
+    leaf.spec.exclusive = True
+    assert batching._job_batch_width(leaf, width=64) == 64
+    assert batching._job_batch_width(jobs[1], width=64) == 1
+
+    lookup = {job.id: job for job in jobs}
+    task = batching._schedule_task_from_job(leaf, lookup, width=64)
+    assert task.width == 64
 
 
 def test_partition_jobs_flat_nodes_any(tmp_path):

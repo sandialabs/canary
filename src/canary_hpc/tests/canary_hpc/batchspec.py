@@ -4,7 +4,9 @@
 
 from pathlib import Path
 from typing import Any
+from typing import cast
 
+from _canary.core.job import Job
 from _canary.core.job import JobPhase
 from _canary.core.job import JobState
 from _canary.core.status import Outcome
@@ -60,6 +62,19 @@ class FakeJob:
 
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
+
+    # ``canary_hpc.estimate.estimate_runtime`` inputs.  ``runtime`` is reported
+    # as the recorded history; with timeout = 4 * runtime the history floor
+    # (0.1 * timeout) never binds, so the estimate is exactly 1.25 * runtime.
+    @property
+    def timeout(self) -> float:
+        return 4.0 * self.runtime
+
+    def total_timeout(self) -> float:
+        return 4.0 * self.runtime
+
+    def load_cached_runs(self) -> dict[str, Any]:
+        return {"metrics": {"time": {"mean": self.runtime, "max": self.runtime}}}
 
     def required_resources(self) -> list[NodeRequest]:
         request = NodeRequest()
@@ -673,3 +688,76 @@ def test_finalize_status_tolerates_transient_child_lockfile_read_failure(tmp_pat
 
     assert batch.status.is_success()
     assert job.status.is_success()
+
+
+# ---------------------------------------------------------------------------
+# Scheduler wall limit
+# ---------------------------------------------------------------------------
+
+
+def test_wall_limit_single_job_is_the_jobs_hard_limit(tmp_path):
+    from _canary import config
+
+    job = FakeJob(id="j1", runtime=10.0)
+    batch = make_batch(tmp_path, [job])
+    with config.override():
+        config.options.hpc_submit_args = []
+        assert batch.wall_limit() == job.total_timeout() == 40.0
+
+
+def test_wall_limit_multi_job_is_penalized_upper_bound(tmp_path):
+    from _canary import config
+    from canary_hpc.batchspec import BATCH_WALL_PENALTY
+
+    jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(4)]
+    spec = BatchSpec(layout="flat", jobs=cast(list[Job], jobs), runtime_upper_bound=25.0)
+    batch = HPCBatch(spec=spec, workspace=ExecutionSpace(root=tmp_path, path=Path("batch")))
+    with config.override():
+        config.options.hpc_submit_args = []
+        assert batch.wall_limit() == BATCH_WALL_PENALTY * 25.0
+
+
+def test_wall_limit_does_not_apply_timeout_multiplier(tmp_path):
+    from _canary import config
+
+    jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(4)]
+    spec = BatchSpec(layout="flat", jobs=cast(list[Job], jobs), runtime_upper_bound=25.0)
+    batch = HPCBatch(spec=spec, workspace=ExecutionSpace(root=tmp_path, path=Path("batch")))
+    with config.override():
+        config.options.hpc_submit_args = []
+        config.options.timeout = {"multiplier": 4.0}
+        assert batch.wall_limit() == 1.25 * 25.0
+        assert batch.total_timeout() == batch.queue_timeout + 1.25 * 25.0
+
+
+def test_wall_limit_is_capped_at_serial_hard_limits(tmp_path):
+    from _canary import config
+
+    jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(2)]  # hard limit 40 s each
+    spec = BatchSpec(layout="flat", jobs=cast(list[Job], jobs), runtime_upper_bound=1000.0)
+    batch = HPCBatch(spec=spec, workspace=ExecutionSpace(root=tmp_path, path=Path("batch")))
+    with config.override():
+        config.options.hpc_submit_args = []
+        assert batch.wall_limit() == 80.0
+
+
+def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path):
+    from _canary import config
+
+    jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(3)]
+    batch = make_batch(tmp_path, jobs)
+    with config.override():
+        config.options.hpc_submit_args = []
+        # history 10 s -> estimate 12.5 s each; 3 in series; x1.25 penalty
+        assert abs(batch.wall_limit() - 1.25 * 3 * 12.5) < 1e-9
+
+
+def test_pinned_wall_limit_wins(tmp_path):
+    from _canary import config
+
+    jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(3)]
+    batch = make_batch(tmp_path, jobs)
+    with config.override():
+        config.options.hpc_submit_args = ["--time=7m"]
+        assert batch.wall_limit() == 420.0
+        assert batch.wall_limit(submit_args=["--time-limit=1h"]) == 3600.0

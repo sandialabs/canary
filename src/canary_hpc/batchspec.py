@@ -27,6 +27,7 @@ from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.serialize import serialize
 from _canary.util.time import time_in_seconds
 
+from .estimate import estimate_runtime
 from .status import BatchStatus
 
 if TYPE_CHECKING:
@@ -36,13 +37,36 @@ if TYPE_CHECKING:
 
 logger = canary.get_logger(__name__)
 
+#: Safety penalty applied to the batch makespan upper bound when sizing the
+#: scheduler wall limit.  Covers per-batch overhead the bound does not model
+#: (environment setup, job startup, result collection, filesystem latency).
+BATCH_WALL_PENALTY: float = 1.25
+
+
+def automatic_wall_limit(jobs: "Sequence[canary.Job]", *, upper_bound: float | None) -> float:
+    """Return the scheduler wall limit canary requests for ``jobs`` when none is pinned.
+
+    See :meth:`TestBatch.wall_limit`.  ``upper_bound`` is the packer's makespan
+    upper bound; when it is unknown, the jobs are assumed to run one after another.
+    """
+    if len(jobs) == 1:
+        return float(jobs[0].total_timeout())
+    serial_ceiling = float(sum(job.total_timeout() for job in jobs))
+    if upper_bound is None:
+        upper_bound = float(sum(estimate_runtime(job) for job in jobs))
+    return min(BATCH_WALL_PENALTY * float(upper_bound), serial_ceiling)
+
 
 @dataclasses.dataclass
 class BatchSpec:
     layout: str
     jobs: list[canary.Job]
     dependencies: list["BatchSpec"] = dataclasses.field(default_factory=list)
+    #: Packing estimate of the batch makespan (a lower bound, used to balance batches).
     estimated_runtime: float | None = None
+    #: Non-optimistic upper bound on the batch makespan, used to size the
+    #: scheduler wall limit.
+    runtime_upper_bound: float | None = None
     schedule_metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
     id: str = dataclasses.field(init=False)
     session: str = dataclasses.field(init=False)
@@ -177,16 +201,27 @@ class TestBatch(BaseJob):
         super().on_finish(at=at)
 
     def find_approximate_runtime(self) -> float:
-        """Return the batch runtime estimate."""
+        """Return the packing estimate of the batch runtime (used for display and balance)."""
         if self.spec.estimated_runtime is not None:
             return float(self.spec.estimated_runtime)
 
         if len(self.jobs) == 1:
-            return float(self.jobs[0].runtime)
+            return estimate_runtime(self.jobs[0])
 
         # Fallback for BatchSpec objects not produced by the schedule packer.
         # Serial time is conservative
-        return float(sum(job.runtime for job in self.jobs))
+        return float(sum(estimate_runtime(job) for job in self.jobs))
+
+    def runtime_upper_bound(self) -> float:
+        """Return a non-optimistic upper bound on the time needed to run every job.
+
+        Computed by the packer (see ``schedulepack.makespan_upper_bound``).  For
+        a batch that was not produced by the packer, fall back to running the
+        jobs one after another, which can never be exceeded.
+        """
+        if self.spec.runtime_upper_bound is not None:
+            return float(self.spec.runtime_upper_bound)
+        return float(sum(estimate_runtime(job) for job in self.jobs))
 
     @cached_property
     def timeout_multiplier(self) -> float:
@@ -198,20 +233,23 @@ class TestBatch(BaseJob):
 
     @property
     def timeout(self) -> float:
-        return self.estimated_runtime()
+        return self.wall_limit()
 
     @property
     def queue_timeout(self) -> float:
         return canary.config.get_timeout_option("queue") or (4.0 * 60.0 * 60.0)
 
     def total_timeout(self) -> float:
-        return self.queue_timeout + self.timeout_multiplier * self.timeout
+        return self.queue_timeout + self.wall_limit()
 
-    def estimated_runtime(self, submit_args: "Sequence[str] | None" = None) -> float:
-        # ``submit_args`` lets the caller supply the fully-merged scheduler
-        # options (per-batch options + global command-line options) so that a
-        # per-batch ``--time`` is honored.  When not provided, fall back to the
-        # global command-line submit args only.
+    def pinned_wall_limit(self, submit_args: "Sequence[str] | None" = None) -> float | None:
+        """Return a wall limit pinned by the user with ``--time``/``--time-limit``, if any.
+
+        ``submit_args`` lets the caller supply the fully-merged scheduler options
+        (per-batch options + global command-line options) so that a per-batch
+        ``--time`` is honored.  When not provided, fall back to the global
+        command-line submit args only.
+        """
         if submit_args is None:
             submit_args = canary.config.getoption("hpc_submit_args")
         if submit_args:
@@ -220,22 +258,29 @@ class TestBatch(BaseJob):
             a, _ = p.parse_known_args(submit_args)
             if a.qtime:
                 return time_in_seconds(a.qtime)
-        if len(self.jobs) == 1:
-            return self.jobs[0].runtime
-        total_runtime = self.runtime
-        if total_runtime < 100.0:
-            total_runtime = 300.0
-        elif total_runtime < 300.0:
-            total_runtime = 600.0
-        elif total_runtime < 600.0:
-            total_runtime = 1200.0
-        elif total_runtime < 1800.0:
-            total_runtime = 2400.0
-        elif total_runtime < 3600.0:
-            total_runtime = 5000.0
-        else:
-            total_runtime *= 1.25
-        return total_runtime
+        return None
+
+    def wall_limit(self, submit_args: "Sequence[str] | None" = None) -> float:
+        """Return the scheduler wall limit, in seconds, to request for this batch.
+
+        A wall limit pinned with ``--time`` always wins.  Otherwise:
+
+        * A single-job batch gets the job's own hard limit (``total_timeout()``,
+          which already includes the timeout multiplier): the job is killed at
+          that point, so the batch can never need longer.
+        * A multi-job batch gets ``BATCH_WALL_PENALTY`` times the packer's
+          upper bound on its makespan.  The per-job runtime estimates feeding
+          that bound are already conservative, so the timeout multiplier is not
+          applied again here.  The result is capped at the time it would take
+          to run every job to its hard limit, one after another.
+        """
+        if (pinned := self.pinned_wall_limit(submit_args)) is not None:
+            return pinned
+        return automatic_wall_limit(self.jobs, upper_bound=self.runtime_upper_bound())
+
+    def estimated_runtime(self, submit_args: "Sequence[str] | None" = None) -> float:
+        """Deprecated alias of :meth:`wall_limit`."""
+        return self.wall_limit(submit_args)
 
     @property
     def resources(self) -> dict[str, list[dict]]:

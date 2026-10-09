@@ -27,6 +27,7 @@ from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
 from .argparsing import DeprecatedArg
+from .argparsing import cold_runtime_fraction_type
 from .batching import BatchingSpec
 from .batching import CountTarget
 from .batching import allocate_partition_counts
@@ -36,6 +37,7 @@ from .batching import partition_jobs
 from .batching import set_batch_dependencies
 from .batchspec import BatchSpec
 from .batchspec import TestBatch
+from .batchspec import automatic_wall_limit
 from .queue import ResourceQueue
 from .queue_executor import HPCResourceQueueExecutor
 
@@ -47,6 +49,7 @@ class _BatchRow(TypedDict):
     id: str
     n_jobs: int
     est_s: float
+    wall_s: float
     cheap_s: float | None
     algorithm: str
     node_count: int
@@ -82,6 +85,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
                 id=spec.id[:7],
                 n_jobs=n_jobs,
                 est_s=est_s,
+                wall_s=automatic_wall_limit(spec.jobs, upper_bound=spec.runtime_upper_bound),
                 cheap_s=cheap_s,
                 algorithm=algorithm,
                 node_count=node_count,
@@ -113,32 +117,25 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
         if r["cheap_s"] is not None and abs(r["cheap_s"] - r["est_s"]) > 1.0:
             cheap_note = f"  cheap={_fmt_min(r['cheap_s'])}"
         logger.debug(
-            "  batch=%s  jobs=%d  nodes=%s  est=%s%s",
+            "  batch=%s  jobs=%d  nodes=%s  est=%s  wall=%s%s",
             r["id"],
             r["n_jobs"],
             r["node_count"],
             _fmt_min(r["est_s"]),
+            _fmt_min(r["wall_s"]),
             cheap_note,
         )
 
     # ---- build the Rich table (stderr / terminal only) ------------------
-    timeout_multiplier: float = 1.0
-    try:
-        if t := canary.config.get_timeout_option("multiplier"):
-            timeout_multiplier = float(t)
-    except Exception:
-        logger.debug(f"Failed to convert multiplier={t} to float", exc_info=True)
-
     table = Table(expand=False, box=box.SQUARE)
     table.add_column("Batch", no_wrap=True)
     table.add_column("Jobs", justify="right")
     table.add_column("Nodes", justify="right")
     table.add_column("Width", justify="right")
     table.add_column("Est.", justify="right")
-    table.add_column("Alloc", justify="right")
+    table.add_column("Wall", justify="right")
 
     for r in rows:
-        alloc_s: float = r["est_s"] * timeout_multiplier
         # Only annotate with the cheap (pre-simulation) estimate when it differs
         # from the final estimated_runtime — i.e. when exact simulation refined it.
         cheap_s = r["cheap_s"]
@@ -152,7 +149,7 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
             str(r["node_count"]),
             str(r["width"]),
             f"{_fmt_min(r['est_s'])}{cheap_str}",
-            _fmt_min(alloc_s),
+            _fmt_min(r["wall_s"]),
         )
 
     console = Console(file=sys.stderr)
@@ -547,6 +544,17 @@ class CanaryHPCConductor:
             metavar="WORKERS",
             type=int,
             help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
+        )
+        parser.add_argument(
+            "--batch-cold-runtime-fraction",
+            dest="hpc_batch_cold_runtime_fraction",
+            metavar="F",
+            type=cold_runtime_fraction_type,
+            help=(
+                "Estimate the runtime of a job with no timing history as F times its "
+                "declared timeout when packing batches and sizing their scheduler wall "
+                "limits (0 < F; default: 0.75) [alias: -b cold_runtime_fraction=F]"
+            ),
         )
         parser.add_argument(
             "--batch-timeout-strategy",

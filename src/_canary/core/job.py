@@ -488,15 +488,10 @@ class Job(BaseJob):
 
     @cached_property
     def runtime(self) -> float:
-        """Return the cached mean runtime for this job when one is available.
-
-        This property is no longer used by HPC batching.  It remains useful for
-        diagnostics and for callers that want a historical mean runtime signal
-        without changing the declared timeout semantics used for scheduling.
+        """Return the mean recorded runtime for this job, or its timeout if it has no history.
 
         The value is capped at the declared timeout so stale cache entries do
-        not report impossible runtimes after a timeout reduction.  When there is
-        no timing history we fall back to the declared timeout.
+        not report impossible runtimes after a timeout reduction.
         """
         timeout = self.timeout
         try:

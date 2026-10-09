@@ -480,10 +480,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
             batch.fail_preflight(reason, child_reasons=child_reasons)
             return 1
 
-        run_timeout = float(batch.timeout * batch.timeout_multiplier)
+        run_timeout = float(batch.wall_limit(self.scheduler_args(batch)))
         # Canary backstop: 2× the scheduler wall limit.  The scheduler is the
         # authority on run-time enforcement (it was given time_limit =
-        # estimated_runtime × multiplier); this backstop only fires if canary
+        # batch.wall_limit()); this backstop only fires if canary
         # loses contact with the scheduler entirely.  Using 2× means we almost
         # always defer to the scheduler's own kill and avoid the false-FAIL race
         # where the scheduler hasn't yet delivered the job-ended event but the
@@ -590,8 +590,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         variables["CANARY_HPC_NODE_COUNT"] = str(node_count)
         totals = self.resource_totals(batch)
         submit_args = self.scheduler_args(batch)
-        estimated = batch.estimated_runtime(submit_args=submit_args) * batch.timeout_multiplier
-        self._warn_if_wall_too_short(batch, submit_args, estimated)
+        estimated = batch.wall_limit(submit_args=submit_args)
+        self._warn_if_wall_too_short(batch, submit_args, batch.wall_limit(submit_args=[]))
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
@@ -625,7 +625,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
     ) -> None:
         """Warn when a user-pinned wall limit is below the estimated batch runtime.
 
-        canary sizes the scheduler wall from ``estimated_runtime`` automatically.
+        canary sizes the scheduler wall automatically (``TestBatch.wall_limit``).
         A user can override it with a submit arg (e.g. ``-b option="--time=..."``
         / ``--time-limit=...``).  If that override is shorter than the estimate,
         the scheduler will very likely kill the batch mid-run, so surface it up

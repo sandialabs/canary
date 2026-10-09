@@ -877,3 +877,90 @@ def test_pack_to_height_simulated_exact_final_estimate_opt_in() -> None:
     assert all(batch.metadata["exact_final_estimate"] is True for batch in batches)
     assert all(batch.metadata["simulated_runtime"] is not None for batch in batches)
     assert all(batch.estimated_runtime >= batch.metadata["cheap_runtime"] for batch in batches)  # type: ignore[operator]
+
+
+# ---------------------------------------------------------------------------
+# makespan_upper_bound: non-optimistic bound used to size scheduler wall limits
+# ---------------------------------------------------------------------------
+
+
+def test_makespan_upper_bound_empty_and_validation() -> None:
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    assert makespan_upper_bound([], width=4) == 0.0
+    with pytest.raises(ValueError):
+        makespan_upper_bound([ScheduleTask(id="a")], width=0)
+    with pytest.raises(ValueError):
+        makespan_upper_bound([ScheduleTask(id="a")], width=4, workers=0)
+
+
+def test_makespan_upper_bound_narrow_tasks() -> None:
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    tasks = [ScheduleTask(id=f"t{i}", width=1, duration=10.0) for i in range(8)]
+    # work / width + longest task
+    assert makespan_upper_bound(tasks, width=4) == pytest.approx(80.0 / 4 + 10.0)
+
+
+def test_makespan_upper_bound_accounts_for_stranded_width() -> None:
+    """A wide task can strand up to (max_width - 1) CPUs, so the effective width shrinks."""
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    tasks = [ScheduleTask(id="w", width=3, duration=10.0)]
+    tasks += [ScheduleTask(id=f"n{i}", width=1, duration=10.0) for i in range(3)]
+    work = 3 * 10.0 + 3 * 10.0
+    assert makespan_upper_bound(tasks, width=4) == pytest.approx(work / (4 - 2) + 10.0)
+
+
+def test_makespan_upper_bound_serializes_full_width_tasks() -> None:
+    """Tasks as wide as the batch (e.g. exclusive jobs) cannot overlap anything."""
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    tasks = [ScheduleTask(id=f"x{i}", width=4, duration=10.0) for i in range(3)]
+    assert makespan_upper_bound(tasks, width=4) == pytest.approx(30.0)
+    tasks.append(ScheduleTask(id="n", width=1, duration=5.0))
+    assert makespan_upper_bound(tasks, width=4) == pytest.approx(30.0 + 5.0 / 4 + 5.0)
+
+
+def test_makespan_upper_bound_respects_worker_cap() -> None:
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    tasks = [ScheduleTask(id=f"t{i}", width=1, duration=10.0) for i in range(8)]
+    # With 2 workers, total duration / workers dominates work / width.
+    assert makespan_upper_bound(tasks, width=8, workers=2) == pytest.approx(80.0 / 2 + 10.0)
+
+
+def test_makespan_upper_bound_includes_critical_path() -> None:
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    a = ScheduleTask(id="a", width=1, duration=10.0)
+    b = ScheduleTask(id="b", width=1, duration=10.0, dependencies=("a",))
+    c = ScheduleTask(id="c", width=1, duration=10.0, dependencies=("b",))
+    assert makespan_upper_bound([a, b, c], width=8) >= 30.0
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_makespan_upper_bound_never_below_greedy_simulation(seed: int) -> None:
+    """The bound must never be optimistic relative to the exact greedy scheduler."""
+    import random
+
+    from canary_hpc.schedulepack import makespan_upper_bound
+
+    rng = random.Random(seed)
+    width = rng.choice([4, 8, 16, 48])
+    workers = rng.choice([None, None, 2, 5])
+    tasks: list[ScheduleTask] = []
+    for i in range(rng.randint(1, 60)):
+        task_width = width if rng.random() < 0.05 else rng.randint(1, max(1, width // 2))
+        deps: tuple[str, ...] = ()
+        if tasks and rng.random() < 0.2:
+            deps = tuple(t.id for t in rng.sample(tasks, k=min(len(tasks), rng.randint(1, 3))))
+        duration = float(rng.choice([1, 5, 30, 120, 600]) * rng.uniform(0.5, 1.5))
+        tasks.append(
+            ScheduleTask(id=f"t{i}", width=task_width, duration=duration, dependencies=deps)
+        )
+
+    simulated = simulate_makespan(tasks, width=width, workers=workers)
+    bound = makespan_upper_bound(tasks, width=width, workers=workers)
+    assert bound >= simulated - 1e-6
+    assert bound >= cheap_makespan(tasks, width=width, workers=workers) - 1e-6

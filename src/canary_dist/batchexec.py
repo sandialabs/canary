@@ -55,7 +55,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             tk = batch.timekeeper
             submitted_at = tk._submitted if tk._submitted > 0 else time.time()
             queue_deadline = submitted_at + batch.queue_timeout
-            run_timeout = float(batch.estimated_runtime() * batch.timeout_multiplier)
+            run_timeout = float(batch.wall_limit())
             poll = max(1.0, getattr(future, "_polling_interval", 1.0))
 
             with self.handle_signals([future], batch):
@@ -130,7 +130,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
             cpus=batch.cpus,
-            time_limit=batch.estimated_runtime() * batch.timeout_multiplier,
+            time_limit=batch.wall_limit(),
             env=variables,
             output=str(batch.workspace.joinpath(batch.stdout)),
             error=str(batch.workspace.joinpath(batch.stdout)),

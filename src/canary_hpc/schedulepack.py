@@ -331,6 +331,67 @@ class CheapMakespanStats:
         return bounds
 
 
+def makespan_upper_bound(
+    tasks: Sequence[ScheduleTask], *, width: int, workers: int | None = None
+) -> float:
+    """Return a cheap, non-optimistic upper bound on the makespan of ``tasks``.
+
+    ``cheap_makespan`` is a *lower* bound and is right for comparing candidate
+    batches while packing, but it is the wrong quantity for a scheduler wall
+    limit: a greedy executor with idle gaps, wide jobs, and exclusive jobs
+    routinely runs past it.  This bound follows the classic list-scheduling
+    argument: the executor is idle only while every pending job is too wide
+    for the free CPUs, so
+
+        makespan <= work / effective_width + longest critical path
+
+    where ``effective_width`` excludes the CPUs that can be left stranded by the
+    widest task (``width - (max_task_width - 1)``).  When concurrency is also
+    capped at ``workers`` jobs, the same argument gives
+    ``total_duration / workers + longest critical path``, and the larger of the
+    two terms is used.  Tasks as wide as the whole batch (e.g. exclusive jobs)
+    cannot share it with anything, so they are serialized and added on directly.
+
+    The cost is linear in the number of tasks plus the critical-path pass, so it
+    is safe to call on very large batches.
+    """
+    if width <= 0:
+        raise ValueError(f"width={width!r} must be > 0")
+    if workers is not None and workers <= 0:
+        raise ValueError(f"workers={workers!r} must be > 0")
+    if not tasks:
+        return 0.0
+
+    serial = 0.0
+    shared: list[ScheduleTask] = []
+    shared_work = 0.0
+    shared_duration = 0.0
+    shared_max_width = 0
+    shared_max_duration = 0.0
+    for task in tasks:
+        duration = float(task.duration)
+        if task.width >= width:
+            serial += duration
+            continue
+        shared.append(task)
+        shared_work += task.width * duration
+        shared_duration += duration
+        shared_max_width = max(shared_max_width, int(task.width))
+        shared_max_duration = max(shared_max_duration, duration)
+
+    if not shared:
+        return serial
+
+    effective_width = max(1, width - (shared_max_width - 1))
+    body = shared_work / float(effective_width)
+    if workers is not None:
+        body = max(body, shared_duration / float(workers))
+    # Full-width tasks are already counted in ``serial``; a dependency chain
+    # through them only delays the shared tasks by time already accounted for.
+    tail = max(shared_max_duration, _critical_path_lower_bound(shared))
+    return serial + body + tail
+
+
 def cheap_makespan(
     tasks: Sequence[ScheduleTask],
     *,

@@ -13,7 +13,9 @@ from typing import cast
 import canary
 
 from .batchspec import BatchSpec
+from .estimate import estimate_runtime
 from .schedulepack import ScheduleTask
+from .schedulepack import makespan_upper_bound
 from .schedulepack import node_demand_from_request
 from .schedulepack import pack_by_count_atomic_simulated
 from .schedulepack import pack_by_count_simulated
@@ -23,10 +25,8 @@ logger = canary.get_logger(__name__)
 
 
 def _job_batch_duration(job: "canary.Job") -> float:
-    timeout = getattr(job, "timeout", None)
-    if timeout is not None:
-        return float(timeout)
-    return float(getattr(job, "runtime"))
+    """Duration used to pack ``job``: its conservative runtime estimate."""
+    return estimate_runtime(job)
 
 
 PartitionCount = int | None
@@ -445,7 +445,7 @@ def batch_jobs(
     _validate_unique_job_ids(jobs)
 
     lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
-    tasks = [_schedule_task_from_job(job, lookup) for job in jobs]
+    tasks = [_schedule_task_from_job(job, lookup, width=width) for job in jobs]
 
     if isinstance(spec.target, DurationTarget):
         logger.debug(
@@ -501,13 +501,16 @@ def batch_jobs(
 
     for scheduled_batch in scheduled_batches:
         spec_jobs = [lookup[task.id] for task in scheduled_batch.tasks]
+        upper_bound = makespan_upper_bound(scheduled_batch.tasks, width=width, workers=workers)
         batchspec = BatchSpec(
             layout=spec.layout,
             jobs=spec_jobs,
             estimated_runtime=scheduled_batch.estimated_runtime,
+            runtime_upper_bound=upper_bound,
             schedule_metadata={
                 **dict(scheduled_batch.metadata),
                 "estimated_runtime": scheduled_batch.estimated_runtime,
+                "runtime_upper_bound": upper_bound,
                 "width": width,
                 "workers": workers,
                 "resource_capacity": dict(resource_capacity)
@@ -556,7 +559,20 @@ def set_batch_dependencies(specs: list[BatchSpec]) -> None:
         spec.dependencies = deps
 
 
-def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) -> ScheduleTask:
+def _job_batch_width(job: "canary.Job", *, width: int) -> int:
+    """CPU width ``job`` effectively occupies in a batch of ``width`` CPUs.
+
+    The in-batch queue starts no other job while an exclusive job runs, so an
+    exclusive job effectively occupies the whole batch for its duration.
+    """
+    if getattr(job, "exclusive", False):
+        return max(1, int(width), int(job.cpus))
+    return max(1, int(job.cpus))
+
+
+def _schedule_task_from_job(
+    job: "canary.Job", lookup: dict[str, "canary.Job"], *, width: int
+) -> ScheduleTask:
     dependencies = tuple(dep.job.id for dep in job.dependencies if dep.job.id in lookup)
 
     try:
@@ -569,7 +585,7 @@ def _schedule_task_from_job(job: "canary.Job", lookup: dict[str, "canary.Job"]) 
 
     return ScheduleTask(
         id=job.id,
-        width=max(1, int(job.cpus)),
+        width=_job_batch_width(job, width=width),
         duration=float(math.ceil(_job_batch_duration(job))),
         dependencies=dependencies,
         priority=priority,
@@ -606,7 +622,7 @@ def _partition_weight(jobs: list["canary.Job"], *, width: int) -> float:
 
     for job in jobs:
         runtime = float(math.ceil(_job_batch_duration(job)))
-        cpus = max(1, int(job.cpus))
+        cpus = _job_batch_width(job, width=width)
 
         work += cpus * runtime
         max_runtime = max(max_runtime, runtime)
