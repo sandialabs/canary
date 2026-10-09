@@ -46,6 +46,19 @@ class FakeJob:
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
 
+    # ``canary_hpc.estimate.estimate_runtime`` inputs.  ``runtime`` is reported
+    # as the recorded history; with timeout = 4 * runtime the history floor
+    # (0.1 * timeout) never binds, so the estimate is exactly 1.25 * runtime.
+    @property
+    def timeout(self) -> float:
+        return 4.0 * self.runtime
+
+    def total_timeout(self) -> float:
+        return self.timeout
+
+    def load_cached_runs(self) -> dict[str, Any]:
+        return {"metrics": {"time": {"mean": self.runtime, "max": self.runtime}}}
+
     def required_resources(self) -> list[NodeRequest]:
         request = NodeRequest()
         request.add("cpus", self.cpus)
