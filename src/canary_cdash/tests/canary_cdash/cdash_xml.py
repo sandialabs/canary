@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-import gzip
 import importlib.resources
 import os
 import subprocess
 import sys
 import xml.dom.minidom as dom
+import zlib
 from base64 import b64decode
 
 import pytest
@@ -42,7 +42,7 @@ def test_report_cdash(tmpdir):
         assert os.path.exists("TestResults/CDASH")
 
 
-def test_report_cdash_missing_log_payload_is_valid_gzip_base64(tmpdir):
+def test_report_cdash_missing_log_payload_is_valid_cdash_base64(tmpdir):
     with working_dir(tmpdir.strpath):
         root = str(importlib.resources.files("canary"))
         run_canary("init", ".")
@@ -86,11 +86,11 @@ def test_report_cdash_missing_log_payload_is_valid_gzip_base64(tmpdir):
                 break
 
         assert payload is not None
-        decoded = gzip.decompress(b64decode(payload)).decode("utf-8")
+        decoded = cdash_decode(payload)
         assert decoded == "Log not found"
 
 
-def test_report_cdash_skipped_log_payload_is_valid_gzip_base64(tmpdir):
+def test_report_cdash_skipped_log_payload_is_valid_cdash_base64(tmpdir):
     with working_dir(tmpdir.strpath):
         root = str(importlib.resources.files("canary"))
         run_canary("init", ".")
@@ -141,8 +141,43 @@ def test_report_cdash_skipped_log_payload_is_valid_gzip_base64(tmpdir):
                 break
 
         assert payload is not None
-        decoded = gzip.decompress(b64decode(payload)).decode("utf-8")
+        decoded = cdash_decode(payload)
         assert decoded == "Test skipped.  Reason: Synthetic skip for CDash payload test"
+
+
+def test_report_cdash_all_log_payloads_are_zlib(tmpdir):
+    """CDash decodes <Measurement> payloads with PHP's gzuncompress (zlib), and drops the
+    entire Test.xml if any one payload fails.  A gzip container (1f8b) is not accepted."""
+    with working_dir(tmpdir.strpath):
+        root = str(importlib.resources.files("canary"))
+        run_canary("init", ".")
+        run_canary(
+            "selection", "create", "-r", os.path.join(root, "docs/examples/basic"), "default"
+        )
+        run_canary("run", "default")
+        run_canary("report", "cdash", "create")
+
+        cdash_dir = os.path.join("TestResults", "CDASH")
+        files = [os.path.join(cdash_dir, f) for f in os.listdir(cdash_dir) if f.startswith("Test")]
+        assert files
+        n = 0
+        for file in files:
+            doc = dom.parse(file)
+            for measurement in doc.getElementsByTagName("Measurement"):
+                value = measurement.getElementsByTagName("Value")[0]
+                payload = "".join(
+                    node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
+                )
+                raw = b64decode(payload.strip())
+                assert raw[:2] != b"\x1f\x8b", "gzip container is not accepted by CDash"
+                zlib.decompress(raw)
+                n += 1
+        assert n > 0
+
+
+def cdash_decode(payload: str) -> str:
+    """Decode a <Measurement> payload the same way CDash does (base64 + gzuncompress)."""
+    return zlib.decompress(b64decode(payload.strip())).decode("utf-8")
 
 
 def run_canary(command, *args, cwd=None):

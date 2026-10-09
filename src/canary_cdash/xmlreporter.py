@@ -13,7 +13,7 @@ from typing import IO
 from typing import Any
 
 import canary
-from _canary.util.compression import gzip_b64
+from _canary.util.compression import compress_str
 from _canary.util.compression import targz_compress
 from _canary.util.string import truncate_middle
 
@@ -300,8 +300,16 @@ class CDashXMLReporter:
                     add_named_measurement(results, name, value)
                 else:
                     add_named_measurement(results, name, json.dumps(value))
+            # CDash decodes this payload with base64_decode + gzuncompress, which expects a
+            # zlib stream (the same format CTest emits), *not* a gzip container.  Every
+            # payload -- including fallback text such as "Log not found" -- must be encoded
+            # this way; a single undecodable test causes CDash to discard the whole file.
+            kb_to_keep = 2 if job.status.is_success() else 300
             add_measurement(
-                results, gzip_b64(job.read_output()), encoding="base64", compression="gzip"
+                results,
+                compress_str(job.read_output(), kb_to_keep=kb_to_keep),
+                encoding="base64",
+                compression="gzip",
             )
             test_node.appendChild(results)
 
