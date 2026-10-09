@@ -285,3 +285,47 @@ def test_hpc_resource_setter_spec_stores_raw_batchspec_dict() -> None:
     assert isinstance(spec.target, CountTarget)
     assert spec.count == 3
     assert spec.duration is None
+
+
+# ---------------------------------------------------------------------------
+# allow_hyperthreading (-b allow_hyperthreading and --hpc-allow-hyperthreading)
+# ---------------------------------------------------------------------------
+
+
+def _resource_setter_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+    return parser
+
+
+@pytest.mark.parametrize("token", ["allow_hyperthreading", "allow-hyperthreading"])
+def test_b_allow_hyperthreading_bare_is_true(token) -> None:
+    ns = _resource_setter_parser().parse_args(["-b", token])
+    assert ns.hpc_allow_hyperthreading is True
+
+
+@pytest.mark.parametrize("token", ["allow_hyperthreading=false", "allow_hyperthreading:no"])
+def test_b_allow_hyperthreading_false(token) -> None:
+    ns = _resource_setter_parser().parse_args(["-b", token])
+    assert ns.hpc_allow_hyperthreading is False
+
+
+def test_backend_options_reflects_config(monkeypatch) -> None:
+    import _canary.config as config
+    from canary_hpc import backend_options
+
+    with config.override():
+        config.options.hpc_allow_hyperthreading = True
+        assert backend_options() == {"allow_hyperthreading": True}
+        config.options.hpc_allow_hyperthreading = False
+        assert backend_options() == {}
+
+
+def test_allow_hyperthreading_from_env(monkeypatch) -> None:
+    import _canary.config as config
+    from canary_hpc import allow_hyperthreading
+
+    monkeypatch.setenv("CANARY_HPC_ALLOW_HYPERTHREADING", "1")
+    with config.override():
+        config.options.hpc_allow_hyperthreading = False
+        assert allow_hyperthreading() is True

@@ -653,6 +653,11 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         gpu_backend = canary.config.getoption("gpu_backend")
         if gpu_backend not in (None, "auto"):
             default_args.append(f"--gpu-backend={gpu_backend}")
+        # Forward on the CLI: the scheduler job runs with a fresh environment.
+        from . import allow_hyperthreading
+
+        if allow_hyperthreading():
+            default_args.append("--hpc-allow-hyperthreading")
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "hpc", "exec"]
         n = canary.config.getoption("hpc_batch_workers") or -1
         args.extend(

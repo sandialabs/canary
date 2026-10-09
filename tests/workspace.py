@@ -263,6 +263,35 @@ def test_set_workspace_dir_supports_relocated_workspace_dir(tmp_path):
     assert ws2.sessions_dir == moved / "sessions"
 
 
+def test_register_latest_session_recreates_missing_refs_dir(tmp_path):
+    """register_latest_session() must not crash when .canary/refs is missing.
+
+    A workspace opened via Workspace.load() may lack the refs directory
+    (relocated snapshots, partially-deleted trees, or an older layout).  The
+    pointer write must self-heal the directory rather than raising
+    FileNotFoundError and losing an otherwise-successful run.
+    """
+    import types
+
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+
+    # Simulate a workspace whose refs directory never existed / was removed.
+    import shutil
+
+    shutil.rmtree(ws.refs_dir)
+    assert not ws.refs_dir.exists()
+
+    session = types.SimpleNamespace(prefix=ws.sessions_dir / "sess-1")
+    ws.register_latest_session(session)  # type: ignore[arg-type]
+
+    assert ws.refs_dir.exists()
+    latest = ws.refs_dir / "latest"
+    assert latest.exists()
+    assert latest.read_text().strip() == "../sessions/sess-1"
+
+
 def test_set_workspace_dir_accepts_anchor_dir(tmp_path):
     """Explicit workspace overrides may point at the anchor, not just the root."""
     proj = tmp_path / "project"

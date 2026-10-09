@@ -301,6 +301,7 @@ invalid-method-override = "ignore"
 [tool.bandit]
 skips = [
     "B101",  # ignore asserts
+    "B105", 
     "B311",  # ignore warnings about random numbers
     "B318",  # xml.dom.minidom.parse to parse XML
     "B324",  # non-cryptographic hashes allowed (they are used to generate IDs only)

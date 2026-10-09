@@ -20,6 +20,17 @@ from .batching import BatchingSpec
 
 logger = canary.get_logger(__name__)
 
+#: Propagates the hyperthreading choice to the ``hpc exec`` subprocess.
+CANARY_HPC_ALLOW_HYPERTHREADING_ENV = "CANARY_HPC_ALLOW_HYPERTHREADING"
+
+
+def env_flag(name: str) -> bool:
+    return os.getenv(name, "").lower() in ("1", "true", "yes", "on")
+
+
+def _allow_hyperthreading_default() -> bool:
+    return env_flag(CANARY_HPC_ALLOW_HYPERTHREADING_ENV)
+
 
 def cold_runtime_fraction_type(arg: str) -> float:
     """argparse ``type`` for ``--batch-cold-runtime-fraction``: a positive float."""
@@ -317,6 +328,13 @@ class CanaryHPCResourceSetter(argparse.Action):
             timeouts = getattr(namespace, "timeout", None) or {}
             timeouts["queue"] = time_in_seconds(raw)
             setattr(namespace, "timeout", timeouts)
+
+        elif match := re.search(
+            r"^allow[_-]hyperthreading(?:[:=](true|false|1|0|yes|no))?$", value.lower()
+        ):
+            value_str = match.group(1)
+            enabled = value_str in (None, "true", "1", "yes")
+            setattr(namespace, "hpc_allow_hyperthreading", enabled)
 
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
             dest = "hpc_submit_args"

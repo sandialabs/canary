@@ -18,7 +18,11 @@ logger = canary.get_logger(__name__)
 
 class CanaryHPCExecutor:
     def __init__(self, *, workspace: str, backend: str, job: str | None = None) -> None:
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
+        # Backend is used for launching only; the resource pool comes from
+        # resource_pool.json, so options here do not re-derive the CPU pool.
+        from . import backend_options
+
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend, **backend_options())
         cfg = TestBatch.loadconfig(workspace)
         src = canary.config.resource_manager.get_property("source")
         if src != "hpc-batch":

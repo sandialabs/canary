@@ -17,7 +17,9 @@ from _canary.subcommands.run import Run
 from _canary.util.query_data import load_query_data
 from _canary.util.rich import bold
 
+from .argparsing import CANARY_HPC_ALLOW_HYPERTHREADING_ENV
 from .argparsing import CanaryHPCBatchSpec
+from .argparsing import env_flag
 from .conductor import CanaryHPCConductor
 from .executor import CanaryHPCExecutor
 
@@ -29,6 +31,25 @@ if TYPE_CHECKING:
 __all__ = ["CanaryHPCBatchSpec", "CanaryHPCConductor", "CanaryHPCExecutor"]
 
 logger = canary.get_logger(__name__)
+
+
+def allow_hyperthreading() -> bool:
+    """Whether the slurm backend should count hardware threads as CPUs.
+
+    Reads canary config (set by ``--allow-hyperthreading`` / ``-b
+    allow_hyperthreading``), falling back to the env var for subprocesses.
+    """
+    if canary.config.getoption("hpc_allow_hyperthreading", False):
+        return True
+    return env_flag(CANARY_HPC_ALLOW_HYPERTHREADING_ENV)
+
+
+def backend_options() -> dict[str, Any]:
+    """Backend options forwarded to ``hpc_connect.get_backend``."""
+    options: dict[str, Any] = {}
+    if allow_hyperthreading():
+        options["allow_hyperthreading"] = True
+    return options
 
 
 @canary.hookimpl
@@ -209,7 +230,9 @@ Slurm timeout types:\n\n
             conductor.register(canary.config.pluginmanager)
             return conductor.run(args)
         elif args.hpc_cmd == "info":
-            backend: hpc_connect.Backend = hpc_connect.get_backend(args.hpc_backend)
+            backend: hpc_connect.Backend = hpc_connect.get_backend(
+                args.hpc_backend, **backend_options()
+            )
             print(backend.describe())
             return 0
         elif args.hpc_cmd == "log":
@@ -283,7 +306,7 @@ def fill_hpc_resource_pool(b: str) -> dict[str, Any]:
     need to know where the scheduler will physically place the job.
     """
 
-    backend: hpc_connect.Backend = hpc_connect.get_backend(b)
+    backend: hpc_connect.Backend = hpc_connect.get_backend(b, **backend_options())
 
     def _canonical_resource_type(rtype: str) -> str:
         return rtype if rtype.endswith("s") else f"{rtype}s"

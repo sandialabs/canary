@@ -599,6 +599,7 @@ class Workspace:
     def register_latest_session(self, session: Session) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         # Write meta data file refs/latest -> ../sessions/{session.root}
+        self.refs_dir.mkdir(parents=True, exist_ok=True)  # may be absent on a loaded workspace
         file = self.refs_dir / "latest"
         file.unlink(missing_ok=True)
         link = os.path.relpath(str(session.prefix), str(file.parent))

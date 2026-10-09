@@ -27,6 +27,7 @@ from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
 from .argparsing import DeprecatedArg
+from .argparsing import _allow_hyperthreading_default
 from .argparsing import cold_runtime_fraction_type
 from .batching import BatchingSpec
 from .batching import CountTarget
@@ -276,7 +277,8 @@ def create_batch_specs(
 class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
         hpc_connect.config.export()
-        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend)
+        options = self._backend_options()
+        self.backend: hpc_connect.Backend = hpc_connect.get_backend(backend, **options)
         rpool_backend = canary.config.resource_manager.get_property("hpc_backend")
         if rpool_backend != self.backend.name:
             raise ValueError(
@@ -294,6 +296,17 @@ class CanaryHPCConductor:
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_conductor")
+
+    @staticmethod
+    def _backend_options() -> dict[str, Any]:
+        """Resolve backend options and export them for the exec subprocess."""
+        from . import allow_hyperthreading
+        from . import backend_options
+        from .argparsing import CANARY_HPC_ALLOW_HYPERTHREADING_ENV
+
+        if allow_hyperthreading():
+            os.environ[CANARY_HPC_ALLOW_HYPERTHREADING_ENV] = "1"
+        return backend_options()
 
     def run(self, args: argparse.Namespace) -> int:
         if getattr(args, "hpc_batch_workers", None) is not None:
@@ -546,6 +559,14 @@ class CanaryHPCConductor:
             help="Run jobs in batches using WORKERS workers [alias: -b workers=WORKERS]",
         )
         parser.add_argument(
+            "--allow-hyperthreading",
+            dest="hpc_allow_hyperthreading",
+            action="store_true",
+            default=_allow_hyperthreading_default(),
+            help="Count hardware threads as schedulable CPUs on the HPC backend "
+            "[alias: -b allow_hyperthreading]",
+        )
+        parser.add_argument(
             "--batch-cold-runtime-fraction",
             dest="hpc_batch_cold_runtime_fraction",
             metavar="F",
@@ -624,6 +645,10 @@ class BatchExecutor:
         hpc.propagate = True
         hpc.setLevel(logging.NOTSET)
         batch.setup()
-        backend: hpc_connect.Backend = hpc_connect.get_backend(kwargs["backend"])
+        from . import backend_options
+
+        backend: hpc_connect.Backend = hpc_connect.get_backend(
+            kwargs["backend"], **backend_options()
+        )
         batch.run(backend=backend, queue=queue)
         logger.debug(f"Done running {batch}")

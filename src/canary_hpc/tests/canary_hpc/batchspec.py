@@ -583,6 +583,43 @@ def test_estimated_runtime_honors_per_batch_time_but_command_line_wins(tmp_path)
     assert batch.estimated_runtime(submit_args=merged) == 1800.0
 
 
+def _invocation_runner(tmp_path, jobs):
+    from canary_hpc.batchexec import HPCConnectBatchRunner
+
+    runner = HPCConnectBatchRunner.__new__(HPCConnectBatchRunner)
+
+    class _Backend:
+        name = "slurm"
+
+    runner.backend = _Backend()  # type: ignore[attr-defined]
+    return runner, make_batch(tmp_path, jobs)
+
+
+def test_canary_invocation_forwards_hyperthreading(tmp_path):
+    """--hpc-allow-hyperthreading is passed to the exec child when enabled."""
+    import _canary.config as config
+
+    runner, batch = _invocation_runner(tmp_path, [FakeJob(id="j1")])
+    with config.override():
+        config.options.hpc_allow_hyperthreading = True
+        invocation = runner.canary_invocation(batch)
+
+    assert "--hpc-allow-hyperthreading" in invocation
+    # It is a global option and must precede the `hpc exec` subcommand.
+    assert invocation.index("--hpc-allow-hyperthreading") < invocation.index(" hpc exec")
+
+
+def test_canary_invocation_omits_hyperthreading_when_disabled(tmp_path):
+    import _canary.config as config
+
+    runner, batch = _invocation_runner(tmp_path, [FakeJob(id="j1")])
+    with config.override():
+        config.options.hpc_allow_hyperthreading = False
+        invocation = runner.canary_invocation(batch)
+
+    assert "--hpc-allow-hyperthreading" not in invocation
+
+
 # ---------------------------------------------------------------------------
 # Scheduler wall-limit termination detection + status propagation
 # ---------------------------------------------------------------------------
