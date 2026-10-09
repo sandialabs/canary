@@ -466,3 +466,78 @@ def test_create_batch_specs_exact_final_estimate_metadata() -> None:
     assert len(specs) == 1
     assert specs[0].schedule_metadata["exact_final_estimate"] is True
     assert specs[0].schedule_metadata["simulated_runtime"] is not None
+
+
+class FakeChildJob:
+    def __init__(self, id: str) -> None:
+        self.id = id
+        self.refreshed = 0
+
+    def refresh(self) -> None:
+        self.refreshed += 1
+
+
+class FakeBatch:
+    def __init__(self, jobs: list[FakeChildJob]) -> None:
+        self.id = "batch-0000"
+        self.jobs = jobs
+
+    def __iter__(self):
+        return iter(self.jobs)
+
+
+class FakeDBQueue:
+    def __init__(self) -> None:
+        self.items: list[Any] = []
+
+    def put(self, item: Any) -> None:
+        self.items.append(item)
+
+
+class FakeDB:
+    def __init__(self) -> None:
+        self.queue = FakeDBQueue()
+
+
+class FakeResultsWorkspace:
+    def __init__(self) -> None:
+        self.db = FakeDB()
+        self.view_manager = None
+
+
+@dataclasses.dataclass
+class FakeSlot:
+    job: FakeBatch
+
+
+def make_batch_listener():
+    conductor = fake_conductor(counts={"cpus": 4})
+    workspace = FakeResultsWorkspace()
+    children = [FakeChildJob("a"), FakeChildJob("b")]
+    listener = conductor._make_batch_result_listener(workspace)  # type: ignore[arg-type]
+    return listener, workspace, children
+
+
+@pytest.mark.parametrize("event", ["job_submitted", "job_started", "job_updated"])
+def test_batch_result_listener_ignores_in_progress_batch_events(event: str) -> None:
+    listener, workspace, children = make_batch_listener()
+
+    listener(event, FakeSlot(job=FakeBatch(children)))
+
+    assert workspace.db.queue.items == []
+    assert all(child.refreshed == 0 for child in children)
+
+
+def test_batch_result_listener_refreshes_and_spools_children_on_finish() -> None:
+    listener, workspace, children = make_batch_listener()
+
+    listener("job_finished", FakeSlot(job=FakeBatch(children)))
+
+    assert workspace.db.queue.items == children
+    assert all(child.refreshed == 1 for child in children)
+
+
+def test_batch_has_no_child_phase_mutator() -> None:
+    from canary_hpc.batchspec import TestBatch
+
+    assert not hasattr(TestBatch, "mark_children_running")

@@ -140,9 +140,8 @@ def reconcile_unfinished_jobs(runner: Runner, *, interrupted: bool = False) -> i
       started executing but never reported a result is marked ``BROKEN``, and a
       job that never started is marked ``CANCELLED``.
 
-    Note: job *phase* is not a reliable "did it start" signal here because some
-    backends (e.g. HPC) optimistically mark a dispatched batch's children as
-    running for live display.  The timekeeper's start timestamp is used instead.
+    Whether a job started is decided from the timekeeper's start timestamp
+    rather than its phase.
 
     Returns the number of jobs that were reconciled.
     """

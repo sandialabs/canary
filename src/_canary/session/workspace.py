@@ -514,6 +514,8 @@ class Workspace:
         session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = self.sessions_dir / session_name
         jobs = self.construct_jobs(specs, session_dir)
+        if not is_parent:
+            self.refresh_masked_jobs(jobs)
         selector = select.RuntimeSelector(jobs, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
@@ -1041,6 +1043,31 @@ class Workspace:
             lookup[spec.id] = job
             jobs.append(job)
         return jobs
+
+    @staticmethod
+    def refresh_masked_jobs(jobs: list["Job"]) -> None:
+        """Reload the state of masked jobs from their ``testcase.lock`` files.
+
+        Nested canary processes (for example, ``canary hpc exec`` running inside
+        a scheduler allocation) load upstream results from the workspace
+        database, which only the top-level process writes, and it writes them
+        asynchronously.  The lock file is written directly by whichever process
+        ran the job, so it is the most current record of a job that this
+        process will not run itself.  Jobs without a lock file are left as
+        constructed.
+
+        Args:
+            jobs: Jobs constructed for this run.  Only masked jobs are refreshed.
+        """
+        for job in jobs:
+            if not job.mask or not job.lockfile.exists():
+                continue
+            try:
+                job.refresh()
+            except Exception:
+                logger.debug(
+                    "Failed to refresh job %s from its lock file", job.id[:7], exc_info=True
+                )
 
     def get_selection(self, tag: str | None) -> list["JobSpec"]:
         """Retrieves a list of JobSpecs associated with a tag.

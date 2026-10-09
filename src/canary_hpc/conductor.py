@@ -475,23 +475,30 @@ class CanaryHPCConductor:
         """Build an executor listener that spools batch child-job results to the DB.
 
         The shared executor works with :class:`TestBatch` objects, so the
-        default per-job ``testcase_done_callback`` cannot be used directly.  This
-        listener instead spools each child :class:`~_canary.core.job.Job` of a batch
-        to the results database as the batch is submitted, starts running, and
-        finishes, so that ``canary status`` reflects in-progress HPC jobs
-        mid-run.  Only the parent process (which owns the running
-        :class:`ResultListener`) persists to the database.
+        default per-job ``testcase_done_callback`` cannot be used directly.  When
+        a batch finishes, this listener reloads each child
+        :class:`~_canary.core.job.Job` from its ``testcase.lock`` and spools it to
+        the results database and live view.
+
+        In-progress child state is not published from here.  The ``canary hpc
+        exec`` process running inside the allocation owns its jobs and spools
+        their transitions as they happen; the parent's in-memory copies of those
+        jobs are only brought up to date when the batch finishes, so writing
+        them earlier could replace newer results.  Only the parent process
+        (which owns the running :class:`ResultListener`) persists to the
+        database.
         """
 
         def listener(event: str, slot: Any) -> None:
-            if event not in ("job_submitted", "job_started", "job_finished"):
+            if event != "job_finished":
                 return
             batch = slot.job
             try:
-                if event == "job_started":
-                    # The batch's allocation is active; surface its jobs as running.
-                    batch.mark_children_running()
                 for job in batch:
+                    try:
+                        job.refresh()
+                    except Exception:
+                        logger.debug("Failed to refresh job %s", job.id[:7], exc_info=True)
                     workspace.db.queue.put(job)
                     if workspace.view_manager is not None:
                         try:
