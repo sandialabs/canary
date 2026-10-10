@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+import random
+
 import pytest
 
 from canary_hpc.schedulepack import NodeDemand
@@ -964,3 +966,52 @@ def test_makespan_upper_bound_never_below_greedy_simulation(seed: int) -> None:
     bound = makespan_upper_bound(tasks, width=width, workers=workers)
     assert bound >= simulated - 1e-6
     assert bound >= cheap_makespan(tasks, width=width, workers=workers) - 1e-6
+
+
+# --- Robustness/correctness regressions (S5, S3) --------------------------
+
+
+def test_resource_work_normalizes_cpu_to_cpus() -> None:
+    """A 'cpu'-typed demand is accounted under 'cpus', not treated as a
+    zero-capacity resource that yields an infinite estimate."""
+    singular = ScheduleTask(
+        id="t",
+        width=2,
+        duration=10.0,
+        demands=(NodeDemand(resources=(ResourceAmount(type="cpu", slots=2),)),),
+    )
+    assert set(singular.resource_work()) == {"cpus"}
+
+    value = cheap_makespan([singular], width=8, resource_capacity={"cpus": 8})
+    assert value != float("inf")
+    assert value == pytest.approx(10.0)
+
+
+def test_pack_to_height_simulated_mixed_width_does_not_grossly_overshoot() -> None:
+    """With many tasks wider than W/2, the per-level count must not let nearly
+    every batch overshoot the target height.  Mild overshoot is acceptable;
+    gross or systematic overshoot is not."""
+    width = 16
+    height = 100.0
+    rng = random.Random(1234)
+    tasks = [
+        task(
+            f"t{i}",
+            width=(rng.randint(width // 2 + 1, width) if rng.random() < 0.5 else rng.randint(1, 4)),
+            duration=float(rng.randint(5, 40)),
+        )
+        for i in range(300)
+    ]
+
+    batches = pack_to_height_simulated(tasks, width=width, height=height)
+    makespans = [simulate_makespan(b.tasks, width=width) for b in batches]
+    overshooting = [m for m in makespans if m > height + 1e-6]
+
+    # Not collapsed to one batch per task, and no near-empty padding batches.
+    assert len(batches) < len(tasks)
+    # The ideal (un-derated) count overshoots ~100% of multi-task batches; the
+    # derate must bring that well down and keep any overshoot small in size.
+    assert len(overshooting) <= 0.25 * len(batches)
+    assert max(makespans) <= 1.25 * height
+
+

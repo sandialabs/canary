@@ -100,16 +100,18 @@ class ScheduleTask:
         return sum(1 for demand in self.demands if demand.exclusive)
 
     def resource_work(self) -> dict[str, float]:
-        """Return resource-time work by resource type.
+        """Return resource-time work (slots * duration) by resource type.
 
-        This is not used by the current scalar packer yet.  It is preparation
-        for resource-aware cheap makespan estimates.
+        A demand typed ``"cpu"`` is accounted under ``"cpus"`` to match the
+        capacity key the packers use; otherwise it would look up a capacity of 0
+        and produce an infinite bound.
         """
         work: dict[str, float] = {}
 
         for demand in self.demands:
             for amount in demand.resources:
-                work[amount.type] = work.get(amount.type, 0.0) + amount.slots * self.duration
+                rtype = "cpus" if amount.type == "cpu" else amount.type
+                work[rtype] = work.get(rtype, 0.0) + amount.slots * self.duration
 
         if not work:
             work["cpus"] = self.work()
@@ -226,78 +228,6 @@ class CheapMakespanStats:
 
         bounds.extend(
             self._resource_bounds(resource_capacity=resource_capacity, node_count=node_count)
-        )
-
-        return max(bounds)
-
-    def estimate_with_task(
-        self,
-        task: ScheduleTask,
-        *,
-        width: int,
-        workers: int | None = None,
-        resource_capacity: dict[str, int] | None = None,
-        node_count: int | None = None,
-    ) -> float:
-        return self.estimate_with_tasks(
-            [task],
-            width=width,
-            workers=workers,
-            resource_capacity=resource_capacity,
-            node_count=node_count,
-        )
-
-    def estimate_with_tasks(
-        self,
-        tasks: Sequence[ScheduleTask],
-        *,
-        width: int,
-        workers: int | None = None,
-        critical_path: float = 0.0,
-        resource_capacity: dict[str, int] | None = None,
-        node_count: int | None = None,
-    ) -> float:
-
-        if width <= 0:
-            raise ValueError(f"width={width!r} must be > 0")
-
-        if workers is not None and workers <= 0:
-            raise ValueError(f"workers={workers!r} must be > 0")
-
-        total_work = self.total_work
-        total_duration = self.total_duration
-        max_duration = self.max_duration
-        max_width = self.max_width
-        node_work = self.node_work
-        resource_work = dict(self.resource_work)
-
-        for task in tasks:
-            total_work += task.work()
-            total_duration += float(task.duration)
-            max_duration = max(max_duration, float(task.duration))
-            max_width = max(max_width, int(task.width))
-            node_work += task.exclusive_node_count() * float(task.duration)
-            for rtype, work in task.resource_work().items():
-                resource_work[rtype] = resource_work.get(rtype, 0.0) + work
-
-        if max_width > width:
-            raise ValueError(
-                f"Tasks exceed available width: max task width {max_width}, "
-                f"available width is {width}"
-            )
-
-        bounds = [max_duration, total_work / float(width), self.critical_path, float(critical_path)]
-
-        if workers is not None:
-            bounds.append(total_duration / float(workers))
-
-        bounds.extend(
-            self._resource_bounds(
-                resource_capacity=resource_capacity,
-                node_count=node_count,
-                resource_work=resource_work,
-                node_work=node_work,
-            )
         )
 
         return max(bounds)
@@ -710,7 +640,13 @@ def pack_by_count_atomic_simulated(
         tasks, width=width, resource_capacity=resource_capacity, node_count=node_count
     )
 
-    components = _dependency_components(tasks, width=width, workers=workers)
+    components = _dependency_components(
+        tasks,
+        width=width,
+        workers=workers,
+        resource_capacity=resource_capacity,
+        node_count=node_count,
+    )
     if not components:
         return []
 
@@ -993,7 +929,21 @@ def _estimate_count_for_height(
     total_duration = sum(float(task.duration) for task in tasks)
     max_task_height = max((float(task.duration) for task in tasks), default=0.0)
 
-    count = max(1, math.ceil(total_work / (float(width) * float(height))))
+    # The ideal area term ``total_work / (width * height)`` assumes perfect
+    # packing, but two wide tasks cannot share a slot, so it undershoots and the
+    # resulting batches overshoot the target height.  Derate the width by the
+    # average stranded capacity (roughly half of ``mean_task_width - 1``) to curb
+    # overshoot without inflating the count on the common uniform-width case.
+    # Mean width is work-weighted (simple mean when all durations are zero).
+    if total_duration > 0:
+        mean_width = (
+            sum(float(task.width) * float(task.duration) for task in tasks) / total_duration
+        )
+    else:
+        mean_width = sum(task.width for task in tasks) / len(tasks)
+    effective_width = max(1.0, float(width) - (float(mean_width) - 1.0) / 2.0)
+
+    count = max(1, math.ceil(total_work / (effective_width * float(height))))
 
     if workers is not None:
         count = max(count, math.ceil(total_duration / (float(workers) * float(height))))
@@ -1156,15 +1106,20 @@ def _topological_levels(tasks: Sequence[ScheduleTask]) -> list[list[ScheduleTask
 
 
 def _dependency_components(
-    tasks: Sequence[ScheduleTask], *, width: int, workers: int | None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    workers: int | None,
+    resource_capacity: dict[str, int] | None = None,
+    node_count: int | None = None,
 ) -> list[list[ScheduleTask]]:
     """Return undirected dependency-connected components.
 
     Dependencies outside ``tasks`` are ignored.
 
-    The component ordering uses the caller's actual ``width`` and ``workers``.
-    This fixes the previous bug where ordering was computed using
-    ``max(task.width)`` and ``workers=None`` regardless of caller settings.
+    Components are ordered by their cheap makespan under the caller's ``width``,
+    ``workers``, ``resource_capacity`` and ``node_count``, so a resource-bound
+    component is ranked by its binding resource rather than a CPU-only estimate.
     """
     task_by_id = {task.id: task for task in tasks}
     task_ids = set(task_by_id)
@@ -1211,7 +1166,13 @@ def _dependency_components(
     components.sort(
         key=lambda component: (
             cheap_makespan(
-                component, width=width, workers=workers, critical_path=True, validate=False
+                component,
+                width=width,
+                workers=workers,
+                critical_path=True,
+                validate=False,
+                resource_capacity=resource_capacity,
+                node_count=node_count,
             ),
             sum(task.scheduling_priority() for task in component),
             len(component),

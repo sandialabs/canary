@@ -20,6 +20,7 @@ from .schedulepack import node_demand_from_request
 from .schedulepack import pack_by_count_atomic_simulated
 from .schedulepack import pack_by_count_simulated
 from .schedulepack import pack_to_height_simulated
+from .schedulepack import simulate_makespan
 
 logger = canary.get_logger(__name__)
 
@@ -501,7 +502,13 @@ def batch_jobs(
 
     for scheduled_batch in scheduled_batches:
         spec_jobs = [lookup[task.id] for task in scheduled_batch.tasks]
+        # makespan_upper_bound is cheap but not a guaranteed upper bound: a
+        # dependency chain interleaving full-width and shared tasks can exceed
+        # it.  Take the max with an exact per-batch simulation so the wall-limit
+        # input is never below the real makespan.
         upper_bound = makespan_upper_bound(scheduled_batch.tasks, width=width, workers=workers)
+        simulated = simulate_makespan(scheduled_batch.tasks, width=width, workers=workers)
+        upper_bound = max(upper_bound, simulated)
         batchspec = BatchSpec(
             layout=spec.layout,
             jobs=spec_jobs,

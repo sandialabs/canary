@@ -187,6 +187,14 @@ def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
     assert batch.estimated_runtime is not None and batch.estimated_runtime < 300.0
     assert batch.runtime_upper_bound is not None
     assert batch.runtime_upper_bound >= batch.estimated_runtime
+    # runtime_upper_bound must never be below the exact simulated makespan;
+    # batch_jobs takes max(bound, simulate_makespan).  Rebuild the tasks the
+    # same way batch_jobs does so the simulation sees the same inputs.
+    from canary_hpc.schedulepack import simulate_makespan
+
+    lookup = {job.id: job for job in batch.jobs}
+    sim_tasks = [batching._schedule_task_from_job(job, lookup, width=64) for job in batch.jobs]
+    assert batch.runtime_upper_bound >= simulate_makespan(sim_tasks, width=64) - 1e-6
     assert batch.schedule_metadata["runtime_upper_bound"] == batch.runtime_upper_bound
     assert estimate.DEFAULT_COLD_RUNTIME_FRACTION > 0.1
 
