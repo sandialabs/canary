@@ -81,9 +81,7 @@ def dump(data: dict[str, Any]) -> str:
 def describe_job(job: "Job | JobSpec", indent: str = "") -> None:
     """Pretty-print syntax-highlighted YAML metadata for *job* or *spec*."""
     from pygments import highlight
-    from pygments.formatters import (
-        TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
-    )
+    from pygments.formatters.terminal256 import TerminalTrueColorFormatter as Formatter
     from pygments.lexers import get_lexer_by_name
 
     state = serialize(job)
