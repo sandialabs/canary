@@ -1015,3 +1015,73 @@ def test_pack_to_height_simulated_mixed_width_does_not_grossly_overshoot() -> No
     assert max(makespans) <= 1.25 * height
 
 
+# --- additive heap key keeps batches even in task count -------------------
+
+
+def _few_long_many_short(n_long: int, n_short: int) -> list[ScheduleTask]:
+    """A few very long tasks plus many short ones.
+
+    A flat makespan-based key would seed a batch with each long task and leave
+    it nearly empty; the additive key avoids this.
+    """
+    tasks = [task(f"long{i}", width=1, duration=1000.0) for i in range(n_long)]
+    tasks += [task(f"short{i}", width=1, duration=10.0) for i in range(n_short)]
+    return tasks
+
+
+def test_additive_key_has_no_near_empty_batches() -> None:
+    """No near-empty batch on the few-long-many-short workload."""
+    tasks = _few_long_many_short(n_long=8, n_short=6400)
+    batches = pack_by_count_simulated(tasks, width=64, count=32)
+    sizes = sorted(len(b.tasks) for b in batches)
+    mean = sum(sizes) / len(sizes)
+    near_empty = [s for s in sizes if s < 0.25 * mean]
+    assert near_empty == []
+    assert sizes[0] > 1
+    assert sizes[-1] / mean < 1.5
+    placed = sorted(t.id for b in batches for t in b.tasks)
+    assert placed == sorted(t.id for t in tasks)
+
+
+def test_additive_key_size_balance_on_heavy_tail() -> None:
+    """Heavy-tailed durations do not starve any batch."""
+    tasks = [
+        task(f"t{i}", width=1, duration=(1000.0 if i % 100 == 0 else 5.0)) for i in range(2000)
+    ]
+    batches = pack_by_count_simulated(tasks, width=32, count=24)
+    sizes = sorted(len(b.tasks) for b in batches)
+    mean = sum(sizes) / len(sizes)
+    assert [s for s in sizes if s < 0.25 * mean] == []
+    assert sizes[0] >= 1
+    # Long tasks consume whole batches, so the fullest batch is a bounded
+    # multiple of the mean, not one giant batch.
+    assert sizes[-1] / mean <= 3.5
+
+
+def test_additive_respects_gpu_capacity() -> None:
+    """GPU-bearing tasks are balanced by gpu work, so they do not all land in
+    one batch."""
+    gpu = NodeDemand(resources=(ResourceAmount(type="gpus", slots=1),))
+    tasks = [ScheduleTask(id=f"g{i}", width=1, duration=100.0, demands=(gpu,)) for i in range(8)]
+    tasks += [task(f"c{i}", width=1, duration=100.0) for i in range(8)]
+    batches = pack_by_count_simulated(
+        tasks, width=16, count=4, resource_capacity={"cpus": 16, "gpus": 2}
+    )
+    gpu_per_batch = sorted(
+        sum(1 for t in b.tasks if any(d.resources for d in t.demands)) for b in batches
+    )
+    assert gpu_per_batch[-1] <= 4
+    placed = sorted(t.id for b in batches for t in b.tasks)
+    assert placed == sorted(t.id for t in tasks)
+
+
+def test_atomic_additive_key_has_no_near_empty_batches() -> None:
+    """The atomic packer uses the same key: long single-task components plus
+    many short ones do not starve any batch."""
+    tasks = _few_long_many_short(n_long=8, n_short=2000)
+    batches = pack_by_count_atomic_simulated(tasks, width=32, count=20)
+    sizes = sorted(len(b.tasks) for b in batches)
+    mean = sum(sizes) / len(sizes)
+    assert [s for s in sizes if s < 0.25 * mean] == []
+    placed = sorted(t.id for b in batches for t in b.tasks)
+    assert placed == sorted(t.id for t in tasks)

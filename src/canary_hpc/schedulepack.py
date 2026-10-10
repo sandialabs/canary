@@ -688,7 +688,7 @@ def pack_by_count_atomic_simulated(
 
     accums = [_BatchAccum() for _ in range(count)]
 
-    heap: list[tuple[float, int, float, float, int]] = [
+    heap: list[tuple] = [
         accums[i].heap_key(
             width=width,
             workers=workers,
@@ -776,26 +776,55 @@ class _BatchAccum:
         index: int,
         resource_capacity: dict[str, int] | None = None,
         node_count: int | None = None,
-    ) -> tuple[float, int, float, float, int]:
+    ) -> tuple:
         """Return a stable heap key for choosing the least-loaded batch.
 
-        The first element is the cheap makespan estimate.  The remaining fields
-        break ties in favor of batches with fewer tasks and less accumulated
-        work.  This matters because the lower-bound estimate can remain flat
-        when adding tasks that fit in parallel.
+        The key leads with the strictly-additive throughput load -- the maximum
+        over the additive capacity bounds (cpu work/width, each resource
+        work/capacity, exclusive node_work/node_count).  This term rises every
+        time work is added, so it never goes flat, yet it still respects GPU /
+        node / resource capacity (unlike a bare ``total_work/width``).  The full
+        lower-bound ``estimate`` is the secondary term, so a batch that is
+        genuinely makespan-bound is still correctly deprioritised.
+
+        Leading with ``estimate()`` instead would be a ``max(...)`` term
+        dominated by ``max_duration`` / ``critical_path``: it stays flat when
+        adding parallel-fitting tasks, so a batch seeded with one long task is
+        pinned at that duration and left nearly empty while others overfill.
         """
-        return (
-            self.stats.estimate(
-                width=width,
-                workers=workers,
-                resource_capacity=resource_capacity,
-                node_count=node_count,
-            ),
-            self.stats.count,
-            self.stats.total_work,
-            self.stats.total_duration,
-            index,
+        estimate = self.stats.estimate(
+            width=width, workers=workers, resource_capacity=resource_capacity, node_count=node_count
         )
+        additive = self._additive_load(
+            width=width, resource_capacity=resource_capacity, node_count=node_count
+        )
+        return (additive, estimate, self.stats.count, self.stats.total_duration, index)
+
+    def _additive_load(
+        self,
+        *,
+        width: int,
+        resource_capacity: dict[str, int] | None = None,
+        node_count: int | None = None,
+    ) -> float:
+        """Maximum over strictly-additive capacity bounds (no max_duration term).
+
+        Unlike :meth:`CheapMakespanStats.estimate`, this never includes the flat
+        ``max_duration`` or ``critical_path`` terms, so it is strictly monotone
+        in the work added to the batch.
+        """
+        bounds = [self.stats.total_work / float(width)]
+
+        if node_count:
+            bounds.append(self.stats.node_work / float(node_count))
+
+        if resource_capacity:
+            for rtype, work in self.stats.resource_work.items():
+                capacity = int(resource_capacity.get(rtype, 0))
+                if capacity > 0:
+                    bounds.append(work / float(capacity))
+
+        return max(bounds)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -844,7 +873,7 @@ def _pack_independent_by_count_cheap(
 
     accums = [_BatchAccum() for _ in range(count)]
 
-    heap: list[tuple[float, int, float, float, int]] = [
+    heap: list[tuple] = [
         accums[i].heap_key(
             width=width,
             workers=workers,

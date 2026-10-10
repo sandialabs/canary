@@ -395,6 +395,18 @@ def test_batch_jobs_preserves_schedule_metadata(tmp_path):
         assert "simulated_runtime" in metadata
 
 
+def test_batch_jobs_places_every_job_once(tmp_path):
+    """batch_jobs uses the additive balance key (the only key): every job is
+    placed exactly once and the result is non-empty."""
+    jobs = make_jobs(tmp_path)
+    spec = batching_spec(layout="flat", nodes="any", count=4)
+
+    batches = batching.batch_jobs(jobs=jobs, width=64, workers=None, spec=spec)
+    assert batches
+    placed = sorted(j.id for b in batches for j in b.jobs)
+    assert placed == sorted(j.id for j in jobs)
+
+
 class _FakePartition:
     def __init__(self, njobs: int, weight: float, node_count: int = 1) -> None:
         self.jobs = list(range(njobs))
