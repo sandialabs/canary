@@ -23,11 +23,11 @@ from _canary.core.job import JobPhase
 from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.execution.testexec import ExecutionSpace
+from _canary.util.estimate_runtime import estimate_runtime
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.serialize import serialize
 from _canary.util.time import time_in_seconds
 
-from .estimate import estimate_runtime
 from .status import BatchStatus
 
 if TYPE_CHECKING:

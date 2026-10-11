@@ -6,15 +6,15 @@ import random
 
 import pytest
 
-from canary_hpc.schedulepack import NodeDemand
-from canary_hpc.schedulepack import ResourceAmount
-from canary_hpc.schedulepack import ScheduledBatch
-from canary_hpc.schedulepack import ScheduleTask
-from canary_hpc.schedulepack import cheap_makespan
-from canary_hpc.schedulepack import pack_by_count_atomic_simulated
-from canary_hpc.schedulepack import pack_by_count_simulated
-from canary_hpc.schedulepack import pack_to_height_simulated
-from canary_hpc.schedulepack import simulate_makespan
+from _canary.util.schedulepack import NodeDemand
+from _canary.util.schedulepack import ResourceAmount
+from _canary.util.schedulepack import ScheduledBatch
+from _canary.util.schedulepack import ScheduleTask
+from _canary.util.schedulepack import cheap_makespan
+from _canary.util.schedulepack import pack_by_count_atomic_simulated
+from _canary.util.schedulepack import pack_by_count_simulated
+from _canary.util.schedulepack import pack_to_height_simulated
+from _canary.util.schedulepack import simulate_makespan
 
 
 def resource_task(
@@ -887,7 +887,7 @@ def test_pack_to_height_simulated_exact_final_estimate_opt_in() -> None:
 
 
 def test_makespan_upper_bound_empty_and_validation() -> None:
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     assert makespan_upper_bound([], width=4) == 0.0
     with pytest.raises(ValueError):
@@ -897,7 +897,7 @@ def test_makespan_upper_bound_empty_and_validation() -> None:
 
 
 def test_makespan_upper_bound_narrow_tasks() -> None:
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     tasks = [ScheduleTask(id=f"t{i}", width=1, duration=10.0) for i in range(8)]
     # work / width + longest task
@@ -906,7 +906,7 @@ def test_makespan_upper_bound_narrow_tasks() -> None:
 
 def test_makespan_upper_bound_accounts_for_stranded_width() -> None:
     """A wide task can strand up to (max_width - 1) CPUs, so the effective width shrinks."""
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     tasks = [ScheduleTask(id="w", width=3, duration=10.0)]
     tasks += [ScheduleTask(id=f"n{i}", width=1, duration=10.0) for i in range(3)]
@@ -916,7 +916,7 @@ def test_makespan_upper_bound_accounts_for_stranded_width() -> None:
 
 def test_makespan_upper_bound_serializes_full_width_tasks() -> None:
     """Tasks as wide as the batch (e.g. exclusive jobs) cannot overlap anything."""
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     tasks = [ScheduleTask(id=f"x{i}", width=4, duration=10.0) for i in range(3)]
     assert makespan_upper_bound(tasks, width=4) == pytest.approx(30.0)
@@ -925,7 +925,7 @@ def test_makespan_upper_bound_serializes_full_width_tasks() -> None:
 
 
 def test_makespan_upper_bound_respects_worker_cap() -> None:
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     tasks = [ScheduleTask(id=f"t{i}", width=1, duration=10.0) for i in range(8)]
     # With 2 workers, total duration / workers dominates work / width.
@@ -933,7 +933,7 @@ def test_makespan_upper_bound_respects_worker_cap() -> None:
 
 
 def test_makespan_upper_bound_includes_critical_path() -> None:
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     a = ScheduleTask(id="a", width=1, duration=10.0)
     b = ScheduleTask(id="b", width=1, duration=10.0, dependencies=("a",))
@@ -946,7 +946,7 @@ def test_makespan_upper_bound_never_below_greedy_simulation(seed: int) -> None:
     """The bound must never be optimistic relative to the exact greedy scheduler."""
     import random
 
-    from canary_hpc.schedulepack import makespan_upper_bound
+    from _canary.util.schedulepack import makespan_upper_bound
 
     rng = random.Random(seed)
     width = rng.choice([4, 8, 16, 48])

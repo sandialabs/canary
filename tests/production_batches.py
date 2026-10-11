@@ -19,11 +19,10 @@ from typing import Any
 
 import pytest
 
-from canary_hpc import estimate
-from canary_hpc.batchspec import BATCH_WALL_PENALTY
-from canary_hpc.schedulepack import ScheduleTask
-from canary_hpc.schedulepack import cheap_makespan
-from canary_hpc.schedulepack import makespan_upper_bound
+from _canary.util import estimate_runtime as estimate
+from _canary.util.schedulepack import ScheduleTask
+from _canary.util.schedulepack import cheap_makespan
+from _canary.util.schedulepack import makespan_upper_bound
 
 DATA = Path(__file__).parent / "data" / "production_batches.json.gz"
 
@@ -64,7 +63,8 @@ def wall_limit(jobs: list[RecordedJob], *, width: int) -> float:
         )
         for job in jobs
     ]
-    return BATCH_WALL_PENALTY * makespan_upper_bound(tasks, width=width)
+    # 1.25 to match canary_hpc BATCH_WALL_PENALTY
+    return 1.25 * makespan_upper_bound(tasks, width=width)
 
 
 def batches(*, history_scale: float | None) -> list[tuple[float, list[RecordedJob]]]:

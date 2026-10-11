@@ -11,16 +11,16 @@ from typing import Literal
 from typing import cast
 
 import canary
+from _canary.util.estimate_runtime import estimate_runtime
+from _canary.util.schedulepack import ScheduleTask
+from _canary.util.schedulepack import makespan_upper_bound
+from _canary.util.schedulepack import node_demand_from_request
+from _canary.util.schedulepack import pack_by_count_atomic_simulated
+from _canary.util.schedulepack import pack_by_count_simulated
+from _canary.util.schedulepack import pack_to_height_simulated
+from _canary.util.schedulepack import simulate_makespan
 
 from .batchspec import BatchSpec
-from .estimate import estimate_runtime
-from .schedulepack import ScheduleTask
-from .schedulepack import makespan_upper_bound
-from .schedulepack import node_demand_from_request
-from .schedulepack import pack_by_count_atomic_simulated
-from .schedulepack import pack_by_count_simulated
-from .schedulepack import pack_to_height_simulated
-from .schedulepack import simulate_makespan
 
 logger = canary.get_logger(__name__)
 

@@ -28,7 +28,6 @@ from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
 from .argparsing import DeprecatedArg
 from .argparsing import _allow_hyperthreading_default
-from .argparsing import cold_runtime_fraction_type
 from .batching import BatchingSpec
 from .batching import CountTarget
 from .batching import allocate_partition_counts
@@ -565,17 +564,6 @@ class CanaryHPCConductor:
             default=_allow_hyperthreading_default(),
             help="Count hardware threads as schedulable CPUs on the HPC backend "
             "[alias: -b allow_hyperthreading]",
-        )
-        parser.add_argument(
-            "--batch-cold-runtime-fraction",
-            dest="hpc_batch_cold_runtime_fraction",
-            metavar="F",
-            type=cold_runtime_fraction_type,
-            help=(
-                "Estimate the runtime of a job with no timing history as F times its "
-                "declared timeout when packing batches and sizing their scheduler wall "
-                "limits (0 < F; default: 0.75) [alias: -b cold_runtime_fraction=F]"
-            ),
         )
         parser.add_argument(
             "--batch-timeout-strategy",

@@ -80,9 +80,7 @@ def test_report_cdash_missing_log_payload_is_valid_cdash_base64(tmpdir):
                 and parent is not None
                 and parent.nodeName == "Measurement"
             ):
-                payload = "".join(
-                    node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
-                )
+                payload = join_text_node_data(value.childNodes)
                 break
 
         assert payload is not None
@@ -133,9 +131,7 @@ def test_report_cdash_skipped_log_payload_is_valid_cdash_base64(tmpdir):
                     and parent is not None
                     and parent.nodeName == "Measurement"
                 ):
-                    payload = "".join(
-                        node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
-                    )
+                    payload = join_text_node_data(value.childNodes)
                     break
             if payload is not None:
                 break
@@ -165,9 +161,7 @@ def test_report_cdash_all_log_payloads_are_zlib(tmpdir):
             doc = dom.parse(file)
             for measurement in doc.getElementsByTagName("Measurement"):
                 value = measurement.getElementsByTagName("Value")[0]
-                payload = "".join(
-                    node.data for node in value.childNodes if node.nodeType == node.TEXT_NODE
-                )
+                payload = join_text_node_data(value.childNodes)
                 raw = b64decode(payload.strip())
                 assert raw[:2] != b"\x1f\x8b", "gzip container is not accepted by CDash"
                 zlib.decompress(raw)
@@ -178,6 +172,11 @@ def test_report_cdash_all_log_payloads_are_zlib(tmpdir):
 def cdash_decode(payload: str) -> str:
     """Decode a <Measurement> payload the same way CDash does (base64 + gzuncompress)."""
     return zlib.decompress(b64decode(payload.strip())).decode("utf-8")
+
+
+def join_text_node_data(nodes):
+    s = "".join(n.data for n in nodes if n.nodeType == n.TEXT_NODE)
+    return s
 
 
 def run_canary(command, *args, cwd=None):

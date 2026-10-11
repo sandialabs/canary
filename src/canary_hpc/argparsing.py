@@ -32,17 +32,6 @@ def _allow_hyperthreading_default() -> bool:
     return env_flag(CANARY_HPC_ALLOW_HYPERTHREADING_ENV)
 
 
-def cold_runtime_fraction_type(arg: str) -> float:
-    """argparse ``type`` for ``--batch-cold-runtime-fraction``: a positive float."""
-    try:
-        value = float(arg)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"expected a number, got {arg!r}") from None
-    if not value > 0.0:
-        raise argparse.ArgumentTypeError(f"cold runtime fraction must be > 0, got {arg!r}")
-    return value
-
-
 class CanaryHPCSchedulerArgs(argparse.Action):
     """Arguments to pass directly to scheduler"""
 
@@ -305,11 +294,6 @@ class CanaryHPCResourceSetter(argparse.Action):
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
             setattr(namespace, "hpc_batch_workers", workers)
-
-        elif match := re.search(r"^cold[_-]runtime[_-]fraction[:=](.+)$", value):
-            raw = strip_quotes(match.group(1))
-            fraction = cold_runtime_fraction_type(raw)
-            setattr(namespace, "hpc_batch_cold_runtime_fraction", fraction)
 
         elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", value):
             raw = match.group(2)

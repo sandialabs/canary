@@ -36,7 +36,7 @@ class EstimableJob(Protocol):
 #: prediction, and the fraction of it that a job actually uses varies widely,
 #: so the cold estimate is deliberately conservative.  Override with
 #: ``--batch-cold-runtime-fraction``.
-DEFAULT_COLD_RUNTIME_FRACTION: float = 0.75
+COLD_RUNTIME_FRACTION: float = 0.75
 
 #: Lower bound for an estimate drawn from timing history, as a fraction of the
 #: declared timeout.  Guards against a history made of anomalously fast runs
@@ -49,14 +49,6 @@ RUNTIME_FLOOR_FRACTION: float = 0.1
 RUNTIME_HISTORY_PENALTY: float = 1.25
 
 logger = canary.get_logger(__name__)
-
-
-def cold_runtime_fraction() -> float:
-    """Return the fraction of the timeout used to estimate a job with no history."""
-    value = canary.config.getoption("hpc_batch_cold_runtime_fraction")
-    if value is None:
-        return DEFAULT_COLD_RUNTIME_FRACTION
-    return float(value)
 
 
 def historical_runtime(job: EstimableJob) -> float | None:
@@ -92,7 +84,7 @@ def estimate_runtime(job: EstimableJob) -> float:
     ceiling = float(job.total_timeout())
     sample = historical_runtime(job)
     if sample is None:
-        estimate = cold_runtime_fraction() * timeout
+        estimate = COLD_RUNTIME_FRACTION * timeout
     else:
         estimate = max(RUNTIME_HISTORY_PENALTY * sample, RUNTIME_FLOOR_FRACTION * timeout)
     return min(estimate, ceiling)
