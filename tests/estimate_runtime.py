@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from _canary.util import estimate_runtime as estimate
+import _canary.history as his
 
 
 class FakeJob:
@@ -46,32 +46,32 @@ def history(mean: float, maximum: float | None = None) -> dict[str, float]:
 
 def test_cold_job_uses_default_fraction_of_timeout():
     job = FakeJob(timeout=300.0)
-    assert estimate.COLD_RUNTIME_FRACTION == 0.75
-    assert estimate.estimate_runtime(job) == 225.0
+    assert his.COLD_RUNTIME_FRACTION == 0.75
+    assert his.estimate_runtime(job) == 225.0
 
 
 def test_history_applies_penalty():
     job = FakeJob(timeout=300.0, history=history(60.0))
-    assert estimate.estimate_runtime(job) == estimate.RUNTIME_HISTORY_PENALTY * 60.0 == 75.0
+    assert his.estimate_runtime(job) == his.RUNTIME_HISTORY_PENALTY * 60.0 == 75.0
 
 
 def test_history_prefers_recorded_max_over_mean():
     """A few anomalously fast samples drag the mean down; the recorded max does not move."""
     job = FakeJob(timeout=300.0, history=history(40.0, maximum=80.0))
-    assert estimate.estimate_runtime(job) == 1.25 * 80.0
+    assert his.estimate_runtime(job) == 1.25 * 80.0
 
 
 def test_history_is_floored_at_fraction_of_timeout():
     job = FakeJob(timeout=300.0, history=history(0.01))
-    assert estimate.estimate_runtime(job) == estimate.RUNTIME_FLOOR_FRACTION * 300.0 == 30.0
+    assert his.estimate_runtime(job) == his.RUNTIME_FLOOR_FRACTION * 300.0 == 30.0
 
 
 def test_history_is_capped_at_hard_limit():
     """A stale history longer than the hard limit is capped at that limit."""
     job = FakeJob(timeout=300.0, history=history(900.0))
-    assert estimate.estimate_runtime(job) == 300.0
+    assert his.estimate_runtime(job) == 300.0
     job = FakeJob(timeout=300.0, multiplier=4.0, history=history(900.0))
-    assert estimate.estimate_runtime(job) == 1.25 * 900.0
+    assert his.estimate_runtime(job) == 1.25 * 900.0
 
 
 @pytest.mark.parametrize(
@@ -85,14 +85,14 @@ def test_history_is_capped_at_hard_limit():
 )
 def test_malformed_history_falls_back_to_cold_estimate(cache):
     job = FakeJob(timeout=300.0, cache=cache)
-    assert estimate.estimate_runtime(job) == 225.0
+    assert his.estimate_runtime(job) == 225.0
 
 
 def test_unreadable_cache_falls_back_to_cold_estimate():
-    assert estimate.estimate_runtime(FakeJob(timeout=300.0, broken_cache=True)) == 225.0
+    assert his.estimate_runtime(FakeJob(timeout=300.0, broken_cache=True)) == 225.0
 
 
 def test_mean_only_history_is_used():
     """Caches written without a ``max`` entry still provide a usable estimate."""
     job = FakeJob(timeout=300.0, history={"mean": 100.0, "count": 1})
-    assert estimate.estimate_runtime(job) == 125.0
+    assert his.estimate_runtime(job) == 125.0

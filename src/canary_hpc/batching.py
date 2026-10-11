@@ -11,7 +11,7 @@ from typing import Literal
 from typing import cast
 
 import canary
-from _canary.util.estimate_runtime import estimate_runtime
+from _canary.history import estimate_runtime
 from _canary.util.schedulepack import ScheduleTask
 from _canary.util.schedulepack import makespan_upper_bound
 from _canary.util.schedulepack import node_demand_from_request

@@ -2,34 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Conservative per-job runtime estimates used to pack batches and size their wall limits.
-
-The estimate does not need to be accurate: the in-batch queue executor does the
-real scheduling, and packing only needs estimates that are consistent enough to
-produce batches of roughly equal runtime.  It must not be *optimistic*, however,
-because the scheduler wall limit of each batch is derived from it and a wall
-limit shorter than the real runtime kills the batch.
-"""
-
 from typing import Any
 from typing import Protocol
 
-import canary
+from ..util import logging
 
-
-class EstimableJob(Protocol):
-    """The parts of a job the runtime estimate depends on."""
-
-    @property
-    def id(self) -> str: ...
-
-    @property
-    def timeout(self) -> float: ...
-
-    def total_timeout(self) -> float: ...
-
-    def load_cached_runs(self) -> dict[str, Any] | None: ...
-
+logger = logging.get_logger(__name__)
 
 #: Runtime estimate for a job with no timing history, as a fraction of its
 #: declared timeout.  Declared timeouts are an upper limit, not a runtime
@@ -48,7 +26,19 @@ RUNTIME_FLOOR_FRACTION: float = 0.1
 #: sample is inflated before it is used.
 RUNTIME_HISTORY_PENALTY: float = 1.25
 
-logger = canary.get_logger(__name__)
+
+class EstimableJob(Protocol):
+    """The parts of a job the runtime estimate depends on."""
+
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def timeout(self) -> float: ...
+
+    def total_timeout(self) -> float: ...
+
+    def load_cached_runs(self) -> dict[str, Any] | None: ...
 
 
 def historical_runtime(job: EstimableJob) -> float | None:

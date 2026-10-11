@@ -169,7 +169,7 @@ def test_batch_t(tmp_path):
 
 def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
     """Packing durations and the stored bounds follow canary_hpc.estimate, not raw timeouts."""
-    from _canary.util import estimate_runtime as estimate
+    import _canary.history as his
 
     jobs = make_jobs(tmp_path)
     seen: list[str] = []
@@ -196,18 +196,18 @@ def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
     sim_tasks = [batching._schedule_task_from_job(job, lookup, width=64) for job in batch.jobs]
     assert batch.runtime_upper_bound >= simulate_makespan(sim_tasks, width=64) - 1e-6
     assert batch.schedule_metadata["runtime_upper_bound"] == batch.runtime_upper_bound
-    assert estimate.COLD_RUNTIME_FRACTION > 0.1
+    assert his.COLD_RUNTIME_FRACTION > 0.1
 
 
 def test_batching_cold_jobs_use_cold_fraction_of_timeout(tmp_path):
     """With no timing history, every job is packed at cold_fraction * timeout."""
-    from _canary.util import estimate_runtime as estimate
+    import _canary.history as his
 
     jobs = make_jobs(tmp_path)
     spec = batching_spec(layout="flat", nodes="any", count=len(jobs))
     batches = batching.batch_jobs(jobs=jobs, width=64, spec=spec)
 
-    fraction = estimate.COLD_RUNTIME_FRACTION
+    fraction = his.COLD_RUNTIME_FRACTION
     for batch in batches:
         (job,) = batch.jobs
         assert batch.estimated_runtime == pytest.approx(math.ceil(fraction * job.timeout))

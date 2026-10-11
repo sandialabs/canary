@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from _canary.util import estimate_runtime as estimate
+import _canary.history as his
 from _canary.util.schedulepack import ScheduleTask
 from _canary.util.schedulepack import cheap_makespan
 from _canary.util.schedulepack import makespan_upper_bound
@@ -59,7 +59,7 @@ def wall_limit(jobs: list[RecordedJob], *, width: int) -> float:
         ScheduleTask(
             id=job.id,
             width=width if job.exclusive else job.cpus,
-            duration=float(math.ceil(estimate.estimate_runtime(job))),
+            duration=float(math.ceil(his.estimate_runtime(job))),
         )
         for job in jobs
     ]

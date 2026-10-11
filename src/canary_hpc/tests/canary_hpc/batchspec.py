@@ -63,7 +63,7 @@ class FakeJob:
     def size(self) -> float:
         return float((self.cpus**2 + self.runtime**2) ** 0.5)
 
-    # ``_canary.uitl.estimate_runtime.estimate_runtime`` inputs.  ``runtime`` is reported
+    # ``_canary.history.estimate_runtime`` inputs.  ``runtime`` is reported
     # as the recorded history; with timeout = 4 * runtime the history floor
     # (0.1 * timeout) never binds, so the estimate is exactly 1.25 * runtime.
     @property
