@@ -5,7 +5,6 @@ import argparse
 import copy
 import dataclasses
 import datetime
-import math
 import time
 from functools import cached_property
 from pathlib import Path
@@ -50,8 +49,8 @@ def automatic_wall_limit(jobs: "Sequence[canary.Job]", *, upper_bound: float | N
     upper bound; when it is unknown, the jobs are assumed to run one after another.
     """
     if len(jobs) == 1:
-        return float(jobs[0].total_timeout())
-    serial_ceiling = float(sum(job.total_timeout() for job in jobs))
+        return float(jobs[0].timeout)
+    serial_ceiling = float(sum(job.timeout for job in jobs))
     if upper_bound is None:
         upper_bound = float(sum(estimate_runtime(job) for job in jobs))
     return min(BATCH_WALL_PENALTY * float(upper_bound), serial_ceiling)
@@ -76,7 +75,7 @@ class BatchSpec:
     def __post_init__(self) -> None:
         import uuid
 
-        self.id = str(uuid.uuid4())  # hashit(",".join(job.id for job in self.jobs), length=20)
+        self.id = str(uuid.uuid4())
         self.session = cast(str, self.jobs[0].workspace.session)
         # 1 CPU and not GPUs needed to submit this batch and wait for scheduler
         self.rparameters = {"cpus": 1, "gpus": 0}
@@ -176,10 +175,6 @@ class TestBatch(BaseJob):
         else:
             combined_stat = self._combined_status()
             return f"{name} ({combined_stat})"
-
-    def cost(self) -> float:
-        cpus = max(job.cpus for job in self.jobs)
-        return math.sqrt(cpus**2 + self.runtime**2)
 
     @property
     def cpus(self) -> int:

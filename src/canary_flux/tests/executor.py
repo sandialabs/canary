@@ -59,7 +59,8 @@ class FakeJob:
     def cost(self):
         return 1.0
 
-    def total_timeout(self):
+    @property
+    def timeout(self):
         return 10.0
 
     def display_name(self, *args, **kwargs):

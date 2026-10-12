@@ -90,7 +90,8 @@ def test_basejob_default_phase_transitions() -> None:
         def is_ready(self) -> bool:
             return True
 
-        def total_timeout(self) -> float:
+        @property
+        def timeout(self) -> float:
             return 1.0
 
         def refresh(self) -> None:
@@ -146,6 +147,10 @@ def test_basejob_validate_enqueuable_rejects_running_or_done() -> None:
             return True
 
         def total_timeout(self) -> float:
+            return 1.0
+
+        @property
+        def timeout(self) -> float:
             return 1.0
 
         def refresh(self) -> None:
@@ -362,82 +367,3 @@ def test_job_save_uses_atomic_tmp_cleanup(spec: JobSpec, space):
 
     loaded = json.loads(job.lockfile.read_text())
     assert loaded.id == job.id
-
-
-# ---------------------------------------------------------------------------
-# Tests for job.runtime cache behavior
-# ---------------------------------------------------------------------------
-
-
-def _write_job_cache(cache_dir: Path, spec_id: str, mean: float) -> None:
-    """Write a minimal job cache file with the given mean runtime."""
-    file = cache_dir / "jobs" / spec_id[:2] / f"{spec_id[2:]}.json"
-    file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(
-        '{"cache": {"metrics": {"time": {"mean": %f, "min": %f, "max": %f, "variance": 0.0, "count": 1}}}}'
-        % (mean, mean, mean)
-    )
-
-
-def test_job_runtime_falls_back_to_timeout_when_no_cache(spec: JobSpec, space):
-    """With no job cache, runtime falls back to the declared timeout."""
-    job = Job(spec=spec, workspace=space)
-    assert job.runtime == spec.timeout
-
-
-def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, tmp_path):
-    """A cached mean well below the timeout is used directly."""
-
-    # find_cache_dir walks up from workspace.root (tmp_path/sessions/s1).
-    # Place WORKSPACE.TAG at tmp_path so find_cache_dir resolves tmp_path/cache.
-    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
-    _write_job_cache(tmp_path / "cache", spec.id, mean=60.0)
-
-    job = Job(spec=spec, workspace=space)
-    assert job.runtime == 60.0
-
-
-def test_job_runtime_caps_stale_cache_at_timeout(spec: JobSpec, space, tmp_path):
-    """A cached mean exceeding the declared timeout is capped at the timeout."""
-    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
-    _write_job_cache(tmp_path / "cache", spec.id, mean=900.0)  # stale: 900s > 300s timeout
-
-    job = Job(spec=spec, workspace=space)
-    assert job.runtime == spec.timeout  # capped at 300.0
-
-
-def test_job_runtime_preserves_very_fast_cache(spec: JobSpec, space, tmp_path):
-    """A cached mean well below the timeout is preserved."""
-    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
-    _write_job_cache(tmp_path / "cache", spec.id, mean=1.0)  # 1s actual on 300s declared job
-
-    job = Job(spec=spec, workspace=space)
-    assert job.runtime == 1.0
-
-
-def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):
-    """A cached mean exactly equal to the timeout passes through unchanged."""
-    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
-    _write_job_cache(tmp_path / "cache", spec.id, mean=300.0)
-
-    job = Job(spec=spec, workspace=space)
-    assert job.runtime == 300.0
-
-
-def test_job_runtime_stale_cache_logs_debug(spec: JobSpec, space, tmp_path, caplog):
-    """A stale cached mean (> timeout) emits a debug-level log message."""
-    import logging
-
-    import _canary.core.job as job_module
-
-    (tmp_path / "WORKSPACE.TAG").write_text("Signature: test\n")
-    _write_job_cache(tmp_path / "cache", spec.id, mean=750.0)  # 2.5x the 300s timeout
-
-    # Reset the once-per-process log flag so this test is order-independent.
-    job_module._cache_dir_logged = False
-
-    with caplog.at_level(logging.DEBUG, logger="_canary.core.job"):
-        job = Job(spec=spec, workspace=space)
-        _ = job.runtime  # trigger cached_property
-
-    assert any("exceeds declared timeout" in r.message for r in caplog.records)

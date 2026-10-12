@@ -25,6 +25,7 @@ class DummyJob(BaseJob):
         self.state = JobState()
         self.timekeeper = Timekeeper()
         self._status = Status()
+        self.workspace = SimpleNamespace(path=".")
         self.measurements = {}
         self.saved = False
 
@@ -57,7 +58,8 @@ class DummyJob(BaseJob):
     def is_ready(self) -> bool:
         return True
 
-    def total_timeout(self) -> float:
+    @property
+    def timeout(self) -> float:
         return 1.0
 
     def refresh(self) -> None:

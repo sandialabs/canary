@@ -446,7 +446,14 @@ def batch_jobs(
     _validate_unique_job_ids(jobs)
 
     lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
-    tasks = [_schedule_task_from_job(job, lookup, width=width) for job in jobs]
+    durations = {job.id: math.ceil(_job_batch_duration(job)) for job in jobs}
+    widths = {job.id: _job_batch_width(job, width=width) for job in jobs}
+    work = sum(widths[job.id] * durations[job.id] for job in jobs)
+    scale = max(work / width, max(durations.values())) or 1.0
+    tasks = [
+        _schedule_task_from_job(job, lookup, width=width, duration=durations[job.id], scale=scale)
+        for job in jobs
+    ]
 
     if isinstance(spec.target, DurationTarget):
         logger.debug(
@@ -578,18 +585,13 @@ def _job_batch_width(job: "canary.Job", *, width: int) -> int:
 
 
 def _schedule_task_from_job(
-    job: "canary.Job", lookup: dict[str, "canary.Job"], *, width: int
+    job: "canary.Job", lookup: dict[str, "canary.Job"], *, width: int, duration: float, scale: float
 ) -> ScheduleTask:
     dependencies = tuple(dep.job.id for dep in job.dependencies if dep.job.id in lookup)
-
-    try:
-        priority = float(job.cost())
-    except Exception:
-        priority = None
-
+    eff_width = _job_batch_width(job, width=width)
+    priority = math.hypot(eff_width / width, duration / scale)
     requests = job.required_resources()
     demands = tuple(node_demand_from_request(request) for request in requests)
-
     return ScheduleTask(
         id=job.id,
         width=_job_batch_width(job, width=width),

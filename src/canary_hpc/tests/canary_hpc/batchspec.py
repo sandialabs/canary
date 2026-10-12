@@ -70,9 +70,6 @@ class FakeJob:
     def timeout(self) -> float:
         return 4.0 * self.runtime
 
-    def total_timeout(self) -> float:
-        return 4.0 * self.runtime
-
     def load_cached_runs(self) -> dict[str, Any]:
         return {"metrics": {"time": {"mean": self.runtime, "max": self.runtime}}}
 
@@ -739,7 +736,7 @@ def test_wall_limit_single_job_is_the_jobs_hard_limit(tmp_path):
     batch = make_batch(tmp_path, [job])
     with config.override():
         config.options.hpc_submit_args = []
-        assert batch.wall_limit() == job.total_timeout() == 40.0
+        assert batch.wall_limit() == job.timeout == 40.0
 
 
 def test_wall_limit_multi_job_is_penalized_upper_bound(tmp_path):
@@ -779,6 +776,7 @@ def test_wall_limit_is_capped_at_serial_hard_limits(tmp_path):
 
 
 def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path):
+    import _canary.history as his
     from _canary import config
 
     jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(3)]
@@ -786,7 +784,7 @@ def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path):
     with config.override():
         config.options.hpc_submit_args = []
         # history 10 s -> estimate 12.5 s each; 3 in series; x1.25 penalty
-        assert abs(batch.wall_limit() - 1.25 * 3 * 12.5) < 1e-9
+        assert abs(batch.wall_limit() - 1.25 * 3 * 10 * 4 * his.COLD_RUNTIME_FRACTION) < 1e-9
 
 
 def test_pinned_wall_limit_wins(tmp_path):

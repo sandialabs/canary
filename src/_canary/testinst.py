@@ -34,7 +34,6 @@ class TestInstance:
     keywords: list[str]
     parameters: Parameters
     timeout: float | int | None
-    runtime: float | int | None
     baseline: list[BaselineAction]
     sources: dict[str, list[tuple[str, str | None]]]
     work_tree: str
@@ -165,7 +164,6 @@ def from_job(job: "Job") -> TestInstance:
         keywords=job.spec.keywords,
         parameters=parameters,
         timeout=job.spec.timeout,
-        runtime=job.runtime,
         baseline=job.spec.baseline,
         sources=sources,
         work_tree=str(job.workspace.dir),  # type: ignore
@@ -281,10 +279,6 @@ class MissingTestInstance:
     @property
     def timeout(self):
         return self._raise("timeout")
-
-    @property
-    def runtime(self):
-        return self._raise("runtime")
 
     @property
     def baseline(self):

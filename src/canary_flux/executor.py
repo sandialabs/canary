@@ -108,9 +108,6 @@ class FluxJob:
     def is_done(self) -> bool:
         return self.inner.is_done()
 
-    def total_timeout(self) -> float:
-        return self.inner.total_timeout()
-
     def on_submit(self, at: float | None = None) -> None:
         self.timekeeper.open(at=at)
 
@@ -338,7 +335,7 @@ class FluxDirectExecutor:
                 ready.append(job)
 
         # Match existing behavior loosely: high-cost jobs first.
-        ready.sort(key=lambda job: job.cost(), reverse=True)
+        ready.sort(key=lambda job: job.cpus, reverse=True)
         return ready
 
     def _submit_ready_jobs(self, submitter: Any) -> bool:
@@ -411,13 +408,14 @@ class FluxDirectExecutor:
         if extra := canary.config.getoption("flux_submit_args"):
             submit_args.extend(extra)
 
+        wall_time = canary.config.timeout_multiplier() * job.timeout
         return hpc_connect.JobSpec(
             name=f"canary.{job.id[:7]}",
             commands=[command],
             cpus=job.cpus,
             gpus=job.gpus,
             nodes=max(1, job.nodes),
-            time_limit=job.total_timeout(),
+            time_limit=wall_time,
             env=self._child_environment(job, submit_workspace=submit_workspace),
             output=str(submit_workspace / "flux.out"),
             error=str(submit_workspace / "flux.err"),

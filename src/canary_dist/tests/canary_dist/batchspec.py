@@ -53,9 +53,6 @@ class FakeJob:
     def timeout(self) -> float:
         return 4.0 * self.runtime
 
-    def total_timeout(self) -> float:
-        return self.timeout
-
     def load_cached_runs(self) -> dict[str, Any]:
         return {"metrics": {"time": {"mean": self.runtime, "max": self.runtime}}}
 

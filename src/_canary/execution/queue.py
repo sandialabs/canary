@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import heapq
+import math
 import threading
 import time
 from collections import Counter
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 
+from .. import history
 from ..core.job import BaseJob
 from ..resource_pool.rpool import ResourceUnavailable
 from ..util import logging
@@ -34,12 +36,11 @@ class Busy(Exception):
 @dataclass(order=True)
 class HeapSlot:
     # Negative cost so that heapq is max-heap
-    cost: float = field(init=False, repr=False)
     job: BaseJob = field(compare=False)
+    cost: float = field(repr=False, default=0.0)
     resources: list["NodeRequest"] = field(compare=False, init=False, repr=False)
 
     def __post_init__(self):
-        self.cost = -self.job.cost()
         self.resources = self.job.required_resources()
 
 
@@ -52,9 +53,14 @@ class ResourceQueue:
     """
 
     def __init__(
-        self, lock: threading.Lock, resource_pool: "ResourcePool", jobs: list[BaseJob] | None = None
+        self,
+        lock: threading.Lock,
+        resource_pool: "ResourcePool",
+        store: history.HistoryStore | None = None,
+        jobs: list[BaseJob] | None = None,
     ) -> None:
         self.lock = lock
+        self.store = store or history.HistoryStore(None)
         self._heap: list[HeapSlot] = []
         self._busy: dict[str, Any] = {}
         self._finished: dict[str, Any] = {}
@@ -70,12 +76,30 @@ class ResourceQueue:
 
     def prepare(self) -> None:
         """Empty method that a subclass can implement"""
+        if self.prepared:
+            name = type(self).__name__
+            raise RuntimeError(f"{name} already prepared")
         with self.lock:
             if not self._heap:
                 raise Empty()
+            jobs = [slot.job for slot in self._heap]
+            runtimes = {job.id: history.estimate_runtime(job, store=self.store) for job in jobs}
+            cpus = {job.id: sum(_.count("cpus") for _ in job.required_resources()) for job in jobs}
+
+            width: float = float(self.rpool.count("cpus"))
+            cpu_work: float = sum(cpus[j.id] * runtimes[j.id] for j in jobs)
+            scale: float = max(cpu_work / width, max(runtimes.values()))
+
+            for slot in self._heap:
+                slot.cost = -math.hypot(cpus[slot.job.id] / width, runtimes[slot.job.id] / scale)
+
+            heapq.heapify(self._heap)
+        self.prepared = True
 
     def put(self, *jobs: BaseJob) -> None:
-        # Precompute heap
+        if self.prepared:
+            name = type(self).__name__
+            raise RuntimeError(f"{name}.put() cannot be called after calling {name}.prepare()")
         for job in jobs:
             job.validate_enqueuable()
             required = job.required_resources()
@@ -87,6 +111,10 @@ class ResourceQueue:
             heapq.heappush(self._heap, slot)
 
     def get(self) -> BaseJob:
+        if not self.prepared:
+            name = type(self).__name__
+            raise RuntimeError(f"{name}.prepare must be called before calling {name}.get()")
+
         with self.lock:
             if not self._heap:
                 logger.debug("Queue empty on get()")

@@ -213,20 +213,20 @@ class _MainWorker:
 
         job_id = job.id
 
-        total_timeout = float(job.total_timeout())
+        wall_limit = config.timeout_multiplier() * job.timeout
         watchdog_grace = float(
             os.getenv(
-                "CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * total_timeout)))
+                "CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * wall_limit)))
             )
         )
-        watchdog_deadline = time.time() + total_timeout + watchdog_grace
+        watchdog_deadline = time.time() + wall_limit + watchdog_grace
 
         def terminate_and_report(event: str, **extra: Any) -> None:
             logger.warning(
                 "Terminating worker for job %s: event=%s timeout=%s grace=%s extra=%r",
                 job_id[:7],
                 event,
-                total_timeout,
+                wall_limit,
                 watchdog_grace,
                 extra,
             )
@@ -274,7 +274,7 @@ class _MainWorker:
 
             if proc.is_alive() and now > watchdog_deadline:
                 terminate_and_report(
-                    "job_timeout", phase="watchdog", timeout=total_timeout, grace=watchdog_grace
+                    "job_timeout", phase="watchdog", timeout=wall_limit, grace=watchdog_grace
                 )
                 return
 
@@ -669,7 +669,8 @@ class ResourceQueueExecutor:
                 return
 
             if event == "job_timeout":
-                reason = f"Job timed out after {slot.job.total_timeout()} s."
+                wall_limit = config.timeout_multiplier() * slot.job.timeout
+                reason = f"Job timed out after {wall_limit} s."
 
                 self._finish_abnormal_slot(slot, outcome="TIMEOUT", reason=reason)
 

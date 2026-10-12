@@ -434,6 +434,17 @@ def repeat_until_fail(case: "Job") -> bool | None:
     return True
 
 
+@hookimpl(specname="canary_runtest_finish")
+def store_runtime(case: "Job") -> None:
+    from ..history import HistoryStore
+
+    try:
+        store = HistoryStore.open(start=case.workspace.root)
+        store.record(case)
+    except Exception:
+        logger.debug("Failed to cache last run", exc_info=True)
+
+
 # ---- RERUN
 def rerun_case(job: "Job", attempt: int) -> None:
     try:

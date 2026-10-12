@@ -46,6 +46,18 @@ def get_timeout_option(name: str, default: float | None = None) -> float | None:
     return timeouts.get(name, default)
 
 
+def timeout_multiplier() -> float:
+    ensure_loaded()
+    assert _config is not None
+    multiplier: float = 1.0
+    if cli_timeouts := _config.getoption("timeout"):
+        if t := cli_timeouts.get("multiplier"):
+            multiplier = float(t)
+    elif t := _config.get("run:timeout:multiplier"):
+        multiplier = float(t)
+    return multiplier
+
+
 def __getattr__(name: str) -> typing.Any:
     global _config
     if _config is None:

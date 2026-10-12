@@ -13,7 +13,6 @@ from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
@@ -208,9 +207,6 @@ class BaseJob(ABC):
     def id(self) -> str: ...
 
     # ---- scheduler sizing/resources ----
-    @abstractmethod
-    def cost(self) -> float: ...
-
     @property
     def exclusive(self) -> bool:
         return False
@@ -264,8 +260,9 @@ class BaseJob(ABC):
         self.timekeeper.maybe_close(at=at)
 
     # ---- executor integration ----
+    @property
     @abstractmethod
-    def total_timeout(self) -> float: ...
+    def timeout(self) -> float: ...
 
     @abstractmethod
     def refresh(self) -> None: ...
@@ -407,15 +404,6 @@ class Job(BaseJob):
     def timeout(self) -> float:
         return self.spec.timeout
 
-    def total_timeout(self) -> float:
-        fac: float = 1.0
-        if cli_timeouts := config.getoption("timeout"):
-            if t := cli_timeouts.get("multiplier"):
-                fac = float(t)
-        elif t := config.get("run:timeout:multiplier"):
-            fac = float(t)
-        return fac * self.timeout
-
     @property
     def attributes(self) -> dict[str, Any]:
         return self.spec.attributes
@@ -482,37 +470,6 @@ class Job(BaseJob):
     @property
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
-
-    def cost(self) -> float:
-        return math.sqrt(self.cpus**2 + self.runtime**2)
-
-    @cached_property
-    def runtime(self) -> float:
-        """Return the mean recorded runtime for this job, or its timeout if it has no history.
-
-        The value is capped at the declared timeout so stale cache entries do
-        not report impossible runtimes after a timeout reduction.
-        """
-        timeout = self.timeout
-        try:
-            try:
-                if cache := self.load_cached_runs():
-                    mean = float(cache["metrics"]["time"]["mean"])
-                    if mean > timeout:
-                        logger.debug(
-                            "Cached mean runtime %.1fs for %s exceeds declared timeout %.1fs "
-                            "(%.1fx); capping at timeout for packing estimate",
-                            mean,
-                            self.spec.display_name(),
-                            timeout,
-                            mean / timeout,
-                        )
-                    return min(mean, timeout)
-            except KeyError:
-                pass
-        except Exception:
-            logger.debug("Failed to load historic timing data", exc_info=True)
-        return timeout
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
@@ -883,10 +840,7 @@ class Job(BaseJob):
         pass
 
     def finish(self) -> None:
-        try:
-            self.cache_last_run()
-        except Exception:
-            logger.debug("Failed to cache last run", exc_info=True)
+        pass
 
     def save(self) -> None:
         json.safesave(self.lockfile, self)
@@ -906,84 +860,6 @@ class Job(BaseJob):
                 out.write(file.read_text(errors="ignore"))
         return out.getvalue()
 
-    def load_cached_runs(self) -> dict[str, Any] | None:
-        if cache_dir := find_cache_dir(start=self.workspace.root):
-            file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
-            if file.exists():
-                return json.loads(file.read_text())["cache"]
-        return None
-
-    def cache_last_run(self) -> None:
-        """store relevant information for this run"""
-        if not self.status.is_success():
-            return
-        from ..util.filesystem import atomic_write
-        from ..util.filesystem import file_lock
-        from .jobspec import _GlobalSpecCache
-
-        if cache_dir := find_cache_dir(start=self.workspace.root):
-            file = cache_dir / "jobs" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
-            file.parent.mkdir(parents=True, exist_ok=True)
-            # Lock the individual cache file for the whole read-modify-write so
-            # concurrent workers and concurrent HPC batches sharing this cache do
-            # not lose one another's updates.
-            with file_lock(file):
-                cache: dict[str, Any]
-                if not file.exists():
-                    cache = {
-                        ".version": [3, 0],
-                        "meta": {
-                            "name": self.spec.display_name(),
-                            "id": self.spec.id,
-                            "root": self.spec.file_root,
-                            "path": self.spec.file_path,
-                            "parameters": self.spec.parameters,
-                        },
-                    }
-                else:
-                    cache = json.loads(file.read_text())["cache"]
-                # Record the current file content hash so consumers can detect
-                # that a test was edited since these metrics were recorded (the
-                # id itself is content-independent).
-                try:
-                    meta = cache.setdefault("meta", {})
-                    meta["content_hash"] = _GlobalSpecCache.content_hash(
-                        self.spec.file_root / self.spec.file_path
-                    )
-                except Exception:
-                    logger.debug("Failed to record content hash", exc_info=True)
-                history = cache.setdefault("history", {})
-                fn = datetime.datetime.fromtimestamp
-                dt = fn(self.timekeeper._started) if self.timekeeper._started > 0 else None
-                if dt is not None:
-                    history["last_run"] = dt.strftime("%c")
-                name = self.status.category.lower()
-                history[name] = history.get(name, 0) + 1
-                if self.timekeeper.running() >= 0 and self.status.is_success():
-                    count: int = 0
-                    metrics = cache.setdefault("metrics", {})
-                    t = metrics.setdefault("time", {})
-                    if t:
-                        # Welford's single pass online algorithm to update statistics
-                        count, mean, variance = t["count"], t["mean"], t["variance"]
-                        delta = self.timekeeper.running() - mean
-                        mean += delta / (count + 1)
-                        M2 = variance * count
-                        delta2 = self.timekeeper.running() - mean
-                        M2 += delta * delta2
-                        variance = M2 / (count + 1)
-                        minimum = min(t["min"], self.timekeeper.running())
-                        maximum = max(t["max"], self.timekeeper.running())
-                    else:
-                        variance = 0.0
-                        mean = minimum = maximum = self.timekeeper.running()
-                    t["mean"] = mean
-                    t["min"] = minimum
-                    t["max"] = maximum
-                    t["variance"] = variance
-                    t["count"] = count + 1
-                atomic_write(file, json.dumps({"cache": cache}, indent=2))
-
 
 def load_job_from_file(arg: Path | str | None) -> Job:
     from _canary.session.workspace import Workspace
@@ -1001,47 +877,6 @@ def load_job_from_state(lock_data: "Job") -> "Job":
 
     workspace = Workspace.load()
     return workspace.find(job=lock_data.spec.id)
-
-
-_cache_dir_logged: bool = False
-
-
-def find_cache_dir(start: Path) -> Path | None:
-    """Return the job result cache directory, or None if none is configured.
-
-    Resolution order:
-    1. ``CANARY_CACHE_DIR`` environment variable
-    2. ``run:cache:dir`` config key
-    3. Walk up from *start* for a ``WORKSPACE.TAG`` anchor → ``<anchor>/cache``
-
-    The resolved path (and its source) is logged at DEBUG level the first time
-    this function returns a non-None result during the process lifetime, so
-    operators can confirm which cache is in use without inspecting source code.
-    """
-    global _cache_dir_logged
-
-    if "CANARY_CACHE_DIR" in os.environ:
-        cache_dir = Path(os.environ["CANARY_CACHE_DIR"])
-        if not _cache_dir_logged:
-            logger.debug("Job cache dir (CANARY_CACHE_DIR): %s", cache_dir)
-            _cache_dir_logged = True
-        return cache_dir
-    if raw := config.get("run:cache:dir"):
-        cache_dir = Path(raw)
-        if not _cache_dir_logged:
-            logger.debug("Job cache dir (run:cache:dir config): %s", cache_dir)
-            _cache_dir_logged = True
-        return cache_dir
-    d = start
-    while d != d.parent:
-        if (d / "WORKSPACE.TAG").exists():
-            cache_dir = d / "cache"
-            if not _cache_dir_logged:
-                logger.debug("Job cache dir (WORKSPACE.TAG at %s): %s", d, cache_dir)
-                _cache_dir_logged = True
-            return cache_dir
-        d = d.parent
-    return None
 
 
 def split_count(total: int, parts: int) -> list[int]:

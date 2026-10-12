@@ -68,6 +68,7 @@ from .base import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
+    from ..core.job import Job
 
 
 # ---------------------------------------------------------------------------
@@ -303,21 +304,12 @@ def _job_lockfile(workspace: Workspace, jobid: str) -> Path:
     return lockfile
 
 
-def _find_cache_path(workspace: Workspace, spec_id: str) -> Path | None:
+def _find_cache_path(job: "Job") -> Path | None:
     """Return the path to the per-job timing cache file, or None if absent."""
-    from ..core.job import find_cache_dir
+    from ..history.store import HistoryStore
 
-    cache_dir = find_cache_dir(start=workspace.root)
-    if cache_dir is None:
-        cache_dir = workspace.root / "cache"
-    cache_file = cache_dir / "jobs" / spec_id[:2] / spec_id[2:]
-    if cache_file.exists():
-        return cache_file
-    # Try legacy location
-    legacy = workspace.root / "cache" / "cases" / spec_id[:2] / spec_id[2:]
-    if legacy.exists():
-        return legacy
-    return None
+    store = HistoryStore.open(start=job.workspace.root)
+    return store.path_for(job)
 
 
 def _resolve_session_dir(workspace: Workspace, session: str) -> Path:
@@ -490,7 +482,7 @@ def _exec_job(args: argparse.Namespace) -> int:
 
     if args.cache:
         job = workspace.find_job(args.jobid)
-        cache_path = _find_cache_path(workspace, job.id)
+        cache_path = _find_cache_path(job)
         if cache_path is None:
             sys.stderr.write(f"No cache entry found for job {args.jobid!r}\n")
             return 1

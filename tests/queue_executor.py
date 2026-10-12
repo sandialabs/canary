@@ -53,7 +53,8 @@ class DummyJob(BaseJob):
     def is_ready(self) -> bool:
         return True
 
-    def total_timeout(self) -> float:
+    @property
+    def timeout(self) -> float:
         return 12.0
 
     def refresh(self) -> None:

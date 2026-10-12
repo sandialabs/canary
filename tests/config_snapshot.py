@@ -112,7 +112,7 @@ def test_run_cache_dir_config_settable():
 
 
 def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, monkeypatch):
-    from _canary.core.job import find_cache_dir
+    from _canary.history.store import _find_cache_dir as find
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -120,17 +120,17 @@ def test_find_cache_dir_prefers_env_then_config_then_workspace_tag(tmp_path, mon
 
     # 1. With nothing set, walk up to the WORKSPACE.TAG and use <ws>/cache.
     monkeypatch.delenv("CANARY_CACHE_DIR", raising=False)
-    assert find_cache_dir(start=ws) == ws / "cache"
+    assert find(start=ws) == ws / "cache"
 
     # 2. A configured run:cache:dir takes precedence over the workspace tag.
     shared = tmp_path / "shared"
     config.set("run:cache:dir", str(shared))
-    assert find_cache_dir(start=ws) == shared
+    assert find(start=ws) == shared
 
     # 3. CANARY_CACHE_DIR wins over everything.
     envdir = tmp_path / "env"
     monkeypatch.setenv("CANARY_CACHE_DIR", str(envdir))
-    assert find_cache_dir(start=ws) == envdir
+    assert find(start=ws) == envdir
 
 
 def test_snapshot_captures_absolute_sys_path(tmp_path, monkeypatch):

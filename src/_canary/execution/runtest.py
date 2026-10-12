@@ -54,6 +54,7 @@ from typing import Generator
 import rich
 
 from .. import config
+from ..history import HistoryStore
 from ..plugins.hookspec import hookimpl
 from ..util import glyphs
 from ..util import logging
@@ -191,7 +192,8 @@ def default_runtests(runner: Runner) -> bool:
 
     try:
         rpool = config.resource_manager.get_pool()
-        queue = ResourceQueue(lock=global_lock, resource_pool=rpool)
+        store = HistoryStore.open(start=runner.workspace.root)
+        queue = ResourceQueue(lock=global_lock, resource_pool=rpool, store=store)
         queue.put(*runner.jobs)  # type: ignore
         queue.prepare()
     except Exception:

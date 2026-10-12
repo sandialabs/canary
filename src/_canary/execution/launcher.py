@@ -88,10 +88,11 @@ class SubprocessLauncher(Launcher):
                 name=f"{job.id[:7]}",
                 sample_children=False,
             )
+            wall_limit = config.timeout_multiplier() * job.timeout
             try:
                 mp.start()
                 start = time.time()
-                deadline = start + job.total_timeout()
+                deadline = start + wall_limit
                 while True:
                     mp.sample_metrics()
                     rc = mp.poll()
@@ -129,7 +130,7 @@ class SubprocessLauncher(Launcher):
                             except Exception:
                                 pass  # nosec B110
 
-                        raise TestTimedOut(f"Test exceeded timeout of {job.total_timeout():.1f} s")
+                        raise TestTimedOut(f"Test exceeded timeout of {wall_limit:.1f} s")
 
                     time.sleep(0.1)
             finally:

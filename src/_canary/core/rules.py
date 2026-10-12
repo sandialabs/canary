@@ -417,7 +417,8 @@ class SessionTimeoutRule(RuntimeRule):
         return "runtime of job exceeds session timeout"
 
     def __call__(self, job: "Job") -> RuleOutcome:
-        if job.total_timeout() < self.timeout:
+        wall_limit = config.timeout_multiplier() * job.timeout
+        if wall_limit < self.timeout:
             return RuleOutcome(ok=True)
         return RuleOutcome.failed(self.default_reason)
 
