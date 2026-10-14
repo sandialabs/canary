@@ -120,9 +120,7 @@ class DistributedPoolConductor:
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
             dependencies = [batches[dep.id] for dep in batch_spec.dependencies]
             batch = TestBatch(
-                batch_spec,
-                workspace=workspace,
-                dependencies=cast(list[HPCTestBatch], dependencies),
+                batch_spec, workspace=workspace, dependencies=cast(list[HPCTestBatch], dependencies)
             )
             if width > batch.cpus:
                 batch.cpus = width
