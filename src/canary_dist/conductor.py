@@ -123,7 +123,6 @@ class DistributedPoolConductor:
                 batch_spec,
                 workspace=workspace,
                 dependencies=cast(list[HPCTestBatch], dependencies),
-                backend_supports_dependencies=self.backend.supports_dependencies(),
             )
             if width > batch.cpus:
                 batch.cpus = width

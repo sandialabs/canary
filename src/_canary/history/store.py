@@ -81,7 +81,7 @@ class RetrievableJob(Protocol):
 
 class HistoryStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root
+        self.root = None if os.getenv("CANARY_DISABLE_HISTORY") else root
 
     @classmethod
     def open(cls, start: Path) -> "HistoryStore":

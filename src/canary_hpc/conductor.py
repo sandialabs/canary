@@ -459,12 +459,7 @@ class CanaryHPCConductor:
             path = batch_spec.id[:7]
             workspace = ExecutionSpace(root=root, path=Path(path), session=runner.session)
             dependencies = [batches[dep.id] for dep in batch_spec.dependencies]
-            batch = TestBatch(
-                batch_spec,
-                workspace=workspace,
-                dependencies=dependencies,
-                backend_supports_dependencies=self.backend.supports_dependencies(),
-            )
+            batch = TestBatch(batch_spec, workspace=workspace, dependencies=dependencies)
             logger.debug(
                 "Created batch workspace: %s  jobs=%d  deps=%d",
                 workspace.dir,
