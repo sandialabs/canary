@@ -86,7 +86,7 @@ class RecordedJob:
 
 
 @pytest.fixture(scope="module")
-def tmp_store() -> Generator[MyStore]:
+def tmp_store() -> Generator[MyStore, None, None]:
     tmp_path = Path(mkdtemp())
     store = MyStore(tmp_path)
     data = load()
@@ -101,7 +101,7 @@ def tmp_store() -> Generator[MyStore]:
 
 
 @pytest.fixture(scope="module")
-def cold_store() -> Generator[MyStore]:
+def cold_store() -> Generator[MyStore, None, None]:
     tmp_path = Path(mkdtemp())
     store = MyStore(tmp_path)
     data = load()

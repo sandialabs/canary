@@ -73,7 +73,7 @@ def cold_store() -> HistoryStore:
 
 
 @pytest.fixture
-def tmp_store(tmp_path: Path) -> Generator[HistoryStore]:
+def tmp_store(tmp_path: Path) -> Generator[HistoryStore, None, None]:
     store = HistoryStore(tmp_path)
     yield store
 
