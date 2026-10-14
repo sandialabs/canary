@@ -11,6 +11,7 @@ from typing import Literal
 from typing import cast
 
 import canary
+from _canary.history import HistoryStore
 from _canary.history import estimate_runtime
 from _canary.util.schedulepack import ScheduleTask
 from _canary.util.schedulepack import makespan_upper_bound
@@ -25,9 +26,9 @@ from .batchspec import BatchSpec
 logger = canary.get_logger(__name__)
 
 
-def _job_batch_duration(job: "canary.Job") -> float:
+def _job_batch_duration(job: "canary.Job", store: HistoryStore) -> float:
     """Duration used to pack ``job``: its conservative runtime estimate."""
-    return estimate_runtime(job)
+    return estimate_runtime(job, store=store)
 
 
 PartitionCount = int | None
@@ -203,6 +204,7 @@ def partition_jobs(
     nodes: Literal["any", "same"],
     cpus_per_node: int,
     resources_per_node: dict[str, int] | None = None,
+    store: HistoryStore | None = None,
 ) -> list[JobPartition]:
     """Partition jobs into DAG-safe groups with explicit schedule widths.
 
@@ -244,6 +246,8 @@ def partition_jobs(
     if not jobs:
         return []
 
+    store = store or HistoryStore.open(jobs[0].workspace.root)
+
     _validate_unique_job_ids(jobs)
 
     if layout == "atomic":
@@ -264,7 +268,7 @@ def partition_jobs(
                 width=width,
                 resource_capacity=resource_capacity,
                 key=f"layout=atomic,nodes=any,node_count={node_count}",
-                weight=_partition_weight(group, width=width),
+                weight=_partition_weight(group, width=width, store=store),
             )
         ]
 
@@ -290,7 +294,7 @@ def partition_jobs(
                         cpus_per_node=cpus_per_node,
                         width=width,
                         key=(f"layout=flat,nodes=same,level={level_index},node_count={node_count}"),
-                        weight=_partition_weight(group, width=width),
+                        weight=_partition_weight(group, width=width, store=store),
                         resource_capacity=resource_capacity,
                     )
                 )
@@ -310,7 +314,7 @@ def partition_jobs(
                     width=width,
                     resource_capacity=resource_capacity,
                     key=(f"layout=flat,nodes=any,level={level_index},node_count={node_count}"),
-                    weight=_partition_weight(group, width=width),
+                    weight=_partition_weight(group, width=width, store=store),
                 )
             )
 
@@ -414,6 +418,7 @@ def batch_jobs(
     resource_capacity: dict[str, int] | None = None,
     node_count: int | None = None,
     exact_final_estimate: bool = False,
+    store: HistoryStore | None = None,
 ) -> list[BatchSpec]:
     """Partition jobs into simulated-scheduler batches.
 
@@ -445,13 +450,16 @@ def batch_jobs(
 
     _validate_unique_job_ids(jobs)
 
+    store = store or HistoryStore(None)
     lookup: dict[str, canary.Job] = {job.id: job for job in jobs}
-    durations = {job.id: math.ceil(_job_batch_duration(job)) for job in jobs}
+    durations = {job.id: math.ceil(_job_batch_duration(job, store)) for job in jobs}
     widths = {job.id: _job_batch_width(job, width=width) for job in jobs}
     work = sum(widths[job.id] * durations[job.id] for job in jobs)
     scale = max(work / width, max(durations.values())) or 1.0
     tasks = [
-        _schedule_task_from_job(job, lookup, width=width, duration=durations[job.id], scale=scale)
+        _schedule_task_from_job(
+            job, lookup, width=width, duration=durations[job.id], scale=scale, store=store
+        )
         for job in jobs
     ]
 
@@ -585,7 +593,13 @@ def _job_batch_width(job: "canary.Job", *, width: int) -> int:
 
 
 def _schedule_task_from_job(
-    job: "canary.Job", lookup: dict[str, "canary.Job"], *, width: int, duration: float, scale: float
+    job: "canary.Job",
+    lookup: dict[str, "canary.Job"],
+    *,
+    width: int,
+    duration: float,
+    scale: float,
+    store: HistoryStore,
 ) -> ScheduleTask:
     dependencies = tuple(dep.job.id for dep in job.dependencies if dep.job.id in lookup)
     eff_width = _job_batch_width(job, width=width)
@@ -595,7 +609,7 @@ def _schedule_task_from_job(
     return ScheduleTask(
         id=job.id,
         width=_job_batch_width(job, width=width),
-        duration=float(math.ceil(_job_batch_duration(job))),
+        duration=float(math.ceil(_job_batch_duration(job, store))),
         dependencies=dependencies,
         priority=priority,
         payload=job,
@@ -621,7 +635,7 @@ def _job_node_count(job: "canary.Job") -> int:
     return max(1, len(job.required_resources()))
 
 
-def _partition_weight(jobs: list["canary.Job"], *, width: int) -> float:
+def _partition_weight(jobs: list["canary.Job"], *, width: int, store: HistoryStore) -> float:
     """Return a simple estimated load for proportional count allocation."""
     if not jobs:
         return 0.0
@@ -630,7 +644,7 @@ def _partition_weight(jobs: list["canary.Job"], *, width: int) -> float:
     max_runtime = 0.0
 
     for job in jobs:
-        runtime = float(math.ceil(_job_batch_duration(job)))
+        runtime = float(math.ceil(_job_batch_duration(job, store)))
         cpus = _job_batch_width(job, width=width)
 
         work += cpus * runtime

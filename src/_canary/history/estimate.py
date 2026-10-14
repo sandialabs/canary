@@ -24,10 +24,10 @@ def estimate_runtime(
     job: "RetrievableJob", store: HistoryStore | None = None, safety_factor: float = 0.5
 ) -> float:
     """Return a conservative runtime estimate for ``job``, in seconds."""
-    import math
-
+    estimate: float
     if store is not None and (stats := store.runtime_statistics(job)):
-        stddev = math.sqrt(max(0.0, stats.variance))
-        return stats.mean + safety_factor * stddev
+        std = max(0.1 * stats.mean, stats.std)
+        estimate = stats.mean + safety_factor * std
     else:
-        return COLD_RUNTIME_FRACTION * job.timeout
+        estimate = COLD_RUNTIME_FRACTION * job.timeout
+    return estimate

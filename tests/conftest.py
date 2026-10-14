@@ -14,8 +14,8 @@ mp.initialize()
 
 @pytest.fixture(scope="function", autouse=True)
 def config(request):
+    env_copy = os.environ.copy()
     try:
-        env_copy = os.environ.copy()
         os.environ.pop("CONFIG_ENV_FILENAME", None)
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"

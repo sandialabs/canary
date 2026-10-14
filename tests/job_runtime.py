@@ -6,6 +6,7 @@
 # Tests for job.runtime cache behavior
 # ---------------------------------------------------------------------------
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,14 +20,35 @@ from _canary.core.jobspec import JobSpec
 class FakeHistoryStore(his.HistoryStore):
     def record(self, job: Any) -> None:
         """Write a minimal job cache file with the given mean runtime."""
-        spec_id, mean = job
+        job_id, mean = job
         assert self.root is not None
-        file = self.root / "jobs" / spec_id[:2] / f"{spec_id[2:]}.json"
+        file = self.root / "jobs" / job_id[:2] / f"{job_id[2:]}.jsonl"
         file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_text(
-            '{"cache": {"metrics": {"time": {"mean": %f, "min": %f, "max": %f, "variance": 0.0, "count": 1}}}}'
-            % (mean, mean, mean)
-        )
+        meta = {
+            "what": "meta",
+            "version": his.store.SCHEMA,
+            "id": job_id,
+            "name": job_id,
+            "root": "/tmp",
+            "path": "path.pyt",
+            "parameters": {},
+            "totals": {},
+        }
+        run: dict[str, Any] = {
+            "what": "record",
+            "version": his.store.SCHEMA,
+            "recorded_at": round(time.time(), 3),
+            "status": "success",
+            "duration": round(mean, 3),
+            "timeout": float(10 * mean),
+            "timeiout_multiplier": 1.0,
+            "file_hash": "abcdefg",
+            "host": "myhost",
+        }
+        if not file.exists():
+            self._append(file, meta, run)
+        else:
+            self._append(file, run)
 
 
 @pytest.fixture
@@ -61,7 +83,8 @@ def test_job_runtime_uses_cached_mean_when_below_timeout(spec: JobSpec, space, t
     store = FakeHistoryStore.open(tmp_path)
     job = Job(spec=spec, workspace=space)
     store.record((spec.id, 60.0))
-    assert his.estimate_runtime(job, store=store) == 60.0
+    t = his.estimate_runtime(job, store=store)
+    assert expected_runtime(60) == pytest.approx(t)
 
 
 def test_job_runtime_caps_stale_cache_at_timeout(spec: JobSpec, space, tmp_path):
@@ -78,7 +101,8 @@ def test_job_runtime_preserves_very_fast_cache(spec: JobSpec, space, tmp_path):
     store = FakeHistoryStore.open(tmp_path)
     store.record((spec.id, 1.0))
     job = Job(spec=spec, workspace=space)
-    assert his.estimate_runtime(job, store=store) == 1.0
+    t = his.estimate_runtime(job, store=store)
+    assert expected_runtime(1.0) == pytest.approx(t)
 
 
 def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):
@@ -87,4 +111,9 @@ def test_job_runtime_cap_exactly_at_timeout(spec: JobSpec, space, tmp_path):
     store = FakeHistoryStore.open(tmp_path)
     store.record((spec.id, 300.0))
     job = Job(spec=spec, workspace=space)
-    assert his.estimate_runtime(job, store=store) == 300.0
+    t = his.estimate_runtime(job, store=store)
+    assert expected_runtime(300.0) == pytest.approx(t)
+
+
+def expected_runtime(mean: float) -> float:
+    return mean + 0.1 * 0.5 * mean

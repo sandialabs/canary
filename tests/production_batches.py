@@ -15,6 +15,7 @@ import gzip
 import json
 import math
 import shutil
+import time
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -38,22 +39,37 @@ def load() -> dict[str, Any]:
 
 class MyStore(HistoryStore):
     def record(self, job: Any) -> None:
-        """store relevant information for this run"""
-        id, row = job
+        """Write a minimal job cache file with the given mean runtime."""
+        job_id, row = job
+        mean = row[-1]
         assert self.root is not None
-        file = self.root / "jobs" / id[:2] / f"{id[2:]}.json"
-        assert file is not None
+        file = self.root / "jobs" / job_id[:2] / f"{job_id[2:]}.jsonl"
         file.parent.mkdir(parents=True, exist_ok=True)
-        cache = {".version": [3, 0], "meta": {}}
-        metrics = cache.setdefault("metrics", {})
-        t = metrics.setdefault("time", {})
-        t["mean"] = row[-1]
-        t["min"] = row[-1]
-        t["max"] = row[-1]
-        t["variance"] = 0.0
-        t["count"] = 1
-        with open(file, "w") as fh:
-            json.dump({"cache": cache}, fh)
+        meta = {
+            "what": "meta",
+            "version": his.store.SCHEMA,
+            "id": job_id,
+            "name": job_id,
+            "root": "/tmp",
+            "path": "path.pyt",
+            "parameters": {},
+            "totals": {},
+        }
+        run: dict[str, Any] = {
+            "what": "record",
+            "version": his.store.SCHEMA,
+            "recorded_at": round(time.time(), 3),
+            "status": "success",
+            "duration": round(mean, 3),
+            "timeout": float(10 * mean),
+            "timeiout_multiplier": 1.0,
+            "file_hash": "abcdefg",
+            "host": "myhost",
+        }
+        if not file.exists():
+            self._append(file, meta, run)
+        else:
+            self._append(file, run)
 
 
 class RecordedJob:

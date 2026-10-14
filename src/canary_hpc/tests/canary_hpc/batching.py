@@ -175,7 +175,7 @@ def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
     jobs = make_jobs(tmp_path)
     seen: list[str] = []
 
-    def fake_estimate(job):
+    def fake_estimate(job, store=None):
         seen.append(job.id)
         return 0.1 * float(job.timeout)
 
@@ -194,9 +194,15 @@ def test_batching_packs_on_runtime_estimate(tmp_path, monkeypatch):
 
     lookup = {job.id: job for job in batch.jobs}
     scale = max([job.timeout for job in batch.jobs])
+    store = his.HistoryStore(None)
     sim_tasks = [
         batching._schedule_task_from_job(
-            job, lookup, width=64, duration=his.COLD_RUNTIME_FRACTION * job.timeout, scale=scale
+            job,
+            lookup,
+            width=64,
+            duration=his.COLD_RUNTIME_FRACTION * job.timeout,
+            scale=scale,
+            store=store,
         )
         for job in batch.jobs
     ]
@@ -230,8 +236,14 @@ def test_exclusive_jobs_occupy_full_batch_width(tmp_path):
 
     lookup = {job.id: job for job in jobs}
     scale = max([job.timeout for job in jobs])
+    store = his.HistoryStore(None)
     task = batching._schedule_task_from_job(
-        leaf, lookup, width=64, duration=his.COLD_RUNTIME_FRACTION * leaf.timeout, scale=scale
+        leaf,
+        lookup,
+        width=64,
+        duration=his.COLD_RUNTIME_FRACTION * leaf.timeout,
+        scale=scale,
+        store=store,
     )
     assert task.width == 64
 

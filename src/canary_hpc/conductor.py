@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
+import dataclasses
 import logging
 import os
 import sys
@@ -18,6 +19,7 @@ import hpc_connect
 import canary
 from _canary.execution.runtest import Runner
 from _canary.execution.testexec import ExecutionSpace
+from _canary.history import HistoryStore
 from _canary.resource_pool import ResourcePool
 from _canary.subcommands.run import Run
 from _canary.util import cpu_count
@@ -170,16 +172,16 @@ def create_batch_specs(
     This helper is intentionally side-effect light so conductor batching can be
     tested without submitting to a backend.
     """
-    import dataclasses
 
+    store = HistoryStore.open(jobs[0].workspace.root)
     spec = normalize_batching_spec(batchspec)
-
     partitions = partition_jobs(
         jobs=jobs,
         layout=spec.layout,
         nodes=spec.node_policy,
         cpus_per_node=cpus_per_node,
         resources_per_node=resources_per_node,
+        store=store,
     )
 
     # A positive batch count with layout=flat,nodes=same is not meaningful when
@@ -220,6 +222,7 @@ def create_batch_specs(
         single_spec = dataclasses.replace(
             spec, layout="atomic", node_policy="any", target=CountTarget(1)
         )
+
         batch_specs = batch_jobs(
             jobs=jobs,
             width=width,
@@ -228,6 +231,7 @@ def create_batch_specs(
             resource_capacity=resource_capacity,
             node_count=node_count,
             exact_final_estimate=exact_final_estimate,
+            store=store,
         )
         set_batch_dependencies(batch_specs)
         return batch_specs
@@ -265,6 +269,7 @@ def create_batch_specs(
                 resource_capacity=partition.resource_capacity,
                 node_count=partition.node_count,
                 exact_final_estimate=exact_final_estimate,
+                store=store,
             )
         )
 

@@ -2,13 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-import datetime
+import math
 import os
+import socket
+import statistics
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Protocol
+from typing import Sequence
 
 from .. import config
 from ..util import json_helper as json
@@ -25,14 +29,31 @@ logger = logging.get_logger(__name__)
 
 _cache_dir_logged: bool = False
 
+SCHEMA = 1
+KEEP = 50
+MAX_BYTES = 32 * 1024
+
 
 @dataclass
 class RuntimeStatistics:
+    count: int
     mean: float
+    variance: float
     min: float
     max: float
-    variance: float
-    count: int
+
+    @property
+    def std(self) -> float:
+        return math.sqrt(self.variance)
+
+    @classmethod
+    def from_durations(cls, durations: Sequence[float]) -> "RuntimeStatistics":
+        n = len(durations)
+        if n == 0:
+            raise ValueError("No durations to compute runtime statistics")
+        mean = statistics.mean(durations) if n > 1 else durations[0]
+        variance = statistics.variance(durations) if n > 1 else 0.0
+        return cls(count=n, mean=mean, variance=variance, min=min(durations), max=max(durations))
 
 
 class StorableJob(Protocol):
@@ -68,91 +89,101 @@ class HistoryStore:
         return cls(root)
 
     def path_for(self, job: "RetrievableJob") -> Path | None:
-        """Return the path to the per-job timing cache file, or None if absent."""
         if self.root is None:
             return None
-        cache_file = self.root / "jobs" / job.id[:2] / f"{job.id[2:]}.json"
-        return cache_file
+        return self.root / "jobs" / job.id[:2] / f"{job.id[2:]}.jsonl"
 
     def load(self, job: "RetrievableJob") -> dict[str, Any] | None:
         if self.root is None:
             return None
-        if (file := self.path_for(job)) and file.exists():
-            return json.loads(file.read_text())["cache"]
-        return None
+        file = self.path_for(job)
+        if file is None:
+            return None
+        if not file.exists():
+            return None
+        history: dict[str, Any] = {}
+        lines = file.read_text()
+        for line in lines.splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line.strip())
+            what = record.pop("what", None)
+            if what == "meta":
+                history["meta"] = record
+            elif what == "record":
+                history.setdefault("records", []).append(record)
+        return history
 
     def record(self, job: "StorableJob") -> None:
-        """store relevant information for this run"""
-        from ..core.jobspec import _GlobalSpecCache
-
+        """Append one completion record for ``job``.  Never raises: the finish
+        hook must not turn a history problem into a job failure."""
         if self.root is None:
-            return None
-
-        if not job.status.is_success():
             return
+        try:
+            self._record(job)
+        except Exception:
+            logger.debug("Failed to record history for %s", job.spec.id[:7], exc_info=True)
 
-        file = self.path_for(job)
-        assert file is not None
-        file.parent.mkdir(parents=True, exist_ok=True)
-        # Lock the individual cache file for the whole read-modify-write so
-        # concurrent workers and concurrent HPC batches sharing this cache do
-        # not lose one another's updates.
-        with file_lock(file):
-            cache: dict[str, Any]
-            if not file.exists():
-                cache = {
-                    ".version": [3, 0],
-                    "meta": {
-                        "name": job.spec.display_name(),
-                        "id": job.spec.id,
-                        "root": job.spec.file_root,
-                        "path": job.spec.file_path,
-                        "parameters": job.spec.parameters,
-                    },
-                }
-            else:
-                cache = json.loads(file.read_text())["cache"]
-            # Record the current file content hash so consumers can detect
-            # that a test was edited since these metrics were recorded (the
-            # id itself is content-independent).
+    def _record(self, job: "StorableJob") -> None:
+
+        duration = float(job.timekeeper.running())
+        if duration < 0:  # never started
+            return
+        run: dict[str, Any] = {
+            "what": "record",
+            "version": SCHEMA,
+            "recorded_at": round(time.time(), 3),
+            "status": job.status.outcome.name.lower(),
+            "duration": round(duration, 3),
+            "timeout": float(job.timeout),
+            "timeout_multiplier": config.timeout_multiplier(),
+            "file_hash": _content_hash(job),
+            "host": socket.gethostname(),
+        }
+        path = self.path_for(job)
+        assert path is not None
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # One lock covers the compaction check and the append, so concurrent
+        # workers and concurrent HPC batches sharing this cache cannot interleave.
+        with file_lock(path):
+            if not path.exists():
+                self._append(path, _meta(job), run)
+                return
+            if path.stat().st_size > MAX_BYTES:
+                self._compact(path, job)
+            self._append(path, run)
+
+    @staticmethod
+    def _append(path: Path, *records: dict[str, Any]) -> None:
+        with open(path, "a") as f:
+            for rec in records:
+                f.write(json.dumps(rec, default=str, separators=(",", ":")) + "\n")
+
+    @staticmethod
+    def _compact(path: Path, job: "StorableJob") -> None:
+
+        meta: dict[str, Any] = {}
+        runs: list[dict[str, Any]] = []
+        for line in path.read_text().splitlines():
             try:
-                meta = cache.setdefault("meta", {})
-                meta["content_hash"] = _GlobalSpecCache.content_hash(
-                    job.spec.file_root / job.spec.file_path
-                )
-            except Exception:
-                logger.debug("Failed to record content hash", exc_info=True)
-            history = cache.setdefault("history", {})
-            fn = datetime.datetime.fromtimestamp
-            dt = fn(job.timekeeper._started) if job.timekeeper._started > 0 else None
-            if dt is not None:
-                history["last_run"] = dt.strftime("%c")
-            name = job.status.category.lower()
-            history[name] = history.get(name, 0) + 1
-            if job.timekeeper.running() >= 0 and job.status.is_success():
-                count: int = 0
-                metrics = cache.setdefault("metrics", {})
-                t = metrics.setdefault("time", {})
-                if t:
-                    # Welford's single pass online algorithm to update statistics
-                    count, mean, variance = t["count"], t["mean"], t["variance"]
-                    delta = job.timekeeper.running() - mean
-                    mean += delta / (count + 1)
-                    M2 = variance * count
-                    delta2 = job.timekeeper.running() - mean
-                    M2 += delta * delta2
-                    variance = M2 / (count + 1)
-                    minimum = min(t["min"], job.timekeeper.running())
-                    maximum = max(t["max"], job.timekeeper.running())
-                else:
-                    variance = 0.0
-                    mean = minimum = maximum = job.timekeeper.running()
-                t["mean"] = mean
-                t["min"] = minimum
-                t["max"] = maximum
-                t["variance"] = variance
-                t["count"] = count + 1
-            atomic_write(file, json.dumps({"cache": cache}, indent=2))
+                rec = json.loads(line)
+            except ValueError:  # torn or corrupt line
+                continue
+            if rec.get("k") == "meta":
+                meta = rec
+            elif rec.get("k") == "run":
+                runs.append(rec)
+
+        totals = meta.get("totals", {})
+        for r in runs[:-KEEP]:  # fold what we drop into lifetime counts
+            totals[r["status"]] = totals.get(r["status"], 0) + 1
+        meta = {**meta, **_meta(job), "totals": totals}  # refresh name, path, parameters
+
+        out = [meta, *runs[-KEEP:]]
+        atomic_write(
+            path, "".join(json.dumps(r, default=str, separators=(",", ":")) + "\n" for r in out)
+        )
 
     def runtime_statistics(self, job: "RetrievableJob") -> RuntimeStatistics | None:
         """Return the longest representative runtime recorded for ``job``, or ``None``.
@@ -160,21 +191,15 @@ class HistoryStore:
         Uses ``max(mean, max)`` rather than the mean alone so that a few anomalously
         fast samples cannot drag the estimate down.
         """
-
-        cache = self.load(job)
         try:
-            cache = self.load(job)
+            history = self.load(job)
         except Exception:
             logger.debug("Failed to load historic timing data for %s", job.id[:7], exc_info=True)
             return None
-        if not cache:
+        if not history:
             return None
-        try:
-            stats = cache["metrics"]["time"]
-            return RuntimeStatistics(**stats)
-        except (KeyError, TypeError, ValueError):
-            logger.debug(f"Failed to load runtime statistics for {job}", exc_info=True)
-            return None
+        durations = _durations(history.get("records", []))
+        return RuntimeStatistics.from_durations(durations) if durations else None
 
 
 def _find_cache_dir(start: Path | None = None) -> Path | None:
@@ -213,3 +238,35 @@ def _find_cache_dir(start: Path | None = None) -> Path | None:
             return cache_dir
         d = d.parent
     return None
+
+
+def _content_hash(job: "StorableJob") -> str | None:
+    from ..core.jobspec import _GlobalSpecCache
+
+    path = job.spec.file_root / job.spec.file_path
+    try:
+        return _GlobalSpecCache.content_hash(path)
+    except Exception:
+        return None
+
+
+def _meta(job: "StorableJob") -> dict[str, Any]:
+    spec = job.spec
+    return {
+        "what": "meta",
+        "version": SCHEMA,
+        "id": spec.id,
+        "name": spec.display_name(),
+        "root": str(spec.file_root),
+        "path": str(spec.file_path),
+        "parameters": spec.parameters,
+        "totals": {},
+    }
+
+
+def _durations(records: list[dict[str, Any]], *, status: str = "success") -> list[float]:
+    return [
+        float(r["duration"])
+        for r in records
+        if r.get("status") == status and r.get("duration") is not None
+    ]

@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -46,6 +48,7 @@ class FakeDependency:
 
 class FakeWorkspace:
     session: str | None = "fake-session"
+    root: Path = Path(tempfile.gettempdir())
 
 
 @dataclasses.dataclass
