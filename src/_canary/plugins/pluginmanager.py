@@ -74,6 +74,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from ..resource_pool import hooks as rp_hooks
         from . import canaryconf_impl
         from . import hooks
+        from . import user_execspace
 
         for subcommand in subcommands.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
@@ -91,6 +92,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(rp_hooks, "builtin.resource_pool")
         self.register(canaryconf_impl, "builtin.canaryconf_impl")
         self.register(select, "builtin.select")
+        self.register(user_execspace, "builtin.user_execspace")
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

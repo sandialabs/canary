@@ -11,6 +11,7 @@ session timing and return-code aggregation.  The public
 
 * ``canary_runtests_start``
 * ``canary_runtests``
+* ``canary_runtests_finish``
 * ``canary_runtests_report``
 
 The default ``canary_runtests`` hook implementation, :func:`default_runtests`,
@@ -120,6 +121,12 @@ def canary_runtests(runner: Runner, listeners: list[Callable[..., None]] | None 
         # never show ``NONE (NONE)`` / phantom running jobs.
         interrupted = isinstance(sys.exc_info()[1], KeyboardInterrupt)
         reconcile_unfinished_jobs(runner, interrupted=interrupted)
+        # Session-level teardown (e.g. migrating outputs from an alternate
+        # execution prefix) must complete before any reporter reads job paths.
+        try:
+            pm.canary_runtests_finish(runner=runner)
+        except Exception:
+            logger.exception("Unhandled exception in canary_runtests_finish")
         #        logger.info(
         #            f"[bold]Finished[/] session in {(runner.finish - runner.start):.2f} s. "
         #            f"with returncode {runner.returncode}"

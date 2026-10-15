@@ -97,7 +97,8 @@ class HistoryMode(str, Enum):
 
 
 class StorableJob(Protocol):
-    id: str
+    @property
+    def id(self) -> str: ...
 
     @property
     def spec(self) -> "JobSpec": ...
@@ -113,7 +114,8 @@ class StorableJob(Protocol):
 
 
 class RetrievableJob(Protocol):
-    id: str
+    @property
+    def id(self) -> str: ...
 
     @property
     def timeout(self) -> float: ...
