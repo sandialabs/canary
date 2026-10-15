@@ -134,11 +134,11 @@ class VVTestAdapter:
         self.m.add_parameter_set(ps, when=arg.when)
 
     def f_ANALYZE(self, arg: Directive) -> None:
-        options = dict(arg.options or {})
-        if arg.argument:
-            key = "flag" if arg.argument.startswith("-") else "script"
-            options[key] = arg.argument
-        self.m.set_aggregate(when=arg.when, **options)
+        assert arg.name == "analyze"
+        if not arg.argument and not dict(arg.options or {}):
+            self.m.set_aggregate(when=arg.when, flag="--analyze")
+        else:
+            self._set_aggregate_from_directive(arg)
 
     def f_TIMEOUT(self, arg: Directive) -> None:
         try:
@@ -203,6 +203,206 @@ class VVTestAdapter:
             when = result
         d = DependencySelector(pattern=arg.argument, expects=expects, when=when.lower())
         self.m.add_dependency(d, when=arg.when)
+
+    def f_DESCRIPTION(self, arg: Directive) -> None:
+        assert arg.name == "description"
+        self.m.add_description(self._argument(arg))
+
+    def f_SET_ID(self, arg: Directive) -> None:
+        assert arg.name == "set_id"
+        self.m.set_id(self._argument(arg), when=arg.when)
+
+    def f_OWNERS(self, arg: Directive) -> None:
+        assert arg.name == "owners"
+        owners = self._split_argument(arg)
+        if not owners:
+            raise VVTParseError(f"owners: missing owner name(s): {arg.line!r}", arg)
+        self.m.add_owner(*owners)
+
+    def f_OWNER(self, arg: Directive) -> None:
+        assert arg.name == "owner"
+        self.m.add_owner(self._argument(arg))
+
+    def f_CPUS(self, arg: Directive) -> None:
+        assert arg.name == "cpus"
+        self.m.set_resource_parameter("cpus", self._int_argument(arg), when=arg.when)
+
+    def f_GPUS(self, arg: Directive) -> None:
+        assert arg.name == "gpus"
+        self.m.set_resource_parameter("gpus", self._int_argument(arg), when=arg.when)
+
+    def f_NODES(self, arg: Directive) -> None:
+        assert arg.name == "nodes"
+        self.m.set_resource_parameter("nodes", self._int_argument(arg), when=arg.when)
+
+    def f_SET_ATTRIBUTE(self, arg: Directive) -> None:
+        assert arg.name == "set_attribute"
+
+        attrs = self._options(arg)
+
+        # Optional convenience form:
+        #
+        #   # VVT: set_attribute: key=value other=value
+        #
+        # The canonical form should be:
+        #
+        #   # VVT: set_attribute (key=value, other=value)
+        #
+        for item in self._split_argument(arg):
+            if "=" not in item:
+                raise VVTParseError(f"set_attribute: expected KEY=VALUE item: {item!r}", arg)
+            key, value = item.split("=", 1)
+            if not key:
+                raise VVTParseError(f"set_attribute: empty attribute name: {arg.line!r}", arg)
+            attrs[key] = value
+
+        if not attrs:
+            raise VVTParseError(f"set_attribute: no attributes specified: {arg.line!r}", arg)
+
+        self.m.set_attributes(when=arg.when, **attrs)
+
+    def f_LOAD_MODULE(self, arg: Directive) -> None:
+        assert arg.name == "load_module"
+        options = self._options(arg)
+        use = options.pop("use", None)
+        self._no_options_left(arg, options)
+        self.m.add_module(self._argument(arg), use=use, when=arg.when)
+
+    def f_SOURCE(self, arg: Directive) -> None:
+        assert arg.name == "source"
+        rcfiles = self._split_argument(arg)
+        if not rcfiles:
+            raise VVTParseError(f"source: missing rcfile name: {arg.line!r}", arg)
+        for rcfile in rcfiles:
+            self.m.add_rcfile(rcfile, when=arg.when)
+
+    def f_ARTIFACT(self, arg: Directive) -> None:
+        assert arg.name == "artifact"
+
+        options = self._options(arg)
+        save_on = str(options.pop("save_on", "always"))
+        self._no_options_left(arg, options)
+
+        mapped: Literal["always", "never", "on_failure", "on_success"]
+        if save_on == "always":
+            mapped = "always"
+        elif save_on == "never":
+            mapped = "never"
+        elif save_on in ("success", "on_success"):
+            mapped = "on_success"
+        elif save_on in ("failure", "on_failure"):
+            mapped = "on_failure"
+        else:
+            raise VVTParseError(
+                "artifact: invalid save_on value, choose from "
+                "'always', 'never', 'success', 'failure', 'on_success', 'on_failure'",
+                arg,
+            )
+
+        artifacts = self._split_argument(arg)
+        if not artifacts:
+            raise VVTParseError(f"artifact: missing file/pattern argument: {arg.line!r}", arg)
+
+        for artifact in artifacts:
+            self.m.add_artifact(artifact, save_on=mapped, when=arg.when)
+
+    def f_EXECUTION_PATH(self, arg: Directive) -> None:
+        assert arg.name == "execution_path"
+        self.m.set_exec_path(self._argument(arg), when=arg.when)
+
+    def f_EXCLUSIVE(self, arg: Directive) -> None:
+        assert arg.name == "exclusive"
+        self.m.set_exclusive(when=arg.when)
+
+    def f_XDIFF(self, arg: Directive) -> None:
+        assert arg.name == "xdiff"
+        self.m.set_xdiff(when=arg.when)
+
+    def f_XFAIL(self, arg: Directive) -> None:
+        assert arg.name == "xfail"
+
+        options = self._options(arg)
+        code = options.pop("code", -1)
+        self._no_options_left(arg, options)
+
+        if arg.argument:
+            code = arg.argument.strip()
+
+        try:
+            code = int(code)
+        except (TypeError, ValueError):
+            raise VVTParseError(
+                f"xfail: invalid expected-failure code: {arg.line!r}", arg
+            ) from None
+
+        self.m.set_xfail(code=code, when=arg.when)
+
+    def f_AGGREGATE(self, arg: Directive) -> None:
+        assert arg.name == "aggregate"
+        self._set_aggregate_from_directive(arg)
+
+    def f_GENERATE_COMPOSITE_BASE_CASE(self, arg: Directive) -> None:
+        assert arg.name == "generate_composite_base_case"
+        self._set_aggregate_from_directive(arg)
+
+    def _set_aggregate_from_directive(self, arg: Directive) -> None:
+        options = self._options(arg)
+
+        if arg.argument:
+            key = "flag" if arg.argument.startswith("-") else "script"
+            options[key] = arg.argument
+
+        flag = options.pop("flag", None)
+        script = options.pop("script", None)
+        requires = options.pop("requires", "success")
+        self._no_options_left(arg, options)
+
+        self.m.set_aggregate(when=arg.when, flag=flag, script=script, requires=requires)
+
+    def _options(self, arg: Directive) -> dict[str, Any]:
+        return dict(arg.options or {})
+
+    def _argument(self, arg: Directive, *, required: bool = True) -> str:
+        value = (arg.argument or "").strip()
+        if required and not value:
+            raise VVTParseError(f"{arg.name}: missing required argument: {arg.line!r}", arg)
+        return value
+
+    def _int_argument(self, arg: Directive) -> int:
+        value = self._argument(arg)
+        try:
+            return int(value)
+        except ValueError:
+            raise VVTParseError(
+                f"{arg.name}: expected integer argument: {arg.line!r}", arg
+            ) from None
+
+    def _split_argument(self, arg: Directive) -> list[str]:
+        value = self._argument(arg, required=False)
+        if not value:
+            return []
+        try:
+            return shlex.split(value)
+        except ValueError as exc:
+            raise VVTParseError(f"{arg.name}: failed to parse argument: {exc}", arg) from None
+
+    def _no_options_left(self, arg: Directive, options: dict[str, Any]) -> None:
+        if options:
+            names = ", ".join(sorted(options))
+            raise VVTParseError(f"{arg.name}: unknown option(s): {names}", arg)
+
+    def _bool_argument(self, arg: Directive, *, default: bool = True) -> bool:
+        value = self._argument(arg, required=False)
+        if not value:
+            return default
+
+        lowered = value.lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+
+        raise VVTParseError(f"{arg.name}: expected boolean argument: {arg.line!r}", arg)
 
 
 def csplit(text: str) -> list[Any]:
@@ -392,22 +592,26 @@ def p_LINE(file: Path | str, line: str) -> Directive | None:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
+
     filename = str(file if os.path.exists(file) else "<string>")
     tokens = string.get_tokens(line)
+
     cmd_stack = []
     for token in tokens:
         if token.type == tokenize.ENCODING:
             continue
+        if token.type in (tokenize.NEWLINE, tokenize.ENDMARKER):
+            break
         if token.type == tokenize.OP:
             break
         cmd_stack.append(token.string.strip())
+
     command = "_".join(cmd_stack)
 
     # Look for option block and parse it
     options = []
     filter_opts = {}
     if (token.type, token.string) == (tokenize.OP, LPAREN):
-        # Entering an option block, look for closing paren and parse everything in between
         level, option_tokens = 1, []
         for token in tokens:
             if (token.type, token.string) == (tokenize.OP, RPAREN):
@@ -420,19 +624,21 @@ def p_LINE(file: Path | str, line: str) -> Directive | None:
         else:
             msg = "failed to find end of options in {0} at line {1} of {2}"
             raise ParseError(msg.format(line, token.start[0], filename))
+
         f_opts = p_OPTIONS(filename, option_tokens)
         for opt, val in f_opts:
             if opt in ("testname", "parameters", "options", "platforms"):
                 filter_opts[opt] = val
             else:
                 options.append((opt, val))
+
         token = next(tokens)
 
     when = make_when_expr(filter_opts)
 
     # Everything left over is the args
     args = ""
-    if token.type != tokenize.NEWLINE:
+    if token.type not in (tokenize.NEWLINE, tokenize.ENDMARKER):
         if token.type != tokenize.OP and token.string not in (EQUAL, COLON):
             msg = "failed to determine start of arguments in {0} at line {1} of {2}"
             raise ParseError(msg.format(line, token.start[0], filename))
@@ -546,20 +752,25 @@ def p_OPTION(filename: str, tokens: list[tokenize.TokenInfo]) -> tuple[str, Any]
     token = tokens[0]
     if token.type != tokenize.NAME:
         raise ParseError(f"Error parsing token {token!r} in {filename}")
+
     name = token.string
+
     if len(tokens) == 1:
         return swap_alias(name), True
+
     token = tokens[1]
     if token.type == tokenize.NEWLINE:
         return swap_alias(name), True
+
     if (token.type, token.string) != (tokenize.OP, EQUAL):
         raise ParseError(f"Error parsing token {token!r} in {filename}")
-    value = ""
-    for token in tokens[2:]:
-        if token.type == tokenize.NEWLINE:
-            break
-        value += f" {token.string}"
-    return swap_alias(name), string.strip_quotes(value.strip())
+
+    value_tokens = [
+        token for token in tokens[2:] if token.type not in (tokenize.NEWLINE, tokenize.ENDMARKER)
+    ]
+    value = tokenize.untokenize(value_tokens).strip()
+
+    return swap_alias(name), string.strip_quotes(value)
 
 
 def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> list[tuple[str, Any]]:

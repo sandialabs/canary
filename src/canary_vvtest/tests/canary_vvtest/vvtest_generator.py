@@ -308,3 +308,334 @@ def test_unknown_directive_raises(tmp_path: Path) -> None:
     directives = VVTestLoader(file=f).parse()
     with pytest.raises(VVTParseError):
         VVTestAdapter(m).apply(directives)
+
+
+def lock_vvt_model(m: VVTestModel, on_options=None):
+    from canary_vvtest.vvt import VVTestLockEmitter
+
+    return VVTestLockEmitter().lock(m, on_options=on_options or [])
+
+
+def test_adapter_metadata_resource_environment_and_artifact_directives(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: description : this directive is accepted but currently has no model effect
+# VVT: name : main
+# VVT: set_id : abcdef12
+# VVT: owner : alice
+# VVT: owners : bob carol
+# VVT: cpus : 4
+# VVT: gpus : 1
+# VVT: nodes : 2
+# VVT: set_attribute (queue=debug, priority=high)
+# VVT: set_attribute : account=proj123 qos=normal
+# VVT: load_module (use="/opt/modules") : gcc
+# VVT: load_module : cmake
+# VVT: source : env.sh extra-env.sh
+# VVT: artifact : results/*.txt
+# VVT: artifact (save_on=failure) : debug.log
+# VVT: artifact (save_on=success) : summary.log
+# VVT: execution_path : runs/{name}
+# VVT: exclusive
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    assert len(locked) == 1
+
+    s = locked[0]
+
+    assert s.family == "main"
+    assert s.id == "abcdef12"
+
+    assert s.owners == ["alice", "bob", "carol"]
+
+    assert s.meta_parameters["cpus"] == 4
+    assert s.meta_parameters["gpus"] == 1
+    assert s.meta_parameters["nodes"] == 2
+
+    assert s.attributes["queue"] == "debug"
+    assert s.attributes["priority"] == "high"
+    assert s.attributes["account"] == "proj123"
+    assert s.attributes["qos"] == "normal"
+
+    assert s.modules == ["gcc", "cmake"]
+    assert s.environment["MODULEPATH"].split(":")[0] == "/opt/modules"
+
+    assert s.rcfiles == ["env.sh", "extra-env.sh"]
+
+    artifacts = {a.pattern: a.when for a in s.artifacts}
+    assert artifacts["results/*.txt"] == "always"
+    assert artifacts["debug.log"] == "on_failure"
+    assert artifacts["summary.log"] == "on_success"
+
+    assert s.exec_path == "runs/main"
+    assert s.exclusive is True
+
+
+def test_adapter_xfail_default_code(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: xfail
+""",
+    )
+
+    locked = lock_vvt_model(m)
+
+    assert len(locked) == 1
+    assert locked[0].xstatus == -1
+
+
+def test_adapter_xfail_code_from_option(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: xfail (code=17)
+""",
+    )
+
+    locked = lock_vvt_model(m)
+
+    assert len(locked) == 1
+    assert locked[0].xstatus == 17
+
+
+def test_adapter_xfail_code_from_argument(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: xfail : 23
+""",
+    )
+
+    locked = lock_vvt_model(m)
+
+    assert len(locked) == 1
+    assert locked[0].xstatus == 23
+
+
+def test_adapter_xdiff(tmp_path: Path) -> None:
+    from _canary.core.error import diff_exit_status
+
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: xdiff
+""",
+    )
+
+    locked = lock_vvt_model(m)
+
+    assert len(locked) == 1
+    assert locked[0].xstatus == diff_exit_status
+
+
+def test_adapter_xstatus_when_options_are_honored(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : a
+# VVT: name : b
+# VVT: xfail (testname=a, code=11)
+# VVT: xdiff (testname=b)
+""",
+    )
+
+    locked = sorted(lock_vvt_model(m), key=lambda s: s.family)
+
+    from _canary.core.error import diff_exit_status
+
+    assert len(locked) == 2
+    assert locked[0].family == "a"
+    assert locked[0].xstatus == 11
+    assert locked[1].family == "b"
+    assert locked[1].xstatus == diff_exit_status
+
+
+def test_adapter_aggregate_flag_creates_multicase_parent(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: aggregate (flag=--pack, requires=always)
+""",
+    )
+
+    locked = lock_vvt_model(m)
+
+    cases = [s for s in locked if not s.attributes.get("multicase")]
+    parents = [s for s in locked if s.attributes.get("multicase") is True]
+
+    assert len(cases) == 2
+    assert len(parents) == 1
+
+    parent = parents[0]
+    assert parent.family == "agg"
+    assert parent.command[-1] == "--pack"
+    assert parent.attributes["paramsets"] == [{"keys": ["np"], "values": [[1], [2]]}]
+
+
+def test_adapter_aggregate_argument_flag_creates_multicase_parent(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: aggregate : --analyze
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    parent = next(s for s in locked if s.attributes.get("multicase") is True)
+
+    assert parent.command[-1] == "--analyze"
+
+
+def test_adapter_aggregate_argument_script_creates_multicase_parent(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: aggregate : analyze.py
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    parent = next(s for s in locked if s.attributes.get("multicase") is True)
+
+    assert parent.command == [(tmp_path / "analyze.py").as_posix()]
+    assert any(a.action == "link" and a.src.name == "analyze.py" for a in parent.assets)
+
+
+def test_adapter_generate_composite_base_case_script_creates_multicase_parent(
+    tmp_path: Path,
+) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: generate_composite_base_case (script=make_base.py, requires=always)
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    parent = next(s for s in locked if s.attributes.get("multicase") is True)
+
+    assert parent.command == [(tmp_path / "make_base.py").as_posix()]
+    assert any(a.action == "link" and a.src.name == "make_base.py" for a in parent.assets)
+
+
+def test_adapter_generate_composite_base_case_argument_script_creates_multicase_parent(
+    tmp_path: Path,
+) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: generate_composite_base_case : make_base.py
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    parent = next(s for s in locked if s.attributes.get("multicase") is True)
+
+    assert parent.command == [(tmp_path / "make_base.py").as_posix()]
+    assert any(a.action == "link" and a.src.name == "make_base.py" for a in parent.assets)
+
+
+def test_adapter_analyze_without_arguments_defaults_to_analyze_flag(tmp_path: Path) -> None:
+    m = load_vvt_model(
+        tmp_path,
+        "x.vvt",
+        """
+# VVT: name : agg
+# VVT: parameterize : np = 1 2
+# VVT: analyze
+""",
+    )
+
+    locked = lock_vvt_model(m)
+    parent = next(s for s in locked if s.attributes.get("multicase") is True)
+
+    assert parent.command[-1] == "--analyze"
+
+
+def test_adapter_invalid_xfail_code_raises_parse_error(tmp_path: Path) -> None:
+    f = tmp_path / "x.vvt"
+    write(
+        f,
+        """
+# VVT: xfail : not-an-int
+""",
+    )
+
+    m = VVTestModel(root=str(tmp_path), path="x.vvt")
+    directives = VVTestLoader(file=f).parse()
+
+    with pytest.raises(VVTParseError, match="xfail"):
+        VVTestAdapter(m).apply(directives)
+
+
+def test_adapter_invalid_artifact_save_on_raises_parse_error(tmp_path: Path) -> None:
+    f = tmp_path / "x.vvt"
+    write(
+        f,
+        """
+# VVT: artifact (save_on=sometimes) : debug.log
+""",
+    )
+
+    m = VVTestModel(root=str(tmp_path), path="x.vvt")
+    directives = VVTestLoader(file=f).parse()
+
+    with pytest.raises(VVTParseError, match="artifact"):
+        VVTestAdapter(m).apply(directives)
+
+
+def test_adapter_invalid_set_attribute_argument_raises_parse_error(tmp_path: Path) -> None:
+    f = tmp_path / "x.vvt"
+    write(
+        f,
+        """
+# VVT: set_attribute : not-key-value
+""",
+    )
+
+    m = VVTestModel(root=str(tmp_path), path="x.vvt")
+    directives = VVTestLoader(file=f).parse()
+
+    with pytest.raises(VVTParseError, match="set_attribute"):
+        VVTestAdapter(m).apply(directives)
+
+
+def test_adapter_invalid_resource_count_raises(tmp_path: Path) -> None:
+    f = tmp_path / "x.vvt"
+    write(
+        f,
+        """
+# VVT: cpus : 0
+""",
+    )
+
+    m = VVTestModel(root=str(tmp_path), path="x.vvt")
+    directives = VVTestLoader(file=f).parse()
+
+    with pytest.raises(ValueError, match="cpus"):
+        VVTestAdapter(m).apply(directives)
