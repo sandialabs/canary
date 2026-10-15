@@ -8,6 +8,7 @@ import socket
 import statistics
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -21,6 +22,7 @@ from ..util.filesystem import atomic_write
 from ..util.filesystem import file_lock
 
 if TYPE_CHECKING:
+    from ..config.argparsing import Parser
     from ..core.jobspec import JobSpec
     from ..core.status import Status
     from ..core.timekeeper import Timekeeper
@@ -56,6 +58,44 @@ class RuntimeStatistics:
         return cls(count=n, mean=mean, variance=variance, min=min(durations), max=max(durations))
 
 
+class HistoryMode(str, Enum):
+    NONE = "none"
+    READ = "r"
+    WRITE = "w"
+    READWRITE = "rw"
+
+    @classmethod
+    def get(cls) -> "HistoryMode":
+        if mode := config.getoption("history_mode"):
+            return HistoryMode(mode)
+        elif mode := os.getenv("CANARY_HISTORY_MODE"):
+            try:
+                return HistoryMode(mode)
+            except ValueError:
+                logger.warning("Invalid history mode: %s", mode)
+                return HistoryMode.READWRITE
+        elif disable := os.getenv("CANARY_DISABLE_HISTORY"):
+            return HistoryMode("none" if disable.lower() in ("1", "true", "yes", "on") else "rw")
+        return HistoryMode.READWRITE
+
+    @property
+    def allow_read(self) -> bool:
+        return self in (HistoryMode.READ, HistoryMode.READWRITE)
+
+    @property
+    def allow_write(self) -> bool:
+        return self in (HistoryMode.WRITE, HistoryMode.READWRITE)
+
+    @staticmethod
+    def setup_parser(parser: "Parser") -> None:
+        parser.add_argument(
+            "--history-mode",
+            choices=("none", "r", "w", "rw"),
+            command="run",
+            help="Job history mode. none=no access, r=read only, w=write only, rw=read/write [default: rw]",
+        )
+
+
 class StorableJob(Protocol):
     id: str
 
@@ -81,7 +121,8 @@ class RetrievableJob(Protocol):
 
 class HistoryStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = None if disable_history() else root
+        self.mode = HistoryMode.get()
+        self.root = None if self.mode is HistoryMode.NONE else root
 
     @classmethod
     def open(cls, start: Path) -> "HistoryStore":
@@ -95,6 +136,8 @@ class HistoryStore:
 
     def load(self, job: "RetrievableJob") -> dict[str, Any] | None:
         if self.root is None:
+            return None
+        elif not self.mode.allow_read:
             return None
         file = self.path_for(job)
         if file is None:
@@ -118,6 +161,8 @@ class HistoryStore:
         """Append one completion record for ``job``.  Never raises: the finish
         hook must not turn a history problem into a job failure."""
         if self.root is None:
+            return
+        elif not self.mode.allow_write:
             return
         try:
             self._record(job)
@@ -170,9 +215,9 @@ class HistoryStore:
                 rec = json.loads(line)
             except ValueError:  # torn or corrupt line
                 continue
-            if rec.get("k") == "meta":
+            if rec.get("what") == "meta":
                 meta = rec
-            elif rec.get("k") == "run":
+            elif rec.get("what") == "record":
                 runs.append(rec)
 
         totals = meta.get("totals", {})
@@ -191,6 +236,8 @@ class HistoryStore:
         Uses ``max(mean, max)`` rather than the mean alone so that a few anomalously
         fast samples cannot drag the estimate down.
         """
+        if not self.mode.allow_read:
+            return None
         try:
             history = self.load(job)
         except Exception:
@@ -270,7 +317,3 @@ def _durations(records: list[dict[str, Any]], *, status: str = "success") -> lis
         for r in records
         if r.get("status") == status and r.get("duration") is not None
     ]
-
-
-def disable_history() -> bool:
-    return os.getenv("CANARY_DISABLE_HISTORY", "0").lower() in ("1", "true", "yes", "on")

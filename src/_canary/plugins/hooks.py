@@ -445,6 +445,13 @@ def store_runtime(case: "Job") -> None:
         logger.debug("Failed to cache last run", exc_info=True)
 
 
+@hookimpl(specname="canary_addoption")
+def add_history_options(parser: Parser) -> None:
+    from ..history.store import HistoryMode
+
+    HistoryMode.setup_parser(parser)
+
+
 # ---- RERUN
 def rerun_case(job: "Job", attempt: int) -> None:
     try:
