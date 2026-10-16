@@ -577,6 +577,15 @@
           "safe_pattern": "Return None; every implementation runs. Use @canary.hookimpl(trylast=True) to run after any other registered finish hooks (the built-in default runs first via tryfirst).",
           "agent_use": "Inspect outputs, perform post-processing, add measurements, and attach metadata."
         },
+        "canary_runtests_finish": {
+          "purpose": "Runs once after every job in the session has a terminal status and before any canary_runtests_report implementation. Fires in the process that executed the jobs (including nested runs such as canary hpc exec) from a finally block, so it also runs on exceptions, timeouts and interrupts.",
+          "firstresult": false,
+          "arguments": [
+            "runner"
+          ],
+          "default_behavior": "The built-in user_execspace plugin uses it to copy job directories back from --exec-prefix. Exceptions are logged and do not prevent reporting.",
+          "agent_use": "Session-level teardown that must complete before reports read job paths, e.g. migrating outputs from a temporary execution location."
+        },
         "canary_runtests_report": {
           "purpose": "Runs after a test session to generate reports or summaries.",
           "firstresult": false,
@@ -604,7 +613,9 @@
         "canary_runtest_launcher": "Return a Launcher for an individual Job.",
         "canary_runteststart": "Setup phase for one Job.",
         "canary_runtest": "Execution phase for one Job. A firstresult hook: the built-in runner is registered trylast, so plugins (and the --repeat-* implementations) can override execution by returning a non-None value, or return None to fall through to the default runner.",
-        "canary_runtest_finish": "Finish/post-processing phase for one Job."
+        "canary_runtest_finish": "Finish/post-processing phase for one Job.",
+        "canary_runtests_start": "Called once in the executing process before jobs are dispatched to workers; paired with canary_runtests_finish.",
+        "canary_runtests_finish": "Session-level teardown after all jobs finish, before reporting."
       },
       "resources": {
         "canary_resource_pool_fill": "Create the initial resource-pool specification.",

@@ -325,6 +325,14 @@ class CanaryHPCConductor:
         if "live_columns" not in console_style:
             console_style["live_columns"] = "Job,ID,Status,Queued,Running,Elapsed,Rank"
         setattr(canary.config.options, "console_style", console_style)
+        # Jobs execute in each batch's ``canary hpc exec`` process, not here:
+        # forward the execution prefix to the batches (see
+        # HPCConnectBatchRunner.canary_invocation) and disable it locally.
+        exec_prefix = getattr(args, "exec_prefix", None)
+        args.hpc_exec_prefix = exec_prefix
+        args.exec_prefix = None
+        setattr(canary.config.options, "hpc_exec_prefix", exec_prefix)
+        setattr(canary.config.options, "exec_prefix", None)
         return Run().execute(args)
 
     def backend_count_per_node(self, rtype: str) -> int:
