@@ -99,6 +99,8 @@ def test_session_exec_root_is_unique_per_workspace(tmp_path):
     assert a != b
     assert a.parent.parent == tmp_path / "canary"
     assert a.name == "S"
+    # Deterministic, so concurrent runs of a session (e.g. HPC batches) share it.
+    assert a == ues.session_exec_root(tmp_path, Path("/ws/a/.canary"), "S")
 
 
 def test_copy_back_preserves_links_and_writes_lock_last(tmp_path):
@@ -134,24 +136,6 @@ def test_copy_back_preserves_links_and_writes_lock_last(tmp_path):
 def test_copy_back_missing_source_is_noop(tmp_path):
     assert ues.copy_back(tmp_path / "nope", tmp_path / "dst", exec_root=tmp_path) is False
     assert not (tmp_path / "dst").exists()
-
-
-def test_remove_exec_root_prunes_empty_parents(tmp_path):
-    root = ues.session_exec_root(tmp_path, Path("/ws/.canary"), "S")
-    (root / "job").mkdir(parents=True)
-    ues.remove_exec_root(root)
-    assert not (tmp_path / "canary").exists()
-    assert tmp_path.exists()
-
-
-def test_remove_exec_root_keeps_other_sessions(tmp_path):
-    root = ues.session_exec_root(tmp_path, Path("/ws/.canary"), "S")
-    other = root.parent / "OTHER"
-    root.mkdir(parents=True)
-    other.mkdir()
-    ues.remove_exec_root(root)
-    assert not root.exists()
-    assert other.exists()
 
 
 def test_replace_dir_variables():
@@ -193,8 +177,10 @@ def test_exec_prefix_runs_below_prefix_and_copies_back(tmp_path):
         assert str(prefix) not in json.dumps(lock["workspace"])
         assert str(prefix) not in json.dumps(lock.get("variables", {}))
 
-    # Temporary tree removed.
-    assert not (prefix / "canary").exists()
+    # The execution tree is left in place below the prefix.
+    exec_root = ues.session_exec_root(prefix, src / ".canary", session.name)
+    for name in ("a.x=1", "a.x=2"):
+        assert (exec_root / name / "out.txt").exists()
 
     # Results view points at the session directory.
     view = src / "TestResults"
@@ -230,7 +216,7 @@ def test_exec_prefix_failures_and_timeouts_are_copied(tmp_path):
     assert (session / "t" / "partial.dat").read_text() == "x"
     assert _load_job(session / "c").status.outcome.name == "FAILED"
     assert _load_job(session / "t").status.outcome.name == "TIMEOUT"
-    assert not (prefix / "canary").exists()
+    assert (prefix / "canary").is_dir()
 
 
 def test_exec_prefix_env_default(tmp_path):
@@ -247,7 +233,6 @@ def test_exec_prefix_env_default(tmp_path):
 
     job_dir = _session_dir(src) / "a.x=1"
     assert Path((job_dir / "out.txt").read_text()).is_relative_to(tmp_path / "fast" / "canary")
-    assert not (tmp_path / "fast" / "canary").exists()
 
 
 def test_exec_prefix_not_set_runs_in_session(tmp_path):

@@ -5,11 +5,11 @@
 """Run jobs under an alternate execution prefix and migrate results back.
 
 ``canary run --exec-prefix=PATH`` executes every job of the session in a
-temporary location below ``PATH`` (for example a node-local RAM disk or a burst
-buffer such as ``/beeond/$USER``) instead of the session directory inside the
+location below ``PATH`` (for example a node-local RAM disk or a burst buffer
+such as ``/beeond/$USER``) instead of the session directory inside the
 workspace.  When the session finishes, each job's execution directory is copied
-back to its normal location in the session directory and the temporary tree is
-removed.
+back to its normal location in the session directory.  The tree below ``PATH``
+is left in place; its lifetime is up to the user or the system providing it.
 
 The feature is implemented entirely with hooks:
 
@@ -28,8 +28,7 @@ The feature is implemented entirely with hooks:
     Runs after every job has a terminal status and before any reporter.  Copies
     each job directory back (``testcase.lock`` last), restores the job's
     execution space and environment to the session directory, rewrites the lock
-    file with host paths, refreshes the results view, and removes the prefix
-    tree unless a copy failed.
+    file with host paths, and refreshes the results view.
 
 Layout below the prefix::
 
@@ -96,13 +95,17 @@ class _State:
 _state: _State | None = None
 
 
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
+def add_exec_prefix_option(parser: "Parser", command: str | list[str]) -> None:
+    """Add ``--exec-prefix`` to the ``command`` subparser(s).
+
+    Exposed so that plugins providing their own run-like subcommands can offer
+    the same option.  Must be called from a ``canary_addoption`` implementation.
+    """
     parser.add_argument(
         "--exec-prefix",
         dest="exec_prefix",
         metavar="PATH",
-        command="run",
+        command=command,
         group="execution location",
         default=os.getenv(EXEC_PREFIX_ENV) or None,
         help="Execute jobs below PATH (e.g. a node-local RAM disk or burst buffer) and copy "
@@ -110,6 +113,11 @@ def canary_addoption(parser: "Parser") -> None:
         "Environment variables in PATH are expanded when the jobs run "
         f"[default: ${EXEC_PREFIX_ENV}]",
     )
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    add_exec_prefix_option(parser, command="run")
 
 
 def resolve_prefix(raw: str) -> Path:
@@ -185,24 +193,16 @@ def canary_runtests_finish(runner: "Runner") -> None:
     if state is None:
         return
     try:
-        failures: list[str] = []
         for redirect in state.redirects:
             try:
                 copy_back(redirect.exec_dir, redirect.host_dir, exec_root=state.root)
             except Exception as e:
-                failures.append(f"{redirect.job.display_name()}: {e}")
                 logger.error(
                     f"Failed to copy results of {redirect.job.display_name()} from "
                     f"{redirect.exec_dir} to {redirect.host_dir}: {e}"
                 )
             finally:
                 _restore(redirect, runner)
-        if failures:
-            logger.error(
-                f"{len(failures)} job(s) could not be copied back; leaving {state.root} in place"
-            )
-        else:
-            remove_exec_root(state.root)
     finally:
         if state.set_cache_env:
             os.environ.pop("CANARY_CACHE_DIR", None)
@@ -284,23 +284,6 @@ def _rewrite_symlinks(top: Path, *, old: Path, new: Path) -> None:
             if target.is_absolute() and _is_relative_to(target, old):
                 path.unlink()
                 path.symlink_to(new / target.relative_to(old))
-
-
-def remove_exec_root(root: Path) -> None:
-    """Remove the per-session tree and any now-empty parents created by canary."""
-    try:
-        shutil.rmtree(root)
-    except FileNotFoundError:
-        pass
-    except OSError as e:
-        logger.warning(f"Failed to remove execution tree {root}: {e}")
-        return
-    # <prefix>/canary/<hash>/<session>: prune <hash> and canary if empty.
-    for parent in (root.parent, root.parent.parent):
-        try:
-            parent.rmdir()
-        except OSError:
-            break
 
 
 def _replace_dir_variables(job: "Job", *, old: Path, new: Path) -> None:

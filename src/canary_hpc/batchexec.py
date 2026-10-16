@@ -667,4 +667,8 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                 f"--workspace={batch.workspace.dir}",
             ]
         )
+        if exec_prefix := canary.config.getoption("hpc_exec_prefix"):
+            # Quoted, so environment variables (e.g. $USER, $SLURM_JOB_ID) are
+            # expanded by canary on the execution host, not by the batch shell.
+            args.append(f"--exec-prefix={exec_prefix}")
         return shlex.join(args)
