@@ -13,6 +13,7 @@ candidate task lists.
 tests, diagnostics, and external callers.
 """
 
+import bisect
 import dataclasses
 import heapq
 import math
@@ -262,7 +263,11 @@ class CheapMakespanStats:
 
 
 def makespan_upper_bound(
-    tasks: Sequence[ScheduleTask], *, width: int, workers: int | None = None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    workers: int | None = None,
+    resource_capacity: dict[str, int] | None = None,
 ) -> float:
     """Return a cheap, non-optimistic upper bound on the makespan of ``tasks``.
 
@@ -281,6 +286,12 @@ def makespan_upper_bound(
     ``total_duration / workers + longest critical path``, and the larger of the
     two terms is used.  Tasks as wide as the whole batch (e.g. exclusive jobs)
     cannot share it with anything, so they are serialized and added on directly.
+
+    Non-CPU resources (e.g. GPUs) are accounted for when ``resource_capacity``
+    is given: for each resource type the same list-scheduling argument applies
+    to the tasks that use it, with the capacity reduced by the largest single
+    request minus one, i.e. ``work_r / (capacity_r - (max_request_r - 1))``.
+    The returned value is never below :func:`cheap_makespan` (the lower bound).
 
     The cost is linear in the number of tasks plus the critical-path pass, so it
     is safe to call on very large batches.
@@ -316,10 +327,63 @@ def makespan_upper_bound(
     body = shared_work / float(effective_width)
     if workers is not None:
         body = max(body, shared_duration / float(workers))
+    if resource_capacity:
+        body = max(body, _resource_upper_body(shared, resource_capacity))
     # Full-width tasks are already counted in ``serial``; a dependency chain
     # through them only delays the shared tasks by time already accounted for.
     tail = max(shared_max_duration, _critical_path_lower_bound(shared))
-    return serial + body + tail
+    upper = serial + body + tail
+    lower = cheap_makespan(
+        tasks,
+        width=width,
+        workers=workers,
+        validate=False,
+        resource_capacity=_capacity_for(tasks, resource_capacity),
+    )
+    return max(upper, lower)
+
+
+def _task_resource_requests(task: ScheduleTask) -> dict[str, int]:
+    """Largest per-node request of each non-CPU resource type for *task*."""
+    out: dict[str, int] = {}
+    for demand in task.demands:
+        for amount in demand.resources:
+            rtype = "cpus" if amount.type == "cpu" else amount.type
+            if rtype == "cpus":
+                continue
+            out[rtype] = max(out.get(rtype, 0), int(amount.slots))
+    return out
+
+
+def _capacity_for(
+    tasks: Sequence[ScheduleTask], resource_capacity: dict[str, int] | None
+) -> dict[str, int] | None:
+    """Restrict *resource_capacity* to the types actually used by *tasks* (plus cpus)."""
+    if not resource_capacity:
+        return None
+    used = {"cpus"}
+    for task in tasks:
+        used.update(task.resource_work())
+    return {k: int(v) for k, v in resource_capacity.items() if k in used}
+
+
+def _resource_upper_body(tasks: Sequence[ScheduleTask], capacity: dict[str, int]) -> float:
+    """List-scheduling bound on time spent with each non-CPU resource type busy."""
+    body = 0.0
+    work: dict[str, float] = {}
+    max_req: dict[str, int] = {}
+    for task in tasks:
+        for rtype, slots in _task_resource_requests(task).items():
+            nodes = max(1, task.node_count())
+            work[rtype] = work.get(rtype, 0.0) + slots * nodes * float(task.duration)
+            max_req[rtype] = max(max_req.get(rtype, 0), slots)
+    for rtype, w in work.items():
+        cap = int(capacity.get(rtype, 0))
+        if cap <= 0:
+            continue  # unknown capacity: cannot bound (packer validates feasibility)
+        effective = max(1, cap - (max_req[rtype] - 1))
+        body = max(body, w / float(effective))
+    return body
 
 
 def cheap_makespan(
@@ -365,12 +429,23 @@ def cheap_makespan(
 
 
 def simulate_makespan(
-    tasks: Sequence[ScheduleTask], *, width: int, workers: int | None = None
+    tasks: Sequence[ScheduleTask],
+    *,
+    width: int,
+    workers: int | None = None,
+    resource_capacity: dict[str, int] | None = None,
 ) -> float:
-    """Simulate a simple resource-aware scheduler and return exact makespan.
+    """Simulate a simple resource-aware list scheduler and return its makespan.
 
-    This public function preserves exact simulator behavior for external
-    callers.  The packers avoid calling it in placement hot loops.
+    Tasks are started greedily in priority order whenever CPU width, the
+    optional worker cap, and -- if ``resource_capacity`` is given -- every
+    other requested resource type (e.g. GPUs) are available.  Resource
+    requests are aggregated across a task's node demands.
+
+    The ready list is kept sorted by insertion (``bisect``) and each scheduling
+    pass is a single linear scan, so the cost is roughly
+    ``O(n * r)`` per event with ``r`` ready tasks rather than re-sorting and
+    restarting the scan after every start.
     """
     if width <= 0:
         raise ValueError(f"width={width!r} must be > 0")
@@ -386,6 +461,27 @@ def simulate_makespan(
     task_by_id = {task.id: task for task in tasks}
     task_ids = set(task_by_id)
 
+    # Per-task aggregate non-CPU requests, only for capacities we know about.
+    capacity: dict[str, int] = {}
+    if resource_capacity:
+        capacity = {k: int(v) for k, v in resource_capacity.items() if k not in ("cpus", "cpu")}
+    requests: dict[str, dict[str, int]] = {}
+    for task in tasks:
+        req: dict[str, int] = {}
+        if capacity:
+            for demand in task.demands:
+                for amount in demand.resources:
+                    rtype = "cpus" if amount.type == "cpu" else amount.type
+                    if rtype in capacity:
+                        req[rtype] = req.get(rtype, 0) + int(amount.slots)
+            for rtype, n in req.items():
+                if n > capacity[rtype]:
+                    raise ValueError(
+                        f"Task {task.id!r} requests {n} {rtype}, but only "
+                        f"{capacity[rtype]} are available"
+                    )
+        requests[task.id] = req
+
     successors: dict[str, list[str]] = {task.id: [] for task in tasks}
     indegree: dict[str, int] = {task.id: 0 for task in tasks}
 
@@ -397,10 +493,24 @@ def simulate_makespan(
             successors[dep_id].append(task.id)
             indegree[task.id] += 1
 
-    ready: list[str] = [task_id for task_id, degree in indegree.items() if degree == 0]
+    def ready_key(task_id: str) -> tuple[float, float, int, tuple[int, ...]]:
+        # Negated so that ascending order == highest priority first.
+        task = task_by_id[task_id]
+        return (
+            -task.scheduling_priority(),
+            -float(task.duration),
+            -int(task.width),
+            _neg_str(str(task.id)),
+        )
+
+    keys: dict[str, tuple] = {tid: ready_key(tid) for tid in task_by_id}
+    ready: list[tuple[tuple, str]] = sorted(
+        (keys[tid], tid) for tid, degree in indegree.items() if degree == 0
+    )
 
     now = 0.0
     available_width = width
+    available = dict(capacity)
     running_workers = 0
     max_workers = workers if workers is not None else len(tasks)
 
@@ -409,42 +519,35 @@ def simulate_makespan(
     sequence = 0
     completed = 0
 
-    def ready_sort_key(task_id: str) -> tuple[float, float, int, str]:
-        task = task_by_id[task_id]
-        return (task.scheduling_priority(), float(task.duration), int(task.width), str(task.id))
+    def fits(task: ScheduleTask) -> bool:
+        if task.width > available_width:
+            return False
+        for rtype, n in requests[task.id].items():
+            if n > available[rtype]:
+                return False
+        return True
 
     while completed < len(tasks):
-        started = True
-
-        while started and ready:
-            started = False
-            ready.sort(key=ready_sort_key, reverse=True)
-
-            for index, task_id in enumerate(list(ready)):
-                task = task_by_id[task_id]
-
-                if task.width > available_width:
-                    continue
-
-                if running_workers >= max_workers:
-                    continue
-
-                ready.pop(index)
-
-                available_width -= task.width
-                running_workers += 1
-
-                finish_time = now + float(task.duration)
-                heapq.heappush(running, (finish_time, sequence, task_id))
-                sequence += 1
-                started = True
-                break
+        if ready and running_workers < max_workers:
+            keep: list[tuple[tuple, str]] = []
+            for entry in ready:
+                task = task_by_id[entry[1]]
+                if running_workers < max_workers and fits(task):
+                    available_width -= task.width
+                    for rtype, n in requests[task.id].items():
+                        available[rtype] -= n
+                    running_workers += 1
+                    heapq.heappush(running, (now + float(task.duration), sequence, task.id))
+                    sequence += 1
+                else:
+                    keep.append(entry)
+            ready = keep
 
         if not running:
             if ready:
                 raise RuntimeError(
                     "Scheduler made no progress despite ready tasks; "
-                    "check width/workers constraints"
+                    "check width/workers/resource constraints"
                 )
 
             raise ValueError("Dependency cycle detected")
@@ -457,6 +560,8 @@ def simulate_makespan(
             task = task_by_id[task_id]
 
             available_width += task.width
+            for rtype, n in requests[task_id].items():
+                available[rtype] += n
             running_workers -= 1
             completed += 1
 
@@ -464,9 +569,14 @@ def simulate_makespan(
                 indegree[child_id] -= 1
 
                 if indegree[child_id] == 0:
-                    ready.append(child_id)
+                    bisect.insort(ready, (keys[child_id], child_id))
 
     return now
+
+
+def _neg_str(text: str) -> tuple[int, ...]:
+    """Sort key that orders strings in *descending* order when sorted ascending."""
+    return tuple(-ord(c) for c in text) + (1,)
 
 
 def pack_to_height_simulated(
