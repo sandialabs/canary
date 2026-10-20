@@ -63,9 +63,10 @@ optional-dependencies.dev = [
     "sphinx-design",
     "xmlschema",
 ]
+
 # backward compatible options that are now either required or builtin to hpc-connect
 optional-dependencies.requests = [ "requests" ]
-optional-dependencies.notebook = [ "canary-notebook @ git+https://github.com/sandialabs/canary-notebook.git" ]
+
 urls.Documentation = "https://canary-wm.readthedocs.io/en/production/"
 urls.Issues = "https://github.com/sandialabs/canary/issues"
 urls.Repository = "https://github.com/sandialabs/canary"
