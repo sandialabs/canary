@@ -158,6 +158,73 @@ class SpecDependency:
 NULL_PATH = Path("\0")
 
 
+class UnsafeParameterError(ValueError):
+    """Raised when a parameter name/value or job path could escape the session directory.
+
+    Parameter names and values are embedded verbatim in job names, which become
+    directory names under the session (``<family>.<name>=<value>``).  Values
+    containing path separators, ``..`` components, or control characters would
+    allow a job to run in -- and later recursively delete -- directories outside
+    the workspace, so they are rejected when the spec is constructed.
+    """
+
+
+_UNSAFE_CHARS = re.compile(r"[\x00-\x1f\x7f/\\]")
+
+
+def validate_parameter_component(
+    what: str, text: str, *, family: str | None = None, standalone: bool = True
+) -> None:
+    """Raise :class:`UnsafeParameterError` if *text* is unsafe in a job directory name.
+
+    Args:
+        what: Description used in the error message.
+        text: The string to check.
+        family: Test family, for error context.
+        standalone: *text* may form an entire path component by itself (e.g. the
+            test family name), so ``''``, ``'.'`` and ``'..'`` are rejected too.
+            Parameter values are always embedded as ``name=value`` and so only
+            need the separator/control-character check.
+    """
+    where = f" (test {family!r})" if family else ""
+    if standalone and text in ("", ".", ".."):
+        raise UnsafeParameterError(
+            f"Invalid {what} {text!r}{where}: must not be empty, '.' or '..'"
+        )
+    if m := _UNSAFE_CHARS.search(text):
+        bad = m.group(0)
+        desc = {"/": "'/'", "\\": "'\\'"}.get(bad, f"control character {bad!r}")
+        raise UnsafeParameterError(
+            f"Invalid {what} {text!r}{where}: {desc} is not allowed because parameter names "
+            "and values are used to construct the job's execution directory"
+        )
+
+
+def validate_parameters(parameters: dict[str, Any], *, family: str | None = None) -> None:
+    """Validate that parameter names and (stringified) values are safe path components."""
+    for key, value in parameters.items():
+        validate_parameter_component("parameter name", str(key), family=family)
+        validate_parameter_component(
+            f"value for parameter {key!r}", stringify(value), family=family, standalone=False
+        )
+
+
+def validate_relative_path(what: str, path: "Path | str", *, family: str | None = None) -> Path:
+    """Ensure *path* is a relative path that stays within its parent directory."""
+    p = Path(path)
+    where = f" (test {family!r})" if family else ""
+    text = str(path)
+    if p.is_absolute() or text.startswith(("/", "\\")) or (len(text) > 1 and text[1] == ":"):
+        raise UnsafeParameterError(f"Invalid {what} {text!r}{where}: must be a relative path")
+    if ".." in p.parts or ".." in Path(text.replace("\\", "/")).parts:
+        raise UnsafeParameterError(f"Invalid {what} {text!r}{where}: '..' is not allowed")
+    if _UNSAFE_CHARS.search(text.replace("/", "")):
+        raise UnsafeParameterError(f"Invalid {what} {text!r}{where}: contains control characters")
+    if p.parts in ((), (".",)):
+        raise UnsafeParameterError(f"Invalid {what} {text!r}{where}: must not be empty")
+    return p
+
+
 @dataclasses.dataclass
 class JobSpec:
     # The search path containing the generated spec; typically the some version-control root
@@ -192,20 +259,36 @@ class JobSpec:
 
     def __post_init__(self) -> None:
         self.family = self.family or self.file.stem
+        validate_parameter_component("test name", self.family)
+        validate_parameters(self.parameters, family=self.family)
         if not self.id:
             kwds = self.parameters | self.meta_parameters
             kwds.pop("runtime", None)
             self.id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
         else:
             validate_spec_id(self.id)
+        # Explicit exec/view paths (from generators or plugins) must be relative and
+        # free of '..'.  Derived defaults come from the test file's location,
+        # which is trusted; they are made relative to file_root when possible.
         if self.exec_path == NULL_PATH:
-            self.exec_path = self.file_path.parent / self.name
-        self.exec_path = Path(self.exec_path)
+            self.exec_path = self._default_job_path()
+        else:
+            self.exec_path = validate_relative_path("exec_path", self.exec_path, family=self.family)
         if self.view_path == NULL_PATH:
-            self.view_path = self.file_path.parent / self.name
-        self.view_path = Path(self.view_path)
+            self.view_path = self._default_job_path()
+        else:
+            self.view_path = validate_relative_path("view_path", self.view_path, family=self.family)
         if self.timeout < 0:
             self.timeout = default_timeout(self.keywords)
+
+    def _default_job_path(self) -> Path:
+        parent = self.file_path.parent
+        if parent.is_absolute():
+            try:
+                parent = parent.relative_to(self.file_root)
+            except ValueError:
+                pass
+        return parent / self.name
 
     def __hash__(self) -> int:
         return hash(self.id)

@@ -89,7 +89,17 @@ def _open_or_create_workspace(work_tree: str, wipe: bool, kind: str) -> Workspac
     if wipe:
         if kind != "scanpaths":
             raise RuntimeError("Cannot remove existing workspace without additional scanpaths")
+        # Only the workspace located exactly at ``work_tree`` is removed; an
+        # enclosing (ancestor) workspace is never wiped implicitly.
+        if Workspace.workspace_at(work_tree) is None:
+            anchor = Workspace.find_anchor(start=work_tree)
+            if anchor is not None:
+                raise ValueError(
+                    f"-w: {work_tree} is inside the workspace at {anchor}, which will not be "
+                    f"wiped implicitly.  Run from {anchor} or use 'canary rm {anchor}' first."
+                )
         Workspace.remove(work_tree)
+        return Workspace.create(path=work_tree)
     try:
         return Workspace.load(start=work_tree)
     except NotAWorkspaceError:

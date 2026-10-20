@@ -42,6 +42,7 @@ def _run_and_rebaseline(tmp_path: Path, filename: str, body: str) -> None:
     assert all(job.status.is_success() for job in session.jobs)
 
     # do_baseline consults config for the active command; rebaseline sets it.
+    assert _canary.config._config is not None
     _canary.config._config.options.command = "rebaseline"
     for job in workspace.load_jobs():
         # Fire the hook exactly as the rebaseline subcommand does, so plugin

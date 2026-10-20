@@ -15,6 +15,7 @@ from typing import Any
 
 from . import config
 from .config.argparsing import make_argument_parser
+from .error import SessionTerminated
 from .error import StopExecution
 from .util import logging
 from .util.banner import banner
@@ -242,6 +243,11 @@ def console_main() -> int:
             print_current_config()
         logger.error(e.args[0])
         return 4
+    except SessionTerminated as e:
+        if reraise:
+            raise
+        logger.error(f"Terminated by {e.signame}.")
+        return 128 + e.signum
     except KeyboardInterrupt:
         if reraise:
             raise

@@ -41,7 +41,7 @@ def open_workspace(start: str | Path | None = None) -> Workspace:
     return Workspace.load(start)
 
 
-def create_workspace(path: str | Path = Path.cwd(), force: bool = False) -> Workspace:
+def create_workspace(path: str | Path | None = None, force: bool = False) -> Workspace:
     """Create a new workspace at *path*.
 
     Delegates to :meth:`Workspace.create`.

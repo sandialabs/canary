@@ -35,6 +35,9 @@ from .jobspec import Mask
 from .jobspec import SpecDependency
 from .jobspec import build_spec_id
 from .jobspec import default_timeout
+from .jobspec import validate_parameter_component
+from .jobspec import validate_parameters
+from .jobspec import validate_relative_path
 
 FileResourceT = dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]]
 logger = logging.get_logger(__name__)
@@ -196,6 +199,10 @@ class JobSpecIR:
         self.family: str = family or self.file.stem
         self.parameters: dict[str, Any] = dict(parameters or {})
         self.meta_parameters: dict[str, Any] = dict(meta_parameters or {})
+        # Reject parameters that would let the job's directory escape the session
+        # (e.g. values containing '/' or '..'); see UnsafeParameterError.
+        validate_parameter_component("test name", self.family)
+        validate_parameters(self.parameters, family=self.family)
         duplicate_parameter_keys = set(self.parameters) & set(self.meta_parameters)
         if duplicate_parameter_keys:
             keys = ", ".join(sorted(duplicate_parameter_keys))
@@ -226,6 +233,10 @@ class JobSpecIR:
         self.command = command or []
         self.mask = mask
         self.baseline = baseline or []
+        if exec_path:
+            validate_relative_path("exec_path", exec_path, family=self.family)
+        if view_path:
+            validate_relative_path("view_path", view_path, family=self.family)
         self.exec_path: str | None = exec_path
         self.view_path: str | None = view_path
 

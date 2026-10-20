@@ -72,6 +72,17 @@ workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 workspace_log = "canary.log"
 
+
+def _display_path(path: str | Path) -> str:
+    """Return *path* relative to cwd when possible, else absolute (never raises)."""
+    p = Path(path).absolute()
+    try:
+        rel = os.path.relpath(p, Path.cwd())
+    except ValueError:  # e.g. different drives on Windows
+        return str(p)
+    return str(p) if rel.startswith("..") else rel
+
+
 # ---------------------------------------------------------------------------
 # Explicit workspace override
 # ---------------------------------------------------------------------------
@@ -297,43 +308,67 @@ class Workspace:
         return (p / workspace_tag).exists()
 
     @staticmethod
-    def remove(start: str | Path = Path.cwd()) -> Path | None:
-        """Deletes a workspace and its associated view.
+    def workspace_at(path: str | Path) -> Path | None:
+        """Return the workspace directory located *exactly* at *path*, or ``None``.
+
+        Unlike :meth:`find_anchor`, no upward search is performed.  *path* may be
+        either the anchor directory (containing ``.canary``) or the ``.canary``
+        directory itself.  The directory must carry a ``WORKSPACE.TAG`` to be
+        recognized, so arbitrary directories named ``.canary`` are never
+        mistaken for workspaces.  Intended for destructive operations, which must
+        never act on an ancestor of the path the user named.
+        """
+        p = Path(path).absolute()
+        candidate = p if p.name == workspace_path else p / workspace_path
+        if candidate.is_dir() and not candidate.is_symlink() and Workspace.exists_at(candidate):
+            return candidate
+        return None
+
+    @staticmethod
+    def remove(start: str | Path | None = None) -> Path | None:
+        """Deletes the workspace located exactly at *start* and its associated view.
+
+        No upward search is performed: if *start* does not itself contain a
+        tagged ``.canary`` workspace (or is not one), nothing is removed.  This
+        prevents a typo or a subdirectory path from deleting an unrelated
+        ancestor workspace.
 
         Args:
-            start: Path to start searching for the workspace.
+            start: The workspace anchor directory (or the ``.canary`` directory
+                itself).  Defaults to the current working directory.
 
         Returns:
             The path to the removed workspace, or None if no workspace was found.
+
+        Raises:
+            ValueError: If the recorded view directory exists but is not owned by
+                canary.
         """
-        relpath = Path(start).absolute().relative_to(Path.cwd())
-        pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {relpath}")
-        anchor = Workspace.find_anchor(start=start)
-        if anchor is None:
+        start = Path.cwd() if start is None else Path(start)
+        pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {_display_path(start)}")
+        workspace = Workspace.workspace_at(start)
+        if workspace is None:
             pm.done("no workspace found")
             return None
-        workspace = anchor / workspace_path
-        view: Path | None = None
-        cache_dir = workspace / "cache"
-        file = workspace / "cache/view"
-        if file.exists():
-            relpath = Path(file.read_text().strip())
-            view = cache_dir / relpath
-        if view is None or not view.exists():
-            if Workspace.exists_at(workspace):
-                force_remove(workspace)
-            pm.done()
-            return workspace
-        elif Workspace.exists_at(workspace) and ResultsView.exists_at(view):
-            force_remove(view)
-            force_remove(workspace)
-            pm.done()
-            return workspace
-        elif Workspace.exists_at(workspace) and view.exists():
-            raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
-        else:
-            pm.done(f"error: unable to remove {workspace}")
-            return None
+        view_dir: Path | None = None
+        try:
+            ws = object.__new__(Workspace)
+            ws.initialize_properties_from_root(root=workspace)
+            if view := ws.latest_view():
+                view_dir = view.dir
+        except Exception:
+            logger.warning(f"Could not read view location for {workspace}; leaving view in place")
+            view_dir = None
+        if view_dir is not None and view_dir.exists():
+            if not ResultsView.exists_at(view_dir):
+                pm.done("error")
+                raise ValueError(
+                    f"Cannot remove {workspace} because {view_dir} is not owned by Canary"
+                )
+            force_remove(view_dir)
+        force_remove(workspace)
+        pm.done()
+        return workspace
 
     def rmf(self) -> None:
         """Dangerously removes the workspace and view directories from disk."""
@@ -394,7 +429,7 @@ class Workspace:
         return None
 
     @classmethod
-    def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
+    def create(cls, path: str | Path | None = None, force: bool = False) -> "Workspace":
         """Creates a new Canary workspace at the specified path.
 
         Args:
@@ -404,12 +439,13 @@ class Workspace:
         Returns:
             The newly created Workspace instance.
         """
-        path = Path(path).absolute()
+        path = Path.cwd() if path is None else Path(path).absolute()
         if path.stem == workspace_path:
             raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
+            # Only ever remove the workspace at exactly ``path`` -- never an ancestor.
             cls.remove(start=path)
-        wspath = path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
+        wspath = _display_path(path)
         logger.info(f"[bold]Initializing[/] empty canary workspace at {wspath}")
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=path)

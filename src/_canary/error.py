@@ -61,3 +61,24 @@ class StopExecution(Exception):
         self.message = message
         self.exit_code = exit_code
         super().__init__(message)
+
+
+class SessionTerminated(KeyboardInterrupt):
+    """Raised in the main canary process when it receives SIGTERM/SIGHUP.
+
+    Subclasses :class:`KeyboardInterrupt` so that every existing interrupt
+    cleanup path (terminating workers, reaping tests, reconciling job state)
+    also runs for termination signals sent by CI systems, batch schedulers or
+    ``kill``.
+    """
+
+    def __init__(self, signum: int):
+        self.signum = int(signum)
+        try:
+            import signal as _signal
+
+            name = _signal.Signals(self.signum).name
+        except Exception:  # pragma: no cover
+            name = str(self.signum)
+        self.signame = name
+        super().__init__(f"Terminated by {name}")
