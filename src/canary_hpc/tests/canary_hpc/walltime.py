@@ -69,3 +69,19 @@ def test_batch_wall_limit_uses_slurm_semantics(tmp_path: Path):
     assert batch.wall_limit(submit_args=["-t", "30"]) == 1800.0
     with pytest.raises(WallTimeError):
         batch.wall_limit(submit_args=["--time=bogus"])
+
+
+def test_batch_watchdog_covers_queue_wait_and_backstop(tmp_path):
+    from _canary import config
+
+    from .batchspec import FakeJob
+    from .batchspec import make_batch
+
+    batch = make_batch(tmp_path, [FakeJob(id="j1")])
+    batch.add_submit_option("--time=10:00")
+    with config.override():
+        config.options.timeout = {"queue": 3600.0}
+        # queue timeout (1 h) + 2x the pinned 10 min wall
+        budget = batch.watchdog_timeout()
+        assert budget == 3600.0 + 2 * 600.0
+        assert budget is not None and budget > batch.timeout

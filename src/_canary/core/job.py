@@ -211,6 +211,18 @@ class BaseJob(ABC):
     def exclusive(self) -> bool:
         return False
 
+    def watchdog_timeout(self) -> float | None:
+        """Worst-case seconds this job may legitimately occupy a worker, or ``None``.
+
+        The worker watchdog is a last-resort backstop for jobs whose own timeout
+        enforcement failed.  By default it uses ``timeout_multiplier * timeout``.
+        Jobs whose lifetime includes time not covered by :attr:`timeout` -- e.g.
+        HPC batches waiting in a scheduler queue before their wall clock starts
+        -- override this to return their full budget, so the watchdog never
+        fires while the job is legitimately waiting.
+        """
+        return None
+
     @abstractmethod
     def required_resources(self) -> list["NodeRequest"]: ...
 

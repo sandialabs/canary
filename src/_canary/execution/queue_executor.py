@@ -294,26 +294,35 @@ class _MainWorker:
         job_id = job.id
 
         wall_limit = config.timeout_multiplier() * job.timeout
+        # Jobs may declare a longer worst-case lifetime than their run timeout
+        # (e.g. HPC batches: scheduler queue wait + 2x wall backstop) so the
+        # watchdog never fires while they are legitimately waiting.
+        budget = wall_limit
+        try:
+            if (declared := job.watchdog_timeout()) is not None:
+                budget = max(wall_limit, float(declared))
+        except Exception as e:
+            logger.debug("watchdog_timeout() failed for %s: %s", job_id[:7], e)
         watchdog_grace = float(
-            os.getenv(
-                "CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * wall_limit)))
-            )
+            os.getenv("CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * budget))))
         )
-        watchdog_deadline = time.time() + wall_limit + watchdog_grace
+        watchdog_deadline = time.time() + budget + watchdog_grace
 
         def terminate_and_report(event: str, **extra: Any) -> None:
             logger.warning(
                 "Terminating worker for job %s: event=%s timeout=%s grace=%s extra=%r",
                 job_id[:7],
                 event,
-                wall_limit,
+                budget,
                 watchdog_grace,
                 extra,
             )
 
             # Kill the inner job process *and* the test it launched (which runs in
-            # its own session/process group), with a real grace period.
-            self.kill_job_tree()
+            # its own session/process group).  Give the job enough time after
+            # SIGTERM to run its own cleanup -- for batches that means cancelling
+            # the scheduler job (scancel/flux cancel) -- before escalating.
+            self.kill_job_tree(grace=max(procutil.kill_grace_period(), 30.0))
 
             payload: dict[str, Any] = {
                 "job_id": job_id,
@@ -343,7 +352,7 @@ class _MainWorker:
 
             if proc.is_alive() and now > watchdog_deadline:
                 terminate_and_report(
-                    "job_timeout", phase="watchdog", timeout=wall_limit, grace=watchdog_grace
+                    "job_timeout", phase="watchdog", timeout=budget, grace=watchdog_grace
                 )
                 return
 
@@ -794,8 +803,10 @@ class ResourceQueueExecutor:
                 return
 
             if event == "job_timeout":
-                wall_limit = config.timeout_multiplier() * slot.job.timeout
-                reason = f"Job timed out after {wall_limit} s."
+                applied = payload.get("timeout")
+                if not isinstance(applied, (int, float)):
+                    applied = config.timeout_multiplier() * slot.job.timeout
+                reason = f"Job timed out after {float(applied):.1f} s (worker watchdog)."
 
                 self._finish_abnormal_slot(slot, outcome="TIMEOUT", reason=reason)
 

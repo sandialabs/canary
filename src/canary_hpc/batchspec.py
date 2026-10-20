@@ -236,6 +236,27 @@ class TestBatch(BaseJob):
     def total_timeout(self) -> float:
         return self.queue_timeout + self.wall_limit()
 
+    def watchdog_timeout(self) -> float | None:
+        """Worst-case lifetime: scheduler queue wait plus canary's 2x-wall backstop.
+
+        The batch runner enforces both the queue timeout and the run timeout
+        itself (and cancels the scheduler job when they expire); the worker
+        watchdog must not fire before those do, in particular while the batch
+        is still waiting in the scheduler queue.
+        """
+        try:
+            submit_args = self._watchdog_submit_args()
+            wall = float(self.wall_limit(submit_args))
+        except Exception:
+            wall = float(self.wall_limit())
+        return float(self.queue_timeout) + 2.0 * wall
+
+    def _watchdog_submit_args(self) -> "list[str] | None":
+        args: list[str] = list(self.submit_options)
+        if extra := canary.config.getoption("hpc_submit_args"):
+            args.extend(extra)
+        return args or None
+
     def pinned_wall_limit(self, submit_args: "Sequence[str] | None" = None) -> float | None:
         """Return a wall limit pinned by the user with ``--time``/``--time-limit``, if any.
 
