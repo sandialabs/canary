@@ -12,6 +12,7 @@ original environment on exit.
 """
 
 import os
+import shlex
 import subprocess
 from contextlib import contextmanager
 from typing import Generator
@@ -19,6 +20,35 @@ from typing import MutableMapping
 
 # awk script alternative to posix `env -0`
 awk_cmd = r"""awk 'BEGIN{for(name in ENVIRON) printf("%s=%s%c", name, ENVIRON[name], 0)}'"""
+
+#: Default time limit (seconds) for a ``module`` command; override with
+#: ``CANARY_MODULE_TIMEOUT``.
+DEFAULT_MODULE_TIMEOUT = 300.0
+
+
+def _module_timeout() -> float:
+    try:
+        return float(os.getenv("CANARY_MODULE_TIMEOUT", DEFAULT_MODULE_TIMEOUT))
+    except ValueError:
+        return DEFAULT_MODULE_TIMEOUT
+
+
+def _run_module(cmd: str, env: MutableMapping | None) -> subprocess.CompletedProcess:
+    """Run *cmd* through bash, reading output with ``communicate`` (no pipe deadlock)."""
+    try:
+        return subprocess.run(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            executable="/bin/bash",
+            env=env,
+            timeout=_module_timeout(),
+            check=False,
+        )  # nosec B602 - arguments are shlex-quoted
+    except subprocess.TimeoutExpired:
+        raise ModuleError(f"timed out after {_module_timeout():g} s: {cmd}") from None
 
 
 def _module(*args, environb: MutableMapping | None = None) -> str | None:
@@ -40,27 +70,20 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
     Raises:
         ModuleError: If a state-changing command exits with a non-zero status.
     """
-    module_cmd = f"module {' '.join(args)}"
-    environb = environb or os.environb
+    if not args:
+        raise ModuleError("no module sub-command given")
+    module_cmd = "module " + " ".join(shlex.quote(str(a)) for a in args)
+    if environb is None:
+        environb = os.environb
 
     if args[0] in ["load", "swap", "unload", "purge", "use", "unuse"]:
         # Suppress module output
-        module_cmd += r" >/dev/null 2>&1 && " + awk_cmd
-        module_p = subprocess.Popen(
-            module_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            shell=True,
-            executable="/bin/bash",
-            env=environb,
-        )  # nosec B602
+        cp = _run_module(module_cmd + r" >/dev/null 2>&1 && " + awk_cmd, environb)
+        output = cp.stdout or b""
+        if cp.returncode != 0:
+            raise ModuleError(f"failed: {module_cmd}: {output.decode('utf-8', errors='replace')}")
 
         new_environb = {}
-        module_p.wait()
-        output = module_p.communicate()[0]
-        if module_p.returncode != 0:
-            raise ModuleError(f"failed: {module_cmd}: {output.decode()}")
-
         # Loop over each environment variable key=value byte string
         for entry in output.strip(b"\0").split(b"\0"):
             # Split variable name and value
@@ -68,6 +91,8 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
             if len(parts) != 2:
                 continue
             new_environb[parts[0]] = parts[1]
+        if not new_environb:
+            raise ModuleError(f"failed: {module_cmd}: could not capture resulting environment")
 
         # Update os.environ with new dict
         environb.clear()
@@ -76,14 +101,8 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
 
     else:
         # Simply execute commands that don't change state and return output
-        module_p = subprocess.Popen(
-            module_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            shell=True,
-            executable="/bin/bash",
-        )  # nosec B602
-        return str(module_p.communicate()[0].decode())
+        cp = _run_module(module_cmd, None)
+        return (cp.stdout or b"").decode("utf-8", errors="replace")
 
 
 def unload(modulename: str) -> None:
@@ -139,12 +158,13 @@ def loaded(
         *names: Additional modules to load after ``modulename``.
         use: Optional path or list of paths to prepend to ``MODULEPATH`` before loading.
     """
-    if use is not None:
-        existing_modulepath = os.getenv("MODULEPATH", "")
-        prepend_path = use if isinstance(use, str) else ":".join(use)
-        os.environb[b"MODULEPATH"] = f"{prepend_path}:{existing_modulepath}".encode()
+    # Snapshot *before* touching MODULEPATH so it is restored on exit too.
+    save_environb = dict(os.environb)
     try:
-        save_environb = dict(os.environb)
+        if use is not None:
+            existing_modulepath = os.getenv("MODULEPATH", "")
+            prepend_path = use if isinstance(use, str) else ":".join(use)
+            os.environb[b"MODULEPATH"] = f"{prepend_path}:{existing_modulepath}".encode()
         for name in [modulename, *names]:
             text = _module("show", name).split()  # type: ignore
             for i, word in enumerate(text):
