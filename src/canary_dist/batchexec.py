@@ -14,6 +14,9 @@ import hpc_connect.futures
 
 import canary
 import canary_hpc.batchexec as be
+from _canary.util.envtransport import is_secret_name
+from _canary.util.envtransport import is_valid_name
+from _canary.util.envtransport import pack_environment
 from _canary.util.multiprocessing import SimpleQueue
 
 if TYPE_CHECKING:
@@ -113,17 +116,27 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
 
     @staticmethod
     def filtered_env() -> Generator[tuple[str, str], None, None]:
+        """Environment forwarded by ``--export ALL``, minus shell internals and secrets.
+
+        Credentials (tokens, passwords, keys -- see
+        :func:`_canary.util.envtransport.is_secret_name`) are never forwarded
+        implicitly: they would be written into a batch script on a shared
+        filesystem.  Export them explicitly by name to forward them.
+        """
         for key, val in os.environ.items():
             if key.startswith(("_", "BASH_FUNC_")):
                 continue
             if key in ("USER", "HOME", "PS1"):
+                continue
+            if not is_valid_name(key) or is_secret_name(key):
                 continue
             yield (key, val)
 
     def submit(self, batch: "TestBatch") -> hpc_connect.futures.FutureProtocol:
         assert self.backend.name == "remote_subprocess"
 
-        variables = self.rc_environ(batch)
+        # See canary_hpc.batchexec.submit: never embed unsafe values in the script.
+        variables = pack_environment(self.rc_environ(batch))
         invocation = self.canary_invocation(batch)
 
         job = hpc_connect.JobSpec(

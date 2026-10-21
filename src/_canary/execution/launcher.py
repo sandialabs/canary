@@ -438,17 +438,39 @@ def _write_env_json(job: "Job") -> None:
 
     Called from :meth:`SubprocessLauncher.context` immediately after
     :meth:`~_canary.core.job.Job.set_runtime_env` has injected the job's variables
-    into ``os.environ`` — capturing exactly the environment the test subprocess
-    will inherit.  Written best-effort; failures are logged at DEBUG and do not
+    into ``os.environ`` -- capturing the environment the test subprocess will
+    inherit.  Written best-effort; failures are logged at DEBUG and do not
     affect job execution.
+
+    The file lives in the test's working directory, which is commonly on a
+    shared filesystem, published as a CI artifact, or linked into reports, so:
+
+    * values of secret-looking variables (tokens, passwords, keys, ...; see
+      :func:`_canary.util.envtransport.is_secret_name`) are replaced with
+      ``<redacted>``, and
+    * the file is created with mode ``0600``.
+
+    Set ``CANARY_ENV_JSON=0`` to disable writing it altogether.
 
     The file is a plain ``{"VAR": "value", ...}`` JSON object, queryable via
     ``canary query job <id> env`` or ``canary query job <id> env.KEY``.
     """
     import json as _json
 
+    from ..util.envtransport import redact
+    from ..util.misc import boolean
+
+    if not boolean(os.getenv("CANARY_ENV_JSON", "1")):
+        return
     try:
-        with job.workspace.openfile("env.json", "w") as fh:
-            _json.dump(dict(os.environ), fh, sort_keys=True, indent=2)
+        path = job.workspace.joinpath("env.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):  # pragma: no cover - non-POSIX
+            pass
+        with os.fdopen(fd, "w") as fh:
+            _json.dump(redact(dict(os.environ)), fh, sort_keys=True, indent=2)
     except Exception:
         logger.debug("Failed to write env.json for %s", job.id[:7], exc_info=True)

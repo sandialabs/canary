@@ -223,7 +223,12 @@ def console_main() -> int:
     This function is not meant for programmable use; use `main()` instead.
     """
     from .util import multiprocessing
+    from .util.envtransport import restore_environment
 
+    # Variables whose values are unsafe to embed in a batch script are shipped
+    # base64-encoded (see util.envtransport); decode them before anything reads
+    # the environment.
+    restore_environment()
     multiprocessing.initialize()
 
     # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the

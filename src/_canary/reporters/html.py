@@ -521,7 +521,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 except ValueError:
                     continue
 
-                is_text = path.is_file() and is_plain_text_file(path)
+                # Only embed contents of files that resolve inside the job's
+                # workspace or the test's source tree.  A symlinked artifact may
+                # point anywhere (e.g. ~/.ssh), and reports are often published.
+                is_text = (
+                    path.is_file()
+                    and embeddable(path, roots=(root, job.spec.file.parent))
+                    and is_plain_text_file(path)
+                )
 
                 try:
                     size = path.stat().st_size
@@ -631,7 +638,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         truncated = False
         try:
-            data = source.read_bytes()
+            # Bounded read: never load a multi-GB log into memory.
+            with open(source, "rb") as fp:
+                data = fp.read(max_bytes + 1)
         except OSError as e:
             text = f"Could not read file: {e}"
         else:
@@ -937,7 +946,8 @@ def is_plain_text_file(path: Path, *, max_probe_bytes: int = 8192) -> bool:
         return True
 
     try:
-        data = path.read_bytes()[:max_probe_bytes]
+        with open(path, "rb") as fp:
+            data = fp.read(max_probe_bytes)
     except OSError:
         return False
 
@@ -954,6 +964,22 @@ def is_plain_text_file(path: Path, *, max_probe_bytes: int = 8192) -> bool:
 def safe_report_filename(relpath: Path) -> str:
     parts = [p for p in relpath.parts if p not in ("", ".", "..")]
     return "__".join(parts) + ".html"
+
+
+def embeddable(path: Path, *, roots: "tuple[Path, ...]") -> bool:
+    """True if *path* (after resolving symlinks) lies inside one of *roots*."""
+    try:
+        target = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    for root in roots:
+        try:
+            r = Path(root).resolve()
+        except (OSError, RuntimeError):
+            continue
+        if target == r or target.is_relative_to(r):
+            return True
+    return False
 
 
 def artifact_path(workspace_dir: Path, relpath: Path) -> Path | None:

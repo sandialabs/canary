@@ -420,3 +420,36 @@ def test_absolute_pythonpath_returns_none_when_unset(monkeypatch):
 
     monkeypatch.delenv("PYTHONPATH", raising=False)
     assert HPCConnectRunner._absolute_pythonpath() is None
+
+
+def test_batched_hostile_environment_value_is_not_executed(tmpdir):
+    """Batch env values with quotes/$/backticks must neither break nor inject into the script."""
+    import os
+
+    hostile = 'x"; touch INJECTED; echo "$(touch INJECTED2)`touch INJECTED3`'
+    with working_dir(tmpdir.strpath, create=True):
+        with open("t.pyt", "w") as fh:
+            fh.write(
+                "import os, sys\n"
+                "if __name__ == '__main__':\n"
+                "    v = os.environ.get('CANARY_TEST_HOSTILE')\n"
+                f"    sys.exit(0 if v == {hostile!r} else 1)\n"
+            )
+        # A plugin that injects the hostile value into every batch's environment.
+        with open("hostile_plugin.py", "w") as fh:
+            fh.write(
+                "import canary_hpc.batchexec as be\n"
+                "_orig = be.HPCConnectRunner.rc_environ\n"
+                "def rc_environ(self, batch):\n"
+                "    env = _orig(self, batch)\n"
+                f"    env['CANARY_TEST_HOSTILE'] = {hostile!r}\n"
+                "    return env\n"
+                "be.HPCConnectRunner.rc_environ = rc_environ\n"
+            )
+        hpc = CanaryCommand("hpc")
+        hpc.add_default_args("-p", os.path.abspath("hostile_plugin.py"))
+        cp = hpc("run", "-w", "--scheduler=shell", "t.pyt", debug=True)
+        assert_success(cp)
+        for name in ("INJECTED", "INJECTED2", "INJECTED3"):
+            hits = glob_files_in_session(name) + ([name] if os.path.exists(name) else [])
+            assert not hits, f"command injection via batch environment: {hits}"

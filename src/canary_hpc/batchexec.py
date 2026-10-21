@@ -19,6 +19,7 @@ import hpc_connect.futures
 
 import canary
 from _canary.util import json_helper
+from _canary.util.envtransport import pack_environment
 from _canary.util.multiprocessing import SimpleQueue
 
 from .walltime import WallTimeError
@@ -549,6 +550,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         submit_args = self.scheduler_args(batch)
         estimated = batch.wall_limit(submit_args=submit_args)
         self._warn_if_wall_too_short(batch, submit_args, batch.wall_limit(submit_args=[]))
+        # hpc-connect backends write `export NAME="value"` without escaping, so
+        # values containing quotes, `$`, backticks, backslashes or newlines would
+        # break the script or execute commands.  Ship those encoded instead.
+        variables = pack_environment(variables)
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
