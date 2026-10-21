@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 from typing import Sequence
 
-from _canary.subcommands.base import CanarySubcommand
+from _canary.cli.base import CanarySubcommand
 from _canary.util import logging
 from _canary.util.filesystem import working_dir
 from _canary.util.pytest_runner import PytestResult

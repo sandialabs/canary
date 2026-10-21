@@ -205,7 +205,7 @@ get_testcase = get_job
 
 _LAZY_IMPORTS: dict[str, tuple[str, str | None]] = {
     # name -> (module_path, attribute_in_module); attribute None imports the module itself
-    "CanarySubcommand": ("_canary.subcommands.base", "CanarySubcommand"),
+    "CanarySubcommand": ("_canary.cli.base", "CanarySubcommand"),
     "CanaryReporter": ("_canary.reporters.reporter", "CanaryReporter"),
     "CanaryPluginManager": ("_canary.plugins.pluginmanager", "CanaryPluginManager"),
     "Collector": ("_canary.generation.collect", "Collector"),

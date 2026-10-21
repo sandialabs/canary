@@ -584,7 +584,7 @@ def test_run_wipe_recreates_workspace_at_path(chdir_tmp):
 def test_rm_command_rejects_missing_path(chdir_tmp):
     import argparse
 
-    from _canary.subcommands.rm import RemoveWorkspace
+    from _canary.cli.rm import RemoveWorkspace
 
     ws = Workspace.create(chdir_tmp)
     rc = RemoveWorkspace().execute(argparse.Namespace(rm_path=str(chdir_tmp / "nope")))

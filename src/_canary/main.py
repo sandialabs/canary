@@ -25,8 +25,8 @@ from .util.rich import colorize
 from .util.rich import set_color_when
 
 if TYPE_CHECKING:
+    from .cli.base import CanarySubcommand
     from .config.argparsing import Parser
-    from .subcommands.base import CanarySubcommand
 
 
 reraise: bool = False

@@ -17,11 +17,11 @@ from typing import TypedDict
 import hpc_connect
 
 import canary
+from _canary.cli.run import Run
 from _canary.execution.runtest import Runner
 from _canary.execution.testexec import ExecutionSpace
 from _canary.history import HistoryStore
 from _canary.resource_pool import ResourcePool
-from _canary.subcommands.run import Run
 from _canary.util import cpu_count
 from _canary.util.multiprocessing import SimpleQueue
 

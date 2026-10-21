@@ -11,6 +11,7 @@ from typing import Type
 import pluggy
 
 if TYPE_CHECKING:
+    from ..cli.base import CanarySubcommand
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..core.job import Job
@@ -24,7 +25,6 @@ if TYPE_CHECKING:
     from ..select import RuntimeSelector
     from ..select import Selector
     from ..session.workspace import Session
-    from ..subcommands.base import CanarySubcommand
     from .pluginmanager import CanaryPluginManager
 
 

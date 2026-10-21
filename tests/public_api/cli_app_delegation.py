@@ -42,7 +42,7 @@ FACADE_ROUTED_COMMANDS = {
 def test_clean_subcommand_uses_app_facade(modname, expected):
     import _canary.app as app
 
-    module = importlib.import_module(f"_canary.subcommands.{modname}")
+    module = importlib.import_module(f"_canary.cli.{modname}")
 
     imported = getattr(module, "app", None)
     assert imported is not None and getattr(imported, "__name__", None) == "_canary.app", (
@@ -55,7 +55,7 @@ def test_clean_subcommand_uses_app_facade(modname, expected):
 @pytest.mark.parametrize("modname", sorted(FACADE_ROUTED_COMMANDS))
 def test_clean_subcommand_does_not_call_workspace_directly(modname):
     """Guard against reintroducing a direct ``Workspace.load``/``.create`` call."""
-    module = importlib.import_module(f"_canary.subcommands.{modname}")
+    module = importlib.import_module(f"_canary.cli.{modname}")
     source = inspect.getsource(module)
 
     assert "Workspace.load(" not in source, f"{modname} should route load through app"
@@ -81,7 +81,7 @@ NO_DIRECT_DB_COMMANDS = {
 @pytest.mark.parametrize("modname", sorted(NO_DIRECT_DB_COMMANDS))
 def test_migrated_subcommand_does_not_touch_the_database_directly(modname):
     """Guard against reintroducing raw ``workspace.db`` access in a migrated command."""
-    module = importlib.import_module(f"_canary.subcommands.{modname}")
+    module = importlib.import_module(f"_canary.cli.{modname}")
     source = inspect.getsource(module)
 
     assert ".db." not in source, (

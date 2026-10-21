@@ -80,7 +80,7 @@ class Generator:
         pm.done()
         self.validate(irs)
         pm = logger.progress_monitor("[bold]Resolving[/] test spec dependencies")
-        self.specs = resolve(irs)
+        self.specs = self.resolve(irs)
         self.ready = True
         pm.done()
         config.pluginmanager.hook.canary_generate_modifyitems(generator=self)
@@ -91,16 +91,13 @@ class Generator:
 
         # Detect duplicate tests and exec paths
         pm = logger.progress_monitor("[bold]Searching[/] for duplicated tests")
-        counts: dict[str, dict[str, int]] = {}
+        counts: dict[str, int] = {}
         for spec in specs:
-            idc = counts.setdefault("id", {})
-            idc[spec.id] = idc.get(spec.id, 0) + 1
-            epc = counts.setdefault("exec_path", {})
-            epc[str(spec.exec_path)] = epc.get(str(spec.exec_path), 0) + 1
+            counts[spec.id] = counts.get(spec.id, 0) + 1
 
-        duplicates: dict[str, list["JobSpecIR | JobSpec"]] = {}
-        duplicate_ids = {id for id, count in counts.get("id", {}).items() if count > 1}
+        duplicate_ids = {id for id, count in counts.items() if count > 1}
         if duplicate_ids:
+            duplicates: dict[str, list["JobSpecIR | JobSpec"]] = {}
             for id in duplicate_ids:
                 duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
             logger.error("Duplicate test IDs generated for the following test cases")
@@ -114,13 +111,24 @@ class Generator:
                     )
             raise ValueError("Duplicate test IDs in test suite")
 
-        duplicates.clear()
-        duplicate_eps = {ep for ep, count in counts.get("exec_path", {}).items() if count > 1}
-        for ep in duplicate_eps:
-            duplicates.setdefault(ep, []).extend([_ for _ in specs if str(_.exec_path) == ep])
+        pm.done()
+        return None
+
+    def resolve(self, arg_specs: list["JobSpecIR | JobSpec"]) -> list["JobSpec"]:
+        specs = resolve(arg_specs)
+        counts: dict[str, int] = {}
+        for spec in specs:
+            counts[str(spec.exec_path)] = counts.get(str(spec.exec_path), 0) + 1
+        dup_exec_paths = {ep for ep, count in counts.items() if count > 1}
+        if dup_exec_paths:
+            duplicates: dict[str, list["JobSpecIR | JobSpec"]] = {}
+            for exec_path in dup_exec_paths:
+                duplicates.setdefault(exec_path, []).extend(
+                    [_ for _ in specs if _.exec_path == exec_path]
+                )
             logger.error("Duplicate test exec paths generated for the following test cases")
-            for ep, dspecs in duplicates.items():
-                logger.error(f"{ep}:")
+            for exec_path, dspecs in duplicates.items():
+                logger.error(f"{exec_path}:")
                 for spec in dspecs:
                     logger.log(
                         logging.EMIT,
@@ -128,9 +136,7 @@ class Generator:
                         extra={"prefix": ""},
                     )
             raise ValueError("Duplicate test exec paths in test suite")
-
-        pm.done()
-        return None
+        return specs
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:

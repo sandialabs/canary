@@ -32,7 +32,7 @@ LAZY_ONLY_MODULES = frozenset(
         "_canary.execution.runtest",
         "_canary.execution.queue_executor",
         "_canary.reporters.reporter",
-        "_canary.subcommands.run",
+        "_canary.cli.run",
     }
 )
 

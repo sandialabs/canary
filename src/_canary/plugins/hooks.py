@@ -519,7 +519,7 @@ def query_execute_job(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query job``."""
     if getattr(args, "query_subcmd", None) != "job":
         return None
-    from ..subcommands.query import _exec_job
+    from ..cli.query import _exec_job
 
     return _exec_job(args)
 
@@ -529,7 +529,7 @@ def query_execute_session(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query session``."""
     if getattr(args, "query_subcmd", None) != "session":
         return None
-    from ..subcommands.query import _exec_session
+    from ..cli.query import _exec_session
 
     return _exec_session(args)
 
@@ -539,7 +539,7 @@ def query_execute_sessions(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query sessions``."""
     if getattr(args, "query_subcmd", None) != "sessions":
         return None
-    from ..subcommands.query import _exec_sessions
+    from ..cli.query import _exec_sessions
 
     return _exec_sessions(args)
 
@@ -549,7 +549,7 @@ def query_execute_db(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query db``."""
     if getattr(args, "query_subcmd", None) != "db":
         return None
-    from ..subcommands.query import _exec_db
+    from ..cli.query import _exec_db
 
     return _exec_db(args)
 
@@ -559,7 +559,7 @@ def query_execute_jobs(args: "argparse.Namespace") -> "int | None":
     """Handle ``canary query jobs``."""
     if getattr(args, "query_subcmd", None) != "jobs":
         return None
-    from ..subcommands.query import _exec_jobs
+    from ..cli.query import _exec_jobs
 
     return _exec_jobs(args)
 

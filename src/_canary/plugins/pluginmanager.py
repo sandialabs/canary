@@ -63,9 +63,9 @@ class CanaryPluginManager(pluggy.PluginManager):
             warnings.warn(f"Failed to load developer plugin from {dev_dir!r}: {exc}", stacklevel=2)
 
     def register_builtins(self):
+        from .. import cli
         from .. import reporters
         from .. import select
-        from .. import subcommands
         from ..execution import launcher
         from ..execution import runtest
         from ..generation import collect
@@ -76,7 +76,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         from . import hooks
         from . import user_execspace
 
-        for subcommand in subcommands.plugins:
+        for subcommand in cli.plugins:
             name = subcommand.__name__.split(".")[-1].lower()
             self.register(subcommand, name=f"command.{name}")
         for p in reporters.plugins:

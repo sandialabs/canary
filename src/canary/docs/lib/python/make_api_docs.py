@@ -222,7 +222,7 @@ def make_api_docs(prefix: str):
             "_canary.reporters.markdown": ["type"],
             "_canary.reporters.reporter": ["type"],
         },
-        no_index_modules=["_canary.resource_pool.rpool", "_canary.subcommands.status"],
+        no_index_modules=["_canary.resource_pool.rpool", "_canary.cli.status"],
     )
 
     maker.add_package("canary", canary, skip_dirs=["examples"], skip_modules=["directives"])

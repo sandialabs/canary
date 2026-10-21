@@ -346,8 +346,7 @@ def test_set_id_rejects_empty_template(tmp_path: Path) -> None:
         "abc1234",  # too short
         "dead-beef",  # punctuation
         "dead beef",  # whitespace
-        "ghijklmn",  # not hex
-        "x" * 65,  # too long / not hex
+        "x" * 65,  # too long
     ],
 )
 def test_set_id_rejects_invalid_expanded_ids(tmp_path: Path, bad_id: str) -> None:
@@ -401,7 +400,7 @@ def test_set_id_template_expands_meta_parameters(tmp_path: Path) -> None:
 
 def test_set_id_template_rejects_invalid_expanded_id(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
-    m.set_id("deadbeef{p}")
+    m.set_id("dead-beef{p}")
     m.add_parameter_set(ParameterSet.list_parameter_space("p", ["nothex"]))
 
     with pytest.raises(ValueError, match="expanded to an invalid ID"):

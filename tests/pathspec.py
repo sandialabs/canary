@@ -7,9 +7,9 @@ import json
 import os
 
 import canary
+from _canary.cli.run import PathSpec
+from _canary.cli.run import ReadPathsFromFile
 from _canary.session.workspace import Workspace
-from _canary.subcommands.run import PathSpec
-from _canary.subcommands.run import ReadPathsFromFile
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
 

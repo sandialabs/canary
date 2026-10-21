@@ -229,7 +229,7 @@ def ensure_command_reference() -> None:
     Generates command reference pages if they don't exist, or if
     CANARY_DOCS_REGENERATE_COMMANDS is set.
     """
-    from _canary.subcommands import make_commands_docs
+    from _canary.cli import make_commands_docs
 
     user_dir = Path(docs_source_dir) / "user"
     command_dir = user_dir / "commands"

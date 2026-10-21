@@ -322,7 +322,7 @@ def test_create_ir_with_environment_modification(tmp_path, monkeypatch):
 
     ctestfile = tmp_path / "CTestTestfile.cmake"
     ctestfile.write_text("")
-    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin")
     ir = ctg.create_ir(
         file_root=tmp_path,
         file_path="CTestTestfile.cmake",
@@ -340,7 +340,10 @@ def test_create_ir_with_environment_modification(tmp_path, monkeypatch):
     spec = ir.finalize({})
     job = Job(spec=spec, workspace=ExecutionSpace(root=tmp_path / "ws", path=Path(spec.exec_path)))
     assert job.variables["L"] == "a;b;z"
-    assert job.variables["PATH"] == f"{job.workspace.dir}:/opt/x/bin:/usr/bin"
+    assert (
+        job.variables["PATH"]
+        == f"{job.workspace.dir}:/opt/x/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin"
+    )
 
 
 def test_parse_environment_ignores_malformed_entries():

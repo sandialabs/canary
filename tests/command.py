@@ -12,23 +12,23 @@ import pytest
 import yaml
 
 import canary
+from _canary.cli import learn as learn_mod
+from _canary.cli.config import show_config
+from _canary.cli.describe import Describe
+from _canary.cli.find import Find
+from _canary.cli.learn import CAPABILITY_HELP_QUERY
+from _canary.cli.learn import SKILL_HELP_QUERY
+from _canary.cli.learn import Learn
+from _canary.cli.learn import build_capabilities_tree
+from _canary.cli.learn import build_skills_tree
+from _canary.cli.learn import list_capability_paths
+from _canary.cli.learn import list_skill_paths
+from _canary.cli.location import Location
+from _canary.cli.log import Log
+from _canary.cli.query import Query
+from _canary.cli.status import Status
+from _canary.cli.tree import Tree
 from _canary.session.workspace import Workspace
-from _canary.subcommands import learn as learn_mod
-from _canary.subcommands.config import show_config
-from _canary.subcommands.describe import Describe
-from _canary.subcommands.find import Find
-from _canary.subcommands.learn import CAPABILITY_HELP_QUERY
-from _canary.subcommands.learn import SKILL_HELP_QUERY
-from _canary.subcommands.learn import Learn
-from _canary.subcommands.learn import build_capabilities_tree
-from _canary.subcommands.learn import build_skills_tree
-from _canary.subcommands.learn import list_capability_paths
-from _canary.subcommands.learn import list_skill_paths
-from _canary.subcommands.location import Location
-from _canary.subcommands.log import Log
-from _canary.subcommands.query import Query
-from _canary.subcommands.status import Status
-from _canary.subcommands.tree import Tree
 from _canary.util.filesystem import working_dir
 from _canary.util.query_data import query_json
 from _canary.util.query_data import skill_to_markdown
@@ -279,7 +279,7 @@ def test_location_4(setup):
 
 
 def test_log(setup, monkeypatch):
-    from _canary.subcommands import log as log_module
+    from _canary.cli import log as log_module
 
     monkeypatch.setattr(log_module, "page_text", lambda text: None)
 
@@ -352,8 +352,8 @@ def test_status(setup):
 
 def test_status_summary_always_printed(setup, capsys):
     """status always prints a summary line even when everything passes."""
+    from _canary.cli.status import _build_summary_line
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.status import _build_summary_line
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -381,12 +381,12 @@ def test_status_failed_flag(setup, capsys):
 
 def test_status_build_summary_all_pass():
     """_build_summary_line returns green all-pass message when every row passes."""
+    from _canary.cli.status import _build_summary_line
     from _canary.core.job import JobPhase
     from _canary.core.job import JobState
     from _canary.core.status import Category
     from _canary.core.status import Outcome
     from _canary.core.status import Status as _Status
-    from _canary.subcommands.status import _build_summary_line
 
     def _make_row(outcome):
         return {
@@ -403,12 +403,12 @@ def test_status_build_summary_all_pass():
 
 def test_status_build_summary_reports_running():
     """_build_summary_line counts RUNNING jobs distinctly (not as 'not run')."""
+    from _canary.cli.status import _build_summary_line
     from _canary.core.job import JobPhase
     from _canary.core.job import JobState
     from _canary.core.status import Category
     from _canary.core.status import Outcome
     from _canary.core.status import Status as _Status
-    from _canary.subcommands.status import _build_summary_line
 
     rows = [
         {
@@ -429,10 +429,10 @@ def test_status_build_summary_reports_running():
 
 def test_status_filter_by_status_running_char():
     """filter_by_status honors the (r)unning report char."""
+    from _canary.cli.status import filter_by_status
     from _canary.core.job import JobPhase
     from _canary.core.job import JobState
     from _canary.core.status import Status as _Status
-    from _canary.subcommands.status import filter_by_status
 
     running = {"status": _Status(), "state": JobState(phase=JobPhase.RUNNING)}
     pending = {"status": _Status(), "state": JobState(phase=JobPhase.PENDING)}
@@ -569,7 +569,7 @@ def test_query_job_list_keys(setup, capsys):
 
 
 def test_query_job_all_runs_returns_list(setup, capsys):
-    from _canary.subcommands.query import _exec_job
+    from _canary.cli.query import _exec_job
 
     args = argparse.Namespace(
         query_subcmd="job",
@@ -590,7 +590,7 @@ def test_query_job_all_runs_returns_list(setup, capsys):
 
 
 def test_query_job_all_runs_has_expected_fields(setup, capsys):
-    from _canary.subcommands.query import _exec_job
+    from _canary.cli.query import _exec_job
 
     args = argparse.Namespace(
         query_subcmd="job",
@@ -616,7 +616,7 @@ def test_query_job_all_runs_has_expected_fields(setup, capsys):
 
 def test_query_job_env_returns_dict(setup, capsys):
     """env.json is written by SubprocessLauncher and queryable as 'env'."""
-    from _canary.subcommands.query import _exec_job
+    from _canary.cli.query import _exec_job
 
     args = argparse.Namespace(
         query_subcmd="job",
@@ -641,7 +641,7 @@ def test_query_job_env_returns_dict(setup, capsys):
 
 def test_query_job_env_single_key(setup, capsys):
     """env.KEY drills into the env snapshot exactly like measurements.KEY."""
-    from _canary.subcommands.query import _exec_job
+    from _canary.cli.query import _exec_job
 
     args = argparse.Namespace(
         query_subcmd="job",
@@ -1545,7 +1545,7 @@ def test_query_batch_via_query_command(batch_setup, capsys):
 
 
 def test_parse_where_string_equality():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("status.category==PASS")
     assert pred({"status": {"category": "PASS"}}) is True
@@ -1553,7 +1553,7 @@ def test_parse_where_string_equality():
 
 
 def test_parse_where_string_inequality():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("status.outcome!=FAILED")
     assert pred({"status": {"outcome": "SUCCESS"}}) is True
@@ -1561,7 +1561,7 @@ def test_parse_where_string_inequality():
 
 
 def test_parse_where_numeric_greater_than():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.queue_wait>3600")
     assert pred({"timings": {"queue_wait": 5348.0}}) is True
@@ -1570,7 +1570,7 @@ def test_parse_where_numeric_greater_than():
 
 
 def test_parse_where_numeric_greater_than_or_equal():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.queue_wait>=3600")
     assert pred({"timings": {"queue_wait": 3600.0}}) is True
@@ -1579,7 +1579,7 @@ def test_parse_where_numeric_greater_than_or_equal():
 
 
 def test_parse_where_numeric_less_than():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.running<60")
     assert pred({"timings": {"running": 45.5}}) is True
@@ -1587,7 +1587,7 @@ def test_parse_where_numeric_less_than():
 
 
 def test_parse_where_numeric_less_than_or_equal():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.running<=60")
     assert pred({"timings": {"running": 60.0}}) is True
@@ -1596,7 +1596,7 @@ def test_parse_where_numeric_less_than_or_equal():
 
 def test_parse_where_none_value_ordered_returns_false():
     """None timing values (batch not yet finished) should never pass ordered predicates."""
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     for op in (">", "<", ">=", "<="):
         pred = _parse_where(f"timings.queue_wait{op}3600")
@@ -1606,21 +1606,21 @@ def test_parse_where_none_value_ordered_returns_false():
 
 
 def test_parse_where_none_value_equality_returns_false():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.queue_wait==3600")
     assert pred({"timings": {"queue_wait": None}}) is False
 
 
 def test_parse_where_none_value_inequality_returns_true():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     pred = _parse_where("timings.queue_wait!=3600")
     assert pred({"timings": {"queue_wait": None}}) is True
 
 
 def test_parse_where_invalid_expression_raises():
-    from _canary.subcommands.query import _parse_where
+    from _canary.cli.query import _parse_where
 
     with pytest.raises(ValueError, match="Invalid --where expression"):
         _parse_where("not_valid_expression")
@@ -1741,7 +1741,7 @@ def test_batch_scheduler_state_function():
 
 def _run_query_jobs(setup_ns, *, session=None, where=None, terse=False, digest=False):
     """Helper: call _exec_jobs via Query().execute() dispatch."""
-    from _canary.subcommands.query import _exec_jobs
+    from _canary.cli.query import _exec_jobs
 
     args = argparse.Namespace(
         query_subcmd="jobs", session=session, where=where, terse=terse, digest=digest, watch=None
@@ -1861,8 +1861,8 @@ def test_query_jobs_terse_outputs_single_line(setup, capsys):
 
 def test_batch_timings_fallback_no_batch_dir(setup):
     """_batch_timings_for_job returns all -1.0 when there is no batches/ directory."""
+    from _canary.cli.query import _batch_timings_for_job
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _batch_timings_for_job
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -1883,8 +1883,8 @@ def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
     """_batch_timings_for_job returns batch-level timings when a matching batch.lock exists."""
     import json as _json
 
+    from _canary.cli.query import _batch_timings_for_job
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _batch_timings_for_job
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -1978,8 +1978,8 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
     """last_activity is populated from the owning batch.lock when present."""
     import json as _json
 
+    from _canary.cli.query import _exec_jobs
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _exec_jobs
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2029,8 +2029,8 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
 
 def test_batch_last_activity_no_batch_dir(setup):
     """_batch_last_activity_for_job returns None when no batches/ dir exists."""
+    from _canary.cli.query import _batch_last_activity_for_job
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _batch_last_activity_for_job
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2040,7 +2040,7 @@ def test_batch_last_activity_no_batch_dir(setup):
 
 def test_watch_all_terminal_detects_terminal():
     """_all_terminal returns True when all entries have non-NONE status categories."""
-    from _canary.subcommands.query import _all_terminal
+    from _canary.cli.query import _all_terminal
 
     all_pass = [{"status": {"category": "PASS"}}, {"status": {"category": "PASS"}}]
     assert _all_terminal(all_pass) is True
@@ -2048,7 +2048,7 @@ def test_watch_all_terminal_detects_terminal():
 
 def test_watch_all_terminal_detects_none_status():
     """_all_terminal returns False when any entry has NONE category."""
-    from _canary.subcommands.query import _all_terminal
+    from _canary.cli.query import _all_terminal
 
     mixed = [{"status": {"category": "PASS"}}, {"status": {"category": "NONE"}}]
     assert _all_terminal(mixed) is False
@@ -2056,7 +2056,7 @@ def test_watch_all_terminal_detects_none_status():
 
 def test_watch_all_terminal_empty_list():
     """_all_terminal returns False (keep polling) for an empty result set."""
-    from _canary.subcommands.query import _all_terminal
+    from _canary.cli.query import _all_terminal
 
     assert _all_terminal([]) is False
 
@@ -2071,19 +2071,19 @@ def test_watch_loop_exits_when_terminal(setup, capsys):
         nonlocal call_count
         call_count += 1
         # Build the real job list from the DB
+        from _canary.cli.query import _watch_loop  # noqa: F401
         from _canary.session.workspace import Workspace
-        from _canary.subcommands.query import _watch_loop  # noqa: F401
 
         workspace = Workspace.load()
-        from _canary.subcommands.query import _db_results_for_session
-        from _canary.subcommands.query import _row_to_job_entry
+        from _canary.cli.query import _db_results_for_session
+        from _canary.cli.query import _row_to_job_entry
 
         session_dir = workspace.sessions_dir / setup.session.name
         rows = _db_results_for_session(workspace, setup.session.name)
         out = [_row_to_job_entry(workspace, row) for row in rows]
         return out, 0
 
-    from _canary.subcommands.query import _watch_loop
+    from _canary.cli.query import _watch_loop
 
     with working_dir(setup.results_path), canary.config.override():
         rc = _watch_loop(0.0, fetch=counting_fetch, terse=False, digest=False)
@@ -2093,13 +2093,13 @@ def test_watch_loop_exits_when_terminal(setup, capsys):
 
 def test_watch_loop_terse_emits_ndjson(setup, capsys):
     """In --terse mode, _watch_loop emits one compact JSON line per cycle."""
+    from _canary.cli.query import _watch_loop
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _watch_loop
 
     def fetch():
         workspace = Workspace.load()
-        from _canary.subcommands.query import _db_results_for_session
-        from _canary.subcommands.query import _row_to_job_entry
+        from _canary.cli.query import _db_results_for_session
+        from _canary.cli.query import _row_to_job_entry
 
         rows = _db_results_for_session(workspace, setup.session.name)
         out = [_row_to_job_entry(workspace, row) for row in rows]
@@ -2118,13 +2118,13 @@ def test_watch_loop_terse_emits_ndjson(setup, capsys):
 
 def test_watch_loop_digest_mode(setup, capsys):
     """In --digest mode, _watch_loop emits one 'name CATEGORY' line per job per cycle."""
+    from _canary.cli.query import _watch_loop
     from _canary.session.workspace import Workspace
-    from _canary.subcommands.query import _watch_loop
 
     def fetch():
         workspace = Workspace.load()
-        from _canary.subcommands.query import _db_results_for_session
-        from _canary.subcommands.query import _row_to_job_entry
+        from _canary.cli.query import _db_results_for_session
+        from _canary.cli.query import _row_to_job_entry
 
         rows = _db_results_for_session(workspace, setup.session.name)
         out = [_row_to_job_entry(workspace, row) for row in rows]
@@ -2142,7 +2142,7 @@ def test_watch_loop_digest_mode(setup, capsys):
 
 def test_watch_flag_in_query_jobs_namespace(setup, capsys):
     """--watch=0.0 in args namespace exits immediately for a completed session."""
-    from _canary.subcommands.query import _exec_jobs
+    from _canary.cli.query import _exec_jobs
 
     args = argparse.Namespace(
         query_subcmd="jobs",
@@ -2169,7 +2169,7 @@ def test_watch_flag_in_query_jobs_namespace(setup, capsys):
 
 def test_watch_flag_in_query_session_namespace(setup, capsys):
     """--watch=0.0 on session subcommand expands jobs and exits on terminal state."""
-    from _canary.subcommands.query import _exec_session
+    from _canary.cli.query import _exec_session
 
     args = argparse.Namespace(
         query_subcmd="session",

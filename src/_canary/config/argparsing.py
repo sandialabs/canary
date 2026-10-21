@@ -23,7 +23,7 @@ from ..util.rich import colorize
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
-    from ..subcommands.base import CanarySubcommand
+    from ..cli.base import CanarySubcommand
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -291,7 +291,7 @@ def identity(arg):
 
 
 def known_commands() -> list[str]:
-    from ..subcommands import plugins
+    from ..cli import plugins
 
     return [p.__name__.split(".")[-1] for p in plugins]
 
