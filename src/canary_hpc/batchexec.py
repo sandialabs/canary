@@ -208,13 +208,8 @@ class HPCConnectRunner:
 
             len(job.required_resources())
 
-        Canary is not doing sophisticated placement here. The batch allocation
-        must be large enough to run the largest node-shaped job in the batch.
         """
-        node_count = 1
-        for job in batch.jobs:
-            node_count = max(node_count, len(job.required_resources()))
-        return node_count
+        return batch.nodes_required()
 
     def resource_totals(self, batch: "TestBatch") -> dict[str, int]:
         """Total resource counts the batch allocation must provide.

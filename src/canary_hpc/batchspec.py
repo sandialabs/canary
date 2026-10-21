@@ -191,6 +191,19 @@ class TestBatch(BaseJob):
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
+    def nodes_required(self) -> int:
+        """Return number of scheduler nodes required to run jobs in this batch.
+
+        With the NodeRequest layout, node count is explicit:
+
+            len(job.required_resources())
+
+        """
+        node_count = 1
+        for job in self:
+            node_count = max(node_count, len(job.required_resources()))
+        return node_count
+
     def on_finish(self, at: float | None = None) -> None:
         super().on_finish(at=at)
 
