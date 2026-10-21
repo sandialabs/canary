@@ -14,6 +14,7 @@ from typing import Literal
 import yaml
 from schema import Optional
 from schema import Schema
+from schema import SchemaError
 
 from ..plugins.pluginmanager import CanaryPluginManager
 from ..resource_pool.manager import ResourceManager
@@ -111,7 +112,7 @@ class Config:
             self._consider_persisted_plugin(plugin, base=base)
         self.pluginmanager.hook.canary_addconfig(config=self)
         self.resource_manager.clear()
-        self.data = config_schema.validate(data)
+        self.data = validate_config(data, source="the merged configuration")
         if self.get("debug"):
             logging.set_level(logging.DEBUG)
 
@@ -314,7 +315,7 @@ class Config:
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
-                data = config_schema.validate(fd)
+                data = validate_config(fd, source=f"configuration file {args.config_file}")
 
         logging.set_level(logging.INFO)
         if args.color is not None:
@@ -393,19 +394,77 @@ def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     data: dict[str, Any] = {}
     file = get_scope_filename(scope)
     if file is not None and (fd := read_config_file(file)):
+        # Validate each scope on its own so errors name the file they came from.
+        validate_config(fd, source=f"{scope} configuration file {file}")
         data.update(fd)
     return data
 
 
+class ConfigError(ValueError):
+    """A configuration file, environment variable or option is invalid.
+
+    The message names the offending source so users can fix it without a
+    traceback.
+    """
+
+
+def _schema_message(e: SchemaError) -> str:
+    """Return the most specific, de-duplicated message from a :class:`SchemaError`."""
+    msgs = [m for m in (e.errors or []) if m] or [m for m in (e.autos or []) if m]
+    if not msgs:
+        return str(e)
+    seen: list[str] = []
+    for m in msgs:
+        m = str(m).strip().rstrip(":").strip()
+        if m and m not in seen:
+            seen.append(m)
+    return seen[0] if len(seen) == 1 else ": ".join(seen[-3:])
+
+
+def validate_config(data: Any, *, source: str) -> dict[str, Any]:
+    """Validate *data* against the config schema, raising :class:`ConfigError` naming *source*."""
+    try:
+        return config_schema.validate(data)
+    except SchemaError as e:
+        raise ConfigError(f"Invalid configuration in {source}: {_schema_message(e)}") from None
+
+
 def read_config_file(file: str | Path) -> dict[str, Any] | None:
-    """Load configuration settings from ``file``"""
+    """Load configuration settings from ``file``.
+
+    Returns ``None`` if the file does not exist or is empty.
+
+    Raises:
+        ConfigError: If the file is not valid YAML or its top level is not a mapping.
+    """
     file = Path(file)
     if not file.exists():
         return None
     fd: Any
-    with open(file) as fh:
-        fd = yaml.safe_load(fh)
-        return fd[TOP_LEVEL_CONFIG_KEY] if TOP_LEVEL_CONFIG_KEY in fd else fd
+    try:
+        with open(file) as fh:
+            fd = yaml.safe_load(fh)
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Invalid YAML in configuration file {file}: {e}") from None
+    except OSError as e:
+        raise ConfigError(f"Cannot read configuration file {file}: {e}") from None
+    if fd is None:
+        return None
+    if not isinstance(fd, dict):
+        raise ConfigError(
+            f"Invalid configuration file {file}: expected a mapping at the top level, "
+            f"got {type(fd).__name__}"
+        )
+    if TOP_LEVEL_CONFIG_KEY in fd:
+        fd = fd[TOP_LEVEL_CONFIG_KEY]
+        if fd is None:
+            return None
+        if not isinstance(fd, dict):
+            raise ConfigError(
+                f"Invalid configuration file {file}: '{TOP_LEVEL_CONFIG_KEY}' must be a "
+                f"mapping, got {type(fd).__name__}"
+            )
+    return fd
 
 
 def get_scope_filename(scope: str) -> Path:
@@ -510,7 +569,14 @@ def workspace_anchor() -> Path | None:
 def get_env_scope() -> dict[str, Any]:
     variables = {key: var for key, var in os.environ.items() if key.startswith("CANARY_")}
     if variables:
-        variables = environment_variable_schema.validate(variables)
+        try:
+            variables = environment_variable_schema.validate(variables)
+        except SchemaError as e:
+            names = ", ".join(f"{k}={v!r}" for k, v in sorted(variables.items()) if k in str(e))
+            where = f" ({names})" if names else ""
+            raise ConfigError(
+                f"Invalid canary environment variable{where}: {_schema_message(e)}"
+            ) from None
     return variables
 
 

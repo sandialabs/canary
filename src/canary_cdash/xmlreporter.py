@@ -13,6 +13,7 @@ from typing import IO
 from typing import Any
 
 import canary
+from _canary.util import xmlsafe
 from _canary.util.compression import compress_str
 from _canary.util.compression import targz_compress
 from _canary.util.string import truncate_middle
@@ -189,7 +190,7 @@ class CDashXMLReporter:
             self.meta["OSPlatform"] = os_platform
         el = doc.createElement("Site")
         for key, value in self.meta.items():
-            el.setAttribute(key, str("" if value is None else value))
+            xmlsafe.set_attribute(el, key, "" if value is None else value)
         doc.appendChild(el)
         return doc
 
@@ -210,7 +211,7 @@ class CDashXMLReporter:
         if subproject_labels:
             for label in subproject_labels:
                 subproject = doc.createElement("Subproject")
-                subproject.setAttribute("name", label)
+                xmlsafe.set_attribute(subproject, "name", label)
                 add_text_node(subproject, "Label", label)
                 root.appendChild(subproject)  # type: ignore
 
@@ -367,7 +368,7 @@ class CDashXMLReporter:
             t = canary.time.timestamp()
             s = canary.time.strftimestamp(t)
             el = doc.createElement("Note")
-            el.setAttribute("Name", str(name))
+            xmlsafe.set_attribute(el, "Name", name)
             add_text_node(el, "Time", t)
             add_text_node(el, "DateTime", s)
             add_text_node(el, "Text", text)
@@ -385,6 +386,8 @@ class CDashXMLReporter:
 
     @staticmethod
     def validate_xml(file: str, *, schema: str) -> None:
+        # Always verify well-formedness: CDash rejects the whole file otherwise.
+        xdom.parse(file)  # nosec B318 - parsing our own output
         try:
             import xmlschema  # type: ignore
         except ImportError:
@@ -406,25 +409,24 @@ class CDashXMLReporter:
 
 
 def add_text_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:
+    """Append ``<name>value</name>``; characters invalid in XML 1.0 are removed."""
     child = xdom.Element(name)
     child.ownerDocument = parent.ownerDocument
     for key, val in attrs.items():
-        child.setAttribute(key, str(val))
-    text = xdom.Text()
-    text.data = str(value)
-    child.appendChild(text)
+        xmlsafe.set_attribute(child, key, val)
+    child.appendChild(xmlsafe.text_node(parent.ownerDocument, value))
     parent.appendChild(child)
     return
 
 
 def add_cdata_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:
+    """Append ``<name><![CDATA[value]]></name>``, splitting at ``]]>`` and sanitizing."""
     child = xdom.Element(name)
     child.ownerDocument = parent.ownerDocument
     for key, val in attrs.items():
-        child.setAttribute(key, str(val))
-    text = xdom.CDATASection()
-    text.data = str(value)
-    child.appendChild(text)
+        xmlsafe.set_attribute(child, key, val)
+    for node in xmlsafe.cdata_nodes(parent.ownerDocument, value):
+        child.appendChild(node)
     parent.appendChild(child)
     return
 
@@ -456,10 +458,10 @@ def add_named_measurement(
         else:
             type = "text/string"
         add_text_node(measurement, "Value", arg)
-    measurement.setAttribute("name", name)
+    xmlsafe.set_attribute(measurement, "name", name)
     measurement.setAttribute("type", type)
     for key, val in attrs.items():
-        measurement.setAttribute(key, str(val))
+        xmlsafe.set_attribute(measurement, key, val)
     parent.appendChild(measurement)
 
 

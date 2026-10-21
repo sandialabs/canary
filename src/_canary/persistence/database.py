@@ -24,8 +24,10 @@ rerun strategies to decide which specs to re-execute without loading full
 """
 
 import collections
+import contextlib
 import dataclasses
 import datetime
+import os
 import sqlite3
 import threading
 import time
@@ -35,6 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Collection
+from typing import Iterator
 
 from ..core import jobspec
 from ..core.job import JobPhase
@@ -95,6 +98,7 @@ class WorkspaceDatabase:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+        self._ready = False
 
     @classmethod
     def create(cls, path: Path) -> "WorkspaceDatabase":
@@ -123,16 +127,32 @@ class WorkspaceDatabase:
         This method is idempotent — calling it multiple times has no effect if
         the connection is already open.  The schema is created with
         ``CREATE TABLE IF NOT EXISTS`` guards so it is safe to call on an
-        existing database.
+        existing database.  Schema creation and any legacy migrations run in a
+        single ``BEGIN IMMEDIATE`` transaction and the schema version is
+        recorded in ``PRAGMA user_version``.
+
+        Raises:
+            DatabaseVersionError: If the database was written by a newer canary
+                with a schema version this release does not understand.
         """
+        if self._connection is not None and self._ready:
+            return
         if self._connection is None:
-            self._connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-            self._connection.execute("PRAGMA journal_mode=MEMORY;")
-            self._connection.execute("PRAGMA synchronous=OFF;")
-            self._connection.execute("PRAGMA foreign_keys=ON;")
-        assert self._connection is not None
+            conn = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
+            try:
+                _configure_connection(conn)
+            except BaseException:
+                conn.close()
+                raise
+            self._connection = conn
         conn = self._connection
-        with conn:
+        version = _get_user_version(conn)
+        if version > SCHEMA_VERSION:
+            raise DatabaseVersionError(
+                f"{self.path} has schema version {version}, but this version of canary only "
+                f"understands up to version {SCHEMA_VERSION}.  Upgrade canary to use this workspace."
+            )
+        with self.transaction(immediate=True):
             sql = "CREATE TABLE IF NOT EXISTS specs (spec_id TEXT PRIMARY KEY, data TEXT NOT NULL)"
             conn.execute(sql)
 
@@ -201,24 +221,7 @@ class WorkspaceDatabase:
                 """
             )
 
-            sql = """CREATE TABLE IF NOT EXISTS results (
-            spec_id TEXT,
-            spec_name TEXT,
-            spec_fullname TEXT,
-            file_root TEXT,
-            file_path TEXT,
-            session TEXT,
-            workspace TEXT,
-            job_state TEXT,
-            status_category TEXT,
-            status_outcome TEXT,
-            status_reason TEXT,
-            status_code INTEGER,
-            timekeeper TEXT,
-            measurements TEXT,
-            PRIMARY KEY (spec_id, session)
-            )"""
-            conn.execute(sql)
+            conn.execute(RESULTS_DDL.format(name="results"))
 
             sql = "CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)"
             conn.execute(sql)
@@ -226,10 +229,62 @@ class WorkspaceDatabase:
             sql = "CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)"
             conn.execute(sql)
 
-        _migrate_results_status_state_to_job_state(self)
-        _migrate_status_category_skip_to_notrun(self)
-        _migrate_status_category_cancel_to_aborted(self)
+            # Bring legacy ``results`` tables up to the current layout.  This runs
+            # inside the same transaction as table creation so a crash part-way
+            # through leaves the database exactly as it was.
+            _migrate_results_table(conn)
+            _migrate_status_category_skip_to_notrun(conn)
+            _migrate_status_category_cancel_to_aborted(conn)
+            if _get_user_version(conn) != SCHEMA_VERSION:
+                conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        self._ready = True
         return
+
+    @contextlib.contextmanager
+    def transaction(self, immediate: bool = False) -> Iterator[sqlite3.Connection]:
+        """Run the enclosed statements atomically.
+
+        The connection is opened in autocommit mode (``isolation_level=None``),
+        where Python's ``with conn:`` does **not** start a transaction.  This
+        helper issues an explicit ``BEGIN`` and commits on success or rolls back
+        on *any* exception (including :class:`KeyboardInterrupt`), so partially
+        applied writes are never persisted.
+
+        Nested use is supported: inner blocks join the outermost transaction.
+
+        Args:
+            immediate: Acquire the write lock up front (``BEGIN IMMEDIATE``).  Use
+                for read-modify-write sequences to avoid ``SQLITE_BUSY`` upgrades.
+        """
+        conn = self._connection
+        if conn is None:
+            self.connect()
+            conn = self._connection
+        assert conn is not None
+        if conn.in_transaction:
+            yield conn
+            return
+        conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+        try:
+            yield conn
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+        else:
+            conn.commit()
+
+    @contextlib.contextmanager
+    def _temp_ids(self, ids: "Collection[str]") -> Iterator[sqlite3.Connection]:
+        """Populate a temporary ``_ids`` table inside a transaction; always dropped."""
+        with self.transaction() as conn:
+            conn.execute("DROP TABLE IF EXISTS temp._ids")
+            conn.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
+            try:
+                conn.executemany("INSERT OR IGNORE INTO _ids(id) VALUES (?)", ((_,) for _ in ids))
+                yield conn
+            finally:
+                conn.execute("DROP TABLE IF EXISTS temp._ids")
 
     def put_specs(self, specs: list[JobSpec]) -> None:
         """Upsert *specs* into the database, replacing any previous blobs.
@@ -255,9 +310,7 @@ class WorkspaceDatabase:
             for future in as_completed(futures):
                 data.append(future.result())
 
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids(id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_[0],) for _ in data))
+        with self._temp_ids([row[0] for row in data]):
             # 2. Bulk insert/update specs
             self.connection.executemany(
                 """
@@ -268,6 +321,7 @@ class WorkspaceDatabase:
                 ((row[0], row[1]) for row in data),
             )
 
+            self.connection.execute("DROP TABLE IF EXISTS temp._meta")
             self.connection.execute("CREATE TEMP TABLE _meta(spec_id TEXT, source TEXT, view TEXT)")
 
             self.connection.executemany(
@@ -295,9 +349,6 @@ class WorkspaceDatabase:
                 self.connection.executemany(
                     "INSERT INTO spec_deps(spec_id, dep_id) VALUES (?, ?)", graph
                 )
-
-            # 5. Drop temporary table
-            self.connection.execute("DROP TABLE _ids")
 
     def resolve_spec_id(self, id: str) -> str | None:
         """Expand a short spec ID prefix to its full 64-character ID.
@@ -382,13 +433,10 @@ class WorkspaceDatabase:
         self.resolve_spec_ids(ids)
         upstream = self.get_upstream_ids(ids)
         load_ids = upstream.union(ids)
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in load_ids))
+        with self._temp_ids(load_ids):
             rows = self.connection.execute(
                 "SELECT * FROM specs where spec_id IN (SELECT id FROM _ids)"
             ).fetchall()
-            self.connection.execute("DROP TABLE _ids")
         specs = self._reconstruct_specs(rows)
         if include_upstreams:
             return specs
@@ -460,13 +508,10 @@ class WorkspaceDatabase:
         if not ids:
             return self.connection.execute("SELECT spec_id, dep_id FROM spec_deps").fetchall()
         rows: list[tuple[str, str]]
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in ids))
+        with self._temp_ids(ids):
             rows = self.connection.execute(
                 "SELECT spec_id, dep_id FROM spec_deps WHERE spec_id IN (SELECT id FROM _ids)"
             ).fetchall()
-            self.connection.execute("DROP TABLE _ids")
         return rows
 
     @staticmethod
@@ -517,7 +562,7 @@ class WorkspaceDatabase:
           timekeeper, measurements
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        with self.connection:
+        with self.transaction():
             self.connection.executemany(sql, rows)
 
     def reconcile_running_jobs(
@@ -551,7 +596,7 @@ class WorkspaceDatabase:
 
         o = Outcome.factory(outcome)
         category: Category = get_category(o)
-        with self.connection:
+        with self.transaction():
             cursor = self.connection.execute(
                 """
                 UPDATE results
@@ -589,7 +634,7 @@ class WorkspaceDatabase:
         """
         rows: list[tuple[str, ...]]
         if not ids:
-            with self.connection:
+            with self.transaction():
                 rows = self.connection.execute(
                     """SELECT *
                     FROM results AS r
@@ -604,9 +649,7 @@ class WorkspaceDatabase:
         self.resolve_spec_ids(ids)
         upstream = self.get_upstream_ids(ids) if include_upstreams else set()
         load_ids = list(upstream.union(ids))
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((_,) for _ in load_ids))
+        with self._temp_ids(load_ids):
             rows = self.connection.execute(
                 """
                 SELECT r.*
@@ -619,7 +662,6 @@ class WorkspaceDatabase:
                 )
                 """
             ).fetchall()
-            self.connection.execute("DROP TABLE _ids")
         return {row[0]: self._reconstruct_results(row) for row in rows}
 
     def get_result_history(self, id: str) -> list:
@@ -762,7 +804,7 @@ class WorkspaceDatabase:
         """
         if tag == ":all:":
             raise ValueError("Tag name :all: is reserved")
-        with self.connection:
+        with self.transaction():
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
             self.connection.execute("DELETE FROM selection_meta WHERE tag = ?", (tag,))
             self.connection.executemany(
@@ -783,7 +825,7 @@ class WorkspaceDatabase:
 
     def rename_selection(self, old: str, new: str) -> None:
         """Rename selection *old* to *new* (updates both ``selections`` and ``selection_meta``)."""
-        with self.connection:
+        with self.transaction():
             self.connection.execute("UPDATE selections SET tag = ? WHERE tag = ?", (new, old))
 
     def get_selection_metadata(self, tag: str) -> dict[str, Any]:
@@ -820,7 +862,7 @@ class WorkspaceDatabase:
         Returns:
             Always ``True`` (the deletion is unconditional).
         """
-        with self.connection:
+        with self.transaction():
             self.connection.execute("DELETE FROM selections WHERE tag = ?", (tag,))
         return True
 
@@ -848,9 +890,7 @@ class WorkspaceDatabase:
         """
         if not seeds:
             return set()
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((s,) for s in seeds))
+        with self._temp_ids(seeds):
             sql = """
                 WITH RECURSIVE
                 downstream(id) AS (
@@ -865,7 +905,6 @@ class WorkspaceDatabase:
                 SELECT DISTINCT id FROM downstream
             """
             rows = self.connection.execute(sql).fetchall()
-            self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
 
     def get_upstream_ids(self, seeds: Collection[str]) -> set[str]:
@@ -875,9 +914,7 @@ class WorkspaceDatabase:
         """
         if not seeds:
             return set()
-        with self.connection:
-            self.connection.execute("CREATE TEMP TABLE _ids (id TEXT PRIMARY KEY)")
-            self.connection.executemany("INSERT INTO _ids(id) VALUES (?)", ((s,) for s in seeds))
+        with self._temp_ids(seeds):
             sql = """
                 WITH RECURSIVE
                 upstream(id) AS (
@@ -892,7 +929,6 @@ class WorkspaceDatabase:
                 SELECT DISTINCT id FROM upstream
             """
             rows = self.connection.execute(sql).fetchall()
-            self.connection.execute("DROP TABLE _ids")
         return {r[0] for r in rows}
 
     def get_dependency_graph(self) -> dict[str, list[str]]:
@@ -1142,122 +1178,306 @@ class NotASelection(Exception):
         super().__init__(f"No selection for tag {tag!r} found")
 
 
+# Connection configuration
+
+
+#: Schema version stored in ``PRAGMA user_version``.  Bump this and add a step to
+#: :func:`_migrate_results_table` (or a new migration) whenever the on-disk
+#: layout changes.  Version 0 means "unversioned" (any database written before
+#: versioning was introduced); such databases are migrated in place on open.
+SCHEMA_VERSION = 1
+
+#: Current column layout of the ``results`` table.
+RESULTS_COLUMNS = (
+    "spec_id",
+    "spec_name",
+    "spec_fullname",
+    "file_root",
+    "file_path",
+    "session",
+    "workspace",
+    "job_state",
+    "status_category",
+    "status_outcome",
+    "status_reason",
+    "status_code",
+    "timekeeper",
+    "measurements",
+)
+
+RESULTS_DDL = """CREATE TABLE IF NOT EXISTS {name} (
+            spec_id TEXT,
+            spec_name TEXT,
+            spec_fullname TEXT,
+            file_root TEXT,
+            file_path TEXT,
+            session TEXT,
+            workspace TEXT,
+            job_state TEXT,
+            status_category TEXT,
+            status_outcome TEXT,
+            status_reason TEXT,
+            status_code INTEGER,
+            timekeeper TEXT,
+            measurements TEXT,
+            PRIMARY KEY (spec_id, session)
+            )"""
+
+
+class DatabaseVersionError(RuntimeError):
+    """Raised when a workspace database was written by a newer, incompatible canary."""
+
+
+def _get_user_version(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+#: Filesystem types on which SQLite's WAL mode is unsafe (no shared-memory
+#: coherence across clients).  On these we fall back to a rollback journal.
+_NETWORK_FS_TYPES = frozenset(
+    ("nfs", "nfs4", "lustre", "gpfs", "cifs", "smbfs", "smb3", "fuse.sshfs", "beegfs", "panfs")
+)
+
+
+def _filesystem_type(path: Path) -> str | None:
+    """Best-effort lookup of the filesystem type containing *path* (Linux only)."""
+    try:
+        target = os.path.realpath(path)
+        best: tuple[int, str] | None = None
+        with open("/proc/mounts") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mnt = parts[1].replace("\\040", " ")
+                if target == mnt or target.startswith(mnt.rstrip("/") + "/"):
+                    if best is None or len(mnt) > best[0]:
+                        best = (len(mnt), parts[2])
+        return best[1] if best else None
+    except OSError:
+        return None
+
+
+def _journal_mode_for(path: Path) -> str:
+    """Pick a crash-safe journal mode for the database at *path*.
+
+    ``CANARY_DB_JOURNAL_MODE`` overrides the choice (e.g. ``WAL``, ``DELETE``,
+    ``TRUNCATE``).  Otherwise WAL is used on local filesystems and a
+    ``DELETE`` rollback journal on network/parallel filesystems, where WAL's
+    shared-memory index is not supported.  ``MEMORY`` and ``OFF`` are never
+    chosen automatically because a crash mid-transaction can corrupt the file.
+    """
+    if mode := os.getenv("CANARY_DB_JOURNAL_MODE"):
+        return mode.upper()
+    fstype = _filesystem_type(path.parent if path.parent.exists() else Path.cwd())
+    if fstype is not None and fstype.lower() in _NETWORK_FS_TYPES:
+        return "DELETE"
+    return "WAL"
+
+
+def _configure_connection(conn: sqlite3.Connection) -> None:
+    """Apply durability/integrity pragmas to a freshly opened connection.
+
+    The previous configuration (``journal_mode=MEMORY`` + ``synchronous=OFF``)
+    could corrupt the database if canary was killed while a write transaction
+    was in progress -- a routine event under batch schedulers and CI.  We now
+    use a durable journal (WAL locally, DELETE on network filesystems) with
+    ``synchronous=NORMAL`` (WAL) / ``FULL`` (rollback journal).
+    """
+    path = Path(conn.execute("PRAGMA database_list").fetchone()[2] or ".")
+    requested = _journal_mode_for(path)
+    try:
+        mode = str(conn.execute(f"PRAGMA journal_mode={requested};").fetchone()[0]).upper()
+    except sqlite3.OperationalError as e:
+        # Switching modes needs an exclusive lock; if another process holds the
+        # database open, keep whatever (persistent) mode is already in effect.
+        logger.debug("Could not set journal_mode=%s: %s", requested, e)
+        mode = str(conn.execute("PRAGMA journal_mode;").fetchone()[0]).upper()
+    if mode == "WAL":
+        conn.execute("PRAGMA synchronous=NORMAL;")
+    else:
+        if mode in ("MEMORY", "OFF"):
+            # Never accept a non-durable journal (e.g. a stale override).
+            mode = str(conn.execute("PRAGMA journal_mode=DELETE;").fetchone()[0]).upper()
+        conn.execute("PRAGMA synchronous=FULL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
+
+
 # Backward compatibility
 
 
-def _migrate_results_status_state_to_job_state(db: WorkspaceDatabase) -> None:
-    """One-time migration: rename the legacy ``status_state`` column to ``job_state``.
-
-    Databases created before the ``job_state`` rename keep a ``status_state``
-    column.  This function detects that condition and performs an in-place
-    schema migration using a rename-and-copy strategy so that no result data is
-    lost.  Safe to call on already-migrated databases (no-op).
-    """
-    conn = db.connection
-    row = conn.execute("SELECT 1 FROM results").fetchone()
-    if row is None:
-        return
-    info = conn.execute("PRAGMA table_info(results)").fetchall()
-    cols = {r[1] for r in info}
-    if "status_state" not in cols:
-        return
-    if "job_state" in cols:
-        # inconsistent schema; bail or handle separately
-        logger.warning("results has both status_state and job_state; skipping migration")
-        return
-    logger.info("DB migration: results.status_state -> results.job_state")
-    with conn:
-        # 1) rename old table out of the way
-        conn.execute("ALTER TABLE results RENAME TO results_old")
-
-        # 2) create new results table with job_state
-        conn.execute(
-            """
-            CREATE TABLE results (
-              spec_id TEXT,
-              spec_name TEXT,
-              spec_fullname TEXT,
-              file_root TEXT,
-              file_path TEXT,
-              session TEXT,
-              workspace TEXT,
-
-              job_state TEXT,
-
-              status_category TEXT,
-              status_outcome TEXT,
-              status_reason TEXT,
-              status_code INTEGER,
-
-              submitted REAL,
-              started REAL,
-              finished REAL,
-              measurements TEXT,
-
-              PRIMARY KEY (spec_id, session)
-            )
-            """
-        )
-
-        # 3) copy data with transformation
-        conn.execute(
-            """
-            INSERT INTO results (
-              spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
-              job_state, status_category, status_outcome, status_reason, status_code,
-              submitted, started, finished, measurements
-            )
-            SELECT
-              spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
-              CASE status_state
+#: Legacy ``status_state`` values mapped to :class:`JobPhase` values.
+_LEGACY_STATE_SQL = """CASE {col}
                 WHEN 'COMPLETE' THEN 'DONE'
                 WHEN 'NOTRUN'   THEN 'DONE'
+                WHEN 'DONE'     THEN 'DONE'
                 WHEN 'READY'    THEN 'PENDING'
                 WHEN 'PENDING'  THEN 'PENDING'
+                WHEN 'STAGING'  THEN 'STAGING'
                 WHEN 'RUNNING'  THEN 'RUNNING'
+                WHEN 'FINISHING' THEN 'FINISHING'
                 ELSE 'PENDING'
-              END AS job_state,
-              status_category, status_status, status_reason, status_code,
-              submitted, started, finished, measurements
-            FROM results_old
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)")
-        conn.execute("DROP TABLE results_old")
+              END"""
 
 
-def _migrate_status_category_skip_to_notrun(db: "WorkspaceDatabase") -> None:
+def _iso_to_epoch(value: Any) -> float:
+    """Convert a legacy ISO-8601 (or numeric) timestamp to a Unix epoch float."""
+    if value is None:
+        return -1.0
+    if isinstance(value, (int, float)):
+        return float(value) if value > 0 else -1.0
+    text = str(value).strip()
+    if not text or text.upper() == "NA":
+        return -1.0
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        return datetime.datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return -1.0
+
+
+def _legacy_timekeeper(submitted: Any, started: Any, finished: Any, duration: Any = None) -> str:
+    """Build a serialized :class:`Timekeeper` from legacy start/finish columns."""
+    from ..core.timekeeper import Timekeeper
+
+    sub = _iso_to_epoch(submitted)
+    start = _iso_to_epoch(started)
+    fin = _iso_to_epoch(finished)
+    if fin < 0 and start > 0 and duration not in (None, "", "NA"):
+        try:
+            d = float(duration)
+            if d >= 0:
+                fin = start + d
+        except (TypeError, ValueError):
+            pass
+    tk = Timekeeper()
+    if sub > 0:
+        tk.open(at=sub)
+    if start > 0:
+        tk.start(at=start)
+    if fin > 0:
+        tk.stop(at=fin)
+        tk.close(at=fin)
+    return json.dumps_min(tk)
+
+
+def _migrate_results_table(conn: sqlite3.Connection) -> None:
+    """Rebuild a legacy ``results`` table into the current layout.
+
+    Several historical layouts exist in the wild:
+
+    * ``status_state``/``status_status`` + ``started_on``/``finished_on``/``duration`` (ISO text)
+    * the same with an additional ``submitted_on``
+    * ``status_state``/``status_status`` + ``submitted``/``started``/``finished`` (REAL)
+    * ``job_state``/``status_outcome`` + ``submitted``/``started``/``finished`` (REAL)
+    * current: ``job_state``/``status_outcome`` + ``timekeeper`` (JSON)
+
+    Detection is by column set (never by row count), and the rebuild is done
+    with the current DDL so the result is always readable by
+    :meth:`WorkspaceDatabase._reconstruct_results`.  Must be called inside a
+    transaction; a failure part-way through rolls back to the original table.
+    Safe to call on an already-current database (no-op).
+    """
+    assert conn.in_transaction, "_migrate_results_table must run inside a transaction"
+    info = conn.execute("PRAGMA table_info(results)").fetchall()
+    cols = [r[1] for r in info]
+    colset = set(cols)
+    if not cols or (colset >= set(RESULTS_COLUMNS) and "status_state" not in colset):
+        return
+
+    def pick(*names: str) -> str | None:
+        for name in names:
+            if name in colset:
+                return name
+        return None
+
+    state_col = pick("job_state", "status_state")
+    outcome_col = pick("status_outcome", "status_status")
+    if state_col is None:
+        raise sqlite3.DatabaseError(f"Unrecognized legacy results schema: {cols}")
+    logger.info("DB migration: rebuilding legacy results table (%s)", ", ".join(cols))
+
+    def col(name: str, default: str = "NULL") -> str:
+        return name if name in colset else default
+
+    state_expr = _LEGACY_STATE_SQL.format(col=state_col)
+    outcome_expr = outcome_col or "'NONE'"
+    has_tk = "timekeeper" in colset
+    sub_col = pick("submitted", "submitted_on")
+    start_col = pick("started", "started_on")
+    fin_col = pick("finished", "finished_on")
+    dur_col = pick("duration")
+
+    select_cols = [
+        "spec_id",
+        col("spec_name", "''"),
+        col("spec_fullname", "''"),
+        col("file_root", "''"),
+        col("file_path", "''"),
+        "session",
+        col("workspace", "''"),
+        state_expr,
+        col("status_category", "'NONE'"),
+        outcome_expr,
+        col("status_reason", "''"),
+        col("status_code", "-1"),
+        "timekeeper" if has_tk else "NULL",
+        col("measurements", "'{}'"),
+        sub_col or "NULL",
+        start_col or "NULL",
+        fin_col or "NULL",
+        dur_col or "NULL",
+    ]
+    rows = conn.execute(f"SELECT {', '.join(select_cols)} FROM results").fetchall()  # nosec B608
+
+    conn.execute("DROP TABLE IF EXISTS results_new")
+    conn.execute(RESULTS_DDL.format(name="results_new"))
+    placeholders = ", ".join("?" for _ in RESULTS_COLUMNS)
+    insert = (
+        f"INSERT OR REPLACE INTO results_new ({', '.join(RESULTS_COLUMNS)}) VALUES ({placeholders})"  # nosec B608
+    )
+
+    def convert(row: tuple[Any, ...]) -> tuple[Any, ...]:
+        base = list(row[:14])
+        if not base[12]:
+            base[12] = _legacy_timekeeper(row[14], row[15], row[16], row[17])
+        if not base[13]:
+            base[13] = "{}"
+        if base[11] is None:
+            base[11] = -1
+        return tuple(base)
+
+    conn.executemany(insert, (convert(r) for r in rows))
+    conn.execute("DROP TABLE results")
+    conn.execute("ALTER TABLE results_new RENAME TO results")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_results_id ON results (spec_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_results_session ON results (session)")
+
+
+def _migrate_status_category_skip_to_notrun(conn: sqlite3.Connection) -> None:
     """One-time migration: rename the ``status_category`` value ``'SKIP'`` to ``'NOTRUN'``.
 
     Databases written before the ``Category.SKIP`` → ``Category.NOTRUN`` rename
-    store the string ``'SKIP'`` in ``results.status_category``.  This function
-    rewrites those rows in-place.  Safe to call on already-migrated databases
-    (no-op when no ``'SKIP'`` rows remain).
+    store the string ``'SKIP'`` in ``results.status_category``.  Safe to call on
+    already-migrated databases (no-op when no ``'SKIP'`` rows remain).
     """
-    conn = db.connection
     row = conn.execute("SELECT 1 FROM results WHERE status_category = 'SKIP' LIMIT 1").fetchone()
     if row is None:
         return
     logger.info("DB migration: results.status_category 'SKIP' -> 'NOTRUN'")
-    with conn:
-        conn.execute("UPDATE results SET status_category = 'NOTRUN' WHERE status_category = 'SKIP'")
+    conn.execute("UPDATE results SET status_category = 'NOTRUN' WHERE status_category = 'SKIP'")
 
 
-def _migrate_status_category_cancel_to_aborted(db: "WorkspaceDatabase") -> None:
+def _migrate_status_category_cancel_to_aborted(conn: sqlite3.Connection) -> None:
     """One-time migration: rename the ``status_category`` value ``'CANCEL'`` to ``'ABORTED'``.
 
-    Databases written before the ``Category.CANCEL`` → ``Category.ABORTED`` rename
-    store the string ``'CANCEL'`` in ``results.status_category``.  This function
-    rewrites those rows in-place.  Safe to call on already-migrated databases
-    (no-op when no ``'CANCEL'`` rows remain).
+    Safe to call on already-migrated databases (no-op when no ``'CANCEL'`` rows remain).
     """
-    conn = db.connection
     row = conn.execute("SELECT 1 FROM results WHERE status_category = 'CANCEL' LIMIT 1").fetchone()
     if row is None:
         return
     logger.info("DB migration: results.status_category 'CANCEL' -> 'ABORTED'")
-    with conn:
-        conn.execute(
-            "UPDATE results SET status_category = 'ABORTED' WHERE status_category = 'CANCEL'"
-        )
+    conn.execute("UPDATE results SET status_category = 'ABORTED' WHERE status_category = 'CANCEL'")

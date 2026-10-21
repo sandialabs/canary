@@ -30,6 +30,7 @@ from .. import config
 from ..core.error import TestTimedOut
 from ..plugins.hookspec import hookimpl
 from ..util import logging
+from ..util import procutil
 from ..util.module import load as load_module
 from ..util.shell import source_rcfile
 
@@ -103,37 +104,21 @@ class SubprocessLauncher(Launcher):
 
                     if time.time() > deadline:
                         # kill whole process group (requires start_new_session=True)
-                        pid = mp.pid
-                        if isinstance(pid, int):
-                            pgid: int | None
-                            try:
-                                pgid = os.getpgid(pid)
-                            except Exception:
-                                pgid = None
-
-                            # TERM then KILL
-                            try:
-                                if pgid is not None:
-                                    os.killpg(pgid, signal.SIGTERM)
-                                else:
-                                    os.kill(pid, signal.SIGTERM)
-                            except Exception:
-                                pass  # nosec B110
-
-                            time.sleep(0.1)
-
-                            try:
-                                if pgid is not None:
-                                    os.killpg(pgid, signal.SIGKILL)
-                                else:
-                                    os.kill(pid, signal.SIGKILL)
-                            except Exception:
-                                pass  # nosec B110
-
+                        mp.kill_tree()
                         raise TestTimedOut(f"Test exceeded timeout of {wall_limit:.1f} s")
 
                     time.sleep(0.1)
             finally:
+                # Whatever got us here (normal return, timeout, KeyboardInterrupt,
+                # SIGTERM converted to an exception, or an unexpected error), the
+                # test must not outlive this call.  The test runs in its own
+                # session so it never sees terminal signals; reap the whole group.
+                try:
+                    if mp.popen is not None and mp.poll() is None:
+                        logger.debug(f"Terminating still-running test {job.display_name()}")
+                        mp.kill_tree()
+                except BaseException:  # pragma: no cover - never mask the original error
+                    logger.debug("Failed to terminate test process", exc_info=True)
                 stdout.close()
                 if not isinstance(stderr, int):
                     stderr.close()
@@ -320,36 +305,34 @@ class MeasuredProcess:
         except Exception as e:
             logger.debug("MeasuredProcess.kill failed pid=%s: %s", self.pid, e)
 
-    def shutdown(self, signum: int, grace_period: float = 0.05) -> None:
-        """
-        Best-effort: send `signum`, wait `grace_period`, then SIGKILL if still alive.
+    def kill_tree(self, signum: int = signal.SIGTERM, grace_period: float | None = None) -> None:
+        """Terminate the process, its process group and all descendants, then reap it.
+
+        Sends *signum* to the whole tree, waits up to *grace_period* seconds
+        (default :func:`~_canary.util.procutil.kill_grace_period`), escalates to
+        ``SIGKILL`` and finally waits on the child so no zombie is left.
         """
         if self.popen is None:
             return
-        self.sample_metrics()
-
         pid = self.pid
         if pid is None:
             return
-
         try:
-            os.kill(pid, signum)
-        except Exception as e:
-            logger.debug("MeasuredProcess.shutdown os.kill(%s,%s) failed: %s", pid, signum, e)
-            try:
-                self.terminate()
-            except Exception:  # nosec B110
-                pass
-
-        time.sleep(grace_period)
+            procutil.kill_session_leader(pid, grace=grace_period)
+        except Exception as e:  # pragma: no cover - fall back to direct kill
+            logger.debug("kill_tree(%s) failed: %s", pid, e)
+            self.kill()
         try:
-            if self.poll() is None:
-                self.kill()
-        except Exception:
-            try:
-                self.kill()
-            except Exception:  # nosec B110
-                pass
+            self.popen.wait(timeout=5.0)
+        except Exception as e:  # pragma: no cover
+            logger.debug("wait after kill_tree failed pid=%s: %s", pid, e)
+
+    def shutdown(self, signum: int, grace_period: float | None = None) -> None:
+        """Best-effort: send `signum` to the whole process tree, then SIGKILL if still alive."""
+        if self.popen is None:
+            return
+        self.sample_metrics()
+        self.kill_tree(signum, grace_period)
 
     # --- measurement API ---------------------------------------------------
 
@@ -455,17 +438,39 @@ def _write_env_json(job: "Job") -> None:
 
     Called from :meth:`SubprocessLauncher.context` immediately after
     :meth:`~_canary.core.job.Job.set_runtime_env` has injected the job's variables
-    into ``os.environ`` — capturing exactly the environment the test subprocess
-    will inherit.  Written best-effort; failures are logged at DEBUG and do not
+    into ``os.environ`` -- capturing the environment the test subprocess will
+    inherit.  Written best-effort; failures are logged at DEBUG and do not
     affect job execution.
+
+    The file lives in the test's working directory, which is commonly on a
+    shared filesystem, published as a CI artifact, or linked into reports, so:
+
+    * values of secret-looking variables (tokens, passwords, keys, ...; see
+      :func:`_canary.util.envtransport.is_secret_name`) are replaced with
+      ``<redacted>``, and
+    * the file is created with mode ``0600``.
+
+    Set ``CANARY_ENV_JSON=0`` to disable writing it altogether.
 
     The file is a plain ``{"VAR": "value", ...}`` JSON object, queryable via
     ``canary query job <id> env`` or ``canary query job <id> env.KEY``.
     """
     import json as _json
 
+    from ..util.envtransport import redact
+    from ..util.misc import boolean
+
+    if not boolean(os.getenv("CANARY_ENV_JSON", "1")):
+        return
     try:
-        with job.workspace.openfile("env.json", "w") as fh:
-            _json.dump(dict(os.environ), fh, sort_keys=True, indent=2)
+        path = job.workspace.joinpath("env.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):  # pragma: no cover - non-POSIX
+            pass
+        with os.fdopen(fd, "w") as fh:
+            _json.dump(redact(dict(os.environ)), fh, sort_keys=True, indent=2)
     except Exception:
         logger.debug("Failed to write env.json for %s", job.id[:7], exc_info=True)

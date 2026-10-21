@@ -480,3 +480,30 @@ def test_allocate_partition_counts_equal_partitions_are_balanced() -> None:
     assert sum(c for c in counts if c is not None) == 30
     # Equal partitions should differ by at most one batch.
     assert max(c for c in counts if c is not None) - min(c for c in counts if c is not None) <= 1
+
+
+def test_gpu_bound_batch_upper_bound_accounts_for_gpus(tmp_path, monkeypatch):
+    """8 x 60 s one-GPU jobs on a 1-GPU node serialize: the bound must cover 480 s."""
+    import _canary.core.job
+    import _canary.core.jobspec
+    import _canary.execution.testexec
+
+    monkeypatch.setattr(batching, "estimate_runtime", lambda job, store=None: 60.0)
+    ws = _canary.execution.testexec.ExecutionSpace(tmp_path, Path("session"))
+    jobs = []
+    for i in range(8):
+        spec = _canary.core.jobspec.JobSpec(
+            file_root=tmp_path,
+            file_path=tmp_path / "g.pyt",
+            family="g",
+            id=_job_id(f"g.{i}"),
+            parameters={"i": i, "cpus": 1, "gpus": 1},
+            timeout=600.0,
+        )
+        jobs.append(_canary.core.job.Job(spec=spec, workspace=ws))
+    spec = batching_spec(layout="flat", nodes="any", count=1)
+    (batch,) = batching.batch_jobs(
+        jobs=jobs, width=16, spec=spec, resource_capacity={"cpus": 16, "gpus": 1}, node_count=1
+    )
+    assert batch.runtime_upper_bound is not None
+    assert batch.runtime_upper_bound >= 480.0  # previously 90 s

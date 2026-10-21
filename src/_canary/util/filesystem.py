@@ -395,8 +395,10 @@ def working_dir(dirname: str | pathlib.Path, create: bool = False) -> Generator[
 
     orig_dir = os.getcwd()
     os.chdir(dirname)
-    yield
-    os.chdir(orig_dir)
+    try:
+        yield
+    finally:
+        os.chdir(orig_dir)
 
 
 def mkdirp(*paths: PathLike, mode: int | None = None) -> None:

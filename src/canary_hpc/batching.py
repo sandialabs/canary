@@ -521,9 +521,20 @@ def batch_jobs(
         # dependency chain interleaving full-width and shared tasks can exceed
         # it.  Take the max with an exact per-batch simulation so the wall-limit
         # input is never below the real makespan.
-        upper_bound = makespan_upper_bound(scheduled_batch.tasks, width=width, workers=workers)
-        simulated = simulate_makespan(scheduled_batch.tasks, width=width, workers=workers)
-        upper_bound = max(upper_bound, simulated)
+        # Both account for non-CPU resources (e.g. GPUs): ignoring them sized
+        # GPU-bound batches for CPU-parallel execution and the scheduler killed
+        # them before their (serialized) jobs could finish.
+        upper_bound = makespan_upper_bound(
+            scheduled_batch.tasks, width=width, workers=workers, resource_capacity=resource_capacity
+        )
+        if len(scheduled_batch.tasks) <= _EXACT_SIMULATION_LIMIT:
+            simulated = simulate_makespan(
+                scheduled_batch.tasks,
+                width=width,
+                workers=workers,
+                resource_capacity=resource_capacity,
+            )
+            upper_bound = max(upper_bound, simulated)
         batchspec = BatchSpec(
             layout=spec.layout,
             jobs=spec_jobs,
@@ -545,6 +556,11 @@ def batch_jobs(
         batchspecs.append(batchspec)
 
     return batchspecs
+
+
+#: Batches larger than this skip the exact per-batch simulation and rely on the
+#: (linear-time, resource-aware) ``makespan_upper_bound`` alone.
+_EXACT_SIMULATION_LIMIT = 20000
 
 
 def normalize_batching_spec(batchspec: BatchingSpec | Mapping[str, Any] | None) -> BatchingSpec:

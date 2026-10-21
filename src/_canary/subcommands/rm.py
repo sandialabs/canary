@@ -29,10 +29,20 @@ class RemoveWorkspace(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser"):
         parser.add_argument(
-            "rm_path", metavar="PATH", default=os.getcwd(), help="Remove workspace at PATH"
+            "rm_path",
+            metavar="PATH",
+            nargs="?",
+            default=None,
+            help="Remove the workspace located at PATH (the directory containing .canary, "
+            "or the .canary directory itself) [default: .].  Parent directories are "
+            "never searched.",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        if p := Workspace.remove(start=Path(args.rm_path)):
+        path = Path(args.rm_path) if args.rm_path else Path(os.getcwd())
+        if not path.exists():
+            logger.error(f"{path}: no such file or directory")
+            return 1
+        if p := Workspace.remove(start=path):
             logger.info(f"[bold]Removed[/] workspace at {p}")
         return 0

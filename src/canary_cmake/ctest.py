@@ -212,6 +212,14 @@ def create_ir(
             deps.append(canary.DependencySelector(pattern=d, expects="+", when="on_success"))
     if environment is not None:
         kwargs.setdefault("environment", {}).update(environment)
+    if environment_modification is not None:
+        # Applied after ENVIRONMENT, as ctest does.  Values may reference
+        # ``$NAME``; they are expanded against the job's runtime environment
+        # (see Job.get_environ_from_spec), so path_list_* etc. compose with the
+        # environment the test actually runs in.
+        kwargs.setdefault("environment", {}).update(
+            apply_env_mods(environment_modification, base=kwargs.get("environment"))
+        )
     if disabled:
         kwargs["mask"] = canary.Mask.masked(f"Explicitly disabled in {file_root}/{file_path}")
 
@@ -236,8 +244,6 @@ def create_ir(
         kwargs["exclusive"] = True
     if required_files:
         attributes["required_files"] = required_files
-    if environment_modification is not None:
-        kwargs["variables"] = apply_env_mods(environment_modification)
 
     if timeout is not None:
         kwargs["timeout"] = float(timeout)
@@ -285,27 +291,64 @@ def create_ir(
     return canary.JobSpecIR(**kwargs)  # ty: ignore[missing-argument]
 
 
-def apply_env_mods(mods: list[dict[str, str]]) -> dict[str, str | None]:
+def apply_env_mods(
+    mods: list[dict[str, str]], base: dict[str, str | None] | None = None
+) -> dict[str, str | None]:
+    """Translate CTest ``ENVIRONMENT_MODIFICATION`` operations into environment values.
+
+    Operations are applied in order and compose: each sees the result of earlier
+    operations on the same variable, then the test's ``ENVIRONMENT`` (*base*).
+    Otherwise ``string_*`` operations use the variable's current value in
+    ``os.environ`` and list operations reference ``$NAME``, which is expanded
+    against the runtime environment when the job starts.  ``reset`` drops
+    earlier operations on the variable.  The result maps names to values
+    (``None`` unsets).
+    """
+    base = dict(base or {})
     variables: dict[str, str | None] = {}
+
+    def known(name: str) -> tuple[bool, str | None]:
+        if name in variables:
+            return True, variables[name]
+        if name in base:
+            return True, base[name]
+        return False, None
+
+    def list_op(name: str, value: str, sep: str, append: bool) -> str:
+        found, cur = known(name)
+        if not found:
+            cur = f"${name}"
+        if not cur:
+            return value
+        return f"{cur}{sep}{value}" if append else f"{value}{sep}{cur}"
+
     for em in mods:
-        op, name, value = em["op"], em["name"], em["value"]
+        op, name, value = em["op"], em["name"], em.get("value", "")
+        found, cur = known(name)
+        if not found:
+            cur = os.getenv(name, "")
         match op:
             case "set":
                 variables[name] = value
             case "unset":
                 variables[name] = None
+            case "reset":
+                variables.pop(name, None)
+                base.pop(name, None)
             case "string_append":
-                variables[name] = f"{os.getenv(name, '')}{value}"
+                variables[name] = f"{cur or ''}{value}"
             case "string_prepend":
-                variables[name] = f"{value}{os.getenv(name, '')}"
+                variables[name] = f"{value}{cur or ''}"
             case "path_list_append":
-                variables[name] = f"${name}:{value}"
+                variables[name] = list_op(name, value, ":", append=True)
             case "path_list_prepend":
-                variables[name] = f"{value}:${name}"
+                variables[name] = list_op(name, value, ":", append=False)
             case "cmake_list_append":
-                variables[name] = f"${name};{value}"
+                variables[name] = list_op(name, value, ";", append=True)
             case "cmake_list_prepend":
-                variables[name] = f"{value};${name}"
+                variables[name] = list_op(name, value, ";", append=False)
+            case _:
+                logger.warning(f"Unsupported ENVIRONMENT_MODIFICATION operation {op!r} for {name}")
     return variables
 
 
@@ -419,25 +462,68 @@ def safeint(arg: str) -> None | int:
         return None
 
 
+#: Launchers whose rank/process-count flags determine a test's CPU count.
+_MPI_LAUNCHERS = frozenset(
+    ("mpiexec", "mpirun", "mpiexec.hydra", "orterun", "srun", "jsrun", "aprun", "flux", "prun")
+)
+#: Flags (with a separate value or ``=value``) that give the number of ranks.
+_NP_FLAGS = ("-n", "-np", "--np", "--ntasks", "-c")
+_NP_JOINED = re.compile(r"^(?:--np=|--ntasks=|-np|-n|-c)([0-9]+)$")
+
+
 def parse_np(args: list[str]) -> int | None:
-    iterargs = iter(args)
-    while True:
-        try:
-            arg = next(iterargs)
-        except StopIteration:
+    """Return the process count requested by an MPI launcher in *args*, if any.
+
+    Only the option section of a known MPI launcher (``mpiexec``, ``mpirun``,
+    ``srun``, ``jsrun``, ``flux run``, ...) is examined -- it ends at the first
+    argument that is neither a flag nor a flag's value -- so the launched
+    program's own arguments and ordinary commands such as ``head -n 100 file``
+    or ``sh -c "..."`` are never misread as CPU requests.  For backward
+    compatibility, a bare argument list that starts with a flag (no executable)
+    is examined the same way.  A trailing flag with no value is ignored.
+
+    Launcher options of unknown arity are skipped heuristically (an option is
+    assumed to take the following bare word as its value only when another
+    option follows), so in rare layouts such as ``mpiexec --flag exe -n 5`` the
+    program's own ``-n`` may still be picked up; set the ``PROCESSORS`` test
+    property to be explicit.
+    """
+    if not args:
+        return None
+    start: int | None = None
+    for i, arg in enumerate(args):
+        if os.path.basename(arg) in _MPI_LAUNCHERS:
+            start = i + 1
             break
-        if re.search("^-(n|np|c)$", arg):
-            if i := safeint(next(iterargs)):
-                return i
-        elif re.search("^--np$", arg):
-            if i := safeint(next(iterargs)):
-                return i
-        elif match := re.search("^-(n|np|c)([0-9]+)$", arg):
-            if i := int(match.group(2)):
-                return i
-        elif match := re.search("^--np=([0-9]+)$", arg):
-            if i := int(match.group(1)):
-                return i
+    if start is None:
+        if not args[0].startswith("-"):
+            return None
+        start = 0
+    tokens = args[start:]
+    i = 0
+    while i < len(tokens):
+        arg = tokens[i]
+        if arg == "run" and i == 0 and start > 0 and os.path.basename(args[start - 1]) == "flux":
+            i += 1
+            continue
+        if not arg.startswith("-"):
+            break  # the launched executable: stop
+        if arg in _NP_FLAGS:
+            if i + 1 < len(tokens) and (n := safeint(tokens[i + 1])):
+                return n
+            i += 2
+            continue
+        if match := _NP_JOINED.match(arg):
+            if n := int(match.group(1)):
+                return n
+        elif "=" not in arg and i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+            # An unknown launcher option followed by a bare word: treat the word
+            # as the option's value (e.g. ``--bind-to core``, ``-host a,b``) if
+            # more options follow it; otherwise it is the launched executable.
+            if i + 2 < len(tokens) and tokens[i + 2].startswith("-"):
+                i += 2
+                continue
+        i += 1
     return None
 
 
@@ -538,7 +624,8 @@ def find_cmake():
     out = subprocess.check_output([cmake, "--version"]).decode("utf-8")
     parts = [_.strip() for _ in out.split() if _.split()]
     if parts and parts[0:2] == ["cmake", "version"]:
-        version_parts = tuple([int(_) for _ in parts[2].split(".")])
+        nums = re.findall(r"\d+", parts[2])
+        version_parts = tuple(int(_) for _ in nums[:3]) if nums else (0,)
         if version_parts[:2] <= (3, 20):
             logger.warning("canary ctest integration requires cmake > 3.20")
             return None
@@ -564,7 +651,10 @@ def parse_environment(environment: list[str]) -> dict[str, str]:
     """
     env: dict[str, str] = {}
     for item in environment:
-        key, value = item.split("=", 1)
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            logger.warning(f"Ignoring malformed ENVIRONMENT entry {item!r} (expected NAME=VALUE)")
+            continue
         env[key] = value
     return env
 

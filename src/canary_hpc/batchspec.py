@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import argparse
 import copy
 import dataclasses
 import datetime
@@ -25,9 +24,9 @@ from _canary.execution.testexec import ExecutionSpace
 from _canary.history import estimate_runtime
 from _canary.util.multiprocessing import SimpleQueue
 from _canary.util.serialize import serialize
-from _canary.util.time import time_in_seconds
 
 from .status import BatchStatus
+from .walltime import pinned_wall_seconds
 
 if TYPE_CHECKING:
     from _canary.resource_pool.rpool import NodeRequest
@@ -237,6 +236,27 @@ class TestBatch(BaseJob):
     def total_timeout(self) -> float:
         return self.queue_timeout + self.wall_limit()
 
+    def watchdog_timeout(self) -> float | None:
+        """Worst-case lifetime: scheduler queue wait plus canary's 2x-wall backstop.
+
+        The batch runner enforces both the queue timeout and the run timeout
+        itself (and cancels the scheduler job when they expire); the worker
+        watchdog must not fire before those do, in particular while the batch
+        is still waiting in the scheduler queue.
+        """
+        try:
+            submit_args = self._watchdog_submit_args()
+            wall = float(self.wall_limit(submit_args))
+        except Exception:
+            wall = float(self.wall_limit())
+        return float(self.queue_timeout) + 2.0 * wall
+
+    def _watchdog_submit_args(self) -> "list[str] | None":
+        args: list[str] = list(self.submit_options)
+        if extra := canary.config.getoption("hpc_submit_args"):
+            args.extend(extra)
+        return args or None
+
     def pinned_wall_limit(self, submit_args: "Sequence[str] | None" = None) -> float | None:
         """Return a wall limit pinned by the user with ``--time``/``--time-limit``, if any.
 
@@ -247,13 +267,10 @@ class TestBatch(BaseJob):
         """
         if submit_args is None:
             submit_args = canary.config.getoption("hpc_submit_args")
-        if submit_args:
-            p = argparse.ArgumentParser()
-            p.add_argument("--time", "--time-limit", dest="qtime")
-            a, _ = p.parse_known_args(submit_args)
-            if a.qtime:
-                return time_in_seconds(a.qtime)
-        return None
+        # Shared with batchexec diagnostics so the two can never disagree.  An
+        # invalid value raises WallTimeError rather than being misread (e.g.
+        # ``30:00`` was previously parsed as 2e-6 s).
+        return pinned_wall_seconds(submit_args)
 
     def wall_limit(self, submit_args: "Sequence[str] | None" = None) -> float:
         """Return the scheduler wall limit, in seconds, to request for this batch.

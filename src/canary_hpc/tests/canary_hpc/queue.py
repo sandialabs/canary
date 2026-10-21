@@ -11,6 +11,7 @@ from typing import cast
 
 from _canary.core.job import JobPhase
 from _canary.core.job import JobState
+from _canary.core.status import Outcome
 from _canary.core.status import Status
 from _canary.execution.queue import HeapSlot
 from canary_hpc.queue import ResourceQueue
@@ -21,7 +22,7 @@ class FakeChildJob:
 
     def __init__(self, id: str, *, outcome: str | None = None) -> None:
         self.id = id
-        self.status = Status(outcome=outcome) if outcome is not None else Status()
+        self.status = Status(outcome=Outcome.factory(outcome)) if outcome is not None else Status()
         self.state = JobState(phase=JobPhase.DONE if outcome is not None else JobPhase.PENDING)
         self.saved = False
 

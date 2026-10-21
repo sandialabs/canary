@@ -52,11 +52,26 @@ class ExecutionSpace:
     def dir(self) -> Path:
         return self.root / self.path
 
+    def _check_contained(self) -> None:
+        """Refuse to operate on a directory that resolves outside :attr:`root`.
+
+        Guards destructive operations (create/remove) against job paths that
+        escape the session directory via ``..``, absolute paths, or symlinks.
+        """
+        if self.path.is_absolute():
+            raise ValueError(f"Execution path {self.path} must be relative to {self.root}")
+        root = self.root.resolve()
+        target = self.dir.resolve()
+        if target != root and not target.is_relative_to(root):
+            raise ValueError(f"Execution directory {self.dir} resolves outside of {self.root}")
+
     def create(self, exist_ok: bool = False) -> None:
+        self._check_contained()
         self.dir.mkdir(parents=True, exist_ok=exist_ok)
 
     def remove(self, missing_ok: bool = False) -> None:
         if self.exists():
+            self._check_contained()
             force_remove(self.dir)
         elif not missing_ok:
             raise FileNotFoundError(self.dir)

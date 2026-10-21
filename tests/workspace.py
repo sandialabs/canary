@@ -494,3 +494,99 @@ def test_stale_persisted_plugin_warns_and_does_not_crash(tmp_path, monkeypatch):
     joined = "\n".join(warnings)
     assert "analysis/missing.py" in joined
     assert "totally.bogus.module" in joined
+
+
+# --- destructive operations never act on an ancestor workspace -------------
+
+
+def test_remove_does_not_search_upward(chdir_tmp):
+    root = chdir_tmp / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+    sub = root / "sub" / "dir"
+    sub.mkdir(parents=True)
+
+    assert Workspace.remove(sub) is None
+    assert ws.root.exists(), "ancestor workspace must not be removed"
+
+
+def test_remove_nonexistent_path_does_not_remove_ancestor(chdir_tmp):
+    ws = Workspace.create(chdir_tmp)
+    assert Workspace.remove(chdir_tmp / "typo_dir") is None
+    assert ws.root.exists()
+
+
+def test_remove_accepts_dot_canary_dir(chdir_tmp):
+    root = chdir_tmp / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+    assert Workspace.remove(ws.root) == ws.root
+    assert not ws.root.exists()
+
+
+def test_remove_ignores_untagged_canary_dir(chdir_tmp):
+    root = chdir_tmp / "proj"
+    (root / ".canary").mkdir(parents=True)
+    (root / ".canary" / "keep.txt").write_text("user data")
+    assert Workspace.remove(root) is None
+    assert (root / ".canary" / "keep.txt").exists()
+
+
+def test_remove_outside_cwd(tmp_path, monkeypatch):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    ws = Workspace.create(elsewhere)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    # Previously raised ValueError from Path.relative_to(cwd)
+    assert Workspace.remove(elsewhere) == ws.root
+    assert not ws.root.exists()
+
+
+def test_create_force_in_subdir_keeps_ancestor(chdir_tmp):
+    parent = Workspace.create(chdir_tmp)
+    sub = chdir_tmp / "sub"
+    sub.mkdir()
+    child = Workspace.create(sub, force=True)
+    assert parent.root.exists()
+    assert child.root.exists()
+    # and force really does replace the workspace at exactly that path
+    marker = child.root / "marker"
+    marker.write_text("x")
+    Workspace.create(sub, force=True)
+    assert not marker.exists()
+    assert parent.root.exists()
+
+
+def test_run_wipe_refuses_enclosing_workspace(chdir_tmp):
+    from _canary.app.run import _open_or_create_workspace
+
+    parent = Workspace.create(chdir_tmp)
+    sub = chdir_tmp / "sub"
+    sub.mkdir()
+    with pytest.raises(ValueError, match="will not be wiped"):
+        _open_or_create_workspace(str(sub), True, "scanpaths")
+    assert parent.root.exists()
+
+
+def test_run_wipe_recreates_workspace_at_path(chdir_tmp):
+    from _canary.app.run import _open_or_create_workspace
+
+    ws = Workspace.create(chdir_tmp)
+    marker = ws.root / "marker"
+    marker.write_text("x")
+    new = _open_or_create_workspace(str(chdir_tmp), True, "scanpaths")
+    assert new.root == ws.root
+    assert not marker.exists()
+
+
+def test_rm_command_rejects_missing_path(chdir_tmp):
+    import argparse
+
+    from _canary.subcommands.rm import RemoveWorkspace
+
+    ws = Workspace.create(chdir_tmp)
+    rc = RemoveWorkspace().execute(argparse.Namespace(rm_path=str(chdir_tmp / "nope")))
+    assert rc == 1
+    assert ws.root.exists()

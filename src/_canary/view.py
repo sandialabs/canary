@@ -344,7 +344,16 @@ class ResultsView:
             job: The finished job whose workspace directory should be linked.
         """
         source = job.workspace.dir
-        dest = self.dir / job.view_path
+        rel = Path(job.view_path)
+        if rel.is_absolute():
+            raise ValueError(f"Invalid view path for {job}: {job.view_path!r}")
+        dest = self.dir / rel
+        # The parent must resolve inside the view (dest itself may be a symlink
+        # created by a previous run, so resolve only its parent).
+        view_dir = self.dir.resolve()
+        parent = dest.parent.resolve()
+        if parent != view_dir and not parent.is_relative_to(view_dir):
+            raise ValueError(f"View path for {job} resolves outside of {self.dir}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         self.remove_path(dest)
         if self.settings.mode == "symlink":

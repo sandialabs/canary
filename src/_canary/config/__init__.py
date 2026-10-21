@@ -8,9 +8,10 @@ from contextlib import contextmanager
 from .config import CONFIG_ENV_CFG64  # noqa: F401
 from .config import CONFIG_ENV_FILENAME  # noqa: F401
 from .config import Config
+from .config import ConfigError  # noqa: F401
 from .config import get_scope_filename  # noqa: F401
 
-__all__ = ["Config", "CONFIG_ENV_FILENAME", "get_scope_filename"]
+__all__ = ["Config", "ConfigError", "CONFIG_ENV_FILENAME", "get_scope_filename"]
 
 
 _config: Config | None = None
@@ -63,6 +64,25 @@ def __getattr__(name: str) -> typing.Any:
     if _config is None:
         _config = Config.factory()
     return getattr(_config, name)
+
+
+def is_loaded() -> bool:
+    """True if the configuration singleton has been successfully created."""
+    return _config is not None
+
+
+def safe_get(path: str, default: typing.Any = None) -> typing.Any:
+    """``get(path)`` that never (re)loads configuration and never raises.
+
+    For use in error handlers: if loading the configuration is what failed,
+    calling :func:`get` would try to load it again and raise inside the handler.
+    """
+    if _config is None:
+        return default
+    try:
+        return _config.get(path, default)
+    except Exception:
+        return default
 
 
 @contextmanager

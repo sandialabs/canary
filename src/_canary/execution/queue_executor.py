@@ -18,12 +18,14 @@ from typing import Literal
 
 from .. import config
 from ..core.job import BaseJob
+from ..error import SessionTerminated
 from ..error import StopExecution
 from ..events import Event
 from ..events import EventBus
 from ..events import project_job_event
 from ..util import logging
 from ..util import multiprocessing as mp
+from ..util import procutil
 from ..util.misc import boolean
 from ..util.returncode import compute_returncode
 from .console import EventReporter
@@ -71,6 +73,7 @@ class JobFunctor:
         **kwargs: Any,
     ) -> None:
         """Process entrypoint: bootstraps environment and executes a single job."""
+        _inner_process_setup()
         config.load_snapshot(config_snapshot)
         logging.clear_handlers()
         h = logging.QueueHandler(logging_queue)
@@ -92,6 +95,40 @@ class JobFunctor:
             finally:
                 logging.clear_handlers()
                 h.close()
+
+
+#: Parent-side connections that a *forked* inner job process must close so that
+#: the parent sees EOF promptly if the worker dies (set just before fork).
+_FORK_INHERITED_CONNS: list[Connection] = []
+#: PID of the worker that forked the inner job process (set just before fork).
+_FORK_PARENT_PID: int | None = None
+
+
+def _raise_interrupt(signum: int, frame: Any) -> None:
+    raise KeyboardInterrupt(f"Received signal {signum}")
+
+
+def _inner_process_setup() -> None:
+    """Prepare a freshly started inner job process.
+
+    * Close inherited copies of the worker's event pipe (fork only) so a dead
+      worker is detected immediately.
+    * Convert SIGTERM into :class:`KeyboardInterrupt` so the launcher's cleanup
+      (which reaps the test's process group) runs when the worker terminates us.
+    * Ask the kernel to SIGTERM us if the worker dies (Linux), and bail out if
+      it already has.
+    """
+    global _FORK_INHERITED_CONNS
+    for conn in _FORK_INHERITED_CONNS:
+        try:
+            conn.close()
+        except Exception:  # nosec B110
+            pass
+    _FORK_INHERITED_CONNS = []
+    procutil.install_termination_handlers(procutil.termination_signals(), _raise_interrupt)
+    procutil.set_parent_death_signal(signal.SIGTERM)
+    if _FORK_PARENT_PID is not None and os.getppid() != _FORK_PARENT_PID:
+        raise SystemExit(1)
 
 
 def inner_ctx() -> Any:
@@ -148,6 +185,12 @@ class _MainWorker:
         self.common_kwargs = common_kwargs
 
         self.ctx = inner_ctx()
+        #: PID of the process that created this worker (the main canary process).
+        self.parent_pid = os.getpid()
+        self._worker_pid: int | None = None
+        #: Set when the worker has been asked to stop; running jobs are reaped
+        #: immediately instead of being given time to finish.
+        self._stopping = False
 
         # Sampling / polling controls
         self.poll_sleep = 0.01
@@ -172,24 +215,51 @@ class _MainWorker:
         except (BrokenPipeError, EOFError, OSError) as e:
             raise ParentGone from e
 
+    def _on_terminate(self, signum: int, frame: Any) -> None:
+        """SIGTERM/SIGHUP handler: stop the current job's whole process tree, then exit.
+
+        Forked inner job processes inherit this handler until they replace it;
+        in that case simply behave like an interrupt.
+        """
+        if os.getpid() != self._worker_pid:
+            raise KeyboardInterrupt(f"Received signal {signum}")
+        self._stopping = True
+        raise ParentGone(f"worker {self.worker_id} received signal {signum}")
+
     def __call__(self) -> None:
+        self._worker_pid = os.getpid()
+        procutil.install_termination_handlers(procutil.termination_signals(), self._on_terminate)
+        # If the main canary process dies (even by SIGKILL), get SIGTERM'd so
+        # that we in turn reap the job we are running.
+        procutil.set_parent_death_signal(signal.SIGTERM)
         config.load_snapshot(self.config_snapshot)
         try:
+            if os.getppid() != self.parent_pid:
+                return
             self.run()
-        except ParentGone:
+        except (ParentGone, KeyboardInterrupt):
+            self._stopping = True
             return
         finally:
             self.cleanup_all()
 
     def run(self) -> None:
+        watcher = procutil.ParentWatcher()
         while True:
-            msg = self.task_q.get()
+            try:
+                msg = self.task_q.get(timeout=1.0)
+            except QueueEmpty:
+                if not watcher.parent_alive():
+                    self._stopping = True
+                    raise ParentGone("main canary process exited")
+                continue
             if msg is None:
                 return
             job, per_job_kwargs = msg
             self.run_one_job(job, per_job_kwargs or {})
 
     def run_one_job(self, job: BaseJob, per_job_kwargs: dict[str, Any]) -> None:
+        global _FORK_INHERITED_CONNS, _FORK_PARENT_PID
         # IMPORTANT: use mp.Queue (not SimpleQueue) so we can do get(timeout=...)
         self.local_q = mp.Queue()
         proc: BaseProcess = self.ctx.Process(
@@ -198,10 +268,20 @@ class _MainWorker:
             kwargs={**self.common_kwargs, **per_job_kwargs},
         )
         self.proc = proc
-        proc.start()
+        _FORK_INHERITED_CONNS = [self.event_conn]
+        _FORK_PARENT_PID = os.getpid()
+        try:
+            proc.start()
+        finally:
+            _FORK_INHERITED_CONNS = []
+            _FORK_PARENT_PID = None
 
         try:
             self.monitor_job(job)
+        except BaseException:
+            # Interrupted/terminated mid-job: do not wait for the job to finish.
+            self._stopping = True
+            raise
         finally:
             self.cleanup_job()
 
@@ -214,37 +294,35 @@ class _MainWorker:
         job_id = job.id
 
         wall_limit = config.timeout_multiplier() * job.timeout
+        # Jobs may declare a longer worst-case lifetime than their run timeout
+        # (e.g. HPC batches: scheduler queue wait + 2x wall backstop) so the
+        # watchdog never fires while they are legitimately waiting.
+        budget = wall_limit
+        try:
+            if (declared := job.watchdog_timeout()) is not None:
+                budget = max(wall_limit, float(declared))
+        except Exception as e:
+            logger.debug("watchdog_timeout() failed for %s: %s", job_id[:7], e)
         watchdog_grace = float(
-            os.getenv(
-                "CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * wall_limit)))
-            )
+            os.getenv("CANARY_WORKER_WATCHDOG_GRACE", str(max(300.0, min(1800.0, 0.10 * budget))))
         )
-        watchdog_deadline = time.time() + wall_limit + watchdog_grace
+        watchdog_deadline = time.time() + budget + watchdog_grace
 
         def terminate_and_report(event: str, **extra: Any) -> None:
             logger.warning(
                 "Terminating worker for job %s: event=%s timeout=%s grace=%s extra=%r",
                 job_id[:7],
                 event,
-                wall_limit,
+                budget,
                 watchdog_grace,
                 extra,
             )
 
-            pid = getattr(proc, "pid", None)
-            if isinstance(pid, int):
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except Exception as e:
-                    logger.debug("os.kill(SIGTERM) failed pid=%s: %s", pid, e)
-
-                time.sleep(0.05)
-
-                try:
-                    if proc.is_alive():
-                        os.kill(pid, signal.SIGKILL)
-                except Exception as e:
-                    logger.debug("os.kill(SIGKILL) failed pid=%s: %s", pid, e)
+            # Kill the inner job process *and* the test it launched (which runs in
+            # its own session/process group).  Give the job enough time after
+            # SIGTERM to run its own cleanup -- for batches that means cancelling
+            # the scheduler job (scancel/flux cancel) -- before escalating.
+            self.kill_job_tree(grace=max(procutil.kill_grace_period(), 30.0))
 
             payload: dict[str, Any] = {
                 "job_id": job_id,
@@ -274,7 +352,7 @@ class _MainWorker:
 
             if proc.is_alive() and now > watchdog_deadline:
                 terminate_and_report(
-                    "job_timeout", phase="watchdog", timeout=wall_limit, grace=watchdog_grace
+                    "job_timeout", phase="watchdog", timeout=budget, grace=watchdog_grace
                 )
                 return
 
@@ -285,21 +363,44 @@ class _MainWorker:
 
             time.sleep(self.poll_sleep)
 
+    def kill_job_tree(self, grace: float | None = None) -> None:
+        """Terminate the inner job process and every descendant (including the test)."""
+        proc = self._proc
+        if proc is None:
+            return
+        pid = getattr(proc, "pid", None)
+        if not isinstance(pid, int):
+            return
+        try:
+            procutil.kill_process_tree(pid, grace=grace)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("kill_process_tree(%s) failed: %s", pid, e)
+        try:
+            proc.join(timeout=1.0)
+        except Exception as e:  # pragma: no cover
+            logger.debug("proc.join failed: %s", e)
+
     def cleanup_job(self) -> None:
+        if self._proc is not None:
+            try:
+                # Normal completion: the inner process is exiting on its own.
+                self._proc.join(timeout=0.5 if self._stopping else 5.0)
+                if self._proc.is_alive():
+                    # Still running (interrupted, terminated, or stuck): never
+                    # abandon it -- reap the inner process and the test's group.
+                    self.kill_job_tree()
+                if not self._proc.is_alive():
+                    self._proc.close()
+            except Exception as e:
+                logger.debug("proc cleanup failed: %s", e)
+            self._proc = None
+
         if self.local_q is not None:
             try:
                 self.local_q.close()
             except Exception as e:
                 logger.debug("local_q.close failed: %s", e)
             self.local_q = None
-
-        if self._proc is not None:
-            try:
-                self._proc.join(timeout=0.1)
-                self._proc.close()
-            except Exception as e:
-                logger.debug("proc.close failed: %s", e)
-            self._proc = None
 
     def cleanup_all(self) -> None:
         # If we are exiting mid-job, still release job resources.
@@ -416,16 +517,25 @@ class ResourceQueueExecutor:
         self.worker_connections.clear()
 
     def _shutdown_workers(self) -> None:
+        busy = set(self.busy_workers)
         for w in self.workers:
             try:
                 w["task_q"].put(None)
             except Exception as e:
                 logger.debug("task_q.put failed: %s", e)
+        procs = [w["proc"] for w in self.workers]
+        # Idle workers exit promptly on the sentinel.  Busy workers are told to
+        # stop: SIGTERM makes them reap their job's whole process tree first.
         for w in self.workers:
-            try:
-                terminate_proc(w["proc"])
-            except Exception as e:
-                logger.debug("proc.close failed: %s", e)
+            if w["id"] in busy:
+                try:
+                    w["proc"].terminate()
+                except Exception as e:
+                    logger.debug("proc.terminate failed: %s", e)
+        try:
+            terminate_procs(procs)
+        except Exception as e:
+            logger.debug("terminate_procs failed: %s", e)
         self.workers.clear()
         self.idle_workers.clear()
         self.busy_workers.clear()
@@ -477,10 +587,32 @@ class ResourceQueueExecutor:
         qrank, qsize = 0, len(self.queue)
         start = time.time()
 
+        def on_terminate(signum: int, frame: Any) -> None:
+            raise SessionTerminated(signum)
+
+        previous_handlers = procutil.install_termination_handlers(
+            procutil.termination_signals(), on_terminate
+        )
+        try:
+            return self._run(start, session_timeout, qrank, qsize, **kwargs)
+        finally:
+            procutil.restore_handlers(previous_handlers)
+
+    def _run(
+        self, start: float, session_timeout: float, qrank: int, qsize: int, **kwargs: Any
+    ) -> int:
         reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
         with reporter:
+            drain = False
             while True:
                 try:
+                    if drain:
+                        # Draining happens inside the ``try`` so that an interrupt,
+                        # ``canary.kill`` or session timeout raised while waiting for
+                        # the last jobs still goes through the cleanup handlers below.
+                        self._wait_all(start, session_timeout)
+                        break
+
                     if session_timeout >= 0.0 and time.time() - start > session_timeout:
                         self._terminate_all(signal.SIGUSR2)
                         self._check_for_leaks()
@@ -518,16 +650,18 @@ class ResourceQueueExecutor:
                     time.sleep(self.busy_wait_time)
 
                 except Empty:
-                    self._wait_all(start, session_timeout)
-                    break
+                    drain = True
 
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
                     raise StopExecution("canary.kill found", signal.SIGTERM)
 
-                except KeyboardInterrupt:
-                    self._terminate_all(signal.SIGINT)
+                except KeyboardInterrupt as e:
+                    reason = None
+                    if isinstance(e, SessionTerminated):
+                        reason = f"Session terminated by {e.signame}"
+                    self._terminate_all(signal.SIGINT, reason=reason)
                     self._check_for_leaks()
                     raise
 
@@ -669,8 +803,10 @@ class ResourceQueueExecutor:
                 return
 
             if event == "job_timeout":
-                wall_limit = config.timeout_multiplier() * slot.job.timeout
-                reason = f"Job timed out after {wall_limit} s."
+                applied = payload.get("timeout")
+                if not isinstance(applied, (int, float)):
+                    applied = config.timeout_multiplier() * slot.job.timeout
+                reason = f"Job timed out after {float(applied):.1f} s (worker watchdog)."
 
                 self._finish_abnormal_slot(slot, outcome="TIMEOUT", reason=reason)
 
@@ -836,14 +972,14 @@ class ResourceQueueExecutor:
             self._check_for_leaks()
             time.sleep(self.busy_wait_time)
 
-    def _terminate_all(self, signum: int) -> None:
+    def _terminate_all(self, signum: int, reason: str | None = None) -> None:
         if signum == signal.SIGINT:
             stat = "INTERRUPTED"
-            reason = "Keyboard interrupt"
+            reason = reason or "Keyboard interrupt"
             code = int(signal.SIGINT)
         else:
             stat = "ERROR"
-            reason = f"Job terminated with signal {signum}"
+            reason = reason or f"Job terminated with signal {signum}"
             code = -1
 
         inflight_slots = list(self.inflight.values())
@@ -892,13 +1028,52 @@ class ResourceQueueExecutor:
             logger.debug("job.save failed during abnormal close: %s", e)
 
 
-def terminate_proc(proc):
-    i = 0
-    while i < 3 and proc.is_alive():
-        proc.terminate()
-        proc.join(timeout=0.5)
-        i += 1
-    proc.close()
+def terminate_procs(procs: list, *, exit_timeout: float = 2.0) -> None:
+    """Stop worker processes: wait briefly, then SIGTERM, then SIGKILL; always reap.
+
+    Workers handle SIGTERM by reaping their current job's process tree, which
+    takes up to :func:`~_canary.util.procutil.kill_grace_period` seconds, so we
+    allow for that before escalating.
+    """
+    procs = [p for p in procs if p is not None]
+
+    def alive() -> list:
+        out = []
+        for p in procs:
+            try:
+                if p.is_alive():
+                    out.append(p)
+            except ValueError:  # already closed
+                continue
+        return out
+
+    procutil.wait_for(lambda: not alive(), exit_timeout)
+    for p in alive():
+        try:
+            p.terminate()
+        except Exception as e:
+            logger.debug("terminate failed: %s", e)
+    procutil.wait_for(lambda: not alive(), procutil.kill_grace_period() + 3.0)
+    for p in alive():
+        try:
+            pid = p.pid
+            if isinstance(pid, int):
+                procutil.kill_process_tree(pid, sig=signal.SIGKILL, grace=0.5)
+            p.kill()
+        except Exception as e:
+            logger.debug("kill failed: %s", e)
+    for p in procs:
+        try:
+            p.join(timeout=1.0)
+            if not p.is_alive():
+                p.close()
+        except Exception as e:
+            logger.debug("join/close failed: %s", e)
+
+
+def terminate_proc(proc) -> None:
+    """Stop a single worker process (see :func:`terminate_procs`)."""
+    terminate_procs([proc], exit_timeout=0.0)
 
 
 class CanaryKill(Exception):

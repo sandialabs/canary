@@ -4,7 +4,6 @@
 import dataclasses
 import json
 import os
-import re
 import shlex
 import signal
 import sys
@@ -20,7 +19,11 @@ import hpc_connect.futures
 
 import canary
 from _canary.util import json_helper
+from _canary.util.envtransport import pack_environment
 from _canary.util.multiprocessing import SimpleQueue
+
+from .walltime import WallTimeError
+from .walltime import pinned_wall_seconds
 
 if TYPE_CHECKING:
     from .batchspec import TestBatch
@@ -259,59 +262,14 @@ _FLUX_TIMEOUT_RETURNCODE = 66
 def _parse_wall_seconds(submit_args: Sequence[str]) -> float | None:
     """Extract a wall-limit (in seconds) from scheduler submit args, if pinned.
 
-    Recognizes Slurm ``--time``/``-t`` (``MM``, ``MM:SS``, ``HH:MM:SS``,
-    ``D-HH[:MM[:SS]]``) and flux ``--time-limit`` (``N`` seconds, or ``Ns``/
-    ``Nm``/``Nh``/``Nd`` suffixed).  Returns ``None`` if no wall is pinned or it
-    cannot be parsed.  Best-effort: used only to warn, never to gate.
+    Thin wrapper around :func:`canary_hpc.walltime.pinned_wall_seconds` that
+    returns ``None`` (instead of raising) for unparseable values.  Used only for
+    diagnostics; :meth:`TestBatch.wall_limit` uses the strict parser.
     """
-    tokens: list[str] = []
-    for arg in submit_args:
-        tokens.extend(shlex.split(arg) if isinstance(arg, str) else [str(arg)])
-
-    value: str | None = None
-    for i, tok in enumerate(tokens):
-        for key in ("--time-limit", "--time", "-t"):
-            if tok == key and i + 1 < len(tokens):
-                value = tokens[i + 1]
-            elif tok.startswith(key + "="):
-                value = tok.split("=", 1)[1]
-            if value is not None:
-                break
-        if value is not None:
-            break
-
-    if value is None:
-        return None
-    value = value.strip().strip("'\"")
-
-    # flux-style suffixed duration, e.g. 90m, 1h, 3600s, 2d
-    m = re.fullmatch(r"(?i)\s*([0-9]*\.?[0-9]+)\s*([smhd])\s*", value)
-    if m:
-        n = float(m.group(1))
-        return n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2).lower()]
-
-    # slurm-style [D-]HH:MM:SS / MM:SS / MM, optional leading "D-"
-    days = 0.0
-    body = value
-    if "-" in body:
-        d, _, body = body.partition("-")
-        try:
-            days = float(d)
-        except ValueError:
-            return None
-    parts = body.split(":")
     try:
-        nums = [float(p) for p in parts]
-    except ValueError:
+        return pinned_wall_seconds(submit_args)
+    except WallTimeError:
         return None
-    if len(parts) == 1:
-        # bare number: minutes (slurm) unless days prefix present (then hours)
-        return days * 86400 + (nums[0] * 3600 if days else nums[0] * 60)
-    if len(parts) == 2:
-        return days * 86400 + nums[0] * 3600 + nums[1] * 60 if days else nums[0] * 60 + nums[1]
-    if len(parts) == 3:
-        return days * 86400 + nums[0] * 3600 + nums[1] * 60 + nums[2]
-    return None
 
 
 def _scheduler_wall_limit_reason(
@@ -592,6 +550,10 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         submit_args = self.scheduler_args(batch)
         estimated = batch.wall_limit(submit_args=submit_args)
         self._warn_if_wall_too_short(batch, submit_args, batch.wall_limit(submit_args=[]))
+        # hpc-connect backends write `export NAME="value"` without escaping, so
+        # values containing quotes, `$`, backticks, backslashes or newlines would
+        # break the script or execute commands.  Ship those encoded instead.
+        variables = pack_environment(variables)
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],

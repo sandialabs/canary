@@ -5,7 +5,6 @@
 import argparse
 import dataclasses
 import os
-import re
 import xml.dom.minidom as xdom
 import xml.sax.saxutils
 from argparse import Namespace
@@ -17,6 +16,7 @@ from typing import TYPE_CHECKING
 from .. import config
 from ..plugins.hookspec import hookimpl
 from ..util import logging
+from ..util import xmlsafe
 from ..util.filesystem import mkdirp
 from .reporter import CanaryReporter
 from .reporter import enabled
@@ -176,10 +176,14 @@ class JunitDocument(xdom.Document):
         return element
 
     def create_cdata_node(self, text: str) -> xdom.CDATASection:
-        node = xdom.CDATASection()
-        node.data = cleanup_text(text)
-        node.ownerDocument = self
-        return node
+        """Return a single CDATA node (``]]>`` is made harmless); prefer :meth:`append_cdata`."""
+        nodes = xmlsafe.cdata_nodes(self, text.replace("]]>", "]] >"), max_length=max_output())
+        return nodes[0]
+
+    def append_cdata(self, parent: xdom.Element, text: str) -> None:
+        """Append *text* to *parent* as XML-safe CDATA, preserving ``]]>`` exactly."""
+        for node in xmlsafe.cdata_nodes(self, text, max_length=max_output()):
+            parent.appendChild(node)
 
     def create_testsuite_element(
         self, jobs: list["Job"], tagname: str = "testsuite", **attrs: str
@@ -189,7 +193,7 @@ class JunitDocument(xdom.Document):
         stats = gather_statistics(jobs)
 
         for name, value in attrs.items():
-            element.setAttribute(name, value)
+            xmlsafe.set_attribute(element, name, value)
 
         element.setAttribute("tests", str(stats.num_tests))
         element.setAttribute("errors", str(stats.num_error))
@@ -202,10 +206,10 @@ class JunitDocument(xdom.Document):
 
     def create_testcase_element(self, job: "Job") -> xdom.Element:
         testcase = self.create_element("testcase")
-        testcase.setAttribute("name", job.display_name())
-        testcase.setAttribute("classname", get_classname(job))
+        xmlsafe.set_attribute(testcase, "name", job.display_name())
+        xmlsafe.set_attribute(testcase, "classname", get_classname(job))
         testcase.setAttribute("time", str(job.timekeeper.running()))
-        testcase.setAttribute("file", getattr(job, "relpath", str(job.spec.file_path)))
+        xmlsafe.set_attribute(testcase, "file", getattr(job, "relpath", str(job.spec.file_path)))
 
         if job.status.is_failure():
             failure = self.create_element("failure")
@@ -213,8 +217,13 @@ class JunitDocument(xdom.Document):
             failure.setAttribute("type", job.status.outcome.name)
             testcase.appendChild(failure)
 
+            if job.status.reason:
+                xmlsafe.set_attribute(
+                    failure, "message", f"{job.status.outcome.name}: {job.status.reason}"[:1024]
+                )
+            output = job.read_output()
             system_out = self.create_element("system-out")
-            system_out.appendChild(self.create_cdata_node(job.read_output()))
+            self.append_cdata(system_out, output)
             testcase.appendChild(system_out)
 
             if "CI_SERVER_VERSION_MAJOR" in os.environ:
@@ -222,11 +231,11 @@ class JunitDocument(xdom.Document):
                 major = int(os.environ["CI_SERVER_VERSION_MAJOR"])
                 minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
                 if (major, minor) < (16, 5):
-                    failure.appendChild(self.create_cdata_node(job.read_output()))
+                    self.append_cdata(failure, output)
 
         elif job.status.is_skipped():
             skipped = self.create_element("skipped")
-            skipped.setAttribute("message", job.status.outcome.name)
+            xmlsafe.set_attribute(skipped, "message", job.status.reason or job.status.outcome.name)
             testcase.appendChild(skipped)
 
         return testcase
@@ -274,9 +283,17 @@ def gather_statistics(jobs: list["Job"]) -> SimpleNamespace:
     return stats
 
 
+def max_output() -> int:
+    """Maximum characters of captured output embedded per test (``CANARY_JUNIT_MAX_OUTPUT``)."""
+    try:
+        return int(os.getenv("CANARY_JUNIT_MAX_OUTPUT", xmlsafe.DEFAULT_MAX_TEXT))
+    except ValueError:
+        return xmlsafe.DEFAULT_MAX_TEXT
+
+
 def cleanup_text(text: str, escape: bool = False) -> str:
-    # First strip ANSI color sequences from string.
-    text = re.sub(r"\033[^m]*m", "", text)
+    """Strip ANSI sequences and characters that are invalid in XML 1.0."""
+    text = xmlsafe.xml_safe(text)
     if escape:
         text = xml.sax.saxutils.escape(text)
     return text

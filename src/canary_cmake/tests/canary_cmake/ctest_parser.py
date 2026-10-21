@@ -271,3 +271,77 @@ def test_parse_ctesttestfile_cmake_driven_cmd(loadtestfile):
     command = test["command"]
     command[0] = os.path.basename(command[0])
     assert command == ["cmake", "-DOPTION=VAL1;VAL2", "-DSPAM=BAZ", "-P", "FILE"]
+
+
+def test_parse_np_only_reads_launcher_options():
+    # Not an MPI launcher: never read program flags as CPU counts.
+    assert ctg.parse_np(["head", "-n", "100", "file"]) is None
+    assert ctg.parse_np(["gzip", "-c", "9"]) is None
+    assert ctg.parse_np(["sh", "-c", "mpiexec -n 4 exe"]) is None
+    assert ctg.parse_np(["echo", "-np", "yaml"]) is None
+    # A trailing flag without a value used to raise StopIteration.
+    assert ctg.parse_np(["mytool", "-c"]) is None
+    assert ctg.parse_np(["mpiexec", "-n"]) is None
+    assert ctg.parse_np(["-n"]) is None
+    # Launchers
+    assert ctg.parse_np(["/usr/bin/mpiexec", "-n", "4", "./a.out", "-n", "99"]) == 4
+    assert ctg.parse_np(["mpiexec", "--bind-to", "core", "-n", "8", "exe"]) == 8
+    assert ctg.parse_np(["mpirun", "-np", "2", "exe"]) == 2
+    assert ctg.parse_np(["srun", "--ntasks=16", "exe"]) == 16
+    assert ctg.parse_np(["flux", "run", "-n", "3", "exe"]) == 3
+    assert ctg.parse_np(["jsrun", "-n4", "exe"]) == 4
+
+
+def test_apply_env_mods_operations():
+    mods = [
+        {"op": "path_list_prepend", "name": "PATH", "value": "/opt/x/bin"},
+        {"op": "path_list_append", "name": "LD", "value": "/b"},
+        {"op": "set", "name": "A", "value": "1"},
+        {"op": "string_append", "name": "A", "value": "2"},
+        {"op": "string_prepend", "name": "A", "value": "0"},
+        {"op": "cmake_list_append", "name": "L", "value": "z"},
+        {"op": "unset", "name": "U", "value": ""},
+        {"op": "set", "name": "R", "value": "x"},
+        {"op": "reset", "name": "R", "value": ""},
+    ]
+    out = ctg.apply_env_mods(mods, base={"L": "a;b", "LD": "/a"})
+    assert out["PATH"] == "/opt/x/bin:$PATH"
+    assert out["LD"] == "/a:/b"
+    assert out["A"] == "012"
+    assert out["L"] == "a;b;z"
+    assert out["U"] is None
+    assert "R" not in out
+
+
+def test_create_ir_with_environment_modification(tmp_path, monkeypatch):
+    """ENVIRONMENT_MODIFICATION used to crash generation (unexpected kwarg 'variables')."""
+    from pathlib import Path
+
+    from _canary.core.job import Job
+    from _canary.execution.testexec import ExecutionSpace
+
+    ctestfile = tmp_path / "CTestTestfile.cmake"
+    ctestfile.write_text("")
+    monkeypatch.setenv("PATH", "/usr/bin")
+    ir = ctg.create_ir(
+        file_root=tmp_path,
+        file_path="CTestTestfile.cmake",
+        family="t",
+        ctestfile=str(ctestfile),
+        command=["head", "-n", "100", "f"],
+        environment={"L": "a;b"},
+        environment_modification=[
+            {"op": "path_list_prepend", "name": "PATH", "value": "/opt/x/bin"},
+            {"op": "cmake_list_append", "name": "L", "value": "z"},
+        ],
+    )
+    # head -n 100 is not a CPU request
+    assert "cpus" not in ir.parameters
+    spec = ir.finalize({})
+    job = Job(spec=spec, workspace=ExecutionSpace(root=tmp_path / "ws", path=Path(spec.exec_path)))
+    assert job.variables["L"] == "a;b;z"
+    assert job.variables["PATH"] == f"{job.workspace.dir}:/opt/x/bin:/usr/bin"
+
+
+def test_parse_environment_ignores_malformed_entries():
+    assert ctg.parse_environment(["A=1", "bad", "B=x=y", "=v"]) == {"A": "1", "B": "x=y"}

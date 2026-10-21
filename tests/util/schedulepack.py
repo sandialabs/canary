@@ -1085,3 +1085,91 @@ def test_atomic_additive_key_has_no_near_empty_batches() -> None:
     assert [s for s in sizes if s < 0.25 * mean] == []
     placed = sorted(t.id for b in batches for t in b.tasks)
     assert placed == sorted(t.id for t in tasks)
+
+
+# --- resource-aware bounds (GPU-bound batches were sized as if CPU-parallel) ---
+
+
+def _gpu_task(i: int, duration: float = 60.0, gpus: int = 1, cpus: int = 1, deps=()):
+    from _canary.util.schedulepack import NodeDemand
+    from _canary.util.schedulepack import ResourceAmount
+
+    return ScheduleTask(
+        id=f"g{i}",
+        width=cpus,
+        duration=duration,
+        dependencies=tuple(deps),
+        demands=(
+            NodeDemand(resources=(ResourceAmount("cpus", cpus), ResourceAmount("gpus", gpus))),
+        ),
+    )
+
+
+def test_gpu_bound_tasks_serialize_in_simulation_and_bounds():
+    from _canary.util.schedulepack import cheap_makespan
+    from _canary.util.schedulepack import makespan_upper_bound
+
+    tasks = [_gpu_task(i) for i in range(8)]
+    cap = {"cpus": 16, "gpus": 1}
+    lower = cheap_makespan(tasks, width=16, resource_capacity=cap)
+    sim = simulate_makespan(tasks, width=16, resource_capacity=cap)
+    upper = makespan_upper_bound(tasks, width=16, resource_capacity=cap)
+    assert lower == pytest.approx(480.0)
+    assert sim == pytest.approx(480.0)
+    assert upper >= sim  # previously 90 s
+
+
+def test_resource_bounds_bracket_simulation_randomized():
+    import random
+
+    from _canary.util.schedulepack import NodeDemand
+    from _canary.util.schedulepack import ResourceAmount
+    from _canary.util.schedulepack import cheap_makespan
+    from _canary.util.schedulepack import makespan_upper_bound
+
+    rng = random.Random(1234)
+    for _ in range(300):
+        n = rng.randint(1, 30)
+        width = rng.randint(4, 16)
+        gpus = rng.randint(1, 4)
+        tasks = []
+        for i in range(n):
+            deps = tuple(f"t{j}" for j in rng.sample(range(i), k=min(i, rng.randint(0, 2))))
+            w = rng.randint(1, width)
+            g = rng.choice([0, 0, 1, rng.randint(1, gpus)])
+            res = [ResourceAmount("cpus", w)] + ([ResourceAmount("gpus", g)] if g else [])
+            tasks.append(
+                ScheduleTask(
+                    id=f"t{i}",
+                    width=w,
+                    duration=float(rng.randint(1, 50)),
+                    dependencies=deps,
+                    demands=(NodeDemand(resources=tuple(res)),),
+                )
+            )
+        cap = {"cpus": width, "gpus": gpus}
+        workers = rng.choice([None, 2, 5])
+        lb = cheap_makespan(tasks, width=width, workers=workers, resource_capacity=cap)
+        sim = simulate_makespan(tasks, width=width, workers=workers, resource_capacity=cap)
+        ub = makespan_upper_bound(tasks, width=width, workers=workers, resource_capacity=cap)
+        assert lb - 1e-9 <= sim <= ub + 1e-9
+
+
+def test_simulation_rejects_infeasible_resource_request():
+    with pytest.raises(ValueError, match="requests 2 gpus"):
+        simulate_makespan([_gpu_task(0, gpus=2)], width=4, resource_capacity={"gpus": 1})
+
+
+def test_simulation_scales_subquadratically():
+    import random
+    import time
+
+    rng = random.Random(0)
+    tasks = [
+        ScheduleTask(id=f"x{i}", width=rng.randint(1, 8), duration=float(rng.randint(1, 100)))
+        for i in range(6000)
+    ]
+    start = time.perf_counter()
+    simulate_makespan(tasks, width=64)
+    # Previously ~25 s for 6000 tasks (re-sort + restart after every start).
+    assert time.perf_counter() - start < 10.0
