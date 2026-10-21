@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from . import config
+from .config import ConfigError
 from .config.argparsing import make_argument_parser
 from .error import SessionTerminated
 from .error import StopExecution
@@ -106,7 +107,16 @@ class CanaryMain:
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
-        os.chdir(config.invocation_dir)
+        # Use the module-level invocation directory: going through the config
+        # proxy would (re)load configuration, and if loading is what failed it
+        # would raise again from inside this handler.
+        from .config import config as config_mod
+
+        directory = config.invocation_dir if config.is_loaded() else config_mod.invocation_dir
+        try:
+            os.chdir(directory)
+        except OSError:  # pragma: no cover - directory removed during the run
+            pass
 
 
 def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int:
@@ -197,6 +207,8 @@ def print_banner() -> None:
 def print_current_config() -> None:
     logger = logging.get_logger(__name__)
     fh = io.StringIO()
+    if not config.is_loaded():
+        return
     try:
         config.dump(fh)
         print("Current canary configuration:")
@@ -236,10 +248,15 @@ def console_main() -> int:
         else:
             logger.error(e.message)
         return e.exit_code
+    except ConfigError as e:
+        if reraise and config.safe_get("debug"):
+            raise
+        logger.error(str(e))
+        return 2
     except TimeoutError as e:
         if reraise:
             raise
-        if config.get("debug"):
+        if config.safe_get("debug"):
             print_current_config()
         logger.error(e.args[0])
         return 4
@@ -257,7 +274,7 @@ def console_main() -> int:
     except SystemExit as e:
         if e.code == 0:
             return 0
-        if config.get("debug"):
+        if config.safe_get("debug"):
             print_current_config()
         if reraise:
             traceback.print_exc()
@@ -265,7 +282,7 @@ def console_main() -> int:
             return e.code
         return 1
     except Exception as e:
-        if config.get("debug"):
+        if config.safe_get("debug"):
             print_current_config()
         if reraise:
             raise
