@@ -1010,6 +1010,8 @@ class PYTLoader:
                 with open(self.file) as fp:
                     code = compile(fp.read(), self.file.as_posix(), "exec")
                 exec(code, {"__name__": "__load__", "__file__": self.file.as_posix()})  # nosec
+        except BaseException as e:
+            raise ParseError(f"Failed to parse {self.file}") from e
         finally:
             canary_pyt.set_file_scanning(False)
 
@@ -1134,3 +1136,7 @@ def check_duplicate_explicit_ids(file: Path, ids: list[str]) -> None:
     duplicates = duplicate_values(ids)
     if duplicates:
         raise ValueError(f"{file}: set_id generated duplicate ID(s): {', '.join(duplicates)}")
+
+
+class ParseError(Exception):
+    pass
