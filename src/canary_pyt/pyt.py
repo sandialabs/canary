@@ -1118,12 +1118,13 @@ def validate_user_id_template(id: str) -> str:
 
 
 def validate_expanded_user_id(id: str) -> str:
-    _user_id_regex = re.compile(r"^[0-9a-f_]{8,64}$")
     normalized = id.strip().lower()
+    _user_id_regex = re.compile(r"^[a-z0-9_]{8,64}$")
     if not _user_id_regex.fullmatch(normalized):
         raise ValueError(
-            "set_id expanded to an invalid ID. Expected a SHA-like hexadecimal "
-            f"identifier with optional underscores and length 8..64; got {id!r}"
+            "set_id expanded to an invalid ID. Expected a lowercase identifier "
+            "starting with a letter and containing only letters, digits, and "
+            f"underscores with length 6..64; got {id!r}"
         )
     return normalized
 

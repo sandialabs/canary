@@ -4,6 +4,8 @@
 
 from pathlib import Path
 
+import pytest
+
 import _canary.config as config
 import canary
 from _canary import select
@@ -306,3 +308,27 @@ def test_many_composite(tmpdir):
     generators = collect.find_generators_in_path(workdir)
     specs = generate_specs(generators)
     assert len(specs) == len(names) * 5
+
+
+def test_generate_rejects_duplicate_ids(tmpdir):
+    workdir = tmpdir.strpath
+    with working_dir(workdir):
+        with open("a.pyt", "w") as fh:
+            fh.write("import canary_pyt\ncanary_pyt.directives.set_id('spam_1234')")
+        with open("b.pyt", "w") as fh:
+            fh.write("import canary_pyt\ncanary_pyt.directives.set_id('spam_1234')")
+    generators = collect.find_generators_in_path(workdir)
+    with pytest.raises(ValueError, match="Duplicate test IDs in test suite"):
+        generate_specs(generators)
+
+
+def test_generate_rejects_duplicate_exec_paths(tmpdir):
+    workdir = tmpdir.strpath
+    with working_dir(workdir):
+        with open("a.pyt", "w") as fh:
+            fh.write("import canary_pyt\ncanary_pyt.directives.execution_path('spam_1234')")
+        with open("b.pyt", "w") as fh:
+            fh.write("import canary_pyt\ncanary_pyt.directives.execution_path('spam_1234')")
+    generators = collect.find_generators_in_path(workdir)
+    with pytest.raises(ValueError, match="Duplicate test exec paths in test suite"):
+        generate_specs(generators)

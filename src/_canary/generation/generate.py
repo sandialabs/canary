@@ -88,17 +88,21 @@ class Generator:
         return self.specs
 
     def validate(self, specs: list["JobSpecIR | JobSpec"]) -> None:
+
+        # Detect duplicate tests and exec paths
         pm = logger.progress_monitor("[bold]Searching[/] for duplicated tests")
-        ids = [spec.id for spec in specs]
-        counts: dict[str, int] = {}
-        for id in ids:
-            counts[id] = counts.get(id, 0) + 1
-        duplicate_ids = {id for id, count in counts.items() if count > 1}
+        counts: dict[str, dict[str, int]] = {}
+        for spec in specs:
+            idc = counts.setdefault("id", {})
+            idc[spec.id] = idc.get(spec.id, 0) + 1
+            epc = counts.setdefault("exec_path", {})
+            epc[str(spec.exec_path)] = epc.get(str(spec.exec_path), 0) + 1
+
         duplicates: dict[str, list["JobSpecIR | JobSpec"]] = {}
-        # if there are duplicates, we are in error condition and lookup cost is not important
-        for id in duplicate_ids:
-            duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
-        if duplicates:
+        duplicate_ids = {id for id, count in counts.get("id", {}).items() if count > 1}
+        if duplicate_ids:
+            for id in duplicate_ids:
+                duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
             logger.error("Duplicate test IDs generated for the following test cases")
             for id, dspecs in duplicates.items():
                 logger.error(f"{id}:")
@@ -109,6 +113,22 @@ class Generator:
                         extra={"prefix": ""},
                     )
             raise ValueError("Duplicate test IDs in test suite")
+
+        duplicates.clear()
+        duplicate_eps = {ep for ep, count in counts.get("exec_path", {}).items() if count > 1}
+        for ep in duplicate_eps:
+            duplicates.setdefault(ep, []).extend([_ for _ in specs if str(_.exec_path) == ep])
+            logger.error("Duplicate test exec paths generated for the following test cases")
+            for ep, dspecs in duplicates.items():
+                logger.error(f"{ep}:")
+                for spec in dspecs:
+                    logger.log(
+                        logging.EMIT,
+                        f"  - {spec.display_name()}: {spec.file_path}",
+                        extra={"prefix": ""},
+                    )
+            raise ValueError("Duplicate test exec paths in test suite")
+
         pm.done()
         return None
 
