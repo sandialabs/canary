@@ -555,6 +555,28 @@ def canary_runtests(runner: "Runner") -> None:
 
 
 @hookspec
+def canary_runtests_finish(runner: "Runner") -> None:
+    """Called after all jobs in ``runner`` have been executed, before reporting.
+
+    The companion of :func:`canary_runtests_start`.  It fires in the process
+    that executed the jobs (including nested runs such as ``canary hpc exec``),
+    from the ``finally`` block of the session driver, so it runs on normal
+    completion as well as on exceptions, session timeouts, and interrupts.
+    Unfinished jobs have already been given a terminal status when this hook is
+    called, and every ``canary_runtests_report`` implementation runs *after*
+    it.  Use it for session-level teardown that must happen before results are
+    reported (for example, migrating job outputs from a temporary execution
+    location back to the session directory).
+
+    Exceptions raised by implementations are logged and do not prevent
+    reporting.
+
+    Args:
+        runner: The runner whose jobs were executed.
+    """
+
+
+@hookspec
 def canary_runtests_report(runner: "Runner") -> None:
     """Reports the test results.
 

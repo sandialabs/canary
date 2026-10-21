@@ -13,6 +13,7 @@ from typing import Any
 import hpc_connect
 
 import canary
+from _canary.plugins.user_execspace import add_exec_prefix_option
 from _canary.subcommands.run import Run
 from _canary.util.query_data import load_query_data
 from _canary.util.rich import bold
@@ -80,6 +81,10 @@ def canary_addoption(parser: "canary.Parser") -> None:
         help="Use this HPC backend [default: None]",
     )
     CanaryHPCConductor.setup_legacy_parser(parser)
+    # ``canary hpc run`` builds its own parser, so core run options added by
+    # plugins are not inherited; offer the execution prefix explicitly.  The
+    # conductor forwards it to ``canary hpc exec``, where the jobs execute.
+    add_exec_prefix_option(parser, command=["hpc::run", "hpc::exec"])
     # Supplement (do not replace) the base `canary run --timeout` help with the HPC
     # queue type.  `-b queue_timeout=T` remains accepted for backward compatibility
     # but is intentionally NOT advertised as its own option; point users at --timeout.
