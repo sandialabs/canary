@@ -44,8 +44,6 @@ Common flags
             In --terse mode emits one NDJSON document per cycle.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
