@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
+import pytest
+
+from _canary.util.time import hhmmss
 from _canary.util.time import pretty_seconds
 from _canary.util.time import time_in_seconds
 
@@ -44,3 +47,24 @@ def test_time_in_seconds():
     assert isclose(time_in_seconds("1d23h15m"), 1 * 24 * 60 * 60 + 23 * 60 * 60 + 15 * 60)
     assert isclose(time_in_seconds(4000), 4000)
     assert isclose(time_in_seconds(400.0), 400.0)
+
+
+def test_hhmmss_does_not_wrap_after_24_hours():
+    assert hhmmss(25 * 3600) == "25:00:00"
+
+
+def test_hhmmss_formats_large_elapsed_hours():
+    assert hhmmss((49 * 3600) + (2 * 60) + 3) == "49:02:03"
+
+
+def test_hhmmss_formats_none_as_placeholder():
+    assert hhmmss(None) == "--:--:--"
+
+
+def test_hhmmss_formats_sub_threshold_with_fractional_precision():
+    assert hhmmss(1.25) == "00:00:01.25"
+
+
+def test_hhmmss_rejects_negative_durations():
+    with pytest.raises(ValueError, match="nonnegative duration"):
+        hhmmss(-1)

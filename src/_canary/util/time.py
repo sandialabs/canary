@@ -14,7 +14,6 @@ import re
 import time
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 from typing import Callable
 
 
@@ -64,21 +63,40 @@ def time_in_seconds(arg: int | float | str) -> float:
 
 
 def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
-    """Format ``seconds`` as ``HH:MM:SS``, including sub-second precision below ``threshold``.
+    """Format ``seconds`` as elapsed ``HH:MM:SS``.
+
+    Unlike datetime-based formatting, this treats ``seconds`` as a duration and
+    does not wrap after 24 hours.
 
     Args:
         seconds: Duration in seconds, or ``None`` to return a placeholder.
         threshold: Seconds below which fractional precision is included.
 
     Returns:
-        Formatted time string, or ``"--:--:--"`` when ``seconds`` is ``None``.
+        Formatted duration string, or ``"--:--:--"`` when ``seconds`` is
+        ``None``.
     """
     if seconds is None:
         return "--:--:--"
-    utc = datetime.fromtimestamp(seconds, timezone.utc)
+
+    if seconds < 0:
+        raise ValueError(f"hhmmss requires a nonnegative duration; got {seconds!r}")
+
     if seconds < threshold:
-        return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
-    return datetime.strftime(utc, "%H:%M:%S")
+        whole = int(seconds)
+        frac = seconds - whole
+        hours, rem = divmod(whole, 3600)
+        minutes, secs = divmod(rem, 60)
+
+        # Preserve the previous apparent behavior of two fractional digits:
+        # old code used "%f"[:-4].
+        centiseconds = int(frac * 100)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
+
+    total_seconds = int(seconds)
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def pretty_seconds_formatter(seconds: int | float) -> Callable:
