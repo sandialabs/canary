@@ -842,10 +842,13 @@ class Job(BaseJob):
             if value is not None:
                 t = SimpleTemplate(value)
                 variables[key] = t.substitute(os.environ, missing="")
-        t = SimpleTemplate(f"{self.workspace.dir}:$PYTHONPATH")
-        variables["PYTHONPATH"] = t.substitute(os.environ, missing="")
-        t = SimpleTemplate(f"{self.workspace.dir}:$PATH")
-        variables["PATH"] = t.substitute(os.environ, missing="")
+        # Prepend the job workspace to PATH/PYTHONPATH.  If the spec itself sets
+        # either (e.g. via a CTest ENVIRONMENT_MODIFICATION path_list_prepend),
+        # build on that value rather than discarding it.
+        for name in ("PYTHONPATH", "PATH"):
+            spec_value = variables.get(name)
+            base = spec_value if spec_value is not None else os.environ.get(name, "")
+            variables[name] = f"{self.workspace.dir}:{base}" if base else str(self.workspace.dir)
         return variables
 
     def teardown(self) -> None:
