@@ -45,3 +45,18 @@ def test_file_lock_serializes_concurrent_read_modify_write(tmp_path: Path) -> No
 
     # Without locking, concurrent read-modify-write would lose updates.
     assert json.loads(target.read_text())["count"] == nprocs * iterations
+
+
+def test_working_dir_restores_cwd_on_exception(tmp_path):
+    import os
+
+    import pytest
+
+    from _canary.util.filesystem import working_dir
+
+    start = os.getcwd()
+    with pytest.raises(RuntimeError):
+        with working_dir(tmp_path / "sub", create=True):
+            assert os.getcwd() == str((tmp_path / "sub").resolve())
+            raise RuntimeError("boom")
+    assert os.getcwd() == start
