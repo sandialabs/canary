@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
+from typing import Any
 from typing import Generator
 
 #: Default time limit (seconds) for sourcing an rc file; override with
@@ -80,12 +81,16 @@ class Bash:
             ]
         )
         try:
+            kwds: dict[str, Any] = {}
+            if os.name == "posix" and os.getgid() != os.getegid():
+                kwds["group"] = os.getgid()
             cp = subprocess.run(
                 ["bash", "--noprofile", "--norc", "-c", script],
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=timeout,
                 check=False,
+                **kwds,
             )
         except subprocess.TimeoutExpired:
             raise RcFileError(f"Timed out after {timeout:g} s sourcing {file}") from None

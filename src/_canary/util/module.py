@@ -15,6 +15,7 @@ import os
 import shlex
 import subprocess
 from contextlib import contextmanager
+from typing import Any
 from typing import Generator
 from typing import MutableMapping
 
@@ -36,6 +37,9 @@ def _module_timeout() -> float:
 def _run_module(cmd: str, env: MutableMapping | None) -> subprocess.CompletedProcess:
     """Run *cmd* through bash, reading output with ``communicate`` (no pipe deadlock)."""
     try:
+        kwds: dict[str, Any] = {}
+        if os.name == "posix" and os.getgid() != os.getegid():
+            kwds["group"] = os.getgid()
         return subprocess.run(
             cmd,
             stdin=subprocess.DEVNULL,
@@ -46,6 +50,7 @@ def _run_module(cmd: str, env: MutableMapping | None) -> subprocess.CompletedPro
             env=env,
             timeout=_module_timeout(),
             check=False,
+            **kwds,
         )  # nosec B602 - arguments are shlex-quoted
     except subprocess.TimeoutExpired:
         raise ModuleError(f"timed out after {_module_timeout():g} s: {cmd}") from None
