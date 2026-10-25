@@ -255,7 +255,7 @@ def test_parse_ctesttestfile_timeout_signal(loadtestfile):
     test = loadtestfile["timeout_signal"]
     assert find_property(test["properties"], "TIMEOUT") == 1
     assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-    assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
+    assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
