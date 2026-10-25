@@ -253,11 +253,13 @@ class FluxDirectExecutor:
         self.futures: dict[Any, str] = {}
         self.slots_by_id: dict[str, ExecutionSlot] = {}
 
-        self.live_reporting = self._should_live_report()
         self.max_concurrent_jobs = int(canary.config.getoption("workers") or -1)
 
         self._qrank = 0
         self._qsize = len(runner.jobs)
+
+    def live_reporting(self) -> bool:
+        return self._should_live_report()
 
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:

@@ -182,25 +182,41 @@ def test_reporter_pending_rows_mark_timing_columns_na() -> None:
     assert values["status"] == "[magenta]PENDING[/]"
 
 
-def test_event_reporter_uses_compact_event_columns() -> None:
+def test_event_reporter_uses_event_log_output() -> None:
     job = DummyJob(name="event")
     reporter = EventReporter(DummyExecutor([job]))
 
-    assert reporter.event_columns == ("Job", "ID", "Status", "Time", "Rank")
-    assert [col.header for col in reporter.table.columns] == list(reporter.event_columns)
+    assert hasattr(reporter, "render_event_line")
+    assert not hasattr(reporter, "table")
 
 
-def test_event_reporter_renders_event_row() -> None:
+def test_event_reporter_renders_event_line() -> None:
     job = DummyJob(name="event")
     reporter = EventReporter(DummyExecutor([job]))
     slot = make_slot()
 
-    text = reporter.render_event_row(slot, status="[cyan]SUBMITTED[/]")
+    text = reporter.render_event_line(slot, "submitted")
 
     rendered = text.plain
-    assert "myjob" in rendered
-    assert "SUBMITTED" in rendered
-    assert "2/5" in rendered
+
+    assert "submitted" in rendered
+    assert slot.job.id[:7] in rendered
+    assert f"rank={slot.qrank}/{slot.qsize}" in rendered
+    assert f"worker={slot.worker_id}" in rendered
+
+
+def test_event_reporter_renders_finished_event_line() -> None:
+    job = DummyJob(name="event")
+    reporter = EventReporter(DummyExecutor([job]))
+    slot = make_slot()
+
+    text = reporter.render_event_line(slot, "finished", result="[green]PASS[/]", reason="")
+
+    rendered = text.plain
+
+    assert "finished" in rendered
+    assert "result=PASS" in rendered
+    assert "duration=" in rendered
 
 
 def test_row_values_for_job_falls_back_to_timekeeper():

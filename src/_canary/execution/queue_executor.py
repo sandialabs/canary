@@ -444,18 +444,20 @@ class ResourceQueueExecutor:
         self.busy_workers: dict[int, str] = {}  # worker_id -> job_id
         self.slots_by_id: dict[str, ExecutionSlot] = {}
 
+    def live_reporting(self) -> bool:
         style = config.getoption("console_style") or {}
-        self.live_reporting = style.get("live", True)
+        live_reporting: bool = style.get("live", True)
         if config.get("debug"):
-            self.live_reporting = False
+            live_reporting = False
         if not sys.stdin.isatty():
-            self.live_reporting = False
+            live_reporting = False
         if "CANARY_LIVE" in os.environ and not boolean(os.environ["CANARY_LIVE"]):
-            self.live_reporting = False
+            live_reporting = False
         elif int(os.getenv("CANARY_LEVEL", "0")) > 0:
-            self.live_reporting = False
+            live_reporting = False
         elif os.getenv("CANARY_MAKE_DOCS"):
-            self.live_reporting = False
+            live_reporting = False
+        return live_reporting
 
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:
@@ -601,7 +603,7 @@ class ResourceQueueExecutor:
     def _run(
         self, start: float, session_timeout: float, qrank: int, qsize: int, **kwargs: Any
     ) -> int:
-        reporter = LiveReporter(self) if self.live_reporting else EventReporter(self)
+        reporter = LiveReporter(self) if self.live_reporting() else EventReporter(self)
         with reporter:
             drain = False
             while True:
@@ -610,7 +612,7 @@ class ResourceQueueExecutor:
                         # Draining happens inside the ``try`` so that an interrupt,
                         # ``canary.kill`` or session timeout raised while waiting for
                         # the last jobs still goes through the cleanup handlers below.
-                        self._wait_all(start, session_timeout)
+                        self._wait_all(start, session_timeout, reporter=reporter)
                         break
 
                     if session_timeout >= 0.0 and time.time() - start > session_timeout:
@@ -622,6 +624,7 @@ class ResourceQueueExecutor:
 
                     self._check_finished_processes()
                     self._check_for_leaks()
+                    reporter.poll()
 
                     # Wait for an idle worker
                     while not self.idle_workers:
@@ -633,6 +636,7 @@ class ResourceQueueExecutor:
                             raise TimeoutError(
                                 f"Test session exceeded time out of {session_timeout} s."
                             )
+                        reporter.poll()
                         time.sleep(self.busy_wait_time)
 
                     job = self.queue.get()
@@ -960,7 +964,7 @@ class ResourceQueueExecutor:
             logger.critical(f"Terminal jobs still marked busy: {','.join(terminal_busy)}")
             raise StuckQueueError(f"Terminal jobs still busy: {terminal_busy}")
 
-    def _wait_all(self, start: float, timeout: float) -> None:
+    def _wait_all(self, start: float, timeout: float, *, reporter: Any | None = None) -> None:
         while True:
             if not self.inflight:
                 break
@@ -970,6 +974,8 @@ class ResourceQueueExecutor:
                 raise TimeoutError(f"Test session exceeded time out of {timeout} s.")
             self._check_finished_processes()
             self._check_for_leaks()
+            if reporter is not None:
+                reporter.poll()
             time.sleep(self.busy_wait_time)
 
     def _terminate_all(self, signum: int, reason: str | None = None) -> None:

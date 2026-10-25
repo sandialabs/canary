@@ -1,7 +1,6 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import dataclasses
 import sys
 import threading
 import time
@@ -9,7 +8,6 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
-from typing import Literal
 from typing import Protocol
 
 from rich import box
@@ -45,7 +43,8 @@ class ReporterExecutorProtocol(Protocol):
     running: dict[str, "ExecutionSlot"]
     finished: dict[str, "ExecutionSlot"]
     started_on: float
-    live_reporting: bool
+
+    def live_reporting(self) -> bool: ...
 
     @property
     def queue(self) -> ReporterQueueProtocol: ...
@@ -86,6 +85,9 @@ class Reporter:
         else:
             self.final_columns = ("Job", "ID", "Status", "Total", "Details")
         self.validate_columns(self.final_columns)
+
+    def poll(self) -> None:
+        pass
 
     def job_time_for_column(self, job: BaseJob, column: str) -> float:
         """
@@ -572,37 +574,47 @@ class EventReporter(Reporter):
         super().__init__(executor)
 
         self.debug = bool(config.get("debug"))
-        self.event_columns: tuple[str, ...] = ("Job", "ID", "Status", "Time", "Rank")
-        self.validate_columns(self.event_columns)
 
-        self.table = StaticTable()
-
-        maxnamelen = max(
-            (len(s.job.display_name(resolve=self.namefmt == "long")) for s in executor.queue._heap),
-            default=len("Job"),
-        )
-
-        for col in self.event_columns:
-            if col == "Job":
-                self.table.add_column(col, width=maxnamelen)
-            elif col == "ID":
-                self.table.add_column(col, width=8)
-            elif col == "Status":
-                self.table.add_column(col, width=15)
-            elif col == "Rank":
-                self.table.add_column(col, width=8, align="right")
-            elif col in self.timing_columns:
-                self.table.add_column(col, width=8, align="right")
-            else:
-                self.table.add_column(col, width=10)
+        style = config.getoption("console_style") or {}
+        self.progress_interval = float(style.get("progress_interval", 60.0))
+        self._last_progress = 0.0
 
     def __enter__(self):
         self.executor.add_listener(self.on_event)
-        self.table.print_header()
+        self.log_progress(force=True)
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        self.log_progress(force=True)
         self.executor.remove_listener(self.on_event)
+
+    def poll(self) -> None:
+        self.log_progress()
+
+    def render_event_line(
+        self, slot: "ExecutionSlot", event: str, *, result: str = "", reason: str = ""
+    ) -> Text:
+        fields = [f"rank={slot.qrank}/{slot.qsize}", f"worker={slot.worker_id}"]
+
+        if event == "finished":
+            fields.append(f"duration={fmt_secs(slot.job.timekeeper.total(live=True))}")
+
+        if result:
+            plain_result = Text.from_markup(result).plain
+            fields.append(f"result={plain_result}")
+
+        if reason:
+            fields.append(f"reason={reason}")
+
+        line = (
+            f"{fmt_clock()}  "
+            f"{self.job_kind(slot):<5} "
+            f"{slot.job.id[:7]:<7}  "
+            f"{event:<10} "
+            f"{' '.join(fields)}"
+        )
+
+        return Text(line)
 
     def on_event(self, event: str, *args, **kwargs) -> None:
         match event:
@@ -619,79 +631,81 @@ class EventReporter(Reporter):
             case _:
                 return
 
-    def render_event_row(self, slot: "ExecutionSlot", *, status: str, details: str = "") -> Text:
-        values = self.row_values_for_slot(slot, self.event_columns, status=status, details=details)
-        row = self.format_row_values(self.event_columns, values)
-        return self.table.render_row(row)
-
     def on_job_submit(self, slot: "ExecutionSlot") -> None:
-        text = self.render_event_row(slot, status="[cyan]SUBMITTED[/]")
-        logger.info(text.markup, extra={"prefix": ""})
+        self.log_event(slot, "submitted")
 
     def on_job_stage(self, slot: "ExecutionSlot") -> None:
         if self.debug:
-            text = self.render_event_row(slot, status="[blue]STAGING[/]")
-            logger.info(text.markup, extra={"prefix": ""})
+            self.log_event(slot, "staging")
 
     def on_job_start(self, slot: "ExecutionSlot") -> None:
-        text = self.render_event_row(slot, status="[blue]STARTED[/]")
-        logger.info(text.markup, extra={"prefix": ""})
+        self.log_event(slot, "started")
 
     def on_job_stop(self, slot: "ExecutionSlot") -> None:
         if self.debug:
-            text = self.render_event_row(slot, status="[blue]FINALIZING[/]")
-            logger.info(text.markup, extra={"prefix": ""})
+            self.log_event(slot, "finalizing")
 
     def on_job_finish(self, slot: "ExecutionSlot") -> None:
-        text = self.render_event_row(
+        self.log_event(
             slot,
-            status=slot.job.status.display_name(style="rich"),
-            details=slot.job.status.reason or "",
+            "finished",
+            result=slot.job.status.outcome.label,
+            reason=slot.job.status.reason or "",
         )
-        logger.info(text.markup, extra={"prefix": ""})
 
+    def log_event(
+        self, slot: "ExecutionSlot", event: str, *, result: str = "", reason: str = ""
+    ) -> None:
+        text = self.render_event_line(slot, event, result=result, reason=reason)
+        logger.info(text.plain, extra={"prefix": ""})
 
-@dataclasses.dataclass
-class StaticColumn:
-    header: str
-    width: int
-    align: Literal["left", "right"] = "left"
+    def log_progress(self, *, force: bool = False) -> None:
+        now = time.time()
+        if not force and now - self._last_progress < self.progress_interval:
+            return
 
+        self._last_progress = now
 
-class StaticTable:
-    def __init__(self, columns: list[StaticColumn] | None = None) -> None:
-        self.columns = list(columns or [])
+        total = len(self.executor.queue.jobs())
+        submitted = len(self.executor.submitted)
+        running = len(self.executor.running)
+        finished = len(self.executor.finished)
+        queued = max(0, total - submitted - running - finished)
 
-    def add_column(self, header: str, width: int, align: Literal["left", "right"] = "left") -> None:
-        self.columns.append(StaticColumn(header=header, width=width, align=align))
+        status_counts = self.finished_status_counts()
 
-    def _format_cell(self, value: str, col: StaticColumn) -> Text:
-        text = Text.from_markup(value)
-        if text.cell_len > col.width:
-            text.truncate(col.width, overflow="ellipsis")
-        pad = col.width - text.cell_len
-        if pad > 0:
-            if col.align == "right":
-                text = Text(" " * pad) + text
-            else:
-                text += Text(" " * pad)
-        return text
+        status_text = " ".join(f"{name}={count}" for name, count in sorted(status_counts.items()))
 
-    def render_header(self) -> Text:
-        return self.render_row([col.header for col in self.columns])
+        fields = [
+            f"done={finished}/{total}",
+            f"running={running}",
+            f"submitted={submitted}",
+            f"queued={queued}",
+        ]
 
-    def render_row(self, values: list[str]) -> Text:
-        row = Text()
-        for value, col in zip(values, self.columns):
-            row.append(self._format_cell(value, col))
-            row.append("  ")
-        return row
+        if status_text:
+            fields.append(status_text)
 
-    def print_header(self):
-        text = self.render_header()
-        rule = "─" * (text.cell_len - 2)
-        logger.info(text.markup, extra={"prefix": ""})
-        logger.info(rule, extra={"prefix": ""})
+        logger.info(f"{fmt_clock()}  progress       {' '.join(fields)}", extra={"prefix": ""})
+
+    def finished_status_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+
+        for slot in self.executor.finished.values():
+            status = Text.from_markup(slot.job.status.display_name(style="rich")).plain
+            key = status.split(" ", 1)[0].lower()
+            counts[key] = counts.get(key, 0) + 1
+
+        return counts
+
+    @staticmethod
+    def job_kind(slot: "ExecutionSlot") -> str:
+        name = type(slot.job).__name__.lower()
+
+        if name.endswith("batch"):
+            return "batch"
+
+        return "job"
 
 
 def fmt_secs(x: float) -> str:
@@ -707,3 +721,8 @@ def fmt_secs(x: float) -> str:
     from _canary.util.time import hhmmss
 
     return hhmmss(None if x < 0 else x, threshold=1)
+
+
+def fmt_clock(at: float | None = None) -> str:
+    now = time.time() if at is None else at
+    return time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now % 1.0) * 100):02d}"
