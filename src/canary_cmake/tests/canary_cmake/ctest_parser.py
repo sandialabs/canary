@@ -252,10 +252,10 @@ def test_parse_ctesttestfile_timeout_signal(loadtestfile):
         with pytest.raises(KeyError):
             assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
         with pytest.raises(KeyError):
-            assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
+            assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
     else:
         assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-        assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
+        assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
