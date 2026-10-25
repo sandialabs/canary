@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import sys
 from typing import Any
 
 import pytest
@@ -10,6 +11,8 @@ import pytest
 import canary_cmake.ctest as ctg
 from _canary.util.filesystem import force_remove
 from _canary.util.filesystem import which
+
+IS_MACOS = sys.platform == "darwin"
 
 
 @pytest.fixture(scope="module")
@@ -245,9 +248,13 @@ def test_parse_ctesttestfile_timeout_after_match(loadtestfile):
 def test_parse_ctesttestfile_timeout_signal(loadtestfile):
     test = loadtestfile["timeout_signal"]
     assert find_property(test["properties"], "TIMEOUT") == 1
-    with pytest.raises(KeyError):
+    if IS_MACOS:
+        with pytest.raises(KeyError):
+            assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
+        with pytest.raises(KeyError):
+            assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
+    else:
         assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-    with pytest.raises(KeyError):
         assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
 
 
