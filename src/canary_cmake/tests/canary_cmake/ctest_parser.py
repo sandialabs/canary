@@ -246,16 +246,16 @@ def test_parse_ctesttestfile_timeout_after_match(loadtestfile):
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_timeout_signal(loadtestfile):
+    if sys.platform == "darwin":
+        pytest.xfail(
+            "CTest 3.31 on macOS omits TIMEOUT_SIGNAL_* from json-v1 parse output, "
+            "despite POSIX signal support per CMake docs."
+        )
+
     test = loadtestfile["timeout_signal"]
     assert find_property(test["properties"], "TIMEOUT") == 1
-    if IS_MACOS:
-        with pytest.raises(KeyError):
-            assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-        with pytest.raises(KeyError):
-            assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
-    else:
-        assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-        assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
+    assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
+    assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
