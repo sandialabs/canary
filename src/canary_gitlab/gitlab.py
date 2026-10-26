@@ -19,6 +19,8 @@ from urllib.request import Request
 from urllib.request import build_opener
 from urllib.request import urlopen
 
+NETWORK_TIMEOUT_SECONDS = 30
+
 
 def api_access_required(fun):
     @functools.wraps(fun)
@@ -281,8 +283,11 @@ class repo:
 
         url = self.build_api_url(path=f"projects/{self.project_id}/uploads")
         headers = {"PRIVATE-TOKEN": str(self.access_token)}
-        files = {"file": open(file, "rb")}
-        response = requests.post(url, headers=headers, files=files)  # nosec B113
+        with open(file, "rb") as fh:
+            files = {"file": fh}
+            response = requests.post(  # nosec B113
+                url, headers=headers, files=files, timeout=NETWORK_TIMEOUT_SECONDS
+            )
         return response.json()
 
     @api_access_required
@@ -294,7 +299,7 @@ class repo:
         request = Request(url=url, headers=headers, method="POST")
         request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
         if assets is not None:
@@ -303,7 +308,7 @@ class repo:
 
         get_url = f"{url}/{tag}"
         request = Request(url=get_url, headers=headers)
-        return json.load(urlopen(request))  # nosec B310
+        return json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
 
     @api_access_required
     def link(self, *, tag, filename, fileurl):
@@ -313,7 +318,7 @@ class repo:
         request = Request(url=url, headers=headers, data=data, method="POST")
         request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
     @api_access_required
@@ -332,7 +337,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))  # nosec B310
+                payload = json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
                 if not payload:
                     break
                 issues.extend(payload)
@@ -354,7 +359,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))  # nosec B310
+                payload = json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
                 if not payload:
                     break
                 self._commits.extend(payload)
@@ -378,7 +383,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))  # nosec B310
+                payload = json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
                 if not payload:
                     break
                 merge_requests.extend(payload)
@@ -391,17 +396,18 @@ class repo:
         url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}")
         headers = {"PRIVATE-TOKEN": str(self.access_token)}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))  # nosec B310
+        return json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
 
     @api_access_required
     def move_issue(self, issue_no, *, to_project_id):
-        # TODO: I (tjfulle) haven't figured out how to use urllib to do what
-        # the --form argument to curl does
-        header = ["--header", f"PRIVATE-TOKEN: {self.access_token}"]
-        form = ["--form", f"to_project_id={to_project_id}"]
         url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}/move")
-        args = header + form + [url]
-        curl(*args)
+        data = urlencode({"to_project_id": to_project_id}).encode("utf-8")
+        headers = {"PRIVATE-TOKEN": str(self.access_token)}
+        request = Request(url=url, headers=headers, data=data, method="POST")
+        request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
+        opener = build_opener(HTTPHandler)
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
+            pass
 
     @api_access_required
     def edit_issue(self, issue_no, *, data=None, notes=None):
@@ -427,7 +433,7 @@ class repo:
         request = Request(url=url, headers=headers, method=method)
         request.get_method = lambda: method  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
     @api_access_required
@@ -438,7 +444,7 @@ class repo:
         url = f"{base_url}?{encoded_params}"
         request = Request(url=url, headers=headers, method="POST")
         request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
-        issue = json.load(urlopen(request))  # nosec B310
+        issue = json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
         return issue.get("iid")
 
     @api_access_required
@@ -446,7 +452,7 @@ class repo:
         url = self.build_api_url(path=f"projects/{self.project_id}/repository/tags")
         headers = {"PRIVATE-TOKEN": str(self.access_token)}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))  # nosec B310
+        return json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
 
     def tag_exists(self, name):
         return name in self.tags()
@@ -610,7 +616,7 @@ class merge_request:
             logging.info(f"Fetching merge request data for MR {self.iid}")
             headers = {"PRIVATE-TOKEN": self.access_token}
             request = Request(url=url, headers=headers)
-            self._mr_data = json.load(urlopen(request))  # nosec B310
+            self._mr_data = json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
         return self._mr_data
 
     def fetch_project_data(self, pid):
@@ -618,7 +624,7 @@ class merge_request:
         logging.info(f"Fetching project data for project {pid}")
         headers = {"PRIVATE-TOKEN": self.access_token}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))  # nosec B310
+        return json.load(urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS))  # nosec B310
 
     @property
     def project_data(self):
@@ -647,7 +653,7 @@ class merge_request:
                 return None
             pid = self.target_project_id
             if pid == self.project_id:
-                self._source_data = self.project_data
+                self._target_data = self.project_data
             else:
                 self._target_data = self.fetch_project_data(pid)
         return self._target_data
@@ -679,7 +685,7 @@ class merge_request:
         )
         request = Request(url=url, headers=headers, method="POST")
         request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
     def remove_labels(self, *labels):
@@ -693,7 +699,7 @@ class merge_request:
         )
         request = Request(url=url, headers=headers, method="PUT")
         request.get_method = lambda: "PUT"  # ty: ignore[invalid-assignment]
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
     def add_labels(self, *labels):
@@ -707,13 +713,13 @@ class merge_request:
         )
         request = Request(url=url, headers=headers, method="PUT")
         request.get_method = lambda: "PUT"  # ty: ignore[invalid-assignment]
-        with opener.open(request):
+        with opener.open(request, timeout=NETWORK_TIMEOUT_SECONDS):
             pass
 
 
 def download_file(download_url, filename=None):
     filename = filename or os.path.basename(download_url)
-    with urlopen(download_url) as response:  # nosec B310
+    with urlopen(download_url, timeout=NETWORK_TIMEOUT_SECONDS) as response:  # nosec B310
         with open(filename, "wb") as fh:
             shutil.copyfileobj(response, fh)
 
@@ -727,7 +733,7 @@ def get_job_artifacts(api_v4_url, project_id, jobid, access_token=None, dest=Non
             headers["PRIVATE-TOKEN"] = access_token
         logging.info(f"Downloading artifacts from {url}")
         request = Request(url=url, headers=headers)
-        response = urlopen(request)  # nosec B310
+        response = urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS)  # nosec B310
         f = zipfile.ZipFile(io.BytesIO(response.read()))
 
         # Safe extraction: block traversal and absolute paths

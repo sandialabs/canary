@@ -38,7 +38,7 @@ def test_zip_slip_extraction(tmp_path, monkeypatch):
     # Monkeypatch urlopen in gitlab module
     import canary_gitlab.gitlab as gitlab_mod
 
-    def fake_urlopen(req: object) -> DummyResponse:
+    def fake_urlopen(req: object, timeout=None) -> DummyResponse:
         return DummyResponse()
 
     monkeypatch.setattr(gitlab_mod, "urlopen", cast(Any, fake_urlopen))

@@ -22,6 +22,8 @@ from _canary.util.filesystem import force_remove
 
 logger = canary.get_logger(__name__)
 
+NETWORK_TIMEOUT_SECONDS = 30
+
 
 class api_filters:
     def __init__(self, combine_mode=None):
@@ -151,7 +153,7 @@ class server:
     @staticmethod
     def get(url, raw=False):
         """Get the response from the CDash API and parse it using the json library"""
-        response = urlopen(url)  # nosec B310
+        response = urlopen(url, timeout=NETWORK_TIMEOUT_SECONDS)  # nosec B310
         return response if raw else json.load(response)
 
     def buildid(self, *, sitename, buildstamp, buildname):
@@ -172,7 +174,7 @@ class server:
         logger.debug(f"Getting build ID from CDash using the following query: {url}")
         curl = Executable("curl")
         try:
-            result = curl("-k", "-L", url, output=str, error=os.devnull)
+            result = curl("-L", url, output=str, error=os.devnull)
             doc = dom.parseString(result.get_output())
             if els := doc.getElementsByTagName("buildid"):
                 buildid = get_text(els[0])
@@ -557,7 +559,7 @@ class server:
         )
 
         with no_proxy():
-            response = urlopen(request)  # nosec B310
+            response = urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS)  # nosec B310
 
         document = json.load(response)
 
