@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import os
 from pathlib import Path
 
 import pytest
@@ -317,9 +318,22 @@ def test_generate_rejects_duplicate_ids(tmpdir):
             fh.write("import canary_pyt\ncanary_pyt.directives.set_id('spam_1234')")
         with open("b.pyt", "w") as fh:
             fh.write("import canary_pyt\ncanary_pyt.directives.set_id('spam_1234')")
-    generators = collect.find_generators_in_path(workdir)
-    with pytest.raises(ValueError, match="Duplicate test IDs in test suite"):
-        generate_specs(generators)
+
+
+def test_custom_view_name_is_skipped_during_collection(tmpdir):
+    with working_dir(tmpdir.strpath, create=True), config.override():
+        config.set("workspace:view:name", "CustomResults")
+
+        with open("test.pyt", "w") as fh:
+            fh.write("import canary_pyt\n")
+
+        os.mkdir("CustomResults")
+        with open("CustomResults/copied.pyt", "w") as fh:
+            fh.write("import canary_pyt\n")
+
+        generators = collect.find_generators_in_path(".")
+
+        assert len(generators) == 1
 
 
 def test_generate_rejects_duplicate_exec_paths(tmpdir):

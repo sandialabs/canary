@@ -332,7 +332,12 @@ class RegisterPlugin(argparse.Action):
 class ConfigMods(argparse.Action):
     def __call__(self, parser, namespace, option, option_str=None):
         data = {}
-        *parts, value = option.split(":")
+        parts = option.split(":", 2)
+        if len(parts) < 2:
+            parser.error(f"Invalid -c value {option!r}; expected key:value")
+        value = parts.pop()
+        if not parts or any(not part for part in parts):
+            parser.error(f"Invalid -c value {option!r}; expected key:value")
         current = data
         while len(parts) > 1:
             key = parts.pop(0)

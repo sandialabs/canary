@@ -385,7 +385,7 @@ def canary_collectstart(collector: "Collector") -> None:
         ".hg",
         ".canary",
         ".canary.*",
-        config.get("view") or "TestResults",
+        config.get("workspace:view:name") or "TestResults",
     ]
     collector.add_skip_dirs(dirs)
 

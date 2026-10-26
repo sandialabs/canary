@@ -250,6 +250,8 @@ class Config:
         if parts[0] == "config":
             # Legacy support for top level config key
             parts = parts[1:]
+        if parts[0] not in self.data:
+            return default
         value = self.data.get(parts[0], {})
         for key in parts[1:]:
             # cannot use value.get(key, default) in case there is another part
@@ -324,7 +326,7 @@ class Config:
         if args.q or args.v:
             level_index: int = log_levels.index(logging.INFO)
             if args.q:
-                level_index = min(len(log_levels), level_index + args.q)
+                level_index = min(len(log_levels) - 1, level_index + args.q)
             if args.v:
                 level_index = max(0, level_index - args.v)
             levelno = log_levels[level_index]
@@ -340,8 +342,9 @@ class Config:
             data["no_pager"] = True
 
         if args.config_mods:
-            data.update(args.config_mods)
-            if envmods := args.config_mods.get("environment"):
+            validated_mods = config_schema.validate(args.config_mods)
+            data.update(validated_mods)
+            if envmods := validated_mods.get("environment"):
                 self.apply_environment_mods(envmods)
 
         # Put timeouts passed on the command line into the regular configuration

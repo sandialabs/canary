@@ -109,6 +109,21 @@ def test_configmods_merges_multiple_updates_to_same_tree():
     assert mods["a"]["c"] == 2
 
 
+def test_configmods_accepts_colons_in_value():
+
+    parser = make_argument_parser()
+    args = parser.parse_args(["-c", "scratch:url:http://x.y"])
+
+    assert args.config_mods["scratch"]["url"] == "http://x.y"
+
+
+def test_configmods_rejects_missing_value():
+
+    parser = make_argument_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["-c", "debug"])
+
+
 def test_environment_modification_action_sets_os_environ():
 
     parser = make_argument_parser()
@@ -119,6 +134,14 @@ def test_environment_modification_action_sets_os_environ():
     assert cfg.get("environment")["set"]["HELLO"] == "WORLD"
     assert os.environ["HELLO"] == "WORLD"
     os.environ.pop("HELLO")
+
+
+def test_config_get_returns_default_for_missing_top_level_key():
+
+    cfg = Config()
+    cfg.data = {"run": {"timeout": {"default": 300.0}}}
+
+    assert cfg.get("nokey", 5) == 5
 
 
 def test_environment_modification_invalid_raises():
@@ -181,6 +204,16 @@ def test_helpformatter_usage_renders():
     #   [-hvqd]
     assert _usage_has_short_flag(usage, "v")
     assert _usage_has_short_flag(usage, "q")
+
+
+def test_quiet_flag_clamps_to_most_quiet_log_level():
+
+    parser = make_argument_parser()
+    args = parser.parse_args(["-qqqq"])
+    config = Config()
+    config.set_main_options(args)
+
+    assert config.get("log_level") == "CRITICAL"
 
 
 def _usage_has_short_flag(usage: str, flag: str) -> bool:
