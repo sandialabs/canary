@@ -245,13 +245,18 @@ class ParameterExpression:
 
     def __init__(self, string: str) -> None:
         self.string = string
-        self.expression = self.parse_expr(string)
+        try:
+            self.expression = self.parse_expr(string)
+        except Exception:
+            self.expression = "False"
 
     def __repr__(self) -> str:
         return self.string
 
     @staticmethod
     def parse_expr(expr: str) -> str:
+        if "**" in expr:
+            raise ValueError(f"Exponentiation is not allowed in parameter expression {expr!r}")
         TokenInfo = tokenize.TokenInfo
         parts: list[tokenize.TokenInfo] = []
         tokens = get_tokens(expr)
@@ -296,18 +301,28 @@ class ParameterExpression:
                     )
                     parts[-1] = token
                     continue
+                elif token.string == "*":
+                    pass
                 elif token.string == "!":
                     # This situation can arise for something like `!cpus`
                     start = token.start
-                    token = next(tokens)
-                    assert token.type == tokenize.NAME
+                    try:
+                        token = next(tokens)
+                    except StopIteration as exc:
+                        raise ValueError(f"Invalid parameter expression {expr!r}") from exc
+                    if token.type != tokenize.NAME:
+                        raise ValueError(f"Invalid parameter expression {expr!r}")
                     string = f"not_defined({token.string!r})"
                     token = TokenInfo(tokenize.ENDMARKER, string, start, token.end, token.line)
                 parts.append(token)
             elif token.type == tokenize.ERRORTOKEN and token.string == "!":
                 start = token.start
-                token = next(tokens)
-                assert token.type == tokenize.NAME
+                try:
+                    token = next(tokens)
+                except StopIteration as exc:
+                    raise ValueError(f"Invalid parameter expression {expr!r}") from exc
+                if token.type != tokenize.NAME:
+                    raise ValueError(f"Invalid parameter expression {expr!r}")
                 string = f"not_defined({token.string!r})"
                 token = TokenInfo(tokenize.ENDMARKER, string, start, token.end, token.line)
                 parts.append(token)
@@ -327,7 +342,7 @@ class ParameterExpression:
         assert isinstance(self.expression, str)
         try:
             return bool(eval(self.expression, safe_globals, local_vars))  # nosec B307
-        except NameError:
+        except (NameError, TypeError, SyntaxError, tokenize.TokenError, ValueError, OverflowError):
             return False
 
 

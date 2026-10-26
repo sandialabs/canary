@@ -17,6 +17,7 @@ from typing import Type
 
 from .expression import Expression
 from .expression import ParameterExpression
+from .expression import ParseError
 
 
 class WhenResult:
@@ -167,7 +168,13 @@ class When:
         assert self.platform_expr is not None
         string = safe_substitute(self.platform_expr, **kwds)
         string = remove_surrounding_quotes(string)
-        expr = Expression.compile(string, allow_wildcards=True)
+        try:
+            expr = Expression.compile(string, allow_wildcards=True)
+        except (ParseError, SyntaxError, ValueError):
+            fmt = "[bold]platforms={0}[/] evaluated to [bold red]False[/] for platforms={1}"
+            input = ",".join(PlatformMatcher().own_platform_names)
+            reason = fmt.format(string, input)
+            return reason
         if not expr.evaluate(PlatformMatcher()):
             fmt = "[bold]platforms={0}[/] evaluated to [bold red]False[/] for platforms={1}"
             input = ",".join(PlatformMatcher().own_platform_names)
@@ -183,7 +190,12 @@ class When:
             return reason
         string = safe_substitute(self.testname_expr, **kwds)
         string = remove_surrounding_quotes(string)
-        expr = Expression.compile(string, allow_wildcards=True)
+        try:
+            expr = Expression.compile(string, allow_wildcards=True)
+        except (ParseError, SyntaxError, ValueError):
+            fmt = "[bold]testname={0}[/] evaluated to [bold]False[/] for testname={1}"
+            reason = fmt.format(string, testname_arg)
+            return reason
         if not expr.evaluate(NameMatcher({testname_arg})):
             fmt = "[bold]testname={0}[/] evaluated to [bold]False[/] for testname={1}"
             reason = fmt.format(expr.string, testname_arg)
@@ -195,7 +207,12 @@ class When:
         options_arg = options_arg or []
         string = safe_substitute(self.option_expr, **kwds)
         string = remove_surrounding_quotes(string)
-        expr = Expression.compile(string, allow_wildcards=True)
+        try:
+            expr = Expression.compile(string, allow_wildcards=True)
+        except (ParseError, SyntaxError, ValueError):
+            fmt = "[bold]options={0}[/] evaluated to [bold red]False[/] for options={1}"
+            reason = fmt.format(string, json.dumps(options_arg))
+            return reason
         if not expr.evaluate(OptionMatcher(set(options_arg))):
             fmt = "[bold]options={0}[/] evaluated to [bold red]False[/] for options={1}"
             reason = fmt.format(expr.string, json.dumps(options_arg))
@@ -209,7 +226,12 @@ class When:
         keywords_arg = keywords_arg or []
         string = safe_substitute(self.keyword_expr, **kwds)
         string = remove_surrounding_quotes(string)
-        expr = Expression.compile(string, allow_wildcards=True)
+        try:
+            expr = Expression.compile(string, allow_wildcards=True)
+        except (ParseError, SyntaxError, ValueError):
+            fmt = "[bold]keywords={0}[/] evaluated to [bold red]False[/] for keywords={1}"
+            reason = fmt.format(string, json.dumps(keywords_arg))
+            return reason
         if not expr.evaluate(AnyMatcher(set(keywords_arg), False)):
             fmt = "[bold]keywords={0}[/] evaluated to [bold red]False[/] for keywords={1}"
             reason = fmt.format(expr.string, json.dumps(keywords_arg))
@@ -240,7 +262,7 @@ class When:
     ) -> WhenResult:
         kwds: dict[str, Any] = {}
         if testname is not None:
-            kwds["testname"] = kwds["name"] = None
+            kwds["testname"] = kwds["name"] = testname
         if parameters is not None:
             kwds.update(parameters)
         for key in list(kwds.keys()):
@@ -347,7 +369,7 @@ def safe_substitute(arg: str, **kwds) -> str:
     if "$" in arg:
         t = Template(arg)
         return t.safe_substitute(**kwds)
-    return arg.format(**kwds)
+    return arg
 
 
 def get_tokens(code) -> Iterator[tokenize.TokenInfo]:

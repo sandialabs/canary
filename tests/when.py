@@ -189,6 +189,12 @@ def test_testname_alias_name_in_from_string():
     assert w.evaluate(testname="bar").value is False
 
 
+def test_testname_template_substitution_uses_actual_testname():
+    w = When.from_string("options='${testname}'")
+    assert w.evaluate(testname="foo", on_options=["foo"]).value is True
+    assert w.evaluate(testname="foo", on_options=["bar"]).value is False
+
+
 def test_parameter_alias_parameter_in_from_string():
     w = When.from_string("parameter='a=1'")
     assert w.parameter_expr == "a=1"
@@ -207,6 +213,12 @@ def test_option_alias_option_in_from_string():
     assert w.option_expr == "dbg"
     assert w.evaluate(on_options=["dbg"]).value is True
     assert w.evaluate(on_options=["fast"]).value is False
+
+
+def test_safe_substitute_leaves_literal_braces_unchanged():
+    w = When.from_string("options='{foo}'")
+    assert w.evaluate(on_options=["{foo}"]).value is False
+    assert w.evaluate(on_options=["foo"]).value is False
 
 
 def test_keywords_case_sensitivity_defaults_to_case_sensitive_false_in_reasoning():
