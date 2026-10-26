@@ -506,10 +506,10 @@ class CanaryHPCConductor:
         database.
         """
 
-        def listener(event: str, slot: Any) -> None:
-            if event != "job_finished":
+        def listener(event: Any) -> None:
+            if event.name != "job_finished" or event.slot is None:
                 return
-            batch = slot.job
+            batch = event.slot.job
             try:
                 for job in batch:
                     try:

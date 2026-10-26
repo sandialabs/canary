@@ -381,7 +381,14 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
         def set_jobid(future: hpc_connect.futures.FutureProtocol):
             jobid = batch.jobid = future.jobid
-            queue.put({"event": "job_updated", "timestamp": time.time(), "attrs": {"jobid": jobid}})
+            queue.put(
+                {
+                    "event": "job_updated",
+                    "timestamp": time.time(),
+                    "attrs": {"jobid": jobid},
+                    "detail": f"{self.backend.name} jobid: {jobid}",
+                }
+            )
 
         def write_procinfo(future: hpc_connect.futures.FutureProtocol):
             try:

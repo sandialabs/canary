@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from _canary.execution.queue_executor import ExecutionEvent
 from canary_hpc.conductor import create_batch_specs
 
 
@@ -535,7 +536,7 @@ def make_batch_listener():
 def test_batch_result_listener_ignores_in_progress_batch_events(event: str) -> None:
     listener, workspace, children = make_batch_listener()
 
-    listener(event, FakeSlot(job=FakeBatch(children)))
+    listener(ExecutionEvent(name=event, slot=FakeSlot(job=FakeBatch(children))))
 
     assert workspace.db.queue.items == []
     assert all(child.refreshed == 0 for child in children)
@@ -544,7 +545,7 @@ def test_batch_result_listener_ignores_in_progress_batch_events(event: str) -> N
 def test_batch_result_listener_refreshes_and_spools_children_on_finish() -> None:
     listener, workspace, children = make_batch_listener()
 
-    listener("job_finished", FakeSlot(job=FakeBatch(children)))
+    listener(ExecutionEvent(name="job_finished", slot=FakeSlot(job=FakeBatch(children))))
 
     assert workspace.db.queue.items == children
     assert all(child.refreshed == 1 for child in children)

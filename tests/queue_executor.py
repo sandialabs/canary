@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 from typing import Any
-from typing import Callable
 from typing import cast
 
 from _canary.core.job import BaseJob
 from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
+from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
 from _canary.execution.queue_executor import ResourceQueueExecutor
 
@@ -101,13 +101,13 @@ def make_executor(queue: DummyQueue) -> ResourceQueueExecutor:
     return ResourceQueueExecutor(cast(Any, queue), executor=lambda *a, **k: None, max_workers=1)
 
 
-def add_listener(executor: ResourceQueueExecutor) -> list[tuple[str, ExecutionSlot]]:
-    events: list[tuple[str, ExecutionSlot]] = []
+def add_listener(executor: ResourceQueueExecutor) -> list[ExecutionEvent]:
+    events: list[ExecutionEvent] = []
 
-    def listener(event: str, slot: ExecutionSlot) -> None:
-        events.append((event, slot))
+    def listener(event: ExecutionEvent) -> None:
+        events.append(event)
 
-    executor.add_listener(cast(Callable[..., None], listener))
+    executor.add_listener(listener)
     return events
 
 
@@ -132,7 +132,7 @@ def test_handle_job_timeout_closes_slot_and_marks_timeout() -> None:
     assert job.id in executor.finished
     assert job.id not in executor.running
     assert queue.done_jobs == [job]
-    assert events[-1][0] == "job_finished"
+    assert events[-1].name == "job_finished"
     assert job.timekeeper._finished > 0
     assert job.timekeeper.total(live=False) >= 0.0
 
@@ -160,7 +160,7 @@ def test_handle_job_died_with_signal_marks_error() -> None:
     assert job.id in executor.finished
     assert job.id not in executor.running
     assert queue.done_jobs == [job]
-    assert events[-1][0] == "job_finished"
+    assert events[-1].name == "job_finished"
     assert job.timekeeper._finished > 0
 
 
@@ -213,7 +213,7 @@ def test_terminate_all_marks_inflight_jobs_cancelled() -> None:
     assert job.id in executor.finished
     assert queue.done_jobs == [job]
     assert queue.cleared == "INTERRUPTED"
-    assert events[-1][0] == "job_finished"
+    assert events[-1].name == "job_finished"
     assert job.timekeeper._finished > 0
 
 

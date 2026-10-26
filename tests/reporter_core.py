@@ -13,6 +13,7 @@ from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.console import EventReporter
 from _canary.execution.console import Reporter
+from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
 
 
@@ -101,16 +102,16 @@ class DummyExecutor:
         self.finished: dict[str, ExecutionSlot] = {}
         self.started_on = 0.0
         self.live_reporting = False
-        self.listeners: list[Callable[..., None]] = []
+        self.listeners: list[Callable[[ExecutionEvent], None]] = []
 
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
 
-    def add_listener(self, callback: Callable[..., None]) -> None:
+    def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)
 
-    def remove_listener(self, callback: Callable[..., None]) -> None:
+    def remove_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.remove(callback)
 
 

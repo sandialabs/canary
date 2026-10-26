@@ -22,6 +22,7 @@ from ..core.job import BaseJob
 from ..util import logging
 
 if TYPE_CHECKING:
+    from .queue_executor import ExecutionEvent
     from .queue_executor import ExecutionSlot
 
 
@@ -52,9 +53,9 @@ class ReporterExecutorProtocol(Protocol):
     @property
     def inflight(self) -> dict[str, "ExecutionSlot"]: ...
 
-    def add_listener(self, callback: Callable[..., None]) -> None: ...
+    def add_listener(self, callback: Callable[["ExecutionEvent"], None]) -> None: ...
 
-    def remove_listener(self, callback: Callable[..., None]) -> None: ...
+    def remove_listener(self, callback: Callable[["ExecutionEvent"], None]) -> None: ...
 
 
 class Reporter:
@@ -616,18 +617,23 @@ class EventReporter(Reporter):
 
         return Text(line)
 
-    def on_event(self, event: str, *args, **kwargs) -> None:
-        match event:
+    def on_event(self, event: "ExecutionEvent") -> None:
+        slot = event.slot
+        if slot is None:
+            return
+        match event.name:
             case "job_submitted":
-                self.on_job_submit(args[0])
+                self.on_job_submit(slot)
             case "job_staged":
-                self.on_job_stage(args[0])
+                self.on_job_stage(slot)
             case "job_started":
-                self.on_job_start(args[0])
+                self.on_job_start(slot)
             case "job_stopped":
-                self.on_job_stop(args[0])
+                self.on_job_stop(slot)
+            case "job_updated":
+                self.on_job_update(slot, detail=event.payload.get("detail", ""))
             case "job_finished":
-                self.on_job_finish(args[0])
+                self.on_job_finish(slot)
             case _:
                 return
 
@@ -645,6 +651,9 @@ class EventReporter(Reporter):
         if self.debug:
             self.log_event(slot, "finalizing")
 
+    def on_job_update(self, slot: "ExecutionSlot", *, detail: Any = "") -> None:
+        self.log_event(slot, "updated", detail=str(detail) if detail else "")
+
     def on_job_finish(self, slot: "ExecutionSlot") -> None:
         self.log_event(
             slot,
@@ -654,9 +663,17 @@ class EventReporter(Reporter):
         )
 
     def log_event(
-        self, slot: "ExecutionSlot", event: str, *, result: str = "", reason: str = ""
+        self,
+        slot: "ExecutionSlot",
+        event: str,
+        *,
+        result: str = "",
+        reason: str = "",
+        detail: str = "",
     ) -> None:
         text = self.render_event_line(slot, event, result=result, reason=reason)
+        if detail:
+            text.append(f" {detail}")
         logger.info(text.plain, extra={"prefix": ""})
 
     def log_progress(self, *, force: bool = False) -> None:

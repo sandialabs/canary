@@ -20,6 +20,7 @@ from _canary.core.job import BaseJob
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.console import EventReporter
 from _canary.execution.console import LiveReporter
+from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
 from _canary.util.misc import boolean
 
@@ -247,7 +248,7 @@ class FluxDirectExecutor:
         self.running: dict[str, ExecutionSlot] = {}
         self.finished: dict[str, ExecutionSlot] = {}
 
-        self.listeners: list[Callable[..., None]] = []
+        self.listeners: list[Callable[[ExecutionEvent], None]] = []
         self.started_on: float = -1.0
 
         self.futures: dict[Any, str] = {}
@@ -265,18 +266,18 @@ class FluxDirectExecutor:
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
 
-    def add_listener(self, callback: Callable[..., None]) -> None:
+    def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)
 
-    def remove_listener(self, callback: Callable[..., None]) -> None:
+    def remove_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         try:
             self.listeners.remove(callback)
         except ValueError:
             pass
 
-    def notify_listeners(self, event: str, *args: Any) -> None:
+    def notify_listeners(self, event: ExecutionEvent) -> None:
         for callback in list(self.listeners):
-            callback(event, *args)
+            callback(event)
 
     def run(self) -> int:
         import hpc_connect
@@ -285,7 +286,7 @@ class FluxDirectExecutor:
 
         reporter = (
             LiveReporter(self, live_columns="jixpsrfew")
-            if self.live_reporting
+            if self.live_reporting()
             else EventReporter(self)
         )
         self.add_listener(self._sync_view_on_finish)
@@ -470,7 +471,7 @@ class FluxDirectExecutor:
             job.save()
         except Exception:
             logger.debug("Failed to save submitted job %s", job.id[:7], exc_info=True)
-        self.notify_listeners("job_submitted", slot)
+        self.notify_listeners(ExecutionEvent(name="job_submitted", slot=slot))
 
     def _mark_flux_started_by_id(self, job_id: str) -> None:
         slot = self.slots_by_id.get(job_id)
@@ -491,7 +492,7 @@ class FluxDirectExecutor:
             job.save()
         except Exception:
             logger.debug("Failed to save Flux-started job %s", job_id[:7], exc_info=True)
-        self.notify_listeners("job_started", slot)
+        self.notify_listeners(ExecutionEvent(name="job_started", slot=slot))
 
     def _mark_submission_failed(self, slot: ExecutionSlot, exc: BaseException) -> None:
         flux_job = cast(FluxJob, slot.job)
@@ -518,7 +519,7 @@ class FluxDirectExecutor:
         except Exception:
             logger.debug("Failed to queue submission-failed job %s", job.id[:7], exc_info=True)
 
-        self.notify_listeners("job_finished", slot)
+        self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
 
     def _poll_finished(self) -> bool:
         finished_any = False
@@ -612,7 +613,7 @@ class FluxDirectExecutor:
             except Exception:
                 logger.debug("Failed to queue blocked job %s", job.id[:7], exc_info=True)
 
-            self.notify_listeners("job_finished", slot)
+            self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
             finalized_any = True
 
         return finalized_any
@@ -650,7 +651,7 @@ class FluxDirectExecutor:
             except Exception:
                 logger.debug("Failed to queue stuck job %s", job.id[:7], exc_info=True)
 
-            self.notify_listeners("job_finished", slot)
+            self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
 
     def _mark_finished(
         self,
@@ -675,7 +676,7 @@ class FluxDirectExecutor:
         # record that boundary before closing the FluxJob.
         if job.timekeeper._finished > 0 and flux_job.timekeeper._stopped < 0:
             slot.on_stop(at=job.timekeeper._finished)
-            self.notify_listeners("job_stopped", slot)
+            self.notify_listeners(ExecutionEvent(name="job_stopped", slot=slot))
 
         returned_at = time.time()
         slot.on_finish(at=returned_at)
@@ -713,7 +714,7 @@ class FluxDirectExecutor:
         # Do NOT queue normal executed jobs here if child `canary flux exec` already
         # did workspace.db.queue.put(job). Parent-side queueing here would duplicate
         # result writes.
-        self.notify_listeners("job_finished", slot)
+        self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
 
     def _record_flux_timing(
         self, job: canary.Job, flux_job: FluxJob, *, proc_info: dict[str, Any] | None = None
@@ -831,7 +832,7 @@ class FluxDirectExecutor:
 
             if job.timekeeper._finished > 0 and flux_job.timekeeper._stopped < 0:
                 slot.on_stop(at=job.timekeeper._finished)
-                self.notify_listeners("job_stopped", slot)
+                self.notify_listeners(ExecutionEvent(name="job_stopped", slot=slot))
 
     def _proc_info_failure_reason(self, proc_info: dict[str, Any] | None) -> str | None:
         if not proc_info:
@@ -864,15 +865,15 @@ class FluxDirectExecutor:
 
         return None
 
-    def _sync_view_on_finish(self, event: str, slot: ExecutionSlot) -> None:
-        if event != "job_finished":
+    def _sync_view_on_finish(self, event: ExecutionEvent) -> None:
+        if event.name != "job_finished" or event.slot is None:
             return
 
         view_manager = getattr(self.runner.workspace, "view_manager", None)
         if view_manager is None:
             return
 
-        job = inner_job(slot.job)
+        job = inner_job(event.slot.job)
 
         try:
             view_manager.sync(job)

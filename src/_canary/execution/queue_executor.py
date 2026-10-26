@@ -39,6 +39,13 @@ logger = logging.get_logger(__name__)
 EventTypes = Literal["job_submitted", "job_staged", "job_started", "job_stopped", "job_finished"]
 
 
+@dataclasses.dataclass(frozen=True)
+class ExecutionEvent:
+    name: str
+    slot: "ExecutionSlot | None" = None
+    payload: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
 @dataclasses.dataclass
 class ExecutionSlot:
     job: BaseJob
@@ -435,7 +442,7 @@ class ResourceQueueExecutor:
         self.started_on: float = -1.0
         self._store: dict[str, Any] = {}
         self.alogger = logging.AdaptiveDebugLogger(logger.name)
-        self.listeners: list[Callable[..., None]] = []
+        self.listeners: list[Callable[[ExecutionEvent], None]] = []
 
         # worker infrastructure
         self.workers: list[dict[str, Any]] = []
@@ -463,10 +470,10 @@ class ResourceQueueExecutor:
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
 
-    def add_listener(self, callback: Callable[..., None]) -> None:
+    def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)
 
-    def remove_listener(self, callback: Callable[..., None]) -> None:
+    def remove_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         try:
             self.listeners.remove(callback)
         except ValueError:  # nosec B110
@@ -671,14 +678,14 @@ class ResourceQueueExecutor:
 
         return compute_returncode(self.queue.jobs())
 
-    def notify_listeners(self, event: EventTypes, *args: Any) -> None:
+    def notify_listeners(self, event: ExecutionEvent) -> None:
         for cb in self.listeners:
-            cb(event, *args)
+            cb(event)
         if self.event_bus is not None:
-            self.event_bus.publish(Event(name=event, payload=self._event_payload(args)))
+            self.event_bus.publish(Event(name=event.name, payload=self._event_payload(event)))
 
     @staticmethod
-    def _event_payload(args: tuple[Any, ...]) -> dict[str, Any]:
+    def _event_payload(event: ExecutionEvent) -> dict[str, Any]:
         """Project the (slot,) notify args into a primitives-only bus payload.
 
         The internal listener path above still receives the live ``ExecutionSlot``;
@@ -686,19 +693,21 @@ class ResourceQueueExecutor:
         crosses the interface boundary.  Returns an empty payload when there is
         no slot (e.g. session-level events).
         """
-        if not args:
-            return {}
-        slot = args[0]
+        payload: dict[str, Any] = dict(event.payload)
+        slot = event.slot
+        if slot is None:
+            return payload
         job = getattr(slot, "job", None)
         if job is None:
-            return {}
+            return payload
         job_event = project_job_event(
             job,
             qrank=getattr(slot, "qrank", -1),
             qsize=getattr(slot, "qsize", -1),
             worker_id=getattr(slot, "worker_id", -1),
         )
-        return {"job": job_event}
+        payload["job"] = job_event
+        return payload
 
     def _check_finished_processes(self) -> None:
 
@@ -752,24 +761,24 @@ class ResourceQueueExecutor:
         if event := payload.get("event"):
             if event == "job_submitted":
                 slot.on_submit(float(payload["timestamp"]))
-                self.notify_listeners(event, slot)
+                self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                 return
 
             if event == "job_staged":
                 slot.on_stage(float(payload["timestamp"]))
-                self.notify_listeners(event, slot)
+                self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                 return
 
             if event == "job_started":
                 slot.on_start(float(payload["timestamp"]))
                 self.running[job_id] = slot
                 self.submitted.pop(job_id, None)
-                self.notify_listeners(event, slot)
+                self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                 return
 
             if event == "job_stopped":
                 slot.on_stop(float(payload["timestamp"]))
-                self.notify_listeners(event, slot)
+                self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                 return
 
             if event == "job_updated":
@@ -781,6 +790,11 @@ class ResourceQueueExecutor:
                 for name, value in attrs.items():
                     if isinstance(name, str) and not name.startswith("_"):
                         setattr(slot.job, name, value)
+                detail = payload.get("detail")
+                event_payload: dict[str, Any] = {"attrs": attrs}
+                if isinstance(detail, str) and detail:
+                    event_payload["detail"] = detail
+                self.notify_listeners(ExecutionEvent(name=event, slot=slot, payload=event_payload))
                 return
 
             if event == "job_finished":
@@ -801,7 +815,7 @@ class ResourceQueueExecutor:
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
                     self.queue.done(slot.job)
-                    self.notify_listeners(event, slot)
+                    self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
                 return
@@ -818,7 +832,7 @@ class ResourceQueueExecutor:
                 self.running.pop(job_id, None)
                 self.submitted.pop(job_id, None)
                 self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
+                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
                 return
@@ -842,7 +856,7 @@ class ResourceQueueExecutor:
                 self.running.pop(job_id, None)
                 self.submitted.pop(job_id, None)
                 self.queue.done(slot.job)
-                self.notify_listeners("job_finished", slot)
+                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
                 return
@@ -1006,7 +1020,7 @@ class ResourceQueueExecutor:
                 except Exception as e:
                     logger.debug("queue.done failed: %s", e)
 
-                self.notify_listeners("job_finished", slot)
+                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
 
         self._shutdown_workers()
         self.queue.clear(stat, reason=reason, code=code)

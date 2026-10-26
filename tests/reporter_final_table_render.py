@@ -11,6 +11,7 @@ from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.console import Reporter
+from _canary.execution.queue_executor import ExecutionEvent
 
 
 class DummyJob(BaseJob):
@@ -102,10 +103,10 @@ class DummyExecutor:
     def inflight(self):
         return {}
 
-    def add_listener(self, callback: Callable[..., None]) -> None:
+    def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         pass
 
-    def remove_listener(self, callback: Callable[..., None]) -> None:
+    def remove_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         pass
 
 

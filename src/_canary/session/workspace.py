@@ -63,7 +63,7 @@ from ..view import ViewSettings
 
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
-    from ..execution.queue_executor import EventTypes
+    from ..execution.queue_executor import ExecutionEvent
     from ..persistence.database import ResultListener
 
 logger = logging.get_logger(__name__)
@@ -1258,7 +1258,7 @@ class Workspace:
                 found.append(None)
         return found
 
-    def testcase_done_callback(self, event: "EventTypes", *args: Any) -> None:
+    def testcase_done_callback(self, event: "ExecutionEvent") -> None:
         """Callback to queue job results for database persistence.
 
         Results are spooled to the database not only when a job finishes but
@@ -1268,12 +1268,15 @@ class Workspace:
         so each transition simply overwrites the previous row for that job.
 
         Args:
-            event: The event type.
-            *args: Event arguments, expected to contain the job's execution slot.
+            event: The execution event.
         """
-        if event not in ("job_submitted", "job_started", "job_finished"):
+        if event.name not in ("job_submitted", "job_started", "job_finished"):
             return
-        job = args[0].job
+        if event.slot is None:
+            return
+        job = event.slot.job
+        if not isinstance(job, Job):
+            return
         self.db.queue.put(job)
         if self.view_manager is not None:
             try:
