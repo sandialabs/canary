@@ -14,6 +14,7 @@ from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.testexec import ExecutionSpace
 from _canary.resource_pool.rpool import NodeRequest
+from canary_hpc.batchexec import HPCConnectBatchRunner
 from canary_hpc.batchexec import HPCConnectRunner
 from canary_hpc.batchexec import _all_children_finished
 from canary_hpc.batchspec import BatchSpec
@@ -676,6 +677,62 @@ def test_scheduler_wall_limit_reason_none_when_healthy():
         )
         is None
     )
+
+
+def test_runner_waits_for_scheduler_completion_after_children_finish(tmp_path, monkeypatch):
+    batch = make_batch(tmp_path, [FakeJob(id="j1", outcome=Outcome.SUCCESS)])
+    batch.workspace.create(exist_ok=True)
+    runner = HPCConnectBatchRunner.__new__(HPCConnectBatchRunner)
+
+    class DummyBackend:
+        name = "local"
+
+    runner.backend = DummyBackend()  # type: ignore[attr-defined]
+
+    class DummyFuture:
+        jobid = "123"
+        _polling_interval = 0.01
+
+        def __init__(self):
+            self._done = False
+
+        def add_jobstart_callback(self, cb):
+            cb(self)
+
+        def add_jobid_callback(self, cb):
+            cb(self)
+
+        def add_done_callback(self, cb):
+            return None
+
+        def done(self):
+            return self._done
+
+        def result(self, timeout=None):
+            self._done = True
+            return 7
+
+        def cancel(self):
+            return True
+
+    class DummyQueue:
+        def __init__(self):
+            self.events = []
+
+        def put(self, event):
+            self.events.append(event)
+
+    queue = DummyQueue()
+
+    runner.generate_resource_pool = lambda batch: None  # type: ignore[assignment]
+    runner.validate_batch = lambda batch: []  # type: ignore[assignment]
+    runner.submit = lambda batch: DummyFuture()  # type: ignore[assignment]
+    runner.handle_signals = lambda futures, batch: __import__("contextlib").nullcontext()  # type: ignore[assignment]
+    monkeypatch.setattr("canary_hpc.batchexec._all_children_finished", lambda batch: True)
+
+    rc = runner.execute(batch, queue)
+
+    assert rc == 7
 
 
 def test_unfinished_jobs_get_actionable_reason_on_wall_limit(tmp_path):
