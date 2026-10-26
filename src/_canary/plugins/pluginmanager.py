@@ -5,6 +5,7 @@
 import importlib.util
 import inspect
 import os
+import pathlib
 import sys
 import warnings
 from typing import Any
@@ -86,7 +87,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(hooks, "builtin.hooks")
         self.register(generate, "builtin.generate")
         self.register(gpu_select, "builtin.gpu_select")
-        self.register(filter, "builtin.filter")
         self.register(launcher, "builtin.launcher")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")
@@ -97,8 +97,9 @@ class CanaryPluginManager(pluggy.PluginManager):
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"
         if name.startswith("no:"):
-            self.unregister(name=name[3:])
-            self.set_blocked(name[3:])
+            normalized = derive_plugin_name(name[3:])
+            self.unregister(name=normalized)
+            self.set_blocked(normalized)
         else:
             self.import_plugin(name)
 
@@ -177,17 +178,28 @@ class CanaryPluginManager(pluggy.PluginManager):
         under the same stem name so that relative imports inside the file
         (if any) can resolve.
         """
-        import pathlib
-
-        stem = pathlib.Path(path).stem
+        stem = derive_plugin_name(path)
         abs_path = os.path.abspath(path)
 
-        if self.is_blocked(stem) or self.get_plugin(stem) is not None:
+        if self.is_blocked(stem):
             return
+        if self.get_plugin(stem) is not None:
+            existing = self.get_plugin(stem)
+            existing_file = getattr(existing, "__file__", None)
+            if existing_file is not None and os.path.abspath(existing_file) == abs_path:
+                return
+            raise PluginAlreadyImportedError(
+                f"Plugin file {path!r} already registered under the name {stem!r}"
+            )
 
         spec = importlib.util.spec_from_file_location(stem, abs_path)
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot create module spec for plugin file {path!r}")
+
+        if stem in sys.modules and stem not in self._name2plugin:
+            raise PluginAlreadyImportedError(
+                f"Plugin file {path!r} would shadow existing module {stem!r}"
+            )
 
         mod = importlib.util.module_from_spec(spec)
         sys.modules.setdefault(stem, mod)
@@ -212,9 +224,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         registered under the directory's base name.  The package is also
         inserted into ``sys.modules`` so intra-package imports work.
         """
-        import pathlib
-
-        pkg_name = pathlib.Path(path).name
+        pkg_name = derive_plugin_name(path)
         abs_path = os.path.abspath(path)
         init = os.path.join(abs_path, "__init__.py")
 
@@ -225,13 +235,28 @@ class CanaryPluginManager(pluggy.PluginManager):
             )
 
         if self.is_blocked(pkg_name) or self.get_plugin(pkg_name) is not None:
-            return
+            existing = self.get_plugin(pkg_name)
+            existing_file = getattr(existing, "__file__", None) if existing is not None else None
+            if existing_file is not None and os.path.abspath(existing_file) == os.path.abspath(
+                init
+            ):
+                return
+            if self.is_blocked(pkg_name):
+                return
+            raise PluginAlreadyImportedError(
+                f"Plugin directory {path!r} already registered under the name {pkg_name!r}"
+            )
 
         spec = importlib.util.spec_from_file_location(
             pkg_name, init, submodule_search_locations=[abs_path]
         )
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot create module spec for plugin directory {path!r}")
+
+        if pkg_name in sys.modules and pkg_name not in self._name2plugin:
+            raise PluginAlreadyImportedError(
+                f"Plugin directory {path!r} would shadow existing module {pkg_name!r}"
+            )
 
         mod = importlib.util.module_from_spec(spec)
         sys.modules.setdefault(pkg_name, mod)
@@ -260,3 +285,12 @@ def getname(obj: Any) -> str:
 
 
 class PluginAlreadyImportedError(Exception): ...
+
+
+def derive_plugin_name(name: str) -> str:
+    path = pathlib.Path(name)
+    if name.endswith(".py"):
+        return path.stem
+    if os.path.isdir(name):
+        return path.name
+    return name

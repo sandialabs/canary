@@ -109,7 +109,7 @@ class Config:
         # in a workspace config.
         base = workspace_anchor()
         for plugin in bootstrap.get("plugins", []):
-            self._consider_persisted_plugin(plugin, base=base)
+            self._consider_persisted_plugin(plugin, base=base, source="merged configuration")
         self.pluginmanager.hook.canary_addconfig(config=self)
         self.resource_manager.clear()
         self.data = validate_config(data, source="the merged configuration")
@@ -180,10 +180,12 @@ class Config:
         # container).
         base = workspace_anchor()
         for plugin in self.data.get("plugins", []):
-            self._consider_persisted_plugin(plugin, base=base)
+            self._consider_persisted_plugin(plugin, base=base, source="config snapshot")
         self.pluginmanager.hook.canary_addconfig(config=self)
 
-    def _consider_persisted_plugin(self, plugin: str, *, base: str | Path | None) -> None:
+    def _consider_persisted_plugin(
+        self, plugin: str, *, base: str | Path | None, source: str
+    ) -> None:
         """Load a plugin recorded in persisted config, best-effort.
 
         Relative path plugins are resolved against *base* (see
@@ -198,7 +200,7 @@ class Config:
             self.pluginmanager.consider_plugin(resolved)
         except Exception as e:
             logger.warning(
-                f"failed to load plugin {plugin!r} recorded in workspace config: {e}; "
+                f"failed to load plugin {plugin!r} recorded in {source}: {e}; "
                 "continuing without it (pass -p explicitly to force an error)"
             )
 

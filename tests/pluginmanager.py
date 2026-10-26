@@ -194,6 +194,16 @@ def test_consider_plugin_no_prefix_unloads_file_plugin(tmp_path, pm):
     assert pm.is_blocked("unload_hook")
 
 
+def test_consider_plugin_no_prefix_unloads_file_plugin_by_path(tmp_path, pm):
+    hook_file = _write_file(tmp_path / "unload_by_path.py", "X = 1\n")
+    pm.import_plugin(str(hook_file))
+
+    pm.consider_plugin(f"no:{hook_file}")
+
+    assert pm.get_plugin("unload_by_path") is None
+    assert pm.is_blocked("unload_by_path")
+
+
 def test_consider_plugin_no_prefix_unloads_directory_plugin(tmp_path, pm):
     """no:<pkgname> unloads a previously loaded directory plugin."""
     pkg = _write_package(tmp_path, "unload_pkg", "X = 1\n")
@@ -202,6 +212,16 @@ def test_consider_plugin_no_prefix_unloads_directory_plugin(tmp_path, pm):
     pm.consider_plugin("no:unload_pkg")
     assert pm.get_plugin("unload_pkg") is None
     assert pm.is_blocked("unload_pkg")
+
+
+def test_consider_plugin_no_prefix_unloads_directory_plugin_by_path(tmp_path, pm):
+    pkg = _write_package(tmp_path, "unload_dir_by_path", "X = 1\n")
+    pm.import_plugin(str(pkg))
+
+    pm.consider_plugin(f"no:{pkg}")
+
+    assert pm.get_plugin("unload_dir_by_path") is None
+    assert pm.is_blocked("unload_dir_by_path")
 
 
 def test_consider_plugin_file_path_loads_plugin(tmp_path, pm):
@@ -216,6 +236,22 @@ def test_consider_plugin_directory_path_loads_plugin(tmp_path, pm):
     pkg = _write_package(tmp_path, "consider_pkg", "X = 1\n")
     pm.consider_plugin(str(pkg))
     assert pm.get_plugin("consider_pkg") is not None
+
+
+def test_duplicate_stem_file_plugins_raise_instead_of_silent_skip(tmp_path, pm):
+    d1 = tmp_path / "d1"
+    d2 = tmp_path / "d2"
+    hook1 = _write_file(d1 / "same.py", "X = 1\n")
+    hook2 = _write_file(d2 / "same.py", "X = 2\n")
+
+    pm.import_plugin(str(hook1))
+    with pytest.raises(Exception, match="already registered|shadow"):
+        pm.import_plugin(str(hook2))
+
+
+def test_builtins_do_not_register_python_filter_function():
+    mgr = CanaryPluginManager.factory()
+    assert mgr.get_plugin("builtin.filter") is None
 
 
 # --------------------------------------------------------------------------- #

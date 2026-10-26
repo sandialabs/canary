@@ -173,3 +173,11 @@ def test_apply_snapshot_without_sys_path_key_is_noop(tmp_path):
     snapshot = {"invocation_dir": str(tmp_path), "options": {}, "data": {}, "resource_manager": {}}
     cfg = Config(loadini=False)
     cfg._apply_snapshot(snapshot)  # must not raise
+
+
+def test_snapshot_plugin_load_warning_names_snapshot_source(tmp_path, caplog):
+    with config.override() as cfg:
+        cfg._consider_persisted_plugin("missing_plugin", base=tmp_path, source="config snapshot")
+
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "recorded in config snapshot" in text
