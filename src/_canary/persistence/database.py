@@ -1082,18 +1082,27 @@ class ResultListener(threading.Thread):
             self.db.queue.requeue_stale(older_than=0)
 
             while not self._stop_event.is_set():
-                self._drain_once()
+                try:
+                    self._drain_once()
+                except Exception:
+                    logger.exception("ResultListener drain failed")
                 time.sleep(self.poll_interval)
 
             # Final drain so records written just before stop are not lost.
-            self._drain_once()
+            while True:
+                try:
+                    if not self._drain_once():
+                        break
+                except Exception:
+                    logger.exception("ResultListener final drain failed")
+                    break
         finally:
             self.db.close()
 
-    def _drain_once(self) -> None:
+    def _drain_once(self) -> bool:
         batch = self.db.queue.receive()
         if not batch:
-            return
+            return False
 
         paths, objs = zip(*batch)
 
@@ -1107,6 +1116,7 @@ class ResultListener(threading.Thread):
 
         self.db.queue.ack(list(paths))
         self._processed.update(obj.id for obj in objs)
+        return True
 
     def stop_and_join(self):
         """Stop listener and wait for thread to finish."""

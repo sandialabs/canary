@@ -38,11 +38,14 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
 
+from ..util import logging
 from ..util.fsqueue import FSQueue
 from .bus import Event
 
 if TYPE_CHECKING:
     from .bus import EventBus
+
+logger = logging.get_logger(__name__)
 
 
 class SpoolBus:
@@ -82,19 +85,31 @@ class SpoolListener:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            self._drain_once()
+            try:
+                self._drain_once()
+            except Exception:
+                logger.exception("SpoolListener drain failed")
             time.sleep(self._poll_interval)
 
         # Final drain so events written just before stop are not lost.
-        self._drain_once()
+        while True:
+            try:
+                if not self._drain_once():
+                    break
+            except Exception:
+                logger.exception("SpoolListener final drain failed")
+                break
 
-    def _drain_once(self) -> None:
+    def _drain_once(self) -> bool:
         batch = self._queue.receive()
+        if not batch:
+            return False
         for path, item in batch:
             if self._publish(item):
                 self._queue.ack(path)
             else:
                 self._queue.fail(path, reason="malformed spool event")
+        return True
 
     def _publish(self, item: object) -> bool:
         if isinstance(item, dict):

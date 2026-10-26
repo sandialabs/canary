@@ -106,3 +106,29 @@ def test_listener_tolerates_malformed_record(tmp_path):
     finally:
         listener.stop()
     assert seen[0].name == "job_started"
+
+
+def test_listener_continues_after_subscriber_exception(tmp_path):
+    spool = tmp_path / "events"
+    bus = EventBus()
+    seen: list[Event] = []
+
+    def boom(event: Event) -> None:
+        if event.name == "job_started":
+            raise RuntimeError("boom")
+
+    bus.subscribe(boom)
+    bus.subscribe(seen.append)
+
+    producer = SpoolBus(spool)
+    producer.publish(Event(name="job_started", payload={"id": "1"}))
+    producer.publish(Event(name="job_finished", payload={"id": "1"}))
+
+    listener = SpoolListener(spool, bus)
+    listener.start()
+    try:
+        assert _drain_until(lambda: len(seen) == 2)
+    finally:
+        listener.stop()
+
+    assert [event.name for event in seen] == ["job_started", "job_finished"]
