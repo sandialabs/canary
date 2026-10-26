@@ -13,8 +13,12 @@ from typing import Callable
 from typing import Literal
 from typing import TypedDict
 
+from ..util import logging
+
 if TYPE_CHECKING:
     from ..core.job import BaseJob
+
+logger = logging.get_logger(__name__)
 
 # ``job_submitted`` .. ``job_died`` are the names the execution layer emits
 # today (see the ``queue.put({"event": ...})`` sites in ``queue_executor`` and
@@ -169,9 +173,15 @@ class EventBus:
     def publish(self, event: Event) -> None:
         """Deliver *event* to matching name subscribers, then global subscribers."""
         for sub in list(self._by_name.get(event.name, ())):
-            sub(event)
+            try:
+                sub(event)
+            except Exception:
+                logger.exception("EventBus subscriber failed for event %s", event.name)
         for sub in list(self._global):
-            sub(event)
+            try:
+                sub(event)
+            except Exception:
+                logger.exception("EventBus subscriber failed for event %s", event.name)
 
     def emit(self, name: str, /, **payload: Any) -> Event:
         """Build an :class:`Event` and :meth:`publish` it."""

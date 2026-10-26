@@ -708,7 +708,10 @@ class ResourceQueueExecutor:
 
     def notify_listeners(self, event: ExecutionEvent) -> None:
         for cb in self.listeners:
-            cb(event)
+            try:
+                cb(event)
+            except Exception:
+                logger.exception("Execution listener failed for event %s", event.name)
         if self.event_bus is not None:
             self.event_bus.publish(Event(name=event.name, payload=self._event_payload(event)))
 
@@ -843,9 +846,9 @@ class ResourceQueueExecutor:
                     self.running.pop(job_id, None)
                     self.submitted.pop(job_id, None)
                     self.queue.done(slot.job)
-                    self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                     self.busy_workers.pop(wid, None)
                     self.idle_workers.append(wid)
+                    self.notify_listeners(ExecutionEvent(name=event, slot=slot))
                 return
 
             if event == "job_timeout":
@@ -860,9 +863,9 @@ class ResourceQueueExecutor:
                 self.running.pop(job_id, None)
                 self.submitted.pop(job_id, None)
                 self.queue.done(slot.job)
-                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
+                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 return
 
             if event == "job_died":
@@ -884,9 +887,9 @@ class ResourceQueueExecutor:
                 self.running.pop(job_id, None)
                 self.submitted.pop(job_id, None)
                 self.queue.done(slot.job)
-                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 self.busy_workers.pop(wid, None)
                 self.idle_workers.append(wid)
+                self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
                 return
 
             logger.warning(f"Unexpected worker payload for {job_id[:7]}: {payload}")

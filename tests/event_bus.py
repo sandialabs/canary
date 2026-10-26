@@ -56,6 +56,22 @@ def test_name_subscribers_run_before_global_and_in_registration_order():
     assert order == ["name1", "name2", "global"]
 
 
+def test_subscriber_exception_does_not_block_later_subscribers():
+    bus = EventBus()
+    seen: list[str] = []
+
+    def boom(event: Event) -> None:
+        raise RuntimeError("boom")
+
+    bus.subscribe(boom, name="job_started")
+    bus.subscribe(lambda e: seen.append("name"), name="job_started")
+    bus.subscribe(lambda e: seen.append("global"))
+
+    bus.emit("job_started")
+
+    assert seen == ["name", "global"]
+
+
 def test_unsubscribe_stops_delivery_and_tolerates_repeat_removal():
     bus = EventBus()
     seen: list[Event] = []

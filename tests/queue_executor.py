@@ -138,6 +138,64 @@ def test_handle_job_timeout_closes_slot_and_marks_timeout() -> None:
     assert job.timekeeper.total(live=False) >= 0.0
 
 
+def test_listener_exception_does_not_abort_terminal_cleanup() -> None:
+    queue = DummyQueue()
+    executor = make_executor(queue)
+    seen: list[str] = []
+
+    def boom(event: ExecutionEvent) -> None:
+        raise RuntimeError("boom")
+
+    def after(event: ExecutionEvent) -> None:
+        seen.append(event.name)
+        assert 0 not in executor.busy_workers
+        assert 0 in executor.idle_workers
+
+    executor.add_listener(boom)
+    executor.add_listener(after)
+
+    job = DummyJob()
+    slot = ExecutionSlot(job=cast(BaseJob, job), qrank=1, qsize=1, worker_id=0)
+
+    executor.slots_by_id[job.id] = slot
+    executor.running[job.id] = slot
+    executor.busy_workers[0] = job.id
+
+    executor._handle_worker_payload({"job_id": job.id, "worker_id": 0, "event": "job_timeout"})
+
+    assert seen == ["job_finished"]
+    assert queue.done_jobs == [job]
+    assert 0 not in executor.busy_workers
+    assert 0 in executor.idle_workers
+
+
+def test_event_bus_subscriber_exception_does_not_abort_later_delivery() -> None:
+    from _canary.events import EventBus
+
+    queue = DummyQueue()
+    executor = make_executor(queue)
+    executor.event_bus = EventBus()
+
+    seen: list[str] = []
+
+    def boom(event) -> None:
+        raise RuntimeError("boom")
+
+    executor.event_bus.subscribe(boom, name="job_finished")
+    executor.event_bus.subscribe(lambda event: seen.append(event.name), name="job_finished")
+
+    job = DummyJob()
+    slot = ExecutionSlot(job=cast(BaseJob, job), qrank=1, qsize=1, worker_id=0)
+
+    executor.slots_by_id[job.id] = slot
+    executor.running[job.id] = slot
+    executor.busy_workers[0] = job.id
+
+    executor._handle_worker_payload({"job_id": job.id, "worker_id": 0, "event": "job_timeout"})
+
+    assert seen == ["job_finished"]
+
+
 def test_handle_job_died_with_signal_marks_error() -> None:
     queue = DummyQueue()
     executor = make_executor(queue)
