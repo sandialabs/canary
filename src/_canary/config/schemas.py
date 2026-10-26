@@ -143,7 +143,7 @@ environment_variable_schema = EnvarSchema(
         Optional("CANARY_DEBUG"): Use(boolean),
         Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
         Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
-        Optional(Regex("CANARY_TIMEOUT_w+")): Use(time_in_seconds),
+        Optional(Regex(r"^CANARY_TIMEOUT_\w+$")): Use(time_in_seconds),
         Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
     },
     ignore_extra_keys=True,

@@ -574,7 +574,10 @@ class Workspace:
         selector = select.RuntimeSelector(jobs, workspace=self.root)
         selector.add_rule(rules.ResourceCapacityRule())
         selector.add_rule(rules.RerunRule(strategy=only))
-        if timeout := config.get_timeout_option("session"):
+        timeout = config.get_timeout_option("session")
+        if timeout is None:
+            timeout = config.get("run:timeout:session")
+        if timeout is not None and float(timeout) >= 0.0:
             if fac := config.get_timeout_option("multiplier"):
                 timeout *= fac
             selector.add_rule(rules.SessionTimeoutRule(timeout=timeout))
