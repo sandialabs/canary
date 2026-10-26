@@ -4,10 +4,15 @@
 
 import json
 import multiprocessing as mp
+import os
 from pathlib import Path
+
+import pytest
 
 from _canary.util.filesystem import atomic_write
 from _canary.util.filesystem import file_lock
+from _canary.util.filesystem import force_symlink
+from _canary.util.filesystem import remove
 
 
 def test_file_lock_creates_sidecar(tmp_path: Path) -> None:
@@ -48,10 +53,6 @@ def test_file_lock_serializes_concurrent_read_modify_write(tmp_path: Path) -> No
 
 
 def test_working_dir_restores_cwd_on_exception(tmp_path):
-    import os
-
-    import pytest
-
     from _canary.util.filesystem import working_dir
 
     start = os.getcwd()
@@ -60,3 +61,37 @@ def test_working_dir_restores_cwd_on_exception(tmp_path):
             assert os.getcwd() == str((tmp_path / "sub").resolve())
             raise RuntimeError("boom")
     assert os.getcwd() == start
+
+
+def test_remove_unlinks_symlink_to_directory(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    remove(link)
+
+    assert not link.exists()
+    assert target.exists()
+
+
+def test_force_symlink_replaces_dangling_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "real"
+    target.write_text("x")
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "missing")
+
+    force_symlink(str(target), str(link))
+
+    assert link.is_symlink()
+    assert os.readlink(link) == str(target)
+
+
+def test_force_symlink_refuses_real_directory(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.write_text("x")
+    dest = tmp_path / "dest"
+    dest.mkdir()
+
+    with pytest.raises(IsADirectoryError):
+        force_symlink(str(src), str(dest))

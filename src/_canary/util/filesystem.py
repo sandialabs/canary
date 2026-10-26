@@ -214,7 +214,9 @@ def force_copy(src: str, dst: str) -> None:
 def remove(file_or_dir: PathLike) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
-    if path.is_file():
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_file():
         path.unlink()
     elif path.is_dir():
         rmtree2(path)
@@ -233,10 +235,12 @@ def rmtree2(path: PathLike, n: int = 5) -> None:
             shutil.rmtree(path)
             ok = True
         except OSError as e:
+            if isinstance(e, (FileNotFoundError, NotADirectoryError)):
+                raise
             if attempts >= n:
                 raise
-            logger.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
-            time.sleep(0.2 * n)
+            logger.debug(f"Failed to remove {path} with shutil.rmtree at attempt {attempts}: {e}")
+            time.sleep(0.2 * attempts)
         attempts += 1
 
 
@@ -444,11 +448,21 @@ def is_exe(path: str) -> bool:
 
 def force_symlink(src: str, dest: str) -> None:
     """Forcefully create a symbolic link from ``src`` to ``dest``"""
+    dest_path = pathlib.Path(dest)
+    if dest_path.is_dir() and not dest_path.is_symlink():
+        raise IsADirectoryError(dest)
+    if dest_path.exists() or dest_path.is_symlink():
+        remove(dest_path)
+    tmp_link = dest_path.with_name(f".{dest_path.name}.tmp-{os.getpid()}-{int(time.time() * 1000)}")
     try:
-        os.symlink(src, dest)
-    except (OSError, FileExistsError):
-        remove(dest)
-        os.symlink(src, dest)
+        os.symlink(src, tmp_link)
+        os.replace(tmp_link, dest_path)
+    except Exception:
+        try:
+            tmp_link.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def accessible(file_name: str) -> bool:
