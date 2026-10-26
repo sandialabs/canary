@@ -27,6 +27,7 @@ import datetime
 import fnmatch
 import os
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -54,6 +55,7 @@ from ..persistence.database import WorkspaceDatabase
 from ..util import json_helper as json
 from ..util import logging
 from ..util.filesystem import async_rmtree
+from ..util.filesystem import atomic_write
 from ..util.filesystem import force_remove
 from ..util.filesystem import write_directory_tag
 from ..util.names import unique_random_name
@@ -379,7 +381,11 @@ class Workspace:
     def latest_view(self) -> ResultsView | None:
         file = self.cache_dir / "view"
         if file.exists():
-            view = json.loads(file.read_text())
+            try:
+                view = json.loads(file.read_text())
+            except Exception:
+                logger.warning("Ignoring corrupt workspace view cache at %s", file)
+                return None
             # root is not persisted (it would go stale if the workspace moves).
             # Inject the correct live anchor here so callers always get a usable view.
             object.__setattr__(view, "root", self.root.parent)
@@ -387,7 +393,7 @@ class Workspace:
         return None
 
     def register_view(self, view: ResultsView) -> None:
-        (self.cache_dir / "view").write_text(json.dumps(view, indent=2))
+        atomic_write(self.cache_dir / "view", json.dumps(view, indent=2))
 
     @staticmethod
     def find_anchor(start: str | Path | None = None) -> Path | None:
@@ -452,20 +458,29 @@ class Workspace:
         if self.root.exists():
             logger.error("workspace already exists")
             raise WorkspaceExistsError(path)
-        self.root.mkdir(parents=True)
-        write_directory_tag(self.root / workspace_tag)
+        path.mkdir(parents=True, exist_ok=True)
+        tmp_root = path / f".{workspace_path}.tmp-{os.getpid()}-{int(time.time() * 1000)}"
+        tmp_root.mkdir()
 
-        self.refs_dir.mkdir(parents=True)
-        self.sessions_dir.mkdir(parents=True)
-        self.cache_dir.mkdir(parents=True)
-        self.tmp_dir.mkdir(parents=True)
-        self.logs_dir.mkdir(parents=True)
-        self.reports_dir.mkdir(parents=True)
-        version = self.root / "VERSION"
+        refs_dir = tmp_root / "refs"
+        sessions_dir = tmp_root / "sessions"
+        cache_dir = tmp_root / "cache"
+        tmp_dir = tmp_root / "tmp"
+        logs_dir = tmp_root / "logs"
+        reports_dir = tmp_root / "reports"
+
+        write_directory_tag(tmp_root / workspace_tag)
+        refs_dir.mkdir(parents=True)
+        sessions_dir.mkdir(parents=True)
+        cache_dir.mkdir(parents=True)
+        tmp_dir.mkdir(parents=True)
+        logs_dir.mkdir(parents=True)
+        reports_dir.mkdir(parents=True)
+        version = tmp_root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
-        self.db = WorkspaceDatabase.create(self.root)
-        file = self.root / "config.yaml"
+        tmp_db = WorkspaceDatabase.create(tmp_root)
+        file = tmp_root / "config.yaml"
         cfg: dict[str, Any] = {}
         if mods := config.getoption("config_mods"):
             cfg.update(mods)
@@ -479,6 +494,10 @@ class Workspace:
             ]
         with open(file, "w") as fh:
             yaml.dump({"canary": cfg}, fh, default_flow_style=False)
+
+        os.replace(tmp_root, self.root)
+        tmp_db.close()
+        self.db = WorkspaceDatabase.create(self.root)
 
         return self
 
@@ -637,9 +656,8 @@ class Workspace:
         # Write meta data file refs/latest -> ../sessions/{session.root}
         self.refs_dir.mkdir(parents=True, exist_ok=True)  # may be absent on a loaded workspace
         file = self.refs_dir / "latest"
-        file.unlink(missing_ok=True)
         link = os.path.relpath(str(session.prefix), str(file.parent))
-        file.write_text(str(link))
+        atomic_write(file, str(link))
 
     def rebuild_view(self, view_t: ViewSettings | None = None) -> None:
         if view_t is None:

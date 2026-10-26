@@ -151,7 +151,11 @@ class HistoryStore:
         for line in lines.splitlines():
             if not line.strip():
                 continue
-            record = json.loads(line.strip())
+            try:
+                record = json.loads(line.strip())
+            except Exception:
+                logger.debug("Skipping corrupt history line in %s", file, exc_info=True)
+                continue
             what = record.pop("what", None)
             if what == "meta":
                 history["meta"] = record

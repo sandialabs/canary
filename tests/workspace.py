@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
+import os
+from pathlib import Path
+
 import pytest
 
 import _canary.session.workspace as _workspace_module
@@ -396,6 +399,59 @@ def test_latest_view_survives_unknown_view_settings_key(tmp_path):
     assert loaded is not None
     assert isinstance(loaded.settings, ViewSettings)
     assert loaded.settings.name == "TestResults"
+
+
+def test_latest_view_ignores_corrupt_cache_file(tmp_path):
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+
+    cache = ws.cache_dir / "view"
+    cache.write_text("{not json")
+
+    assert ws.latest_view() is None
+
+
+def test_register_latest_session_uses_atomic_write(tmp_path, monkeypatch):
+    import types
+
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+    session = types.SimpleNamespace(prefix=ws.sessions_dir / "sess-1")
+
+    calls: list[tuple[Path, str]] = []
+
+    def fake_atomic_write(path: Path, text: str) -> None:
+        calls.append((path, text))
+
+    monkeypatch.setattr("_canary.session.workspace.atomic_write", fake_atomic_write)
+
+    ws.register_latest_session(session)  # type: ignore[arg-type]
+
+    assert calls == [
+        (ws.refs_dir / "latest", os.path.relpath(str(session.prefix), str(ws.refs_dir)))
+    ]
+
+
+def test_create_workspace_renames_temp_dir_atomically(tmp_path, monkeypatch):
+    proj = tmp_path / "project"
+    proj.mkdir()
+
+    calls: list[tuple[Path, Path]] = []
+    original_replace = os.replace
+
+    def tracking_replace(src: os.PathLike[str] | str, dst: os.PathLike[str] | str) -> None:
+        calls.append((Path(src), Path(dst)))
+        original_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", tracking_replace)
+
+    ws = Workspace.create(proj)
+
+    assert calls, "expected workspace creation to end with os.replace"
+    assert ".canary.tmp-" in calls[-1][0].name
+    assert calls[-1][1] == ws.root
 
 
 # --------------------------------------------------------------------------- #
