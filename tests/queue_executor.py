@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+import time
 from typing import Any
 from typing import cast
 
 from _canary.core.job import BaseJob
+from _canary.core.job import JobPhase
 from _canary.core.job import JobState
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
@@ -109,6 +111,21 @@ class DummyQueue:
 
     def status(self, start: float | None = None) -> str:
         return "dummy"
+
+
+class BusyQueue(DummyQueue):
+    def __init__(self, pending_jobs: list[BaseJob]) -> None:
+        super().__init__()
+        self.pending_jobs = pending_jobs
+        self._busy: dict[str, BaseJob] = {}
+
+    def get(self) -> BaseJob:
+        from _canary.execution.queue import Busy
+
+        raise Busy
+
+    def pending(self) -> list[BaseJob]:
+        return self.pending_jobs
 
 
 def make_executor(queue: DummyQueue) -> ResourceQueueExecutor:
@@ -424,3 +441,39 @@ def test_resource_queue_defers_exclusive_job_until_busy_set_is_empty() -> None:
     selected = q.get()
 
     assert selected is waiting
+
+
+def test_executor_marks_pending_jobs_blocked_when_busy_with_no_inflight() -> None:
+    blocked = DummyJob(id="b" * 64)
+    queue = BusyQueue([cast(BaseJob, blocked)])
+    executor = make_executor(queue)
+    executor.idle_workers = [0]
+
+    class DummyReporter:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def poll(self) -> None:
+            return None
+
+    executor.live_reporting = lambda: False  # type: ignore[method-assign]
+    executor._check_finished_processes = lambda: None  # type: ignore[method-assign]
+    executor._check_for_leaks = lambda: None  # type: ignore[method-assign]
+
+    from _canary.execution import queue_executor as qe
+
+    original_event_reporter = qe.EventReporter
+    qe.EventReporter = lambda _executor: DummyReporter()  # type: ignore[assignment]
+    try:
+        rc = executor._run(start=time.time(), session_timeout=-1.0, qrank=0, qsize=1)
+    finally:
+        qe.EventReporter = original_event_reporter  # type: ignore[assignment]
+
+    assert rc == 0
+    assert blocked.state.phase == JobPhase.DONE
+    assert blocked.status.outcome.name == "BLOCKED"
+    assert blocked.saved
+    assert "could not be scheduled" in (blocked.status.reason or "")

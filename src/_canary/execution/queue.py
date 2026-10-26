@@ -217,20 +217,27 @@ class ResourceQueue:
                 logger.exception("Failed to cancel pending job %s", job.id[:7])
 
     def done(self, job: BaseJob) -> None:
+        requested_job = job
         try:
             with self.lock:
-                job = self._busy.pop(job.id, None)
-                if job is None:
-                    logger.error(f"queue.done() called for non-busy job {job.id[:7]}")
+                busy_job = self._busy.get(requested_job.id)
+                if busy_job is None:
+                    logger.error("queue.done() called for non-busy job %s", requested_job.id[:7])
                     return
-                self._finished[job.id] = job
-                if job.exclusive:
+
+                resources = busy_job.free_resources()
+                self.rpool.checkin(resources)
+
+                self._busy.pop(requested_job.id, None)
+                self._finished[busy_job.id] = busy_job
+                if busy_job.exclusive:
                     self.exclusive_job_id = None
-                    logger.debug(f"Exclusive job {job.id[:7]} finished, exclusive lock released")
-                self.rpool.checkin(job.free_resources())
-                logger.debug(f"Job {job.id[:7]} marked done")
+                    logger.debug(
+                        "Exclusive job %s finished, exclusive lock released", busy_job.id[:7]
+                    )
+                logger.debug("Job %s marked done", busy_job.id[:7])
         except Exception:
-            logger.exception(f"Failed to mark {job.id[:7]} as done")
+            logger.exception("Failed to mark %s as done", requested_job.id[:7])
 
     def jobs(self) -> list[BaseJob]:
         """Return all jobs in queue, busy, and finished."""

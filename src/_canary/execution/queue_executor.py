@@ -18,6 +18,7 @@ from typing import Literal
 
 from .. import config
 from ..core.job import BaseJob
+from ..core.job import JobPhase
 from ..error import SessionTerminated
 from ..error import StopExecution
 from ..events import Event
@@ -686,6 +687,22 @@ class ResourceQueueExecutor:
                     self.workers[wid]["task_q"].put((job, kwargs))
 
                 except Busy:
+                    if not self.inflight:
+                        pending = list(self.queue.pending())
+                        reason = (
+                            "Job could not be scheduled: no runnable job could acquire resources "
+                            "or satisfy dependencies"
+                        )
+                        for job in pending:
+                            if job.state.is_done():
+                                continue
+                            try:
+                                job.set_status(outcome="BLOCKED", reason=reason)
+                                job.state.phase = JobPhase.DONE
+                                job.save()
+                            except Exception:
+                                logger.exception("Failed to mark blocked job %s", job.id[:7])
+                        break
                     time.sleep(self.busy_wait_time)
 
                 except Empty:
