@@ -172,6 +172,43 @@ def test_depends_on_missing(tmpdir):
             generate.resolve([b])
 
 
+def test_depends_on_invalid_shlex_pattern_reports_source_spec(tmpdir):
+    from _canary.core.resolve_dependency import UnresolvedDependenciesErrors
+
+    with working_dir(tmpdir.strpath, create=True):
+        root = Path(".")
+        Path("f1.pyt").touch()
+        dep = ir.DependencySelector(pattern="it's")
+        b = ir.JobSpecIR(file_root=root, file_path=Path("f1.pyt"), family="f1", dependencies=[dep])
+        with pytest.raises(UnresolvedDependenciesErrors, match="f1: invalid dependency pattern"):
+            generate.resolve([b])
+
+
+def test_dependency_cycle_reports_names_not_raw_ids(tmpdir):
+    from _canary.core.resolve_dependency import UnresolvedDependenciesErrors
+
+    with working_dir(tmpdir.strpath, create=True):
+        root = Path(".")
+        fa = Path("a.pyt")
+        fb = Path("b.pyt")
+        fa.touch()
+        fb.touch()
+        a = ir.JobSpecIR(
+            file_root=root,
+            file_path=fa,
+            family="a",
+            dependencies=[ir.DependencySelector(pattern="b")],
+        )
+        b = ir.JobSpecIR(
+            file_root=root,
+            file_path=fb,
+            family="b",
+            dependencies=[ir.DependencySelector(pattern="a")],
+        )
+        with pytest.raises(UnresolvedDependenciesErrors, match="Dependency cycle detected: a -> b"):
+            generate.resolve([a, b])
+
+
 def test_generate_specs(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         root = Path(".")

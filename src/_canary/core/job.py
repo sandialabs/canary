@@ -102,6 +102,8 @@ class Dependency:
             return self.job.status.category is Category.PASS
         elif when == "on_failure":
             return self.job.status.category is Category.FAIL
+        if when.startswith("on_"):
+            raise ValueError(f"Unknown dependency when={when!r}")
         expr = Expression.compile(when)
         choices = (self.job.status.category.name, self.job.status.outcome.name)
         return expr.evaluate(AnyMatcher(set(choices)))

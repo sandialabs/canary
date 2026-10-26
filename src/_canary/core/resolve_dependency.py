@@ -22,6 +22,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 from dataclasses import dataclass
+from graphlib import CycleError
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING
 from typing import Sequence
@@ -73,7 +74,15 @@ def _find_matching_specs(
     matches: set[str] = set()
     matched_specs: list["JobSpecIR | JobSpec"] = []
 
-    for pattern in shlex.split(dp.pattern):
+    try:
+        patterns = shlex.split(dp.pattern)
+    except ValueError as exc:
+        source = getattr(source_spec, "fullname", source_spec.id)
+        raise UnresolvedDependenciesErrors(
+            [f"{source}: invalid dependency pattern {dp.pattern!r}: {exc}"]
+        ) from exc
+
+    for pattern in patterns:
         matched_this_pattern: bool = False
         # Check exact matches first before resorting to glob matching
         candidates: list["JobSpecIR | JobSpec"] = []
@@ -134,7 +143,7 @@ def _resolve_dependencies_serial(
         for i, dp in enumerate(spec.dependencies):
             deps = _find_matching_specs(dp, spec, ctx)
             dep_ids = [d.id for d in deps]
-            errors.extend(dp.verify(len(dep_ids)))
+            errors.extend(_decorate_dependency_errors(spec, dp.verify(len(dep_ids))))
             groups.append((i, dep_ids))
             flat.extend(dep_ids)
 
@@ -169,7 +178,7 @@ def _resolve_dependencies_parallel(
         for i, dp in enumerate(spec.dependencies):
             deps = _find_matching_specs(dp, spec, ctx)
             dep_ids = [d.id for d in deps]
-            errs.extend(dp.verify(len(dep_ids)))
+            errs.extend(_decorate_dependency_errors(spec, dp.verify(len(dep_ids))))
             groups.append((i, dep_ids))
             flat.extend(dep_ids)
 
@@ -310,7 +319,22 @@ def resolve(specs: Sequence["JobSpecIR | JobSpec"]) -> list["JobSpec"]:
     # Topologically finalize IR specs
     lookup: dict[str, JobSpec] = {}
     ts = TopologicalSorter(graph)
-    ts.prepare()
+    try:
+        ts.prepare()
+    except CycleError as exc:
+        cycle = exc.args[1] if len(exc.args) > 1 else []
+        if not isinstance(cycle, list):
+            cycle = []
+        names = []
+        for spec_id in cycle:
+            node = spec_map.get(spec_id)
+            if node is None:
+                names.append(str(spec_id))
+                continue
+            names.append(getattr(node, "fullname", getattr(node, "name", str(spec_id))))
+        raise UnresolvedDependenciesErrors(
+            [f"Dependency cycle detected: {' -> '.join(names)}"]
+        ) from exc
 
     while ts.is_active():
         ids = ts.get_ready()
@@ -336,3 +360,8 @@ class UnresolvedDependenciesErrors(Exception):
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors
         super().__init__("\n".join(errors))
+
+
+def _decorate_dependency_errors(source_spec: "JobSpecIR", errors: list[str]) -> list[str]:
+    source = getattr(source_spec, "fullname", source_spec.id)
+    return [f"{source}: {error}" for error in errors]
