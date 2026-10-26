@@ -12,6 +12,8 @@ I/O stream lifecycles for subprocess calls).
 import dataclasses
 import os
 import shlex
+import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -62,16 +64,16 @@ class Executable:
             FileNotFoundError: If the executable cannot be found on PATH.
             FileNotExecutableError: If the file exists but is not executable.
         """
+        text = str(name)
         found: Path | None = None
-        if os.path.exists(name):
+        if os.sep in text:
             found = Path(name).absolute()
         else:
-            PATH = [Path(p) for p in os.getenv("PATH", "").split(os.pathsep) if p.split()]
-            for path in PATH:
-                file = path.joinpath(name)
-                if os.path.exists(file):
-                    found = file
-                    break
+            located = shutil.which(text)
+            if located:
+                found = Path(located)
+            elif os.path.exists(name):
+                found = Path(name).absolute()
         if found is not None and os.access(found, os.X_OK):
             return found
         elif found is None:
@@ -173,7 +175,7 @@ class Executable:
         args.extend(self.default_args)
         args.extend(map(str, args_in))
 
-        env = env or dict(os.environ)
+        env = dict(os.environ) if env is None else dict(env)
         env.update(self.default_env)
 
         result = Result(shlex.join(args))
@@ -193,7 +195,21 @@ class Executable:
                     if proc.poll() is not None:
                         break
                     if timeout > 0 and time.monotonic() - start > timeout:
-                        proc.kill()
+                        try:
+                            os.killpg(proc.pid, signal.SIGTERM)
+                            proc.wait(timeout=1.0)
+                        except Exception:
+                            logger.debug(
+                                "Failed to terminate process group %s", proc.pid, exc_info=True
+                            )
+                        if proc.poll() is None:
+                            try:
+                                os.killpg(proc.pid, signal.SIGKILL)
+                            except Exception:
+                                logger.debug(
+                                    "Failed to kill process group %s", proc.pid, exc_info=True
+                                )
+                        proc.wait()
                         raise CommandTimedOutError
                     time.sleep(0.05)
             result.returncode = self.returncode = proc.returncode
@@ -204,6 +220,9 @@ class Executable:
                     f"Command exited with status {self.returncode}: {shlex.join(args)}"
                 )
             return result
+
+        except ProcessError:
+            raise
 
         except OSError as e:
             result.returncode = self.returncode = e.errno  # type: ignore

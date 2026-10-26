@@ -153,7 +153,7 @@ def display_file(file: Path, *, tail: int | None = None) -> None:
     """Print *file*'s path header and page its contents, raising if the file is missing."""
     if not file.exists():
         raise FileNotFoundError(file)
-    text = file.read_text().rstrip()
+    text = file.read_text(encoding="utf-8", errors="replace").rstrip()
     if tail is not None:
         text = tail_text(text, tail)
     print(f"{file}:")
