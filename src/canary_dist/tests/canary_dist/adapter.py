@@ -4,10 +4,13 @@
 
 import subprocess
 from typing import Any
+from typing import cast
 
 import pytest
 
+import canary
 from _canary.resource_pool.rpool import NodeRequest
+from _canary.resource_pool.rpool import Outcome
 from _canary.resource_pool.rpool import ResourceUnavailable
 from canary_dist.adapter import DistributedResourcePoolAdapter
 from canary_dist.adapter import _with_node
@@ -182,6 +185,84 @@ def test_checkout_raises_when_server_reports_unavailable(monkeypatch):
 
     with pytest.raises(ResourceUnavailable):
         adapter.checkout([counted_node_request(cpus=1)])
+
+
+def test_checkout_maps_transport_failures_to_resource_unavailable(monkeypatch):
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
+
+    adapter = FakeAdapter(responses={"/rx": {"success": True}})
+
+    def failing_curl(endpoint: str, method: str = "POST", data: Any = None, **parameters: str):
+        if endpoint == "/checkout":
+            return subprocess.CompletedProcess(
+                args=["curl"], returncode=28, stdout="", stderr="timed out"
+            )
+        return FakeAdapter.curl(adapter, endpoint, method, data, **parameters)
+
+    monkeypatch.setattr(adapter, "curl", failing_curl)
+
+    with pytest.raises(ResourceUnavailable, match="timed out"):
+        adapter.checkout([counted_node_request(cpus=1)])
+
+
+def test_current_state_maps_transport_failures_to_resource_unavailable(monkeypatch):
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
+
+    adapter = FakeAdapter(responses={})
+
+    def failing_curl(endpoint: str, method: str = "POST", data: Any = None, **parameters: str):
+        return subprocess.CompletedProcess(
+            args=["curl"], returncode=7, stdout="", stderr="connection refused"
+        )
+
+    monkeypatch.setattr(adapter, "curl", failing_curl)
+
+    with pytest.raises(ResourceUnavailable, match="connection refused"):
+        adapter.current_state()
+
+
+def test_accommodates_remote_returns_negative_outcome_on_transport_failure(monkeypatch):
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
+
+    class FakeCase:
+        def required_resources(self):
+            return [counted_node_request(cpus=1)]
+
+    adapter = FakeAdapter(responses={})
+
+    def failing_curl(endpoint: str, method: str = "POST", data: Any = None, **parameters: str):
+        return subprocess.CompletedProcess(
+            args=["curl"], returncode=56, stdout="", stderr="recv failure"
+        )
+
+    monkeypatch.setattr(adapter, "curl", failing_curl)
+
+    outcome = adapter.accommodates_remote(cast(canary.TestCase, FakeCase()))
+
+    assert isinstance(outcome, Outcome)
+    assert outcome.ok is False
+    assert outcome.reason == "recv failure"
+
+
+def test_curl_sets_connect_and_request_timeouts(monkeypatch):
+    monkeypatch.setattr("canary.config.getoption", lambda name, default=None: None)
+    monkeypatch.setattr(DistributedResourcePoolAdapter, "update_resource_counts", lambda self: None)
+
+    called: dict[str, Any] = {}
+
+    def fake_run(args, capture_output, text):
+        called["args"] = args
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout='{"success": true}', stderr=""
+        )
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    adapter = DistributedResourcePoolAdapter(server_url="http://server")
+    adapter.curl("/status", method="GET")
+
+    assert "--connect-timeout" in called["args"]
+    assert "--max-time" in called["args"]
 
 
 def test_checkin_uses_transaction_id():

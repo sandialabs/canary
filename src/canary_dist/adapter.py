@@ -20,6 +20,9 @@ from _canary.resource_pool.rpool import ResourceUnavailable
 
 logger = canary.get_logger(__name__)
 
+CONNECT_TIMEOUT_SECONDS = 5.0
+REQUEST_TIMEOUT_SECONDS = 30.0
+
 
 class DistributedResourcePoolAdapter:
     """Client-side adapter for the distributed resource-pool server.
@@ -141,8 +144,11 @@ class DistributedResourcePoolAdapter:
         yaml.dump(data, file, default_flow_style=False)
 
     def current_state(self) -> dict[str, Any]:
-        p = self.curl("/status", method="GET")
-        return self.parse_json_response(p)
+        try:
+            p = self.curl("/status", method="GET")
+            return self.parse_json_response(p)
+        except RuntimeError as exc:
+            raise ResourceUnavailable(str(exc)) from exc
 
     def max_count(self, type: str) -> int:
         return max((counts.get(type, 0) for counts in self.resource_counts.values()), default=0)
@@ -153,8 +159,11 @@ class DistributedResourcePoolAdapter:
             resources = _single_node_resources(case.required_resources())
         except ResourceUnavailable as e:
             return Outcome(False, reason=str(e))
-        p = self.curl("/accommodates", data={"resources": resources})
-        data = self.parse_json_response(p)
+        try:
+            p = self.curl("/accommodates", data={"resources": resources})
+            data = self.parse_json_response(p)
+        except RuntimeError as exc:
+            return Outcome(False, reason=str(exc))
         return Outcome(data["accommodates"], reason=data["reason"])
 
     def accommodates(self, case: canary.TestCase) -> Outcome:
@@ -210,19 +219,27 @@ class DistributedResourcePoolAdapter:
                 "resources": {...}
             }
         """
-        # Run the health check first to check in expired checkouts.
-        self.curl("/rx")
+        try:
+            # Run the health check first to check in expired checkouts.
+            self.curl("/rx")
 
-        tags = canary.config.getoption("dist_tags") or None
-        groups = self._current_groups()
-        timeout: float = kwds.get("timeout", 60.0 * 30.0)
+            tags = canary.config.getoption("dist_tags") or None
+            groups = self._current_groups()
+            timeout: float = kwds.get("timeout", 60.0 * 30.0)
 
-        # The distributed server does not support multi-node submission.
-        resources = _single_node_resources(request)
-        request_data = {"resources": resources, "timeout": timeout, "tags": tags, "groups": groups}
+            # The distributed server does not support multi-node submission.
+            resources = _single_node_resources(request)
+            request_data = {
+                "resources": resources,
+                "timeout": timeout,
+                "tags": tags,
+                "groups": groups,
+            }
 
-        p = self.curl("/checkout", data=request_data)
-        data = self.parse_json_response(p)
+            p = self.curl("/checkout", data=request_data)
+            data = self.parse_json_response(p)
+        except RuntimeError as exc:
+            raise ResourceUnavailable(str(exc)) from exc
 
         if not data["success"]:
             raise ResourceUnavailable(data["message"])
@@ -264,7 +281,16 @@ class DistributedResourcePoolAdapter:
             querystrings = urlencode(parameters)
             url += f"?{querystrings}"
 
-        args = ["curl", "-s", "-g", "--fail"]  # , "--fail-with-body"]
+        args = [
+            "curl",
+            "-s",
+            "-g",
+            "--fail",
+            "--connect-timeout",
+            str(CONNECT_TIMEOUT_SECONDS),
+            "--max-time",
+            str(REQUEST_TIMEOUT_SECONDS),
+        ]
         args.extend(["-X", method])
         args.extend(["-H", f"X-User: {getpass.getuser()}"])
         args.extend(["-H", f"X-Host: {os.uname().nodename}"])

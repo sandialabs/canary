@@ -145,8 +145,13 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
+                checkout_timeout = job.resource_checkout_timeout()
+
                 try:
-                    acquired = self.rpool.checkout(slot.resources)
+                    if checkout_timeout is None:
+                        acquired = self.rpool.checkout(slot.resources)
+                    else:
+                        acquired = self.rpool.checkout(slot.resources, timeout=checkout_timeout)
                 except ResourceUnavailable:
                     deferred_slots.append(slot)
                     continue

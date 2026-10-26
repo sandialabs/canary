@@ -93,6 +93,10 @@ class TestBatch(bs.TestBatch):
 
         return [req]
 
+    def resource_checkout_timeout(self) -> float | None:
+        """Keep the remote lease alive for the batch's full expected lifetime."""
+        return float(self.queue_timeout) + (2.0 * float(self.wall_limit()))
+
     def assign_resources(self, allocation: dict[str, Any]) -> None:  # type: ignore[override]
         metadata = allocation.get("metadata", {})
 

@@ -168,6 +168,18 @@ def test_required_resources_uses_max_per_job_resources(tmp_path):
     assert request[0].resources.count({"type": "gpus", "slots": 1}) == 2
 
 
+def test_resource_checkout_timeout_covers_queue_wait_plus_backstop(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "canary.config.get_timeout_option", lambda name: 600.0 if name == "queue" else None
+    )
+
+    batch = make_batch(tmp_path, [FakeJob(id="job-1", runtime=40.0)])
+
+    # wall_limit() for a single job is the job timeout; FakeJob.timeout = 4 * runtime = 160.
+    assert batch.wall_limit() == 160.0
+    assert batch.resource_checkout_timeout() == 600.0 + (2.0 * 160.0)
+
+
 def test_setup_writes_resource_pool_and_allocation(tmp_path):
     batch = make_batch(tmp_path, [FakeJob(id="job-1")])
 

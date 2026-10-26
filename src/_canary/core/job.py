@@ -223,6 +223,15 @@ class BaseJob(ABC):
         """
         return None
 
+    def resource_checkout_timeout(self) -> float | None:
+        """Requested lease duration for resource checkout, or ``None``.
+
+        Some resource pools hand out expiring leases rather than static local
+        allocations.  Jobs that need a lease long enough to cover queue wait and
+        execution time can override this to return a timeout in seconds.
+        """
+        return None
+
     @abstractmethod
     def required_resources(self) -> list["NodeRequest"]: ...
 
