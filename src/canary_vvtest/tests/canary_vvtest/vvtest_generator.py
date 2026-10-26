@@ -310,6 +310,36 @@ def test_unknown_directive_raises(tmp_path: Path) -> None:
         VVTestAdapter(m).apply(directives)
 
 
+def test_include_cycle_raises_vvtparseerror(tmp_path: Path) -> None:
+    from canary_vvtest.vvt import p_VVT
+
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    write(a, "# VVT: include : ./b.txt\n")
+    write(b, "# VVT: include : ./a.txt\n")
+
+    with pytest.raises(VVTParseError, match="include cycle detected"):
+        list(p_VVT(a))
+
+
+def test_safe_eval_does_not_expose_os_or_sys(tmp_path: Path) -> None:
+    from canary_vvtest.vvt import evaluate_boolean_expression
+
+    assert evaluate_boolean_expression("__import__('os').getpid()") is None
+    assert evaluate_boolean_expression("os.getcwd()") is None
+
+
+def test_malformed_directive_is_wrapped_in_vvtparseerror(tmp_path: Path) -> None:
+    from canary_vvtest.vvt import ParseError
+    from canary_vvtest.vvt import p_VVT
+
+    f = tmp_path / "bad.vvt"
+    write(f, "# VVT: parameterize (int : np = 1 2\n")
+
+    with pytest.raises(ParseError, match="failed to parse directive"):
+        list(p_VVT(f))
+
+
 def lock_vvt_model(m: VVTestModel, on_options=None):
     from canary_vvtest.vvt import VVTestLockEmitter
 

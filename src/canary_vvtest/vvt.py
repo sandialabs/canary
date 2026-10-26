@@ -656,18 +656,29 @@ def p_LINE(file: Path | str, line: str) -> Directive | None:
     )
 
 
-def p_VVT(arg: Path | str) -> Generator[Directive, None, None]:
+def p_VVT(arg: Path | str, _visited: set[str] | None = None) -> Generator[Directive, None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
+    if _visited is None:
+        _visited = set()
+    if isinstance(arg, (str, Path)) and os.path.exists(str(arg)):
+        _visited = set(_visited)
+        _visited.add(os.path.abspath(os.fspath(arg)))
     lines, _ = find_vvt_lines(arg)
     for line in lines:
-        ns = p_LINE(arg, line)
+        try:
+            ns = p_LINE(arg, line)
+        except Exception as exc:
+            raise ParseError(f"failed to parse directive in {arg}: {exc}") from exc
         if ns and ns.name in ("include", "insert_directive_file"):
             inc_file = ns.argument.strip()  # type: ignore[union-attr]
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
                 inc_file = os.path.join(os.path.dirname(arg), inc_file)
+            resolved = os.path.abspath(inc_file)
+            if _visited is not None and resolved in _visited:
+                raise VVTParseError(f"include cycle detected: {resolved}", ns)
             if not os.path.exists(inc_file):
                 raise VVTParseError(f"include file does not exist: {inc_file!r}", ns)
-            for i_ns in p_VVT(inc_file):
+            for i_ns in p_VVT(inc_file, _visited=_visited):
                 yield Directive(
                     name=i_ns.name,
                     file=i_ns.file,
@@ -715,11 +726,19 @@ def find_vvt_lines(arg: Path | str) -> tuple[list[str], int]:
     if isinstance(arg, Path):
         if not arg.exists():
             raise FileNotFoundError(arg)
-        tokens = tokenize.tokenize(open(arg, "rb").readline)
+        with open(arg, "rb") as fh:
+            tokens = tokenize.tokenize(fh.readline)
+            return _collect_vvt_lines(tokens)
     elif os.path.exists(arg):
-        tokens = tokenize.tokenize(open(arg, "rb").readline)
+        with open(arg, "rb") as fh:
+            tokens = tokenize.tokenize(fh.readline)
+            return _collect_vvt_lines(tokens)
     else:
         tokens = string.get_tokens(arg)
+        return _collect_vvt_lines(tokens)
+
+
+def _collect_vvt_lines(tokens: Generator[tokenize.TokenInfo, None, None]) -> tuple[list[str], int]:
     s = io.StringIO()
     for token in tokens:
         if token.type == tokenize.ENCODING:
@@ -801,7 +820,7 @@ def importable(module_name: str) -> bool:
 
 
 def safe_eval(expression: str) -> Any:
-    globals = {"os": os, "sys": sys, "importable": importable}
+    globals = {"__builtins__": {}, "importable": importable}
     return eval(expression, globals, {})  # nosec B307
 
 
