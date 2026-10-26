@@ -295,6 +295,12 @@ class BaseJob(ABC):
     @abstractmethod
     def display_name(self, **kwargs: Any) -> str: ...
 
+    def identity_label(self) -> str:
+        return "job"
+
+    def result_label(self) -> str:
+        return self.status.outcome.label
+
     def add_measurement(self, name: str, value: Any) -> None:
         self.measurements.add_measurement(name, value)
 

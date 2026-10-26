@@ -14,7 +14,9 @@ from _canary.core.job import JobState
 from _canary.core.status import Outcome
 from _canary.core.status import Status
 from _canary.execution.queue import HeapSlot
+from _canary.execution.queue_executor import ExecutionSlot
 from canary_hpc.queue import ResourceQueue
+from canary_hpc.queue_executor import HPCResourceQueueExecutor
 
 
 class FakeChildJob:
@@ -72,6 +74,9 @@ class FakeBatch:
         if children:
             for job in self.jobs:
                 job.save()
+
+    def identity_label(self) -> str:
+        return "batch"
 
 
 class FakePool:
@@ -140,3 +145,29 @@ def test_clear_preserves_already_finished_children() -> None:
     # The pending child is cancelled.
     assert pending.status.outcome.name == "INTERRUPTED"
     assert pending.state.is_done()
+
+
+def test_hpc_progress_snapshot_counts_batches() -> None:
+    q = _make_queue()
+    pending = FakeBatch("batch-pending", [FakeChildJob("job-pending")])
+    running = FakeBatch("batch-running", [FakeChildJob("job-running")])
+    finished = FakeBatch("batch-finished", [FakeChildJob("job-finished", outcome="SUCCESS")])
+    _push(q, pending)
+
+    executor = HPCResourceQueueExecutor(cast(Any, q), executor=lambda *a, **k: None, max_workers=1)
+    running_slot = ExecutionSlot(job=cast(Any, running), qrank=1, qsize=3, worker_id=0)
+    finished_slot = ExecutionSlot(job=cast(Any, finished), qrank=2, qsize=3, worker_id=1)
+
+    q._busy[running.id] = cast(Any, running)
+    q._finished[finished.id] = cast(Any, finished)
+    executor.running[running.id] = running_slot
+    executor.finished[finished.id] = finished_slot
+    executor.slots_by_id[running.id] = running_slot
+
+    snapshot = executor.progress_snapshot()
+
+    assert snapshot.unit == "batch"
+    assert snapshot.total == 3
+    assert snapshot.running == 1
+    assert snapshot.finished == 1
+    assert snapshot.queued == 1

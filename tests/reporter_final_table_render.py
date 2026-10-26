@@ -12,6 +12,7 @@ from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.console import Reporter
 from _canary.execution.queue_executor import ExecutionEvent
+from _canary.execution.queue_executor import ProgressSnapshot
 
 
 class DummyJob(BaseJob):
@@ -102,6 +103,12 @@ class DummyExecutor:
     @property
     def inflight(self):
         return {}
+
+    def progress_snapshot(self) -> ProgressSnapshot:
+        total = len(self.queue.jobs())
+        return ProgressSnapshot(
+            unit="job", total=total, submitted=0, running=0, finished=0, queued=total
+        )
 
     def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         pass

@@ -8,6 +8,7 @@ from typing import cast
 
 from _canary.core.job import JobPhase
 from _canary.execution.queue_executor import ExecutionSlot
+from _canary.execution.queue_executor import ProgressSnapshot
 from _canary.execution.queue_executor import ResourceQueueExecutor
 from _canary.util import logging
 
@@ -35,6 +36,24 @@ class _BatchJobProtocol(Protocol):
 
 class HPCResourceQueueExecutor(ResourceQueueExecutor):
     """ResourceQueueExecutor specialized for HPC batches."""
+
+    def progress_snapshot(self) -> ProgressSnapshot:
+        unit = "job"
+        if slot := next(iter(self.slots_by_id.values()), None):
+            unit = slot.job.identity_label()
+        total = len(self.queue._heap) + len(self.queue._busy) + len(self.queue._finished)
+        submitted = len(self.submitted)
+        running = len(self.running)
+        finished = len(self.finished)
+        queued = max(0, total - submitted - running - finished)
+        return ProgressSnapshot(
+            unit=unit,
+            total=total,
+            submitted=submitted,
+            running=running,
+            finished=finished,
+            queued=queued,
+        )
 
     def _finish_abnormal_slot(
         self, slot: ExecutionSlot, *, outcome: str, reason: str, code: int = -1

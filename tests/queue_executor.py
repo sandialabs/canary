@@ -11,6 +11,7 @@ from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
 from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
+from _canary.execution.queue_executor import ProgressSnapshot
 from _canary.execution.queue_executor import ResourceQueueExecutor
 
 
@@ -295,3 +296,19 @@ def test_resource_queue_clear_default_cancelled() -> None:
     assert job.status.category.value == "ABORTED"
     assert (job.status.reason or "") == "Cancelled before the job started"
     assert job.saved
+
+
+def test_progress_snapshot_uses_job_identity_label() -> None:
+    queue = DummyQueue()
+    executor = make_executor(queue)
+
+    job = DummyJob()
+    slot = ExecutionSlot(job=cast(BaseJob, job), qrank=1, qsize=1, worker_id=0)
+    executor.slots_by_id[job.id] = slot
+    executor.submitted[job.id] = slot
+
+    snapshot = executor.progress_snapshot()
+
+    assert isinstance(snapshot, ProgressSnapshot)
+    assert snapshot.unit == "job"
+    assert snapshot.submitted == 1

@@ -22,6 +22,7 @@ from _canary.execution.console import EventReporter
 from _canary.execution.console import LiveReporter
 from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
+from _canary.execution.queue_executor import ProgressSnapshot
 from _canary.util.misc import boolean
 
 logger = canary.get_logger(__name__)
@@ -84,6 +85,12 @@ class FluxJob:
 
     def display_name(self, **kwargs: Any) -> str:
         return self.inner.display_name(**kwargs)
+
+    def identity_label(self) -> str:
+        return self.inner.identity_label()
+
+    def result_label(self) -> str:
+        return self.inner.result_label()
 
     def set_status(
         self,
@@ -265,6 +272,23 @@ class FluxDirectExecutor:
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
+
+    def progress_snapshot(self) -> ProgressSnapshot:
+        total = len(self.queue.jobs())
+        submitted = len(self.submitted)
+        running = len(self.running)
+        finished = len(self.finished)
+        unit = "job"
+        if slot := next(iter(self.slots_by_id.values()), None):
+            unit = slot.job.identity_label()
+        return ProgressSnapshot(
+            unit=unit,
+            total=total,
+            submitted=submitted,
+            running=running,
+            finished=finished,
+            queued=max(0, total - submitted - running - finished),
+        )
 
     def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)

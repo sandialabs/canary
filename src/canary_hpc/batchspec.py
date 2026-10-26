@@ -175,6 +175,12 @@ class TestBatch(BaseJob):
             combined_stat = self._combined_status()
             return f"{name} ({combined_stat})"
 
+    def identity_label(self) -> str:
+        return "batch"
+
+    def result_label(self) -> str:
+        return self.status.display_name()
+
     @property
     def cpus(self) -> int:
         return self.spec.rparameters["cpus"]

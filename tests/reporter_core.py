@@ -15,6 +15,7 @@ from _canary.execution.console import EventReporter
 from _canary.execution.console import Reporter
 from _canary.execution.queue_executor import ExecutionEvent
 from _canary.execution.queue_executor import ExecutionSlot
+from _canary.execution.queue_executor import ProgressSnapshot
 
 
 class DummyJob(BaseJob):
@@ -107,6 +108,20 @@ class DummyExecutor:
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
+
+    def progress_snapshot(self) -> ProgressSnapshot:
+        total = len(self.queue.jobs())
+        submitted = len(self.submitted)
+        running = len(self.running)
+        finished = len(self.finished)
+        return ProgressSnapshot(
+            unit="job",
+            total=total,
+            submitted=submitted,
+            running=running,
+            finished=finished,
+            queued=max(0, total - submitted - running - finished),
+        )
 
     def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)
@@ -218,6 +233,15 @@ def test_event_reporter_renders_finished_event_line() -> None:
     assert "finished" in rendered
     assert "result=PASS" in rendered
     assert "duration=" in rendered
+
+
+def test_event_reporter_logs_progress_unit() -> None:
+    job = DummyJob(name="event")
+    reporter = EventReporter(DummyExecutor([job]))
+
+    snapshot = reporter.executor.progress_snapshot()
+
+    assert snapshot.unit == "job"
 
 
 def test_row_values_for_job_falls_back_to_timekeeper():

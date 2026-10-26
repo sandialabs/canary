@@ -46,6 +46,16 @@ class ExecutionEvent:
     payload: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
+@dataclasses.dataclass(frozen=True)
+class ProgressSnapshot:
+    unit: str
+    total: int
+    submitted: int
+    running: int
+    finished: int
+    queued: int
+
+
 @dataclasses.dataclass
 class ExecutionSlot:
     job: BaseJob
@@ -469,6 +479,24 @@ class ResourceQueueExecutor:
     @property
     def inflight(self) -> dict[str, ExecutionSlot]:
         return self.submitted | self.running
+
+    def progress_snapshot(self) -> ProgressSnapshot:
+        unit = "job"
+        if slot := next(iter(self.slots_by_id.values()), None):
+            unit = slot.job.identity_label()
+        total = len(self.queue.jobs())
+        submitted = len(self.submitted)
+        running = len(self.running)
+        finished = len(self.finished)
+        queued = max(0, total - submitted - running - finished)
+        return ProgressSnapshot(
+            unit=unit,
+            total=total,
+            submitted=submitted,
+            running=running,
+            finished=finished,
+            queued=queued,
+        )
 
     def add_listener(self, callback: Callable[[ExecutionEvent], None]) -> None:
         self.listeners.append(callback)

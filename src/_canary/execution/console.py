@@ -24,6 +24,7 @@ from ..util import logging
 if TYPE_CHECKING:
     from .queue_executor import ExecutionEvent
     from .queue_executor import ExecutionSlot
+    from .queue_executor import ProgressSnapshot
 
 
 logger = logging.get_logger(__name__)
@@ -52,6 +53,8 @@ class ReporterExecutorProtocol(Protocol):
 
     @property
     def inflight(self) -> dict[str, "ExecutionSlot"]: ...
+
+    def progress_snapshot(self) -> "ProgressSnapshot": ...
 
     def add_listener(self, callback: Callable[["ExecutionEvent"], None]) -> None: ...
 
@@ -609,7 +612,7 @@ class EventReporter(Reporter):
 
         line = (
             f"{fmt_clock()}  "
-            f"{self.job_kind(slot):<5} "
+            f"{slot.job.identity_label():<5} "
             f"{slot.job.id[:7]:<7}  "
             f"{event:<10} "
             f"{' '.join(fields)}"
@@ -656,10 +659,7 @@ class EventReporter(Reporter):
 
     def on_job_finish(self, slot: "ExecutionSlot") -> None:
         self.log_event(
-            slot,
-            "finished",
-            result=slot.job.status.outcome.label,
-            reason=slot.job.status.reason or "",
+            slot, "finished", result=slot.job.result_label(), reason=slot.job.status.reason or ""
         )
 
     def log_event(
@@ -683,21 +683,18 @@ class EventReporter(Reporter):
 
         self._last_progress = now
 
-        total = len(self.executor.queue.jobs())
-        submitted = len(self.executor.submitted)
-        running = len(self.executor.running)
-        finished = len(self.executor.finished)
-        queued = max(0, total - submitted - running - finished)
+        progress = self.executor.progress_snapshot()
 
         status_counts = self.finished_status_counts()
 
         status_text = " ".join(f"{name}={count}" for name, count in sorted(status_counts.items()))
 
         fields = [
-            f"done={finished}/{total}",
-            f"running={running}",
-            f"submitted={submitted}",
-            f"queued={queued}",
+            f"unit={progress.unit}",
+            f"done={progress.finished}/{progress.total}",
+            f"running={progress.running}",
+            f"submitted={progress.submitted}",
+            f"queued={progress.queued}",
         ]
 
         if status_text:
@@ -714,15 +711,6 @@ class EventReporter(Reporter):
             counts[key] = counts.get(key, 0) + 1
 
         return counts
-
-    @staticmethod
-    def job_kind(slot: "ExecutionSlot") -> str:
-        name = type(slot.job).__name__.lower()
-
-        if name.endswith("batch"):
-            return "batch"
-
-        return "job"
 
 
 def fmt_secs(x: float) -> str:
