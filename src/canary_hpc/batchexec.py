@@ -510,16 +510,29 @@ class HPCConnectBatchRunner(HPCConnectRunner):
                         last_child_check = now
                         _update_last_activity(batch)
                         if _all_children_finished(batch):
-                            logger.warning(
-                                "Batch %s: all child jobs reached a terminal state "
-                                "but the scheduler has not yet reported completion — "
-                                "possible scheduler communication loss; "
-                                "treating batch as done.",
-                                batch.id[:7],
-                            )
-                            batch.on_stop(at=now)
-                            queue.put({"event": "job_stopped", "timestamp": now})
-                            return 0
+                            try:
+                                rc = future.result(timeout=60.0)
+                            except TimeoutError:
+                                logger.warning(
+                                    "Batch %s: all child jobs reached a terminal state "
+                                    "but the scheduler has not yet reported completion — "
+                                    "possible scheduler communication loss; "
+                                    "treating batch as done.",
+                                    batch.id[:7],
+                                )
+                                batch.on_stop(at=now)
+                                queue.put({"event": "job_stopped", "timestamp": now})
+                                return 0
+                            else:
+                                now = time.time()
+                                logger.debug(
+                                    "Finished %s with exit code %s after waiting for scheduler completion",
+                                    batch,
+                                    rc,
+                                )
+                                batch.on_stop(at=now)
+                                queue.put({"event": "job_stopped", "timestamp": now})
+                                return rc
 
                     # Canary backstop (2× scheduler wall limit).  Only fires if
                     # we have completely lost contact with the scheduler.

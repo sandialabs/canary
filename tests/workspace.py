@@ -81,6 +81,16 @@ def test_find_anchor_when_start_is_canary_dir(chdir_tmp):
     assert Workspace.find_anchor(ws.root) == root  # passing ".canary" dir
 
 
+def test_find_anchor_ignores_untagged_canary_dir(chdir_tmp):
+    root = chdir_tmp / "proj"
+    child = root / "a" / "b"
+    (root / ".canary").mkdir(parents=True)
+    child.mkdir(parents=True)
+
+    assert Workspace.find_anchor(child) is None
+    assert Workspace.find_anchor(root / ".canary") is None
+
+
 def test_find_workspace_returns_path(chdir_tmp):
     root = chdir_tmp / "proj"
     root.mkdir()

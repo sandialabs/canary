@@ -410,10 +410,10 @@ class Workspace:
             start = Path.cwd()
         current_path = Path(start).absolute()
         if current_path.stem == workspace_path:
-            return current_path.parent
+            return current_path.parent if Workspace.workspace_at(current_path) is not None else None
         while True:
-            if (current_path / workspace_path).exists():
-                return current_path
+            if Workspace.workspace_at(current_path) is not None:
+                return current_path.parent if current_path.name == workspace_path else current_path
             if current_path.parent == current_path:
                 break
             current_path = current_path.parent

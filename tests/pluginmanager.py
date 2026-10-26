@@ -295,7 +295,10 @@ def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
 
     deck = tmp_path / "deckroot"
     # The deck root is the ONLY .canary workspace.
-    (deck / ".canary").mkdir(parents=True)
+    from _canary.session.workspace import Workspace
+
+    deck.mkdir()
+    Workspace.create(deck)
     (deck / "analysis").mkdir()
     (deck / "analysis" / "reverify.py").write_text(
         "import canary\n\n@canary.hookimpl\ndef canary_runtest_finish(case):\n    pass\n"
