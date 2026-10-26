@@ -288,6 +288,15 @@ class Node:
         if not outcome:
             raise ResourceUnavailable(outcome.reason or f"Node {self.id} cannot satisfy request")
 
+        # An exclusive checkout must take a whole node that is currently unused.
+        # If any resource instance has already been partially consumed, granting
+        # exclusivity here would silently share the node with existing work.
+        for rtype in self.resources:
+            if self.slots_available(rtype) != self.slots_capacity(rtype):
+                raise ResourceUnavailable(
+                    f"Node {self.id} is already partially occupied and cannot be checked out exclusively"
+                )
+
         acquired: dict[str, list[dict]] = {}
 
         for rtype, instances in self.resources.items():

@@ -77,6 +77,19 @@ class DummyJob(BaseJob):
         self.status.set(category=category, outcome=outcome, reason=reason, code=code)
 
 
+class ExclusiveDummyJob(DummyJob):
+    @property
+    def exclusive(self) -> bool:
+        return True
+
+    def required_resources(self):
+        from _canary.resource_pool.rpool import NodeRequest
+
+        req = NodeRequest()
+        req.add("cpus", 1)
+        return [req]
+
+
 class DummyQueue:
     def __init__(self) -> None:
         self.done_jobs: list[BaseJob] = []
@@ -370,3 +383,44 @@ def test_progress_snapshot_uses_job_identity_label() -> None:
     assert isinstance(snapshot, ProgressSnapshot)
     assert snapshot.unit == "job"
     assert snapshot.submitted == 1
+
+
+def test_resource_queue_defers_exclusive_job_until_busy_set_is_empty() -> None:
+    import threading
+
+    from _canary.execution.queue import Busy
+    from _canary.execution.queue import ResourceQueue
+
+    class FakePool:
+        def accommodates(self, req):
+            return True
+
+        def count(self, resource_type: str) -> int:
+            assert resource_type == "cpus"
+            return 4
+
+        def checkout(self, resources, **kwds):
+            return {"metadata": {}, "resources": {"cpus": [{"id": "0", "slots": 1, "node": "n0"}]}}
+
+    waiting = ExclusiveDummyJob(id="e" * 64)
+    running = DummyJob(id="r" * 64)
+
+    q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
+    q.put(cast(BaseJob, waiting))
+    q.prepare()
+    q._busy[running.id] = running
+
+    try:
+        q.get()
+    except Busy:
+        pass
+    else:
+        raise AssertionError("expected Busy while an exclusive job waits behind a running job")
+
+    assert len(q._heap) == 1
+    assert q._heap[0].job is waiting
+
+    q._busy.clear()
+    selected = q.get()
+
+    assert selected is waiting

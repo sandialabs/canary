@@ -11,6 +11,7 @@ from schema import SchemaError
 import _canary.resource_pool.schemas as schemas
 from _canary.resource_pool import ResourcePool
 from _canary.resource_pool.rpool import EmptyResourcePoolError
+from _canary.resource_pool.rpool import Node
 from _canary.resource_pool.rpool import NodeRequest
 from _canary.resource_pool.rpool import ResourceUnavailable
 
@@ -481,6 +482,21 @@ def test_multi_node_exclusive_checkout_consumes_whole_nodes():
         "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
         "gpus": [{"id": "0", "slots": 1}],
     }
+
+
+def test_exclusive_checkout_rejects_partially_occupied_node():
+    node = Node(
+        id="0",
+        resources={
+            "cpus": [{"id": "0", "slots": 2}, {"id": "1", "slots": 2}],
+            "gpus": [{"id": "0", "slots": 1}],
+        },
+    )
+
+    node.checkout([{"type": "cpus", "slots": 1}])
+
+    with pytest.raises(ResourceUnavailable, match="partially occupied"):
+        node.checkout_exclusive([{"type": "cpus", "slots": 1}])
 
 
 def test_count_and_slots_by_node():

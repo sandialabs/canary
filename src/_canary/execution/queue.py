@@ -129,6 +129,10 @@ class ResourceQueue:
                     deferred_slots.append(slot)
                     continue
 
+                if job.exclusive and self._busy:
+                    deferred_slots.append(slot)
+                    continue
+
                 job.refresh_readiness()
 
                 if not job.is_runnable():
