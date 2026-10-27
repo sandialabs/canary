@@ -349,7 +349,8 @@ class ResourceCapacityRule(RuntimeRule):
                 result = pm.canary_resource_pool_accommodates(case=job)
                 outcome = RuleOutcome(ok=result.ok, reason=result.reason)
             except Exception as e:
-                outcome = RuleOutcome.failed("[bold]%s[/](%r)" % (e.__class__.__name__, e.args[0]))
+                detail = str(e) or e.__class__.__name__
+                outcome = RuleOutcome.failed(f"[bold]{e.__class__.__name__}[/]({detail})")
                 if config.get("debug"):
                     raise
             finally:

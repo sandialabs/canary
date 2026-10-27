@@ -170,14 +170,21 @@ class _Changed(Strategy):
     help = "run tests whose source file changed since the last run"
 
     def selects_root(self, pspec: "PartialSpec") -> bool:
-        mtime = pspec.file.stat().st_mtime
+        try:
+            mtime = pspec.file.stat().st_mtime
+        except FileNotFoundError:
+            return True
         # A never-run spec (started_at <= 0) has no prior run to compare
         # against, so it is treated as changed and seeded.
         return pspec.started_at <= 0 or mtime > pspec.started_at
 
     def should_run(self, job: "Job") -> RunDecision:
         started = job.timekeeper._started
-        if started < 0 or job.spec.file.stat().st_mtime > started:
+        try:
+            mtime = job.spec.file.stat().st_mtime
+        except FileNotFoundError:
+            return RunDecision(True)
+        if started < 0 or mtime > started:
             return RunDecision(True)
         return RunDecision(False, reason="job spec has not changed since last run")
 

@@ -197,6 +197,25 @@ def test_rerun_changed_does_not_mask_modified_spec(tmp_path):
     assert not job.mask, "modified spec should not be masked"
 
 
+def test_rerun_changed_treats_missing_spec_as_changed(tmp_path):
+    spec_file = tmp_path / "gone.pyt"
+    spec_file.write_text("# stub\n")
+    old_start = spec_file.stat().st_mtime + 10.0
+
+    job = make_job(tmp_path, "case", outcome="SUCCESS", started_at=old_start)
+    job.spec = JobSpec(
+        file_root=tmp_path, file_path=spec_file, family="case", id="d" * 64, timeout=10.0
+    )
+    job.timekeeper._started = old_start
+    spec_file.unlink()
+
+    selector = RuntimeSelector([job], workspace=tmp_path)
+    selector.add_rule(RerunRule("changed"))
+    selector.run()
+
+    assert not job.mask, "missing spec should be treated as changed"
+
+
 def test_masked_job_keeps_prior_started_timestamp(tmp_path):
     """A job masked by not_pass retains its prior _started value unchanged."""
     original_start = 12345.0

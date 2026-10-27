@@ -31,7 +31,7 @@ class Selection(CanarySubcommand):
     add_help = False
 
     def setup_parser(self, parser: "Parser") -> None:
-        subparsers = parser.add_subparsers(dest="select_command")
+        subparsers = parser.add_subparsers(dest="select_command", required=True)
         p = subparsers.add_parser("create")
         Collector.setup_parser(p)
         Generator.setup_parser(p)

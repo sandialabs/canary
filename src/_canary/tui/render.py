@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 from rich.console import Group
 from rich.console import RenderableType
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -213,9 +214,17 @@ def render_log(state: "ExplorerState") -> Group:
     footer.append("   ")
     footer.append(Text.from_markup(_LOG_HELP))
     title = state.log_title or "log"
+    safe_title = escape(title)
     if state.log_follow:
-        title = f"{title}  [green]● live[/green]"
-    return Group(Panel(body, title=Text.from_markup(title), title_align="left"), footer)
+        return Group(
+            Panel(
+                body,
+                title=Text.from_markup(f"{safe_title}  [green]● live[/green]"),
+                title_align="left",
+            ),
+            footer,
+        )
+    return Group(Panel(body, title=Text(safe_title), title_align="left"), footer)
 
 
 def render_run_progress(progress: "RunProgressView") -> Panel:

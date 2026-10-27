@@ -274,6 +274,13 @@ def test_find_rejects_non_scanpath_positional_request(monkeypatch):
         parser.parse_args(["find", "mytag"])
 
 
+def test_selection_requires_subcommand():
+    parser = make_cli_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["selection"])
+
+
 def _usage_has_short_flag(usage: str, flag: str) -> bool:
     # Individual form, e.g. [-v]
     if f"[-{flag}]" in usage:

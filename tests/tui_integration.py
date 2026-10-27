@@ -169,6 +169,17 @@ def test_model_open_selected_log_enters_log_mode(tmp_path):
     assert model.state.selected is not None
 
 
+def test_model_open_selected_log_escapes_markup_in_title(tmp_path):
+    _make_workspace(tmp_path)
+    with working_dir(str(tmp_path)), canary.config.override():
+        model = tui.ExplorerModel()
+        model.refresh()
+        assert model.state.selected is not None
+        model.state.selected["name"] = "bad[/]title["
+        model.open_selected_log()
+    assert model.state.mode == "log"
+
+
 def test_model_refresh_log_follows_a_running_jobs_output(tmp_path):
     """While following, refresh_log re-reads the job's output and updates state."""
     _make_workspace(tmp_path)

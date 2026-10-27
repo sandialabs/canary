@@ -336,6 +336,32 @@ def test_custom_view_name_is_skipped_during_collection(tmpdir):
         assert len(generators) == 1
 
 
+def test_resource_capacity_rule_tolerates_empty_exception_args(tmpdir, monkeypatch):
+    from _canary.core.job import Job
+    from _canary.core.jobspec import JobSpec
+    from _canary.execution.testexec import ExecutionSpace
+
+    workdir = tmpdir.strpath
+    with working_dir(workdir, create=True):
+        Path("x.pyt").write_text("import canary_pyt\n")
+        spec = JobSpec(file_root=Path(workdir), file_path=Path("x.pyt"), family="x", id="x" * 64)
+        workspace = ExecutionSpace(
+            root=Path(workdir) / "sessions" / "s1", path=Path("x"), session="s1"
+        )
+        job = Job(spec=spec, workspace=workspace)
+
+        class Boom:
+            def canary_resource_pool_accommodates(self, case=None):
+                raise AssertionError()
+
+        monkeypatch.setattr(config, "pluginmanager", type("P", (), {"hook": Boom()})())
+        rule = rules.ResourceCapacityRule()
+        outcome = rule(job)
+
+        assert not outcome.ok
+        assert "AssertionError" in outcome.reason
+
+
 def test_generate_rejects_duplicate_exec_paths(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):

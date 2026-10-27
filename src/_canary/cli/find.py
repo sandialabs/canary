@@ -77,6 +77,8 @@ class Find(CanarySubcommand):
         collector = Collector()
         if getattr(args, "request", None) is not None:
             args.scanpaths = args.request.value
+        if not args.scanpaths:
+            args.scanpaths = {str(Path.cwd()): []}
         collector.add_scanpaths(args.scanpaths)
         generators = collector.run()
 
