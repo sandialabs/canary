@@ -56,6 +56,10 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class WorkspaceDatabase:
     """SQLite wrapper for the canary workspace database.
 
@@ -638,8 +642,8 @@ class WorkspaceDatabase:
                 rows = self.connection.execute(
                     """SELECT *
                     FROM results AS r
-                    WHERE r.session = (
-                      SELECT MAX(session)
+                    WHERE r.rowid = (
+                      SELECT MAX(rowid)
                       FROM results AS r2
                       WHERE r2.spec_id = r.spec_id
                     )
@@ -655,8 +659,8 @@ class WorkspaceDatabase:
                 SELECT r.*
                 FROM results AS r
                 WHERE r.spec_id IN (SELECT id FROM _ids)
-                AND r.session = (
-                  SELECT MAX(session)
+                AND r.rowid = (
+                  SELECT MAX(rowid)
                   FROM results AS r2
                   WHERE r2.spec_id = r.spec_id
                 )
@@ -730,11 +734,14 @@ class WorkspaceDatabase:
         total = conn.execute("SELECT COUNT(*) FROM results").fetchone()[0]
         outcome_rows = conn.execute(
             "SELECT status_outcome, COUNT(*) FROM results "
-            "WHERE session = (SELECT MAX(session) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
+            "WHERE rowid = (SELECT MAX(rowid) FROM results AS r2 WHERE r2.spec_id = results.spec_id) "
             "GROUP BY status_outcome ORDER BY COUNT(*) DESC"
         ).fetchall()
         session_count = conn.execute("SELECT COUNT(DISTINCT session) FROM results").fetchone()[0]
-        latest = conn.execute("SELECT MAX(session) FROM results").fetchone()[0]
+        latest_row = conn.execute(
+            "SELECT session FROM results ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        latest = None if latest_row is None else latest_row[0]
         spec_count = conn.execute("SELECT COUNT(*) FROM specs").fetchone()[0]
         return {
             "spec_count": spec_count,
@@ -970,7 +977,7 @@ class WorkspaceDatabase:
         where = "" if not clauses else "WHERE " + " AND ".join(clauses)
         sql = f"""
         WITH latest_session AS (
-          SELECT spec_id, MAX(session) AS session
+          SELECT spec_id, MAX(rowid) AS rowid
           FROM results
           GROUP BY spec_id
         ),
@@ -985,7 +992,7 @@ class WorkspaceDatabase:
           FROM results r
           JOIN latest_session ls
           ON r.spec_id = ls.spec_id
-          AND r.session = ls.session
+          AND r.rowid = ls.rowid
         )
         SELECT
           s.spec_id,
@@ -1029,13 +1036,21 @@ class WorkspaceDatabase:
         """
         if not prefixes:
             return []
-        clauses = ["view LIKE ?" if p.endswith("%") else "view = ?" for p in prefixes]
+        escaped_prefixes = []
+        clauses = []
+        for prefix in prefixes:
+            if prefix.endswith("%"):
+                escaped_prefixes.append(_escape_like(prefix))
+                clauses.append("view LIKE ? ESCAPE '\\'")
+            else:
+                escaped_prefixes.append(prefix)
+                clauses.append("view = ?")
         sql = f"""
             SELECT DISTINCT spec_id
             FROM specs_meta
             WHERE {" OR ".join(clauses)}
         """  # nosec B608
-        rows = self.connection.execute(sql, prefixes).fetchall()
+        rows = self.connection.execute(sql, escaped_prefixes).fetchall()
         return [row[0] for row in rows]
 
     def _timekeeper_started_at(self, text: str | None) -> float:

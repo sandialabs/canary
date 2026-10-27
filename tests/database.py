@@ -273,6 +273,58 @@ def test_select_from_view_glob(db: WorkspaceDatabase, make_random_specs: MakeRan
     assert isinstance(ids, list)
 
 
+def test_select_from_view_escapes_like_wildcards(db: WorkspaceDatabase):
+    from _canary.core.jobspec import JobSpec
+
+    root = db.path.parent
+    a = JobSpec(file_root=root, file_path=Path("foo/a_b/test.py"), family="a", id="a" * 64)
+    b = JobSpec(file_root=root, file_path=Path("foo/axb/test.py"), family="b", id="b" * 64)
+    db.put_specs([a, b])
+
+    ids = db.select_from_view([f"{a.exec_path.as_posix()}/{a.file.name}"])
+
+    assert ids == [a.id]
+
+
+def test_get_results_uses_latest_inserted_row_not_lexicographic_session(db: WorkspaceDatabase):
+    from _canary.core.job import Job
+    from _canary.core.job import JobPhase
+    from _canary.core.jobspec import JobSpec
+    from _canary.execution.testexec import ExecutionSpace
+
+    root = db.path.parent
+    spec = JobSpec(
+        file_root=root, file_path=Path("case.pyt"), family="case", id="c" * 64, timeout=10.0
+    )
+    db.put_specs([spec])
+
+    old = Job(
+        spec=spec,
+        workspace=ExecutionSpace(
+            root=root / "sessions" / "m-session", path=Path("case"), session="m-session"
+        ),
+    )
+    old.status.set(outcome="FAILED")
+    old.state.phase = JobPhase.DONE
+
+    new = Job(
+        spec=spec,
+        workspace=ExecutionSpace(
+            root=root / "sessions" / "2026-01-01", path=Path("case"), session="2026-01-01"
+        ),
+    )
+    new.status.set(outcome="SUCCESS")
+    new.state.phase = JobPhase.DONE
+
+    db.put_results(old)
+    db.put_results(new)
+
+    result = db.get_results()[spec.id]
+
+    assert result["session"] == "2026-01-01"
+    assert result["status"].outcome.name == "SUCCESS"
+
+
 # -----------------------------------------------------------------------------
 # Foreign-key enforcement
 #
