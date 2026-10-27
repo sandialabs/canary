@@ -195,6 +195,34 @@ def run_learn_skills(*, query=".", terse=False, list_keys=False, markdown=None) 
     return Learn().run_skills(args)
 
 
+def run_query_capabilities_shortcut(*, query=".", terse=False, list_keys=False) -> int:
+    args = argparse.Namespace(
+        query_subcmd=None,
+        capabilities_query=query,
+        skills_query=None,
+        job_shortcut=None,
+        session_shortcut=None,
+        clean=False,
+        terse=terse,
+        list_keys=list_keys,
+    )
+    return Query().execute(args)
+
+
+def run_query_skills_shortcut(*, query=".", terse=False, list_keys=False) -> int:
+    args = argparse.Namespace(
+        query_subcmd=None,
+        capabilities_query=None,
+        skills_query=query,
+        job_shortcut=None,
+        session_shortcut=None,
+        clean=False,
+        terse=terse,
+        list_keys=list_keys,
+    )
+    return Query().execute(args)
+
+
 class FakeHook:
     def __init__(self, *, capabilities=None, skills=None):
         self._capabilities = list(capabilities or [])
@@ -929,6 +957,47 @@ def test_learn_capability_no_query_with_list_lists_root(capsys):
     assert "core" in out
 
 
+def test_query_capability_shortcut_command(capsys):
+    rc = run_query_capabilities_shortcut(query="core.overview")
+
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+
+    assert "what_is_canary" in out
+    assert "major_concepts" in out
+
+
+def test_query_capability_shortcut_defaults_to_core_namespace(capsys):
+    rc = run_query_capabilities_shortcut(query="overview")
+
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+
+    assert "what_is_canary" in out
+    assert "major_concepts" in out
+
+
+def test_query_capability_shortcut_list_root(capsys):
+    rc = run_query_capabilities_shortcut(query=".", list_keys=True)
+
+    assert rc == 0
+    out = capsys.readouterr().out.splitlines()
+
+    assert "core" in out
+
+
+def test_query_capability_shortcut_ext_alias_lists_extensions(monkeypatch, capsys):
+    install_fake_learn_plugin(monkeypatch, capabilities=[fake_capabilities_payload("fake")])
+
+    rc = run_query_capabilities_shortcut(query="ext", list_keys=True)
+
+    assert rc == 0
+    out = capsys.readouterr().out.splitlines()
+
+    assert "fake" in out
+    assert "core" not in out
+
+
 # -------------------------------------------------------------------------
 # Learn command: extension capabilities
 # -------------------------------------------------------------------------
@@ -1121,6 +1190,25 @@ def test_learn_skill_terse_prints_compact_json(capsys):
 
     output = capsys.readouterr().out
     assert output == '"canary-run-debug"\n'
+
+
+def test_query_skills_shortcut_command(capsys):
+    rc = run_query_skills_shortcut(query="core.canary-run-debug")
+
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+
+    assert out["name"] == "canary-run-debug"
+    assert "# Canary run and debug" in out["body"]
+
+
+def test_query_skills_shortcut_defaults_to_core_namespace(capsys):
+    rc = run_query_skills_shortcut(query="canary-run-debug")
+
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+
+    assert out["name"] == "canary-run-debug"
 
 
 # -------------------------------------------------------------------------

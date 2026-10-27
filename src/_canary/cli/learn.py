@@ -98,49 +98,103 @@ class Learn(CanarySubcommand):
         return handler(args)
 
     def run_capabilities(self, args: argparse.Namespace) -> int:
-        query = args.query
-
-        if query == CAPABILITY_HELP_QUERY:
-            if args.list_keys:
-                query = "."
-            else:
-                print_capability_query_help()
-                return 0
-
-        data = build_capabilities_tree()
-
-        if args.list_keys:
-            print_query_paths(list_capability_paths(data, query))
-            return 0
-
-        result = query_json(data, query)
-        print_json(result, terse=args.terse)
-        return 0
+        return execute_capabilities_query(args.query, terse=args.terse, list_keys=args.list_keys)
 
     def run_skills(self, args: argparse.Namespace) -> int:
-        query = args.query
+        return execute_skills_query(
+            args.query, terse=args.terse, list_keys=args.list_keys, markdown=args.markdown
+        )
 
-        if query == SKILL_HELP_QUERY:
-            if args.list_keys:
-                query = "."
-            else:
-                print_skill_query_help()
-                return 0
 
-        data = build_skills_tree()
-
-        if args.list_keys:
-            print_query_paths(list_skill_paths(data, query))
+def execute_capabilities_query(query: str, *, terse: bool = False, list_keys: bool = False) -> int:
+    if query == CAPABILITY_HELP_QUERY:
+        if list_keys:
+            query = "."
+        else:
+            print_capability_query_help()
             return 0
 
-        result = query_json(data, query)
+    data = build_capabilities_tree()
+    selected_data, resolved_query = resolve_capabilities_query(data, query)
 
-        if args.markdown:
-            write_skill_markdown(query, result, Path(args.markdown))
-            return 0
-
-        print_json(result, terse=args.terse)
+    if list_keys:
+        print_query_paths(list_capability_paths(selected_data, resolved_query))
         return 0
+
+    result = query_json(selected_data, resolved_query)
+    print_json(result, terse=terse)
+    return 0
+
+
+def execute_skills_query(
+    query: str, *, terse: bool = False, list_keys: bool = False, markdown: str | None = None
+) -> int:
+    if query == SKILL_HELP_QUERY:
+        if list_keys:
+            query = "."
+        else:
+            print_skill_query_help()
+            return 0
+
+    data = build_skills_tree()
+    resolved_query = resolve_skills_query(data, query)
+
+    if list_keys:
+        print_query_paths(list_skill_paths(data, resolved_query))
+        return 0
+
+    result = query_json(data, resolved_query)
+
+    if markdown:
+        write_skill_markdown(resolved_query, result, Path(markdown))
+        return 0
+
+    print_json(result, terse=terse)
+    return 0
+
+
+def resolve_capabilities_query(data: dict[str, Any], query: str) -> tuple[dict[str, Any], str]:
+    if query in ("", "."):
+        return data, "."
+
+    if query == "ext":
+        return extension_capabilities_tree(data), "."
+
+    if query.startswith("ext."):
+        return extension_capabilities_tree(data), query[4:]
+
+    if query_targets_namespace(data, query):
+        return data, query
+
+    return data, f"core.{query}"
+
+
+def resolve_skills_query(data: dict[str, Any], query: str) -> str:
+    if query in ("", "."):
+        return "."
+
+    if query_targets_namespace(data, query):
+        return query
+
+    return f"core.{query}"
+
+
+def extension_capabilities_tree(data: dict[str, Any]) -> dict[str, Any]:
+    return {namespace: payload for namespace, payload in data.items() if namespace != "core"}
+
+
+def query_targets_namespace(data: dict[str, Any], query: str) -> bool:
+    if query.startswith("."):
+        query = query[1:]
+
+    if not query:
+        return False
+
+    if query.startswith("["):
+        return False
+
+    namespace = query.split(".", 1)[0]
+    return namespace in data
 
 
 # -------------------------------------------------------------------------

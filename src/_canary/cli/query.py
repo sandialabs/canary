@@ -42,6 +42,13 @@ Common flags
             automatically when every job in the selection has reached a terminal
             status category (i.e. not NONE).  Ctrl-C exits cleanly with code 0.
             In --terse mode emits one NDJSON document per cycle.
+
+Agent shortcuts
+---------------
+-c QUERY     Shortcut for ``canary learn capabilities QUERY``
+--skills Q   Shortcut for ``canary learn skills Q``
+-j JOB [P]   Shortcut for ``canary query job JOB [P]``
+-s SES [P]   Shortcut for ``canary query session SES [P]``
 """
 
 import argparse
@@ -70,6 +77,8 @@ from ..util.query_data import print_json
 from ..util.query_data import print_query_paths
 from ..util.query_data import query_json
 from .base import CanarySubcommand
+from .learn import execute_capabilities_query
+from .learn import execute_skills_query
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -97,8 +106,13 @@ class Query(CanarySubcommand):
     name = "query"
     description = (
         "Query Canary workspace data.\n\n"
+        "Agent shortcuts: -c QUERY, --skills QUERY, -j JOBID [PATH], -s SESSION [PATH]\n\n"
         "Subcommands: job, session, sessions, jobs, compare, failures, db\n\n"
         "Examples:\n"
+        "  canary query -c overview\n"
+        "  canary query --skills core.canary-orientation\n"
+        "  canary query -j abc1234 measurements.data\n"
+        "  canary query -s latest measurements\n"
         "  canary query job abc1234\n"
         "  canary query job abc1234 status.outcome\n"
         "  canary query job abc1234 env\n"
@@ -125,6 +139,44 @@ class Query(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         """Register built-in and extension subparsers under ``canary query``."""
+        parser.add_argument(
+            "-c",
+            "--capabilities",
+            dest="capabilities_query",
+            metavar="QUERY",
+            help="Shortcut for 'canary learn capabilities QUERY'",
+        )
+        parser.add_argument(
+            "-k",
+            "--skills",
+            dest="skills_query",
+            metavar="QUERY",
+            help="Shortcut for 'canary learn skills QUERY'",
+        )
+        parser.add_argument(
+            "-j",
+            "--job",
+            dest="job_shortcut",
+            nargs="+",
+            metavar="ARG",
+            help="Shortcut for 'canary query job JOBID [PATH]'",
+        )
+        parser.add_argument(
+            "-s",
+            "--session",
+            dest="session_shortcut",
+            nargs="+",
+            metavar="ARG",
+            help="Shortcut for 'canary query session SESSION [PATH]'",
+        )
+        parser.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
+        parser.add_argument("--terse", action="store_true", help="Compact single-line JSON")
+        parser.add_argument(
+            "--list",
+            dest="list_keys",
+            action="store_true",
+            help="List queryable child keys at the selected path",
+        )
         sub = parser.add_subparsers(dest="query_subcmd", metavar="SUBCMD")
 
         # ---- job ----
@@ -388,11 +440,104 @@ class Query(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         """Dispatch to the first plugin that handles ``args.query_subcmd``."""
+        shortcut = _query_shortcut_mode(args)
+        if shortcut is not None:
+            return shortcut
         result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
         if result is not None:
             return result
         print(self.description)
         return 1
+
+
+def _query_shortcut_mode(args: argparse.Namespace) -> int | None:
+    shortcuts = {
+        "capabilities": getattr(args, "capabilities_query", None),
+        "skills": getattr(args, "skills_query", None),
+        "job": getattr(args, "job_shortcut", None),
+        "session": getattr(args, "session_shortcut", None),
+    }
+    active = [name for name, value in shortcuts.items() if value is not None]
+
+    if not active:
+        return None
+
+    if len(active) > 1:
+        sys.stderr.write(
+            "canary query: choose only one shortcut mode from -c/--capabilities, "
+            "-k/--skills, -j/--job, or -s/--session\n"
+        )
+        return 2
+
+    if getattr(args, "query_subcmd", None) is not None:
+        sys.stderr.write("canary query: shortcut options cannot be combined with subcommands\n")
+        return 2
+
+    if active[0] == "capabilities":
+        return execute_capabilities_query(
+            args.capabilities_query,
+            terse=getattr(args, "terse", False),
+            list_keys=getattr(args, "list_keys", False),
+        )
+
+    if active[0] == "skills":
+        return execute_skills_query(
+            args.skills_query,
+            terse=getattr(args, "terse", False),
+            list_keys=getattr(args, "list_keys", False),
+        )
+
+    if active[0] == "job":
+        shortcut_args = _parse_shortcut_target(args.job_shortcut, "job")
+        if shortcut_args is None:
+            return 2
+        jobid, path = shortcut_args
+        return _exec_job(
+            argparse.Namespace(
+                jobid=jobid,
+                path=path,
+                cache=False,
+                all_runs=False,
+                blockers=False,
+                recursive=False,
+                signatures=False,
+                missing_inputs=False,
+                clean=getattr(args, "clean", False),
+                terse=getattr(args, "terse", False),
+                list_keys=getattr(args, "list_keys", False),
+            )
+        )
+
+    shortcut_args = _parse_shortcut_target(args.session_shortcut, "session")
+    if shortcut_args is None:
+        return 2
+    session, path = shortcut_args
+    return _exec_session(
+        argparse.Namespace(
+            session=session,
+            path=path,
+            expand_jobs=False,
+            digest=False,
+            where=None,
+            clean=getattr(args, "clean", False),
+            terse=getattr(args, "terse", False),
+            list_keys=getattr(args, "list_keys", False),
+            watch=None,
+            with_fields=None,
+            missing_inputs=False,
+        )
+    )
+
+
+def _parse_shortcut_target(values: list[str], kind: str) -> tuple[str, str] | None:
+    if len(values) > 2:
+        sys.stderr.write(
+            f"canary query: shortcut '-{kind[0]}' expects {kind.upper()} [PATH], got: {' '.join(values)}\n"
+        )
+        return None
+    target = values[0]
+    path = values[1] if len(values) == 2 else "."
+    return target, path
 
 
 # ---------------------------------------------------------------------------

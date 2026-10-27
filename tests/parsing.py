@@ -220,6 +220,20 @@ def test_helpformatter_usage_renders():
     assert _usage_has_short_flag(usage, "q")
 
 
+def test_query_shortcut_args_parse_without_subcommands():
+    parser = make_cli_parser()
+
+    args = parser.parse_args(["query", "-c", "overview"])
+    assert args.command == "query"
+    assert args.query_subcmd is None
+    assert args.capabilities_query == "overview"
+
+    args = parser.parse_args(["query", "-s", "latest", "measurements"])
+    assert args.command == "query"
+    assert args.query_subcmd is None
+    assert args.session_shortcut == ["latest", "measurements"]
+
+
 def test_quiet_flag_clamps_to_most_quiet_log_level():
 
     parser = make_argument_parser()
