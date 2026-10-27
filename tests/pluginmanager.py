@@ -87,6 +87,23 @@ def test_import_plugin_from_file_idempotent(tmp_path, pm):
     assert len(plugins_named) == 1
 
 
+def test_import_plugin_from_file_registers_preimported_same_module(tmp_path, pm):
+    hook_file = _write_file(tmp_path / "preimported_hook.py", "VALUE = 123\n")
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("preimported_hook", hook_file)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["preimported_hook"] = mod
+    try:
+        spec.loader.exec_module(mod)
+        pm.import_plugin(str(hook_file))
+        assert pm.get_plugin("preimported_hook") is mod
+    finally:
+        sys.modules.pop("preimported_hook", None)
+
+
 def test_import_plugin_from_file_blocked_is_skipped(tmp_path, pm):
     """A file plugin whose stem is blocked is not loaded."""
     hook_file = _write_file(tmp_path / "blocked_hook.py", "X = 1\n")
@@ -146,6 +163,25 @@ def test_import_plugin_from_directory_idempotent(tmp_path, pm):
     pm.import_plugin(str(pkg))  # must not raise
     plugins_named = [p for p in pm.get_plugins() if pm.get_name(p) == "idem_pkg"]
     assert len(plugins_named) == 1
+
+
+def test_import_plugin_from_directory_registers_preimported_same_package(tmp_path, pm):
+    pkg = _write_package(tmp_path, "preimported_pkg", "VALUE = 123\n")
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "preimported_pkg", pkg / "__init__.py", submodule_search_locations=[str(pkg)]
+    )
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["preimported_pkg"] = mod
+    try:
+        spec.loader.exec_module(mod)
+        pm.import_plugin(str(pkg))
+        assert pm.get_plugin("preimported_pkg") is mod
+    finally:
+        sys.modules.pop("preimported_pkg", None)
 
 
 def test_import_plugin_from_directory_blocked_is_skipped(tmp_path, pm):

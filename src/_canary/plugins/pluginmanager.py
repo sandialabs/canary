@@ -197,6 +197,11 @@ class CanaryPluginManager(pluggy.PluginManager):
             raise ImportError(f"Cannot create module spec for plugin file {path!r}")
 
         if stem in sys.modules and stem not in self._name2plugin:
+            existing = sys.modules[stem]
+            existing_file = getattr(existing, "__file__", None)
+            if existing_file is not None and os.path.abspath(existing_file) == abs_path:
+                self.register(existing, stem)
+                return
             raise PluginAlreadyImportedError(
                 f"Plugin file {path!r} would shadow existing module {stem!r}"
             )
@@ -254,6 +259,13 @@ class CanaryPluginManager(pluggy.PluginManager):
             raise ImportError(f"Cannot create module spec for plugin directory {path!r}")
 
         if pkg_name in sys.modules and pkg_name not in self._name2plugin:
+            existing = sys.modules[pkg_name]
+            existing_file = getattr(existing, "__file__", None)
+            if existing_file is not None and os.path.abspath(existing_file) == os.path.abspath(
+                init
+            ):
+                self.register(existing, pkg_name)
+                return
             raise PluginAlreadyImportedError(
                 f"Plugin directory {path!r} would shadow existing module {pkg_name!r}"
             )
