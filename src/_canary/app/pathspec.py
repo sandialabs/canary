@@ -30,6 +30,8 @@ from typing import Literal
 from typing import Optional
 
 from ..generation.collect import vc_prefixes
+from ..scanpaths import merge_scanpaths
+from ..scanpaths import scanpath_from_item
 from ..session.workspace import NotAWorkspaceError
 from ..session.workspace import Workspace
 
@@ -198,17 +200,6 @@ def _classify_item(
         builder.viewpaths.append(p)
         return
 
-    if os.path.isdir(abspath):
-        builder.require_kind("scanpaths", f"scanpaths {abspath}")
-        builder.scanpaths.setdefault(abspath, [])
-        return
-
-    if os.path.isfile(abspath):
-        builder.require_kind("scanpaths", f"scanpaths {abspath}")
-        root, name = os.path.split(abspath)
-        builder.scanpaths.setdefault(root, []).append(name)
-        return
-
     if item.startswith(vc_prefixes):
         path_part = item.partition("@")[2]
         if not os.path.isdir(path_part):
@@ -218,12 +209,13 @@ def _classify_item(
         builder.scanpaths.setdefault(item, [])
         return
 
-    if os.pathsep in item and os.path.exists(item.replace(os.pathsep, os.path.sep)):
-        builder.require_kind("scanpaths", f"scanpaths {abspath}")
-        root, name = item.split(os.pathsep, 1)
-        builder.scanpaths.setdefault(os.path.abspath(root), []).append(
-            name.replace(os.pathsep, os.path.sep)
-        )
+    try:
+        if scanpaths := scanpath_from_item(item):
+            builder.require_kind("scanpaths", f"scanpaths {item}")
+            merge_scanpaths(builder.scanpaths, scanpaths)
+            return
+    except ValueError as e:
+        builder.errors.append(str(e))
         return
 
     possible_specs.append(item)

@@ -104,6 +104,68 @@ def test_classification_extends_a_provided_builder(tmp_path, monkeypatch):
     assert builder.kind == "scanpaths"
 
 
+def test_globbed_directory_item_uses_literal_prefix_as_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "some" / "baz" / "foo").mkdir(parents=True)
+    (tmp_path / "some" / "spam" / "foo").mkdir(parents=True)
+
+    with canary.config.override():
+        builder = app.classify_pathspec([str(tmp_path / "some" / "**" / "foo")])
+
+    assert builder.kind == "scanpaths"
+    assert not builder.errors
+    assert builder.scanpaths[str(tmp_path / "some")] == ["baz/foo", "spam/foo"]
+
+
+def test_globbed_file_item_uses_shared_literal_prefix_as_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "some" / "baz" / "foo").mkdir(parents=True)
+    (tmp_path / "some" / "spam" / "foo").mkdir(parents=True)
+    (tmp_path / "some" / "baz" / "foo" / "test.pyt").write_text(PYT_BODY)
+    (tmp_path / "some" / "spam" / "foo" / "test.pyt").write_text(PYT_BODY)
+
+    with canary.config.override():
+        builder = app.classify_pathspec([str(tmp_path / "some" / "**" / "foo" / "*.pyt")])
+
+    assert builder.kind == "scanpaths"
+    assert not builder.errors
+    assert builder.scanpaths[str(tmp_path / "some")] == ["baz/foo/test.pyt", "spam/foo/test.pyt"]
+
+
+def test_globbed_item_without_matches_reports_error(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with canary.config.override():
+        builder = app.classify_pathspec([str(tmp_path / "some" / "**" / "foo")])
+
+    assert builder.errors == [f"{tmp_path / 'some' / '**' / 'foo'}: no paths matched pattern"]
+
+
+def test_explicit_root_with_glob_keeps_root_authoritative(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "some" / "dir" / "foo" / "a" / "spam").mkdir(parents=True)
+    (tmp_path / "some" / "dir" / "foo" / "b" / "spam").mkdir(parents=True)
+
+    with canary.config.override():
+        builder = app.classify_pathspec([f"{tmp_path / 'some' / 'dir'}:foo/**/spam"])
+
+    assert builder.kind == "scanpaths"
+    assert not builder.errors
+    assert builder.scanpaths[str(tmp_path / "some" / "dir")] == ["foo/a/spam", "foo/b/spam"]
+
+
+def test_colon_after_first_globbed_component_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "some" / "dir" / "a" / "spam").mkdir(parents=True)
+
+    with canary.config.override():
+        builder = app.classify_pathspec([f"{tmp_path / 'some' / 'dir'}/**/spam:baz"])
+
+    assert builder.errors == [
+        f"{tmp_path / 'some' / 'dir'}/**/spam:baz: ':' is only allowed before the first globbed component"
+    ]
+
+
 class _Request:
     kind = "scanpaths"
 

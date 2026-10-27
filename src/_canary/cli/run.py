@@ -298,20 +298,32 @@ pathspec syntax:
   new test sessions:
     %(path)s                                   scan path recursively for test generators
     %(file)s                                   use this test generator
+    %(glob)s                                   expand a filesystem glob, then scan each match
     %(git)s@path                               find tests under git version control at path
     %(repo)s@path                              find tests under repo version control at path
 
   examples:
     canary run path                        scan path for tests to run
+    canary run 'tests/**/foo'              expand to matching directories, then scan them recursively
+    canary run 'tests/**/foo/*.pyt'        expand to matching files using file_root before the first glob
     canary run 7yral9i                     rerun test job with hash 7yral9i
+
+  glob semantics:
+    Wildcarded filesystem pathspecs use Python glob semantics (%(stars)s, %(qmark)s, %(brackets)s,
+    %(starstar)s). The file_root is the literal directory prefix before the first globbed component.
 
   script arguments:
     Any argument following the %(sep)s separator is passed directly to each test script's command line.
 """ % {
             "file": bold("file"),
+            "glob": bold("glob/pattern"),
             "path": bold("path"),
             "git": bold("git"),
             "repo": bold("repo"),
+            "stars": bold("*"),
+            "qmark": bold("?"),
+            "brackets": bold("[]"),
+            "starstar": bold("**"),
             "sep": bold("--"),
         }
         return pathspec_help

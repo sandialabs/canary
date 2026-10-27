@@ -38,6 +38,8 @@ from .. import config
 from ..config.argparsing import Parser
 from ..config.schemas import testpaths_schema
 from ..plugins.hookspec import hookimpl
+from ..scanpaths import scanpath_from_item
+from ..scanpaths import scanpaths_from_root_paths
 from ..util import logging
 from ..util.filesystem import working_dir
 from .generator import AbstractTestGenerator
@@ -56,15 +58,11 @@ def recursedirs_type(arg: str) -> dict[str, list[str]]:
     Returns:
         A dictionary mapping the root directory to a list of relative paths.
     """
-    if os.path.isdir(arg):
-        return {os.path.abspath(arg): []}
-    elif os.path.isfile(arg):
-        d, f = os.path.split(os.path.abspath(arg))
-        return {d: [f]}
-    elif ":" in arg:
-        root, _, path = arg.partition(":")
-        if os.path.isdir(root) and os.path.exists(os.path.join(root, path)):
-            return {root: [path]}
+    try:
+        if scanpaths := scanpath_from_item(arg):
+            return scanpaths
+    except ValueError as e:
+        raise ValueError(str(e)) from e
     raise ValueError(f"{arg}: no such file or directory")
 
 
@@ -91,10 +89,14 @@ def read_recursedirs(file: str) -> dict[str, list[str]]:
     paths: dict[str, list[str]] = {}
     with working_dir(file_dir):
         for p in data["testpaths"]:
-            if isinstance(p, str):
-                paths.setdefault(os.path.abspath(p), [])
-            else:
-                paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
+            root = os.path.abspath(p["root"])
+            expanded = scanpaths_from_root_paths(root, p["paths"])
+            for ex_root, ex_paths in expanded.items():
+                current = paths.get(ex_root)
+                if current == [] or ex_paths == []:
+                    paths[ex_root] = []
+                else:
+                    paths.setdefault(ex_root, []).extend(ex_paths)
     return paths
 
 
