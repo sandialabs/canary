@@ -317,6 +317,24 @@ pathspec syntax:
         return pathspec_help
 
 
+class ScanPathSpec(PathSpec):
+    """Parse positional pathspec args but require scanpaths semantics only."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: Optional[str] = None,
+    ) -> None:
+        super().__call__(parser, namespace, values, option_string)
+        request = getattr(namespace, "request", None)
+        if request is not None and not isinstance(request, ScanPathsRequest):
+            raise argparse.ArgumentError(
+                self, "This command only accepts filesystem scan pathspecs"
+            )
+
+
 class ViewAction(argparse.Action):
     """Parse ``--view key=value,...`` into a view-settings dict."""
 

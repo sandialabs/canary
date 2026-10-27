@@ -27,6 +27,7 @@ from ..util import logging
 from ..util.serialize import serialize
 from .base import CanarySubcommand
 from .common import add_resource_arguments
+from .run import ScanPathSpec
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -63,10 +64,19 @@ class Find(CanarySubcommand):
         Generator.setup_parser(parser)
         Selector.setup_parser(parser, tagged="none")
         add_resource_arguments(parser)
+        parser.add_argument(
+            "runpaths",
+            action=ScanPathSpec,
+            nargs=argparse.REMAINDER,
+            metavar="pathspec [--] [user args...]",
+            help="Filesystem paths to search, using the same pathspec syntax as canary run",
+        )
 
     def execute(self, args: argparse.Namespace) -> int:
         """Collect, generate, filter, and display specs according to the requested output mode."""
         collector = Collector()
+        if getattr(args, "request", None) is not None:
+            args.scanpaths = args.request.value
         collector.add_scanpaths(args.scanpaths)
         generators = collector.run()
 

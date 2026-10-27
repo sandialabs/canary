@@ -7,11 +7,25 @@ import os
 
 import pytest
 
+from _canary.app.pathspec import ScanPathsRequest
 from _canary.config import Config
 from _canary.config.argparsing import HelpFormatter
 from _canary.config.argparsing import Parser
 from _canary.config.argparsing import make_argument_parser
 from _canary.config.argparsing import safe_loads
+from _canary.plugins import hookspec
+from _canary.plugins.pluginmanager import CanaryPluginManager
+
+
+def make_cli_parser() -> Parser:
+    parser = make_argument_parser()
+    parser.add_main_epilog(parser)
+    pm = CanaryPluginManager(hookspec.project_name)
+    pm.add_hookspecs(hookspec)
+    pm.register_builtins()
+    pm.hook.canary_addcommand(parser=parser)
+    pm.hook.canary_addoption(parser=parser)
+    return parser
 
 
 def test_config_args():
@@ -214,6 +228,50 @@ def test_quiet_flag_clamps_to_most_quiet_log_level():
     config.set_main_options(args)
 
     assert config.get("log_level") == "CRITICAL"
+
+
+def test_find_uses_run_style_positional_scanpaths(tmp_path):
+
+    parser = make_cli_parser()
+    args = parser.parse_args(["find", str(tmp_path)])
+
+    assert isinstance(args.request, ScanPathsRequest)
+    assert args.request.value == {str(tmp_path): []}
+    assert args.scanpaths == {str(tmp_path): []}
+
+
+def test_collect_uses_run_style_positional_scanpaths(tmp_path):
+
+    parser = make_cli_parser()
+    args = parser.parse_args(["collect", str(tmp_path)])
+
+    assert isinstance(args.request, ScanPathsRequest)
+    assert args.request.value == {str(tmp_path): []}
+    assert args.scanpaths == {str(tmp_path): []}
+
+
+def test_selection_create_uses_run_style_positional_scanpaths(tmp_path):
+
+    parser = make_cli_parser()
+    args = parser.parse_args(["selection", "create", "mytag", str(tmp_path)])
+
+    assert isinstance(args.request, ScanPathsRequest)
+    assert args.request.value == {str(tmp_path): []}
+    assert args.scanpaths == {str(tmp_path): []}
+
+
+def test_find_rejects_non_scanpath_positional_request(monkeypatch):
+    parser = make_cli_parser()
+
+    def fake_classify(items, builder=None):
+        assert builder is not None
+        builder.require_kind("tag", "tag")
+        return builder
+
+    monkeypatch.setattr("_canary.cli.run.classify_pathspec", fake_classify)
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["find", "mytag"])
 
 
 def _usage_has_short_flag(usage: str, flag: str) -> bool:

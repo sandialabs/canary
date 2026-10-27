@@ -13,6 +13,7 @@ from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..util import logging
 from .base import CanarySubcommand
+from .run import ScanPathSpec
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -35,8 +36,17 @@ class Collect(CanarySubcommand):
         """Register scan-path and generator option arguments."""
         Collector.setup_parser(parser)
         Generator.setup_parser(parser)
+        parser.add_argument(
+            "runpaths",
+            action=ScanPathSpec,
+            nargs=argparse.REMAINDER,
+            metavar="pathspec [--] [user args...]",
+            help="Filesystem paths to collect, using the same pathspec syntax as canary run",
+        )
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Collect test cases from ``args.scanpaths`` into the current workspace."""
+        if getattr(args, "request", None) is not None:
+            args.scanpaths = args.request.value
         app.collect(args.scanpaths, on_options=args.on_options)
         return 0

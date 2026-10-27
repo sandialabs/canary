@@ -12,6 +12,7 @@ from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
 from .base import CanarySubcommand
+from .run import ScanPathSpec
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -35,6 +36,13 @@ class Selection(CanarySubcommand):
         Collector.setup_parser(p)
         Generator.setup_parser(p)
         Selector.setup_parser(p)
+        p.add_argument(
+            "runpaths",
+            action=ScanPathSpec,
+            nargs=argparse.REMAINDER,
+            metavar="pathspec [--] [user args...]",
+            help="Filesystem paths to search, using the same pathspec syntax as canary run",
+        )
         p = subparsers.add_parser("rm")
         p.add_argument("tag", help="Remove this selection")
         p = subparsers.add_parser("rename")
@@ -50,6 +58,8 @@ class Selection(CanarySubcommand):
                         f"[bold]canary selection refresh {args.tag}[/] to regnerate specs"
                     )
                 )
+            if getattr(args, "request", None) is not None:
+                args.scanpaths = args.request.value
             if not args.scanpaths:
                 raise ValueError("No paths to search")
             app.open_workspace().create_selection(
