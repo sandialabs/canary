@@ -16,6 +16,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .. import app
+from ..app.failure_analysis import collect_failure_groups
 from ..core.job import JobState
 from ..core.status import Status as _Status
 from ..plugins.hookspec import hookimpl
@@ -115,6 +116,12 @@ class Status(CanarySubcommand):
             default=False,
             help="Show full 64-character spec IDs instead of 7-character prefixes",
         )
+        parser.add_argument(
+            "--group",
+            action="store_true",
+            default=False,
+            help="Group non-pass jobs by normalized failure signature after the main table summary",
+        )
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "--all",
@@ -197,10 +204,8 @@ class Status(CanarySubcommand):
         console.print(summary_line)
 
         show_failure_summary = (
-            not show_all
-            and total > _AUTO_EXPAND_THRESHOLD
-            and not getattr(args, "output_json", False)
-        )
+            getattr(args, "group", False) or (not show_all and total > _AUTO_EXPAND_THRESHOLD)
+        ) and not getattr(args, "output_json", False)
         if show_failure_summary:
             non_pass = [r for r in all_rows if not r["status"].is_success()]
             if non_pass:
@@ -476,31 +481,22 @@ def _build_failure_summary(rows: list[dict]) -> str:
     Groups failures by ``(outcome, reason)`` and shows the job names in each
     group.  Includes hint lines for the next actions an analyst should take.
     """
-    groups = _group_failures(rows)
+    workspace = app.open_workspace()
+    groups = collect_failure_groups(workspace, rows)
     total = len(rows)
     noun = "job" if total == 1 else "jobs"
 
     lines: list[str] = [f"[bold]Failure summary[/bold] ({total} {noun}):"]
-    for outcome, reason, group_rows in groups:
-        count = len(group_rows)
-        names = ", ".join(r["spec_name"] for r in group_rows[:4])
+    for group in groups:
+        count = group["count"]
+        names = ", ".join(job["name"] for job in group["jobs"][:4])
         if count > 4:
             names += f", … (+{count - 4} more)"
-        outcome_color = {
-            "FAILED": "red",
-            "ERROR": "red",
-            "BROKEN": "red",
-            "TIMEOUT": "yellow",
-            "DIFFED": "yellow",
-            "BLOCKED": "dim",
-            "CANCELLED": "dim",
-            "INTERRUPTED": "dim",
-        }.get(outcome, "dim")
-        outcome_label = f"[{outcome_color}]{outcome}[/{outcome_color}]"
-        reason_str = f'  "[italic]{reason}[/italic]"' if reason else ""
-        lines.append(f"  {outcome_label}{reason_str} ×{count} {names}")
+        outcomes = ", ".join(f"{name}:{value}" for name, value in sorted(group["outcomes"].items()))
+        lines.append(f"  [red]{count}[/red] {group['signature_normalized']} [{outcomes}] {names}")
 
     lines.append("")
+    lines.append("  Triage first:             [bold]canary query failures[/bold]")
     lines.append("  To view a job's output:  [bold]canary log[/bold] [dim]<ID>[/dim]")
     lines.append("  To rerun failures:       [bold]canary run --only failed[/bold]")
     return "\n".join(lines)

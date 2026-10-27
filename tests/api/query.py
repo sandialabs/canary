@@ -228,6 +228,75 @@ def test_jobs_defaults_to_latest_session(workspace, monkeypatch):
     assert out[1]["passed"] is True
 
 
+def test_failures_aggregates_groups(workspace, monkeypatch):
+    from _canary.core.job import JobPhase
+    from _canary.core.job import JobState
+    from _canary.core.status import Status
+
+    patch_workspace(query_api, monkeypatch, workspace)
+    patch_session_resolver(query_api, monkeypatch)
+
+    job_root = workspace.sessions_dir / "s1"
+    job_root.mkdir(parents=True, exist_ok=True)
+    (workspace.refs_dir / "latest").write_text("s1")
+    write_session(workspace, "s1")
+
+    def make_job(job_id, name, text):
+        job_dir = job_root / f"w_{name}"
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "execute.log").write_text(text)
+        workspace._jobs[job_id] = SimpleNamespace(
+            id=job_id,
+            name=name,
+            stdout="execute.log",
+            workspace=SimpleNamespace(
+                dir=job_dir, joinpath=lambda *parts, _job_dir=job_dir: _job_dir.joinpath(*parts)
+            ),
+        )
+
+    log_text = """Traceback (most recent call last):\n  File \"/tmp/src/exodusii/api/lineout.py\", line 365, in _coordinate_dimension\n    raise ValueError('bad')\nValueError: lineout header does not contain coordinate columns\n"""
+    make_job("1", "case_a", log_text)
+    make_job("2", "case_b", log_text)
+    workspace.db.session_rows["s1"] = [
+        {
+            "id": "1",
+            "spec_name": "case_a",
+            "spec_fullname": "suite/case_a",
+            "file_path": "a.pyt",
+            "session": "s1",
+            "workspace": "w_case_a",
+            "status": Status.FAILED("Test exited with exit code = 1", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        },
+        {
+            "id": "2",
+            "spec_name": "case_b",
+            "spec_fullname": "suite/case_b",
+            "file_path": "b.pyt",
+            "session": "s1",
+            "workspace": "w_case_b",
+            "status": Status.FAILED("Test exited with exit code = 1", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        },
+    ]
+
+    monkeypatch.setattr(
+        query_api._query_cmd,
+        "_db_results_for_session",
+        lambda _ws, _session: workspace.db.session_rows["s1"],
+    )
+
+    groups = query_api.failures(session="s1")
+
+    assert len(groups) == 1
+    assert groups[0]["count"] == 2
+    assert groups[0]["exception_type"] == "ValueError"
+
+
 def test_jobs_session_none_uses_latest_run_per_job_across_all_sessions(workspace, monkeypatch):
     patch_workspace(query_api, monkeypatch, workspace)
     patch_converter(query_api, monkeypatch)

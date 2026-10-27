@@ -3,10 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import app
+from ..app.failure_analysis import list_existing_logs
 from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
@@ -55,25 +57,37 @@ If no options are give, -x is assumed."""
             default=False,
             help="Show the location of the test's source directory",
         )
-        parser.add_argument("testspec", help="Test name or test id")
+        parser.add_argument("--json", action="store_true", default=False, help="Emit JSON output")
+        parser.add_argument("testspec", nargs="+", help="Test name or test id")
 
     def execute(self, args: argparse.Namespace) -> int:
         from ..core.job import Job
         from ..core.jobspec import JobSpec
 
         workspace = app.open_workspace()
-        f: Path | str
-        if args.show_input or args.show_source_dir:
-            spec: JobSpec = workspace.find(spec=args.testspec)
-            f = spec.file if args.show_input else spec.file.parent
-        else:
-            job: Job = workspace.find(job=args.testspec)
-            if args.show_log:
-                f = job.workspace.joinpath(job.stdout)
+        items = []
+        testspecs = args.testspec if isinstance(args.testspec, list) else [args.testspec]
+        for testspec in testspecs:
+            f: Path | str
+            if args.show_input or args.show_source_dir:
+                spec: JobSpec = workspace.find(spec=testspec)
+                f = spec.file if args.show_input else spec.file.parent
+                items.append({"id": spec.id, "path": str(f)})
             else:
-                if (view := workspace.latest_view()) and (view.dir / job.view_path).exists():
-                    f = view.dir / job.view_path
+                job: Job = workspace.find(job=testspec)
+                if args.show_log:
+                    logs = list_existing_logs(job)
+                    f = Path(logs[0]["path"]) if logs else job.workspace.joinpath(job.stdout)
                 else:
-                    f = job.workspace.dir
-        print(f)
+                    if (view := workspace.latest_view()) and (view.dir / job.view_path).exists():
+                        f = view.dir / job.view_path
+                    else:
+                        f = job.workspace.dir
+                items.append({"id": job.id, "path": str(f)})
+        if getattr(args, "json", False):
+            json.dump(items, fp=__import__("sys").stdout, indent=2)
+            __import__("sys").stdout.write("\n")
+            return 0
+        for item in items:
+            print(item["path"])
         return 0

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import app
+from ..app.failure_analysis import list_existing_logs
+from ..app.failure_analysis import tail_lines
 from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
@@ -70,9 +72,17 @@ class Log(CanarySubcommand):
             action="store_true",
             help="Show raw log file contents (applicable only to the session log file)",
         )
+        parser.add_argument("--json", action="store_true", default=False, help="Emit JSON output")
+        parser.add_argument(
+            "--list",
+            dest="list_logs",
+            action="store_true",
+            default=False,
+            help="List known log-like files in the job workspace",
+        )
         parser.add_argument(
             "testspec",
-            nargs="?",
+            nargs="*",
             help="Test name or TEST_ID.  If not given, the session log will be shown",
         )
 
@@ -112,10 +122,26 @@ class Log(CanarySubcommand):
                 return 0
             raise ValueError(f"no log file found in {workspace.root}")
 
-        job = workspace.find(job=args.testspec)
-        f = self.get_file_from_workspace(job, args)
-        if f:
-            display_file(f, tail=args.tail)
+        results = []
+        testspecs = args.testspec if isinstance(args.testspec, list) else [args.testspec]
+        for testspec in testspecs:
+            job = workspace.find(job=testspec)
+            if getattr(args, "list_logs", False):
+                logs = list_existing_logs(job)
+                results.append({"id": job.id, "logs": logs})
+                continue
+            f = self.get_file_from_workspace(job, args)
+            if f is None:
+                continue
+            if getattr(args, "json", False):
+                item = {"id": job.id, "file": str(f)}
+                if args.tail is not None:
+                    item["tail"] = tail_lines(f, args.tail)
+                results.append(item)
+            else:
+                display_file(f, tail=args.tail)
+        if getattr(args, "json", False):
+            print(json.dumps(results, indent=2))
         return 0
 
 

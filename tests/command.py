@@ -724,6 +724,26 @@ def _run_query_session_digest(setup, *, where=None):
     return Query().execute(args)
 
 
+def _run_query_session_expand(setup, *, with_fields=None):
+    from _canary.cli.query import _exec_session
+
+    args = argparse.Namespace(
+        query_subcmd="session",
+        session=setup.session.name,
+        path=".",
+        expand_jobs=True,
+        digest=False,
+        where=None,
+        clean=False,
+        terse=False,
+        list_keys=False,
+        watch=None,
+        with_fields=with_fields,
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        return _exec_session(args)
+
+
 def test_query_session_digest_outputs_one_line_per_job(setup, capsys):
     with working_dir(setup.results_path), canary.config.override():
         rc = _run_query_session_digest(setup)
@@ -755,6 +775,15 @@ def test_query_session_digest_where_filters_jobs(setup, capsys):
     for line in lines:
         _, category = line.rsplit(" ", 1)
         assert category == "PASS"
+
+
+def test_query_session_expand_with_logs_tail(setup, capsys):
+    rc = _run_query_session_expand(setup, with_fields=["logs:2"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) > 0
+    assert "logs" in rows[0]
+    assert any("tail" in log for log in rows[0]["logs"])
 
 
 def test_query_terse_outputs_single_line_json(setup, capsys):
@@ -1739,15 +1768,49 @@ def test_batch_scheduler_state_function():
     assert _batch_scheduler_state(now, now + 10, now + 3600) == "done"
 
 
-def _run_query_jobs(setup_ns, *, session=None, where=None, terse=False, digest=False):
+def _run_query_jobs(
+    setup_ns, *, session=None, where=None, terse=False, digest=False, with_fields=None
+):
     """Helper: call _exec_jobs via Query().execute() dispatch."""
     from _canary.cli.query import _exec_jobs
 
     args = argparse.Namespace(
-        query_subcmd="jobs", session=session, where=where, terse=terse, digest=digest, watch=None
+        query_subcmd="jobs",
+        session=session,
+        where=where,
+        terse=terse,
+        digest=digest,
+        watch=None,
+        with_fields=with_fields,
     )
     with working_dir(setup_ns.results_path), canary.config.override():
         return _exec_jobs(args)
+
+
+def _run_query_failures(
+    setup_ns,
+    *,
+    session="latest",
+    where=None,
+    group_by="signature",
+    frame_filter=None,
+    include_pass_with_errors=False,
+    terse=False,
+):
+    from _canary.cli.query import _exec_failures
+
+    args = argparse.Namespace(
+        query_subcmd="failures",
+        session=session,
+        where=where,
+        group_by=group_by,
+        frame_filter=frame_filter,
+        log_names=None,
+        include_pass_with_errors=include_pass_with_errors,
+        terse=terse,
+    )
+    with working_dir(setup_ns.results_path), canary.config.override():
+        return _exec_failures(args)
 
 
 def test_query_jobs_returns_json_list(setup, capsys):
@@ -1759,7 +1822,7 @@ def test_query_jobs_returns_json_list(setup, capsys):
 
 
 def test_query_jobs_has_expected_fields(setup, capsys):
-    rc = _run_query_jobs(setup)
+    rc = _run_query_jobs(setup, with_fields=["logs"])
     assert rc == 0
     rows = json.loads(capsys.readouterr().out)
     for row in rows:
@@ -1771,9 +1834,69 @@ def test_query_jobs_has_expected_fields(setup, capsys):
         assert "session" in row
         assert "exit_code" in row
         assert "status" in row
+        assert "logs" in row
         assert "category" in row["status"]
         assert "outcome" in row["status"]
         assert "timings" in row
+
+
+def test_query_jobs_logs_include_default_stdout_log(setup, capsys):
+    rc = _run_query_jobs(setup, with_fields=["logs"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    target = next(row for row in rows if row["id"] == setup.f_a1_id)
+    assert any(log["name"] == "canary-out.txt" for log in target["logs"])
+
+
+def test_query_jobs_with_logs_tail(setup, capsys):
+    rc = _run_query_jobs(setup, with_fields=["logs:2"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    target = next(row for row in rows if row["id"] == setup.f_a1_id)
+    assert any("tail" in log for log in target["logs"])
+
+
+def test_query_failures_returns_grouped_json(setup, capsys):
+    rc = _run_query_failures(setup, session=setup.session.name)
+    assert rc == 0
+    groups = json.loads(capsys.readouterr().out)
+    assert isinstance(groups, list)
+    assert len(groups) > 0
+    first = groups[0]
+    assert "signature" in first
+    assert "signature_normalized" in first
+    assert "count" in first
+    assert "jobs" in first
+
+
+def test_query_failures_group_by_exception(setup, capsys):
+    rc = _run_query_failures(setup, session=setup.session.name, group_by="exception")
+    assert rc == 0
+    groups = json.loads(capsys.readouterr().out)
+    assert isinstance(groups, list)
+    assert len(groups) > 0
+
+
+def test_status_group_flag(setup, capsys):
+    args = argparse.Namespace(
+        interactive=False,
+        durations=None,
+        format_cols="ID,Name,Session,Exit Code,Duration,Status,Details",
+        report_chars="dftns",
+        sort_by="name",
+        output_json=False,
+        full_ids=False,
+        group=True,
+        show_all=False,
+        show_failed_only=False,
+        specs=[],
+    )
+    with working_dir(setup.results_path), canary.config.override():
+        rc = Status().execute(args)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Failure summary" in out
+    assert "canary query failures" in out
 
 
 def test_query_jobs_with_session_scopes_to_session(setup, capsys):

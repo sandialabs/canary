@@ -19,6 +19,7 @@ from typing import Any
 from typing import Literal
 from typing import Sequence
 
+from _canary.api.failures import failures
 from _canary.cli import query as _query_cmd
 from _canary.session.workspace import Workspace
 from _canary.util.query_data import query_json
@@ -769,6 +770,7 @@ __all__ = [
     "db_stats",
     "diffed_jobs",
     "environment",
+    "failures",
     "failed_jobs",
     "job",
     "job_history",

@@ -56,6 +56,10 @@ from typing import Any
 
 import canary
 
+from ..app.failure_analysis import collect_failure_groups
+from ..app.failure_analysis import job_from_result_row
+from ..app.failure_analysis import list_existing_logs
+from ..app.failure_analysis import tail_lines
 from ..plugins.hookspec import hookimpl
 from ..session.workspace import Workspace
 from ..util.query_data import list_json_object_paths
@@ -85,12 +89,12 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Query(CanarySubcommand):
-    """Structured inspection of Canary workspace data via job, session, sessions, and db subcommands."""
+    """Structured inspection of Canary workspace data via job, session, sessions, jobs, failures, and db subcommands."""
 
     name = "query"
     description = (
         "Query Canary workspace data.\n\n"
-        "Subcommands: job, session, sessions, jobs, db\n\n"
+        "Subcommands: job, session, sessions, jobs, failures, db\n\n"
         "Examples:\n"
         "  canary query job abc1234\n"
         "  canary query job abc1234 status.outcome\n"
@@ -207,6 +211,14 @@ class Query(CanarySubcommand):
                 "With --terse, emits one NDJSON document per cycle."
             ),
         )
+        p_ses.add_argument(
+            "--with",
+            dest="with_fields",
+            action="append",
+            default=None,
+            metavar="FIELD",
+            help="Augment expanded job rows with extra projections, e.g. logs or logs:40",
+        )
 
         # ---- sessions ----
         p_sessions = sub.add_parser("sessions", help="List all sessions with summary statistics")
@@ -262,6 +274,50 @@ class Query(CanarySubcommand):
                 "With --terse, emits one NDJSON document per cycle."
             ),
         )
+        p_jobs.add_argument(
+            "--with",
+            dest="with_fields",
+            action="append",
+            default=None,
+            metavar="FIELD",
+            help="Augment rows with extra projections, e.g. logs or logs:40",
+        )
+
+        # ---- failures ----
+        p_failures = sub.add_parser("failures", help="Group failures by normalized log signature")
+        p_failures.add_argument(
+            "--session",
+            metavar="SESSION",
+            default="latest",
+            help='Session name, prefix, or "latest"',
+        )
+        p_failures.add_argument("--where", metavar="EXPR", help="Optional job filter predicate")
+        p_failures.add_argument(
+            "--group-by",
+            choices=("signature", "exception", "frame", "reason", "file_path"),
+            default="signature",
+            help="Grouping key for failure buckets",
+        )
+        p_failures.add_argument(
+            "--frame-filter",
+            metavar="REGEX",
+            default=None,
+            help="Regex used to choose the most relevant traceback frame",
+        )
+        p_failures.add_argument(
+            "--log",
+            action="append",
+            default=None,
+            dest="log_names",
+            metavar="FILE",
+            help="Workspace log file to scan; may be passed more than once",
+        )
+        p_failures.add_argument(
+            "--include-pass-with-errors",
+            action="store_true",
+            help="Also include PASS jobs whose logs contain a traceback or command error",
+        )
+        p_failures.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
         # ---- db ----
         p_db = sub.add_parser("db", help="Query the workspace SQLite database")
@@ -562,6 +618,9 @@ def _exec_session_expand(workspace: Workspace, session_dir: Path, args: argparse
         out: list[dict[str, Any]] = []
         for row in rows:
             entry = _row_to_job_entry(workspace, row)
+            _apply_with_fields(
+                workspace, row, entry, getattr(args, "with_fields", None) or ["logs"]
+            )
             if predicate and not predicate(entry):
                 continue
             out.append(entry)
@@ -910,6 +969,9 @@ def _exec_jobs(args: argparse.Namespace) -> int:
         out: list[dict[str, Any]] = []
         for row in rows:
             entry = _row_to_job_entry(workspace, row)
+            _apply_with_fields(
+                workspace, row, entry, getattr(args, "with_fields", None) or ["logs"]
+            )
             if predicate and not predicate(entry):
                 continue
             out.append(entry)
@@ -928,6 +990,47 @@ def _exec_jobs(args: argparse.Namespace) -> int:
 
     print_json(out, terse=args.terse)
     return 0
+
+
+def _exec_failures(args: argparse.Namespace) -> int:
+    workspace = Workspace.load()
+    session_dir = _resolve_session_dir(workspace, args.session)
+    rows = _db_results_for_session(workspace, session_dir.name)
+    predicate = _parse_where(args.where) if args.where else None
+    if predicate is not None:
+        rows = [row for row in rows if predicate(_row_to_job_entry(workspace, row))]
+    groups = collect_failure_groups(
+        workspace,
+        rows,
+        group_by=args.group_by,
+        frame_filter=args.frame_filter,
+        include_pass_with_errors=getattr(args, "include_pass_with_errors", False),
+        log_names=getattr(args, "log_names", None),
+    )
+    print_json(groups, terse=args.terse)
+    return 0
+
+
+def _apply_with_fields(
+    workspace: Workspace, row: dict[str, Any], entry: dict[str, Any], with_fields: list[str] | None
+) -> None:
+    if not with_fields:
+        return
+    requested = [field for field in with_fields if field and field.startswith("logs")]
+    if not requested:
+        return
+    job = job_from_result_row(workspace, row)
+    logs = list_existing_logs(job)
+    tail_n = None
+    for field in requested:
+        _, _, suffix = field.partition(":")
+        if suffix:
+            tail_n = int(suffix)
+            break
+    if tail_n is not None:
+        for item in logs:
+            item["tail"] = tail_lines(Path(item["path"]), tail_n)
+    entry["logs"] = logs
 
 
 def _exec_db(args: argparse.Namespace) -> int:

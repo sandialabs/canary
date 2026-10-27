@@ -564,6 +564,16 @@ def query_execute_jobs(args: "argparse.Namespace") -> "int | None":
     return _exec_jobs(args)
 
 
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_failures(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query failures``."""
+    if getattr(args, "query_subcmd", None) != "failures":
+        return None
+    from ..cli.query import _exec_failures
+
+    return _exec_failures(args)
+
+
 # ---------------------------------------------------------------------------
 # Built-in canary fetch subcommand handlers
 # ---------------------------------------------------------------------------
