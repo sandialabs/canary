@@ -485,6 +485,19 @@
             "canary query compare OLD NEW --by name"
           ]
         },
+        "workspace_portability": {
+          "summary": "Canary records the workspace root at session creation and can remap host-style paths when a workspace is inspected from a different mount point.",
+          "fields": {
+            "session.lock.root_at_creation": "Absolute workspace anchor path recorded when the session was created.",
+            "measurements.data.inputs": "Per-job staged input inventory captured during setup. Each entry includes source, dest, kind, exists_now, size, and sha256."
+          },
+          "commands": [
+            "canary location ID --json",
+            "canary query job JOBID --missing-inputs",
+            "canary query session SESSION --missing-inputs",
+            "canary run --snapshot-inputs=small PATH"
+          ]
+        },
         "db": {
           "summary": "Query the workspace SQLite database directly.",
           "modes": {
