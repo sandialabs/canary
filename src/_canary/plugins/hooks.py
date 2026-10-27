@@ -152,6 +152,15 @@ def add_archive_options(parser: Parser) -> None:
         command="run",
         help="Archive job artifacts to a tgz archive by this name",
     )
+    parser.add_argument(
+        "--snapshot-inputs",
+        metavar="MODE",
+        dest="snapshot_inputs",
+        choices=("none", "small", "all"),
+        default="none",
+        command="run",
+        help="Snapshot staged job inputs into .canary/inputs (none, small, all)",
+    )
 
 
 @hookimpl(specname="canary_sessionfinish")

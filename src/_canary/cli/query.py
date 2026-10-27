@@ -61,7 +61,9 @@ from ..app.failure_analysis import failure_signature_for_row
 from ..app.failure_analysis import job_from_result_row
 from ..app.failure_analysis import list_existing_logs
 from ..app.failure_analysis import tail_lines
+from ..app.paths import remap_path
 from ..plugins.hookspec import hookimpl
+from ..session.workspace import Session
 from ..session.workspace import Workspace
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
@@ -172,6 +174,11 @@ class Query(CanarySubcommand):
             action="store_true",
             help="When used with --blockers, include grouped root failure signatures",
         )
+        p_job.add_argument(
+            "--missing-inputs",
+            action="store_true",
+            help="Summarize missing staged inputs for this job",
+        )
 
         # ---- session ----
         p_ses = sub.add_parser("session", help="Query a session lock or its jobs")
@@ -234,6 +241,11 @@ class Query(CanarySubcommand):
             default=None,
             metavar="FIELD",
             help="Augment expanded job rows with extra projections, e.g. logs or logs:40",
+        )
+        p_ses.add_argument(
+            "--missing-inputs",
+            action="store_true",
+            help="Summarize missing staged inputs across the session",
         )
 
         # ---- sessions ----
@@ -569,6 +581,14 @@ def _exec_job(args: argparse.Namespace) -> int:
         print_json(info, terse=args.terse)
         return 0
 
+    if getattr(args, "missing_inputs", False):
+        lockfile = _job_lockfile(workspace, args.jobid)
+        data = json.loads(lockfile.read_text())
+        inputs = data.get("measurements", {}).get("data", {}).get("inputs", [])
+        missing = [item for item in inputs if not item.get("exists_now")]
+        print_json(missing, terse=args.terse)
+        return 0
+
     if getattr(args, "all_runs", False):
         job = workspace.find_job(args.jobid)
         workspace.db.connect()
@@ -687,6 +707,16 @@ def _exec_session(args: argparse.Namespace) -> int:
         return 0
 
     result = query_json(data, args.path)
+    if getattr(args, "missing_inputs", False):
+        session_name = data.get("name", session_dir.name)
+        rows = _db_results_for_session(workspace, session_name)
+        missing = []
+        for row in rows:
+            job = workspace.find_job(row["id"])
+            lock_data = json.loads(job.lockfile.read_text())
+            inputs = lock_data.get("measurements", {}).get("data", {}).get("inputs", [])
+            missing.extend(item for item in inputs if not item.get("exists_now"))
+        result = missing
     if args.clean:
         result = _clean(result)
     print_json(result, terse=args.terse)
@@ -944,12 +974,22 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
     # None for local-worker jobs (no batch) or when the batch has not started.
     last_activity = _batch_last_activity_for_job(workspace, row["id"], row["session"])
 
+    session_dir = workspace.sessions_dir / row["session"]
+    try:
+        root_at_creation = Session.load_lock_data(session_dir).get("root_at_creation")
+    except FileNotFoundError:
+        root_at_creation = None
+
     return {
         "id": row["id"],
         "name": row["spec_name"],
         "fullname": row["spec_fullname"],
         "file_path": row.get("file_path", ""),
-        "exec_dir": str(workspace.sessions_dir / row["session"] / row["workspace"]),
+        "exec_dir": remap_path(
+            session_dir / row["workspace"],
+            root_at_creation=root_at_creation,
+            current_root=workspace.root.parent,
+        ),
         "session": row["session"],
         "exit_code": row["status"].code,
         "status": {

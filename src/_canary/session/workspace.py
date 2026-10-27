@@ -186,6 +186,7 @@ class Session:
         return {
             "name": self.name,
             "prefix": str(self.prefix),
+            "root_at_creation": str(self.prefix.parent.parent.parent),
             "job_ids": [job.id for job in self.jobs],
             "returncode": self.returncode,
             "started_on": self.started_on.isoformat(),

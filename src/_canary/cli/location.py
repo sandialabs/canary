@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from .. import app
 from ..app.failure_analysis import list_existing_logs
+from ..app.paths import remap_path
 from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
 
@@ -57,6 +58,7 @@ If no options are give, -x is assumed."""
             default=False,
             help="Show the location of the test's source directory",
         )
+        parser.add_argument("--remap", default="auto", help="Path remapping mode")
         parser.add_argument("--json", action="store_true", default=False, help="Emit JSON output")
         parser.add_argument("testspec", nargs="+", help="Test name or test id")
 
@@ -65,6 +67,12 @@ If no options are give, -x is assumed."""
         from ..core.jobspec import JobSpec
 
         workspace = app.open_workspace()
+        root_at_creation = None
+        latest = workspace.refs_dir / "latest"
+        if latest.exists():
+            lock = workspace.sessions_dir / latest.read_text().strip() / "session.lock"
+            if lock.exists():
+                root_at_creation = json.loads(lock.read_text()).get("root_at_creation")
         items = []
         testspecs = args.testspec if isinstance(args.testspec, list) else [args.testspec]
         for testspec in testspecs:
@@ -72,7 +80,14 @@ If no options are give, -x is assumed."""
             if args.show_input or args.show_source_dir:
                 spec: JobSpec = workspace.find(spec=testspec)
                 f = spec.file if args.show_input else spec.file.parent
-                items.append({"id": spec.id, "path": str(f)})
+                items.append(
+                    {
+                        "id": spec.id,
+                        "path": remap_path(
+                            f, root_at_creation=root_at_creation, current_root=workspace.root.parent
+                        ),
+                    }
+                )
             else:
                 job: Job = workspace.find(job=testspec)
                 if args.show_log:
@@ -83,7 +98,14 @@ If no options are give, -x is assumed."""
                         f = view.dir / job.view_path
                     else:
                         f = job.workspace.dir
-                items.append({"id": job.id, "path": str(f)})
+                items.append(
+                    {
+                        "id": job.id,
+                        "path": remap_path(
+                            f, root_at_creation=root_at_creation, current_root=workspace.root.parent
+                        ),
+                    }
+                )
         if getattr(args, "json", False):
             json.dump(items, fp=__import__("sys").stdout, indent=2)
             __import__("sys").stdout.write("\n")

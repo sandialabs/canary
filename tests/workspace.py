@@ -157,6 +157,21 @@ def test_info_contains_expected_fields(chdir_tmp):
     assert info["root"] == str(ws.root)
 
 
+def test_session_lock_records_root_at_creation(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+    session_dir = ws.sessions_dir / "s1"
+    session_dir.mkdir(parents=True)
+
+    from _canary.session.workspace import Session
+
+    session = Session(name="s1", jobs=[], prefix=session_dir)
+    data = session.to_lock_data()
+
+    assert data["root_at_creation"] == str(root)
+
+
 # ---------------------------------------------------------------------------
 # --canary-dir / CANARY_DIR / set_workspace_dir
 # ---------------------------------------------------------------------------

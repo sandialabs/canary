@@ -5,6 +5,7 @@
 import copy
 import dataclasses
 import datetime
+import hashlib
 import io
 import math
 import os
@@ -658,6 +659,8 @@ class Job(BaseJob):
         self.workspace.remove(missing_ok=True)
         self.create_workspace()
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
+        snapshot_inputs: str = config.getoption("snapshot_inputs", "none") or "none"
+        input_inventory: list[dict[str, Any]] = []
         prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
         with open(self.workspace.joinpath(self.stdout), "a") as file:
             file.write(f"[{prefix}] Preparing test: {self.name}\n")
@@ -666,24 +669,46 @@ class Job(BaseJob):
             if copy_all_resources:
                 file.write(f"[{prefix}] Copying {self.spec.file} to {self.workspace}\n")
                 self.workspace.copy(self.spec.file)
+                input_inventory.append(
+                    _input_record(self.spec.file, self.workspace.dir / self.spec.file.name, "copy")
+                )
             else:
                 file.write(f"[{prefix}] Linking {self.spec.file} to {self.workspace}\n")
                 self.workspace.link(self.spec.file)
+                input_inventory.append(
+                    _input_record(self.spec.file, self.workspace.dir / self.spec.file.name, "link")
+                )
             for asset in self.spec.assets:
                 if asset.action not in ("copy", "link"):
                     continue
                 if not asset.src.exists():
                     raise MissingSourceError(asset.src)
                 try:
+                    dest_name = asset.dst or asset.src.name
+                    dest_path = self.workspace.dir / dest_name
                     if asset.action == "copy" or copy_all_resources:
                         file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
                         self.workspace.copy(asset.src, asset.dst)
+                        input_inventory.append(_input_record(asset.src, dest_path, "copy"))
                     else:
                         file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
                         self.workspace.link(asset.src, asset.dst)
+                        input_inventory.append(_input_record(asset.src, dest_path, "link"))
                 except Exception:
                     logger.exception("FAILED")
                     raise
+        if snapshot_inputs != "none":
+            snapshot_dir = self.workspace.dir / ".canary" / "inputs"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            for item in input_inventory:
+                src = Path(item["source"])
+                if not src.exists() or not src.is_file():
+                    continue
+                if snapshot_inputs == "small" and src.stat().st_size > 1_000_000:
+                    continue
+                target = snapshot_dir / src.name
+                target.write_bytes(src.read_bytes())
+        self.add_measurement("inputs", input_inventory)
 
     def run(self) -> None:
         from .status import Outcome
@@ -919,3 +944,17 @@ def split_count(total: int, parts: int) -> list[int]:
 
 class MissingSourceError(Exception):
     pass
+
+
+def _input_record(src: Path, dest: Path, kind: str) -> dict[str, Any]:
+    sha256 = None
+    if src.exists() and src.is_file():
+        sha256 = hashlib.sha256(src.read_bytes()).hexdigest()
+    return {
+        "source": str(src),
+        "dest": dest.name,
+        "kind": kind,
+        "exists_now": src.exists(),
+        "size": src.stat().st_size if src.exists() and src.is_file() else None,
+        "sha256": sha256,
+    }

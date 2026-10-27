@@ -126,13 +126,17 @@ if __name__ == "__main__":
 # -------------------------------------------------------------------------
 
 
-def run_location(testspec: str, *, input=False, log=False, source=False, x=False) -> int:
+def run_location(
+    testspec: str | list[str], *, input=False, log=False, source=False, x=False, output_json=False
+) -> int:
+    testspecs = [testspec] if isinstance(testspec, str) else testspec
     args = argparse.Namespace(
         show_input=input,
         show_log=log,
         show_source_dir=source,
         show_working_directory=x,
-        testspec=testspec,
+        json=output_json,
+        testspec=testspecs,
     )
     return Location().execute(args)
 
@@ -2085,6 +2089,49 @@ def test_query_job_blockers(setup, capsys):
     assert data["outcome"] == "BLOCKED"
     assert "blocked_by" in data
     assert data["blocked_by"]["failed"] >= 1
+
+
+def test_query_job_missing_inputs(setup, capsys):
+    from _canary.cli.query import _exec_job
+    from _canary.session.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        job = next(job for job in workspace.load_jobs() if job.name == "f.a=1")
+        lock_data = json.loads(job.lockfile.read_text())
+        inputs = lock_data["measurements"]["data"].get("inputs", [])
+        if inputs:
+            inputs[0]["exists_now"] = False
+            job.lockfile.write_text(json.dumps(lock_data))
+        args = argparse.Namespace(
+            query_subcmd="job",
+            jobid=job.id,
+            path=".",
+            cache=False,
+            all_runs=False,
+            clean=False,
+            terse=False,
+            list_keys=False,
+            blockers=False,
+            recursive=False,
+            signatures=False,
+            missing_inputs=True,
+        )
+        rc = _exec_job(args)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+
+
+def test_location_json_uses_remapped_path(setup, capsys):
+    from _canary.app.paths import remap_path
+
+    result = remap_path(
+        "/host/work/project/session/job",
+        root_at_creation="/host/work/project",
+        current_root="/projects",
+    )
+    assert result == "/projects/session/job"
 
 
 def test_query_jobs_with_session_scopes_to_session(setup, capsys):
