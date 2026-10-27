@@ -638,7 +638,7 @@ class ViewManager:
             if old_view is not None and old_view.exists():
                 old_dir = old_view.dir
                 bak_dir = old_dir.with_name(old_dir.name + ".tmp")
-                if bak_dir.exists():
+                if bak_dir.exists() and ResultsView.exists_at(bak_dir):
                     force_remove(bak_dir)
                 os.rename(old_dir, bak_dir)
             made_new = False

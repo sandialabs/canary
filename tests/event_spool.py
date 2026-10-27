@@ -132,3 +132,18 @@ def test_listener_continues_after_subscriber_exception(tmp_path):
         listener.stop()
 
     assert [event.name for event in seen] == ["job_started", "job_finished"]
+
+
+def test_listener_reaps_tmp_files_on_start(tmp_path):
+    spool = tmp_path / "events"
+    bus = EventBus()
+    listener = SpoolListener(spool, bus)
+    listener._queue.tmp.mkdir(parents=True, exist_ok=True)
+    stale = listener._queue.tmp / "stale"
+    stale.write_text("x")
+
+    listener.start()
+    try:
+        assert not stale.exists()
+    finally:
+        listener.stop()

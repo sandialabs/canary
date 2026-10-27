@@ -1094,6 +1094,7 @@ class ResultListener(threading.Thread):
         try:
             # Single-listener case: recover any records left claimed by a previous
             # crashed listener before we start draining.
+            self.db.queue.reap_tmp(older_than=0)
             self.db.queue.requeue_stale(older_than=0)
 
             while not self._stop_event.is_set():

@@ -107,6 +107,29 @@ def test_rebuild_view_refuses_non_owning_directory(tmp_path):
         assert (view / "user-file.txt").exists()
 
 
+def test_rebuild_view_does_not_remove_non_owned_tmp_backup(tmp_path):
+    root = tmp_path / "view-backup-guard"
+    root.mkdir()
+
+    with working_dir(root), canary.config.override():
+        workspace = Workspace.create(root)
+
+        view = root / "TestResults"
+        view.mkdir()
+        (view / ".canary-view.json").write_text("{}")
+
+        bak = root / "TestResults.tmp"
+        bak.mkdir()
+        marker = bak / "user-file.txt"
+        marker.write_text("keep")
+
+        workspace.rebuild_view(
+            view_t=ViewSettings(when="always", only="all", mode="symlink", name="TestResults")
+        )
+
+        assert marker.exists()
+
+
 def test_sync_tolerates_missing_manifest_target(tmp_path):
     root = tmp_path / "view-missing-target"
     root.mkdir()

@@ -79,6 +79,7 @@ class SpoolListener:
         """Start the background drain thread."""
         if self._thread is not None:
             return
+        self._queue.reap_tmp(older_than=0)
         self._queue.requeue_stale(older_than=0)
         self._thread = threading.Thread(target=self._run, name="canary-event-spool", daemon=True)
         self._thread.start()
