@@ -12,6 +12,7 @@ here.  It lives in ``dev/__init__.py`` at the repository root and is loaded
 automatically by the plugin manager when running from an editable checkout.
 """
 
+from . import agent
 from . import collect
 from . import config
 from . import describe
@@ -40,6 +41,7 @@ from . import tui
 from . import view
 
 plugins = [
+    agent,
     collect,
     config,
     describe,

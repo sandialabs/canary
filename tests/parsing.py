@@ -234,6 +234,24 @@ def test_query_shortcut_args_parse_without_subcommands():
     assert args.session_shortcut == ["latest", "measurements"]
 
 
+def test_agent_bootstrap_args_parse():
+    parser = make_cli_parser()
+
+    args = parser.parse_args(["agent", "bootstrap"])
+    assert args.command == "agent"
+    assert args.agent_command == "bootstrap"
+    assert args.target == "generic"
+    assert args.brief is False
+    assert args.force is False
+
+    args = parser.parse_args(["agent", "bootstrap", "opencode", "--brief", "--force"])
+    assert args.command == "agent"
+    assert args.agent_command == "bootstrap"
+    assert args.target == "opencode"
+    assert args.brief is True
+    assert args.force is True
+
+
 def test_quiet_flag_clamps_to_most_quiet_log_level():
 
     parser = make_argument_parser()

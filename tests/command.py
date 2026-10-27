@@ -13,6 +13,8 @@ import yaml
 
 import canary
 from _canary.cli import learn as learn_mod
+from _canary.cli.agent import BOOTSTRAP_SKILLS
+from _canary.cli.agent import write_agent_bootstrap
 from _canary.cli.config import show_config
 from _canary.cli.describe import Describe
 from _canary.cli.find import Find
@@ -32,7 +34,6 @@ from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
 from _canary.util.query_data import query_json
 from _canary.util.query_data import skill_to_markdown
-from _canary.util.query_data import write_skill_markdown
 from _canary.util.testing import CanaryCommand
 
 EXPECTED_CORE_SKILLS = {
@@ -190,8 +191,8 @@ def run_learn_capabilities(*, query=".", terse=False, list_keys=False) -> int:
     return Learn().run_capabilities(args)
 
 
-def run_learn_skills(*, query=".", terse=False, list_keys=False, markdown=None) -> int:
-    args = argparse.Namespace(query=query, terse=terse, list_keys=list_keys, markdown=markdown)
+def run_learn_skills(*, query=".", terse=False, list_keys=False) -> int:
+    args = argparse.Namespace(query=query, terse=terse, list_keys=list_keys)
     return Learn().run_skills(args)
 
 
@@ -1281,7 +1282,7 @@ def test_list_skill_paths_lists_terminal_skills(monkeypatch):
 
 
 # -------------------------------------------------------------------------
-# Learn command: Markdown export
+# Agent bootstrap
 # -------------------------------------------------------------------------
 
 
@@ -1303,96 +1304,83 @@ def test_skill_to_markdown_emits_frontmatter_and_body():
     assert frontmatter["description"] == skill["description"]
 
 
-def test_write_specific_skill_markdown_to_file(tmp_path):
-    data = build_skills_tree()
-    skill = query_json(data, "core.canary-test-authoring")
-    output = tmp_path / "SKILL.md"
+def test_agent_bootstrap_generic_writes_bootstrap_index_and_skills(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("generic")
 
-    write_skill_markdown("core.canary-test-authoring", skill, output)
+        root = tmp_path / ".agent" / "canary"
+        assert (root / "BOOTSTRAP.md").is_file()
+        assert (root / "INDEX.md").is_file()
 
-    assert output.is_file()
+        bootstrap = (root / "BOOTSTRAP.md").read_text(encoding="utf-8")
+        assert "This repository uses Canary as its workflow and execution layer." in bootstrap
+        assert "canary learn capabilities . --list" in bootstrap
+        assert "canary query -c TOPIC" in bootstrap
 
-    text = output.read_text(encoding="utf-8")
-    assert text.startswith("---\n")
-    assert "name: canary-test-authoring" in text
-    assert "# Authoring Canary tests" in text
-    assert "canary" in text
-
-
-def test_write_specific_skill_markdown_to_existing_directory(tmp_path):
-    data = build_skills_tree()
-    skill = query_json(data, "core.canary-test-authoring")
-
-    write_skill_markdown("core.canary-test-authoring", skill, tmp_path)
-
-    output = tmp_path / "canary-test-authoring.md"
-    assert output.is_file()
-
-    text = output.read_text(encoding="utf-8")
-    assert "# Authoring Canary tests" in text
+        for query in BOOTSTRAP_SKILLS:
+            name = query.split(".", 1)[1]
+            path = root / "skills" / f"{name}.md"
+            assert path.is_file()
+            text = path.read_text(encoding="utf-8")
+            assert text.startswith("---\n")
 
 
-def test_write_all_core_skills_markdown_to_directory(tmp_path):
-    data = build_skills_tree()
-    output = tmp_path / "skills"
+def test_agent_bootstrap_generic_brief_writes_only_bootstrap(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("generic", brief=True)
 
-    write_skill_markdown(".", data, output)
+        root = tmp_path / ".agent" / "canary"
+        assert (root / "BOOTSTRAP.md").is_file()
+        assert not (root / "INDEX.md").exists()
+        assert not (root / "skills").exists()
 
-    assert output.is_dir()
 
-    for name in EXPECTED_CORE_SKILLS:
-        path = output / "core" / f"{name}.md"
-        assert path.is_file()
+def test_agent_bootstrap_opencode_writes_skill_layout(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("opencode")
+
+        root = tmp_path / ".opencode" / "skills"
+        for query in BOOTSTRAP_SKILLS:
+            name = query.split(".", 1)[1]
+            path = root / name / "SKILL.md"
+            assert path.is_file()
+            text = path.read_text(encoding="utf-8")
+            assert text.startswith("---\n")
+            assert f"name: {name}" in text
+
+
+def test_agent_bootstrap_opencode_brief_writes_generic_bootstrap_only(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("opencode", brief=True)
+
+        root = tmp_path / ".agent" / "canary"
+        assert (root / "BOOTSTRAP.md").is_file()
+        assert not (tmp_path / ".opencode").exists()
+
+
+def test_agent_bootstrap_fails_on_existing_managed_file(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / ".agent" / "canary" / "BOOTSTRAP.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("existing\n", encoding="utf-8")
+
+        with pytest.raises(FileExistsError) as exc:
+            write_agent_bootstrap("generic")
+
+        assert "would overwrite existing files" in str(exc.value)
+        assert "Re-run with --force" in str(exc.value)
+
+
+def test_agent_bootstrap_force_overwrites_existing_file(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / ".agent" / "canary" / "BOOTSTRAP.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("existing\n", encoding="utf-8")
+
+        write_agent_bootstrap("generic", force=True)
+
         text = path.read_text(encoding="utf-8")
-        assert "canary" in text
-
-
-def test_write_extension_skill_subtree_markdown_to_directory(tmp_path, monkeypatch):
-    install_fake_learn_plugin(monkeypatch, skills=[fake_skills_payload("fake")])
-
-    data = build_skills_tree()
-    subtree = query_json(data, "fake")
-    output = tmp_path / "skills"
-
-    write_skill_markdown("fake", subtree, output)
-
-    assert (output / "fake" / "canary-fake-authoring.md").is_file()
-    assert (output / "fake" / "canary-fake-debug.md").is_file()
-
-
-def test_learn_command_writes_specific_skill_markdown(tmp_path):
-    output = tmp_path / "canary-run-debug.md"
-
-    rc = run_learn_skills(query="core.canary-run-debug", markdown=str(output))
-
-    assert rc == 0
-    assert output.is_file()
-
-    text = output.read_text(encoding="utf-8")
-    assert "# Canary run and debug" in text
-    assert "canary" in text
-
-
-def test_learn_command_writes_all_skills_markdown(tmp_path):
-    output = tmp_path / "skills"
-
-    rc = run_learn_skills(query=".", markdown=str(output))
-
-    assert rc == 0
-    assert output.is_dir()
-
-    for name in EXPECTED_CORE_SKILLS:
-        assert (output / "core" / f"{name}.md").is_file()
-
-
-def test_write_skill_markdown_rejects_scalar_field_query(tmp_path):
-    data = build_skills_tree()
-    body = query_json(data, "core.canary-test-authoring.body")
-
-    with pytest.raises(ValueError) as exc:
-        write_skill_markdown("core.canary-test-authoring.body", body, tmp_path / "SKILL.md")
-
-    assert "does not contain any skill objects" in str(exc.value)
+        assert "# Canary Agent Bootstrap" in text
 
 
 # -------------------------------------------------------------------------

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -17,7 +16,6 @@ from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
 from ..util.query_data import print_query_paths
 from ..util.query_data import query_json
-from ..util.query_data import write_skill_markdown
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -69,15 +67,6 @@ class Learn(CanarySubcommand):
             help="List skill keys below the selected query point",
         )
         skill_parser.add_argument(
-            "--markdown",
-            metavar="PATH",
-            help=(
-                "Write selected skill or skill subtree as Markdown. "
-                "For a single skill, PATH is a Markdown file or an existing directory. "
-                "For a skill subtree, PATH is an output directory."
-            ),
-        )
-        skill_parser.add_argument(
             "query",
             nargs="?",
             default=SKILL_HELP_QUERY,
@@ -101,9 +90,7 @@ class Learn(CanarySubcommand):
         return execute_capabilities_query(args.query, terse=args.terse, list_keys=args.list_keys)
 
     def run_skills(self, args: argparse.Namespace) -> int:
-        return execute_skills_query(
-            args.query, terse=args.terse, list_keys=args.list_keys, markdown=args.markdown
-        )
+        return execute_skills_query(args.query, terse=args.terse, list_keys=args.list_keys)
 
 
 def execute_capabilities_query(query: str, *, terse: bool = False, list_keys: bool = False) -> int:
@@ -126,9 +113,7 @@ def execute_capabilities_query(query: str, *, terse: bool = False, list_keys: bo
     return 0
 
 
-def execute_skills_query(
-    query: str, *, terse: bool = False, list_keys: bool = False, markdown: str | None = None
-) -> int:
+def execute_skills_query(query: str, *, terse: bool = False, list_keys: bool = False) -> int:
     if query == SKILL_HELP_QUERY:
         if list_keys:
             query = "."
@@ -144,10 +129,6 @@ def execute_skills_query(
         return 0
 
     result = query_json(data, resolved_query)
-
-    if markdown:
-        write_skill_markdown(resolved_query, result, Path(markdown))
-        return 0
 
     print_json(result, terse=terse)
     return 0
@@ -212,7 +193,6 @@ Usage:
   canary learn capabilities QUERY --list
   canary learn skills QUERY
   canary learn skills QUERY --list
-  canary learn skills QUERY --markdown PATH
 
 Examples:
   canary learn capabilities .
@@ -278,7 +258,6 @@ Canary skill queries inspect the aggregated skill tree.
 Usage:
   canary learn skills QUERY
   canary learn skills QUERY --list
-  canary learn skills QUERY --markdown PATH
 
 Examples:
   canary learn skills .
@@ -286,7 +265,6 @@ Examples:
   canary learn skills . --list
   canary learn skills pyt --list
   canary learn skills pyt.canary-pyt-authoring
-  canary learn skills core.canary-orientation --markdown canary-orientation.md
 
 Available skills:"""
     )
@@ -300,7 +278,6 @@ Tips:
   Use '.' for the root skill tree.
   Use '--list' to list skill keys below a point.
   Each provider contributes skills under its namespace, such as 'core', 'pyt', or 'hpc'.
-  Use '--markdown PATH' to export a skill or skill subtree.
 """
     )
 
