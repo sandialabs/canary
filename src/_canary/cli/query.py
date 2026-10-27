@@ -57,6 +57,7 @@ from typing import Any
 import canary
 
 from ..app.failure_analysis import collect_failure_groups
+from ..app.failure_analysis import failure_signature_for_row
 from ..app.failure_analysis import job_from_result_row
 from ..app.failure_analysis import list_existing_logs
 from ..app.failure_analysis import tail_lines
@@ -89,12 +90,12 @@ def canary_addcommand(parser: "Parser") -> None:
 
 
 class Query(CanarySubcommand):
-    """Structured inspection of Canary workspace data via job, session, sessions, jobs, failures, and db subcommands."""
+    """Structured inspection of Canary workspace data via job, session, sessions, jobs, compare, failures, and db subcommands."""
 
     name = "query"
     description = (
         "Query Canary workspace data.\n\n"
-        "Subcommands: job, session, sessions, jobs, failures, db\n\n"
+        "Subcommands: job, session, sessions, jobs, compare, failures, db\n\n"
         "Examples:\n"
         "  canary query job abc1234\n"
         "  canary query job abc1234 status.outcome\n"
@@ -282,6 +283,29 @@ class Query(CanarySubcommand):
             metavar="FIELD",
             help="Augment rows with extra projections, e.g. logs or logs:40",
         )
+
+        # ---- compare ----
+        p_compare = sub.add_parser("compare", help="Compare two sessions job-by-job")
+        p_compare.add_argument("base_session", metavar="BASE_SESSION", help="Baseline session")
+        p_compare.add_argument(
+            "new_session", nargs="?", default="latest", metavar="NEW_SESSION", help="New session"
+        )
+        p_compare.add_argument("--where", metavar="EXPR", help="Optional compare-row predicate")
+        p_compare.add_argument(
+            "--by",
+            choices=("spec_id", "name"),
+            default="spec_id",
+            help="How to match jobs between sessions",
+        )
+        p_compare.add_argument(
+            "--signatures",
+            action="store_true",
+            help="Include failure signatures for new and still-failing jobs",
+        )
+        p_compare.add_argument(
+            "--digest", action="store_true", help="Print one line per compared job instead of JSON"
+        )
+        p_compare.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
         # ---- failures ----
         p_failures = sub.add_parser("failures", help="Group failures by normalized log signature")
@@ -1009,6 +1033,169 @@ def _exec_failures(args: argparse.Namespace) -> int:
     )
     print_json(groups, terse=args.terse)
     return 0
+
+
+def _exec_compare(args: argparse.Namespace) -> int:
+    workspace = Workspace.load()
+    base_rows = _rows_for_named_session(workspace, args.base_session)
+    new_rows = _rows_for_named_session(workspace, args.new_session)
+    by_name = getattr(args, "by", "spec_id") == "name"
+    include_signatures = getattr(args, "signatures", False)
+
+    def key_for(row: dict[str, Any]) -> str:
+        return row["spec_name"] if by_name else row["id"]
+
+    base_map = {key_for(row): row for row in base_rows}
+    new_map = {key_for(row): row for row in new_rows}
+    all_keys = sorted(set(base_map) | set(new_map))
+    predicate = _parse_where(args.where) if args.where else None
+
+    result: dict[str, Any] = {
+        "base": args.base_session,
+        "new": args.new_session,
+        "summary": {
+            "fixed": 0,
+            "new_failures": 0,
+            "still_failing": 0,
+            "still_failing_signature_changed": 0,
+            "missing_in_new": 0,
+            "new_jobs": 0,
+        },
+        "fixed": [],
+        "new_failures": [],
+        "still_failing": [],
+        "missing_in_new": [],
+        "new_jobs": [],
+    }
+    digest_rows: list[str] = []
+
+    for key in all_keys:
+        base_row = base_map.get(key)
+        new_row = new_map.get(key)
+        compare_row = _build_compare_row(
+            workspace, base_row, new_row, include_signatures=include_signatures
+        )
+        if predicate and not predicate(compare_row):
+            continue
+        bucket = compare_row["kind"]
+        if bucket == "fixed":
+            result["summary"]["fixed"] += 1
+            result["fixed"].append(compare_row)
+        elif bucket == "new_failures":
+            result["summary"]["new_failures"] += 1
+            result["new_failures"].append(compare_row)
+        elif bucket == "still_failing":
+            result["summary"]["still_failing"] += 1
+            if compare_row.get("signature_changed"):
+                result["summary"]["still_failing_signature_changed"] += 1
+            result["still_failing"].append(compare_row)
+        elif bucket == "missing_in_new":
+            result["summary"]["missing_in_new"] += 1
+            result["missing_in_new"].append(compare_row)
+        elif bucket == "new_jobs":
+            result["summary"]["new_jobs"] += 1
+            result["new_jobs"].append(compare_row)
+        if getattr(args, "digest", False):
+            digest_rows.append(_compare_digest(compare_row))
+
+    if getattr(args, "digest", False):
+        for line in digest_rows:
+            sys.stdout.write(line + "\n")
+        return 0
+
+    print_json(result, terse=args.terse)
+    return 0
+
+
+def _rows_for_named_session(workspace: Workspace, session_name: str) -> list[dict[str, Any]]:
+    session_dir = _resolve_session_dir(workspace, session_name)
+    return _db_results_for_session(workspace, session_dir.name)
+
+
+def _build_compare_row(
+    workspace: Workspace,
+    base_row: dict[str, Any] | None,
+    new_row: dict[str, Any] | None,
+    *,
+    include_signatures: bool,
+) -> dict[str, Any]:
+    if base_row is None and new_row is None:
+        raise ValueError("compare row requires at least one side")
+    if base_row is None:
+        assert new_row is not None
+        new_entry = _row_to_job_entry(workspace, new_row)
+        return {
+            "kind": "new_jobs",
+            "id": new_row["id"],
+            "name": new_row["spec_name"],
+            "base": None,
+            "new": new_row["status"].outcome.name,
+            "new_status": new_entry["status"],
+        }
+    if new_row is None:
+        assert base_row is not None
+        base_entry = _row_to_job_entry(workspace, base_row)
+        return {
+            "kind": "missing_in_new",
+            "id": base_row["id"],
+            "name": base_row["spec_name"],
+            "base": base_row["status"].outcome.name,
+            "new": None,
+            "base_status": base_entry["status"],
+        }
+
+    assert base_row is not None
+    assert new_row is not None
+    base_entry = _row_to_job_entry(workspace, base_row)
+    new_entry = _row_to_job_entry(workspace, new_row)
+    base_nonpass = base_entry["status"]["category"] != "PASS"
+    new_nonpass = new_entry["status"]["category"] != "PASS"
+    compare_row: dict[str, Any] = {
+        "id": new_row["id"],
+        "name": new_row["spec_name"],
+        "base": base_row["status"].outcome.name,
+        "new": new_row["status"].outcome.name,
+        "base_status": base_entry["status"],
+        "new_status": new_entry["status"],
+    }
+
+    if base_nonpass and not new_nonpass:
+        compare_row["kind"] = "fixed"
+        return compare_row
+    if not base_nonpass and new_nonpass:
+        compare_row["kind"] = "new_failures"
+        if include_signatures:
+            signature = failure_signature_for_row(workspace, new_row)
+            compare_row["signature"] = (
+                None if signature is None else signature["signature_normalized"]
+            )
+        return compare_row
+    if base_nonpass and new_nonpass:
+        compare_row["kind"] = "still_failing"
+        compare_row["signature_changed"] = False
+        if include_signatures:
+            base_signature = failure_signature_for_row(workspace, base_row)
+            new_signature = failure_signature_for_row(workspace, new_row)
+            compare_row["base_signature"] = (
+                None if base_signature is None else base_signature["signature_normalized"]
+            )
+            compare_row["new_signature"] = (
+                None if new_signature is None else new_signature["signature_normalized"]
+            )
+            compare_row["signature_changed"] = (
+                compare_row["base_signature"] != compare_row["new_signature"]
+            )
+        return compare_row
+
+    compare_row["kind"] = "unchanged_pass"
+    return compare_row
+
+
+def _compare_digest(compare_row: dict[str, Any]) -> str:
+    base = compare_row.get("base") or "MISSING"
+    new = compare_row.get("new") or "MISSING"
+    suffix = " [sig changed]" if compare_row.get("signature_changed") else ""
+    return f"{compare_row['name']} {base}->{new}{suffix}"
 
 
 def _apply_with_fields(

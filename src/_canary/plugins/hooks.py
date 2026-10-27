@@ -574,6 +574,16 @@ def query_execute_failures(args: "argparse.Namespace") -> "int | None":
     return _exec_failures(args)
 
 
+@hookimpl(trylast=True, specname="canary_query_execute")
+def query_execute_compare(args: "argparse.Namespace") -> "int | None":
+    """Handle ``canary query compare``."""
+    if getattr(args, "query_subcmd", None) != "compare":
+        return None
+    from ..cli.query import _exec_compare
+
+    return _exec_compare(args)
+
+
 # ---------------------------------------------------------------------------
 # Built-in canary fetch subcommand handlers
 # ---------------------------------------------------------------------------

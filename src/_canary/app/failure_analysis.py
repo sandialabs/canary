@@ -142,6 +142,26 @@ def collect_failure_groups(
     return sorted(groups.values(), key=lambda item: (-item["count"], item["signature_normalized"]))
 
 
+def failure_signature_for_row(
+    workspace: Workspace,
+    row: dict[str, Any],
+    *,
+    frame_filter: str | None = None,
+    include_pass_with_errors: bool = False,
+    log_names: list[str] | None = None,
+) -> dict[str, Any] | None:
+    matcher = re.compile(frame_filter) if frame_filter else _DEFAULT_FRAME_FILTER
+    job = job_from_result_row(workspace, row)
+    return analyze_job_failure(
+        workspace,
+        job,
+        row,
+        frame_filter=matcher,
+        log_names=log_names,
+        include_pass_with_errors=include_pass_with_errors,
+    )
+
+
 def job_from_result_row(workspace: Workspace, row: dict[str, Any]) -> Any:
     if not hasattr(workspace, "db") or not hasattr(workspace.db, "load_specs"):
         return workspace.find_job(row["id"])

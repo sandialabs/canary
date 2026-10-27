@@ -457,6 +457,34 @@
             "canary query failures --include-pass-with-errors"
           ]
         },
+        "compare": {
+          "summary": "Compare two sessions job-by-job and report fixed jobs, regressions, and still-failing signature changes.",
+          "flags": {
+            "BASE_SESSION": "Baseline session name or prefix.",
+            "NEW_SESSION": "New session name or prefix. Defaults to latest.",
+            "--where": "Optional compare-row filter, evaluated against the compare output objects.",
+            "--by": "Match jobs by spec_id or by name.",
+            "--signatures": "Include normalized failure signatures for new and still-failing jobs.",
+            "--digest": "Print one line per compared job as name BASE->NEW.",
+            "--terse": "Compact single-line JSON."
+          },
+          "output_fields": [
+            "base",
+            "new",
+            "summary",
+            "fixed",
+            "new_failures",
+            "still_failing",
+            "missing_in_new",
+            "new_jobs"
+          ],
+          "examples": [
+            "canary query compare OLD latest",
+            "canary query compare OLD NEW --signatures",
+            "canary query compare OLD NEW --digest",
+            "canary query compare OLD NEW --by name"
+          ]
+        },
         "db": {
           "summary": "Query the workspace SQLite database directly.",
           "modes": {

@@ -297,6 +297,115 @@ def test_failures_aggregates_groups(workspace, monkeypatch):
     assert groups[0]["exception_type"] == "ValueError"
 
 
+def test_compare_sessions_reports_fixed_new_and_signature_change(workspace, monkeypatch):
+    from _canary.core.status import Status
+
+    patch_workspace(query_api, monkeypatch, workspace)
+    patch_session_resolver(query_api, monkeypatch)
+
+    monkeypatch.setattr(
+        query_api._query_cmd,
+        "_db_results_for_session",
+        lambda _ws, session: workspace.db.session_rows[session],
+    )
+
+    write_session(workspace, "base")
+    write_session(workspace, "new")
+    workspace.db.session_rows["base"] = [
+        {
+            "id": "1",
+            "spec_name": "fixed_case",
+            "spec_fullname": "suite/fixed_case",
+            "file_path": "a.pyt",
+            "session": "base",
+            "workspace": "w_fixed_case",
+            "status": Status.FAILED("old", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": SimpleNamespace(phase="DONE"),
+        },
+        {
+            "id": "2",
+            "spec_name": "still_case",
+            "spec_fullname": "suite/still_case",
+            "file_path": "b.pyt",
+            "session": "base",
+            "workspace": "w_still_case_base",
+            "status": Status.FAILED("old", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": SimpleNamespace(phase="DONE"),
+        },
+    ]
+    workspace.db.session_rows["new"] = [
+        {
+            "id": "1",
+            "spec_name": "fixed_case",
+            "spec_fullname": "suite/fixed_case",
+            "file_path": "a.pyt",
+            "session": "new",
+            "workspace": "w_fixed_case",
+            "status": Status.SUCCESS(),
+            "timekeeper": {},
+            "measurements": {},
+            "state": SimpleNamespace(phase="DONE"),
+        },
+        {
+            "id": "2",
+            "spec_name": "still_case",
+            "spec_fullname": "suite/still_case",
+            "file_path": "b.pyt",
+            "session": "new",
+            "workspace": "w_still_case_new",
+            "status": Status.FAILED("new", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": SimpleNamespace(phase="DONE"),
+        },
+        {
+            "id": "3",
+            "spec_name": "new_failure",
+            "spec_fullname": "suite/new_failure",
+            "file_path": "c.pyt",
+            "session": "new",
+            "workspace": "w_new_failure",
+            "status": Status.DIFFED("diff", code=64),
+            "timekeeper": {},
+            "measurements": {},
+            "state": SimpleNamespace(phase="DONE"),
+        },
+    ]
+
+    monkeypatch.setattr(
+        __import__("_canary.cli.query", fromlist=["failure_signature_for_row"]),
+        "failure_signature_for_row",
+        lambda _ws, row, **kwargs: {"signature_normalized": row["status"].reason},
+    )
+
+    from _canary.cli.query import _build_compare_row
+
+    fixed = _build_compare_row(
+        workspace,
+        workspace.db.session_rows["base"][0],
+        workspace.db.session_rows["new"][0],
+        include_signatures=True,
+    )
+    still = _build_compare_row(
+        workspace,
+        workspace.db.session_rows["base"][1],
+        workspace.db.session_rows["new"][1],
+        include_signatures=True,
+    )
+    new_failure = _build_compare_row(
+        workspace, None, workspace.db.session_rows["new"][2], include_signatures=True
+    )
+
+    assert fixed["kind"] == "fixed"
+    assert still["kind"] == "still_failing"
+    assert still["signature_changed"] is True
+    assert new_failure["kind"] == "new_jobs"
+
+
 def test_jobs_session_none_uses_latest_run_per_job_across_all_sessions(workspace, monkeypatch):
     patch_workspace(query_api, monkeypatch, workspace)
     patch_converter(query_api, monkeypatch)

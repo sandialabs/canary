@@ -1813,6 +1813,32 @@ def _run_query_failures(
         return _exec_failures(args)
 
 
+def _run_query_compare(
+    setup_ns,
+    *,
+    base_session,
+    new_session="latest",
+    by="spec_id",
+    signatures=False,
+    digest=False,
+    terse=False,
+):
+    from _canary.cli.query import _exec_compare
+
+    args = argparse.Namespace(
+        query_subcmd="compare",
+        base_session=base_session,
+        new_session=new_session,
+        where=None,
+        by=by,
+        signatures=signatures,
+        digest=digest,
+        terse=terse,
+    )
+    with working_dir(setup_ns.results_path), canary.config.override():
+        return _exec_compare(args)
+
+
 def test_query_jobs_returns_json_list(setup, capsys):
     rc = _run_query_jobs(setup)
     assert rc == 0
@@ -1897,6 +1923,132 @@ def test_status_group_flag(setup, capsys):
     out = capsys.readouterr().out
     assert "Failure summary" in out
     assert "canary query failures" in out
+
+
+def test_query_compare_detects_fixed_and_regressions(setup, capsys):
+    import _canary.cli.query as query_mod
+    from _canary.cli.query import _exec_compare
+    from _canary.core.job import JobPhase
+    from _canary.core.job import JobState
+    from _canary.core.status import Status
+    from _canary.session.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        base_row = {
+            "id": "same-id",
+            "spec_name": "case_a",
+            "spec_fullname": "suite/case_a",
+            "file_path": "a.pyt",
+            "session": "base",
+            "workspace": "w_case_a",
+            "status": Status.FAILED("old", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        }
+        new_row = {
+            "id": "same-id",
+            "spec_name": "case_a",
+            "spec_fullname": "suite/case_a",
+            "file_path": "a.pyt",
+            "session": "new",
+            "workspace": "w_case_a",
+            "status": Status.SUCCESS(),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        }
+        extra_row = {
+            "id": "new-id",
+            "spec_name": "case_b",
+            "spec_fullname": "suite/case_b",
+            "file_path": "b.pyt",
+            "session": "new",
+            "workspace": "w_case_b",
+            "status": Status.DIFFED("diff", code=64),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        }
+        original_rows_for_named_session = query_mod._rows_for_named_session
+        query_mod._rows_for_named_session = lambda _ws, session: (
+            [base_row] if session == "base" else [new_row, extra_row]
+        )
+        args = argparse.Namespace(
+            query_subcmd="compare",
+            base_session="base",
+            new_session="new",
+            where=None,
+            by="spec_id",
+            signatures=False,
+            digest=False,
+            terse=False,
+        )
+        rc = _exec_compare(args)
+        query_mod._rows_for_named_session = original_rows_for_named_session
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["base"] == "base"
+    assert data["new"] == "new"
+    assert data["summary"]["fixed"] == 1
+    assert data["summary"]["new_jobs"] == 1
+
+
+def test_query_compare_digest(setup, capsys):
+    import _canary.cli.query as query_mod
+    from _canary.cli.query import _exec_compare
+    from _canary.core.job import JobPhase
+    from _canary.core.job import JobState
+    from _canary.core.status import Status
+    from _canary.session.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        row_a = {
+            "id": "same-id",
+            "spec_name": "case_a",
+            "spec_fullname": "suite/case_a",
+            "file_path": "a.pyt",
+            "session": "base",
+            "workspace": "w_case_a",
+            "status": Status.FAILED("old", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        }
+        row_b = {
+            "id": "same-id",
+            "spec_name": "case_a",
+            "spec_fullname": "suite/case_a",
+            "file_path": "a.pyt",
+            "session": "new",
+            "workspace": "w_case_a",
+            "status": Status.FAILED("new", code=1),
+            "timekeeper": {},
+            "measurements": {},
+            "state": JobState(phase=JobPhase.DONE),
+        }
+        original_rows_for_named_session = query_mod._rows_for_named_session
+        query_mod._rows_for_named_session = lambda _ws, session: (
+            [row_a] if session == "base" else [row_b]
+        )
+        args = argparse.Namespace(
+            query_subcmd="compare",
+            base_session="base",
+            new_session="new",
+            where=None,
+            by="spec_id",
+            signatures=False,
+            digest=True,
+            terse=False,
+        )
+        rc = _exec_compare(args)
+        query_mod._rows_for_named_session = original_rows_for_named_session
+    assert rc == 0
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(lines) > 0
+    assert all("->" in line for line in lines)
 
 
 def test_query_jobs_with_session_scopes_to_session(setup, capsys):
