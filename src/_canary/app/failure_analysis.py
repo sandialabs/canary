@@ -88,6 +88,35 @@ def collect_failure_groups(
     for row in rows:
         outcome = row["status"].outcome.name
         is_pass = row["status"].category.value == "PASS"
+        if outcome == Outcome.BLOCKED.name:
+            blocker = blocked_root_signature(workspace, row)
+            if blocker is not None:
+                key = blocker["signature_normalized"]
+                bucket = groups.setdefault(
+                    key,
+                    {
+                        "signature": blocker["signature"],
+                        "signature_normalized": blocker["signature_normalized"],
+                        "exception_type": blocker.get("exception_type"),
+                        "frame": blocker.get("frame"),
+                        "count": 0,
+                        "outcomes": {},
+                        "jobs": [],
+                        "secondary_errors": [],
+                    },
+                )
+                bucket["count"] += 1
+                bucket["outcomes"][outcome] = bucket["outcomes"].get(outcome, 0) + 1
+                bucket["jobs"].append(
+                    {
+                        "id": row["id"],
+                        "name": row["spec_name"],
+                        "exec_dir": str(workspace.sessions_dir / row["session"] / row["workspace"]),
+                        "log": "dependency",
+                        "log_line": None,
+                    }
+                )
+                continue
         if outcome not in {
             Outcome.FAILED.name,
             Outcome.ERROR.name,
@@ -160,6 +189,30 @@ def failure_signature_for_row(
         log_names=log_names,
         include_pass_with_errors=include_pass_with_errors,
     )
+
+
+def blocked_root_signature(workspace: Workspace, row: dict[str, Any]) -> dict[str, Any] | None:
+    graph = workspace.db.get_dependency_graph()
+    upstream_ids = workspace.db.get_upstream_ids({row["id"]})
+    if not upstream_ids:
+        return None
+    rows = {
+        result["id"]: result for result in workspace.db.get_results(list(upstream_ids)).values()
+    }
+    failing = [result for result in rows.values() if result["status"].category.value == "FAIL"]
+    if not failing:
+        return None
+    signatures = [failure_signature_for_row(workspace, result) for result in failing]
+    signatures = [item for item in signatures if item is not None]
+    if not signatures:
+        return None
+    counts: dict[str, tuple[int, dict[str, Any]]] = {}
+    for signature in signatures:
+        key = signature["signature_normalized"]
+        count, _ = counts.get(key, (0, signature))
+        counts[key] = (count + 1, signature)
+    _, best = max(counts.values(), key=lambda item: item[0])
+    return best
 
 
 def job_from_result_row(workspace: Workspace, row: dict[str, Any]) -> Any:

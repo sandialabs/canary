@@ -2051,6 +2051,42 @@ def test_query_compare_digest(setup, capsys):
     assert all("->" in line for line in lines)
 
 
+def test_query_job_blockers(setup, capsys):
+    from _canary.cli.query import _exec_job
+    from _canary.core.status import Status
+    from _canary.session.workspace import Workspace
+
+    with working_dir(setup.results_path), canary.config.override():
+        workspace = Workspace.load()
+        jobs = {job.name: job for job in workspace.load_jobs()}
+        jobs["g.a=1"].status = Status.FAILED("forced failure", code=1)
+        jobs["g.a=1"].save()
+        workspace.db.put_result(jobs["g.a=1"])
+        jobs["g"].status = Status.BLOCKED(
+            "Dependency g.a=1 finished with 'FAILED'; needed 'on_success'"
+        )
+        workspace.db.put_result(jobs["g"])
+        args = argparse.Namespace(
+            query_subcmd="job",
+            jobid=jobs["g"].id,
+            path=".",
+            cache=False,
+            all_runs=False,
+            clean=False,
+            terse=False,
+            list_keys=False,
+            blockers=True,
+            recursive=True,
+            signatures=True,
+        )
+        rc = _exec_job(args)
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["outcome"] == "BLOCKED"
+    assert "blocked_by" in data
+    assert data["blocked_by"]["failed"] >= 1
+
+
 def test_query_jobs_with_session_scopes_to_session(setup, capsys):
     rc = _run_query_jobs(setup, session=setup.session.name)
     assert rc == 0

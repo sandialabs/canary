@@ -157,6 +157,21 @@ class Query(CanarySubcommand):
                 "Note: runs across code rebuilds may not represent the same computation."
             ),
         )
+        p_job.add_argument(
+            "--blockers",
+            action="store_true",
+            help="Explain which dependency failures blocked this job from running",
+        )
+        p_job.add_argument(
+            "--recursive",
+            action="store_true",
+            help="When used with --blockers, include transitive upstream dependencies",
+        )
+        p_job.add_argument(
+            "--signatures",
+            action="store_true",
+            help="When used with --blockers, include grouped root failure signatures",
+        )
 
         # ---- session ----
         p_ses = sub.add_parser("session", help="Query a session lock or its jobs")
@@ -544,6 +559,16 @@ def _exec_job(args: argparse.Namespace) -> int:
     """Query a single job's ``testcase.lock``, timing cache, or run history."""
     workspace = Workspace.load()
 
+    if getattr(args, "blockers", False):
+        info = _job_blockers(
+            workspace,
+            args.jobid,
+            recursive=getattr(args, "recursive", False),
+            signatures=getattr(args, "signatures", False),
+        )
+        print_json(info, terse=args.terse)
+        return 0
+
     if getattr(args, "all_runs", False):
         job = workspace.find_job(args.jobid)
         workspace.db.connect()
@@ -596,6 +621,48 @@ def _exec_job(args: argparse.Namespace) -> int:
         result = _clean(result)
     print_json(result, terse=args.terse)
     return 0
+
+
+def _job_blockers(
+    workspace: Workspace, jobid: str, *, recursive: bool = False, signatures: bool = False
+) -> dict[str, Any]:
+    job = workspace.find_job(jobid)
+    seed_ids = {job.id}
+    dep_ids = (
+        workspace.db.get_upstream_ids(seed_ids)
+        if recursive
+        else set(dep.job.id for dep in job.dependencies)
+    )
+    if not dep_ids:
+        return {
+            "id": job.id,
+            "name": job.name,
+            "outcome": job.status.outcome.name,
+            "blocked_by": {"total_deps": 0, "failed": 0, "passed": 0, "root_signatures": []},
+        }
+
+    dep_rows = workspace.db.get_results(list(dep_ids))
+    failed_rows = [row for row in dep_rows.values() if row["status"].category.value == "FAIL"]
+    passed_rows = [row for row in dep_rows.values() if row["status"].category.value == "PASS"]
+    root_signatures: list[dict[str, Any]] = []
+    if signatures:
+        grouped = collect_failure_groups(workspace, failed_rows)
+        root_signatures = [
+            {"signature": group["signature_normalized"], "count": group["count"]}
+            for group in grouped
+        ]
+
+    return {
+        "id": job.id,
+        "name": job.name,
+        "outcome": job.status.outcome.name,
+        "blocked_by": {
+            "total_deps": len(dep_ids),
+            "failed": len(failed_rows),
+            "passed": len(passed_rows),
+            "root_signatures": root_signatures,
+        },
+    }
 
 
 def _exec_session(args: argparse.Namespace) -> int:
