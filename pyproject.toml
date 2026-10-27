@@ -187,8 +187,7 @@ command_line = """-m pytest --import-mode=importlib
     ./src/canary_hpc/tests
     ./src/canary_nvidia/tests
     ./src/canary_pyt/tests
-    ./src/canary_vvtest/tests
-    ./packages/canary-distributed-server/tests"""
+    ./src/canary_vvtest/tests"""
 
 [tool.coverage.html]
 directory = "html.cov"
