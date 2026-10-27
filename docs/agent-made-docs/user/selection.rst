@@ -209,20 +209,23 @@ Owners enable team-based job organization and responsibility tracking.
 Regex Selection
 ---------------
 
-Filter jobs using regular expressions:
+Filter jobs by searching file contents with regular expressions. Canary checks
+the primary test file and any declared file assets for a match:
 
 .. code-block:: console
 
-   # Name pattern matching
-   canary run --regex "test_.*" .
+   # Match text in a test definition file
+   canary run --regex "smoke and regression" .
 
-   # Path pattern matching
-   canary run --regex "integration/.*" .
+   # Match text that appears only in a copied or linked asset file
+   canary run --regex "solver_input_v2" .
 
-   # Complex patterns
+   # Match Python-style regex patterns in test files or assets
    canary run --regex "(smoke|regression)_test" .
 
-Regex patterns match against job names, full names, and file paths.
+Regex selection does not match against job names or file paths. It searches file
+contents and includes a job when the expression matches either the test file or
+at least one declared file asset.
 
 ID-Based Selection
 ------------------

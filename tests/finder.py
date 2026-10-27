@@ -94,6 +94,25 @@ def test_keywords(tmpdir):
     assert len(final) == 2
 
 
+def test_regex_matches_asset_contents(tmpdir):
+    workdir = tmpdir.strpath
+    with working_dir(workdir):
+        Path("match.txt").write_text("ASSET_ONLY_TOKEN_83\n", encoding="utf-8")
+        Path("miss.txt").write_text("no match here\n", encoding="utf-8")
+        Path("a.pyt").write_text(
+            "import canary_pyt\ncanary_pyt.directives.copy('match.txt')\n", encoding="utf-8"
+        )
+        Path("b.pyt").write_text(
+            "import canary_pyt\ncanary_pyt.directives.copy('miss.txt')\n", encoding="utf-8"
+        )
+    generators = collect.find_generators_in_path(workdir)
+    specs = generate_specs(generators)
+
+    final = select_specs(specs, regex="ASSET_ONLY_TOKEN_83")
+
+    assert [spec.name for spec in final] == ["a"]
+
+
 def test_parameterize_1(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
