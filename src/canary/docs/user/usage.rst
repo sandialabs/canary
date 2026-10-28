@@ -9,7 +9,10 @@ canary usage
 
 .. note::
 
-   Many of the code-snippets and output in the documentation were auto-generated using a set of examples distributed with ``canary``'s source code.  To run the examples, clone the ``canary`` repository and navigate to ``tests/examples`` where all of the examples in the guide are run.
+   Many of the code snippets and output in this section were generated from the
+   bundled examples that ship with ``canary``. Fetch them into your current
+   working directory with ``canary fetch examples``; the guide assumes they are
+   available under ``./examples``.
 
 .. toctree::
    :maxdepth: 1

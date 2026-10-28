@@ -21,11 +21,13 @@ Getting started
 
 .. note::
 
-   All of the examples in the documentation can be obtained by the ``canary fetch`` command:
+   All of the examples used in this documentation can be obtained with ``canary fetch``:
 
    .. code-block:: console
 
       canary fetch examples
+
+   This creates an ``examples`` directory in your current working directory.
 
 .. _getting-started-first:
 
@@ -37,7 +39,7 @@ The test file ``first.pyt`` defines a function that adds two numbers and verifie
 .. literalinclude:: /examples/basic/first/first.pyt
    :language: python
 
-To run the test, navigate to the examples directory and run ``canary run -k first ./basic`` which tells ``canary`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
+To run the test, navigate to the fetched ``examples`` directory and run ``canary run -k first ./basic`` which tells ``canary`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
 
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}]
@@ -82,7 +84,7 @@ This test introduces two new features:
 * :func:`canary_pyt.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
 * ``canary.Executable``: creates a callable wrapper around executable scripts.
 
-To run the test, navigate to the examples folder and run:
+To run the test, navigate to the fetched ``examples`` directory and run:
 
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}]
