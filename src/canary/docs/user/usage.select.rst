@@ -58,7 +58,7 @@ If specs are already collected into the workspace, create a tag with:
 
 .. code-block:: console
 
-   canary collect -r ./basic
+   canary collect ./basic
    canary select basic
 
 Then run it later with:
