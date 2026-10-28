@@ -6,8 +6,9 @@ canary user's guide
 ===================
 
 Start here when you have a task in mind, such as running CTest tests, using an
-HPC scheduler, or working with existing ``.vvt`` suites. For extension internals
-and implementation details, use :doc:`/extensions/index`.
+HPC scheduler, or working with existing ``.vvt`` suites. Use
+:doc:`/extensions/index` for extension-specific behavior and extension
+authoring.
 
 .. toctree::
    :caption: Getting started

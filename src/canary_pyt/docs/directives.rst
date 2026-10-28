@@ -111,8 +111,8 @@ Directive Reference
 -------------------
 
 Use this page to understand how the directive set fits together when writing
-`.pyt` files. Use an individual directive page when you need the exact
-signature, parameters, or a focused example.
+`.pyt` files. Use an individual directive page when you need exact syntax,
+parameters, or a focused example.
 
 Each directive page includes:
 

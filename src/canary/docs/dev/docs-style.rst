@@ -5,8 +5,8 @@
 Documentation style guide
 =========================
 
-This page defines the default style for hand-written Canary documentation. Keep
-it short, practical, and consistent.
+This page defines the default style for Canary documentation. Keep it short,
+practical, and consistent.
 
 Choose the right page type
 --------------------------
@@ -20,7 +20,7 @@ Choose the right page type
   and implementation structure.
 
 Do not duplicate the same explanation across page types. Prefer one canonical
- page and link to it from the others.
+page and link to it from the others.
 
 Default structure
 -----------------

@@ -8,7 +8,7 @@ Overview
 The ``canary_vvtest`` extension enables Canary to consume and execute VVTest-style ``.vvt`` files.
 
 If you want to run an existing VVTest suite under Canary, start with
-:doc:`/user/usage.vvtest`. This page focuses on how the extension fits into
+:doc:`/user/usage.vvtest`. This page explains how ``canary_vvtest`` fits into
 Canary's generator model.
 
 Relationship to VVTest

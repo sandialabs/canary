@@ -7,8 +7,8 @@ VVTest Compatibility and Migration
 
 This page explains practical compatibility guidance for running VVTest suites under Canary.
 
-For the user-facing workflow, start with :doc:`/user/usage.vvtest`. This page
-focuses on compatibility boundaries, migration planning, and extension-specific
+For day-to-day usage, start with :doc:`/user/usage.vvtest`. This page focuses
+on compatibility boundaries, migration planning, and extension-specific
 behavior.
 
 What Works

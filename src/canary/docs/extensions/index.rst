@@ -11,11 +11,9 @@ Extensions
 entry point group.  This section documents the bundled extensions and explains
 how to author new ones.
 
-If you are trying to accomplish a user task such as running CTest tests,
-submitting work through an HPC scheduler, or running existing ``.vvt`` suites,
-start with the task-oriented pages in the :doc:`/user/index`. Use the extension
-pages here when you want deeper implementation detail, extension-specific
-behavior, or authoring guidance.
+If you want to run tests or reports, start with the :doc:`/user/index`. Use the
+pages here when you want details about a specific extension or when you are
+writing your own.
 
 .. toctree::
    :maxdepth: 1
