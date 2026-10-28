@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python_bin="${PYTHON:-python3}"
+dest="${1:-$repo_root/build/docs-check-strict}"
+
+cd "$repo_root"
+
+docs_dir="$($python_bin - <<'PY'
+from importlib import resources
+
+print(resources.files("canary").joinpath("docs"))
+PY
+)"
+
+"$python_bin" -m sphinx -n -W --keep-going -b html -d "$dest/doctrees" "$docs_dir" "$dest/html"

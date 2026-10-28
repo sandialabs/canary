@@ -144,6 +144,18 @@ canary pre-commit
 type-checks, runs bandit, runs the test suite, and, if everything passes,
 stamps `pyproject.toml` with today's date-based version (`YY.M.D`).
 
+For documentation changes, run the same docs build that CI uses:
+
+```console
+bin/check-docs
+```
+
+To preview the eventual strict gate, run:
+
+```console
+bin/check-docs-strict
+```
+
 ### Cutting a release
 
 `main` always depends on `hpc-connect` from git, because `canary` and

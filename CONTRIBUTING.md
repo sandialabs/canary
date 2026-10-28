@@ -91,7 +91,31 @@ Enhancement suggestions are tracked as [GitLab issues](/issues).
 
 ### Your First Code Contribution
 
+For code changes, install the project in editable mode with development extras and
+run the standard local checks before opening a PR.
+
+```console
+python3 -m pip install --editable .[dev]
+canary pre-commit
+```
+
 ### Improving The Documentation
+
+The supported documentation tree lives under ``src/canary/src/canary/docs``.
+The top-level ``docs/`` directory is deprecated and should not be used for new
+documentation work or validation.
+
+Use the same docs build command that CI runs:
+
+```console
+bin/check-docs
+```
+
+To preview the future warnings-as-errors gate, run:
+
+```console
+bin/check-docs-strict
+```
 
 ## Join The Project Team
 
