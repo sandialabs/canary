@@ -209,8 +209,8 @@ different partition or with a shorter wall time than large multi-node batches â€
 implement the ``canary_hpc_batch_setup`` plugin hook.
 
 The hook is called once for each batch after batching is complete and before the
-batch is submitted.  Implementations inspect the batch and attach raw scheduler
-options with :meth:`TestBatch.add_submit_option`:
+batch is submitted. Implementations inspect the batch and attach raw scheduler
+options with ``TestBatch.add_submit_option()``:
 
 .. code-block:: python
 

@@ -39,11 +39,11 @@ Rerun only the diffed tests
 Rerun tests inside the view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Optionally, a subdirectory of the workspace view argument can be passed to ``canary run``, causing ``canary`` to rerun only those tests that are in ``PATH`` and its children:
+Optionally, a subdirectory of the workspace view can be passed to ``canary run``, causing ``canary`` to rerun only those tests that are in that view path and its children:
 
-.. doc-run::
-   :before_script: [{"args": "cp -R $examples ."}, {"args": "canary run ./status || true", "cwd": "examples"}]
-   :script: [{"args": "canary run $(canary location pass)", "cwd": "examples"}]
+.. code-block:: console
+
+   canary run ./TestResults/pass
 
 Rerun strategies with ``--only``
 ---------------------------------
