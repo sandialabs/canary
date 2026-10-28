@@ -10,14 +10,16 @@ Dependencies in VVTest define relationships between tests. The ``depends on`` di
 depends on / depends_on
 -----------------------
 
-### Syntax
+Syntax
+~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on : test_name
    #VVT: depends on (expect=1, result=pass) : test_name
 
-### Command Normalization
+Command Normalization
+~~~~~~~~~~~~~~~~~~~~~
 
 Command words are joined with underscores:
 
@@ -25,7 +27,8 @@ Command words are joined with underscores:
 
    #VVT: depends on : setup_test  # Normalized to depends_on
 
-### expect Option
+expect Option
+~~~~~~~~~~~~~
 
 Controls the number of expected dependencies:
 
@@ -33,7 +36,8 @@ Controls the number of expected dependencies:
 
    #VVT: depends on (expect=3) : setup_*
 
-### result Option
+result Option
+~~~~~~~~~~~~~
 
 Maps to Canary result values:
 
@@ -48,7 +52,8 @@ Maps to Canary result values:
 
    #VVT: depends on (result=pass) : setup_test
 
-### Dependency Selector Pattern
+Dependency Selector Pattern
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Supports pattern matching:
 
@@ -56,7 +61,8 @@ Supports pattern matching:
 
    #VVT: depends on : setup_*
 
-### Lower-Casing
+Lower-Casing
+~~~~~~~~~~~~
 
 The ``when`` option is lower-cased:
 
@@ -64,7 +70,8 @@ The ``when`` option is lower-cased:
 
    #VVT: depends on (when="platform=linux") : test_name
 
-### Canary Result-Sensitive Behavior
+Canary Result-Sensitive Behavior
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Dependencies are resolved by Canary's dependency system:
 
@@ -72,7 +79,8 @@ Dependencies are resolved by Canary's dependency system:
 - Parent jobs wait for dependencies
 - Failed dependencies block dependent jobs
 
-### Blocked Jobs
+Blocked Jobs
+~~~~~~~~~~~~
 
 When dependencies fail:
 
@@ -80,7 +88,8 @@ When dependencies fail:
 - Status reflects the dependency failure
 - Jobs do not execute
 
-### Migration Implications
+Migration Implications
+~~~~~~~~~~~~~~~~~~~~~~
 
 VVTest dependencies may differ from Canary:
 
@@ -91,31 +100,36 @@ VVTest dependencies may differ from Canary:
 Examples
 --------
 
-### Simple Dependency
+Simple Dependency
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on : setup_database
 
-### Conditional Dependency
+Conditional Dependency
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on (when="platform=linux") : setup_linux
 
-### Result-Sensitive Dependency
+Result-Sensitive Dependency
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on (expect=1, result=pass) : setup_test
 
-### Pattern Matching
+Pattern Matching
+~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on : setup_*
 
-### Multiple Dependencies
+Multiple Dependencies
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 

@@ -10,7 +10,8 @@ This page explains practical compatibility guidance for running VVTest suites un
 What Works
 -----------
 
-### Supported Features
+Supported Features
+~~~~~~~~~~~~~~~~~~
 
 - ``#VVT:`` directive syntax
 - Common directives (keywords, timeout, parameterize, etc.)
@@ -18,7 +19,8 @@ What Works
 - Basic workflow patterns
 - Canary's advanced features (resource management, distributed execution)
 
-### Canary Integration Hooks
+Canary Integration Hooks
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``canary_vvtest`` extension integrates with Canary through several hooks:
 
@@ -28,7 +30,8 @@ The ``canary_vvtest`` extension integrates with Canary through several hooks:
 - ``canary_cdash_name``: Provides CDash-compatible test names for ``.vvt`` jobs
 - ``canary_addoption``: Adds ``-R`` and ``-a/--analyze`` command-line options
 
-### Compatibility Level
+Compatibility Level
+~~~~~~~~~~~~~~~~~~~
 
 Practical compatibility for:
 
@@ -41,23 +44,27 @@ Practical compatibility for:
 What May Differ
 ---------------
 
-### Execution Semantics
+Execution Semantics
+~~~~~~~~~~~~~~~~~~~
 
 - Exact ordering may vary
 - Result mapping ensures compatibility
 - Dependency graphs are validated
 
-### Resource Handling
+Resource Handling
+~~~~~~~~~~~~~~~~~
 
 - Resource allocation details may differ
 - Mapping ensures compatibility (np → cpus, etc.)
 
-### Status Reporting
+Status Reporting
+~~~~~~~~~~~~~~~~
 
 - Status formats may differ
 - Core results (PASSED, FAILED) are preserved
 
-### Query Interface
+Query Interface
+~~~~~~~~~~~~~~~
 
 - Query syntax may differ
 - Core filtering works
@@ -65,13 +72,15 @@ What May Differ
 What Is Not Supported
 ---------------------
 
-### VVTest-Specific Features
+VVTest-Specific Features
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 - VVTest runtime environment
 - Custom VVTest plugins
 - Some advanced VVTest features
 
-### Limitations
+Limitations
+~~~~~~~~~~~
 
 - Not all VVTest behaviors are supported
 - Parsing is source-specific
@@ -84,19 +93,22 @@ What Is Not Supported
 Testing Legacy Suites
 ---------------------
 
-### Start Small
+Start Small
+~~~~~~~~~~~
 
 1. Test a subset of critical tests first
 2. Verify behavior matches expectations
 3. Address compatibility issues
 
-### Validate Results
+Validate Results
+~~~~~~~~~~~~~~~~
 
 1. Compare outputs between VVTest and Canary
 2. Check dependency graphs
 3. Verify resource allocation
 
-### Incremental Adoption
+Incremental Adoption
+~~~~~~~~~~~~~~~~~~~~
 
 1. Migrate test suites one at a time
 2. Use both formats as needed
@@ -105,7 +117,8 @@ Testing Legacy Suites
 Migration Strategy
 ------------------
 
-### Phase 1: Run Under Canary
+Phase 1: Run Under Canary
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. Install ``canary_vvtest`` extension
 2. Point Canary at existing ``.vvt`` files
@@ -117,7 +130,8 @@ Migration Strategy
 - No test suite changes required
 - Minimal disruption
 
-### Phase 2: Incremental Migration
+Phase 2: Incremental Migration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. Identify critical test suites
 2. Convert to ``.pyt`` format incrementally
@@ -129,7 +143,8 @@ Migration Strategy
 - Gradual learning curve
 - Parallel validation
 
-### Phase 3: Full Migration
+Phase 3: Full Migration
+~~~~~~~~~~~~~~~~~~~~~~~
 
 1. All tests converted to ``.pyt``
 2. Remove ``canary_vvtest`` dependency
@@ -145,7 +160,8 @@ Migration Strategy
 Resource Mappings
 -----------------
 
-### np → cpus
+np -> cpus
+~~~~~~~~~~
 
 VVTest ``np`` maps to Canary ``cpus``:
 
@@ -153,7 +169,8 @@ VVTest ``np`` maps to Canary ``cpus``:
 
    #VVT: parameterize : np = 1 2 4
 
-### ndevice → gpus
+ndevice -> gpus
+~~~~~~~~~~~~~~~
 
 VVTest ``ndevice`` maps to Canary ``gpus``:
 
@@ -161,7 +178,8 @@ VVTest ``ndevice`` maps to Canary ``gpus``:
 
    #VVT: parameterize : ndevice = 1 2
 
-### nnode → nodes
+nnode -> nodes
+~~~~~~~~~~~~~~
 
 VVTest ``nnode`` maps to Canary ``nodes``:
 
@@ -172,7 +190,8 @@ VVTest ``nnode`` maps to Canary ``nodes``:
 Execution Log
 -------------
 
-### execute.log
+execute.log
+~~~~~~~~~~~
 
 All stdout/stderr combined into ``execute.log``:
 
@@ -183,7 +202,8 @@ All stdout/stderr combined into ``execute.log``:
 vvtest_util.py
 --------------
 
-### Compatibility Module
+Compatibility Module
+~~~~~~~~~~~~~~~~~~~~
 
 Generated at runtime for ``.vvt`` jobs:
 
@@ -191,7 +211,8 @@ Generated at runtime for ``.vvt`` jobs:
 
    import vvtest_util as vvt
 
-### opt_analyze
+opt_analyze
+~~~~~~~~~~~
 
 Based on ``--execute-analysis-sections``:
 
@@ -199,21 +220,24 @@ Based on ``--execute-analysis-sections``:
 
    python3 -m canary run -a tests/
 
-### is_analysis_only
+is_analysis_only
+~~~~~~~~~~~~~~~~
 
 Also based on ``--execute-analysis-sections``.
 
 When to Migrate
 ---------------
 
-### Consider Migration When
+Consider Migration When
+~~~~~~~~~~~~~~~~~~~~~~~
 
 - Need full access to Canary features
 - Want better maintainability
 - Prefer Python-based definitions
 - Need maximum flexibility
 
-### Keep VVTest When
+Keep VVTest When
+~~~~~~~~~~~~~~~~
 
 - Legacy suites are stable
 - Migration effort is high
@@ -246,14 +270,16 @@ Best Practices
 Examples
 --------
 
-### Mixed Workflow
+Mixed Workflow
+~~~~~~~~~~~~~~
 
 .. code-block:: console
 
    # Run both .vvt and .pyt files
    python3 -m canary run tests/
 
-### Incremental Conversion
+Incremental Conversion
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 

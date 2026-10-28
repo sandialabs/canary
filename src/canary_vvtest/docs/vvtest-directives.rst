@@ -10,7 +10,8 @@ This page documents the VVTest directive DSL supported by ``canary_vvtest``. Eac
 Directive Reference
 -------------------
 
-### keywords
+keywords
+~~~~~~~~
 
 Add keywords to the test for classification and filtering.
 
@@ -33,7 +34,8 @@ Add keywords to the test for classification and filtering.
 
    #VVT: keywords : smoke unit performance
 
-### copy, link, sources
+copy, link, sources
+~~~~~~~~~~~~~~~~~~~
 
 Manage file assets for the test.
 
@@ -60,7 +62,8 @@ Manage file assets for the test.
    #VVT: copy : inputs/*.dat
    #VVT: link : reference_data/
 
-### preload
+preload
+~~~~~~~
 
 Preload data or modules before test execution.
 
@@ -77,7 +80,8 @@ Preload data or modules before test execution.
 - Effect depends on execution backend
 - May have limited effect in some environments
 
-### parameterize
+parameterize
+~~~~~~~~~~~~
 
 Define parameter sets for test variants.
 
@@ -102,7 +106,8 @@ Define parameter sets for test variants.
    #VVT: parameterize : size = 10 20 30
    #VVT: parameterize (type=int) : np = 1 2 4
 
-### analyze
+analyze
+~~~~~~~
 
 Create composite analysis jobs.
 
@@ -126,7 +131,8 @@ Create composite analysis jobs.
 
    #VVT: analyze : --analyze results.txt
 
-### timeout
+timeout
+~~~~~~~
 
 Set execution timeout.
 
@@ -150,7 +156,8 @@ Set execution timeout.
 
    #VVT: timeout : 5m
 
-### filter_warnings
+filter_warnings
+~~~~~~~~~~~~~~~
 
 Control warning filtering.
 
@@ -167,7 +174,8 @@ Control warning filtering.
 - JSON booleans and integers supported
 - Evaluated through safe expression evaluation
 
-### skipif
+skipif
+~~~~~~
 
 Conditionally skip tests.
 
@@ -189,7 +197,8 @@ Conditionally skip tests.
 
    #VVT: skipif (reason="Windows not supported") : platform == "windows"
 
-### baseline
+baseline
+~~~~~~~~
 
 Declare baseline files for comparison.
 
@@ -212,7 +221,8 @@ Declare baseline files for comparison.
 
    #VVT: baseline : expected_output.txt
 
-### enable
+enable
+~~~~~~
 
 Enable or disable tests.
 
@@ -229,7 +239,8 @@ Enable or disable tests.
 - ``false`` disables test
 - Conditional activation supported
 
-### name / testname
+name / testname
+~~~~~~~~~~~~~~~
 
 Set test name.
 
@@ -246,7 +257,8 @@ Set test name.
 - Sets explicit test name
 - Used for multi-test files
 
-### depends on / depends_on
+depends on / depends_on
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Define dependencies between tests.
 
@@ -274,7 +286,8 @@ Define dependencies between tests.
 
    #VVT: depends on : setup_test
 
-### include / insert_directive_file
+include / insert_directive_file
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Include directives from another file.
 
@@ -294,14 +307,16 @@ Include directives from another file.
 Examples
 --------
 
-### Simple Test
+Simple Test
+~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: keywords : smoke unit
    #VVT: timeout : 30
 
-### Parallel Test
+Parallel Test
+~~~~~~~~~~~~~
 
 .. code-block:: text
 

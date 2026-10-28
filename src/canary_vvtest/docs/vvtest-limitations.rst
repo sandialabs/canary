@@ -10,7 +10,8 @@ Understanding the limitations of ``canary_vvtest`` helps avoid common pitfalls a
 File Matching
 -------------
 
-### Only .vvt Files
+Only .vvt Files
+~~~~~~~~~~~~~~~
 
 Only files matching ``*.vvt`` are processed by ``canary_vvtest``:
 
@@ -18,7 +19,8 @@ Only files matching ``*.vvt`` are processed by ``canary_vvtest``:
 
    # Only .vvt files are matched
 
-### Unsupported Directives
+Unsupported Directives
+~~~~~~~~~~~~~~~~~~~~~~
 
 Unsupported directives raise parse errors:
 
@@ -29,7 +31,8 @@ Unsupported directives raise parse errors:
 Include Files
 -------------
 
-### Must Exist
+Must Exist
+~~~~~~~~~~
 
 Include files must exist:
 
@@ -37,7 +40,8 @@ Include files must exist:
 
    #VVT: include : missing.vvt  # Error
 
-### Relative Paths
+Relative Paths
+~~~~~~~~~~~~~~
 
 Include paths resolved relative to current file:
 
@@ -48,7 +52,8 @@ Include paths resolved relative to current file:
 Parameterization
 ----------------
 
-### Generated Parameters
+Generated Parameters
+~~~~~~~~~~~~~~~~~~~~
 
 Generated parameter scripts must have expected JSON format:
 
@@ -56,7 +61,8 @@ Generated parameter scripts must have expected JSON format:
 
    [{"size": 10}, {"size": 20}]
 
-### Dependency Count
+Dependency Count
+~~~~~~~~~~~~~~~~
 
 Dependency count must match parameterization count:
 
@@ -73,7 +79,8 @@ Currently empty in source (may be populated in future).
 Compatibility
 -------------
 
-### Not All VVTest Features
+Not All VVTest Features
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Some VVTest features may not be supported:
 
@@ -81,7 +88,8 @@ Some VVTest features may not be supported:
 - Custom VVTest plugins
 - Advanced VVTest features
 
-### Practical, Not Exact
+Practical, Not Exact
+~~~~~~~~~~~~~~~~~~~~
 
 Compatibility is practical but not exact:
 

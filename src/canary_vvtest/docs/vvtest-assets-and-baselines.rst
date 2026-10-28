@@ -17,13 +17,15 @@ Copy files to the workspace:
    #VVT: copy : file1.txt file2.txt
    #VVT: copy : inputs/*.dat
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Files copied from source tree to workspace
 - Supports glob patterns
 - Files are read-only in workspace
 
-### rename Option
+rename Option
+~~~~~~~~~~~~~
 
 Rename files during copy:
 
@@ -43,7 +45,8 @@ Create symbolic links:
    #VVT: link : directory/
    #VVT: link : data.txt
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Creates symlinks from source tree
 - Changes to linked files affect source
@@ -58,13 +61,15 @@ Record source file associations:
 
    #VVT: sources : input.csv
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Records files in job metadata
 - Files are not automatically copied or linked
 - Used for tracking dependencies
 
-### Action Mapping
+Action Mapping
+~~~~~~~~~~~~~~
 
 - ``copy`` → ``copy`` action
 - ``link`` → ``link`` action
@@ -80,7 +85,8 @@ Declare baseline files for comparison:
    #VVT: baseline : output.txt
    #VVT: baseline : --flag results.txt
 
-### Flag-Based Baseline
+Flag-Based Baseline
+~~~~~~~~~~~~~~~~~~~
 
 Arguments starting with ``--`` become flags:
 
@@ -88,7 +94,8 @@ Arguments starting with ``--`` become flags:
 
    #VVT: baseline : --baseline output.txt
 
-### Copy-Based Baseline
+Copy-Based Baseline
+~~~~~~~~~~~~~~~~~~~
 
 ``src,dst`` pairs for file copying:
 
@@ -96,38 +103,44 @@ Arguments starting with ``--`` become flags:
 
    #VVT: baseline : expected.txt actual.txt
 
-### Parse Errors
+Parse Errors
+~~~~~~~~~~~~
 
 Malformed baseline entries raise parse errors.
 
 Examples
 --------
 
-### Copy Files
+Copy Files
+~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: copy : test_data.csv config.json
 
-### Link Directory
+Link Directory
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: link : reference_data/
 
-### Record Sources
+Record Sources
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: sources : input.csv
 
-### Baseline Comparison
+Baseline Comparison
+~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: baseline : expected_output.txt
 
-### Rename Files
+Rename Files
+~~~~~~~~~~~~
 
 .. code-block:: text
 

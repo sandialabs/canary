@@ -10,7 +10,8 @@ Resource directives specify the computational resources required by jobs. Resour
 Resource Directives
 -------------------
 
-### Fixed Resources
+Fixed Resources
+~~~~~~~~~~~~~~~
 
 Fixed resource directives set meta-parameters that do not create named job variants:
 
@@ -35,7 +36,8 @@ Fixed resource directives set meta-parameters that do not create named job varia
 
    canary_pyt.directives.nodes(2)  # Requires 2 nodes
 
-### Parameterized Resources
+Parameterized Resources
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Parameterized resource directives create named job variants:
 

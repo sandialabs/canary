@@ -17,7 +17,8 @@ Preload data or modules before test execution:
    #VVT: preload : data.csv
    #VVT: preload (testname="test_name") : module.py
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Loads data into memory or sets up environment
 - Effect depends on execution backend
@@ -34,7 +35,8 @@ Set execution timeout:
    #VVT: timeout : 5m
    #VVT: timeout : 2h30m
 
-### Accepted Formats
+Accepted Formats
+~~~~~~~~~~~~~~~~
 
 - Seconds: ``30``
 - Minutes: ``5m``
@@ -43,7 +45,8 @@ Set execution timeout:
 - ``MM:SS`` format
 - ``HH:MM:SS`` format
 
-### to_seconds Function
+to_seconds Function
+~~~~~~~~~~~~~~~~~~~
 
 Converts time formats to seconds:
 
@@ -62,7 +65,8 @@ Enable or disable tests:
    #VVT: enable : true
    #VVT: enable : false
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - ``true`` or nonempty string enables test
 - ``false`` disables test
@@ -77,13 +81,15 @@ Conditionally skip tests:
 
    #VVT: skipif (reason="Not applicable") : condition
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Skips test when condition is true
 - ``reason`` option explains why test is skipped
 - False expressions do not skip
 
-### Boolean Evaluation
+Boolean Evaluation
+~~~~~~~~~~~~~~~~~~
 
 Uses safe expression evaluation with namespace:
 
@@ -101,7 +107,8 @@ Control warning filtering:
    #VVT: filter_warnings : true
    #VVT: filter_warnings : false
 
-### Behavior
+Behavior
+~~~~~~~~
 
 - Boolean argument controls warning filtering
 - JSON booleans and integers supported
@@ -112,7 +119,8 @@ Runtime Compatibility Utility
 
 ``canary_vvtest`` writes a ``vvtest_util.py`` compatibility module into the execution directory for ``.vvt`` jobs during ``canary_runteststart``.
 
-### Important Attributes
+Important Attributes
+~~~~~~~~~~~~~~~~~~~~
 
 From ``get_vvtest_attrs()`` in ``__init__.py``:
 
@@ -150,7 +158,8 @@ From ``get_vvtest_attrs()`` in ``__init__.py``:
 - ``RESOURCE_ndevice``
 - ``RESOURCE_IDS_ndevice``
 
-### Parameter Access
+Parameter Access
+~~~~~~~~~~~~~~~~
 
 Job parameters are written as module variables:
 
@@ -159,18 +168,21 @@ Job parameters are written as module variables:
    import vvtest_util as vvt
    size = vvt.size  # Access parameter
 
-### Analysis Jobs
+Analysis Jobs
+~~~~~~~~~~~~~
 
 Analysis jobs get ``PARAM_<names>`` tables from parameter sets.
 
-### DEPDIRMAP
+DEPDIRMAP
+~~~~~~~~~
 
 Currently empty in source (may be populated in future).
 
 Canary Integration
 ------------------
 
-### opt_analyze and is_analysis_only
+opt_analyze and is_analysis_only
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Both based on ``--execute-analysis-sections`` in ``sys.argv``:
 
@@ -178,7 +190,8 @@ Both based on ``--execute-analysis-sections`` in ``sys.argv``:
 
    python3 -m canary run -a tests/
 
-### Rerun Option (-R)
+Rerun Option (-R)
+~~~~~~~~~~~~~~~~~
 
 The ``-R`` option forces rerun of all tests, overriding normal completion checking:
 
@@ -188,7 +201,8 @@ The ``-R`` option forces rerun of all tests, overriding normal completion checki
 
 This option is equivalent to ``--only=all`` and ensures tests are executed even if they previously completed successfully.
 
-### Resource Mappings
+Resource Mappings
+~~~~~~~~~~~~~~~~~
 
 - ``np`` → ``cpus``
 - ``ndevice`` → ``gpus``
@@ -197,31 +211,36 @@ This option is equivalent to ``--only=all`` and ensures tests are executed even 
 Examples
 --------
 
-### Preload Data
+Preload Data
+~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: preload : dataset.csv
 
-### Timeout
+Timeout
+~~~~~~~
 
 .. code-block:: text
 
    #VVT: timeout : 5m
 
-### Enable Test
+Enable Test
+~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: enable : true
 
-### Skip Conditionally
+Skip Conditionally
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: skipif (reason="Windows not supported") : platform == "windows"
 
-### Filter Warnings
+Filter Warnings
+~~~~~~~~~~~~~~~
 
 .. code-block:: text
 

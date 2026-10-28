@@ -10,7 +10,8 @@ Assets are files needed by jobs during execution. Assets are copied or linked to
 Asset Directives
 ----------------
 
-### copy
+copy
+~~~~
 
 Copy files to the workspace:
 
@@ -27,7 +28,8 @@ Copy files to the workspace:
 - Files are read-only in workspace
 - Copies are independent of source
 
-### link
+link
+~~~~
 
 Create symbolic links to files:
 
@@ -44,7 +46,8 @@ Create symbolic links to files:
 - Changes to linked files affect source
 - Uses less disk space than copying
 
-### sources
+sources
+~~~~~~~
 
 Record source file associations:
 

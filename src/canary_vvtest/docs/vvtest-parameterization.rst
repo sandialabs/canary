@@ -10,14 +10,16 @@ Parameterization enables test variant generation in VVTest files. The ``paramete
 Ordinary Parameterization
 -------------------------
 
-### Syntax
+Syntax
+~~~~~~
 
 .. code-block:: text
 
    #VVT: parameterize : name = value1 value2 value3
    #VVT: parameterize (type=int) : size = 10 20 30
 
-### Table Parsing
+Table Parsing
+~~~~~~~~~~~~~
 
 Arguments are parsed as a table:
 
@@ -35,7 +37,8 @@ Generates 2 parameter sets:
 - ``size=10, mode=fast``
 - ``size=20, mode=slow``
 
-### Scalar Casting
+Scalar Casting
+~~~~~~~~~~~~~~
 
 The ``scalar.cast`` function handles type conversion:
 
@@ -50,7 +53,8 @@ The ``scalar.cast`` function handles type conversion:
 
    #VVT: parameterize (type=int) : np = 1 2 4
 
-### Type Options
+Type Options
+~~~~~~~~~~~~
 
 **autotype** (default):
 
@@ -76,7 +80,8 @@ The ``scalar.cast`` function handles type conversion:
 
    #VVT: parameterize (type=str) : mode = fast slow medium
 
-### Special Parameter Names
+Special Parameter Names
+~~~~~~~~~~~~~~~~~~~~~~~
 
 These names are forced to integer type:
 
@@ -90,7 +95,8 @@ These names are forced to integer type:
 
    #VVT: parameterize : np = 1 2 4  # Always integer
 
-### Original String Preservation
+Original String Preservation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The original string representation is preserved for execution path naming:
 
@@ -102,7 +108,8 @@ The parameter value is:
 - **Integer**: 1000000 (for computation)
 - **String**: "1000000" (for path naming)
 
-### Execution Path Naming
+Execution Path Naming
+~~~~~~~~~~~~~~~~~~~~~
 
 Parameter values are used in execution paths:
 
@@ -118,7 +125,8 @@ Generates execution paths:
 Generator Parameterization
 --------------------------
 
-### Generator Option
+Generator Option
+~~~~~~~~~~~~~~~~
 
 Use ``generator`` option to execute a script:
 
@@ -126,7 +134,8 @@ Use ``generator`` option to execute a script:
 
    #VVT: parameterize (generator) : params = script.py
 
-### Script Execution
+Script Execution
+~~~~~~~~~~~~~~~~
 
 - Script executed in the ``.vvt`` file directory
 - ``python`` or ``python3`` replaced by ``sys.executable``
@@ -138,7 +147,8 @@ Use ``generator`` option to execute a script:
 
    #VVT: parameterize (generator) : config = generate_params.py
 
-### JSON Output Format
+JSON Output Format
+~~~~~~~~~~~~~~~~~~
 
 First JSON object/list gives parameter dictionaries:
 
@@ -146,7 +156,8 @@ First JSON object/list gives parameter dictionaries:
 
    [{"size": 10, "mode": "fast"}, {"size": 20, "mode": "slow"}]
 
-### Dependency Output
+Dependency Output
+~~~~~~~~~~~~~~~~~
 
 Optional second JSON line gives dependencies:
 
@@ -154,32 +165,37 @@ Optional second JSON line gives dependencies:
 
    [{"depends_on": ["setup_test"]}, {"depends_on": ["setup_test"]}]
 
-### Dependency Count Validation
+Dependency Count Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Dependency count must match parameterization count.
 
 Examples
 --------
 
-### Simple Parameterization
+Simple Parameterization
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: parameterize : size = 10 20 30
 
-### Typed Parameterization
+Typed Parameterization
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: parameterize (type=int) : np = 1 2 4
 
-### Table Parameterization
+Table Parameterization
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: parameterize : size,mode = 10,fast 20,slow 30,medium
 
-### Generator Parameterization
+Generator Parameterization
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 

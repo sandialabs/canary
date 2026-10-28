@@ -21,7 +21,8 @@ Accessing the Instance
 Attributes
 ----------
 
-### Core Attributes
+Core Attributes
+~~~~~~~~~~~~~~~
 
 **file_root**:
    Root directory of the test file.
@@ -51,7 +52,8 @@ Attributes
 
    print(f"File: {instance.file}")
 
-### Resource Attributes
+Resource Attributes
+~~~~~~~~~~~~~~~~~~~
 
 **cpu_ids**:
    List of CPU IDs allocated to the job.
@@ -69,7 +71,8 @@ Attributes
    print(f"GPU IDs: {instance.gpu_ids}")
    print(f"GPU count: {len(instance.gpu_ids)}")
 
-### Metadata Attributes
+Metadata Attributes
+~~~~~~~~~~~~~~~~~~~
 
 **family**:
    Test family or group.
@@ -109,7 +112,8 @@ Attributes
 
    print(f"Runtime: {instance.runtime}s")
 
-### Workspace Attributes
+Workspace Attributes
+~~~~~~~~~~~~~~~~~~~~
 
 **work_tree**:
    Work tree directory.
@@ -125,7 +129,8 @@ Attributes
 
    print(f"Working directory: {instance.working_directory}")
 
-### State Attributes
+State Attributes
+~~~~~~~~~~~~~~~~
 
 **state**:
    Current state of the job.
@@ -155,7 +160,8 @@ Attributes
 
    print(f"Return code: {instance.returncode}")
 
-### Dependency Attributes
+Dependency Attributes
+~~~~~~~~~~~~~~~~~~~~~
 
 **dependencies**:
    List of job dependencies.
@@ -165,7 +171,8 @@ Attributes
    for dep in instance.dependencies:
        print(f"Dependency: {dep.name}, status: {dep.status}")
 
-### Custom Attributes
+Custom Attributes
+~~~~~~~~~~~~~~~~~
 
 **variables**:
    Custom variables.
@@ -185,7 +192,8 @@ Attributes
 Methods
 -------
 
-### get_dependency
+get_dependency
+~~~~~~~~~~~~~~
 
 Get a specific dependency:
 
@@ -194,7 +202,8 @@ Get a specific dependency:
    child = instance.get_dependency("test1")
    print(f"Child status: {child.status}")
 
-### output
+output
+~~~~~~
 
 Get job output:
 
@@ -203,7 +212,8 @@ Get job output:
    output = instance.output()
    print(f"Output: {output}")
 
-### logfile
+logfile
+~~~~~~~
 
 Get job log file:
 
@@ -212,7 +222,8 @@ Get job log file:
    logfile = instance.logfile()
    print(f"Log file: {logfile}")
 
-### set_attribute
+set_attribute
+~~~~~~~~~~~~~
 
 Set custom attributes:
 

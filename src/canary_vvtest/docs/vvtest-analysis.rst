@@ -10,14 +10,16 @@ The ``analyze`` directive creates composite analysis jobs that aggregate results
 analyze Directive
 -----------------
 
-### Syntax
+Syntax
+~~~~~~
 
 .. code-block:: text
 
    #VVT: analyze : --flag argument
    #VVT: analyze : script.py
 
-### Flag-Based Analysis
+Flag-Based Analysis
+~~~~~~~~~~~~~~~~~~~
 
 Arguments starting with ``-`` become flags:
 
@@ -25,7 +27,8 @@ Arguments starting with ``-`` become flags:
 
    #VVT: analyze : --analyze results.txt
 
-### Script-Based Analysis
+Script-Based Analysis
+~~~~~~~~~~~~~~~~~~~~~
 
 Other arguments become scripts:
 
@@ -33,7 +36,8 @@ Other arguments become scripts:
 
    #VVT: analyze : analyze_results.py
 
-### Options
+Options
+~~~~~~~
 
 Additional options are passed through to analysis setup:
 
@@ -44,7 +48,8 @@ Additional options are passed through to analysis setup:
 Relationship to Child Jobs
 --------------------------
 
-### Parameterized Children
+Parameterized Children
+~~~~~~~~~~~~~~~~~~~~~~
 
 Analysis jobs depend on parameterized child jobs:
 
@@ -59,7 +64,8 @@ Generates:
 - ``test[size=30]``
 - ``test[analyze]`` (depends on all children)
 
-### Composite Behavior
+Composite Behavior
+~~~~~~~~~~~~~~~~~~
 
 The composite parent job:
 
@@ -68,7 +74,8 @@ The composite parent job:
 - Can aggregate or analyze data
 - Uses ``TestMultiInstance`` for child access
 
-### Shared Model/Emitter
+Shared Model/Emitter
+~~~~~~~~~~~~~~~~~~~~
 
 Analysis behavior derives from:
 
@@ -79,7 +86,8 @@ Analysis behavior derives from:
 Interaction with -a / --analyze
 --------------------------------
 
-### --analyze Option
+--analyze Option
+~~~~~~~~~~~~~~~~
 
 Appends ``--execute-analysis-sections`` to script arguments:
 
@@ -87,7 +95,8 @@ Appends ``--execute-analysis-sections`` to script arguments:
 
    python3 -m canary run -a tests/
 
-### analyze Directive
+analyze Directive
+~~~~~~~~~~~~~~~~~
 
 Works with ``-a`` option:
 
@@ -100,25 +109,29 @@ When run with ``-a``, the script receives the analysis flag.
 Examples
 --------
 
-### Flag-Based Analysis
+Flag-Based Analysis
+~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: analyze : --analyze output.txt
 
-### Script-Based Analysis
+Script-Based Analysis
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: analyze : analyze_results.py
 
-### With Options
+With Options
+~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: analyze (option=value) : script.py
 
-### Composite Workflow
+Composite Workflow
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 

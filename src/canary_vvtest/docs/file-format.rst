@@ -22,11 +22,12 @@ A typical ``.vvt`` file follows this pattern:
        # Test logic
 
 VVTest Directive DSL
-=====================
+--------------------
 
 The VVTest directive DSL uses comment syntax with specific rules:
 
-### Basic Format
+Basic Format
+~~~~~~~~~~~~
 
 .. code-block:: text
 
@@ -38,13 +39,15 @@ or:
 
    #VVT: COMMAND ( OPTIONS ) = ARGS
 
-### With Test Name
+With Test Name
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: COMMAND (testname="test_name") : arguments
 
-### Continuation Lines
+Continuation Lines
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
@@ -52,7 +55,8 @@ or:
    #VVT:: argument2
    #VVT:: argument3
 
-### Parser Behavior
+Parser Behavior
+~~~~~~~~~~~~~~~
 
 The ``canary_vvtest`` parser follows these rules:
 
@@ -62,14 +66,16 @@ The ``canary_vvtest`` parser follows these rules:
 4. **Stop on code**: Parsing stops at first non-comment, non-whitespace line
 5. **Error handling**: Parse errors are reported with file and line information
 
-### Command Normalization
+Command Normalization
+~~~~~~~~~~~~~~~~~~~~~
 
 Command words are joined with underscores:
 
 - ``depends on`` → ``depends_on``
 - ``filter warnings`` → ``filter_warnings``
 
-### Option Normalization
+Option Normalization
+~~~~~~~~~~~~~~~~~~~~
 
 Option aliases are normalized:
 
@@ -77,7 +83,8 @@ Option aliases are normalized:
 - ``platform`` → ``platforms``
 - ``parameter`` → ``parameters``
 
-### Conditional Options
+Conditional Options
+~~~~~~~~~~~~~~~~~~~
 
 Supported conditional/filter options:
 
@@ -86,12 +93,13 @@ Supported conditional/filter options:
 - ``options``
 - ``platforms``
 
-### Argument Syntax
+Argument Syntax
+~~~~~~~~~~~~~~~
 
 Arguments begin after ``:`` or ``=``. Non-filter options are passed to the directive-specific handler.
 
 Directive Parsing
-==================
+-----------------
 
 ``canary_vvtest`` parses directives using the following rules:
 
@@ -106,7 +114,8 @@ Supported VVTest Directives
 
 Based on ``canary_vvtest/vvt.py`` source, the following directives are supported:
 
-### Core Directives
+Core Directives
+~~~~~~~~~~~~~~~
 
 - **keywords**: Add keywords to the test
 - **copy**: Copy files to workspace
@@ -123,12 +132,14 @@ Based on ``canary_vvtest/vvt.py`` source, the following directives are supported
 - **name** / **testname**: Set test name
 - **depends on** / **depends_on**: Define dependencies
 
-### Special Directives
+Special Directives
+~~~~~~~~~~~~~~~~~~
 
 - **include**: Include another ``.vvt`` file (handled during parsing)
 - **insert_directive_file**: Insert directives from another file (handled during parsing)
 
-### Directive Behavior
+Directive Behavior
+~~~~~~~~~~~~~~~~~~
 
 Each directive is handled by a corresponding method in ``VVTestAdapter``:
 
@@ -148,49 +159,57 @@ Each directive is handled by a corresponding method in ``VVTestAdapter``:
 Examples
 --------
 
-### Simple Directive
+Simple Directive
+~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: keywords : smoke unit
 
-### Directive with Options
+Directive with Options
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: timeout (testname="performance") : 120
 
-### Parameterization
+Parameterization
+~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: parameterize : size = 10 20 30
 
-### Dependency
+Dependency
+~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: depends on : setup_test
 
-### Copy Directive
+Copy Directive
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: copy : input.txt
 
-### Link Directive
+Link Directive
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: link : data/
 
-### Baseline Directive
+Baseline Directive
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    #VVT: baseline : output.txt
 
-### Include Directive
+Include Directive
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
