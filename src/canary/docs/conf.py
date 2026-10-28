@@ -72,7 +72,7 @@ nitpick_ignore_regex = [
         r"json\.(JSONDecodeError|JSONEncoder)|logging(\..+)?|multiprocessing(\..+)?|"
         r"pathlib(\._local)?\.Path|pluggy\._manager\.PluginManager|rich\.(console\.Group|live\.Live)|"
         r"schema\.Schema|sqlite3\.(Error|OperationalError)|string\.Template|threading\.Thread|"
-        r"xml\.dom\.minidom\.Document)"
+        r"xml\.dom\.minidom\.Document)",
     ),
     (
         "py:class",
@@ -80,14 +80,14 @@ nitpick_ignore_regex = [
         r"Outcome|PartialSpec|RequestNode|ResultListener|ResultsView|Rows a Rich table spends on its own frame regardless|"
         r"RunOptions|RunProgress|RunProgressView|RunRequest|Short job name|Status|The test|ViewManager|"
         r"ViewManifestEntry|ViewSettings|WorkspaceDatabase|body length|canary\.(CanaryReporter|CanarySubcommand|Config|Job)|"
-        r"canary_hpc\.batchspec\.TestBatch|enums|environ|exe|result)"
+        r"canary_hpc\.batchspec\.TestBatch|enums|environ|exe|result)",
     ),
     (
         "py:class",
         r"_canary\.(app\.pathspec\.RequestNode|core\.status\.(Category|Outcome)|events\..+|"
         r"persistence\.database\.(NotASelection|PartialSpec|ResultListener)|tui\.(progress\.RunProgress|state\.ExplorerState)|"
         r"util\.(conditional\.(Conditional|T)|field\.(R|T)|level_graph\.(LevelGraph|T)|multiprocessing\.FSQueue|reducer\.(R|Reducer|T))|"
-        r"view\.(ViewManifestEntry|ViewSettings))"
+        r"view\.(ViewManifestEntry|ViewSettings))",
     ),
     ("py:func", r"(json\.(dump|dumps|load|loads)|fnmatch\.fnmatchcase)"),
     (
@@ -95,7 +95,7 @@ nitpick_ignore_regex = [
         r"(_canary\.(app\.(pathspec\.classify_pathspec|run\.run|run_in_subprocess)|core\.job\.find_cache_dir)|"
         r"_migrate_results_table|_resolve_dependencies_serial|canary\.Config\.getoption|canary_runtest_rebaseline|"
         r"classify_pathspec|config\.argparsing\.Parser\.add_(argument|command)|Collector\.add_(generator|skip_dirs)|"
-        r"get_(category|default_outcome|event_bus|possible_outcomes)|resolve|run)"
+        r"get_(category|default_outcome|event_bus|possible_outcomes)|resolve|run)",
     ),
     (
         "py:meth",
@@ -103,14 +103,17 @@ nitpick_ignore_regex = [
         r"Status\.set|TIMEOUT|TestBatch\.wall_limit|ViewSettings\.include_job|Workspace\.(create|info|load|tag_info)|"
         r"WorkspaceDatabase\.(get_partial_specs|get_result_history|get_results)|_reconstruct_results|begin|connect|"
         r"consume_(edit|rerun)_request|create|end|finish|format_single_result|handle_key|load|on_event|put_results|"
-        r"resolve_spec_ids|scroll_log|set|snapshot|update_log|wall_limit)"
+        r"resolve_spec_ids|scroll_log|set|snapshot|update_log|wall_limit)",
     ),
     (
         "py:attr",
-        r"(EDITOR|RunOptions\.tag|_staged|_started|_submitted|code|lock_file|only|running|status_filter|visible_jobs|when)"
+        r"(EDITOR|RunOptions\.tag|_staged|_started|_submitted|code|lock_file|only|running|status_filter|visible_jobs|when)",
     ),
     ("py:data", r"(STRATEGIES|sys\.argv)"),
-    ("py:exc", r"(DatabaseVersionError|FileNotExecutableError|NotASelection|UnresolvedDependenciesErrors|sqlite3\.Error)"),
+    (
+        "py:exc",
+        r"(DatabaseVersionError|FileNotExecutableError|NotASelection|UnresolvedDependenciesErrors|sqlite3\.Error)",
+    ),
     ("py:mod", r"(_canary\.(app\.run|events|tui)|psutil)"),
     ("py:obj", r"_canary\.util\.(conditional\.T|field\.(R|T)|level_graph\.T|reducer\.(R|T))"),
 ]
