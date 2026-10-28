@@ -7,6 +7,10 @@ VVTest Compatibility and Migration
 
 This page explains practical compatibility guidance for running VVTest suites under Canary.
 
+For the user-facing workflow, start with :doc:`/user/usage.vvtest`. This page
+focuses on compatibility boundaries, migration planning, and extension-specific
+behavior.
+
 What Works
 -----------
 
@@ -290,5 +294,6 @@ Incremental Conversion
 See Also
 --------
 
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
 - :doc:`vvtest-directives`: Complete directive reference
 - :doc:`file-format`: File format details

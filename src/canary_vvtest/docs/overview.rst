@@ -7,6 +7,10 @@ Overview
 
 The ``canary_vvtest`` extension enables Canary to consume and execute VVTest-style ``.vvt`` files.
 
+If you want to run an existing VVTest suite under Canary, start with
+:doc:`/user/usage.vvtest`. This page focuses on how the extension fits into
+Canary's generator model.
+
 Relationship to VVTest
 =======================
 
@@ -45,7 +49,7 @@ Key Characteristics
     - Both formats are fully supported by Canary
 
 VVTest File Format
-==================
+------------------
 
 The ``canary_vvtest`` extension supports VVTest's file format and execution model:
 
@@ -53,7 +57,6 @@ The ``canary_vvtest`` extension supports VVTest's file format and execution mode
 - VVTest-specific directives and syntax
 - Compatibility with existing VVTest workflows
 - Integration with Canary's execution framework
-- Need maximum flexibility and maintainability
 
 Implementation Model
 --------------------
@@ -89,7 +92,8 @@ See Also
 
 - :doc:`file-format`: VVTest file format details
 - :doc:`vvtest-directives`: Supported VVTest directives
-- ``canary_pyt`` extension: Python job-definition reference
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
+- :doc:`/extensions/exts/canary_pyt/index`: Python job-definition reference
 - :doc:`vvtest-limitations`: Format limitations and considerations
 
 The ``canary_vvtest`` extension allows running test files formatted for Sandia's `vvtest <https://github.com/sandialabs/vvtest>`_ test harness.

@@ -7,6 +7,10 @@ VVTest Environment and Runtime
 
 Environment directives control test execution environment and runtime behavior.
 
+This page focuses on runtime compatibility details provided by
+``canary_vvtest``. For the end-user workflow and the main list of supported
+directives, start with :doc:`/user/usage.vvtest`.
+
 preload Directive
 -----------------
 
@@ -270,5 +274,6 @@ Best Practices
 See Also
 --------
 
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
 - :doc:`vvtest-directives`: Complete directive reference
 - :doc:`file-format`: File format details

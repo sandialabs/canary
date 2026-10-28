@@ -14,6 +14,10 @@ The ``canary_vvtest`` extension provides support for VVTest-style ``.vvt`` files
 Use ``canary_vvtest`` when you need to run existing ``.vvt`` suites under
 Canary without rewriting them to ``.pyt`` first.
 
+If your immediate goal is "run my existing vvtest suite under Canary," start
+with :doc:`/user/usage.vvtest`. The pages here focus on the extension's file
+format, parser behavior, compatibility model, and migration details.
+
 Prerequisites
 -------------
 

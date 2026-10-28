@@ -7,6 +7,9 @@ VVTest Analysis
 
 The ``analyze`` directive creates composite analysis jobs that aggregate results from multiple child jobs. This enables workflow patterns where a parent job analyzes or reports on child job results.
 
+This page focuses on how ``canary_vvtest`` maps VVTest analysis behavior into
+Canary's job model.
+
 analyze Directive
 -----------------
 
@@ -167,5 +170,6 @@ Best Practices
 See Also
 --------
 
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
 - :doc:`vvtest-directives`: Complete directive reference
 - :doc:`vvtest-parameterization`: Parameterization details

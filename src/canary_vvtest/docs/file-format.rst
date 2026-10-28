@@ -112,49 +112,15 @@ Directive Parsing
 Supported VVTest Directives
 ---------------------------
 
-Based on ``canary_vvtest/vvt.py`` source, the following directives are supported:
+The supported directives are documented in two places:
 
-Core Directives
-~~~~~~~~~~~~~~~
+- :doc:`/user/usage.vvtest` gives the user-facing summary for running existing
+  VVTest suites under Canary.
+- :doc:`vvtest-directives` gives the extension-specific directive reference and
+  examples.
 
-- **keywords**: Add keywords to the test
-- **copy**: Copy files to workspace
-- **link**: Create symbolic links
-- **sources**: Record source file associations
-- **preload**: Preload data or modules
-- **parameterize**: Define parameter sets
-- **analyze**: Create composite analysis jobs
-- **timeout**: Set execution timeout
-- **filter_warnings**: Control warning filtering
-- **skipif**: Conditionally skip tests
-- **baseline**: Declare baseline files
-- **enable**: Enable/disable tests
-- **name** / **testname**: Set test name
-- **depends on** / **depends_on**: Define dependencies
-
-Special Directives
-~~~~~~~~~~~~~~~~~~
-
-- **include**: Include another ``.vvt`` file (handled during parsing)
-- **insert_directive_file**: Insert directives from another file (handled during parsing)
-
-Directive Behavior
-~~~~~~~~~~~~~~~~~~
-
-Each directive is handled by a corresponding method in ``VVTestAdapter``:
-
-- ``f_KEYWORDS``: Add keywords
-- ``f_SOURCES``: Handle copy/link/sources
-- ``f_PRELOAD``: Set preload
-- ``f_PARAMETERIZE``: Parse parameterization
-- ``f_ANALYZE``: Set analyze behavior
-- ``f_TIMEOUT``: Parse timeout
-- ``f_FILTER_WARNINGS``: Set warning filter
-- ``f_SKIPIF``: Set skip condition
-- ``f_BASELINE``: Parse baseline
-- ``f_ENABLE``: Set enable state
-- ``f_NAME``: Set test name
-- ``f_DEPENDS_ON``: Parse dependencies
+This page focuses on the file format and parsing rules rather than restating
+every directive description.
 
 Examples
 --------

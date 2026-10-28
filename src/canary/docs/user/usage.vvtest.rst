@@ -11,6 +11,19 @@ VVTest test scripts
 it possible to run existing vvtest suites under ``canary`` while using ``canary`` features such as
 filtering, reporting, and (when applicable) scheduled/HPC execution.
 
+Quick start
+-----------
+
+Point ``canary`` at a directory containing ``.vvt`` files:
+
+.. code-block:: console
+
+    canary run path/to/vvtest-suite
+
+Use this page when your goal is to run an existing vvtest suite under Canary.
+For parser details, compatibility notes, and extension internals, see
+:doc:`/extensions/exts/canary_vvtest/index`.
+
 Directives
 ----------
 
@@ -109,3 +122,9 @@ The following behavioural differences apply when running ``.vvt`` tests under ``
 * **Directive scanning stops at the first code token.** Directives placed after any ``import``
   statement or other code line are silently ignored.  Native vvtest scans the whole file.
 
+See Also
+--------
+
+- :doc:`/extensions/exts/canary_vvtest/index`: VVTest extension landing page
+- :doc:`/extensions/exts/canary_vvtest/vvtest-directives`: Extension directive reference
+- :doc:`/extensions/exts/canary_vvtest/vvtest-compatibility`: Compatibility and migration notes

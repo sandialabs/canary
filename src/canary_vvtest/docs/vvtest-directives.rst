@@ -7,6 +7,9 @@ VVTest Directives
 
 This page documents the VVTest directive DSL supported by ``canary_vvtest``. Each directive is parsed from ``#VVT:`` comments and converted to Canary job specifications.
 
+Use :doc:`/user/usage.vvtest` for the user-facing summary of supported
+directives and common behavior. This page is the extension-specific reference.
+
 Directive Reference
 -------------------
 
@@ -327,6 +330,7 @@ Parallel Test
 See Also
 --------
 
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
 - :doc:`vvtest-parameterization`: Parameterization details
 - :doc:`vvtest-dependencies`: Dependency patterns
 - :doc:`vvtest-analysis`: Analysis workflows
