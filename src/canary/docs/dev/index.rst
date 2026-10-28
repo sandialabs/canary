@@ -10,6 +10,7 @@ Developer's guide
 .. toctree::
    :maxdepth: 1
 
+   docs-style
    style
    contributing
    flow

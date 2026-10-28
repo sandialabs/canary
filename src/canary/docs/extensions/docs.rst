@@ -125,6 +125,9 @@ Canary provides validation scripts to ensure documentation quality:
 Documentation Best Practices
 ----------------------------
 
+See :doc:`/dev/docs-style` for the current documentation style guide used for
+hand-written Canary docs.
+
 **Structure**:
 
 - Follow existing documentation patterns
