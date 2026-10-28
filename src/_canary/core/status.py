@@ -334,6 +334,7 @@ class Status:
         """Atomically update this status, enforcing category/outcome consistency.
 
         Rules:
+
         - If only ``outcome`` is given, ``category`` is inferred via
           :func:`get_category`.
         - If only ``category`` is given, ``outcome`` is set to the default for

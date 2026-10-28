@@ -222,7 +222,24 @@ def make_api_docs(prefix: str):
             "_canary.reporters.markdown": ["type"],
             "_canary.reporters.reporter": ["type"],
         },
-        no_index_modules=["_canary.resource_pool.rpool", "_canary.cli.status"],
+        no_index_modules=[
+            "_canary.api.run",
+            "_canary.app.pathspec",
+            "_canary.app.run",
+            "_canary.cli.status",
+            "_canary.core.resolve_dependency",
+            "_canary.core.status",
+            "_canary.persistence.database",
+            "_canary.resource_pool.rpool",
+            "_canary.tui.progress",
+            "_canary.tui.state",
+            "_canary.util.conditional",
+            "_canary.util.executable",
+            "_canary.util.field",
+            "_canary.util.level_graph",
+            "_canary.util.reducer",
+            "_canary.view",
+        ],
     )
 
     maker.add_package("canary", canary, skip_dirs=["examples"], skip_modules=["directives"])
@@ -271,7 +288,7 @@ def make_api_docs(prefix: str):
         os.path.join(canary, "../canary_pyt"),
         skip_dirs=["tests"],
         exclude_members={"canary_pyt.pyt": ["type"]},
-        no_index_modules=["canary_pyt.directives"],
+        no_index_modules=["canary_pyt.directives", "canary_pyt.enums"],
     )
 
     maker.finish()

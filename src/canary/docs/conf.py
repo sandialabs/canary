@@ -304,6 +304,7 @@ def ensure_extension_docs() -> None:
     """Copy docs/ trees from installed canary plugins into extensions/exts/<name>/.
 
     Discovery:
+
     - Scan every entry point in the ``canary`` group via importlib.metadata.
     - For each entry point, locate the installed package using importlib.resources.
     - If the package contains a ``docs/`` directory with a ``.canary-ext-docs``

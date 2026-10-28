@@ -57,6 +57,6 @@ job ID.  Each value is a serialized job record:
    }
 
 All ``timekeeper`` timestamps are Unix epoch floats; ``-1.0`` means that phase was not reached.
-``status.outcome`` integer values: ``0``=success, ``64``=diffed, ``65``=failed, ``68``=timeout,
-``70``=cancelled, ``80``=skipped, ``81``=blocked.
 
+``status.outcome`` integer values: ``0`` = success, ``64`` = diffed, ``65`` = failed, ``68`` = timeout,
+``70`` = cancelled, ``80`` = skipped, ``81`` = blocked.

@@ -30,25 +30,30 @@ The built-in subcommands (job, session, sessions, jobs, db) are implemented as
 
 Common flags
 ------------
---clean     Strip __type__ wrappers and normalise enum values to strings
---terse     Compact single-line JSON output
---list      List immediate child keys at the selected query path
---digest    One-line-per-job compact summary (session and jobs subcommands)
---where     Filter predicate for --expand-jobs / sessions / jobs / batches
-            String fields:  status.outcome==FAILED  status.category==PASS
-            Numeric fields: timings.queue_wait>3600  timings.running<60
-            Operators: == != > < >= <=  (None fields: ordered ops → False, != → True)
---watch     Poll and re-render the query every N seconds (default 10).  Exits
-            automatically when every job in the selection has reached a terminal
-            status category (i.e. not NONE).  Ctrl-C exits cleanly with code 0.
-            In --terse mode emits one NDJSON document per cycle.
 
-Agent shortcuts
----------------
--c QUERY     Shortcut for ``canary learn capabilities QUERY``
---skills Q   Shortcut for ``canary learn skills Q``
--j JOB [P]   Shortcut for ``canary query job JOB [P]``
--s SES [P]   Shortcut for ``canary query session SES [P]``
+.. code-block:: text
+
+   --clean     Strip __type__ wrappers and normalise enum values to strings
+   --terse     Compact single-line JSON output
+   --list      List immediate child keys at the selected query path
+   --digest    One-line-per-job compact summary (session and jobs subcommands)
+   --where     Filter predicate for --expand-jobs / sessions / jobs / batches
+               String fields:  status.outcome==FAILED  status.category==PASS
+               Numeric fields: timings.queue_wait>3600  timings.running<60
+               Operators: == != > < >= <=  (None fields: ordered ops -> False, != -> True)
+   --watch     Poll and re-render the query every N seconds (default 10).  Exits
+               automatically when every job in the selection has reached a terminal
+               status category (i.e. not NONE).  Ctrl-C exits cleanly with code 0.
+               In --terse mode emits one NDJSON document per cycle.
+
+Agent shortcuts:
+
+.. code-block:: text
+
+   -c QUERY     Shortcut for ``canary learn capabilities QUERY``
+   --skills Q   Shortcut for ``canary learn skills Q``
+   -j JOB [P]   Shortcut for ``canary query job JOB [P]``
+   -s SES [P]   Shortcut for ``canary query session SES [P]``
 """
 
 import argparse

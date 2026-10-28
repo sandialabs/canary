@@ -507,12 +507,13 @@ class Workspace:
         """Loads an existing workspace from the filesystem.
 
         Workspace resolution order:
-        1. ``_override_workspace_dir`` — set by ``set_workspace_dir()`` when
-           ``--canary-dir`` or ``CANARY_DIR`` is in effect.  Points directly at
-           the ``.canary`` directory; no upward search is performed.
-        2. ``start`` argument — walk upward from *start* to find the nearest
+
+        1. ``_override_workspace_dir`` set by ``set_workspace_dir()`` when
+           ``--canary-dir`` or ``CANARY_DIR`` is in effect. This points directly at
+           the ``.canary`` directory, and no upward search is performed.
+        2. The ``start`` argument: walk upward from *start* to find the nearest
            ancestor that contains a ``.canary`` subdirectory.
-        3. ``cwd`` — same upward walk starting from the current working directory.
+        3. ``cwd``: the same upward walk starting from the current working directory.
 
         Args:
             start: The directory to start searching for the workspace.
@@ -678,7 +679,7 @@ class Workspace:
         may include glob characters). Otherwise return None.
 
         Examples:
-          /ws/TestResults/foo/bar/test.py  -> foo/bar/test.py
+            /ws/TestResults/foo/bar/test.py -> foo/bar/test.py
         """
         if latest_view := self.latest_view():
             p = Path(path).absolute()

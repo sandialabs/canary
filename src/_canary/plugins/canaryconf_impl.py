@@ -39,6 +39,7 @@ has already run.  It:
    ``__teardown__`` directory beneath the governing directory so the function
    runs in the session tree location mirroring the ``canaryconf.py``.
 4. Wires :class:`~_canary.core.jobspec.SpecDependency` edges:
+
    - Every test in scope: ``test.dependencies += [SpecDependency(setup, "on_success")]``
    - Teardown spec: ``teardown.dependencies += [SpecDependency(test, "always")]``
      for every test in scope.

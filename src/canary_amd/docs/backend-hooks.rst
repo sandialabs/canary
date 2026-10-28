@@ -155,8 +155,7 @@ The GPU hooks interact with Canary in this sequence:
    - Jobs request GPU resources through resource requirements
    - Canary allocates GPU resources to jobs
    - ``canary_runteststart`` is called before job execution
-   - ``HIP_VISIBLE_DEVICES``, ``ROCR_VISIBLE_DEVICES``, and ``CUDA_VISIBLE_DEVICES``
-     are set based on allocated GPUs
+   - Canary sets the GPU visible-devices environment variables based on allocated GPUs
 
 GPU Resource Specification
 ---------------------------
