@@ -19,6 +19,7 @@ canary usage
    :caption: Running and selecting work
 
    usage.finding_tests
+   usage.select
    usage.describe
    usage.run
    usage.filter

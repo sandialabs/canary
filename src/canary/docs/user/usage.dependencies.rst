@@ -149,7 +149,7 @@ Dependency management commands
 -------------------------------
 
 - ``canary describe`` — show dependency relationships for a test file
-- ``canary select --dependencies`` — include transitive dependencies in a selection
+- ``canary select`` — save a filtered selection for repeated runs
 - ``canary find -g`` — display the full dependency graph
 
 Best practices
