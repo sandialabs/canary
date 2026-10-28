@@ -7,7 +7,7 @@
 CDash integration
 =================
 
-``canary`` can emit `CDash XML files <https://www.python.org>`_ for a completed test session.  The
+``canary`` can emit `CDash XML files <https://www.cdash.org/>`_ for a completed test session.  The
 CDash XML report format is a specialized schema designed for the submission and visualization of
 testing and build results within the CDash (Continuous Dashboard) system, a web-based software
 testing server.
@@ -55,4 +55,3 @@ variables instead of command-line flags:
 
 GitLab merge-request reporting can link CDash results to an MR by setting additional variables
 in the runner environment; see :ref:`canary-gitlab-mr`.
-

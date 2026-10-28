@@ -12,12 +12,12 @@ The generator is responsible for two things:
 * identifying which files it can interpret; and
 * turning those files into runnable test specs.
 
-In the YAML plugin, this is implemented by :class:`~YAMLTestGenerator`.
+In the YAML plugin, this is implemented by ``YAMLTestGenerator``.
 
 File matching via ``file_patterns``
 -----------------------------------
 
-The generator advertises which filenames it recognizes using :attr:`~YAMLTestGenerator.file_patterns`:
+The generator advertises which filenames it recognizes using its ``file_patterns`` class attribute:
 
 .. literalinclude:: /static/yaml_generator.py
    :language: python
@@ -29,8 +29,8 @@ Only files matching these patterns are considered YAML test files by this genera
 Generating cases with ``lock()``
 --------------------------------
 
-The core method is :meth:`~YAMLTestGenerator.lock`. It reads the YAML, validates it, expands any
-parameter combinations, and returns a list of :class:`~canary.JobSpec` objects (one per runnable
+The core method is ``YAMLTestGenerator.lock()``. It reads the YAML, validates it, expands any
+parameter combinations, and returns a list of ``canary.JobSpec`` objects (one per runnable
 test case):
 
 .. literalinclude:: /static/yaml_generator.py
@@ -40,7 +40,7 @@ test case):
 Implementing ``describe()``
 ---------------------------
 
-A generator can optionally implement :meth:`~YAMLTestGenerator.describe` to provide human-readable
+A generator can optionally implement ``YAMLTestGenerator.describe()`` to provide human-readable
 output for ``canary describe FILE``. This is extremely useful when developing a new generator
 because it exercises parsing and case generation without running anything.
 

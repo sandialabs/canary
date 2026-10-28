@@ -27,7 +27,7 @@ Some tests require a modified environment.  When the required environment modifi
           with canary.module.loaded("modulename", use="modulepath"):
             # do work
 
-2. Through the :func:`canary_pyt.directives.load` directive:
+2. Through the ``canary_pyt.directives.load_module`` directive:
 
    .. code-block:: python
 

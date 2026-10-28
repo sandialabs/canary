@@ -25,4 +25,4 @@ would generate 3 test cases needing 1, 2, and 4 ``cpus`` and ``gpus``, respectiv
 Resource consuming parameters
 -----------------------------
 
-More generally, **any** parameter name that appears in the :ref:`resource_pool <tutorial-resource-pool>` are interpreted to be resource consuming.  If the resource is not defined in the :class:`~_canary.resource_pool.rpool.ResourcePool`, the test will not run due to an unsatisfiable resource constraint.
+More generally, **any** parameter name that appears in the :ref:`resource pool <tutorial-resource-pool>` is interpreted to be resource consuming. If the resource is not defined in the active resource pool, the test will not run due to an unsatisfiable resource constraint.

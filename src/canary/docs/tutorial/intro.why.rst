@@ -9,7 +9,7 @@ Why canary?
 
 **Speed**: Hierarchical parallelism is used to run tests asynchronously, optimizing resource utilization and speeding up the testing process.  See :ref:`basics-resource` for more.
 
-**Python**: ``canary`` is an easy to install `Python <python.org>`_ library.
+**Python**: ``canary`` is an easy-to-install `Python <https://www.python.org>`_ library.
 
 **Integration**: ``canary`` :ref:`integrates<integrations>` with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 

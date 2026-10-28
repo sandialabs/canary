@@ -49,7 +49,7 @@ Built-in generator extensions
 Writing a new generator
 -----------------------
 
-``canary`` generates jobs from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files.  Each generator is implemented as a subclass of :class:`~_canary.generator.AbstractTestGenerator`.  User defined test generators can also be created by subclassing :class:`~_canary.generator.AbstractTestGenerator` and defining the :meth:`~_canary.generator.AbstractTestGenerator.matches`, :meth:`~_canary.generator.AbstractTestGenerator.describe`, and :meth:`~_canary.generator.AbstractTestGenerator.lock` methods.  User defined test generators are registered with the :func:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook.
+``canary`` generates jobs from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files. Each generator is implemented as a subclass of ``canary.AbstractTestGenerator``. User-defined test generators can also be created by subclassing ``canary.AbstractTestGenerator`` and defining the ``matches()``, ``describe()``, and ``lock()`` methods. User-defined test generators are registered with the :func:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook.
 
 Consider the following YAML test input:
 
@@ -76,7 +76,7 @@ test files.
 .. note::
 
     The completed test file generator can be seen at
-    https://github.com/sandialabs/canary-yaml
+    `canary-yaml <https://github.com/sandialabs/canary-yaml>`_.
 
 
 Example implementation
@@ -110,7 +110,7 @@ test files.
 .. note::
 
     The completed test file generator can be seen at
-    https://github.com/sandialabs/canary-yaml
+    `canary-yaml <https://github.com/sandialabs/canary-yaml>`_.
 
 
 Example implementation

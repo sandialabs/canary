@@ -4,11 +4,11 @@
 
 .. _tutorial-extending-yaml-specs:
 
-Building :class:`~canary.JobSpec` objects
+Building ``canary.JobSpec`` objects
 =========================================
 
 A job generator ultimately returns runnable work items to ``canary``. In this plugin, those
-work items are :class:`~canary.JobSpec` objects.
+work items are ``canary.JobSpec`` objects.
 
 What the YAML plugin sets
 -------------------------
@@ -39,11 +39,11 @@ Command construction (``sh -c``)
 
 The plugin runs the YAML script by constructing a shell command:
 
-* it finds a shell with :func:`canary.filesystem.which` (required);
+* it finds a shell with ``canary.filesystem.which`` (required);
 * it passes the script using ``sh -c``; and
 * it prefixes the script with ``set -e`` so failures propagate via exit code.
 
-This construction happens in :meth:`~YAMLTestGenerator.lock` when setting ``kwds["command"]``:
+This construction happens in ``YAMLTestGenerator.lock()`` when setting ``kwds["command"]``:
 
 .. literalinclude:: /static/yaml_generator.py
    :language: python
@@ -53,7 +53,7 @@ This construction happens in :meth:`~YAMLTestGenerator.lock` when setting ``kwds
 Template substitution
 ---------------------
 
-When parameters are present, each script line is expanded using :class:`string.Template` and
+When parameters are present, each script line is expanded using ``string.Template`` and
 ``safe_substitute``. Placeholders in the YAML should use the ``${name}`` form:
 
 .. code-block:: yaml

@@ -7,7 +7,7 @@
 User defined commands
 =====================
 
-User defined commands are created by returning a :class:`~_canary.plugins.types.CanarySubcommand` from the :func:`~_canary.plugins.hookspec.canary_subcommand` plugin hook. For example, the following will create a custom command that emails a plain text test report:
+User-defined commands are created by adding a :class:`~_canary.cli.base.CanarySubcommand` from the :func:`~_canary.plugins.hookspec.canary_addcommand` plugin hook. For example, the following creates a custom command that emails a plain text test report:
 
 .. code-block:: python
 

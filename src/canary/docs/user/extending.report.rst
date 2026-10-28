@@ -7,7 +7,7 @@
 User defined reports
 ====================
 
-``canary`` can write output in a number of formats: ``JSON``, ``HTML``, ``Markdown``, among others (see :ref:`canary-report` for additional formats).  User defined report formats can be created by returning an instance of :class:`canary.CanaryReporter` from a :func:`_canary.plugins.hookspec.canary_session_reporter` plugin hook.  For example, the following will write a custom plain text report.
+``canary`` can write output in a number of formats, including ``JSON``, ``HTML``, and ``Markdown``. See :ref:`canary-report` for built-in formats. User-defined report formats can be created by returning an instance of ``canary.CanaryReporter`` from the :func:`~_canary.plugins.hookspec.canary_reporter` plugin hook. For example, the following writes a custom plain-text report.
 
 .. code-block:: python
 
@@ -16,27 +16,24 @@ User defined reports
    import canary
 
    @canary.hookimpl
-   def canary_session_reporter():
+   def canary_reporter():
        return TxtReporter()
 
 
-   class TxtReporter(canary.CanaryReporter)
+   class TxtReporter(canary.CanaryReporter):
        type = "txt"
        description = "Create a plain text report"
 
-    def create(self, output: str | None = None) -> None:
-        """Create a plain text output
-
-        """
-        output = output or "canary-report.txt"
-        workspace = canary.Workspace.load()
-        with open(output, "w") as fh:
-            for job in workspace.load_jobs():
-                fh.write("====\n")
-                fh.write(f"Name: {job.spec.name}\n")
-                fh.write(f"Start: {job.timekeeper.started_on}\n")
-                fh.write(f"Finish: {job.timekeeper.finished_on}\n")
-                fh.write(f"Status: {job.status.name}\n")
+       def create(self, output: str | None = None) -> None:
+           output = output or "canary-report.txt"
+           workspace = canary.Workspace.load()
+           with open(output, "w") as fh:
+               for job in workspace.load_jobs():
+                   fh.write("====\n")
+                   fh.write(f"Name: {job.spec.name}\n")
+                   fh.write(f"Start: {job.timekeeper.started_on}\n")
+                   fh.write(f"Finish: {job.timekeeper.finished_on}\n")
+                   fh.write(f"Status: {job.status.outcome.name}\n")
 
 .. code-block:: console
 
