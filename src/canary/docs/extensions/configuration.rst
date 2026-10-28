@@ -263,4 +263,4 @@ See Also
 - :doc:`plugins`: Plugin configuration
 - :doc:`hooks`: Configuration hooks
 - :doc:`../user/configuration`: Core configuration
-- :doc:`/reference/commands.config`: Config command
+- :doc:`/user/commands/config`: Config command

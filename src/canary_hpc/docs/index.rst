@@ -36,6 +36,6 @@ The ``canary_hpc`` extension provides HPC scheduler and batch-execution capabili
 See Also
 --------
 
-- Canary resource pool (see core documentation)
-- Canary job execution (see core documentation)
-- Canary plugin system (see core documentation)
+- :doc:`/user/basics.resource`: Canary resource pool
+- :doc:`/user/basics.job`: Canary job execution
+- :doc:`/extensions/plugins`: Canary plugin system

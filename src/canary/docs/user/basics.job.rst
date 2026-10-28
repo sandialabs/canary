@@ -166,31 +166,6 @@ Jobs manage file resources through two categories:
   ``on_success``
 - Preserved in the job's execution directory for result analysis and reporting
 
-.. _test-exec-dir:
-
-Test execution directory
-------------------------
-
-.. note::
-
-    The test execution directory is an implementation detail and could change.  Do not rely on it for dependent tests.  Instead, use the ``canary.test.instance.dependencies`` object to get the ``exec_dir`` of each dependency.
-
-The current test exeuction directory naming scheme matches ``vvtest``'s: ``<work_tree>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``canary run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<work_tree>/some/sub_directory/<name>``.
-
-.. [1] The CPU and GPU ids are IDs used internally in ``canary`` and may, or may not, correspond to the actual hardware IDs.  In the simplest case, a test file defines a single job whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<usage-parameterize>` that expand to define multiple jobs whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
-
-.. literalinclude:: /examples/parameterize/parameterize1.pyt
-    :language: python
-    :lines: 7-9
-
-would expand into two test instances with names
-
-* ``parameterize1[a=1]``
-* ``parameterize1[a=4]``
-
-Job execution
--------------
-
 During a test session, ``canary`` creates a :ref:`unique test execution directory <test-exec-dir>` for each job and executes the script with the current python interpreter in its own subprocess.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
@@ -262,6 +237,8 @@ The job object defines the following attributes and methods:
 ``get_dependency(**params) -> Job``:
   Returns the dependency having parameters equal to ``params``.
 
+.. [1] The CPU and GPU ids are IDs used internally in ``canary`` and may, or may not, correspond to the actual hardware IDs.
+
 .. _test-exec-dir:
 
 Test execution directory
@@ -272,5 +249,3 @@ Test execution directory
     The test execution directory is an implementation detail and could change.  Do not rely on it for dependent tests.  Instead, use the ``canary.test.instance.dependencies`` object to get the ``exec_dir`` of each dependency.
 
 The current test exeuction directory naming scheme matches ``vvtest``'s: ``<work_tree>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``canary run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<work_tree>/some/sub_directory/<name>``.
-
-.. [1] The CPU and GPU ids are IDs used internally in ``canary`` and may, or may not, correspond to the actual hardware IDs.

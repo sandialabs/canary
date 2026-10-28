@@ -218,6 +218,6 @@ See Also
 --------
 
 - :doc:`plugins`: Plugin documentation structure
-- :doc:`../user/concepts`: Core Canary concepts
-- :doc:`/reference/commands`: Command reference
-- :doc:`../extensions/pyt/index`: Python extension example
+- :doc:`/user/basics.concepts`: Core Canary concepts
+- :doc:`/user/commands/index`: Command reference
+- :doc:`/extensions/exts/canary_pyt/index`: Python extension example

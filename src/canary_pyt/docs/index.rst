@@ -45,6 +45,8 @@ The ``canary_pyt`` extension is the **reference Python job-definition generator*
 See Also
 --------
 
-- CMake/CTest integration (see core documentation)
-- HPC scheduler integration (see ``canary_hpc`` documentation)
-- Canary core documentation (job execution, resource pools, reporting)
+- :doc:`/user/usage.cmake`: CMake and CTest integration
+- :doc:`/extensions/exts/canary_hpc/index`: HPC scheduler integration
+- :doc:`/user/basics.job`: Canary job execution model
+- :doc:`/user/basics.resource`: Canary resource pools and allocation
+- :doc:`/user/reporting`: Canary reporting overview

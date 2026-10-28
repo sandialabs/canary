@@ -31,6 +31,6 @@ The ``canary_cdash`` extension provides CDash reporting functionality for Canary
 See Also
 --------
 
-- Canary core concepts (see user documentation)
-- Canary report command (see reference documentation)
-- Canary architecture (see core documentation)
+- :doc:`/user/basics.concepts`: Canary core concepts
+- :doc:`/user/commands/report`: Canary report command reference
+- :doc:`/dev/flow`: Canary execution flow

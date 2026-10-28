@@ -32,7 +32,7 @@ The ``canary_flux`` extension provides **Flux Framework integration** for Canary
 See Also
 --------
 
-- Canary resource pool (see core documentation)
-- Canary job execution (see core documentation)
-- Canary plugin system (see core documentation)
-- ``canary_hpc`` extension (for batch-oriented Flux execution; see core documentation)
+- :doc:`/user/basics.resource`: Canary resource pool
+- :doc:`/user/basics.job`: Canary job execution
+- :doc:`/extensions/plugins`: Canary plugin system
+- :doc:`/extensions/exts/canary_hpc/index`: ``canary_hpc`` extension for batch-oriented Flux execution

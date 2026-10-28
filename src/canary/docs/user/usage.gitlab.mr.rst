@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _canary_gitlab-mr_report:
+.. _canary-gitlab-mr:
 
 Merge request reporting
 =======================

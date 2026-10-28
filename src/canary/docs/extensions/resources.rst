@@ -272,5 +272,5 @@ See Also
 
 - :doc:`plugins`: Plugin registration
 - :doc:`hooks`: Resource-related hooks
-- :doc:`../user/resources`: Core resource management
-- :doc:`/reference/commands.config`: Resource configuration
+- :doc:`/user/basics.resource`: Core resource management
+- :doc:`/user/commands/config`: Resource configuration

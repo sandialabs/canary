@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _extending-plugins:
+.. _extensions-plugins:
 
 Plugins
 =======

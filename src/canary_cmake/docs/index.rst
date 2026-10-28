@@ -30,4 +30,4 @@ The ``canary_cmake`` extension provides CMake and CTest integration for Canary.
 See Also
 --------
 
-- Canary run command (see reference documentation)
+- :doc:`/user/commands/run`: Canary run command reference

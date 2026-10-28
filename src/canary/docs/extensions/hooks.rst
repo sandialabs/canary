@@ -533,4 +533,4 @@ See Also
 - :doc:`plugins`: Plugin loading and management
 - :doc:`generators`: Job generator hooks
 - :doc:`commands`: Command extension hooks
-- :doc:`../user/concepts`: Core Canary concepts
+- :doc:`/user/basics.concepts`: Core Canary concepts

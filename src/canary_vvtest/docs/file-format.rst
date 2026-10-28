@@ -241,6 +241,6 @@ Best Practices
 See Also
 --------
 
-- Complete directive reference (see directive documentation)
-- Parameterization details (see parameterization section)
-- Dependency patterns (see dependencies section)
+- :doc:`vvtest-directives`: Complete directive reference
+- :doc:`vvtest-parameterization`: Parameterization details
+- :doc:`vvtest-dependencies`: Dependency patterns

@@ -227,5 +227,4 @@ See Also
 
 - :doc:`plugins`: Measurement plugin registration
 - :doc:`hooks`: Measurement-related hooks
-- :doc:`/user/workflows.agentic`: Agent workflows using measurements
-- :doc:`../user/query`: Querying measurements
+- :doc:`/user/commands/query`: Querying measurements

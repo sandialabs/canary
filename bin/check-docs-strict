@@ -14,4 +14,7 @@ print(resources.files("canary").joinpath("docs"))
 PY
 )"
 
+CANARY_DOCS_REGENERATE_API_DOCS=1 \
+CANARY_DOCS_REGENERATE_COMMANDS=1 \
+CANARY_DOCS_REGENERATE_DIRECTIVES=1 \
 "$python_bin" -m sphinx -n -W --keep-going -b html -d "$dest/doctrees" "$docs_dir" "$dest/html"

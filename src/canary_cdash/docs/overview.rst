@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _integrations-cdash:
+.. _canary-cdash-overview:
 
 CDash Reporting Overview
 ========================

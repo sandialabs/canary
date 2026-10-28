@@ -6,4 +6,4 @@ python_bin="${PYTHON:-python3}"
 dest="${1:-$repo_root/build/docs-check}"
 
 cd "$repo_root"
-"$python_bin" -m canary docs build html -d "$dest"
+"$python_bin" -m canary docs build -w -d "$dest" html

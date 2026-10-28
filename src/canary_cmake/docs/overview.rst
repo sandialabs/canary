@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _integrations-cmake:
+.. _canary-cmake-overview:
 
 canary_cmake Extension Overview
 ===============================
