@@ -103,7 +103,8 @@ Querying structured state
 --------------------------
 
 ``canary query`` reads ``testcase.lock`` and ``session.lock`` files and returns
-values at arbitrary dot-notation paths:
+values at arbitrary dot-notation paths. For a broader guide to session/job
+queries, comparisons, and grouped failure analysis, see :doc:`/user/usage.query`.
 
 .. code-block:: console
 

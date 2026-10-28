@@ -16,27 +16,51 @@ canary usage
 
 .. toctree::
    :maxdepth: 1
+   :caption: Running and selecting work
 
    usage.finding_tests
    usage.describe
    usage.run
    usage.filter
-   usage.parameterize
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Inspecting results and debugging
+
    usage.status
    usage.log
+   usage.location
    usage.tui
+   usage.debugging
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reruns and result control
+
    usage.rerun
    usage.rebaseline
-   usage.location
    usage.enable
-   usage.copy_and_link
-   usage.execute_and_analyze
-   usage.dependencies
-   usage.canaryconf
-   usage.debugging
    usage.xstatus
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Test authoring and runtime behavior
+
+   usage.parameterize
+   usage.dependencies
+   usage.execute_and_analyze
+   usage.copy_and_link
    usage.modules
+   usage.canaryconf
    usage.rcfiles
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Knowledge and agent workflows
+
+   usage.query
+   usage.learn
+   usage.agent
 
 .. toctree::
    :maxdepth: 1

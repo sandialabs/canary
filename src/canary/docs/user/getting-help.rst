@@ -27,3 +27,9 @@ For result triage and workspace inspection, the most useful commands to discover
 - ``canary query job JOBID --missing-inputs`` for staged-input debugging
 
 Machine-readable capability and skill help is also available via ``canary learn``.
+
+See also:
+
+- :doc:`/user/usage.query` for structured workspace queries
+- :doc:`/user/usage.learn` for capabilities and skills
+- :doc:`/user/usage.agent` for agent bootstrap workflows

@@ -80,7 +80,7 @@ nitpick_ignore_regex = [
         r"Outcome|PartialSpec|RequestNode|ResultListener|ResultsView|Rows a Rich table spends on its own frame regardless|"
         r"RunOptions|RunProgress|RunProgressView|RunRequest|Short job name|Status|The test|ViewManager|"
         r"ViewManifestEntry|ViewSettings|WorkspaceDatabase|body length|canary\.(CanaryReporter|CanarySubcommand|Config|Job)|"
-        r"canary_hpc\.batchspec\.TestBatch|enums|environ|exe)"
+        r"canary_hpc\.batchspec\.TestBatch|enums|environ|exe|result)"
     ),
     (
         "py:class",
