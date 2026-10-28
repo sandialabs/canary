@@ -32,6 +32,15 @@ canary
 
 **Extensibility**: ``canary`` can be extended through :ref:`user plugins <extending>`, allowing developers to customize their test sessions according to their specific needs.
 
+If you already know what you want to do, start in the task-oriented user guide:
+
+- :doc:`/user/usage.cmake` for running CMake and CTest tests or generating CDash reports
+- :doc:`/user/usage.hpc` for scheduler-backed HPC execution
+- :doc:`/user/usage.vvtest` for running existing ``.vvt`` suites
+- :doc:`/user/usage.gitlab` for GitLab reporting workflows
+
+The :doc:`/extensions/index` section is the best place to learn how those capabilities are implemented and how to extend them.
+
 .. grid:: 1 1 2 2
    :gutter: 2 3 4 4
 

@@ -9,6 +9,26 @@ Flux Extension
 
 The ``canary_flux`` extension provides **Flux Framework integration** for Canary, enabling test execution on Flux-based HPC systems through direct Flux allocation and job submission.
 
+Use ``canary_flux`` when you want direct Flux execution of individual Canary
+jobs inside a Flux allocation rather than the batch-oriented workflow provided
+by ``canary_hpc``.
+
+Prerequisites
+-------------
+
+- A configured Flux backend through ``hpc_connect``.
+- A Flux-based environment where direct allocation and submission are
+  appropriate.
+
+Quick Start
+-----------
+
+Run a test suite through Flux directly:
+
+.. code-block:: console
+
+   canary flux run ./tests
+
 .. note::
 
    ``canary_flux`` is a **built-in** canary extension, included in the

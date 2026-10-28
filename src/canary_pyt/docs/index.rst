@@ -11,6 +11,31 @@ The ``canary_pyt`` extension is the **reference Python job-definition generator*
 
 **Extension type**: reference Python job-definition generator, directive interpreter.
 
+Use ``canary_pyt`` when you want native Canary job definitions written in
+Python. It is the default choice for new test suites and workflow-oriented job
+definitions.
+
+Prerequisites
+-------------
+
+- Python-based test or workflow definitions.
+- Familiarity with Canary directives and the runtime instance model.
+
+Quick Start
+-----------
+
+Create a ``.pyt`` file and run it with Canary:
+
+.. code-block:: python
+
+   import canary_pyt
+
+   canary_pyt.directives.keywords("smoke")
+
+.. code-block:: console
+
+   canary run path/to/test.pyt
+
 .. note::
 
    ``canary_pyt`` is a **built-in** canary extension, included in the

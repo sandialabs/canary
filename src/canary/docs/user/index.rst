@@ -5,6 +5,10 @@
 canary user's guide
 ===================
 
+Start here when you have a task in mind, such as running CTest tests, using an
+HPC scheduler, or working with existing ``.vvt`` suites. For extension internals
+and implementation details, use :doc:`/extensions/index`.
+
 .. toctree::
    :caption: Getting started
    :maxdepth: 1
@@ -20,6 +24,13 @@ canary user's guide
 
    basics
    usage
+
+.. rubric:: Common Workflows
+
+- :doc:`usage.cmake` for CMake, CTest, and CDash workflows
+- :doc:`usage.hpc` for scheduler-backed HPC execution
+- :doc:`usage.vvtest` for running existing ``.vvt`` suites
+- :doc:`usage.gitlab` for GitLab reporting
 
 .. toctree::
    :caption: Configuration

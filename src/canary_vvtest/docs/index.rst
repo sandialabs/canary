@@ -11,6 +11,25 @@ The ``canary_vvtest`` extension provides support for VVTest-style ``.vvt`` files
 
 **Extension type**: VVTest compatibility generator.
 
+Use ``canary_vvtest`` when you need to run existing ``.vvt`` suites under
+Canary without rewriting them to ``.pyt`` first.
+
+Prerequisites
+-------------
+
+- Existing ``.vvt`` test files.
+- Willingness to accept documented compatibility differences from native
+  ``vvtest`` behavior.
+
+Quick Start
+-----------
+
+Point Canary at a directory containing ``.vvt`` files:
+
+.. code-block:: console
+
+   canary run path/to/vvtest-suite
+
 .. note::
 
    ``canary_vvtest`` is a **built-in** canary extension, included in the
@@ -34,6 +53,7 @@ The ``canary_vvtest`` extension provides support for VVTest-style ``.vvt`` files
 See Also
 --------
 
-- ``canary_pyt`` extension: Python job-definition reference
-- ``canary_cmake`` extension: CMake/CTest integration
-- Canary core documentation (job execution, resource pools, reporting)
+- :doc:`/extensions/exts/canary_pyt/index`: Python job-definition reference
+- :doc:`/extensions/exts/canary_cmake/index`: CMake and CTest integration
+- :doc:`/user/usage.vvtest`: User guide for running VVTest-format test scripts
+- :doc:`/user/basics.job`: Canary job execution model
