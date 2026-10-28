@@ -5,353 +5,143 @@
 Commands
 ========
 
-The ``canary_hpc`` extension provides several commands for HPC batch execution and management. These commands enable users to submit, monitor, and debug HPC batch executions.
+``canary_hpc`` adds the ``canary hpc`` command for scheduler-backed execution.
+For new usage, prefer these subcommands over the older ``canary run
+--hpc-backend=...`` form.
 
-Modern HPC Commands
--------------------
+Common Workflow
+---------------
 
-The ``canary hpc`` command provides subcommands for HPC operations:
-
-.. code-block:: console
-
-   python3 -m canary hpc [-h] [subcommand] ...
-
-Subcommands
-~~~~~~~~~~~
-
-hpc run
-^^^^^^^
-
-**Purpose**: Batch jobs and submit to HPC scheduler
-
-**Usage**:
+The most common sequence is:
 
 .. code-block:: console
 
-   python3 -m canary hpc run [options] [paths...]
+   canary hpc info slurm
+   canary hpc run --backend=slurm ./tests
+   canary hpc log BATCH_ID
 
-**Description**:
+That covers backend inspection, batch submission, and post-submit debugging.
 
-The ``hpc run`` command collects jobs, forms batches, and submits them to the HPC scheduler. It replaces Canary's local execution with HPC batching and submission.
+canary hpc run
+--------------
 
-**Options**:
-
-- ``--backend=BACKEND``: HPC backend to use (e.g., slurm, pbs, flux, shell)
-- ``--batch-spec=SPEC``: Batch specification (e.g., "duration=30m,layout=flat")
-- ``--timeout TYPE=T``: Timeout configuration (queue, run, or total)
-- ``--submit-arg=ARG``: Scheduler-specific submit arguments
-- ``--workers=N``: Number of workers for batch execution
-- Standard Canary test selection and execution options
-
-**Examples**:
+Use ``canary hpc run`` to collect jobs, form batches, and submit them to the
+selected scheduler backend.
 
 .. code-block:: console
 
-   # Run with Slurm backend
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm [options] [paths...]
 
-   # Run with batch specification
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=30m ./basic
+Common options:
 
-   # Run with scheduler arguments
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
+- ``--backend=BACKEND`` selects the scheduler backend.
+- ``--batch-spec=SPEC`` controls how jobs are grouped into batches.
+- ``--timeout TYPE=T`` configures queue and run timeouts.
+- ``--submit-arg=ARG`` passes scheduler-specific submit arguments through to the
+  backend.
+- ``--workers=N`` limits concurrent batch execution.
 
-   # Run with timeout configuration
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
-
-hpc exec
-^^^^^^^^
-
-**Purpose**: Execute (run) the batch
-
-**Usage**:
+Examples:
 
 .. code-block:: console
 
-   python3 -m canary hpc exec [options]
+   canary hpc run --backend=slurm ./tests
+   canary hpc run --backend=slurm --batch-spec=duration=30m ./tests
+   canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./tests
+   canary hpc run --backend=slurm --timeout queue=30m,run=2h ./tests
 
-**Description**:
+canary hpc info
+---------------
 
-The ``hpc exec`` command executes a batch within its workspace. This is typically called by the scheduler job script, not directly by users.
-
-**Options**:
-
-- ``--workspace=PATH``: Batch workspace path (required)
-- ``--backend=BACKEND``: HPC backend name
-- ``--workers=N``: Number of workers for batch execution
-- ``--job=ID``: Run only this specific job
-
-**Examples**:
+Use ``canary hpc info`` to inspect a backend before you submit work.
 
 .. code-block:: console
 
-   # Execute a batch workspace
-   python3 -m canary hpc exec --workspace=/path/to/batches/abc1234 --backend=slurm
+   canary hpc info BACKEND
 
-   # Execute with workers
-   python3 -m canary hpc exec --workspace=/path/to/batches/abc1234 --workers=4
-
-hpc info
-^^^^^^^^
-
-**Purpose**: Show HPC scheduler basic info
-
-**Usage**:
+Examples:
 
 .. code-block:: console
 
-   python3 -m canary hpc info BACKEND
+   canary hpc info slurm
+   canary hpc info pbs
+   canary hpc info shell
 
-**Description**:
+canary hpc log
+--------------
 
-The ``hpc info`` command displays information about the specified HPC backend, including available resources and capabilities.
-
-**Arguments**:
-
-- ``BACKEND``: Backend name (e.g., slurm, pbs, flux, shell)
-
-**Examples**:
+Use ``canary hpc log`` to inspect batch logs after submission.
 
 .. code-block:: console
 
-   # Show Slurm backend info
-   python3 -m canary hpc info slurm
+   canary hpc log [BATCH_ID]
 
-   # Show PBS backend info
-   python3 -m canary hpc info pbs
-
-   # Show shell backend info
-   python3 -m canary hpc info shell
-
-hpc log
-^^^^^^^
-
-**Purpose**: Print the batch log
-
-**Usage**:
+Examples:
 
 .. code-block:: console
 
-   python3 -m canary hpc log [BATCH_ID]
+   canary hpc log abc123
+   canary hpc log
 
-**Description**:
+canary hpc exec
+---------------
 
-The ``hpc log`` command displays the log for a specific batch or all batches if no ID is specified.
-
-**Arguments**:
-
-- ``BATCH_ID``: Optional batch ID to show log for
-
-**Examples**:
+``canary hpc exec`` runs a batch inside its batch workspace. This is usually
+called by the scheduler job script, not by a user directly.
 
 .. code-block:: console
 
-   # Show log for specific batch
-   python3 -m canary hpc log abc123
+   canary hpc exec [options]
 
-   # Show logs for all batches
-   python3 -m canary hpc log
-
-hpc help
-^^^^^^^^
-
-**Purpose**: Additional canary_hpc help topics
-
-**Usage**:
+Examples:
 
 .. code-block:: console
 
-   python3 -m canary hpc help [--spec]
+   canary hpc exec --workspace=/path/to/batches/abc1234 --backend=slurm
+   canary hpc exec --workspace=/path/to/batches/abc1234 --workers=4
 
-**Description**:
+canary hpc help
+---------------
 
-The ``hpc help`` command provides additional help topics and information about HPC functionality.
-
-**Options**:
-
-- ``--spec``: Show batch specification help
-
-**Examples**:
+Use ``canary hpc help`` for extra help topics, especially batch specification
+help.
 
 .. code-block:: console
 
-   # Show HPC help
-   python3 -m canary hpc help
+   canary hpc help
+   canary hpc help --spec
 
-   # Show batch specification help
-   python3 -m canary hpc help --spec
+Legacy Forms
+------------
 
-Legacy Batch Options
---------------------
-
-The HPC extension also supports legacy batch options for compatibility:
-
-canary run with HPC backend
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Purpose**: Run with HPC backend using legacy options
-
-**Usage**:
+The older forms still work:
 
 .. code-block:: console
 
-   python3 -m canary run --hpc-backend=BACKEND [options] [paths...]
+   canary run --hpc-backend=slurm ./tests
+   canary run -b backend=slurm -b spec=duration=30m ./tests
 
-**Description**:
+Use them when you need backward compatibility with existing scripts. For new
+documentation and new scripts, prefer ``canary hpc run``.
 
-The ``--hpc-backend`` option enables HPC execution mode, which is internally rewritten to ``hpc run`` by the ``canary_cmdline_modifyargs`` hook.
+Choosing Between Modern and Legacy Forms
+----------------------------------------
 
-**Options**:
+Prefer ``canary hpc ...`` when:
 
-- ``--hpc-backend=BACKEND``: HPC backend to use
-- Standard Canary test selection and execution options
+- you are writing new commands or documentation
+- you want the clearest mapping between command and behavior
+- you want the scheduler-backed workflow to be obvious at a glance
 
-**Examples**:
+Keep the legacy forms when:
 
-.. code-block:: console
+- you are maintaining older scripts
+- changing the command shape would be disruptive
 
-   # Run with HPC backend
-   python3 -m canary run --hpc-backend=slurm ./tests
+See Also
+--------
 
-   # Run with backend and batch spec
-   python3 -m canary run --hpc-backend=slurm -b spec=duration=30m ./tests
-
-Legacy -b options
-~~~~~~~~~~~~~~~~~
-
-**Purpose**: Legacy batch specification options
-
-**Usage**:
-
-.. code-block:: console
-
-   python3 -m canary run -b OPTION=VALUE [options] [paths...]
-
-**Description**:
-
-The ``-b`` option provides legacy batch specification syntax for compatibility with older Canary versions.
-
-**Options**:
-
-- ``-b backend=BACKEND``: HPC backend
-- ``-b spec=SPEC``: Batch specification
-- ``-b workers=N``: Number of workers
-- ``-b option=VALUE``: Additional options
-
-**Examples**:
-
-.. code-block:: console
-
-   # Legacy batch specification
-   python3 -m canary run -b backend=slurm -b spec=duration=30m ./tests
-
-   # Legacy with workers
-   python3 -m canary run -b backend=slurm -b workers=4 ./tests
-
-   # Legacy with options
-   python3 -m canary run -b backend=slurm -b option=queue=debug ./tests
-
-Command Integration
--------------------
-
-The HPC commands integrate with Canary through several mechanisms:
-
-**Command Rewriting**:
-
-The ``canary_cmdline_modifyargs`` hook rewrites ``canary run --hpc-backend`` to ``canary hpc run``, providing backward compatibility while using the modern implementation.
-
-**Option Normalization**:
-
-Legacy ``-b`` options are normalized to modern batch specification format, ensuring consistent behavior across different invocation methods.
-
-**Backend Selection**:
-
-The ``--hpc-backend`` option can default from the ``CANARY_HPC_BACKEND`` environment variable, providing flexible backend configuration.
-
-Command Examples
-----------------
-
-Basic HPC Execution
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Modern HPC command
-   python3 -m canary hpc run --backend=slurm ./basic
-
-   # Legacy HPC option
-   python3 -m canary run --hpc-backend=slurm ./basic
-
-Batch Specification
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Modern batch spec
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=30m ./basic
-
-   # Legacy batch spec
-   python3 -m canary run --hpc-backend=slurm -b spec=duration=30m ./basic
-
-Scheduler Arguments
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Modern scheduler args
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
-
-   # Legacy scheduler args
-   python3 -m canary run --hpc-backend=slurm -b option="-A myacct,-q debug" ./basic
-
-Backend Information
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Show backend info
-   python3 -m canary hpc info slurm
-
-   # Show all backend info
-   python3 -m canary hpc info pbs
-
-Batch Monitoring
-~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Show batch log
-   python3 -m canary hpc log abc123
-
-   # Show all batch logs
-   python3 -m canary hpc log
-
-Command Selection Guide
------------------------
-
-**Use Modern Commands** when:
-
-- Starting new HPC projects
-- Preferring explicit command structure
-- Needing full feature access
-- Wanting better documentation
-
-**Use Legacy Options** when:
-
-- Maintaining existing scripts
-- Needing backward compatibility
-- Preferring concise syntax
-- Working with legacy configurations
-
-Both command styles provide the same functionality, with modern commands being the recommended approach for new development.
-
-Command Best Practices
-----------------------
-
-1. **Backend Specification**: Always specify the backend explicitly
-2. **Batch Configuration**: Use appropriate batch specification for workload
-3. **Resource Management**: Configure resources in `hpc_connect`, not Canary
-4. **Timeout Configuration**: Set appropriate queue and run timeouts
-5. **Error Handling**: Monitor batch status and logs
-6. **Debugging**: Use ``hpc log`` and workspace inspection
-7. **Documentation**: Record command usage and configurations
+- :doc:`overview`: What scheduler-backed execution changes
+- :doc:`batch-specification`: Batch grouping rules and examples
+- :doc:`scheduler-arguments`: Passing scheduler-specific submit arguments
+- :doc:`limitations`: Important operational constraints
