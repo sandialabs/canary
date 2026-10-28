@@ -63,10 +63,6 @@ Create a ``.pyt`` file and run it with Canary:
    patterns
    limitations
 
-.. note::
-
-   See :doc:`/user/directives/index` for the auto-generated directive reference.
-
 See Also
 --------
 

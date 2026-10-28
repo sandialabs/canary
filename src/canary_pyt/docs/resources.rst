@@ -232,9 +232,7 @@ Examples
 See Also
 --------
 
-- CPU resource directive
-- GPU resource directive
-- Node resource directive
-- Exclusive resource directive
-- Parameterization directive
+- :doc:`directives`: Directive overview
+- :doc:`parameterization`: Parameterization patterns
+- :doc:`test-instance`: Runtime access to assigned resources
 - :doc:`execution-model`: Execution model details

@@ -110,9 +110,11 @@ Using Directives
 Directive Reference
 -------------------
 
-Complete directive reference is auto-generated at build time (see ``/user/directives/index``).
+Use this page to understand how the directive set fits together when writing
+`.pyt` files. Use an individual directive page when you need the exact
+signature, parameters, or a focused example.
 
-Each directive has its own dedicated page with detailed information including:
+Each directive page includes:
 
 - Signature (using ``autofunction``)
 - Purpose and use cases
@@ -123,16 +125,6 @@ Each directive has its own dedicated page with detailed information including:
 - Multiple examples
 - Edge cases and diagnostics
 - Cross-references to related directives
-
-For the full list of directives and their documentation, see the auto-generated directive reference at ``/user/directives/index``.
-
-- Signature
-- Purpose
-- Parameters
-- Effect on generated jobs
-- Examples
-- Edge cases
-- Notes
 
 Important Directives
 --------------------
@@ -260,7 +252,6 @@ Common Pitfalls
 See Also
 --------
 
-- Auto-generated directive reference (see ``/user/directives/index``)
 - :doc:`file-structure`: File organization
-- :doc:`patterns`: Common directive patterns
+- :doc:`patterns`: Common authoring patterns
 - :doc:`limitations`: Directive limitations

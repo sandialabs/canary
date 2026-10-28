@@ -284,5 +284,5 @@ See Also
 
 - :doc:`file-structure`: File organization
 - :doc:`directives`: Directives overview
-- Auto-generated directive reference (see ``/user/directives/index``)
+- :doc:`limitations`: Authoring limitations and pitfalls
 - :doc:`patterns`: Common patterns

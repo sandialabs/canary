@@ -350,7 +350,7 @@ Best Practices
 See Also
 --------
 
-- Set attribute directive
-- Dependencies directive
-- Parameterization directive
+- :doc:`dependencies`: Dependency authoring patterns
+- :doc:`parameterization`: Parameterization patterns
+- :doc:`resources`: Resource requirements and runtime assignment
 - :doc:`composite-analysis`: Composite analysis overview

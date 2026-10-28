@@ -196,5 +196,4 @@ See Also
 
 - :doc:`file-structure`: File organization
 - :doc:`directives`: Directives overview
-- Auto-generated directive reference (see ``/user/directives/index``)
-- :doc:`patterns`: Common patterns
+- :doc:`patterns`: Common authoring patterns

@@ -119,7 +119,6 @@ See Also
 --------
 
 - :doc:`file-structure`: Recommended ``.pyt`` file organization
-- :doc:`directives`: Overview of available directives
-- Auto-generated directive reference (see ``/user/directives/index``)
+- :doc:`directives`: Directive overview
 - :doc:`parameterization`: Test parameterization patterns
 - :doc:`patterns`: Common ``.pyt`` usage patterns

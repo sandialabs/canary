@@ -213,7 +213,6 @@ Best Practices
 See Also
 --------
 
-- Copy directive
-- Link directive
-- Sources directive
+- :doc:`directives`: Directive overview
+- :doc:`resources`: Resource requirements and scheduling
 - :doc:`artifacts`: Artifacts overview
