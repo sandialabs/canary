@@ -3,216 +3,105 @@
    SPDX-License-Identifier: MIT
 
 HPC Scheduler Extension Overview
-==================================
+================================
 
-The ``canary_hpc`` extension is a **scheduler/batching execution extension** for Canary that enables test execution on high-performance computing (HPC) systems. It replaces Canary's local test-execution phase with an HPC batching and submission workflow, allowing tests to run on HPC schedulers through `hpc_connect`.
+``canary_hpc`` lets Canary batch jobs and submit them through an HPC scheduler.
+Use it when your test or workflow run needs queue-backed execution on systems
+managed by Slurm, PBS, Flux, or another ``hpc_connect`` backend.
 
-Extension Type
---------------
-
-**Extension type**: scheduler/batching execution extension, command provider, resource-pool provider
-
-The ``canary_hpc`` extension:
-
-- Provides the ``canary hpc`` command and legacy ``canary run -b ...`` options
-- Uses Canary's ordinary collection, selection, job, resource, and persistence model
-- Replaces local test execution with HPC batching and submission
-- Batches selected Canary jobs into ``TestBatch`` objects
-- Submits batches through `hpc_connect`
-- Launches nested Canary executions inside allocated batch workspaces
-- Does not define job file formats
-- Does not replace Canary's core resource model
-- Uses `hpc_connect` backend descriptions to construct topology-aware resource pools
-
-Key Features
+What It Does
 ------------
 
-1. **HPC Scheduler Integration**: Connects to HPC schedulers via `hpc_connect` backends
-2. **Batch Execution**: Groups jobs into batches for efficient scheduler submission
-3. **Resource Management**: Uses `hpc_connect` backend resources to build Canary resource pools
-4. **Nested Execution**: Runs Canary inside batch workspaces with batch-local resource pools
-5. **Command Integration**: Provides both ``canary hpc`` commands and legacy ``canary run -b`` options
-6. **Backend Flexibility**: Supports multiple HPC backends (Slurm, PBS, Flux, shell, etc.)
-7. **Batch Specification**: Configurable batching dimensions and layouts
-8. **Timeout Management**: Queue and run timeouts for scheduler jobs
-9. **Status Tracking**: Batch status aggregation and failure handling
-10. **Debugging Support**: Batch workspaces and log files for troubleshooting
+``canary_hpc`` changes how Canary runs jobs after collection and selection:
 
-Relationship to Canary
-----------------------
+- Canary still discovers tests, resolves dependencies, and builds job specs in
+  the usual way.
+- ``canary_hpc`` groups selected jobs into batches.
+- Each batch is submitted through an ``hpc_connect`` backend.
+- Canary then runs again inside the allocated batch workspace to execute the
+  jobs assigned to that batch.
 
-The ``canary_hpc`` extension builds on Canary's core functionality:
+This is the right workflow when queue submission and batch packing are more
+important than immediate local execution.
 
-**What the extension DOES**:
+What It Does Not Change
+-----------------------
 
-- Provides HPC scheduler integration through `hpc_connect`
-- Adds ``canary hpc`` subcommands and legacy batch options
-- Implements batching and submission workflow
-- Manages HPC resource pools and batch workspaces
-- Handles nested Canary execution in batch contexts
+``canary_hpc`` does not define job file formats. You still describe jobs with
+the usual generators, such as ``canary_pyt``, ``canary_vvtest``, or
+``canary_cmake``.
 
-**What the extension DOES NOT do**:
+It also does not replace Canary's resource model. Jobs still request CPUs,
+GPUs, nodes, and other resources in the normal Canary way. The difference is
+that ``canary_hpc`` builds the usable resource pool from the selected
+``hpc_connect`` backend and from the batch allocation that backend creates.
 
-- Define job file formats or specification syntax
-- Replace Canary's core resource model
-- Execute jobs locally (replaces local execution with HPC submission)
-- Schedule jobs directly (uses `hpc_connect` for scheduler interaction)
-- Define how users request resources (uses Canary's standard resource requirements)
-
-Relationship to hpc_connect
----------------------------
-
-The ``canary_hpc`` extension uses `hpc_connect` as an external dependency:
-
-- **External to Canary**: `hpc_connect` is a separate package, not part of Canary
-- **Backend Provider**: `canary_hpc` uses `hpc_connect` to describe backends and submit scheduler jobs
-- **Backend Access**: Uses `hpc_connect.get_backend(...)` to obtain backend instances
-- **Backend Information**: Uses backend properties like `node_count`, `resource_types()`, `count_per_node()`, and `supports_dependencies()`
-- **Scheduler Details**: Actual scheduler-specific behavior is provided by `hpc_connect` backends
-- **No API Documentation**: This documentation does not generate or vendor `hpc_connect` API documentation
-
-Basic Usage
------------
-
-The HPC extension provides several commands and options:
-
-**Modern HPC Commands**:
-
-.. code-block:: console
-
-   # Show HPC backend information
-   python3 -m canary hpc info slurm
-
-   # Run tests with HPC batching
-   python3 -m canary hpc run --backend=slurm ./basic
-
-   # Execute a specific batch
-   python3 -m canary hpc exec --batch-id <batch-id>
-
-   # Show batch logs
-   python3 -m canary hpc log <batch-id>
-
-**Legacy Batch Options**:
-
-.. code-block:: console
-
-   # Run with HPC backend using legacy options
-   python3 -m canary run --hpc-backend=slurm ./tests
-
-   # Run with batch specification
-   python3 -m canary run -b backend=slurm -b spec=duration=30m ./tests
-
-Command Integration
--------------------
-
-The HPC extension integrates with Canary through command-line options and hooks:
-
-- ``canary_cmdline_modifyargs``: Rewrites ``run`` to ``hpc run`` when ``hpc_backend`` is present
-- ``canary_addoption``: Adds ``--hpc-backend`` and legacy batch options
-- ``canary_addcommand``: Adds the ``hpc`` command
-- ``canary_resource_pool_fill``: Fills HPC backend resource pool or batch-local resource pool
-- ``canary_hpc_batch_runner``: Allows plugins to provide custom batch runners
-- ``canary_hpc_batch_setup``: Allows plugins to attach per-batch scheduler submit options before submission
-
-Execution Flow
+First Commands
 --------------
 
-The HPC execution follows this workflow:
+.. code-block:: console
 
-1. **Job Collection**: Canary collects and filters test jobs
-2. **Batch Formation**: HPC extension groups jobs into batches
-3. **Resource Allocation**: Allocates resources from HPC backend
-4. **Batch Submission**: Submits batches to HPC scheduler via `hpc_connect`
-5. **Nested Execution**: Runs Canary inside batch workspace
-6. **Result Collection**: Gathers results from batch execution
-7. **Status Aggregation**: Aggregates batch and job status
+   # Inspect a backend before running anything
+   canary hpc info slurm
 
-This workflow replaces Canary's local execution with HPC batching and submission.
+   # Submit a test suite through a scheduler backend
+   canary hpc run --backend=slurm ./tests
 
-Backend Support
----------------
+   # Inspect the batch log after submission
+   canary hpc log BATCH_ID
 
-The HPC extension supports multiple scheduler backends through `hpc_connect`:
+If you already use the legacy batch flags, they still work, but the ``canary
+hpc`` commands are the clearer interface going forward.
 
-- **Slurm**: SLURM workload manager
-- **PBS**: Portable Batch System
-- **Flux**: Flux Framework
-- **Shell**: Local shell execution for testing
-- **Other**: Any backend supported by `hpc_connect`
+How It Compares to canary_flux
+------------------------------
 
-Backend Configuration
----------------------
+Use ``canary_hpc`` when you want batching.
 
-Backends can be configured via:
+- It groups multiple jobs into scheduler submissions.
+- It is a good fit for large suites where queue overhead matters.
+- It works across multiple backend types, not just Flux.
 
-- Command line: ``--backend=slurm``
-- Environment variable: ``CANARY_HPC_BACKEND``
-- Configuration files: HPC-specific configuration
+Use ``canary_flux`` when you want direct Flux execution without a batching
+layer.
 
-Resource Pool Behavior
-----------------------
+- Each Canary job is submitted individually inside one Flux allocation.
+- It is a better fit when you want Flux-specific behavior and per-job control.
 
-In HPC mode, resource pool behavior differs from local execution:
+Resource Behavior
+-----------------
 
-- Resource pool overrides are rejected (``-r``, ``--resource-pool-file``, ``--oversubscribe``)
-- Users configure resources in `hpc_connect` backend, not through Canary overrides
-- ``fill_hpc_resource_pool()`` builds topology-aware resource pool from backend
-- Generated pool has ``allow_multinode: true`` with virtual/backend-local node IDs
-- Batch execution uses ``fill_batch_resource_pool()`` to load batch-local resource pool
+In HPC mode, resource behavior differs from a normal local run in a few
+important ways:
 
-This ensures consistent resource management across HPC environments.
+- Resource pool override flags such as ``-r``, ``--resource-pool-file``, and
+  ``--oversubscribe`` are rejected.
+- The backend defines the available resources.
+- Batch-local execution uses the allocation granted by the scheduler, not the
+  host machine's local resources.
 
-Batch Specification
--------------------
+If your first question is "why are my normal local resource overrides ignored?"
+this is usually the reason.
 
-The HPC extension supports configurable batching through batch specifications:
+Operational Model
+-----------------
 
-- **Layout**: ``flat`` or ``atomic`` batch organization
-- **Nodes**: ``same`` or ``any`` node count policy
-- **Count**: Number of batches (``auto``, ``max``, or specific count)
-- **Duration**: Target batch duration
-- **Workers**: Number of workers per batch
+The scheduler-backed run follows this sequence:
 
-These specifications control how jobs are grouped into batches for submission.
+1. Canary collects and filters jobs.
+2. ``canary_hpc`` forms batches.
+3. The selected backend validates resource feasibility.
+4. Batches are submitted to the scheduler.
+5. Each batch runs a nested Canary execution in its batch workspace.
+6. Results are collected back into the parent workspace.
 
-Status and Failure Handling
----------------------------
+This nested execution model is the main conceptual difference between local and
+scheduler-backed runs.
 
-The HPC extension provides comprehensive status tracking:
+See Also
+--------
 
-- Batch status aggregation from child jobs
-- Preflight resource validation before submission
-- Failure handling for incomplete or cancelled jobs
-- Status propagation from batch to individual jobs
-- Debugging information through batch workspaces and logs
-
-This enables effective monitoring and troubleshooting of HPC executions.
-
-Debugging and Diagnostics
---------------------------
-
-The HPC extension provides debugging support through:
-
-- Batch workspaces with metadata and logs
-- Resource pool files for inspection
-- Configuration snapshots for analysis
-- Status commands for monitoring
-- Log commands for troubleshooting
-
-These features help diagnose and resolve HPC execution issues.
-
-Limitations and Constraints
----------------------------
-
-The HPC extension has several important limitations:
-
-- Requires configured `hpc_connect` backend
-- Backend resource definitions drive Canary's HPC resource pool
-- Canary resource pool overrides rejected in HPC mode
-- Scheduler-specific behavior delegated to `hpc_connect`
-- Queue/run timeouts can cancel scheduler jobs
-- Some batching combinations unsupported (e.g., duration-targeted atomic batching)
-
-These limitations should be considered when planning HPC test execution.
-
-The ``canary_hpc`` extension uses `hpc-connect <https://github.com/sandialabs/hpc-connect>`_ for HPC scheduler integration.
+- :doc:`commands`: ``canary hpc`` command reference and examples
+- :doc:`batch-specification`: How batch grouping is controlled
+- :doc:`resources`: How scheduler resources map into Canary resource pools
+- :doc:`limitations`: Important constraints and unsupported combinations

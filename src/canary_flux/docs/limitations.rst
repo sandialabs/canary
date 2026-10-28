@@ -3,37 +3,68 @@
    SPDX-License-Identifier: MIT
 
 Limitations and Constraints
-============================
+===========================
 
-The ``canary_flux`` extension has several important limitations and constraints.
+``canary_flux`` works well when you want direct Flux execution, but there are a
+few important constraints to keep in mind.
 
 Backend Requirements
-====================
+--------------------
 
-Flux Backend Dependency
+- A working Flux backend through ``hpc_connect`` is required.
+- Scheduler-specific behavior is provided by that backend, not by Canary.
+
+Resource Pool Overrides
 -----------------------
-The Flux extension requires hpc_connect with Flux backend configured.
 
-Resource Pool Constraints
-=========================
-Resource pool overrides (--resource-pool-file, --oversubscribe) are rejected.
+The normal local resource pool override flags are rejected in Flux mode:
 
-Execution Constraints
-=====================
-No batching - each job runs individually within single allocation.
+- ``-r``
+- ``--resource-pool-file``
+- ``--oversubscribe``
 
-Timeout Constraints
-===================
-Queue, allocation, session, and job timeouts can all affect execution.
+In practice, that means resource availability comes from the Flux backend and
+the allocation it grants.
 
-Resource Constraints
-====================
-GPU/CPU assignment depends on Flux environment variables being set correctly.
+No Batching Layer
+-----------------
 
-Debugging Constraints
-=====================
-Debug mode disables live reporting and may affect execution behavior.
+``canary_flux`` does not batch jobs.
 
-Comparison with HPC Extension
-==============================
-Flux extension provides direct execution while HPC extension provides batching.
+- Each selected Canary job is submitted individually.
+- All jobs run within the lifetime of a single outer allocation.
+
+If you need batching policy, use ``canary hpc run --backend=flux`` instead.
+
+Timeout Behavior
+----------------
+
+Several timeout layers can affect a run:
+
+- queue timeout while waiting for allocation or job start
+- allocation timeout for the outer Flux allocation
+- session and per-job timeouts inside Canary
+
+If a run stops earlier than expected, check all of those layers.
+
+Environment-Dependent Resource Assignment
+-----------------------------------------
+
+GPU and CPU assignment depends on the Flux environment presented to the job.
+If the relevant environment variables are missing or incomplete, resource
+mapping may not match what you expected.
+
+Debug Mode Tradeoff
+-------------------
+
+Debug mode disables live reporting and can change what you see during the run.
+Use it when you need more diagnostics, but expect a less polished interactive
+display.
+
+See Also
+--------
+
+- :doc:`overview`: Direct Flux execution model
+- :doc:`commands`: ``canary flux`` command reference
+- :doc:`resource-management`: Resource pool and assignment details
+- :doc:`/extensions/exts/canary_hpc/index`: Batch-oriented Flux execution via ``canary_hpc``
