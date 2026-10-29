@@ -29,13 +29,6 @@ BOOTSTRAP_SKILLS = (
 class Agent(CanarySubcommand):
     name = "agent"
     description = "Bootstrap agent-facing Canary guidance and skills"
-    epilog = (
-        "Examples:\n\n"
-        "[pad]canary agent bootstrap\n\n"
-        "[pad]canary agent bootstrap generic --brief\n\n"
-        "[pad]canary agent bootstrap opencode\n\n"
-        "[pad]canary agent bootstrap opencode --force"
-    )
 
     def setup_parser(self, parser: "Parser") -> None:
         sub = parser.add_subparsers(dest="agent_command", metavar="SUBCMD")
