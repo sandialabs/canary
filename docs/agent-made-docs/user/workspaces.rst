@@ -346,10 +346,9 @@ Workspace Best Practices
 1. **One workspace per project**: Create workspaces at project roots
 2. **Version control**: Include ``.canary/`` in version control for reproducibility
 3. **Configuration management**: Use ``config.yaml`` for project-specific settings
-4. **Regular cleanup**: Use ``canary gc`` to clean old sessions
-5. **Backup important data**: Database contains valuable historical results
-6. **Avoid manual editing**: Use Canary commands for workspace operations
-7. **Document customization**: Note any workspace-specific configuration changes
+4. **Backup important data**: Database contains valuable historical results
+5. **Avoid manual editing**: Use Canary commands for workspace operations
+6. **Document customization**: Note any workspace-specific configuration changes
 
 Workspace Lifecycle
 -------------------
@@ -361,6 +360,6 @@ Workspace Lifecycle
 5. **Execution**: ``ws.run()`` or ``canary run``
 6. **Query**: ``ws.db`` operations or ``canary status``
 7. **Reporting**: Reporter plugins or ``canary report``
-8. **Cleanup**: ``canary gc`` or ``Workspace.remove()``
+8. **Cleanup**: ``Workspace.remove()``
 
 This lifecycle ensures consistent workspace state throughout Canary operations.

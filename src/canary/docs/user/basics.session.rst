@@ -156,8 +156,6 @@ Session management commands
      - Query session and job status
    * - ``canary info``
      - Show workspace and session information
-   * - ``canary gc``
-     - Clean up old session directories to reclaim disk space
    * - ``canary report``
      - Generate reports from session results
 

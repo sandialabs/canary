@@ -22,7 +22,6 @@ from .. import config
 from ..config.argparsing import Parser
 from ..generation.generator import AbstractTestGenerator
 from ..session.workspace import Session
-from ..session.workspace import Workspace
 from ..third_party.monkeypatch import monkeypatch
 from ..util import logging
 from ..util.query_data import load_query_data
@@ -313,26 +312,6 @@ def generate_html_report(session: "Session") -> str:
             )
     file.write("</table>\n</body>\n</html>")
     return file.getvalue()
-
-
-# ---- TEARDOWN
-@hookimpl(specname="canary_addoption")
-def add_teardown_options(parser: "Parser") -> None:
-    parser.add_argument(
-        "--teardown",
-        "--post-clean",
-        command="run",
-        action="store_true",
-        default=None,
-        help="Clean up files created by a test if it finishes successfully [default: %(default)s]",
-    )
-
-
-@hookimpl(trylast=True, specname="canary_sessionfinish")
-def teardown_session(session: "Session") -> None:
-    if config.getoption("teardown"):
-        workspace = Workspace.load()
-        workspace.gc()
 
 
 # ---- REPEAT

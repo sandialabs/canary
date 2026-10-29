@@ -22,7 +22,6 @@ import pytest
 # Subcommand module -> the facade functions it is expected to use.
 FACADE_ROUTED_COMMANDS = {
     "collect": {"collect"},
-    "gc": {"open_workspace"},
     "init": {"create_workspace"},
     "view": {"open_workspace"},
     "location": {"open_workspace"},
@@ -66,7 +65,6 @@ def test_clean_subcommand_does_not_call_workspace_directly(modname):
 # they must not reach into the repository (``workspace.db``) directly.
 NO_DIRECT_DB_COMMANDS = {
     "collect",
-    "gc",
     "init",
     "view",
     "select",

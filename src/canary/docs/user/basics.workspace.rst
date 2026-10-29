@@ -149,5 +149,4 @@ Workspace best practices
 
 1. Create one workspace per project root
 2. Commit ``.canary/config.yaml`` to version control for team-wide settings
-3. Use ``canary gc`` periodically to remove old session directories
-4. Back up ``workspace.sqlite3`` if historical result data is important
+3. Back up ``workspace.sqlite3`` if historical result data is important

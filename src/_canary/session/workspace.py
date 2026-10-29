@@ -1250,46 +1250,6 @@ class Workspace:
             return self.db.load_specs()
         return self.db.load_specs_by_tagname(tag)
 
-    def gc(self, dryrun: bool = False) -> None:
-        """Garbage collects old result directories, keeping only the latest per job.
-
-        Args:
-            dryrun: If True, only log what would be removed without actually deleting.
-        """
-        raise NotImplementedError
-
-        def mtime(path: Path):
-            return path.stat().st_mtime
-
-        logger.info(f"Garbage collecting {self.root}")
-        latest: dict[str, Job] = {}
-        view: dict[str, tuple[str, str]] = {}
-        to_remove: list[Job] = []
-        for session in self.sessions():
-            for job in session.jobs:
-                if job.id not in latest:
-                    latest[job.id] = job
-                elif mtime(latest[job.id].workspace.dir) > mtime(job.workspace.dir):
-                    to_remove.append(latest[job.id])
-                    latest[job.id] = job
-                else:
-                    continue
-                ws_dir = latest[job.id].workspace.dir
-                relpath = ws_dir.relative_to(session.work_dir)
-                view[job.id] = (str(session.work_dir), str(relpath))
-        try:
-            for job in to_remove:
-                logger.info(f"gc: removing {job}::{job.workspace.dir}")
-                if not dryrun:
-                    job.workspace.remove()
-        finally:
-            logger.info(f"Garbage collected {len(to_remove)} test jobs")
-            if not dryrun:
-                view_entries: dict[Path, list[Path]] = {}
-                for root, path in view.values():
-                    view_entries.setdefault(Path(root), []).append(Path(path))
-                self.update_view(view_entries)
-
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locates a Job or JobSpec in the workspace.
 

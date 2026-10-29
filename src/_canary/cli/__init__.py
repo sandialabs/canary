@@ -21,7 +21,6 @@ from . import edit
 from . import exec
 from . import fetch
 from . import find
-from . import gc
 from . import help
 from . import info
 from . import init
@@ -50,7 +49,6 @@ plugins = [
     exec,
     fetch,
     find,
-    gc,
     help,
     info,
     init,

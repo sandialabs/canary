@@ -274,8 +274,6 @@ Common session management operations:
      - Query session and job status
    * - ``canary info``
      - Show workspace and session information
-   * - ``canary gc``
-     - Clean up old session directories
    * - ``canary report``
      - Generate reports from session results
 

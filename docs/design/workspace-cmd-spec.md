@@ -199,7 +199,6 @@ canary results -- manage results datasets and `TestResults` "view"
   canary results refresh
   canary results remove <id>
   canary results annotate [-m|--message <msg>] [id]
-  canary results gc
 
 COMMANDS
   With no arguments, prints a list of the results datasets from invocations of `canary run`

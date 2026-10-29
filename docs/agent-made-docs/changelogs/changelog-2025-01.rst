@@ -32,7 +32,6 @@ Features
 - Transitioned from custom plugin manager to pluggy
 - Added resource pool functionality
 - Added Parameters class for parameter validation
-- Added post_clean plugin and --post-clean flag
 - Added case.defect property
 
 Documentation
