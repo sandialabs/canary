@@ -91,10 +91,10 @@ Treat specific labels as subprojects:
 .. code-block:: console
 
    # Single subproject label
-   $ python3 -m canary report cdash create -L "unit"
+   $ canary report cdash create -L "unit"
 
    # Multiple subproject labels
-   $ python3 -m canary report cdash create --subproject-labels "unit,integration,system"
+   $ canary report cdash create --subproject-labels "unit,integration,system"
 
 Hook-Based Subprojects
 ~~~~~~~~~~~~~~~~~~~~~~

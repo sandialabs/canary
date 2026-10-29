@@ -124,7 +124,7 @@ Enable verbose logging:
 
 .. code-block:: console
 
-   $ python3 -m canary -v report cdash create --build MyBuild
+   $ canary -v report cdash create --build MyBuild
 
 Check CDash server status:
 

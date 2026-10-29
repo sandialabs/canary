@@ -111,7 +111,7 @@ The Flux extension submits jobs through the `hpc_connect` submission manager:
 - Sets workspace to Flux submit workspace
 
 **Command Generation**:
-- Uses ``python3 -m canary -C <workspace> flux exec --session <session> <job-id>``
+- Uses ``canary -C <workspace> flux exec --session <session> <job-id>``
 - Adds ``-d`` flag if debug mode enabled
 - Sets ``CANARY_LEVEL`` to prevent infinite nesting
 - Disables live reporting and keyboard interrupts

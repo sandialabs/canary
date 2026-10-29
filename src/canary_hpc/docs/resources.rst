@@ -220,30 +220,30 @@ Resource Management Examples
 .. code-block:: console
 
    # Check Slurm resource pool
-   python3 -m canary config show resource-pool --backend=slurm
+   canary --hpc-backend=slurm config show resource-pool
 
    # Run with Slurm resources
-   python3 -m canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
+   canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
 
 **PBS Resource Configuration**:
 
 .. code-block:: console
 
    # Check PBS resource pool
-   python3 -m canary config show resource-pool --backend=pbs
+   canary --hpc-backend=pbs config show resource-pool
 
    # Run with PBS resources
-   python3 -m canary hpc run --backend=pbs -p "nodes=4,cpus=16" ./basic
+   canary hpc run --backend=pbs -p "nodes=4,cpus=16" ./basic
 
 **Shell Resource Configuration**:
 
 .. code-block:: console
 
    # Check shell resource pool
-   python3 -m canary config show resource-pool --backend=shell
+   canary --hpc-backend=shell config show resource-pool
 
    # Run with shell resources
-   python3 -m canary hpc run --backend=shell -p "cpus=4" ./basic
+   canary hpc run --backend=shell -p "cpus=4" ./basic
 
 Resource Debugging
 ------------------
@@ -253,20 +253,20 @@ Resource Debugging
 .. code-block:: console
 
    # Show HPC resource pool
-   python3 -m canary config show resource-pool --backend=slurm
+   canary --hpc-backend=slurm config show resource-pool
 
    # Check resource allocation
-   python3 -m canary hpc run --backend=slurm -p "nodes=2,cpus=8" --verbose ./basic
+   canary -v hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
 
 **Resource Validation**:
 
 .. code-block:: console
 
    # Test resource requirements
-   python3 -m canary hpc run --backend=slurm -p "nodes=4,cpus=32,gpus=2" --verbose ./basic
+   canary -v hpc run --backend=slurm -p "nodes=4,cpus=32,gpus=2" ./basic
 
    # Check preflight validation
-   python3 -m canary hpc run --backend=slurm -p "nodes=100,cpus=1000" --verbose ./basic
+   canary -v hpc run --backend=slurm -p "nodes=100,cpus=1000" ./basic
 
 Resource Limitations
 --------------------

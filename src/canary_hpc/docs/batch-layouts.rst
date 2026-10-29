@@ -38,13 +38,13 @@ Flat Layout
 .. code-block:: console
 
    # Flat layout with default settings
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
 
    # Flat layout with same node count
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
 
    # Flat layout with duration targeting
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
 
 Atomic Layout
 -------------
@@ -77,10 +77,10 @@ Atomic Layout
 .. code-block:: console
 
    # Atomic layout (requires nodes=any)
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
    # Atomic layout with maximum batches
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
 
 Layout Comparison
 -----------------
@@ -211,16 +211,16 @@ Flat Layout Examples
 .. code-block:: console
 
    # Simple flat layout
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
 
    # Flat with same node count
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
 
    # Flat with duration targeting
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
 
    # Flat with count targeting
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,count=4 ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,count=4 ./basic
 
 Atomic Layout Examples
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -228,13 +228,13 @@ Atomic Layout Examples
 .. code-block:: console
 
    # Simple atomic layout
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
    # Atomic with maximum batches
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
 
    # Atomic with specific count
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=8 ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=8 ./basic
 
 Layout Debugging
 ----------------
@@ -244,14 +244,14 @@ Debugging layout issues:
 .. code-block:: console
 
    # Check layout behavior with verbose logging
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat --verbose ./basic
+   canary -v hpc run --backend=slurm --batch-spec=layout=flat ./basic
 
    # Test atomic layout
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any --verbose ./basic
+   canary -v hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
    # Compare layout performance
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m --verbose ./basic
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any --verbose ./basic
+   canary -v hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
+   canary -v hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
 Layout Best Practices
 ---------------------

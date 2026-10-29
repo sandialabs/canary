@@ -161,7 +161,7 @@ Default Batch Specification
 .. code-block:: console
 
    # Uses default batch specification
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
 Batch Specification Examples
 ----------------------------
@@ -172,10 +172,10 @@ Basic Examples
 .. code-block:: console
 
    # Default specification
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
    # Explicit default
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same,duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same,duration=30m ./basic
 
 Flat Layout Examples
 ~~~~~~~~~~~~~~~~~~~~
@@ -183,13 +183,13 @@ Flat Layout Examples
 .. code-block:: console
 
    # Flat layout with 30-minute duration
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
 
    # Flat layout with same node count
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,nodes=same ./basic
 
    # Flat layout with 4 batches
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,count=4 ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat,count=4 ./basic
 
 Atomic Layout Examples
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -197,13 +197,13 @@ Atomic Layout Examples
 .. code-block:: console
 
    # Atomic layout with any node count (required)
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
    # Atomic layout with maximum batches
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,count=max ./basic
 
    # Atomic layout with duration targeting (not supported - will use count=max)
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any,duration=30m ./basic
 
 Duration Targeting Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,13 +211,13 @@ Duration Targeting Examples
 .. code-block:: console
 
    # 30-minute duration target
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=30m ./basic
+   canary hpc run --backend=slurm --batch-spec=duration=30m ./basic
 
    # 2-hour duration target
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=2h ./basic
+   canary hpc run --backend=slurm --batch-spec=duration=2h ./basic
 
    # 1 hour 30 minute duration target
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=1h30m ./basic
+   canary hpc run --backend=slurm --batch-spec=duration=1h30m ./basic
 
 Count Targeting Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -225,10 +225,10 @@ Count Targeting Examples
 .. code-block:: console
 
    # Create 4 batches
-   python3 -m canary hpc run --backend=slurm --batch-spec=count=4 ./basic
+   canary hpc run --backend=slurm --batch-spec=count=4 ./basic
 
    # Create maximum batches (one job per batch)
-   python3 -m canary hpc run --backend=slurm --batch-spec=count=max ./basic
+   canary hpc run --backend=slurm --batch-spec=count=max ./basic
 
 Worker Configuration Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -236,10 +236,10 @@ Worker Configuration Examples
 .. code-block:: console
 
    # 4 workers per batch
-   python3 -m canary hpc run --backend=slurm --batch-spec=workers=4 ./basic
+   canary hpc run --backend=slurm --batch-spec=workers=4 ./basic
 
    # 8 workers with duration targeting
-   python3 -m canary hpc run --backend=slurm --batch-spec=duration=30m,workers=8 ./basic
+   canary hpc run --backend=slurm --batch-spec=duration=30m,workers=8 ./basic
 
 Batch Specification Validation
 ------------------------------
@@ -340,13 +340,13 @@ Debugging batch specification issues:
 .. code-block:: console
 
    # Show batch specification help
-   python3 -m canary hpc help --spec
+   canary hpc help --spec
 
    # Test with verbose logging
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat,duration=30m --verbose ./basic
+   canary -v hpc run --backend=slurm --batch-spec=layout=flat,duration=30m ./basic
 
    # Check batch formation
-   python3 -m canary hpc run --backend=slurm --batch-spec=count=4 --verbose ./basic
+   canary -v hpc run --backend=slurm --batch-spec=count=4 ./basic
 
 Batch Specification Limitations
 -------------------------------

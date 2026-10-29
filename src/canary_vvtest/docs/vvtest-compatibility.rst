@@ -222,7 +222,7 @@ Based on ``--execute-analysis-sections``:
 
 .. code-block:: console
 
-   python3 -m canary run -a tests/
+   canary run -a tests/
 
 is_analysis_only
 ~~~~~~~~~~~~~~~~
@@ -280,7 +280,7 @@ Mixed Workflow
 .. code-block:: console
 
    # Run both .vvt and .pyt files
-   python3 -m canary run tests/
+   canary run tests/
 
 Incremental Conversion
 ~~~~~~~~~~~~~~~~~~~~~~

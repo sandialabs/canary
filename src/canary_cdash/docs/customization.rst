@@ -18,10 +18,10 @@ Control test name format with ``--name-format``:
 .. code-block:: console
 
    # Short format (default)
-   $ python3 -m canary report cdash create --name-format short
+   $ canary report cdash create --name-format short
 
    # Long format
-   $ python3 -m canary report cdash create --name-format long
+   $ canary report cdash create --name-format long
 
 Subproject Labels
 ~~~~~~~~~~~~~~~~~~
@@ -31,10 +31,10 @@ Treat specific labels as subprojects:
 .. code-block:: console
 
    # Single subproject label
-   $ python3 -m canary report cdash create -L "integration"
+   $ canary report cdash create -L "integration"
 
    # Multiple subproject labels
-   $ python3 -m canary report cdash create --subproject-labels "unit,integration,system"
+   $ canary report cdash create --subproject-labels "unit,integration,system"
 
 Chunking
 ~~~~~~~~
@@ -44,13 +44,13 @@ Control XML file chunking:
 .. code-block:: console
 
    # Default chunking (500 tests per file)
-   $ python3 -m canary report cdash create -n 500
+   $ canary report cdash create -n 500
 
    # No chunking (single file)
-   $ python3 -m canary report cdash create -n -1
+   $ canary report cdash create -n -1
 
    # Custom chunk size
-   $ python3 -m canary report cdash create -n 200
+   $ canary report cdash create -n 200
 
 Plugin Customization
 --------------------
@@ -216,7 +216,7 @@ Use the customization:
 
 .. code-block:: console
 
-   $ python3 -m canary --plugins my_cdash_customization.py report cdash create --build MyBuild
+   $ canary --plugins my_cdash_customization.py report cdash create --build MyBuild
 
 Best Practices
 --------------

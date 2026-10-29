@@ -33,13 +33,13 @@ Queue Timeout
 .. code-block:: console
 
    # Set queue timeout to 30 minutes
-   python3 -m canary flux run --timeout queue=30m ./basic
+   canary flux run --timeout queue=30m ./basic
 
    # Set queue timeout to 1 hour
-   python3 -m canary flux run --timeout queue=1h ./basic
+   canary flux run --timeout queue=1h ./basic
 
    # Set queue timeout to 300 seconds
-   python3 -m canary flux run --timeout queue=300 ./basic
+   canary flux run --timeout queue=300 ./basic
 
 Allocation Timeout
 ------------------
@@ -63,13 +63,13 @@ Allocation Timeout
 .. code-block:: console
 
    # Set allocation timeout to 2 hours
-   python3 -m canary flux run --timeout allocation=2h ./basic
+   canary flux run --timeout allocation=2h ./basic
 
    # Set allocation timeout to 30 minutes
-   python3 -m canary flux run --timeout allocation=30m ./basic
+   canary flux run --timeout allocation=30m ./basic
 
    # Set allocation timeout via alloc-arg
-   python3 -m canary flux run --alloc-arg="--time-limit=120" ./basic
+   canary flux run --alloc-arg="--time-limit=120" ./basic
 
 Session Timeout
 ---------------
@@ -91,7 +91,7 @@ Session Timeout
 .. code-block:: console
 
    # Set session timeout (used as allocation timeout fallback)
-   python3 -m canary flux run --timeout session=4h ./basic
+   canary flux run --timeout session=4h ./basic
 
 Job Timeout
 -----------
@@ -146,13 +146,13 @@ Timeouts are configured using the ``--timeout`` option with type-value pairs:
 .. code-block:: console
 
    # Single timeout
-   python3 -m canary flux run --timeout queue=30m ./basic
+   canary flux run --timeout queue=30m ./basic
 
    # Multiple timeouts (comma-separated)
-   python3 -m canary flux run --timeout queue=30m,allocation=2h ./basic
+   canary flux run --timeout queue=30m,allocation=2h ./basic
 
    # Multiple timeouts (space-separated)
-   python3 -m canary flux run --timeout queue=30m --timeout allocation=2h ./basic
+   canary flux run --timeout queue=30m --timeout allocation=2h ./basic
 
 Timeout Resolution
 ------------------
@@ -345,7 +345,7 @@ Basic Timeout Configuration
 .. code-block:: console
 
    # Set queue and allocation timeouts
-   python3 -m canary flux run \
+   canary flux run \
      --timeout queue=30m,allocation=4h \
      ./basic
 
@@ -355,7 +355,7 @@ Advanced Timeout Configuration
 .. code-block:: console
 
    # Set timeouts with alloc-arg fallback
-   python3 -m canary flux run \
+   canary flux run \
      --timeout queue=1h \
      --alloc-arg="--time-limit=240" \
      ./basic
@@ -366,12 +366,12 @@ Timeout for Different Workloads
 .. code-block:: console
 
    # Short timeouts for quick tests
-   python3 -m canary flux run \
+   canary flux run \
      --timeout queue=10m,allocation=1h \
      ./unit-tests
 
    # Long timeouts for integration tests
-   python3 -m canary flux run \
+   canary flux run \
      --timeout queue=1h,allocation=8h \
      ./integration-tests
 

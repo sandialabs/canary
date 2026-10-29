@@ -165,7 +165,7 @@ Enable the plugin using Canary's plugin system:
 
 .. code-block:: console
 
-   $ python3 -m canary --plugins my_cdash_plugin.py report cdash create --build MyBuild
+   $ canary --plugins my_cdash_plugin.py report cdash create --build MyBuild
 
 Hook Interaction
 ----------------

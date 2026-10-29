@@ -29,10 +29,10 @@ Queue Timeout
 .. code-block:: console
 
    # 30 minute queue timeout
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m ./basic
+   canary hpc run --backend=slurm --timeout queue=30m ./basic
 
    # 2 hour queue timeout
-   python3 -m canary hpc run --backend=slurm --timeout queue=2h ./basic
+   canary hpc run --backend=slurm --timeout queue=2h ./basic
 
 Run Timeout
 ~~~~~~~~~~~
@@ -53,10 +53,10 @@ Run Timeout
 .. code-block:: console
 
    # 1 hour run timeout
-   python3 -m canary hpc run --backend=slurm --timeout run=1h ./basic
+   canary hpc run --backend=slurm --timeout run=1h ./basic
 
    # 30 minute run timeout
-   python3 -m canary hpc run --backend=slurm --timeout run=30m ./basic
+   canary hpc run --backend=slurm --timeout run=30m ./basic
 
 Total Timeout
 ~~~~~~~~~~~~~
@@ -74,7 +74,7 @@ Total Timeout
 .. code-block:: console
 
    # 30m queue + 2h run = 2h30m total
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
+   canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
 
 Per-Test Timeout Multiplier
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -94,10 +94,10 @@ Per-Test Timeout Multiplier
 .. code-block:: console
 
    # 2x multiplier for fast tests
-   python3 -m canary hpc run --backend=slurm --timeout fast=2 ./basic
+   canary hpc run --backend=slurm --timeout fast=2 ./basic
 
    # 3x multiplier for long tests
-   python3 -m canary hpc run --backend=slurm --timeout long=3 ./basic
+   canary hpc run --backend=slurm --timeout long=3 ./basic
 
 Scheduler Time Limits
 ---------------------
@@ -115,13 +115,13 @@ Scheduler Time Limits
 .. code-block:: console
 
    # Slurm time limit
-   python3 -m canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
+   canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
 
    # PBS walltime
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l walltime=2:00:00" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l walltime=2:00:00" ./basic
 
    # Flux time limit
-   python3 -m canary hpc run --backend=flux --submit-arg="--time=2h" ./basic
+   canary hpc run --backend=flux --submit-arg="--time=2h" ./basic
 
 Timeout Configuration
 ---------------------
@@ -131,7 +131,7 @@ Timeout Configuration
 .. code-block:: console
 
    # Queue, run, and test timeouts
-   python3 -m canary hpc run --backend=slurm \
+   canary hpc run --backend=slurm \
      --timeout queue=30m,run=2h,fast=2,long=3 \
      --submit-arg="-t 2:30:00" \
      ./tests
@@ -176,13 +176,13 @@ Basic Timeout Examples
 .. code-block:: console
 
    # 30 minute queue timeout
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m ./basic
+   canary hpc run --backend=slurm --timeout queue=30m ./basic
 
    # 1 hour run timeout
-   python3 -m canary hpc run --backend=slurm --timeout run=1h ./basic
+   canary hpc run --backend=slurm --timeout run=1h ./basic
 
    # Combined queue and run timeouts
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
+   canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
 
 Advanced Timeout Examples
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -190,12 +190,12 @@ Advanced Timeout Examples
 .. code-block:: console
 
    # Queue, run, and test multipliers
-   python3 -m canary hpc run --backend=slurm \
+   canary hpc run --backend=slurm \
      --timeout queue=30m,run=2h,fast=2,long=3 \
      ./tests
 
    # With scheduler time limit
-   python3 -m canary hpc run --backend=slurm \
+   canary hpc run --backend=slurm \
      --timeout queue=30m,run=2h \
      --submit-arg="-t 2:30:00" \
      ./tests
@@ -208,7 +208,7 @@ Backend-Specific Timeout Examples
 .. code-block:: console
 
    # Slurm with time limits
-   python3 -m canary hpc run --backend=slurm \
+   canary hpc run --backend=slurm \
      --timeout queue=30m,run=2h \
      --submit-arg="-t 2:30:00" \
      ./tests
@@ -218,7 +218,7 @@ Backend-Specific Timeout Examples
 .. code-block:: console
 
    # PBS with walltime
-   python3 -m canary hpc run --backend=pbs \
+   canary hpc run --backend=pbs \
      --timeout queue=30m,run=2h \
      --submit-arg="-l walltime=2:30:00" \
      ./tests
@@ -228,7 +228,7 @@ Backend-Specific Timeout Examples
 .. code-block:: console
 
    # Flux with time limit
-   python3 -m canary hpc run --backend=flux \
+   canary hpc run --backend=flux \
      --timeout queue=30m,run=2h \
      --submit-arg="--time=2h30m" \
      ./tests
@@ -241,20 +241,20 @@ Timeout Debugging
 .. code-block:: console
 
    # Check timeout configuration
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h --verbose ./basic
+   canary -v hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
 
    # Monitor timeout behavior
-   python3 -m canary hpc run --backend=slurm --timeout queue=5m,run=10m --verbose ./basic
+   canary -v hpc run --backend=slurm --timeout queue=5m,run=10m ./basic
 
 **Timeout Validation**:
 
 .. code-block:: console
 
    # Test short timeouts
-   python3 -m canary hpc run --backend=slurm --timeout queue=1m,run=1m --verbose ./basic
+   canary -v hpc run --backend=slurm --timeout queue=1m,run=1m ./basic
 
    # Check scheduler time limits
-   python3 -m canary hpc run --backend=slurm --submit-arg="-t 5m" --verbose ./basic
+   canary -v hpc run --backend=slurm --submit-arg="-t 5m" ./basic
 
 Timeout Limitations
 -------------------

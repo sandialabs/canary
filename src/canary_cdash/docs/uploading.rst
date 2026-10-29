@@ -12,7 +12,7 @@ Command Reference
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash post -h
+   $ canary report cdash post -h
 
 Options:
 
@@ -35,7 +35,7 @@ Upload single XML file:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash post \
+   $ canary report cdash post \
        --project MyProject \
        --url https://cdash.example.org \
        CDASH/Test-0.xml
@@ -44,7 +44,7 @@ Upload multiple files:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash post \
+   $ canary report cdash post \
        --project MyProject \
        --url https://cdash.example.org \
        CDASH/*.xml
@@ -56,7 +56,7 @@ Finalize build by posting Done.xml:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash post \
+   $ canary report cdash post \
        --project MyProject \
        --url https://cdash.example.org \
        --done \
@@ -142,7 +142,7 @@ Enable verbose logging for debugging:
 
 .. code-block:: console
 
-   $ python3 -m canary -v report cdash post \
+   $ canary -v report cdash post \
        --project MyProject \
        --url https://cdash.example.org \
        CDASH/Test-0.xml
@@ -158,7 +158,7 @@ Currently, ``canary_cdash`` does not support explicit proxy configuration. Use s
 
    $ export HTTP_PROXY=http://proxy.example.com:8080
    $ export HTTPS_PROXY=http://proxy.example.com:8080
-   $ python3 -m canary report cdash post --project MyProject --url https://cdash.example.org CDASH/Test-0.xml
+   $ canary report cdash post --project MyProject --url https://cdash.example.org CDASH/Test-0.xml
 
 Security Considerations
 -----------------------

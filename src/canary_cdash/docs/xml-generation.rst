@@ -12,7 +12,7 @@ Command Reference
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create -h
+   $ canary report cdash create -h
 
 Options:
 
@@ -47,19 +47,19 @@ Generate CDash XML from current workspace:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild --site MySite
+   $ canary report cdash create --build MyBuild --site MySite
 
 Generate with custom track:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild --track Nightly
+   $ canary report cdash create --build MyBuild --track Nightly
 
 Generate with custom build stamp:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild --build-stamp 20240101-1200-Experimental
+   $ canary report cdash create --build MyBuild --build-stamp 20240101-1200-Experimental
 
 Chunking
 --------
@@ -68,7 +68,7 @@ Large test suites are automatically split into chunks:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild -n 200
+   $ canary report cdash create --build MyBuild -n 200
 
 This creates multiple XML files with 200 tests each.
 
@@ -76,7 +76,7 @@ Disable chunking with ``-n -1``:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild -n -1
+   $ canary report cdash create --build MyBuild -n -1
 
 Output Directory
 ----------------
@@ -87,7 +87,7 @@ Custom output directory:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create --build MyBuild -d /custom/output
+   $ canary report cdash create --build MyBuild -d /custom/output
 
 Build Stamp Generation
 ----------------------

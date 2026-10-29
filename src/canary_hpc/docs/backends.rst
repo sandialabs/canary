@@ -59,10 +59,10 @@ Slurm Backend
 .. code-block:: console
 
    # Use Slurm backend
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
    # With Slurm-specific arguments
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
+   canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
 
 **Resource Information**:
 
@@ -91,10 +91,10 @@ PBS Backend
 .. code-block:: console
 
    # Use PBS backend
-   python3 -m canary hpc run --backend=pbs ./basic
+   canary hpc run --backend=pbs ./basic
 
    # With PBS-specific arguments
-   python3 -m canary hpc run --backend=pbs --submit-arg="-q workq,-l walltime=2:00:00" ./basic
+   canary hpc run --backend=pbs --submit-arg="-q workq,-l walltime=2:00:00" ./basic
 
 **Resource Information**:
 
@@ -123,10 +123,10 @@ Flux Backend
 .. code-block:: console
 
    # Use Flux backend
-   python3 -m canary hpc run --backend=flux ./basic
+   canary hpc run --backend=flux ./basic
 
    # With Flux-specific arguments
-   python3 -m canary hpc run --backend=flux --submit-arg="--flags=debug" ./basic
+   canary hpc run --backend=flux --submit-arg="--flags=debug" ./basic
 
 **Resource Information**:
 
@@ -155,10 +155,10 @@ Shell Backend
 .. code-block:: console
 
    # Use shell backend for testing
-   python3 -m canary hpc run --backend=shell ./basic
+   canary hpc run --backend=shell ./basic
 
    # With shell backend and batch specification
-   python3 -m canary hpc run --backend=shell --batch-spec=count=4 ./basic
+   canary hpc run --backend=shell --batch-spec=count=4 ./basic
 
 **Resource Information**:
 
@@ -264,12 +264,12 @@ The ``hpc info`` command shows backend information:
 .. code-block:: console
 
    # Show Slurm backend info
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Show all available backends
-   python3 -m canary hpc info pbs
-   python3 -m canary hpc info flux
-   python3 -m canary hpc info shell
+   canary hpc info pbs
+   canary hpc info flux
+   canary hpc info shell
 
 Backend Configuration Examples
 ------------------------------
@@ -279,30 +279,30 @@ Backend Configuration Examples
 .. code-block:: console
 
    # Slurm with account and queue
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
+   canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
 
    # Slurm with time limit
-   python3 -m canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
+   canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
 
 **PBS Configuration**:
 
 .. code-block:: console
 
    # PBS with queue and walltime
-   python3 -m canary hpc run --backend=pbs --submit-arg="-q workq,-l walltime=2:00:00" ./basic
+   canary hpc run --backend=pbs --submit-arg="-q workq,-l walltime=2:00:00" ./basic
 
    # PBS with resource limits
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l nodes=4:ppn=8" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l nodes=4:ppn=8" ./basic
 
 **Shell Configuration**:
 
 .. code-block:: console
 
    # Shell backend for testing
-   python3 -m canary hpc run --backend=shell --batch-spec=count=4 ./basic
+   canary hpc run --backend=shell --batch-spec=count=4 ./basic
 
    # Shell with workers
-   python3 -m canary hpc run --backend=shell --workers=2 ./basic
+   canary hpc run --backend=shell --workers=2 ./basic
 
 Backend Debugging
 -----------------
@@ -312,20 +312,20 @@ Backend Debugging
 .. code-block:: console
 
    # Check available backends
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Test with verbose logging
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
 **Resource Pool Issues**:
 
 .. code-block:: console
 
    # Check HPC resource pool
-   python3 -m canary config show resource-pool --backend=slurm
+   canary --hpc-backend=slurm config show resource-pool
 
    # Test resource allocation
-   python3 -m canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
+   canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
 
 **Backend Configuration Issues**:
 
@@ -335,7 +335,7 @@ Backend Debugging
    python3 -c "import hpc_connect; print(hpc_connect.get_backend('slurm'))"
 
    # Test backend manually
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
 Backend Limitations
 -------------------

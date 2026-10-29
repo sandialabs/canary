@@ -14,7 +14,7 @@ To run tests from a CMake build directory, simply pass the path to that director
 
 .. code-block:: console
 
-   python3 -m canary run path/to/cmake-build
+   canary run path/to/cmake-build
 
 Canary will recursively search for CTestTestfile.cmake files and generate corresponding jobs.
 
@@ -25,13 +25,13 @@ Key Commands
 
     .. code-block:: console
 
-       python3 -m canary find -r path/to/cmake-build
+       canary find -r path/to/cmake-build
 
 *   **Inspection**: To see the resolved job specification for a specific CTest test:
 
     .. code-block:: console
 
-       python3 -m canary describe path/to/cmake-build/CTestTestfile.cmake
+       canary describe path/to/cmake-build/CTestTestfile.cmake
 
 Options
 -------

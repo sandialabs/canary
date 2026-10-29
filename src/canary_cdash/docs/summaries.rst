@@ -12,7 +12,7 @@ Command Reference
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary -h
+   $ canary report cdash summary -h
 
 Options:
 
@@ -39,7 +39,7 @@ Generate summary for today:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary \
+   $ canary report cdash summary \
        --project MyProject \
        --url https://cdash.example.org
 
@@ -47,7 +47,7 @@ Generate summary for specific date:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary \
+   $ canary report cdash summary \
        --project MyProject \
        --url https://cdash.example.org \
        --date 2024-01-01
@@ -57,7 +57,7 @@ Filter by Groups
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary \
+   $ canary report cdash summary \
        --project MyProject \
        --url https://cdash.example.org \
        -t Nightly -t Experimental
@@ -67,7 +67,7 @@ Skip Specific Sites
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary \
+   $ canary report cdash summary \
        --project MyProject \
        --url https://cdash.example.org \
        -s "test-.*" -s "backup-.*"
@@ -90,7 +90,7 @@ HTML summary is written to standard output or can be redirected:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash summary \
+   $ canary report cdash summary \
        --project MyProject \
        --url https://cdash.example.org > summary.html
 

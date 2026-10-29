@@ -96,7 +96,7 @@ Appends ``--execute-analysis-sections`` to script arguments:
 
 .. code-block:: console
 
-   python3 -m canary run -a tests/
+   canary run -a tests/
 
 analyze Directive
 ~~~~~~~~~~~~~~~~~

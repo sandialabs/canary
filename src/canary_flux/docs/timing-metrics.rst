@@ -191,7 +191,7 @@ Basic Timing Analysis
 .. code-block:: console
 
    # Run with Flux and examine timing
-   python3 -m canary flux run ./basic
+   canary flux run ./basic
 
    # Check timing metrics
    cat <workspace>/sessions/<session>/jobs/<job-id>/testcase.lock | grep flux.timing

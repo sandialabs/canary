@@ -55,7 +55,7 @@ JobspecV1 Submission
 - Sets time limit from job's total timeout
 
 **Command Generation**:
-- Uses ``python3 -m canary -C <workspace> flux exec --session <session> <job-id>``
+- Uses ``canary -C <workspace> flux exec --session <session> <job-id>``
 - Adds ``-d`` flag if debug mode enabled
 - Sets ``CANARY_LEVEL`` to prevent infinite nesting
 
@@ -178,7 +178,7 @@ Basic Job Lifecycle
 .. code-block:: console
 
    # Run with Flux allocation
-   python3 -m canary flux run ./basic
+   canary flux run ./basic
 
 Job with Dependencies
 ---------------------
@@ -186,7 +186,7 @@ Job with Dependencies
 .. code-block:: console
 
    # Run with dependency management
-   python3 -m canary flux run ./dependent-tests
+   canary flux run ./dependent-tests
 
 Job with Timeouts
 -----------------
@@ -194,7 +194,7 @@ Job with Timeouts
 .. code-block:: console
 
    # Run with timeout configuration
-   python3 -m canary flux run --timeout queue=30m,allocation=2h ./basic
+   canary flux run --timeout queue=30m,allocation=2h ./basic
 
 Job Lifecycle Comparison
 ========================

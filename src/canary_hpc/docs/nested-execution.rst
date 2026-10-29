@@ -45,7 +45,7 @@ Nested Execution Flow
    - Input script executed
 
 3. **Nested Canary Invocation**:
-   - ``python -m canary -C <workspace> hpc exec``
+   - ``canary -C <workspace> hpc exec``
    - Batch workspace path passed via ``--workspace`` option
    - Backend specified via ``--backend``
 
@@ -68,7 +68,7 @@ Nested Execution Command
 
 .. code-block:: console
 
-   python -m canary -C <batch-workspace> hpc exec \
+   canary -C <batch-workspace> hpc exec \
      --backend=<backend> \
      --workspace=<batch-workspace>
 
@@ -83,7 +83,7 @@ Nested Execution Command
 
 .. code-block:: console
 
-   python -m canary -C /path/to/workspace hpc exec \
+   canary -C /path/to/workspace hpc exec \
      --backend=slurm \
      --workspace=/path/to/workspace/sessions/session1/batches/abc1234
 
@@ -236,10 +236,10 @@ Failure Handling in Nested Execution
 .. code-block:: console
 
    # Job with insufficient resources
-   python3 -m canary hpc run --backend=slurm -p "cpus=100" ./basic
+   canary hpc run --backend=slurm -p "cpus=100" ./basic
 
    # Job with invalid configuration
-   python3 -m canary hpc run --backend=slurm --batch-spec=invalid ./basic
+   canary hpc run --backend=slurm --batch-spec=invalid ./basic
 
 Nested Execution Debugging
 --------------------------
@@ -249,7 +249,7 @@ Nested Execution Debugging
 .. code-block:: console
 
    # Nested execution with verbose logging
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
    # Check nested execution logs
    cat TestResults/sessions/<session>/batches/abc1234/canary-out.txt
@@ -269,10 +269,10 @@ Nested Execution Debugging
 .. code-block:: console
 
    # Check batch status
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
    # Monitor nested execution
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
 Nested Execution Examples
 -------------------------
@@ -282,28 +282,28 @@ Nested Execution Examples
 .. code-block:: console
 
    # Basic nested execution
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
 **Nested with Batch Specification**:
 
 .. code-block:: console
 
    # Nested execution with batch spec
-   python3 -m canary hpc run --backend=slurm --batch-spec=count=4 ./basic
+   canary hpc run --backend=slurm --batch-spec=count=4 ./basic
 
 **Nested with Resource Requirements**:
 
 .. code-block:: console
 
    # Nested execution with resources
-   python3 -m canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
+   canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
 
 **Nested with Timeout Configuration**:
 
 .. code-block:: console
 
    # Nested execution with timeouts
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
+   canary hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
 
 Nested Execution Limitations
 ----------------------------

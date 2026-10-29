@@ -242,7 +242,7 @@ Basic Resource Pool
 .. code-block:: console
 
    # Query backend with 4 nodes, 32 CPUs, 4 GPUs per node
-   python3 -m canary flux run ./basic
+   canary flux run ./basic
 
    # Result: Resource pool with 4 nodes
    # Node 0: 32 CPUs, 4 GPUs
@@ -256,7 +256,7 @@ Custom Node Count
 .. code-block:: console
 
    # Override backend node count
-   python3 -m canary flux run --nodes 2 ./basic
+   canary flux run --nodes 2 ./basic
 
    # Result: Resource pool with 2 nodes
    # Node 0: 32 CPUs, 4 GPUs (from backend)
@@ -280,7 +280,7 @@ Resource Validation
 .. code-block:: console
 
    # Job requiring 5 nodes (fails if allocation has only 4)
-   python3 -m canary flux run ./multi-node-test
+   canary flux run ./multi-node-test
    # Error: "job requires more nodes than exist in this flux resource pool"
 
 Debugging Resource Issues

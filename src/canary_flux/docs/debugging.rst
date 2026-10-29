@@ -129,7 +129,7 @@ Debug Mode
 
 .. code-block:: console
 
-   python3 -m canary flux run -d ./basic
+   canary flux run -d ./basic
 
 Verbose Logging
 ---------------
@@ -145,7 +145,7 @@ Verbose Logging
 
 .. code-block:: console
 
-   CANARY_LOG_LEVEL=DEBUG python3 -m canary flux run ./basic
+   CANARY_LOG_LEVEL=DEBUG canary flux run ./basic
 
 Workspace Inspection
 --------------------
@@ -162,7 +162,7 @@ Workspace Inspection
 .. code-block:: console
 
    # Find workspace location
-   python3 -m canary info workspace
+   canary info workspace
 
    # Inspect job workspace
    ls <workspace>/sessions/<session>/jobs/<job-id>
@@ -202,7 +202,7 @@ Resource Debugging
 .. code-block:: console
 
    # Review resource pool structure
-   python3 -m canary info resources
+   canary info resources
 
    # Check job resource assignments
    cat <job-workspace>/testcase.lock | grep resources
@@ -259,7 +259,7 @@ Failure Debugging
 .. code-block:: console
 
    # Review job status
-   python3 -m canary status <job-id>
+   canary status <job-id>
 
    # Check failure reason
    cat <job-workspace>/testcase.lock | grep status
@@ -391,10 +391,10 @@ The Flux extension provides detailed logging for debugging:
 .. code-block:: console
 
    # Set log level via environment
-   CANARY_LOG_LEVEL=DEBUG python3 -m canary flux run ./basic
+   CANARY_LOG_LEVEL=DEBUG canary flux run ./basic
 
    # Set log level via configuration
-   python3 -m canary flux run -o log-level=debug ./basic
+   canary flux run -o log-level=debug ./basic
 
 **Log Output**:
 - Allocation timing and status
@@ -412,20 +412,20 @@ Use Canary status commands to monitor Flux execution:
 .. code-block:: console
 
    # Check job status
-   python3 -m canary status <job-id>
+   canary status <job-id>
 
    # Check all jobs
-   python3 -m canary status -rA
+   canary status -rA
 
 **Session Status**:
 
 .. code-block:: console
 
    # Check session status
-   python3 -m canary status -s <session>
+   canary status -s <session>
 
    # Check session with details
-   python3 -m canary status -s <session> -v
+   canary status -s <session> -v
 
 Workspace Commands
 ------------------
@@ -437,20 +437,20 @@ Use workspace commands to inspect Flux workspaces:
 .. code-block:: console
 
    # Show workspace information
-   python3 -m canary info workspace
+   canary info workspace
 
    # Show session information
-   python3 -m canary info sessions
+   canary info sessions
 
 **Job Inspection**:
 
 .. code-block:: console
 
    # List jobs in session
-   python3 -m canary info jobs -s <session>
+   canary info jobs -s <session>
 
    # Show job details
-   python3 -m canary info job <job-id>
+   canary info job <job-id>
 
 Debugging Best Practices
 ========================
@@ -473,7 +473,7 @@ Debug Configuration Example
 .. code-block:: console
 
    # Run with debug logging and detailed output
-   CANARY_LOG_LEVEL=DEBUG python3 -m canary flux run -d \
+   CANARY_LOG_LEVEL=DEBUG canary flux run -d \
      --timeout queue=1h,allocation=4h \
      ./basic
 
@@ -494,10 +494,10 @@ Create command aliases for common debugging tasks:
 .. code-block:: bash
 
    # Debug alias
-   alias canary-flux-debug='CANARY_LOG_LEVEL=DEBUG python3 -m canary flux run -d'
+   alias canary-flux-debug='CANARY_LOG_LEVEL=DEBUG canary flux run -d'
 
    # Environment inspection
-   alias flux-env='cat $(python3 -m canary info workspace)/sessions/*/jobs/*/env.json | jq .'
+   alias flux-env='cat $(canary info workspace)/sessions/*/jobs/*/env.json | jq .'
 
 Debugging Comparison
 ====================

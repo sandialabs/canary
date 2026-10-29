@@ -12,7 +12,7 @@ Command Reference
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues -h
+   $ canary report cdash make-gitlab-issues -h
 
 Options:
 
@@ -50,7 +50,7 @@ Create issues from today's failures:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues \
+   $ canary report cdash make-gitlab-issues \
        -a "$GITLAB_TOKEN" \
        --cdash-url https://cdash.example.org \
        --cdash-project MyProject \
@@ -62,7 +62,7 @@ Create issues for specific date:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues \
+   $ canary report cdash make-gitlab-issues \
        -a "$GITLAB_TOKEN" \
        --cdash-url https://cdash.example.org \
        --cdash-project MyProject \
@@ -74,7 +74,7 @@ Filter by Groups
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues \
+   $ canary report cdash make-gitlab-issues \
        -a "$GITLAB_TOKEN" \
        --cdash-url https://cdash.example.org \
        --cdash-project MyProject \
@@ -86,7 +86,7 @@ Skip Specific Sites
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues \
+   $ canary report cdash make-gitlab-issues \
        -a "$GITLAB_TOKEN" \
        --cdash-url https://cdash.example.org \
        --cdash-project MyProject \
@@ -194,7 +194,7 @@ Automated issue creation:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash make-gitlab-issues \
+   $ canary report cdash make-gitlab-issues \
        -a "$GITLAB_TOKEN" \
        --cdash-url "$CDASH_URL" \
        --cdash-project "$CDASH_PROJECT" \

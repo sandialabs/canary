@@ -35,8 +35,8 @@ To run CTest tests with Canary, simply pass the path to a CMake build directory:
 
 .. code-block:: console
 
-   $ python3 -m canary run ./ctest
-   $ python3 -m canary status -rA
+   $ canary run ./ctest
+   $ canary status -rA
 
 Canary will automatically detect and run CTest tests defined in the build directory.
 

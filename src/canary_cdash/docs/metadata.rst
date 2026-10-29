@@ -62,7 +62,7 @@ Provide custom build stamp with ``--build-stamp``:
 
 .. code-block:: console
 
-   $ python3 -m canary report cdash create \
+   $ canary report cdash create \
        --build MyBuild \
        --build-stamp 20240101-1200-Nightly
 

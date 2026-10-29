@@ -40,10 +40,10 @@ Backend Configuration
 .. code-block:: console
 
    # Use default "flux" backend
-   python3 -m canary flux run ./basic
+   canary flux run ./basic
 
    # Use specific backend
-   python3 -m canary flux run --flux-backend=myflux ./basic
+   canary flux run --flux-backend=myflux ./basic
 
 **Resource Discovery**:
 

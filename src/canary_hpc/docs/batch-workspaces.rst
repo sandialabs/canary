@@ -170,7 +170,7 @@ canary-inp.sh
    export CANARY_BATCH_ID="abc1234"
    export CANARY_HPC_BACKEND="slurm"
 
-   python -m canary -C /path/to/workspace hpc exec \
+   canary -C /path/to/workspace hpc exec \
      --batch-id=abc1234 \
      --backend=slurm \
      --workspace=/path/to/workspace
@@ -314,7 +314,7 @@ Batch Workspace Examples
 .. code-block:: console
 
    # Check batch status
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
    # Inspect batch configuration
    cat TestResults/sessions/<session>/batches/abc1234/config.json

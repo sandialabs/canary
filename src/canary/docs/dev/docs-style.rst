@@ -44,7 +44,7 @@ Command examples
 ----------------
 
 - Prefer ``canary ...`` in documentation examples.
-- Use ``python3 -m canary ...`` only when module execution is the point being
+- Use ``canary ...`` only when module execution is the point being
   documented or there is a specific technical reason to show it.
 - Keep examples copy-pastable.
 - Use realistic paths and values.

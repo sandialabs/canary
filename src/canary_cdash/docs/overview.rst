@@ -49,16 +49,16 @@ Typical CDash reporting workflow:
 .. code-block:: console
 
    # Generate CDash XML from Canary workspace
-   $ python3 -m canary report cdash create --build MyBuild --site MySite
+   $ canary report cdash create --build MyBuild --site MySite
 
    # Post XML to CDash server
-   $ python3 -m canary report cdash post --project MyProject --url https://cdash.example.org CDASH/*.xml
+   $ canary report cdash post --project MyProject --url https://cdash.example.org CDASH/*.xml
 
    # Generate HTML summary
-   $ python3 -m canary report cdash summary --project MyProject --url https://cdash.example.org
+   $ canary report cdash summary --project MyProject --url https://cdash.example.org
 
    # Create GitLab issues from failures
-   $ python3 -m canary report cdash make-gitlab-issues --cdash-url https://cdash.example.org --cdash-project MyProject
+   $ canary report cdash make-gitlab-issues --cdash-url https://cdash.example.org --cdash-project MyProject
 
 Relationship to Canary Core
 ---------------------------

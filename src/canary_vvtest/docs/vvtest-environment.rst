@@ -192,7 +192,7 @@ Both based on ``--execute-analysis-sections`` in ``sys.argv``:
 
 .. code-block:: console
 
-   python3 -m canary run -a tests/
+   canary run -a tests/
 
 Rerun Option (-R)
 ~~~~~~~~~~~~~~~~~
@@ -201,7 +201,7 @@ The ``-R`` option forces rerun of all tests, overriding normal completion checki
 
 .. code-block:: console
 
-   python3 -m canary run -R tests/
+   canary run -R tests/
 
 This option is equivalent to ``--only=all`` and ensures tests are executed even if they previously completed successfully.
 

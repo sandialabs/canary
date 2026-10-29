@@ -62,50 +62,50 @@ Slurm Arguments
 .. code-block:: console
 
    # Modern syntax
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
+   canary hpc run --backend=slurm --submit-arg="-A myacct,-q debug" ./basic
 
    # Legacy syntax
-   python3 -m canary hpc run --backend=slurm -b option="-A myacct,-q debug" ./basic
+   canary hpc run --backend=slurm -b option="-A myacct,-q debug" ./basic
 
 **Time Limits**:
 
 .. code-block:: console
 
    # 2 hour time limit
-   python3 -m canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
+   canary hpc run --backend=slurm --submit-arg="-t 2:00:00" ./basic
 
    # 30 minute time limit
-   python3 -m canary hpc run --backend=slurm --submit-arg="-t 30" ./basic
+   canary hpc run --backend=slurm --submit-arg="-t 30" ./basic
 
 **Node and CPU Requests**:
 
 .. code-block:: console
 
    # 4 nodes, 8 CPUs per node
-   python3 -m canary hpc run --backend=slurm --submit-arg="-N 4 --ntasks-per-node=8" ./basic
+   canary hpc run --backend=slurm --submit-arg="-N 4 --ntasks-per-node=8" ./basic
 
    # 2 nodes, 16 CPUs total
-   python3 -m canary hpc run --backend=slurm --submit-arg="-N 2 -n 16" ./basic
+   canary hpc run --backend=slurm --submit-arg="-N 2 -n 16" ./basic
 
 **Memory Requests**:
 
 .. code-block:: console
 
    # 16GB memory per node
-   python3 -m canary hpc run --backend=slurm --submit-arg="--mem=16G" ./basic
+   canary hpc run --backend=slurm --submit-arg="--mem=16G" ./basic
 
    # 32GB memory total
-   python3 -m canary hpc run --backend=slurm --submit-arg="--mem=32000" ./basic
+   canary hpc run --backend=slurm --submit-arg="--mem=32000" ./basic
 
 **GPU Requests**:
 
 .. code-block:: console
 
    # 2 GPUs per node
-   python3 -m canary hpc run --backend=slurm --submit-arg="--gres=gpu:2" ./basic
+   canary hpc run --backend=slurm --submit-arg="--gres=gpu:2" ./basic
 
    # Specific GPU type
-   python3 -m canary hpc run --backend=slurm --submit-arg="--gres=gpu:v100:2" ./basic
+   canary hpc run --backend=slurm --submit-arg="--gres=gpu:v100:2" ./basic
 
 PBS Arguments
 ~~~~~~~~~~~~~
@@ -115,30 +115,30 @@ PBS Arguments
 .. code-block:: console
 
    # Select work queue
-   python3 -m canary hpc run --backend=pbs --submit-arg="-q workq" ./basic
+   canary hpc run --backend=pbs --submit-arg="-q workq" ./basic
 
    # Select debug queue
-   python3 -m canary hpc run --backend=pbs --submit-arg="-q debug" ./basic
+   canary hpc run --backend=pbs --submit-arg="-q debug" ./basic
 
 **Walltime**:
 
 .. code-block:: console
 
    # 2 hour walltime
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l walltime=2:00:00" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l walltime=2:00:00" ./basic
 
    # 30 minute walltime
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l walltime=00:30:00" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l walltime=00:30:00" ./basic
 
 **Resource Requests**:
 
 .. code-block:: console
 
    # 4 nodes, 8 CPUs per node
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l nodes=4:ppn=8" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l nodes=4:ppn=8" ./basic
 
    # 16GB memory
-   python3 -m canary hpc run --backend=pbs --submit-arg="-l mem=16gb" ./basic
+   canary hpc run --backend=pbs --submit-arg="-l mem=16gb" ./basic
 
 Flux Arguments
 ~~~~~~~~~~~~~~
@@ -148,20 +148,20 @@ Flux Arguments
 .. code-block:: console
 
    # Debug flags
-   python3 -m canary hpc run --backend=flux --submit-arg="--flags=debug" ./basic
+   canary hpc run --backend=flux --submit-arg="--flags=debug" ./basic
 
    # Specific flags
-   python3 -m canary hpc run --backend=flux --submit-arg="--flags=debug,verbose" ./basic
+   canary hpc run --backend=flux --submit-arg="--flags=debug,verbose" ./basic
 
 **Resource Requests**:
 
 .. code-block:: console
 
    # 4 nodes
-   python3 -m canary hpc run --backend=flux --submit-arg="-N 4" ./basic
+   canary hpc run --backend=flux --submit-arg="-N 4" ./basic
 
    # 8 CPUs per task
-   python3 -m canary hpc run --backend=flux --submit-arg="-n 8" ./basic
+   canary hpc run --backend=flux --submit-arg="-n 8" ./basic
 
 Shell Arguments
 ~~~~~~~~~~~~~~~
@@ -171,10 +171,10 @@ Shell Arguments
 .. code-block:: console
 
    # Simple shell execution
-   python3 -m canary hpc run --backend=shell ./basic
+   canary hpc run --backend=shell ./basic
 
    # Shell with batch specification
-   python3 -m canary hpc run --backend=shell --batch-spec=count=4 ./basic
+   canary hpc run --backend=shell --batch-spec=count=4 ./basic
 
 Environment Variable Arguments
 ------------------------------
@@ -187,7 +187,7 @@ Environment Variable Arguments
    export CANARY_HPC_SUBMIT_ARGS="-A myacct,-q debug"
 
    # Use environment variable
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
 **CANARY_HPC_SCHEDULER_ARGS**:
 
@@ -197,7 +197,7 @@ Environment Variable Arguments
    export CANARY_HPC_SCHEDULER_ARGS="-l walltime=2:00:00"
 
    # Use environment variable
-   python3 -m canary hpc run --backend=pbs ./basic
+   canary hpc run --backend=pbs ./basic
 
 Per-Batch Scheduler Arguments
 -----------------------------
@@ -289,20 +289,20 @@ Scheduler Argument Debugging
 .. code-block:: console
 
    # Test argument parsing
-   python3 -m canary hpc run --backend=slurm --submit-arg="-A myacct" --verbose ./basic
+   canary -v hpc run --backend=slurm --submit-arg="-A myacct" ./basic
 
    # Check backend compatibility
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
 **Argument Inspection**:
 
 .. code-block:: console
 
    # Show backend information
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Test with different arguments
-   python3 -m canary hpc run --backend=slurm --submit-arg="-q debug" --verbose ./basic
+   canary -v hpc run --backend=slurm --submit-arg="-q debug" ./basic
 
 Scheduler Argument Limitations
 ------------------------------
