@@ -26,6 +26,7 @@ import dataclasses
 import datetime
 import fnmatch
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -73,6 +74,19 @@ logger = logging.get_logger(__name__)
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 workspace_log = "canary.log"
+workspace_tombstone_re = re.compile(r"^\.canary\.\d+\.\d+$")
+view_tombstone_re = re.compile(r"^\.canary\.view\..+\.\d+\.\d+$")
+workspace_breadcrumbs = (
+    workspace_tag,
+    "VERSION",
+    "workspace.sqlite3",
+    "config.yaml",
+    "refs",
+    "sessions",
+    "cache",
+    "logs",
+    "reports",
+)
 
 
 def _display_path(path: str | Path) -> str:
@@ -328,6 +342,74 @@ class Workspace:
         return None
 
     @staticmethod
+    def removable_workspace_at(path: str | Path) -> Path | None:
+        """Return the exact workspace occupant at *path* for explicit removal.
+
+        This is broader than :meth:`workspace_at`: removal may detach a damaged
+        ``.canary`` directory at the named path, while discovery/load stays
+        strict and tag-based.
+        """
+        p = Path(path).absolute()
+        candidate = p if p.name == workspace_path else p / workspace_path
+        if not candidate.is_dir() or candidate.is_symlink():
+            return None
+        if Workspace.exists_at(candidate):
+            return candidate
+        for name in workspace_breadcrumbs[1:]:
+            if (candidate / name).exists():
+                return candidate
+        return None
+
+    @staticmethod
+    def _workspace_tombstone_for(path: Path) -> Path:
+        return path.with_name(f"{path.name}.{time.time_ns()}.{os.getpid()}")
+
+    @staticmethod
+    def _view_tombstone_for(path: Path) -> Path:
+        return path.with_name(f".canary.view.{path.name}.{time.time_ns()}.{os.getpid()}")
+
+    @staticmethod
+    def _cleanup_detached(paths: list[Path]) -> None:
+        for path in paths:
+            force_remove(path)
+
+    @staticmethod
+    def _detach_owned_view(workspace: Path) -> tuple[Path | None, Path | None]:
+        view_dir: Path | None = None
+        detached_view: Path | None = None
+        try:
+            ws = object.__new__(Workspace)
+            ws.initialize_properties_from_root(root=workspace)
+            if view := ws.latest_view():
+                view_dir = view.dir
+        except Exception:
+            logger.warning(f"Could not read view location for {workspace}; leaving view in place")
+            return None, None
+        if view_dir is None or not view_dir.exists():
+            return None, None
+        if not ResultsView.exists_at(view_dir):
+            raise ValueError(f"Cannot remove {workspace} because {view_dir} is not owned by Canary")
+        detached_view = Workspace._view_tombstone_for(view_dir)
+        view_dir.rename(detached_view)
+        return view_dir, detached_view
+
+    @staticmethod
+    def _cleanup_stale_tombstones(start: Path) -> list[Path]:
+        parent = start if start.name == workspace_path else start
+        if parent.name == workspace_path:
+            parent = parent.parent
+        stale: list[Path] = []
+        for child in parent.iterdir():
+            if not child.exists():
+                continue
+            if workspace_tombstone_re.match(child.name):
+                stale.append(child)
+            elif view_tombstone_re.match(child.name):
+                stale.append(child)
+        Workspace._cleanup_detached(stale)
+        return stale
+
+    @staticmethod
     def remove(start: str | Path | None = None) -> Path | None:
         """Deletes the workspace located exactly at *start* and its associated view.
 
@@ -353,23 +435,49 @@ class Workspace:
         if workspace is None:
             pm.done("no workspace found")
             return None
-        view_dir: Path | None = None
+        detached: list[Path] = []
         try:
-            ws = object.__new__(Workspace)
-            ws.initialize_properties_from_root(root=workspace)
-            if view := ws.latest_view():
-                view_dir = view.dir
+            _, detached_view = Workspace._detach_owned_view(workspace)
+            if detached_view is not None:
+                detached.append(detached_view)
+            detached_workspace = Workspace._workspace_tombstone_for(workspace)
+            workspace.rename(detached_workspace)
+            detached.append(detached_workspace)
         except Exception:
-            logger.warning(f"Could not read view location for {workspace}; leaving view in place")
-            view_dir = None
-        if view_dir is not None and view_dir.exists():
-            if not ResultsView.exists_at(view_dir):
-                pm.done("error")
-                raise ValueError(
-                    f"Cannot remove {workspace} because {view_dir} is not owned by Canary"
-                )
-            force_remove(view_dir)
-        force_remove(workspace)
+            pm.done("error")
+            raise
+        Workspace._cleanup_detached(detached)
+        pm.done()
+        return workspace
+
+    @staticmethod
+    def detach(start: str | Path | None = None, *, cleanup_stale: bool = False) -> Path | None:
+        """Detach the exact workspace occupant at *start* and schedule cleanup.
+
+        Explicit removal may detach a malformed workspace so the canonical path
+        is freed before slow deletion finishes.
+        """
+        start = Path.cwd() if start is None else Path(start)
+        pm = logger.progress_monitor(f"[bold]Removing[/bold] workspace from {_display_path(start)}")
+        workspace = Workspace.removable_workspace_at(start)
+        detached: list[Path] = []
+        if cleanup_stale:
+            Workspace._cleanup_stale_tombstones(start)
+        if workspace is None:
+            pm.done("no workspace found")
+            return None
+        try:
+            _, detached_view = Workspace._detach_owned_view(workspace)
+            if detached_view is not None:
+                detached.append(detached_view)
+            detached_workspace = Workspace._workspace_tombstone_for(workspace)
+            workspace.rename(detached_workspace)
+            detached.append(detached_workspace)
+        except Exception:
+            pm.done("error")
+            raise
+        for path in detached:
+            async_rmtree(path)
         pm.done()
         return workspace
 

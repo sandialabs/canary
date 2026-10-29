@@ -98,7 +98,7 @@ def _open_or_create_workspace(work_tree: str, wipe: bool, kind: str) -> Workspac
                     f"-w: {work_tree} is inside the workspace at {anchor}, which will not be "
                     f"wiped implicitly.  Run from {anchor} or use 'canary rm {anchor}' first."
                 )
-        Workspace.remove(work_tree)
+        Workspace.detach(work_tree)
         return Workspace.create(path=work_tree)
     try:
         return Workspace.load(start=work_tree)

@@ -8,11 +8,14 @@ from pathlib import Path
 import pytest
 
 import _canary.session.workspace as _workspace_module
+from _canary.cli.rm import RemoveWorkspace
 from _canary.session.workspace import NotAWorkspaceError
 from _canary.session.workspace import Workspace
 from _canary.session.workspace import WorkspaceExistsError
 from _canary.session.workspace import set_workspace_dir
 from _canary.util.filesystem import working_dir
+from _canary.view import ResultsView
+from _canary.view import ViewSettings
 
 
 @pytest.fixture
@@ -662,10 +665,83 @@ def test_run_wipe_recreates_workspace_at_path(chdir_tmp):
     assert not marker.exists()
 
 
-def test_rm_command_rejects_missing_path(chdir_tmp):
+def test_run_wipe_detaches_untagged_workspace_occupant(chdir_tmp, monkeypatch):
+    from _canary.app.run import _open_or_create_workspace
+
+    canary_dir = chdir_tmp / ".canary"
+    (canary_dir / "sessions").mkdir(parents=True)
+    (canary_dir / "logs").mkdir()
+    (canary_dir / "sessions" / "keep.txt").write_text("partial delete")
+    detached: list[Path] = []
+
+    def fake_async_rmtree(path):
+        detached.append(Path(path))
+
+    monkeypatch.setattr(_workspace_module, "async_rmtree", fake_async_rmtree)
+
+    new = _open_or_create_workspace(str(chdir_tmp), True, "scanpaths")
+
+    assert new.root == canary_dir
+    assert (new.root / "WORKSPACE.TAG").exists()
+    assert any(path.name.startswith(".canary.") for path in detached)
+
+
+def test_run_wipe_detaches_owned_view(chdir_tmp, monkeypatch):
+    from _canary.app.run import _open_or_create_workspace
+
+    ws = Workspace.create(chdir_tmp)
+    view = ResultsView(root=chdir_tmp, settings=ViewSettings(name="TestResults"))
+    view.make()
+    view.save_manifest(view.load_manifest())
+    ws.register_view(view)
+    (view.dir / "marker.txt").write_text("old view")
+    detached: list[Path] = []
+
+    def fake_async_rmtree(path):
+        detached.append(Path(path))
+
+    monkeypatch.setattr(_workspace_module, "async_rmtree", fake_async_rmtree)
+
+    new = _open_or_create_workspace(str(chdir_tmp), True, "scanpaths")
+
+    assert new.root == ws.root
+    assert not (chdir_tmp / "TestResults").exists()
+    assert any(path.name.startswith(".canary.view.TestResults.") for path in detached)
+
+
+def test_rm_cleans_stale_tombstones(chdir_tmp, monkeypatch):
     import argparse
 
-    from _canary.cli.rm import RemoveWorkspace
+    stale_workspace = chdir_tmp / ".canary.111.222"
+    stale_workspace.mkdir()
+    (stale_workspace / "ghost.txt").write_text("x")
+    stale_view = chdir_tmp / ".canary.view.TestResults.111.222"
+    stale_view.mkdir()
+    (stale_view / "ghost.txt").write_text("y")
+    ws = Workspace.create(chdir_tmp)
+
+    removed_paths: list[Path] = []
+
+    def fake_async_rmtree(path):
+        path = Path(path)
+        removed_paths.append(path)
+        import shutil
+
+        shutil.rmtree(path)
+
+    monkeypatch.setattr(_workspace_module, "async_rmtree", fake_async_rmtree)
+
+    rc = RemoveWorkspace().execute(argparse.Namespace(rm_path=str(chdir_tmp)))
+
+    assert rc == 0
+    assert not ws.root.exists()
+    assert not stale_workspace.exists()
+    assert not stale_view.exists()
+    assert any(path.name.startswith(".canary.") for path in removed_paths)
+
+
+def test_rm_command_rejects_missing_path(chdir_tmp):
+    import argparse
 
     ws = Workspace.create(chdir_tmp)
     rc = RemoveWorkspace().execute(argparse.Namespace(rm_path=str(chdir_tmp / "nope")))

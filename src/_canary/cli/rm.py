@@ -43,6 +43,6 @@ class RemoveWorkspace(CanarySubcommand):
         if not path.exists():
             logger.error(f"{path}: no such file or directory")
             return 1
-        if p := Workspace.remove(start=path):
+        if p := Workspace.detach(start=path, cleanup_stale=True):
             logger.info(f"[bold]Removed[/] workspace at {p}")
         return 0
