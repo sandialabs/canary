@@ -28,13 +28,13 @@ BOOTSTRAP_SKILLS = (
 
 class Agent(CanarySubcommand):
     name = "agent"
-    description = (
-        "Bootstrap agent-facing Canary guidance and skills.\n\n"
-        "Examples:\n"
-        "  canary agent bootstrap\n"
-        "  canary agent bootstrap generic --brief\n"
-        "  canary agent bootstrap opencode\n"
-        "  canary agent bootstrap opencode --force\n"
+    description = "Bootstrap agent-facing Canary guidance and skills"
+    epilog = (
+        "Examples:\n\n"
+        "[pad]canary agent bootstrap\n\n"
+        "[pad]canary agent bootstrap generic --brief\n\n"
+        "[pad]canary agent bootstrap opencode\n\n"
+        "[pad]canary agent bootstrap opencode --force"
     )
 
     def setup_parser(self, parser: "Parser") -> None:
@@ -59,7 +59,7 @@ class Agent(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         handler = getattr(args, "_agent_handler", None)
         if handler is None:
-            print(self.description)
+            print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
             return 0
         return handler(args)
 

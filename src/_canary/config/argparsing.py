@@ -37,20 +37,31 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         super().__init__(*args, **kwargs)
         self._indent_increment = 2
 
+    def _wrap_paragraph(self, text: str, width: int) -> list[str]:
+        text = self._whitespace_matcher.sub(" ", text).strip()
+        indent = ""
+        if text.startswith("[pad]"):
+            text = text[5:]
+            indent = "  "
+        return textwrap.wrap(text, width, initial_indent=indent, subsequent_indent=indent) or [""]
+
     def _split_lines(self, text, width):
         """Help messages can add new lines by including \n\n"""
         _, cols = terminal_size()
         width = int(2.0 * cols / 3.0)
         lines = []
         for line in text.split("\n\n"):
-            line = self._whitespace_matcher.sub(" ", line).strip()
-            indent = ""
-            if line.startswith("[pad]"):
-                line = line[5:]
-                indent = "  "
-            wrapped = textwrap.wrap(line, width, initial_indent=indent, subsequent_indent=indent)
-            lines.extend(wrapped or ["\n"])
+            lines.extend(self._wrap_paragraph(line, width) or ["\n"])
         return lines
+
+    def _fill_text(self, text, width, indent):
+        _, cols = terminal_size()
+        width = int(2.0 * cols / 3.0)
+        blocks = []
+        for line in text.split("\n\n"):
+            wrapped = self._wrap_paragraph(line, width)
+            blocks.append("\n".join(f"{indent}{part}" if part else indent for part in wrapped))
+        return "\n\n".join(blocks)
 
     def _format_actions_usage(self, actions, groups):
         """Formatter with more concise usage strings."""
@@ -279,9 +290,12 @@ class Parser(argparse.ArgumentParser):
     def add_main_epilog(parser: "Parser") -> None:
         epilog = """\
 more help:
-  canary help --all        list all commands and options
-  canary help --pathspec   help on the path specification syntax
-  canary docs              open https://canary-wm.readthedocs.io/en/production in a browser
+
+[pad]canary help --all        list all commands and options
+
+[pad]canary help --pathspec   help on the path specification syntax
+
+[pad]canary docs              open https://canary-wm.readthedocs.io/en/production in a browser
 """
         parser.epilog = epilog
 

@@ -51,12 +51,12 @@ class Fetch(CanarySubcommand):
     """Copy a bundled Canary asset into the current directory."""
 
     name = "fetch"
-    description = (
-        "Fetch a Canary asset into the current directory.\n\n"
+    description = "Fetch a Canary asset into the current directory"
+    epilog = (
         "Available assets are contributed by installed plugins.\n\n"
-        "Examples:\n"
-        "  canary fetch examples\n"
-        "  canary fetch canary.cmake\n"
+        "Examples:\n\n"
+        "[pad]canary fetch examples\n\n"
+        "[pad]canary fetch canary.cmake"
     )
 
     def setup_parser(self, parser: "Parser") -> None:
@@ -70,10 +70,10 @@ class Fetch(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         """Dispatch to the first plugin that handles ``args.fetch_what``."""
         if not getattr(args, "fetch_what", None):
-            print(self.description)
+            print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
             return 1
         result = canary.config.pluginmanager.hook.canary_fetch_execute(args=args)
         if result is not None:
             return result
-        print(self.description)
+        print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
         return 1

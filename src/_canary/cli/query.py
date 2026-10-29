@@ -109,37 +109,37 @@ class Query(CanarySubcommand):
     """Structured inspection of Canary workspace data via job, session, sessions, jobs, compare, failures, and db subcommands."""
 
     name = "query"
-    description = (
-        "Query Canary workspace data.\n\n"
+    description = "Query workspace data"
+    epilog = (
         "Agent shortcuts: -c QUERY, --skills QUERY, -j JOBID [PATH], -s SESSION [PATH]\n\n"
         "Subcommands: job, session, sessions, jobs, compare, failures, db\n\n"
-        "Examples:\n"
-        "  canary query -c overview\n"
-        "  canary query --skills core.canary-orientation\n"
-        "  canary query -j abc1234 measurements.data\n"
-        "  canary query -s latest measurements\n"
-        "  canary query job abc1234\n"
-        "  canary query job abc1234 status.outcome\n"
-        "  canary query job abc1234 env\n"
-        "  canary query job abc1234 env.CUDA_VISIBLE_DEVICES\n"
-        "  canary query job abc1234 --cache\n"
-        "  canary query job abc1234 --all-runs\n"
-        "  canary query session latest --expand-jobs\n"
-        "  canary query session latest --expand-jobs --where status.outcome==FAILED\n"
-        "  canary query session latest --digest\n"
-        "  canary query session latest --digest --where status.category==PASS\n"
-        "  canary query session latest --expand-jobs --watch\n"
-        "  canary query session latest --expand-jobs --watch=30\n"
-        "  canary query jobs\n"
-        "  canary query jobs --where status.category==FAIL\n"
-        "  canary query jobs --where timings.running>60\n"
-        "  canary query jobs --session latest\n"
-        "  canary query jobs --digest\n"
-        "  canary query jobs --watch\n"
-        "  canary query sessions\n"
-        "  canary query db stats\n"
-        "  canary query db schema\n"
-        '  canary query db "SELECT spec_name, status_outcome FROM results LIMIT 10"\n'
+        "Examples:\n\n"
+        "[pad]canary query -c overview\n\n"
+        "[pad]canary query --skills core.canary-orientation\n\n"
+        "[pad]canary query -j abc1234 measurements.data\n\n"
+        "[pad]canary query -s latest measurements\n\n"
+        "[pad]canary query job abc1234\n\n"
+        "[pad]canary query job abc1234 status.outcome\n\n"
+        "[pad]canary query job abc1234 env\n\n"
+        "[pad]canary query job abc1234 env.CUDA_VISIBLE_DEVICES\n\n"
+        "[pad]canary query job abc1234 --cache\n\n"
+        "[pad]canary query job abc1234 --all-runs\n\n"
+        "[pad]canary query session latest --expand-jobs\n\n"
+        "[pad]canary query session latest --expand-jobs --where status.outcome==FAILED\n\n"
+        "[pad]canary query session latest --digest\n\n"
+        "[pad]canary query session latest --digest --where status.category==PASS\n\n"
+        "[pad]canary query session latest --expand-jobs --watch\n\n"
+        "[pad]canary query session latest --expand-jobs --watch=30\n\n"
+        "[pad]canary query jobs\n\n"
+        "[pad]canary query jobs --where status.category==FAIL\n\n"
+        "[pad]canary query jobs --where timings.running>60\n\n"
+        "[pad]canary query jobs --session latest\n\n"
+        "[pad]canary query jobs --digest\n\n"
+        "[pad]canary query jobs --watch\n\n"
+        "[pad]canary query sessions\n\n"
+        "[pad]canary query db stats\n\n"
+        "[pad]canary query db schema\n\n"
+        '[pad]canary query db "SELECT spec_name, status_outcome FROM results LIMIT 10"'
     )
 
     def setup_parser(self, parser: "Parser") -> None:
@@ -451,7 +451,7 @@ class Query(CanarySubcommand):
         result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
         if result is not None:
             return result
-        print(self.description)
+        print(f"{self.description}\n\n{self.epilog.replace('[pad]', '  ')}")
         return 1
 
 

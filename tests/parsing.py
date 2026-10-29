@@ -200,6 +200,17 @@ def test_helpformatter_split_lines_pad_and_wrapping(monkeypatch: pytest.MonkeyPa
     assert any("wrap" in l for l in lines)
 
 
+def test_helpformatter_fill_text_preserves_pad_paragraphs(monkeypatch: pytest.MonkeyPatch):
+    from _canary.config import argparsing as ap
+
+    monkeypatch.setattr(ap, "terminal_size", lambda: (24, 60))
+
+    fmt = HelpFormatter(prog="x")
+    text = fmt._fill_text("Examples:\n\n[pad]canary query jobs", width=20, indent="")
+    assert "Examples:" in text
+    assert "\n\n  canary query jobs" in text
+
+
 import re
 
 
