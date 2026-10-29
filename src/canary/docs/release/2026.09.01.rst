@@ -1,0 +1,71 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
+canary 2026.09.01 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2026-08-02 through 2026-09-01.
+* Pull requests in this range focus on agent-facing query/knowledge features, installed documentation, plugin/subcommand layout cleanup, and session/query persistence improvements.
+
+Authors
+-------
+
+* Tim Fuller (48)
+* Matt Mosby (1)
+* Matthew Mosby (1)
+
+A total of 3 authors contributed 50 commits to this release.
+
+Highlights
+----------
+
+* Added the first agent-facing knowledge system:
+  * static capabilities data queryable from the CLI;
+  * bundled skills installed as package data;
+  * a new ``canary learn`` command and fetchable agent assets.
+* Added the initial ``canary query`` command for job/session inspection, backed by plain-JSON ``session.lock`` manifests with session measurements.
+* Introduced explicit test ID support for ``.pyt`` tests, including parameterized ID templates and duplicate detection.
+* Added direct Flux support and reworked HPC batch estimation around resource-aware scheduler simulation.
+* Reorganized documentation so the installed docs tree lives under the package and ships with the wheel.
+* Flattened built-in plugin/subcommand layout and split CDash reporting into its own plugin package.
+
+Detailed changes
+----------------
+
+Agent and knowledge tooling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added a static capabilities database and made bundled query/learn data provider-backed.
+* Added bundled skills as installed package data and fetch support for agent-facing assets.
+* Introduced ``canary learn`` and refactored capability/skill data into an extensible registry.
+
+Query, sessions, and persistence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added ``canary query`` support for job and session lock inspection.
+* Refactored session persistence around a plain-JSON ``session.lock`` manifest with session measurements.
+* Improved rebaseline target resolution to load jobs through workspace lookup rather than raw lockfile deserialization.
+
+PYT and test model
+~~~~~~~~~~~~~~~~~~
+
+* Added explicit test ID directives with templated expansion for ``.pyt`` tests.
+* Moved PYT directives into the ``canary_pyt`` namespace and enabled deprecation warnings for older import paths.
+
+Execution, HPC, and integrations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added direct Flux support.
+* Replaced rectangle bin packing with scheduler-simulation-based, resource-aware batch estimation.
+* Improved schedule-pack performance and node-local resource handling.
+* Split CDash reporting into a standalone plugin and expanded CDash GraphQL data access.
+
+Docs and packaging
+~~~~~~~~~~~~~~~~~~
+
+* Reorganized docs so they are installed with canary and live under the package docs tree.
+* Added initial docs content for the new layout and installed JSON data files with the package.
+* Flattened built-in plugin and subcommand layout to simplify package structure.

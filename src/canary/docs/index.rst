@@ -16,7 +16,7 @@ canary
    User's guide <user/index>
    API reference <api-docs/index>
    Developer's guide <dev/index>
-   Release notes<release/index>
+   Changelog<release/index>
    Tutorial<tutorial/index>
    Extensions <extensions/index>
 

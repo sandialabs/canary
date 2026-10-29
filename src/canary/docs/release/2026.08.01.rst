@@ -1,0 +1,54 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
+canary 2026.08.01 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2026-07-09 through 2026-08-01.
+* Pull requests in this range focus on view/report robustness, HPC batch finalization fixes, and documentation/test cleanup ahead of the installed-docs transition.
+
+Authors
+-------
+
+* Tim Fuller (16)
+
+A total of 1 authors contributed 16 commits to this release.
+
+Highlights
+----------
+
+* Re-enabled deferred results views for ``on_success`` and ``on_failure`` configurations.
+* Hardened view locking and view creation against concurrent updates and database/load timing issues.
+* Fixed resource-allocation lifecycle and HPC batch finalization so completed scheduler jobs are less likely to be misclassified during teardown.
+* Improved robustness and reporting for failed jobs running through ``hpc_connect``.
+* Refactored reports out of the results-view path and refreshed HTML report presentation, including command aliases and measurement display cleanup.
+* Relaxed CUDA visibility checks and expanded directive/report test coverage while trimming test/runtime overhead.
+
+Detailed changes
+----------------
+
+Views and reporting
+~~~~~~~~~~~~~~~~~~~
+
+* Hardened view lock creation and made view construction more robust when the database is still settling.
+* Re-enabled deferred view creation for ``on_success`` and ``on_failure`` workflows.
+* Split report generation responsibilities out of the results-view implementation.
+* Refreshed HTML reporting with improved measurement display and command aliases.
+* Avoided unwanted HTML report generation in CI-only paths.
+
+HPC and execution robustness
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Fixed resource allocation lifecycle bugs that could interfere with HPC batch completion.
+* Improved finalization/reporting of failed jobs launched through ``hpc_connect``.
+* Relaxed ``CUDA_VISIBLE_DEVICES`` validation to better tolerate backend/runtime differences.
+
+Tests and maintenance
+~~~~~~~~~~~~~~~~~~~~~
+
+* Increased directive test coverage and cleaned up related lint/test failures.
+* Sped up selected unit tests by removing unnecessary subprocess use.
+* Cleaned up code quality issues in report, markdown-doc, and skipif test paths.

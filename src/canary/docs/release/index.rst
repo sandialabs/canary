@@ -2,8 +2,8 @@
 
    SPDX-License-Identifier: MIT
 
-Release Notes
-=============
+Changelog
+=========
 
 For full details, refer to the `commit logs <https://github.com/sandialabs/canary/commits/main>`_
 
@@ -23,3 +23,6 @@ For full details, refer to the `commit logs <https://github.com/sandialabs/canar
     2026.05.27.rst
     2026.06.08.rst
     2026.07.08.rst
+    2026.08.01.rst
+    2026.09.01.rst
+    2026.10.01.rst

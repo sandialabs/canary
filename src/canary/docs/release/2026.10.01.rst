@@ -1,0 +1,76 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
+canary 2026.10.01 release notes
+===============================
+
+.. contents::
+
+* This release covers commits from 2026-09-02 through 2026-10-01.
+* Pull requests in this range focus on app/facade refactoring, workspace and status persistence hardening, directory-scoped setup/teardown support, and broad CLI/documentation expansion.
+
+Authors
+-------
+
+* Tim Fuller (150)
+* agentuser (3)
+
+A total of 2 authors contributed 153 commits to this release.
+
+Highlights
+----------
+
+* Introduced the ``_canary.app`` backend/facade and began routing CLI behavior through it.
+* Added directory-scoped setup/teardown via ``canaryconf.py`` and per-file setup/teardown directives for ``canary_pyt``.
+* Improved workspace and job persistence:
+  * persist in-progress job state;
+  * reconcile unfinished jobs to terminal outcomes;
+  * save state atomically;
+  * resolve workspace/plugin paths more portably.
+* Expanded query and analyst workflows with status-table improvements, ``log --tail``, blocked-job root-cause reporting, cross-session compare, triage helpers, and agent knowledge shortcuts.
+* Added ``canary agent bootstrap`` plus bundled skills/capabilities guidance for agent workflows.
+* Greatly expanded the packaged docs set, including ported user/developer guides and workflow-focused usage documentation.
+
+Detailed changes
+----------------
+
+Application and CLI architecture
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added the ``_canary.app`` backend and started moving CLI operations behind a dedicated facade.
+* Flattened and cleaned up CLI/subcommand behavior around query, fetch, learn, and agent-oriented workflows.
+* Added the ``canary agent bootstrap`` command and query shortcuts for capability/skill discovery.
+
+Workspace, persistence, and status
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Persisted in-progress job status and reconciled unfinished jobs to terminal results at session end.
+* Updated interrupted/cancelled handling so jobs do not remain stuck in ``NONE``.
+* Wrote workspace state atomically and tightened anchor discovery / explicit workspace resolution.
+* Stopped relying on session-string lexical order in database logic.
+* Reaped stale queue temporary files and hardened listener error handling.
+
+Setup/teardown and execution model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added directory-scoped setup/teardown through ``canaryconf.py`` hooks.
+* Added per-file setup/teardown directives for ``canary_pyt`` and removed the old ``instance_test`` feature.
+* Added ``execution_path`` support and improved execution-path handling across subcommands and HPC batch children.
+* Added a per-batch HPC setup hook and boolean ``atomic`` batch-spec token.
+
+Query, status, and analyst workflows
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added analyst-friendly status table improvements and ``canary log --tail``.
+* Added blocked-job root-cause explanations and cross-session ``canary query compare`` support.
+* Added failure-triage and bulk-log metadata workflows.
+* Added path remapping and input inventory tracking for workspaces.
+
+Docs, tests, and packaging
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Ported large portions of the user and extension authoring docs into the packaged docs tree.
+* Added extension docs markers and improved plugin-author documentation accuracy.
+* Reorganized tests so plugin-specific suites live adjacent to their packages and expanded unit coverage across core plugins/utilities.
+* Added ``canary install`` and packaged distributed-server support.
