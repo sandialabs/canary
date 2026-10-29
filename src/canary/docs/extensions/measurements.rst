@@ -7,7 +7,27 @@
 Measurements
 ============
 
-Measurements provide structured data collection for analysis and automation. Extensions can add custom measurements at various lifecycle points.
+Measurements are structured values attached to jobs or sessions.  They are
+persisted with the run state, exposed through ``canary query``, and available to
+reporters and later automation.
+
+Use the user guide page :doc:`/user/usage.plugins` for examples such as
+recording git SHAs or parsing a metrics file.  This page describes the
+measurement API and where it fits in the run lifecycle.
+
+Data model
+----------
+
+Two public APIs are used to attach measurements:
+
+``case.add_measurement(name, value)``
+  Adds or updates a job-level measurement.
+
+``session.add_measurement(name, value)``
+  Adds or updates a session-level measurement.
+
+Values should be JSON-serializable.  Scalars are common, but lists and mapping
+values are also fine when a measurement naturally has structure.
 
 Adding Measurements
 -------------------
@@ -33,7 +53,7 @@ Adding Measurements
 Measurement Hooks
 -----------------
 
-Add measurements in lifecycle hooks:
+Measurements can be added at several points in the lifecycle:
 
 .. code-block:: python
 
@@ -55,7 +75,72 @@ Add measurements in lifecycle hooks:
    @canary.hookimpl(trylast=True)
    def canary_runtest_finish(case):
        # Post-execution measurements
-       job.add_measurement("final_resources", get_resources())
+       case.add_measurement("final_resources", get_resources())
+
+In practice:
+
+``canary_runteststart``
+  Use for provenance or environment facts that are already known before the job
+  command runs.
+
+``canary_runtest_finish``
+  Use for post-processing files created by the job and turning them into
+  structured measurements.
+
+``canary_sessionfinish``
+  Use for values aggregated across many jobs.
+
+Both ``canary_runteststart`` and ``canary_runtest_finish`` run with the current
+working directory set to the job workspace.
+
+Example: per-job post-processing
+--------------------------------
+
+The most common measurement hook is ``canary_runtest_finish``.  The example
+below reads a ``metrics.json`` file produced by the job and stores selected
+values as measurements.
+
+.. code-block:: python
+
+   import json
+   from pathlib import Path
+
+   import canary
+
+
+   @canary.hookimpl(trylast=True)
+   def canary_runtest_finish(case: canary.Job) -> None:
+       metrics_file = Path("metrics.json")
+       if not metrics_file.exists():
+           return
+
+       data = json.loads(metrics_file.read_text())
+       if "throughput" in data:
+           case.add_measurement("throughput", data["throughput"])
+       if "accuracy" in data:
+           case.add_measurement("accuracy", data["accuracy"])
+
+``trylast=True`` is often appropriate when a finish hook depends on files or
+state produced by other finish hooks.
+
+Example: session aggregation
+----------------------------
+
+Session-level measurements are useful for rollups that do not belong to a
+single job:
+
+.. code-block:: python
+
+   import canary
+
+
+   @canary.hookimpl
+   def canary_sessionfinish(session: canary.Session) -> None:
+       n = 0
+       for job in session.jobs:
+           if "accuracy" in job.measurements.data:
+               n += 1
+       session.add_measurement("jobs_with_accuracy", n)
 
 Querying Measurements
 ---------------------
@@ -70,8 +155,8 @@ Query measurements with ``canary query``:
    $ canary query -j JOB_ID measurements.max_memory
    1024
 
-   $ canary query -j JOB_ID measurements.data.peak_cpu
-   85.5
+   $ canary query session latest measurements.jobs_with_accuracy
+   12
 
 Using Measurements for Agents
 -----------------------------
@@ -100,8 +185,8 @@ Measurement Best Practices
 **Structured Data**:
 
 - Use meaningful measurement names
-- Store structured data (not just strings)
-- Avoid log scraping patterns
+- Store structured data instead of encoding many values into one string
+- Prefer reading machine-written result files over scraping human-oriented logs
 
 **Performance**:
 
@@ -183,14 +268,18 @@ Measurement Integration
 Avoiding Log Scraping
 ---------------------
 
+When a test already writes a structured result file, read that file directly and
+store the values as measurements.  Avoid parsing ad hoc text output when a more
+stable source exists.
+
 **Prefer structured measurements**:
 
 .. code-block:: python
 
    # Good: Structured measurement
    @canary.hookimpl
-   def canary_runtest_finish(job):
-       job.add_measurement("test_result", parse_result(job.stdout))
+    def canary_runtest_finish(job):
+        job.add_measurement("test_result", parse_result_file("result.json"))
 
    # Bad: Log scraping
    @canary.hookimpl
@@ -209,6 +298,7 @@ Measurement Troubleshooting
 - Verify measurement addition timing
 - Check hook execution order
 - Ensure proper measurement names
+- Inspect one job directly with ``canary query job JOB_ID measurements``
 
 **Query Failures**:
 

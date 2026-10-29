@@ -50,6 +50,7 @@ canary usage
    usage.parameterize
    usage.dependencies
    usage.execute_and_analyze
+   usage.plugins
    usage.copy_and_link
    usage.modules
    usage.canaryconf

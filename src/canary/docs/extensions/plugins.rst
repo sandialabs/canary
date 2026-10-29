@@ -7,7 +7,12 @@
 Plugins
 =======
 
-Canary's plugin system extends functionality through a comprehensive hook architecture. Plugins integrate seamlessly with Canary's lifecycle, providing custom behavior while maintaining compatibility.
+Canary's plugin system extends the core runtime through named hooks.  Plugins
+are ordinary Python modules loaded into the same lifecycle used by the bundled
+generators, schedulers, reporters, and integrations.
+
+Use this page for discovery, loading, and runtime behavior.  For small local
+hook modules and routine customization, see :doc:`/user/usage.plugins`.
 
 Plugin Discovery Order
 ----------------------
@@ -30,7 +35,7 @@ Canary loads plugins in this order:
 
 4. **Configuration file**: ``plugins`` field in configuration
 
-5. **Command line**: ``-p NAME`` for local plugin modules
+5. **Command line**: ``-p NAME`` for a module name, ``.py`` file, or package directory
 
 Later sources override earlier ones, allowing progressive customization.
 

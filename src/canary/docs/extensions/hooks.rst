@@ -7,7 +7,18 @@
 Hooks
 =====
 
-Canary's hook system provides extension points throughout the execution lifecycle. Hooks allow plugins to integrate with Canary's workflow at specific phases.
+Canary's hook system provides extension points throughout the execution
+lifecycle.  Plugins use hooks to integrate with collection, generation,
+selection, execution, reporting, and persistence.
+
+Most developer-authored plugins begin with one of these hooks:
+
+* ``canary_runteststart`` for per-job setup and provenance capture
+* ``canary_runtest_finish`` for per-job post-processing and measurements
+* ``canary_sessionfinish`` for session-level aggregation
+* ``canary_select_modifyitems`` for masking or filtering work before execution
+
+For examples of those common workflows, see :doc:`/user/usage.plugins`.
 
 Hook Reference Table
 --------------------
@@ -57,10 +68,6 @@ every implementation runs.
      - False
      - —
      - Modify parsed args
-   * - ``canary_addcommand``
-     - False
-     - —
-     - Add a CLI subcommand
    * - ``canary_query_subcommand``
      - False
      - —
@@ -145,6 +152,10 @@ every implementation runs.
      - **True**
      - trylast (default runner)
      - Provide a test-session execution backend
+   * - ``canary_runtests_finish``
+     - False
+     - —
+     - Run executor-level teardown before reporting
    * - ``canary_runtests_report``
      - False
      - —
@@ -245,6 +256,11 @@ Initialization Hooks
 Session Hooks
 ~~~~~~~~~~~~~
 
+``canary_sessionfinish`` and ``canary_runtests_finish`` are close in timing but
+serve different purposes.  Use ``canary_sessionfinish`` for session metadata and
+result aggregation.  Use ``canary_runtests_finish`` for executor-level teardown
+that must happen before reporting starts.
+
 **canary_sessionstart**: Called when session begins
 
 .. code-block:: python
@@ -260,6 +276,14 @@ Session Hooks
    @canary.hookimpl
    def canary_sessionfinish(session):
        session.add_measurement("session_duration", calculate_duration())
+
+**canary_runtests_finish**: Called after execution and before reporting
+
+.. code-block:: python
+
+   @canary.hookimpl
+   def canary_runtests_finish(runner):
+       migrate_outputs_back_to_session_dir(runner)
 
 Collection Hooks
 ~~~~~~~~~~~~~~~~
@@ -362,6 +386,10 @@ all other registered finish hooks.
    def canary_runtest_finish(case):
        # Post-process results, read output files, add measurements
        case.add_measurement("custom_metric", calculate_metric())
+
+If you want to attach structured metrics after a job completes, this is usually
+the right hook.  Use ``canary_sessionfinish`` instead when the value belongs to
+the session as a whole.
 
 Resource Pool Hooks
 ~~~~~~~~~~~~~~~~~~~
