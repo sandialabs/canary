@@ -96,9 +96,9 @@ Example: Running Composite Analysis
 
 .. code-block:: console
 
-   python3 -m canary run ./execute_and_analyze
-   python3 -m canary status -rA
-   python3 -m canary tree TestResults
+   canary run ./execute_and_analyze
+   canary status -rA
+   canary tree TestResults
 
 TestMultiInstance
 -----------------

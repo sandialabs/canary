@@ -231,14 +231,14 @@ Debugging Environment Variables
 
 .. code-block:: console
 
-   # Run with verbose logging
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   # Run with higher console logging
+   canary -v --gpu-backend=amd run ./tests
 
-   # Check job environment
-   python3 -m canary run --gpu-backend=amd -p gpus=1 tests/env_check.py
+   # Run a test whose parameters request one GPU and inspect its environment
+   canary --gpu-backend=amd run -p gpus=1 tests/env_check.py
 
-   # Test specific GPU allocation with vendor constraint
-   python3 -m canary run --gpu-backend=amd -p "gpus=2,vendor=AMD" tests/gpu_test.py
+   # Run a test whose parameters request AMD GPUs explicitly
+   canary --gpu-backend=amd run -p "gpus=2,vendor=AMD" tests/gpu_test.py
 
 Environment Variable Limitations
 ----------------------------------

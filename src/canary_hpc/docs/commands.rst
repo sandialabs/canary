@@ -118,7 +118,7 @@ The older forms still work:
 
 .. code-block:: console
 
-   canary run --hpc-backend=slurm ./tests
+   canary --hpc-backend=slurm run ./tests
    canary run -b backend=slurm -b spec=duration=30m ./tests
 
 Use them when you need backward compatibility with existing scripts. For new

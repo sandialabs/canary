@@ -104,8 +104,8 @@ Example: Running Tests with Expected Results
 
 .. code-block:: console
 
-   python3 -m canary run ./xstatus
-   python3 -m canary status -rA
+   canary run ./xstatus
+   canary status -rA
 
 **FAILED**:
    - Test failed unexpectedly

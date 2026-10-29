@@ -103,13 +103,13 @@ Basic Usage
 .. code-block:: console
 
    # Use AMD backend explicitly
-   python3 -m canary run --gpu-backend=amd ./tests
+   canary --gpu-backend=amd run ./tests
 
-   # Run tests requiring 2 GPUs
-   python3 -m canary run --gpu-backend=amd -p gpus=2 ./tests
+   # Run only tests whose parameters request 2 GPUs
+   canary --gpu-backend=amd run -p gpus=2 ./tests
 
    # Auto-detect available GPU backend (selects AMD if amd-smi or rocm-smi is found)
-   python3 -m canary run --gpu-backend=auto ./tests
+   canary --gpu-backend=auto run ./tests
 
 GPU Backend Selection
 ---------------------

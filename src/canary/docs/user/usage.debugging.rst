@@ -263,7 +263,7 @@ Enabling debug logging
 .. code-block:: console
 
    $ canary -d run my_test.pyt        # debug mode
-   $ canary --verbose run my_test.pyt # verbose logging
+   $ canary -v run my_test.pyt # verbose logging
 
 Or permanently in configuration:
 
@@ -281,7 +281,7 @@ Rerun strategies for debugging
    $ canary run --only=failed .        # only failed jobs
    $ canary run --only=not_run .       # only jobs that never ran
    $ canary run --workers=1 .          # single-threaded; eliminates concurrency issues
-   $ canary run -r cpus=8 .            # explicit resource pool
+   $ canary -r cpus=8 run .            # explicit resource pool
 
 Advanced techniques
 -------------------

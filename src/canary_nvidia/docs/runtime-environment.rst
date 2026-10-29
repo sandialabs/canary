@@ -197,11 +197,11 @@ Debugging Environment Variables
 
 .. code-block:: console
 
-   # Run with verbose logging
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   # Run with higher console logging
+   canary -v --gpu-backend=nvidia run ./tests
 
-   # Check job environment
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/env_check.py
+   # Run a test whose parameters request one GPU and inspect its environment
+   canary --gpu-backend=nvidia run -p gpus=1 tests/env_check.py
 
 Environment Variable Limitations
 ----------------------------------

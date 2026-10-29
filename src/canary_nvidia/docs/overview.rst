@@ -94,13 +94,13 @@ Basic Usage
 .. code-block:: console
 
    # Use NVIDIA backend explicitly
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   canary --gpu-backend=nvidia run ./tests
 
-   # Run tests requiring 2 GPUs
-   python3 -m canary run --gpu-backend=nvidia -p gpus=2 ./tests
+   # Run only tests whose parameters request 2 GPUs
+   canary --gpu-backend=nvidia run -p gpus=2 ./tests
 
    # Auto-detect available GPU backend (selects NVIDIA if nvidia-smi is found)
-   python3 -m canary run --gpu-backend=auto ./tests
+   canary --gpu-backend=auto run ./tests
 
 GPU Backend Selection
 ---------------------

@@ -105,8 +105,8 @@ Example: Running Tests with Assets
 
 .. code-block:: console
 
-   python3 -m canary run ./copy_and_link
-   python3 -m canary status -rA
+   canary run ./copy_and_link
+   canary status -rA
 
 Execution Directory Setup
 -------------------------

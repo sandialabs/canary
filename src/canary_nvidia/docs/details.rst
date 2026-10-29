@@ -216,23 +216,23 @@ Basic Usage
 .. code-block:: console
 
    # Use NVIDIA backend
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   canary --gpu-backend=nvidia run ./tests
 
-Explicit GPU Request
-~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Request 2 GPUs
-   python3 -m canary run --gpu-backend=nvidia -p gpus=2 ./tests
-
-Vendor-Specific Request
-~~~~~~~~~~~~~~~~~~~~~~~
+Parameter-based GPU Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: console
 
-   # Request NVIDIA GPUs explicitly
-   python3 -m canary run --gpu-backend=nvidia -p "gpus=1,vendor=NVIDIA" ./tests
+   # Run only tests whose parameters request 2 GPUs
+   canary --gpu-backend=nvidia run -p gpus=2 ./tests
+
+Vendor-Specific Parameter Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   # Run only tests whose parameters request an NVIDIA GPU
+   canary --gpu-backend=nvidia run -p "gpus=1,vendor=NVIDIA" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -240,7 +240,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered NVIDIA GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   canary --gpu-backend=nvidia config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -295,7 +295,7 @@ Best Practices
 --------------
 
 1. **Install NVIDIA Tools**: Ensure ``nvidia-smi`` is installed and in PATH
-2. **Check Detection**: Verify backend detection with ``--verbose`` flag
+2. **Check Detection**: Verify backend detection with higher console logging
 3. **Test Environment**: Verify ``CUDA_VISIBLE_DEVICES`` in test setup
 4. **Handle Missing Variables**: Provide fallback behavior when variable not set
 5. **Respect User Overrides**: Don't override user-set environment variables

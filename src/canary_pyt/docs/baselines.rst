@@ -86,16 +86,16 @@ To update baselines:
 .. code-block:: console
 
    # Run tests
-   python3 -m canary run tests/
+   canary run tests/
 
    # Review differences
-   python3 -m canary status -rA
+   canary status -rA
 
    # Rebaseline
-   python3 -m canary rebaseline tests/
+   canary rebaseline tests/
 
    # Verify
-   python3 -m canary run tests/
+   canary run tests/
 
 Baseline Comparison
 -------------------

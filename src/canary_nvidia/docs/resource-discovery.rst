@@ -222,10 +222,10 @@ Debugging Discovery
 .. code-block:: console
 
    # Test backend detection
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   canary -v --gpu-backend=nvidia run ./tests
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   canary --gpu-backend=nvidia config show resource-pool
 
    # Test nvidia-smi manually
    nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader,nounits
@@ -242,7 +242,7 @@ Basic Discovery
 .. code-block:: console
 
    # Auto-detect and use NVIDIA backend
-   python3 -m canary run --gpu-backend=auto ./tests
+   canary --gpu-backend=auto run ./tests
 
 Explicit Backend
 ~~~~~~~~~~~~~~~~
@@ -250,7 +250,7 @@ Explicit Backend
 .. code-block:: console
 
    # Use NVIDIA backend explicitly
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   canary --gpu-backend=nvidia run ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -258,7 +258,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered NVIDIA GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   canary --gpu-backend=nvidia config show resource-pool
 
 Manual Override
 ~~~~~~~~~~~~~~~
@@ -266,7 +266,7 @@ Manual Override
 .. code-block:: console
 
    # Use manual resource definition when auto-discovery fails
-   python3 -m canary run --resource-pool=custom_pool.yaml ./tests
+   canary --resource-pool-file=custom_pool.yaml run ./tests
 
 Discovery Limitations
 ---------------------

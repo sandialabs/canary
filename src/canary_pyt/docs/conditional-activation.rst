@@ -173,7 +173,7 @@ Command-line options override defaults:
 .. code-block:: console
 
    # Run with extended option
-   python3 -m canary run -o extended tests/
+   canary run -o extended tests/
 
 .. code-block:: python
 

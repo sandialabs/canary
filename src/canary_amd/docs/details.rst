@@ -281,23 +281,23 @@ Basic Usage
 .. code-block:: console
 
    # Use AMD backend
-   python3 -m canary run --gpu-backend=amd ./tests
+   canary --gpu-backend=amd run ./tests
 
-Explicit GPU Request
-~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Request 2 GPUs
-   python3 -m canary run --gpu-backend=amd -p gpus=2 ./tests
-
-Vendor-Specific Request
-~~~~~~~~~~~~~~~~~~~~~~~
+Parameter-based GPU Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: console
 
-   # Request AMD GPUs explicitly
-   python3 -m canary run --gpu-backend=amd -p "gpus=1,vendor=AMD" ./tests
+   # Run only tests whose parameters request 2 GPUs
+   canary --gpu-backend=amd run -p gpus=2 ./tests
+
+Vendor-Specific Parameter Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: console
+
+   # Run only tests whose parameters request an AMD GPU
+   canary --gpu-backend=amd run -p "gpus=1,vendor=AMD" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -305,7 +305,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered AMD GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -366,7 +366,7 @@ Best Practices
 
 1. **Install AMD Tools**: Ensure ``amd-smi`` or ``rocm-smi`` is installed and in PATH
 2. **Prefer amd-smi**: Use ``amd-smi`` for more reliable UUID information
-3. **Check Detection**: Verify backend detection with ``--verbose`` flag
+3. **Check Detection**: Verify backend detection with higher console logging
 4. **Test Environment**: Verify AMD environment variables in test setup
 5. **Handle Missing Variables**: Provide fallback behavior when variables not set
 6. **Respect User Overrides**: Don't override user-set environment variables

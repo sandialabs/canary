@@ -256,12 +256,12 @@ Debugging Hook Behavior
 .. code-block:: console
 
    # Check whether the AMD backend is detected
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   canary -v --gpu-backend=amd run ./tests
 
    # Check resource pool with AMD backend
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
-   # Test with explicit GPU requirements
-   python3 -m canary run --gpu-backend=amd -p gpus=1 --verbose ./tests
+   # Run only tests whose parameters request one GPU
+   canary -v --gpu-backend=amd run -p gpus=1 ./tests
 
 Hook behavior is logged at DEBUG level when verbose mode is enabled.

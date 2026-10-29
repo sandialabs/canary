@@ -212,7 +212,7 @@ Example: Execution Flow
 
 .. code-block:: console
 
-   $ python3 -m canary describe tests/example.pyt
+   $ canary describe tests/example.pyt
    --- example.pyt -------------
    File: tests/example.pyt
    Keywords: smoke, unit
@@ -222,13 +222,13 @@ Example: Execution Flow
      example[size=20,mode=fast]
      example[size=20,mode=slow]
 
-   $ python3 -m canary run tests/example.pyt
+   $ canary run tests/example.pyt
    Running example[size=10,mode=fast]... PASSED
    Running example[size=10,mode=slow]... PASSED
    Running example[size=20,mode=fast]... PASSED
    Running example[size=20,mode=slow]... PASSED
 
-   $ python3 -m canary status -rA
+   $ canary status -rA
    example[size=10,mode=fast]: PASSED
    example[size=10,mode=slow]: PASSED
    example[size=20,mode=fast]: PASSED

@@ -245,12 +245,12 @@ Debugging Hook Behavior
 .. code-block:: console
 
    # Check whether the NVIDIA backend is detected
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   canary -v --gpu-backend=nvidia run ./tests
 
    # Check resource pool with NVIDIA backend
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   canary --gpu-backend=nvidia config show resource-pool
 
-   # Test with explicit GPU requirements
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 --verbose ./tests
+   # Run only tests whose parameters request one GPU
+   canary -v --gpu-backend=nvidia run -p gpus=1 ./tests
 
 Hook behavior is logged at DEBUG level when verbose mode is enabled.

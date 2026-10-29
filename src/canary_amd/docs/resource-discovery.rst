@@ -236,10 +236,10 @@ Debugging Discovery
 .. code-block:: console
 
    # Test backend detection
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   canary -v --gpu-backend=amd run ./tests
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
    # Test amd-smi manually
    amd-smi list --json
@@ -260,7 +260,7 @@ Basic Discovery
 .. code-block:: console
 
    # Auto-detect and use AMD backend
-   python3 -m canary run --gpu-backend=auto ./tests
+   canary --gpu-backend=auto run ./tests
 
 Explicit Backend
 ~~~~~~~~~~~~~~~~
@@ -268,7 +268,7 @@ Explicit Backend
 .. code-block:: console
 
    # Use AMD backend explicitly
-   python3 -m canary run --gpu-backend=amd ./tests
+   canary --gpu-backend=amd run ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -276,7 +276,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered AMD GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
 Manual Override
 ~~~~~~~~~~~~~~~
@@ -284,7 +284,7 @@ Manual Override
 .. code-block:: console
 
    # Use manual resource definition when auto-discovery fails
-   python3 -m canary run --resource-pool=custom_pool.yaml ./tests
+   canary --resource-pool-file=custom_pool.yaml run ./tests
 
 Discovery Limitations
 ---------------------

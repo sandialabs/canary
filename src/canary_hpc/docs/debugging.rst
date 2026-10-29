@@ -42,13 +42,13 @@ Batch Submission Issues
 .. code-block:: console
 
    # Check backend detection
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Test batch formation
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
    # Check submission logs
-   python3 -m canary hpc log
+   canary hpc log
 
 Batch Execution Issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,7 +77,7 @@ Batch Execution Issues
    cat TestResults/sessions/<session>/batches/abc1234/canary-out.txt
 
    # Review batch status
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
 Resource Allocation Issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -100,13 +100,13 @@ Resource Allocation Issues
 .. code-block:: console
 
    # Check HPC resource pool
-   python3 -m canary config show resource-pool --backend=slurm
+   canary --hpc-backend=slurm config show resource-pool
 
    # Test with minimal resources
-   python3 -m canary hpc run --backend=slurm -p "cpus=1" ./basic
+   canary hpc run --backend=slurm -p "cpus=1" ./basic
 
-   # Verify resource requirements
-   python3 -m canary show --resources ./tests
+   # Verify the current resource pool
+   canary --hpc-backend=slurm config show resource-pool
 
 Timeout Issues
 ~~~~~~~~~~~~~~~~
@@ -129,10 +129,10 @@ Timeout Issues
 .. code-block:: console
 
    # Test with shorter timeouts
-   python3 -m canary hpc run --backend=slurm --timeout queue=5m,run=10m ./basic
+   canary hpc run --backend=slurm --timeout queue=5m,run=10m ./basic
 
    # Monitor timeout behavior
-   python3 -m canary hpc run --backend=slurm --timeout queue=30m,run=2h --verbose ./basic
+   canary -v hpc run --backend=slurm --timeout queue=30m,run=2h ./basic
 
 Status and Failure Issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -155,13 +155,13 @@ Status and Failure Issues
 .. code-block:: console
 
    # Check batch status
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
    # Inspect job status
    cat TestResults/sessions/<session>/batches/abc1234/batch.lock | jq .status
 
    # Review status aggregation
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
 Debugging Tools
 ---------------
@@ -174,13 +174,13 @@ Verbose Logging
 .. code-block:: console
 
    # Verbose HPC execution
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
-   # Verbose batch execution
-   python3 -m canary hpc exec --batch-id=abc1234 --verbose
+   # Check one batch log directly
+   canary hpc log abc1234
 
-   # Verbose status checking
-   python3 -m canary hpc log --verbose
+   # Review current batch logs
+   canary hpc log
 
 Log Analysis
 ~~~~~~~~~~~~~~~~
@@ -196,7 +196,7 @@ Log Analysis
    grep -i "hpc\|batch\|scheduler" ~/.canary/logs/canary.log
 
    # Review batch logs
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
 Workspace Inspection
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -225,13 +225,13 @@ Backend Testing
 .. code-block:: console
 
    # Check backend availability
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Test backend configuration
    python3 -c "import hpc_connect; print(hpc_connect.get_backend('slurm'))"
 
    # Verify backend resources
-   python3 -m canary config show resource-pool --backend=slurm
+   canary --hpc-backend=slurm config show resource-pool
 
 Debugging Workflow
 ------------------
@@ -273,16 +273,16 @@ Slurm Debugging
 .. code-block:: console
 
    # Check Slurm backend
-   python3 -m canary hpc info slurm
+   canary hpc info slurm
 
    # Test Slurm submission
-   python3 -m canary hpc run --backend=slurm --verbose ./basic
+   canary -v hpc run --backend=slurm ./basic
 
    # Inspect Slurm batch
    ls TestResults/sessions/<session>/batches/abc1234/
 
    # Check Slurm logs
-   python3 -m canary hpc log abc1234
+   canary hpc log abc1234
 
 PBS Debugging
 ~~~~~~~~~~~~~~~~
@@ -290,13 +290,13 @@ PBS Debugging
 .. code-block:: console
 
    # Check PBS backend
-   python3 -m canary hpc info pbs
+   canary hpc info pbs
 
    # Test PBS submission
-   python3 -m canary hpc run --backend=pbs --verbose ./basic
+   canary -v hpc run --backend=pbs ./basic
 
    # Review PBS configuration
-   python3 -m canary config show resource-pool --backend=pbs
+   canary --hpc-backend=pbs config show resource-pool
 
 Shell Debugging
 ~~~~~~~~~~~~~~~~~~
@@ -304,10 +304,10 @@ Shell Debugging
 .. code-block:: console
 
    # Test shell backend
-   python3 -m canary hpc run --backend=shell --verbose ./basic
+   canary -v hpc run --backend=shell ./basic
 
    # Simple shell execution
-   python3 -m canary hpc run --backend=shell --batch-spec=count=4 ./basic
+   canary hpc run --backend=shell --batch-spec=count=4 ./basic
 
    # Inspect shell workspace
    cat TestResults/sessions/<session>/batches/abc1234/canary-out.txt
@@ -338,12 +338,12 @@ Configuration Testing
 .. code-block:: console
 
    # Test different batch specifications
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
-   python3 -m canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=flat ./basic
+   canary hpc run --backend=slurm --batch-spec=layout=atomic,nodes=any ./basic
 
    # Test resource requirements
-   python3 -m canary hpc run --backend=slurm -p "nodes=1,cpus=1" ./basic
-   python3 -m canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
+   canary hpc run --backend=slurm -p "nodes=1,cpus=1" ./basic
+   canary hpc run --backend=slurm -p "nodes=2,cpus=8" ./basic
 
 Environment Variable Testing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -352,11 +352,11 @@ Environment Variable Testing
 
    # Test environment variables
    export CANARY_HPC_BACKEND=slurm
-   python3 -m canary hpc run ./basic
+   canary hpc run ./basic
 
    # Test scheduler arguments
    export CANARY_HPC_SUBMIT_ARGS="-A myacct,-q debug"
-   python3 -m canary hpc run --backend=slurm ./basic
+   canary hpc run --backend=slurm ./basic
 
 Debugging Best Practices
 ------------------------

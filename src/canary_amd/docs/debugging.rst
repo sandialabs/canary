@@ -52,7 +52,7 @@ No GPU Backend Detected
    rocm-smi
 
    # Check backend detection with verbose logging
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   canary -v --gpu-backend=amd run ./tests
 
 GPU Detection but No Resources
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -80,10 +80,10 @@ GPU Detection but No Resources
    rocm-smi
 
    # Check resource pool with AMD backend
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
    # Test with verbose logging
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   canary -v --gpu-backend=amd run ./tests
 
 GPU Resources Available but Not Allocated
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -104,14 +104,14 @@ GPU Resources Available but Not Allocated
 
 .. code-block:: console
 
-   # Check job resource requirements
-   python3 -m canary show --resources ./tests
+   # Check the discovered GPU pool
+   canary --gpu-backend=amd config show resource-pool
 
-   # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=amd -p gpus=1 ./tests
+   # Run only tests whose parameters request a GPU
+   canary --gpu-backend=amd run -p gpus=1 ./tests
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
 AMD Environment Variables Not Set
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -132,11 +132,11 @@ AMD Environment Variables Not Set
 
 .. code-block:: console
 
-   # Test with environment variable check
-   python3 -m canary run --gpu-backend=amd -p gpus=1 tests/env_check.py
+   # Run a test whose parameters request one GPU and inspect its environment
+   canary --gpu-backend=amd run -p gpus=1 tests/env_check.py
 
-   # Test without user overrides
-   python3 -m canary run --gpu-backend=amd -p gpus=1 tests/simple_gpu.py
+   # Run a simple GPU test without user overrides
+   canary --gpu-backend=amd run -p gpus=1 tests/simple_gpu.py
 
 Debugging Tools
 ---------------
@@ -144,15 +144,15 @@ Debugging Tools
 Verbose Logging
 ~~~~~~~~~~~~~~~
 
-Enable verbose logging for detailed diagnostic information:
+Increase console logging for more detail:
 
 .. code-block:: console
 
    # Verbose backend detection
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   canary -v --gpu-backend=amd run ./tests
 
-   # Verbose resource inspection
-   python3 -m canary config show resource-pool --verbose
+   # Show the discovered resource pool
+   canary --gpu-backend=amd config show resource-pool
 
 Tool Testing
 ~~~~~~~~~~~~
@@ -177,10 +177,10 @@ Resource Inspection
 .. code-block:: console
 
    # Show resource pool with AMD backend
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
-   # Show job resource requirements
-   python3 -m canary show --resources ./tests
+   # Show the discovered resource pool
+   canary --gpu-backend=amd config show resource-pool
 
 Debugging Workflow
 ------------------
@@ -198,31 +198,31 @@ Step-by-Step Debugging
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=amd --verbose ./tests
+      canary -v --gpu-backend=amd run ./tests
 
 3. **Check Resource Pool**:
 
    .. code-block:: console
 
-      python3 -m canary config show resource-pool --gpu-backend=amd
+      canary --gpu-backend=amd config show resource-pool
 
-4. **Test Simple Allocation**:
+4. **Run a Simple GPU-Tagged Test**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=amd -p gpus=1 tests/simple.py
+      canary --gpu-backend=amd run -p gpus=1 tests/simple.py
 
 5. **Verify Environment**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=amd -p gpus=1 tests/env_check.py
+      canary --gpu-backend=amd run -p gpus=1 tests/env_check.py
 
-6. **Test Complex Scenario**:
+6. **Run a Vendor-Specific Case**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=amd -p "gpus=2,vendor=AMD" ./tests
+      canary --gpu-backend=amd run -p "gpus=2,vendor=AMD" ./tests
 
 Debugging Checklist
 ~~~~~~~~~~~~~~~~~~~
@@ -341,7 +341,7 @@ When auto-discovery fails, use manual resource definition:
 .. code-block:: console
 
    # Use manual resource pool
-   python3 -m canary run --resource-pool=manual_gpu_pool.yaml ./tests
+   canary --resource-pool-file=manual_gpu_pool.yaml run ./tests
 
 Isolation Technique
 ~~~~~~~~~~~~~~~~~~~
@@ -357,7 +357,7 @@ Isolate issues by testing components individually:
    python3 -c "import canary_amd; import canary; config = canary.Config(); print(canary_amd.canary_gpu_list_gpus(config))"
 
    # Test resource pool separately
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   canary --gpu-backend=amd config show resource-pool
 
 Debugging Limitations
 ---------------------

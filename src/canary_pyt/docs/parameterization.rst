@@ -92,9 +92,9 @@ Example: Running Parameterized Tests
 
 .. code-block:: console
 
-   python3 -m canary describe ./parameterize/parameterize1.pyt
-   python3 -m canary run ./parameterize/parameterize1.pyt
-   python3 -m canary status -rA
+   canary describe ./parameterize/parameterize1.pyt
+   canary run ./parameterize/parameterize1.pyt
+   canary status -rA
 
 Named Variants
 --------------
