@@ -96,7 +96,9 @@ class Check(CanarySubcommand):
         parser.add_argument(
             "-p", nargs=0, action=Action, help="run deptry dependency checks (default)"
         )
-        parser.add_argument("-k", nargs=0, action=Action, help="run codespell spelling checks (default)")
+        parser.add_argument(
+            "-k", nargs=0, action=Action, help="run codespell spelling checks (default)"
+        )
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
         parser.add_argument("-e", nargs=0, action=Action, help="run and check canary examples")
