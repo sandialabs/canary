@@ -83,6 +83,16 @@ def canary_addoption(parser: canary.Parser) -> None:
         help="Distributed pool server location (URL). "
         "Defaults to CANARY_DIST_SERVER_URL environment variable, if defined.",
     )
+    parser.add_argument(
+        "--dist-batch-name",
+        dest="dist_batch_name",
+        metavar="TEMPLATE",
+        default="canary.{batch_short_id}",
+        help=(
+            "Template for the scheduler-visible distributed batch job name. "
+            "Expanded with batch fields such as {batch_short_id}."
+        ),
+    )
 
 
 @canary.hookimpl

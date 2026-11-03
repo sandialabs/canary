@@ -212,6 +212,24 @@ def test_hpc_resource_setter_workers() -> None:
     assert ns.hpc_batch_workers == 7
 
 
+def test_hpc_resource_setter_batch_name_alias() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+
+    ns = parser.parse_args(["-b", "name=mr-{batch_short_id}"])
+
+    assert ns.hpc_batch_name == "mr-{batch_short_id}"
+
+
+def test_hpc_resource_setter_job_name_alias() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", action=CanaryHPCResourceSetter, dest="hpc_resource")
+
+    ns = parser.parse_args(["-b", "job_name=mr-{batch_short_id}"])
+
+    assert ns.hpc_batch_name == "mr-{batch_short_id}"
+
+
 def test_hpc_resource_setter_queue_timeout_backward_compat() -> None:
     # -b queue_timeout=T (and queue-timeout=T) is the deprecated spelling of
     # --timeout queue=T; both must land in the shared `timeout` dict as "queue".

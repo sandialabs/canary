@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from typing import cast
 
+import pytest
+
 from _canary.core.job import Job
 from _canary.core.job import JobPhase
 from _canary.core.job import JobState
@@ -530,6 +532,39 @@ def test_submit_gpu_batch_forwards_gpu_count(tmp_path):
     """A GPU batch forwards the aggregated GPU count to the JobSpec."""
     jobspec = _capture_submitted_jobspec(tmp_path, [FakeJob(id="j1", cpus=4, gpus=2)])
     assert jobspec.gpus == 2
+
+
+def test_submit_batch_uses_default_scheduler_name(tmp_path):
+    import _canary.config as config
+
+    batch = make_batch(tmp_path, [FakeJob(id="j1", cpus=4, gpus=0)])
+    with config.override():
+        config.options.hpc_batch_name = "canary.{batch_short_id}"
+        jobspec = _capture_submitted_jobspec(tmp_path, batch.jobs, batch=batch)
+
+    assert jobspec.name == f"canary.{batch.id[:7]}"
+
+
+def test_submit_batch_renders_custom_scheduler_name(tmp_path):
+    import _canary.config as config
+
+    batch = make_batch(
+        tmp_path, [FakeJob(id="j1", cpus=4, gpus=0), FakeJob(id="j2", cpus=2, gpus=0)]
+    )
+    with config.override():
+        config.options.hpc_batch_name = "mr-{batch_short_id}-{job_count}-{backend}"
+        jobspec = _capture_submitted_jobspec(tmp_path, batch.jobs, batch=batch)
+
+    assert jobspec.name == f"mr-{batch.id[:7]}-2-dummy"
+
+
+def test_submit_batch_name_rejects_unknown_field(tmp_path):
+    import _canary.config as config
+
+    with config.override():
+        config.options.hpc_batch_name = "mr-{unknown}"
+        with pytest.raises(ValueError, match="unknown field"):
+            _capture_submitted_jobspec(tmp_path, [FakeJob(id="j1", cpus=4, gpus=0)])
 
 
 # ---------------------------------------------------------------------------

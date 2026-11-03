@@ -26,6 +26,9 @@ logger = canary.get_logger(__name__)
 
 
 class HPCConnectDistRunner(be.HPCConnectRunner):
+    def batch_name_template(self) -> str:  # type: ignore[override]
+        return canary.config.getoption("dist_batch_name") or "canary.{batch_short_id}"
+
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:  # type: ignore[override]
         started_at: float = -1.0
 
@@ -140,7 +143,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
         invocation = self.canary_invocation(batch)
 
         job = hpc_connect.JobSpec(
-            name=f"canary.{batch.id[:7]}",
+            name=self.batch_job_name(batch),
             commands=[invocation],
             script_name="submit.sh",
             cpus=batch.cpus,

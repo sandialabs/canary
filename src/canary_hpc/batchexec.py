@@ -53,6 +53,39 @@ class HPCConnectRunner:
     def execute(self, batch: "TestBatch", queue: SimpleQueue) -> int | None:
         raise NotImplementedError
 
+    def batch_name_template(self) -> str:
+        return canary.config.getoption("hpc_batch_name") or "canary.{batch_short_id}"
+
+    def batch_name_fields(self, batch: "TestBatch") -> dict[str, Any]:
+        return {
+            "batch_id": batch.id,
+            "batch_short_id": batch.id[:7],
+            "session": batch.session,
+            "backend": self.backend.name,
+            "job_count": len(batch.jobs),
+            "node_count": batch.nodes_required(),
+            "hostname": getattr(batch, "hostname", "") or "",
+        }
+
+    def batch_job_name(self, batch: "TestBatch") -> str:
+        template = self.batch_name_template()
+        fields = self.batch_name_fields(batch)
+        try:
+            return template.format(**fields)
+        except KeyError as exc:
+            keys = ", ".join(sorted(fields))
+            missing = exc.args[0]
+            raise ValueError(
+                f"Invalid batch name template {template!r}: unknown field {missing!r}. "
+                f"Available fields: {keys}"
+            ) from exc
+        except IndexError as exc:
+            raise ValueError(
+                f"Invalid batch name template {template!r}: positional fields are not supported"
+            ) from exc
+        except ValueError as exc:
+            raise ValueError(f"Invalid batch name template {template!r}: {exc}") from exc
+
     def rc_environ(self, batch: "TestBatch") -> dict[str, str | None]:
         variables: dict[str, str | None] = dict(batch.variables)
         level = int(os.getenv("CANARY_LEVEL", "0"))
@@ -570,7 +603,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         # break the script or execute commands.  Ship those encoded instead.
         variables = pack_environment(variables)
         hpc_job = hpc_connect.JobSpec(
-            name=f"canary.{batch.id[:7]}",
+            name=self.batch_job_name(batch),
             commands=[invocation],
             script_name="submit.sh",
             nodes=node_count,

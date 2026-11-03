@@ -80,6 +80,18 @@ def canary_addoption(parser: "canary.Parser") -> None:
         default=os.getenv("CANARY_HPC_BACKEND") or argparse.SUPPRESS,
         help="Use this HPC backend [default: None]",
     )
+    parser.add_argument(
+        "--hpc-batch-name",
+        dest="hpc_batch_name",
+        metavar="TEMPLATE",
+        group="canary hpc",
+        default="canary.{batch_short_id}",
+        help=(
+            "Template for the scheduler-visible HPC batch job name. "
+            "Expanded with batch fields such as {batch_short_id}. "
+            "[alias: -b name=TEMPLATE]"
+        ),
+    )
     CanaryHPCConductor.setup_legacy_parser(parser)
     # ``canary hpc run`` builds its own parser, so core run options added by
     # plugins are not inherited; offer the execution prefix explicitly.  The

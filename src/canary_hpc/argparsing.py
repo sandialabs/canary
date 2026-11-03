@@ -299,6 +299,10 @@ class CanaryHPCResourceSetter(argparse.Action):
             raw = match.group(2)
             setattr(namespace, "hpc_backend", raw)
 
+        elif match := re.search(r"^(name|job_name|job-name)[:=](.+)$", value):
+            raw = strip_quotes(match.group(2))
+            setattr(namespace, "hpc_batch_name", raw)
+
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
             logger.warning("-b timeout=%s is deprecated and has no effect on batching", raw)
