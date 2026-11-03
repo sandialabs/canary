@@ -61,6 +61,7 @@ optional-dependencies.dev = [
     "bandit",
     "semgrep",
     "vulture",
+    "deptry",
     "sphinx",
     "sphinx-design",
     "xmlschema",
@@ -313,3 +314,26 @@ skips = [
     "B607", # start_process_with_partial_path"
 ]
 exclude_dirs = ["src/canary/docs/examples", "src/canary/docs/lib/python/sphinxext"]
+
+[tool.deptry]
+known_first_party = [
+    "_canary",
+    "canary",
+    "canary_amd",
+    "canary_cdash",
+    "canary_cmake",
+    "canary_dist",
+    "canary_flux",
+    "canary_gitlab",
+    "canary_hpc",
+    "canary_nvidia",
+    "canary_pyt",
+    "canary_vvtest",
+]
+ignore = ["DEP002", "DEP003", "DEP004"]
+extend_exclude = [
+    "^src/.*/tests/",
+    "^src/canary/docs/",
+]
+per_rule_ignores = { DEP001 = ["pyinstrument", "pkg_resources"] }
+optional_dependencies_dev_groups = ["dev"]

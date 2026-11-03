@@ -72,7 +72,7 @@ class Check(CanarySubcommand):
     aliases = ["check"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Register check flags (-f format, -c lint, -m type, -b bandit, -s semgrep, -u vulture, -t test, etc.)."""
+        """Register check flags (-f format, -c lint, -m type, -b bandit, -s semgrep, -u vulture, -p deptry, -t test, etc.)."""
         parser.add_argument(
             "--update-version",
             action="store_true",
@@ -90,7 +90,12 @@ class Check(CanarySubcommand):
         parser.add_argument(
             "-s", nargs=0, action=Action, help="run semgrep static analysis checks (default)"
         )
-        parser.add_argument("-u", nargs=0, action=Action, help="run vulture dead-code checks (default)")
+        parser.add_argument(
+            "-u", nargs=0, action=Action, help="run vulture dead-code checks (default)"
+        )
+        parser.add_argument(
+            "-p", nargs=0, action=Action, help="run deptry dependency checks (default)"
+        )
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
         parser.add_argument("-e", nargs=0, action=Action, help="run and check canary examples")
@@ -138,7 +143,7 @@ class Check(CanarySubcommand):
         )
 
         if not hasattr(args, "action") and not has_example_commands:
-            args.action = set("lfcmsubt")
+            args.action = set("lfcmsupbt")
         elif not hasattr(args, "action"):
             args.action = set()
 
@@ -155,6 +160,8 @@ class Check(CanarySubcommand):
             raise ValueError("semgrep must be on PATH to run static analysis checks")
         if shutil.which("vulture") is None and "u" in args.action:
             raise ValueError("vulture must be on PATH to run dead-code checks")
+        if shutil.which("deptry") is None and "p" in args.action:
+            raise ValueError("deptry must be on PATH to run dependency checks")
         if "m" in args.action:
             if shutil.which("ty") is None and shutil.which("mypy") is None:
                 raise ValueError("type checking requires ty or mypy be on PATH")
@@ -182,6 +189,9 @@ class Check(CanarySubcommand):
         if "u" in args.action and shutil.which("vulture"):
             self.vulture_check(args)
 
+        if "p" in args.action and shutil.which("deptry"):
+            self.deptry_check(args)
+
         if "m" in args.action:
             self.type_check_code(args)
 
@@ -198,7 +208,7 @@ class Check(CanarySubcommand):
 
         # All selected checks passed: stamp the date-based version
         # unconditionally.
-        if args.action & set("lfcmsubtdC"):
+        if args.action & set("lfcmsupbtdC"):
             self.stamp_version()
 
         logger.info("All checks complete!")
@@ -313,6 +323,13 @@ class Check(CanarySubcommand):
         with working_dir(self.root):
             pm = logger.progress_monitor("[bold]Checking[/] source for dead code")
             vulture("src", "dev", "--min-confidence", "100")
+            pm.done()
+
+    def deptry_check(self, args: argparse.Namespace):
+        """Run Deptry using repository-local configuration from ``pyproject.toml``."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor("[bold]Checking[/] dependency declarations")
+            deptry(".")
             pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
@@ -526,6 +543,25 @@ def vulture(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["encoding"] = "utf-8"
 
     command = ["vulture", *args]
+    cp = subprocess.run(command, **kwargs)
+
+    if cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+
+    return cp
+
+
+def deptry(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``deptry`` with the given arguments, raising on non-zero exit."""
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+
+    command = ["deptry", *args]
     cp = subprocess.run(command, **kwargs)
 
     if cp.returncode != 0:
