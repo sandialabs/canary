@@ -388,6 +388,46 @@ if __name__ == "__main__":
     assert started_at(jobs2["case"]) > seeded_start
 
 
+def test_rerun_rewrites_workspace_prefixed_path_variables(tmp_path):
+    """Rerun jobs rewrite PATH/PYTHONPATH from the prior session to the new one."""
+    root = tmp_path / "rerun-env"
+    root.mkdir()
+
+    write(
+        root / "case.pyt",
+        """\
+import sys
+
+def test():
+    pass
+
+if __name__ == "__main__":
+    sys.exit(test())
+""",
+    )
+
+    workspace, specs = create_workspace(root)
+    spec = specs[0]
+    _seed_passed_job(workspace, spec, started_at=time.time() - 5.0)
+
+    session_dir = workspace.sessions_dir / "rerun-target"
+    jobs = workspace.construct_jobs(specs, session_dir)
+    job = jobs[0]
+
+    old_exec_dir = job.workspace.dir
+    assert str(job.variables["PYTHONPATH"]).startswith(str(old_exec_dir))
+    assert str(job.variables["PATH"]).startswith(str(old_exec_dir))
+
+    job.workspace.root = session_dir
+    job.workspace.session = session_dir.name
+    Workspace._replace_session_dir_variables(job, old=old_exec_dir, new=job.workspace.dir)
+
+    assert str(job.variables["PYTHONPATH"]).startswith(str(job.workspace.dir))
+    assert not str(job.variables["PYTHONPATH"]).startswith(str(old_exec_dir))
+    assert str(job.variables["PATH"]).startswith(str(job.workspace.dir))
+    assert not str(job.variables["PATH"]).startswith(str(old_exec_dir))
+
+
 def test_rerun_failed_includes_blocked_downstream_after_upstream_fixed(tmp_path):
     """Blocked downstream joins re-run when upstream is fixed.
 

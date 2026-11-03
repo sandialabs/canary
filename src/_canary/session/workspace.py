@@ -71,6 +71,8 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+_SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
+
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 workspace_log = "canary.log"
@@ -707,8 +709,10 @@ class Workspace:
                     raise RuntimeError(f"{job}: requested to run in place but results do not exist")
             else:
                 # Force override session dir
+                old_dir = job.workspace.dir
                 job.workspace.root = session_dir
                 job.workspace.session = session_dir.name
+                self._replace_session_dir_variables(job, old=old_dir, new=job.workspace.dir)
                 if session is not None:
                     assert job.workspace.session == session, f"{job}: unexpected workspace"
             ready.append(job)
@@ -1213,6 +1217,19 @@ class Workspace:
             lookup[spec.id] = job
             jobs.append(job)
         return jobs
+
+    @staticmethod
+    def _replace_session_dir_variables(job: "Job", *, old: Path, new: Path) -> None:
+        variables = job.variables
+        old_s, new_s = str(old), str(new)
+        for key in _SESSION_DIR_VARIABLES:
+            value = variables.get(key)
+            if not isinstance(value, str):
+                continue
+            if value == old_s:
+                variables[key] = new_s
+            elif value.startswith(old_s + os.pathsep):
+                variables[key] = new_s + value[len(old_s) :]
 
     @staticmethod
     def refresh_masked_jobs(jobs: list["Job"]) -> None:
