@@ -60,6 +60,7 @@ optional-dependencies.dev = [
     "ruff",
     "bandit",
     "semgrep",
+    "vulture",
     "sphinx",
     "sphinx-design",
     "xmlschema",

@@ -175,7 +175,7 @@ def create_ir(
     timeout_signal_name: str | None = None,
     will_fail: bool | None = None,
     working_directory: str | None = None,
-    backtrace_triples: list[str] | None = None,
+    _backtrace_triples: list[str] | None = None,
     **kwds,
 ) -> canary.JobSpecIR:
     kwargs: dict[str, Any] = {}

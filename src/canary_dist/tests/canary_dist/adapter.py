@@ -250,8 +250,9 @@ def test_curl_sets_connect_and_request_timeouts(monkeypatch):
 
     called: dict[str, Any] = {}
 
-    def fake_run(args, capture_output, text):
+    def fake_run(args, capture_output=None, text=None):
         called["args"] = args
+        _ = capture_output, text
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout='{"success": true}', stderr=""
         )

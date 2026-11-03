@@ -316,7 +316,7 @@ class EnvironmentModification(argparse.Action):
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
         option: str | Sequence[Any] | None,
-        option_str: str | None = None,
+        _option_str: str | None = None,
     ):
         assert isinstance(option, str)
         try:
@@ -336,7 +336,7 @@ class RegisterPlugin(argparse.Action):
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
         option: str | Sequence[Any] | None,
-        option_str: str | None = None,
+        _option_str: str | None = None,
     ):
         config_mods = getattr(namespace, self.dest, None) or {}
         config_mods.setdefault("plugins", []).append(option)
@@ -344,7 +344,7 @@ class RegisterPlugin(argparse.Action):
 
 
 class ConfigMods(argparse.Action):
-    def __call__(self, parser, namespace, option, option_str=None):
+    def __call__(self, parser, namespace, option, _option_str=None):
         data = {}
         parts = option.split(":", 2)
         if len(parts) < 2:

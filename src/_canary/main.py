@@ -106,7 +106,7 @@ class CanaryMain:
             config.pluginmanager.consider_plugin(p)
         return self
 
-    def __exit__(self, ex_type, ex_value, ex_traceback):
+    def __exit__(self, _ex_type, _ex_value, _ex_traceback):
         # Use the module-level invocation directory: going through the config
         # proxy would (re)load configuration, and if loading is what failed it
         # would raise again from inside this handler.

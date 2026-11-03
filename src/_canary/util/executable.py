@@ -304,7 +304,7 @@ class _StreamHandler:
     def __enter__(self):
         return self
 
-    def __exit__(self, ex_type, ex_value, ex_traceback):
+    def __exit__(self, _ex_type, _ex_value, _ex_traceback):
         if self.temporary:
             assert self.stream is not None
             self.stream.seek(0)

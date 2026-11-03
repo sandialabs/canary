@@ -163,7 +163,7 @@ def generate_random_jobspecs(
 
 
 def generate_random_test_files(
-    root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5, with_deps: bool = True
+    root: Path, count: int = 10, max_params: int = 3, max_rows: int = 5, _with_deps: bool = True
 ) -> None:
     """Generate a random Canary test suite for performance testing."""
 
