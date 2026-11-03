@@ -572,6 +572,7 @@ class HPCConnectBatchRunner(HPCConnectRunner):
         hpc_job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
+            script_name="submit.sh",
             nodes=node_count,
             cpus=totals.get("cpus"),
             # Pass an explicit 0 (not None) when the batch requests no GPUs.

@@ -142,6 +142,7 @@ class HPCConnectDistRunner(be.HPCConnectRunner):
         job = hpc_connect.JobSpec(
             name=f"canary.{batch.id[:7]}",
             commands=[invocation],
+            script_name="submit.sh",
             cpus=batch.cpus,
             time_limit=batch.wall_limit(),
             env=variables,

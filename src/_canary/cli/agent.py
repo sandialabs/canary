@@ -52,7 +52,8 @@ class Agent(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         handler = getattr(args, "_agent_handler", None)
         if handler is None:
-            print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
+            epilog = (self.epilog or "").replace("[pad]", "  ")
+            print(f"{self.description}.\n\n{epilog}")
             return 0
         return handler(args)
 

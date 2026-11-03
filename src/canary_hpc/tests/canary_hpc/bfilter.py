@@ -29,5 +29,5 @@ def test_repo_bfilter(tmpdir):
                 "default", {str(examples / "basic"): [], str(examples / "vvt"): []}
             )
             workspace.run(specs)
-            files = glob.glob("tests/.canary/sessions/**/canary.*.sh", recursive=True)
+            files = glob.glob("tests/.canary/sessions/**/submit.sh", recursive=True)
             assert len(files) == 2
