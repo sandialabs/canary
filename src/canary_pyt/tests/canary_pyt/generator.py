@@ -15,6 +15,8 @@ from canary_pyt.pyt import PYTAdapter
 from canary_pyt.pyt import PYTLoader
 from canary_pyt.pyt import PYTLockEmitter
 from canary_pyt.pyt import PYTModel
+from canary_pyt.pyt import parse_dependencies
+from canary_pyt.pyt import parse_dependency
 
 
 def make_test_file(tmp_path: Path, rel: str, text: str = "# test\n") -> Path:
@@ -158,6 +160,24 @@ def test_analyze_creates_parent_case_and_dependencies(tmp_path: Path) -> None:
     assert all(d.expects == 1 for d in parent.dependencies)
 
 
+def test_analyze_parent_inherits_family_mask_reason(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_family("a")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+    m.set_skipif(True, reason="skip family")
+    m.set_aggregate(flag="--analyze", requires="success")
+
+    specs = lock_model(m)
+
+    children = [s for s in specs if not s.attributes.get("multicase")]
+    parent = [s for s in specs if s.attributes.get("multicase") is True][0]
+
+    assert len(children) == 2
+    assert all(s.mask is not None and s.mask.reason == "skip family" for s in children)
+    assert parent.mask is not None
+    assert parent.mask.reason == "skip family"
+
+
 def test_xdiff_uses_canary_diff_exit_status(tmp_path: Path) -> None:
     m = make_model(tmp_path, "x.pyt")
     m.set_xdiff()
@@ -233,6 +253,98 @@ def test_dependency_parsing_legacy_string(tmp_path: Path) -> None:
     a.f_depends_on("foo*", when=None)  # type: ignore[arg-type]
     specs = lock_model(m)
     assert specs[0].dependencies[0].pattern == "foo*"
+
+
+def test_parse_dependency_string_defaults() -> None:
+    dep = parse_dependency("producer", 0)
+    assert dep.pattern == "producer"
+    assert dep.expects == "+"
+    assert dep.when == "on_success"
+
+
+def test_parse_dependency_rejects_blank_string() -> None:
+    with pytest.raises(ValueError, match="non-empty string"):
+        parse_dependency("   ", 0)
+
+
+def test_parse_dependency_dict_defaults() -> None:
+    dep = parse_dependency({"job": "producer"}, 0)
+    assert dep.pattern == "producer"
+    assert dep.expects == "+"
+    assert dep.when == "on_success"
+
+
+def test_parse_dependency_dict_normalizes_wildcard_when() -> None:
+    dep = parse_dependency({"job": "producer", "when": "*", "expects": 1}, 0)
+    assert dep.pattern == "producer"
+    assert dep.expects == 1
+    assert dep.when == "always"
+
+
+def test_parse_dependency_accepts_outcome_name_for_when() -> None:
+    dep = parse_dependency({"job": "producer", "when": "DIFFED"}, 0)
+    assert dep.when == "DIFFED"
+
+
+def test_parse_dependency_rejects_extra_keys() -> None:
+    with pytest.raises(TypeError, match="invalid keys"):
+        parse_dependency({"job": "producer", "bogus": True}, 0)
+
+
+def test_parse_dependency_rejects_invalid_when() -> None:
+    with pytest.raises(TypeError, match="invalid choice"):
+        parse_dependency({"job": "producer", "when": "later"}, 0)
+
+
+def test_parse_dependency_requires_job_key() -> None:
+    with pytest.raises(TypeError, match="missing required keyword 'job'"):
+        parse_dependency({"when": "always"}, 0)
+
+
+def test_parse_dependency_rejects_invalid_expects_string() -> None:
+    with pytest.raises(TypeError, match="invalid choice"):
+        parse_dependency({"job": "producer", "expects": "2"}, 0)
+
+
+def test_parse_dependency_rejects_nonpositive_integer_expects() -> None:
+    with pytest.raises(ValueError, match="must be > 0"):
+        parse_dependency({"job": "producer", "expects": 0}, 0)
+
+
+def test_parse_dependency_rejects_invalid_expects_type() -> None:
+    with pytest.raises(TypeError, match="invalid type"):
+        parse_dependency({"job": "producer", "expects": []}, 0)
+
+
+def test_parse_dependencies_string_with_legacy_kwargs() -> None:
+    deps = parse_dependencies("producer", expect=2, result="success")
+    assert len(deps) == 1
+    assert deps[0].pattern == "producer"
+    assert deps[0].expects == 2
+    assert deps[0].when == "success"
+
+
+def test_parse_dependencies_rejects_legacy_kwargs_for_non_string_arg() -> None:
+    with pytest.raises(TypeError, match="only supported when 'arg' is a single string"):
+        parse_dependencies({"job": "producer"}, expect=1)
+
+
+def test_parse_dependencies_list_preserves_order() -> None:
+    deps = parse_dependencies(["a", {"job": "b", "when": "always", "expects": "?"}])
+    assert [dep.pattern for dep in deps] == ["a", "b"]
+    assert deps[1].when == "always"
+    assert deps[1].expects == "?"
+
+
+def test_parse_dependencies_reports_index_for_bad_list_entry() -> None:
+    with pytest.raises(TypeError, match=r"depends_on\[1\]\['expects'\]: invalid choice"):
+        parse_dependencies(["a", {"job": "b", "expects": "bad"}])
+
+
+def test_parse_dependencies_passes_through_dependency_selector() -> None:
+    original = DependencySelector(pattern="producer", expects=1, when="always")
+    deps = parse_dependencies(original)
+    assert deps == [original]
 
 
 def test_sources_relative_path_is_rooted_at_test_file(tmp_path: Path) -> None:
@@ -312,6 +424,31 @@ def test_sources_glob_multiple_matches_with_dst_warns_and_ignores_dst(
     ]
     assert all(a.dst is None for a in assets)
     assert any("matched" in r.message and "dst=" in r.message for r in caplog.records)
+
+
+def test_sources_absolute_glob_expands_into_multiple_assets(tmp_path: Path) -> None:
+    make_test_file(tmp_path, "sub/x.pyt")
+    make_test_file(tmp_path, "sub/pattern1.txt")
+    make_test_file(tmp_path, "sub/pattern2.txt")
+
+    m = PYTModel(str(tmp_path), "sub/x.pyt")
+    m.add_source(action="copy", src=str(tmp_path / "sub" / "pattern*.txt"))
+    specs = lock_model(m)
+
+    srcs = sorted(a.src for a in specs[0].assets)
+    assert srcs == [tmp_path / "sub" / "pattern1.txt", tmp_path / "sub" / "pattern2.txt"]
+
+
+def test_sources_non_glob_substitutes_src_and_dst(tmp_path: Path) -> None:
+    make_test_file(tmp_path, "sub/x.pyt")
+    m = PYTModel(str(tmp_path), "sub/x.pyt")
+    m.add_source(action="copy", src="in_${P}.txt", dst="out_{p}.txt")
+
+    assets = m.get_sources(family=None, parameters=None, on_options=[], subs={"p": "2", "P": "2"})
+
+    assert len(assets) == 1
+    assert assets[0].src == tmp_path / "sub" / "in_2.txt"
+    assert assets[0].dst == "out_2.txt"
 
 
 def test_set_id_sets_explicit_jobspec_id(tmp_path: Path) -> None:

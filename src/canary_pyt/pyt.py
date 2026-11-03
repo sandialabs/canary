@@ -425,51 +425,68 @@ class PYTModel:
         subs: dict[str, Any] | None = None,
     ) -> list[Asset]:
         sources = self.sources.eval(family=family, parameters=parameters, on_options=on_options)
-
         assets: list[Asset] = []
-        base_dir = self.file.parent
-
-        def _has_glob(p: str) -> bool:
-            return any(ch in p for ch in ("*", "?", "["))
-
-        for s in sources:
-            src_text = s.src.as_posix()
-            dst_text = s.dst
-
-            if subs:
-                src_text = self.safe_substitute(src_text, **subs)
-                dst_text = None if dst_text is None else self.safe_substitute(dst_text, **subs)
-
-            # Expand globs (relative patterns resolved from the test file directory)
-            if _has_glob(src_text):
-                if os.path.isabs(src_text):
-                    matches = [Path(p) for p in glob.glob(src_text)]
-                else:
-                    matches = sorted(base_dir.glob(src_text))
-
-                if not matches:
-                    logger.warning("source glob matched nothing: %r (from %s)", src_text, self.file)
-                    continue
-
-                # If dst is provided and multiple files match, a single dst is ambiguous
-                if dst_text is not None and len(matches) > 1:
-                    logger.warning(
-                        "source glob %r matched %d files but dst=%r was provided; "
-                        "ignoring dst and using default destination names",
-                        src_text,
-                        len(matches),
-                        dst_text,
-                    )
-                    dst_use = None
-                else:
-                    dst_use = dst_text
-
-                for m in matches:
-                    assets.append(Asset(src=m, dst=dst_use, action=s.action))
-            else:
-                assets.append(Asset(src=Path(src_text), dst=dst_text, action=s.action))
-
+        for source in sources:
+            src_text, dst_text = self._resolve_source_texts(source, subs=subs)
+            assets.extend(
+                self._assets_from_source_spec(source, src_text=src_text, dst_text=dst_text)
+            )
         return assets
+
+    def _resolve_source_texts(
+        self, source: Asset, *, subs: dict[str, Any] | None
+    ) -> tuple[str, str | None]:
+        src_text = source.src.as_posix()
+        dst_text = source.dst
+        if subs:
+            src_text = self.safe_substitute(src_text, **subs)
+            dst_text = None if dst_text is None else self.safe_substitute(dst_text, **subs)
+        return src_text, dst_text
+
+    def _assets_from_source_spec(
+        self, source: Asset, *, src_text: str, dst_text: str | None
+    ) -> list[Asset]:
+        if not self._has_glob(src_text):
+            return [
+                Asset(src=self._resolve_source_path(src_text), dst=dst_text, action=source.action)
+            ]
+
+        matches = self._expand_source_glob(src_text)
+        if not matches:
+            logger.warning("source glob matched nothing: %r (from %s)", src_text, self.file)
+            return []
+
+        dst_use = self._glob_destination(src_text, dst_text, len(matches))
+        return [Asset(src=match, dst=dst_use, action=source.action) for match in matches]
+
+    @staticmethod
+    def _has_glob(path: str) -> bool:
+        return any(ch in path for ch in ("*", "?", "["))
+
+    def _resolve_source_path(self, src_text: str) -> Path:
+        src = Path(src_text)
+        if src.is_absolute():
+            return src
+        return self.file.parent / src
+
+    def _expand_source_glob(self, src_text: str) -> list[Path]:
+        if os.path.isabs(src_text):
+            return [Path(path) for path in glob.glob(src_text)]
+        return sorted(self.file.parent.glob(src_text))
+
+    def _glob_destination(
+        self, src_text: str, dst_text: str | None, match_count: int
+    ) -> str | None:
+        if dst_text is not None and match_count > 1:
+            logger.warning(
+                "source glob %r matched %d files but dst=%r was provided; "
+                "ignoring dst and using default destination names",
+                src_text,
+                match_count,
+                dst_text,
+            )
+            return None
+        return dst_text
 
     def get_baseline(
         self,
@@ -837,160 +854,195 @@ class PYTLockEmitter:
             my_irs: list[JobSpecIR] = []
 
             for parameters in param_dicts:
-                meta_params = model.get_meta_parameters(family, parameters, on_options=on_options)
-                kw = model._sub_kwds(family, parameters, meta_parameters=meta_params)
-                test_mask = model.get_skip_reason(family, parameters, on_options=on_options)
-                keywords = model.get_keywords(family, parameters, on_options=on_options)
-                modules = model.get_modules(family, parameters, on_options=on_options)
-                timeout = model.get_timeout(family, parameters, on_options=on_options)
-                preload = model.get_preload(family, parameters, on_options=on_options)
-                exec_path = model.get_exec_path(family, parameters, on_options=on_options, subs=kw)
-                xstatus = model.get_xstatus(family, parameters, on_options=on_options)
-                exclusive = model.get_exclusive(family, parameters, on_options=on_options)
-                rcfiles = model.get_rcfiles(family, parameters, on_options=on_options)
-                artifacts = model.get_artifacts(family, parameters, on_options=on_options, subs=kw)
-                attributes = model.get_attributes(family, parameters, on_options=on_options)
-                baseline = model.get_baseline(family, parameters, on_options=on_options, subs=kw)
-                assets = model.get_sources(family, parameters, on_options=on_options, subs=kw)
-                deps = model.get_dependencies(family, parameters, on_options=on_options, subs=kw)
-                explicit_id = model.get_id(
-                    family, parameters, meta_parameters=meta_params, on_options=on_options
+                ir, modules, attributes, explicit_id, test_mask = self._build_leaf_ir(
+                    model, family, parameters, on_options=on_options, family_mask=test_mask
                 )
                 if explicit_id is not None:
                     explicit_ids.append(explicit_id)
-
-                ir = JobSpecIR(
-                    id=explicit_id,
-                    file_root=Path(model.root),
-                    file_path=Path(model.path),
-                    family=family,
-                    keywords=keywords,
-                    parameters=parameters,
-                    meta_parameters=meta_params,
-                    modules=[m.name for m in modules],
-                    owners=model.owners,
-                    timeout=timeout or -1.0,
-                    baseline=baseline,
-                    assets=assets,
-                    xstatus=xstatus,
-                    preload=preload,
-                    rcfiles=rcfiles,
-                    artifacts=artifacts,
-                    exclusive=exclusive,
-                    dependencies=deps,
-                    command=list(model.command),
-                    exec_path=exec_path,
-                )
-                ir.add_artifact("testcase.lock")
-                ir.add_artifact(ir.stdout)
-                ir.add_artifact(ir.file.name)
-                if ir.stderr is not None:
-                    ir.add_artifact(ir.stderr)
-
-                enabled, reason = model.get_enable(family, parameters, on_options=on_options)
-                if test_mask is None and enabled is False:
-                    test_mask = reason
-
-                if test_mask is not None:
-                    ir.mask = Mask.masked(test_mask)
-
-                if any(m.use is not None for m in modules):
-                    mp = [x.strip() for x in os.getenv("MODULEPATH", "").split(":") if x.strip()]
-                    for m in modules:
-                        if m.use:
-                            mp.insert(0, m.use)
-                    ir.environment["MODULEPATH"] = ":".join(mp)
-
-                for k, v in attributes.items():
-                    ir.attributes[k] = v
 
                 my_irs.append(ir)
 
             aggregate = model.get_aggregate(family, on_options=on_options)
             if aggregate is not None:
-                psets = model.parameter_sets.eval(family=family, on_options=on_options)
-                if not any(psets):
-                    raise ValueError(
-                        "Generation of composite base job requires at least one parameter"
-                    )
-                parent_explicit_id = model.get_parent_id(
-                    family=family, psets=psets, on_options=on_options
+                parent, parent_explicit_id, test_mask = self._build_parent_ir(
+                    model, family, my_irs, aggregate, on_options=on_options, family_mask=test_mask
                 )
                 if parent_explicit_id is not None:
                     explicit_ids.append(parent_explicit_id)
-
-                modules = model.get_modules(family, parameters=None, on_options=on_options)
-                deps = [
-                    DependencySelector(pattern=d.id, expects=1, when=aggregate.requires)
-                    for d in my_irs
-                ]
-
-                pset_meta = []
-                for ps in psets:
-                    pset_meta.append({"keys": ps.keys, "values": ps.values})
-
-                kw = model._sub_kwds(family, None)
-                parent = JobSpecIR(
-                    file_root=Path(model.root),
-                    file_path=Path(model.path),
-                    id=parent_explicit_id,
-                    family=family,
-                    baseline=[],
-                    owners=model.owners,
-                    modules=[m.name for m in modules],
-                    assets=model.get_sources(family, on_options=on_options, subs=kw),
-                    xstatus=model.get_xstatus(family, on_options=on_options),
-                    preload=model.get_preload(family, on_options=on_options),
-                    rcfiles=model.get_rcfiles(family, on_options=on_options),
-                    keywords=model.get_keywords(family, on_options=on_options),
-                    artifacts=model.get_artifacts(family, on_options=on_options, subs=kw),
-                    exclusive=model.get_exclusive(family, on_options=on_options),
-                    timeout=model.get_timeout(family, on_options=on_options) or -1.0,
-                    attributes={"multicase": True, "paramsets": pset_meta},
-                    dependencies=deps,
-                    exec_path=model.get_exec_path(family, on_options=on_options, subs=kw),
-                )
-                parent.add_artifact("testcase.lock")
-                parent.add_artifact(parent.stdout)
-                parent.add_artifact(parent.file.name)
-                if parent.stderr is not None:
-                    parent.add_artifact(parent.stderr)
-                if aggregate.flag:
-                    parent.command = [sys.executable, os.path.basename(model.path), aggregate.flag]
-                elif aggregate.script:
-                    script = aggregate.script
-                    if os.path.exists(script):
-                        f = Path(script).absolute()
-                    else:
-                        f = model.file.parent / script
-                    if not any(
-                        a.action in ("link", "copy") and a.src.name == f.name for a in parent.assets
-                    ):
-                        parent.assets.append(Asset(f, f.name, action="link"))
-                    parent.command = [f.as_posix()]
-                else:
-                    parent.command = [sys.executable, model.path.name]
-
-                if any(m.use is not None for m in modules):
-                    mp = [x.strip() for x in os.getenv("MODULEPATH", "").split(":") if x.strip()]
-                    for m in modules:
-                        if m.use:
-                            mp.insert(0, m.use)
-                    parent.environment["MODULEPATH"] = ":".join(mp)
-
-                enabled, reason = model.get_enable(family, parameters=None, on_options=on_options)
-                if test_mask is None and enabled is False:
-                    test_mask = reason
-
-                if test_mask is not None:
-                    parent.mask = Mask.masked(test_mask)
-
                 my_irs.append(parent)
 
             check_duplicate_explicit_ids(model.file, explicit_ids)
             irs.extend(my_irs)
 
         return irs
+
+    def _build_leaf_ir(
+        self,
+        model: PYTModel,
+        family: str,
+        parameters: dict[str, Any],
+        *,
+        on_options: list[str] | None,
+        family_mask: str | None,
+    ) -> tuple[JobSpecIR, list[ModuleSpec], dict[str, Any], str | None, str | None]:
+        meta_params = model.get_meta_parameters(family, parameters, on_options=on_options)
+        kw = model._sub_kwds(family, parameters, meta_parameters=meta_params)
+        current_mask = model.get_skip_reason(family, parameters, on_options=on_options)
+        keywords = model.get_keywords(family, parameters, on_options=on_options)
+        modules = model.get_modules(family, parameters, on_options=on_options)
+        timeout = model.get_timeout(family, parameters, on_options=on_options)
+        preload = model.get_preload(family, parameters, on_options=on_options)
+        exec_path = model.get_exec_path(family, parameters, on_options=on_options, subs=kw)
+        xstatus = model.get_xstatus(family, parameters, on_options=on_options)
+        exclusive = model.get_exclusive(family, parameters, on_options=on_options)
+        rcfiles = model.get_rcfiles(family, parameters, on_options=on_options)
+        artifacts = model.get_artifacts(family, parameters, on_options=on_options, subs=kw)
+        attributes = model.get_attributes(family, parameters, on_options=on_options)
+        baseline = model.get_baseline(family, parameters, on_options=on_options, subs=kw)
+        assets = model.get_sources(family, parameters, on_options=on_options, subs=kw)
+        deps = model.get_dependencies(family, parameters, on_options=on_options, subs=kw)
+        explicit_id = model.get_id(
+            family, parameters, meta_parameters=meta_params, on_options=on_options
+        )
+
+        ir = JobSpecIR(
+            id=explicit_id,
+            file_root=Path(model.root),
+            file_path=Path(model.path),
+            family=family,
+            keywords=keywords,
+            parameters=parameters,
+            meta_parameters=meta_params,
+            modules=[m.name for m in modules],
+            owners=model.owners,
+            timeout=timeout or -1.0,
+            baseline=baseline,
+            assets=assets,
+            xstatus=xstatus,
+            preload=preload,
+            rcfiles=rcfiles,
+            artifacts=artifacts,
+            exclusive=exclusive,
+            dependencies=deps,
+            command=list(model.command),
+            exec_path=exec_path,
+        )
+        self._add_standard_artifacts(ir)
+
+        family_mask = self._update_family_mask(
+            model, family, parameters=parameters, on_options=on_options, family_mask=current_mask
+        )
+        if family_mask is not None:
+            ir.mask = Mask.masked(family_mask)
+
+        self._apply_modulepath_uses(ir, modules)
+        for k, v in attributes.items():
+            ir.attributes[k] = v
+
+        return ir, modules, attributes, explicit_id, family_mask
+
+    def _build_parent_ir(
+        self,
+        model: PYTModel,
+        family: str,
+        my_irs: list[JobSpecIR],
+        aggregate: AggregateSpec,
+        *,
+        on_options: list[str] | None,
+        family_mask: str | None,
+    ) -> tuple[JobSpecIR, str | None, str | None]:
+        psets = model.parameter_sets.eval(family=family, on_options=on_options)
+        if not any(psets):
+            raise ValueError("Generation of composite base job requires at least one parameter")
+
+        parent_explicit_id = model.get_parent_id(family=family, psets=psets, on_options=on_options)
+        modules = model.get_modules(family, parameters=None, on_options=on_options)
+        deps = [
+            DependencySelector(pattern=d.id, expects=1, when=aggregate.requires) for d in my_irs
+        ]
+        pset_meta = [{"keys": ps.keys, "values": ps.values} for ps in psets]
+        kw = model._sub_kwds(family, None)
+
+        parent = JobSpecIR(
+            file_root=Path(model.root),
+            file_path=Path(model.path),
+            id=parent_explicit_id,
+            family=family,
+            baseline=[],
+            owners=model.owners,
+            modules=[m.name for m in modules],
+            assets=model.get_sources(family, on_options=on_options, subs=kw),
+            xstatus=model.get_xstatus(family, on_options=on_options),
+            preload=model.get_preload(family, on_options=on_options),
+            rcfiles=model.get_rcfiles(family, on_options=on_options),
+            keywords=model.get_keywords(family, on_options=on_options),
+            artifacts=model.get_artifacts(family, on_options=on_options, subs=kw),
+            exclusive=model.get_exclusive(family, on_options=on_options),
+            timeout=model.get_timeout(family, on_options=on_options) or -1.0,
+            attributes={"multicase": True, "paramsets": pset_meta},
+            dependencies=deps,
+            exec_path=model.get_exec_path(family, on_options=on_options, subs=kw),
+        )
+        self._add_standard_artifacts(parent)
+        self._set_parent_command(parent, model, aggregate)
+        self._apply_modulepath_uses(parent, modules)
+
+        family_mask = self._update_family_mask(
+            model, family, parameters=None, on_options=on_options, family_mask=family_mask
+        )
+        if family_mask is not None:
+            parent.mask = Mask.masked(family_mask)
+
+        return parent, parent_explicit_id, family_mask
+
+    @staticmethod
+    def _add_standard_artifacts(ir: JobSpecIR) -> None:
+        ir.add_artifact("testcase.lock")
+        ir.add_artifact(ir.stdout)
+        ir.add_artifact(ir.file.name)
+        if ir.stderr is not None:
+            ir.add_artifact(ir.stderr)
+
+    @staticmethod
+    def _apply_modulepath_uses(ir: JobSpecIR, modules: list[ModuleSpec]) -> None:
+        if any(m.use is not None for m in modules):
+            mp = [x.strip() for x in os.getenv("MODULEPATH", "").split(":") if x.strip()]
+            for module in modules:
+                if module.use:
+                    mp.insert(0, module.use)
+            ir.environment["MODULEPATH"] = ":".join(mp)
+
+    @staticmethod
+    def _set_parent_command(parent: JobSpecIR, model: PYTModel, aggregate: AggregateSpec) -> None:
+        if aggregate.flag:
+            parent.command = [sys.executable, os.path.basename(model.path), aggregate.flag]
+        elif aggregate.script:
+            script = aggregate.script
+            if os.path.exists(script):
+                f = Path(script).absolute()
+            else:
+                f = model.file.parent / script
+            if not any(
+                a.action in ("link", "copy") and a.src.name == f.name for a in parent.assets
+            ):
+                parent.assets.append(Asset(f, f.name, action="link"))
+            parent.command = [f.as_posix()]
+        else:
+            parent.command = [sys.executable, model.path.name]
+
+    @staticmethod
+    def _update_family_mask(
+        model: PYTModel,
+        family: str,
+        *,
+        parameters: dict[str, Any] | None,
+        on_options: list[str] | None,
+        family_mask: str | None,
+    ) -> str | None:
+        enabled, reason = model.get_enable(family, parameters, on_options=on_options)
+        if family_mask is None and enabled is False:
+            family_mask = reason
+        return family_mask
 
 
 class PYTLoader:
@@ -1034,15 +1086,9 @@ def parse_dependencies(
         return [arg]
 
     if isinstance(arg, str):
-        when: str = legacy_result or "on_success"
-        if legacy_result is not None:
-            s = "DEPRECATED: depends_on(%r, result=%r, ...); use depends_on({'job': %r, when=%r, ...})"
-            logger.warning(s, arg, legacy_result, arg, legacy_result)
-        expects: str | int = legacy_expect or "+"
-        if legacy_expect is not None:
-            s = "DEPRECATED: depends_on(%r, expect=%r, ...); use depends_on({'job': %r, expects=%r, ...})"
-            logger.warning(s, arg, legacy_expect, arg, legacy_expect)
-        return [parse_dependency({"job": arg, "when": when, "expects": expects}, 0)]
+        return [
+            parse_dependency(_coerce_legacy_dependency_string(arg, legacy_expect, legacy_result), 0)
+        ]
 
     if legacy_expect is not None or legacy_result is not None:
         bad: list[str] = []
@@ -1061,6 +1107,9 @@ def parse_dependencies(
 
 def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
     prefix = "depends_on" if index is None else f"depends_on[{index}]"
+    if isinstance(arg, DependencySelector):
+        return arg
+
     if not isinstance(arg, (str, dict)):
         raise TypeError(f"{prefix}: expected string or dict, got {type(arg).__name__}: {arg!r}")
 
@@ -1069,11 +1118,36 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
             raise ValueError(f"{prefix}: job must be a non-empty string")
         return DependencySelector(pattern=arg, expects="+", when="on_success")
 
-    if isinstance(arg, DependencySelector):
-        return arg
-
     assert isinstance(arg, dict)
+    _validate_dependency_keys(arg, prefix)
+    when = _normalize_dependency_when(arg.get("when") or "on_success", prefix)
 
+    if "job" not in arg:
+        raise TypeError(f"{prefix}: missing required keyword 'job'") from None
+    job = arg["job"]
+
+    expects = _normalize_dependency_expects(arg.get("expects", "+"), prefix)
+
+    return DependencySelector(pattern=job, expects=expects, when=when)
+
+
+def _coerce_legacy_dependency_string(
+    arg: str, legacy_expect: str | int | None, legacy_result: str | None
+) -> dict[str, str | int]:
+    when: str = legacy_result or "on_success"
+    if legacy_result is not None:
+        s = "DEPRECATED: depends_on(%r, result=%r, ...); use depends_on({'job': %r, when=%r, ...})"
+        logger.warning(s, arg, legacy_result, arg, legacy_result)
+
+    expects: str | int = legacy_expect or "+"
+    if legacy_expect is not None:
+        s = "DEPRECATED: depends_on(%r, expect=%r, ...); use depends_on({'job': %r, expects=%r, ...})"
+        logger.warning(s, arg, legacy_expect, arg, legacy_expect)
+
+    return {"job": arg, "when": when, "expects": expects}
+
+
+def _validate_dependency_keys(arg: dict[str, Any], prefix: str) -> None:
     choices = {"job", "when", "expects"}
     extra = set(arg) - choices
     if extra:
@@ -1081,20 +1155,19 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
         s = ", ".join(sorted(choices))
         raise TypeError(f"{prefix}: invalid keys: {x}.  (choose from {s})")
 
-    when: str = arg.get("when") or "on_success"
+
+def _normalize_dependency_when(when: str, prefix: str) -> str:
     choices = {name.lower() for name in Outcome._member_names_ if name != "NONE"}
     choices.update({"on_success", "on_failure", "always", "*"})
     if when.lower() not in choices:
         s = ", ".join(sorted(choices))
         raise TypeError(f"{prefix}['when']: invalid choice: {when!r} (choose from {s})")
     if when == "*":
-        when = "always"
+        return "always"
+    return when
 
-    if "job" not in arg:
-        raise TypeError(f"{prefix}: missing required keyword 'job'") from None
-    job = arg["job"]
 
-    expects = arg.get("expects", "+")
+def _normalize_dependency_expects(expects: str | int, prefix: str) -> str | int:
     if not isinstance(expects, (str, int)):
         raise TypeError(f"{prefix}['expects']: invalid type {type(expects).__name__!r}")
     if isinstance(expects, str):
@@ -1102,10 +1175,10 @@ def parse_dependency(arg: DependencyType, index: int) -> DependencySelector:
         if expects not in choices:
             s = ", ".join(sorted(choices))
             raise TypeError(f"{prefix}['expects']: invalid choice: {expects!r} (choose from {s})")
-    elif expects <= 0:
+        return expects
+    if expects <= 0:
         raise ValueError(f"{prefix}['expects']: invalid value: {expects!r} (must be > 0)")
-
-    return DependencySelector(pattern=job, expects=expects, when=when)
+    return expects
 
 
 def validate_user_id_template(id: str) -> str:
