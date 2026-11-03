@@ -90,7 +90,7 @@ The ``when`` expression recognizes the following conditions:
 
    <font size="+3"> Directives: </font>
 
-"""  # noqa: E501
+"""
 
 # --------------------------------------- NOTE -------------------------------------------------- #
 # This module has empty stubs for each directive.  When a test is loaded, it replaces             #
@@ -314,7 +314,7 @@ def copy(
        #VVT: copy (parameters='breakfast=spam') : spam.txt
        #VVT: copy (parameters='breakfast=eggs') : eggs.txt
 
-    """  # noqa: E501
+    """
 
 
 def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> None:
@@ -449,7 +449,7 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
            working directory = vvt.DEPDIRS[0]
            print(f"baz's results can be found in {working directory}")
 
-    """  # noqa: E501
+    """
 
 
 def description(text: str) -> None:
@@ -712,7 +712,7 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
        #VVT: enable (platform="not Windows", options="not debug") : true
        #VVT: enable (testname=foo) : false
 
-    """  # noqa: E501
+    """
 
 
 def include(file: str, *, when: WhenType | None = None) -> None:
@@ -914,7 +914,7 @@ def link(
 
        #VVT: link (rename) : file1.txt,file1_link.txt file2.txt,file2_link.txt
 
-    """  # noqa: E501
+    """
 
 
 def owners(*args: str) -> None:
@@ -1083,7 +1083,7 @@ def parameterize(
        ├── test1[a=a2,b=b2,x=x1]
        ├── test1[a=a2,b=b2,x=x2]
 
-    """  # noqa: E501
+    """
 
 
 def cpus(arg: int, *, when: WhenType | None = None) -> None:
@@ -1123,7 +1123,7 @@ def cpus(arg: int, *, when: WhenType | None = None) -> None:
       appended to the generated test name. If you want distinct named variants such as
       ``...cpus=8``, use ``parameterize("cpus", ...)`` instead.
 
-    """  # noqa: E501
+    """
 
 
 def nodes(arg: int, *, when: WhenType | None = None) -> None:
@@ -1163,7 +1163,7 @@ def nodes(arg: int, *, when: WhenType | None = None) -> None:
       appended to the generated test name. If you want distinct named variants such as
       ``...nodes=8``, use ``parameterize("nodes", ...)`` instead.
 
-    """  # noqa: E501
+    """
 
 
 def gpus(arg: int, *, when: WhenType | None = None) -> None:
@@ -1203,7 +1203,7 @@ def gpus(arg: int, *, when: WhenType | None = None) -> None:
       appended to the generated test name. If you want distinct named variants such as
       ``...gpus=8``, use ``parameterize("gpus", ...)`` instead.
 
-    """  # noqa: E501
+    """
 
 
 def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> None:

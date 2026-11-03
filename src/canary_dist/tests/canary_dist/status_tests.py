@@ -45,7 +45,7 @@ def test_green_red_yellow_delegates_to_color(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def buf(monkeypatch):
     """Return a StringIO buffer and disable ANSI for predictable output."""
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)

@@ -69,7 +69,7 @@ def _child_main(
     # own textual output (event/live tables, the final results summary, banners)
     # must not reach the shared terminal.  Redirect the OS-level stdout/stderr
     # file descriptors for the whole child.
-    devnull = open(os.devnull, "w")  # noqa: SIM115 - lives for the process
+    devnull = open(os.devnull, "w")
     try:
         os.dup2(devnull.fileno(), 1)
         os.dup2(devnull.fileno(), 2)
@@ -88,7 +88,7 @@ def _child_main(
 
         request = RequestNode(kind=request_dict["kind"], value=request_dict["value"])
         return_code = run_session(request, options)
-    except BaseException:  # noqa: BLE001 - map any failure to a nonzero exit code
+    except BaseException:
         return_code = 1
     sys.exit(int(return_code) if return_code is not None else 0)
 

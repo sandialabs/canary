@@ -1,0 +1,42 @@
+rules:
+  - id: canary-no-bare-except
+    languages: [python]
+    severity: ERROR
+    message: Use an explicit exception type instead of a bare except.
+    patterns:
+      - pattern: |
+          try:
+            ...
+          except:
+            ...
+    paths:
+      exclude:
+        - /src/canary/docs/lib/python/sphinxext/**
+
+  - id: canary-subprocess-run-must-set-check
+    languages: [python]
+    severity: ERROR
+    message: Pass check= explicitly to subprocess.run for deterministic failure handling.
+    patterns:
+      - pattern: subprocess.run($ARGS)
+      - pattern-not: subprocess.run($ARGS, check=$CHECK, ...)
+      - pattern-not: subprocess.run(check=$CHECK, $ARGS, ...)
+    paths:
+      exclude:
+        - /src/canary/docs/lib/python/sphinxext/**
+
+  - id: canary-no-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: Avoid subprocess shell=True; pass an argv list instead.
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+      - pattern-not-inside: |
+          subprocess.$FUNC(
+              ...,
+              shell=True,
+              ...,
+          )  # nosec B602 ...
+    paths:
+      exclude:
+        - /src/canary/docs/lib/python/sphinxext/**

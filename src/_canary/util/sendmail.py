@@ -59,7 +59,7 @@ def sendmail(sendaddr, recvaddrs, subject, content, *, subtype="plain", user=Non
             server = smtplib.SMTP(host)
             server.sendmail(FROM, TO, message.as_string())
             server.quit()
-        except:  # noqa: E722
+        except:
             sio = StringIO()
             traceback.print_exc(50, sio)
             error = sio.getvalue() + "\n"

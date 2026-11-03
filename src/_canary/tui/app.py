@@ -147,7 +147,7 @@ class ExplorerModel:
             return False
         try:
             text = self.fetch_log(st.log_spec_id)
-        except Exception:  # noqa: BLE001 - a transient read race must not crash the UI
+        except Exception:
             return False
         return st.update_log(text)
 
@@ -268,7 +268,7 @@ class ExplorerModel:
 
             return False, f"cannot load request kind {kind!r}"
 
-        except Exception as exc:  # noqa: BLE001 - surface load failures in footer
+        except Exception as exc:
             return False, f"load failed: {exc}"
 
     def begin_run_from_input(self, text: str) -> tuple[bool, str]:
@@ -327,7 +327,7 @@ class ExplorerModel:
 
         try:
             n = future.result()
-        except Exception as exc:  # noqa: BLE001 - surface hook/app failures in footer
+        except Exception as exc:
             self.state.notice = f"rebaseline failed: {exc}"
         else:
             if n:
@@ -422,7 +422,7 @@ class ExplorerModel:
         if self._summary is None:
             try:
                 self._summary = self.fetch_summary()
-            except Exception:  # noqa: BLE001 - workspace may not exist yet
+            except Exception:
                 return {
                     "root": "(starting run…)",
                     "session_count": 0,
@@ -530,7 +530,7 @@ def run(
     # (the run creates it); tolerate that and let the run populate the model.
     try:
         model.refresh()
-    except Exception:  # noqa: BLE001 - no workspace yet; the initial run creates it
+    except Exception:
         model.unsubscribe()
         raise
 

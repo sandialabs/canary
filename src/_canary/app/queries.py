@@ -95,7 +95,7 @@ def _job_view(result: dict[str, Any]) -> JobView:
     timekeeper = result["timekeeper"]
     try:
         duration = float(timekeeper.total())
-    except Exception:  # noqa: BLE001 - timing is advisory; never break the view
+    except Exception:
         duration = 0.0
     if duration < 0:
         duration = 0.0

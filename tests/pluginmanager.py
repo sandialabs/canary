@@ -25,7 +25,7 @@ from _canary.plugins.pluginmanager import CanaryPluginManager
 # --------------------------------------------------------------------------- #
 
 
-@pytest.fixture()
+@pytest.fixture
 def pm():
     """A bare PluginManager without builtins (faster, no side-effects)."""
     from _canary.plugins import hookspec

@@ -72,7 +72,7 @@ class Check(CanarySubcommand):
     aliases = ["check"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Register check flags (-f format, -c lint, -m type, -b bandit, -t test, etc.)."""
+        """Register check flags (-f format, -c lint, -m type, -b bandit, -s semgrep, -t test, etc.)."""
         parser.add_argument(
             "--update-version",
             action="store_true",
@@ -86,6 +86,9 @@ class Check(CanarySubcommand):
         parser.add_argument("-m", nargs=0, action=Action, help="run mypy (default)")
         parser.add_argument(
             "-b", nargs=0, action=Action, help="run bandit security checks (default)"
+        )
+        parser.add_argument(
+            "-s", nargs=0, action=Action, help="run semgrep static analysis checks (default)"
         )
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
@@ -134,7 +137,7 @@ class Check(CanarySubcommand):
         )
 
         if not hasattr(args, "action") and not has_example_commands:
-            args.action = set("lfcmbt")
+            args.action = set("lfcmsbt")
         elif not hasattr(args, "action"):
             args.action = set()
 
@@ -147,6 +150,8 @@ class Check(CanarySubcommand):
             raise ValueError("ruff must be on PATH to lint check code")
         if shutil.which("bandit") is None and "b" in args.action:
             raise ValueError("bandit must be on PATH to format and check code")
+        if shutil.which("semgrep") is None and "s" in args.action:
+            raise ValueError("semgrep must be on PATH to run static analysis checks")
         if "m" in args.action:
             if shutil.which("ty") is None and shutil.which("mypy") is None:
                 raise ValueError("type checking requires ty or mypy be on PATH")
@@ -168,6 +173,9 @@ class Check(CanarySubcommand):
         if "b" in args.action and shutil.which("bandit"):
             self.security_check(args)
 
+        if "s" in args.action and shutil.which("semgrep"):
+            self.semgrep_check(args)
+
         if "m" in args.action:
             self.type_check_code(args)
 
@@ -184,7 +192,7 @@ class Check(CanarySubcommand):
 
         # All selected checks passed: stamp the date-based version
         # unconditionally.
-        if args.action & set("lfcmbtdC"):
+        if args.action & set("lfcmsbtdC"):
             self.stamp_version()
 
         logger.info("All checks complete!")
@@ -285,6 +293,13 @@ class Check(CanarySubcommand):
         with working_dir(self.root):
             pm = logger.progress_monitor("[bold]Checking[/] source for security violations")
             bandit("-c", "./pyproject.toml", "-r", "src/")
+            pm.done()
+
+    def semgrep_check(self, args: argparse.Namespace):
+        """Run Semgrep with Canary's repository-local ruleset."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor("[bold]Checking[/] source for static analysis violations")
+            semgrep("scan", "--config", ".semgrep.yml", "src/", "tests/", "dev/")
             pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
@@ -460,6 +475,25 @@ def bandit(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["encoding"] = "utf-8"
 
     command = ["bandit", *args]
+    cp = subprocess.run(command, **kwargs)
+
+    if cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+
+    return cp
+
+
+def semgrep(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``semgrep`` with the given arguments, raising on non-zero exit."""
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+
+    command = ["semgrep", *args]
     cp = subprocess.run(command, **kwargs)
 
     if cp.returncode != 0:

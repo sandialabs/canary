@@ -5,13 +5,13 @@
 import typing
 from contextlib import contextmanager
 
-from .config import CONFIG_ENV_CFG64  # noqa: F401
-from .config import CONFIG_ENV_FILENAME  # noqa: F401
+from .config import CONFIG_ENV_CFG64
+from .config import CONFIG_ENV_FILENAME
 from .config import Config
-from .config import ConfigError  # noqa: F401
-from .config import get_scope_filename  # noqa: F401
+from .config import ConfigError
+from .config import get_scope_filename
 
-__all__ = ["Config", "ConfigError", "CONFIG_ENV_FILENAME", "get_scope_filename"]
+__all__ = ["Config", "ConfigError", "CONFIG_ENV_CFG64", "CONFIG_ENV_FILENAME", "get_scope_filename"]
 
 
 _config: Config | None = None

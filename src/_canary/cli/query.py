@@ -772,7 +772,7 @@ def _exec_job(args: argparse.Namespace) -> int:
     # query path starts with "env" — so queries that don't touch env pay no
     # filesystem cost.
     path = args.path.lstrip(".")
-    if path == "env" or path.startswith("env.") or path.startswith("env["):
+    if path == "env" or path.startswith(("env.", "env[")):
         env_file = lockfile.parent / "env.json"
         if env_file.exists():
             data["env"] = json.loads(env_file.read_text())
@@ -860,7 +860,7 @@ def _exec_session(args: argparse.Namespace) -> int:
     if getattr(args, "missing_inputs", False):
         session_name = data.get("name", session_dir.name)
         rows = _db_results_for_session(workspace, session_name)
-        missing = []
+        missing: list[dict[str, Any]] = []
         for row in rows:
             job = workspace.find_job(row["id"])
             lock_data = json.loads(job.lockfile.read_text())

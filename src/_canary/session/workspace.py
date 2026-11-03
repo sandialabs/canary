@@ -256,11 +256,13 @@ class Session:
 class Workspace:
     version_info = (1, 0, 0)
 
-    def __init__(self, anchor: str | Path = Path.cwd()) -> None:
+    def __init__(self, anchor: str | Path | None = None) -> None:
         """Internal constructor. Use `Workspace.create()` or `Workspace.load()`."""
         # Even through this function is not meant to be called, we declare types so that code
         # editors know what to work with.
         self.root: Path
+
+        anchor = Path.cwd() if anchor is None else anchor
 
         # Storage for pointers to test sessions
         self.refs_dir: Path
@@ -1282,8 +1284,8 @@ class Workspace:
         if id is not None:
             try:
                 return self.load_jobs([id])[0]
-            except IndexError:
-                raise ValueError(f"{id}: no matching test job found in {self.root}")
+            except IndexError as exc:
+                raise ValueError(f"{id}: no matching test job found in {self.root}") from exc
         # Do the full (slow) lookup
         candidates: list[Job] = []
         jobs = self.load_jobs()
@@ -1312,8 +1314,8 @@ class Workspace:
         if id is not None:
             try:
                 return self.db.load_specs([id])[0]
-            except IndexError:
-                raise ValueError(f"{id}: no matching spec found in {self.root}")
+            except IndexError as exc:
+                raise ValueError(f"{id}: no matching spec found in {self.root}") from exc
         # Do the full (slow) lookup
         specs = self.db.load_specs()
         for spec in specs:

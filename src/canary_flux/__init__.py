@@ -250,7 +250,7 @@ def allocation_time_limit() -> float:
         if a.qtime:
             try:
                 return float(a.qtime) * 60.0
-            except:
+            except ValueError:
                 return time_in_seconds(a.qtime)
     if t := canary.config.get_timeout_option("session"):
         return float(t)

@@ -430,8 +430,8 @@ def popnext(arg: list[str]) -> str:
         while True:
             try:
                 word += arg.pop(0)
-            except StopIteration:
-                raise SyntaxError(f"{word!r}: no matching {word[0]} found")
+            except StopIteration as exc:
+                raise SyntaxError(f"{word!r}: no matching {word[0]} found") from exc
             if word[0] == word[-1]:
                 break
     return word

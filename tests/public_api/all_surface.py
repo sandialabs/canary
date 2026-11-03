@@ -125,7 +125,7 @@ def test_every_public_name_resolves():
     for name in canary.__all__:
         try:
             getattr(canary, name)
-        except Exception as exc:  # noqa: BLE001 - report any failure
+        except Exception as exc:
             unresolved[name] = repr(exc)
     assert not unresolved, f"public names failed to resolve: {unresolved}"
 

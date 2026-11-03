@@ -125,9 +125,11 @@ class CDashXMLReporter:
         time_part = "-".join(buildstamp.split("-")[:-1])
         try:
             time.strptime(time_part, fmt)
-        except ValueError:
+        except ValueError as exc:
             fmt += "-<track>"
-            raise ValueError(f"expected build stamp should formatted as {fmt!r}, got {buildstamp}")
+            raise ValueError(
+                f"expected build stamp should formatted as {fmt!r}, got {buildstamp}"
+            ) from exc
         return buildstamp
 
     @staticmethod

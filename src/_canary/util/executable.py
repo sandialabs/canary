@@ -228,7 +228,7 @@ class Executable:
             result.returncode = self.returncode = e.errno  # type: ignore
             msg = f"{self.file}: {e.strerror}"
             if fail_on_error:
-                raise ProcessError(msg)
+                raise ProcessError(msg) from e
             logger.error(msg)
 
         except CommandTimedOutError as e:
@@ -242,7 +242,7 @@ class Executable:
             result.returncode = self.returncode = 1
             msg = f"{e}\nUnknown failure occurred when invoking command: {result.cmd}"
             if fail_on_error:
-                raise ProcessError(msg)
+                raise ProcessError(msg) from e
             logger.error(msg)
 
         return result

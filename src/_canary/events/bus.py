@@ -108,7 +108,7 @@ def project_job_event(
     state = job.state
     try:
         duration = float(job.timekeeper.total())
-    except Exception:  # noqa: BLE001 - timing is advisory; never break the bus
+    except Exception:
         duration = 0.0
     if duration < 0:
         duration = 0.0

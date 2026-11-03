@@ -23,12 +23,11 @@ def test_unique_random_name_raises_if_unable_to_generate_name():
     existing_names = {names.random_name(seed=seed)}
     try:
         _ = names.unique_random_name(existing_names, seed=seed)
-        assert False
+        raise AssertionError("expected unique_random_name to raise ValueError")
     except ValueError as e:
         print(e)
-        assert True
-    except:
-        assert False
+    except Exception as e:
+        raise AssertionError("expected ValueError") from e
 
 
 def test_unique_random_name():

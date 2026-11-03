@@ -39,6 +39,8 @@ from .jobspec import validate_parameter_component
 from .jobspec import validate_parameters
 from .jobspec import validate_relative_path
 
+DEFAULT_MASK = Mask.unmasked()
+
 FileResourceT = dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]]
 logger = logging.get_logger(__name__)
 
@@ -188,7 +190,7 @@ class JobSpecIR:
         owners: list[str] | None = None,
         environment: dict[str, str | None] | None = None,
         command: list[str] | None = None,
-        mask: Mask = Mask.unmasked(),
+        mask: Mask = DEFAULT_MASK,
         baseline: list[BaselineAction] | None = None,
         view_path: str | None = None,
         exec_path: str | None = None,

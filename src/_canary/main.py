@@ -165,9 +165,9 @@ class Profiler:
 def invoke_profiled_command(command, args):
     try:
         nlines = int(args.profiling_lines or 20)
-    except ValueError:
+    except ValueError as exc:
         if args.profiling_lines != "all":
-            raise ValueError("Invalid number for --lines: %s" % args.profiling_lines)
+            raise ValueError("Invalid number for --lines: %s" % args.profiling_lines) from exc
         nlines = -1
 
     with Profiler(nlines=nlines):

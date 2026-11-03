@@ -140,18 +140,18 @@ class When:
 
             try:
                 token = next(tokens)
-            except StopIteration:
-                raise InvalidSyntax(token)
+            except StopIteration as exc:
+                raise InvalidSyntax(token) from exc
 
             if (token.type, token.string) != (tokenize.OP, "="):
                 raise InvalidSyntax(token)
 
             try:
                 token = next(tokens)
-            except StopIteration:
-                raise InvalidSyntax(token)
-            except tokenize.TokenError:
-                raise InvalidSyntax(token)
+            except StopIteration as exc:
+                raise InvalidSyntax(token) from exc
+            except tokenize.TokenError as exc:
+                raise InvalidSyntax(token) from exc
 
             if token.type not in (tokenize.NAME, tokenize.STRING, tokenize.NEWLINE):
                 raise InvalidSyntax(token)

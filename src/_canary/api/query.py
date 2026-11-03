@@ -745,7 +745,7 @@ def _normalize_json_path(path: str) -> str:
     if path in ("", "."):
         return "."
 
-    if path.startswith(".") or path.startswith("["):
+    if path.startswith((".", "[")):
         return path
 
     return f".{path}"

@@ -269,7 +269,7 @@ class _MainWorker:
             except QueueEmpty:
                 if not watcher.parent_alive():
                     self._stopping = True
-                    raise ParentGone("main canary process exited")
+                    raise ParentGone("main canary process exited") from None
                 continue
             if msg is None:
                 return
@@ -711,7 +711,7 @@ class ResourceQueueExecutor:
                 except CanaryKill:
                     self._terminate_all(signal.SIGINT)
                     self._check_for_leaks()
-                    raise StopExecution("canary.kill found", signal.SIGTERM)
+                    raise StopExecution("canary.kill found", signal.SIGTERM) from None
 
                 except KeyboardInterrupt as e:
                     reason = None

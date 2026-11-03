@@ -208,8 +208,10 @@ class Duration:
                 raise DurationError("Unknown unit {} in duration {}".format(unit, original))
             try:
                 total += float(value) * Duration.units[unit]
-            except Exception:
-                raise DurationError("Invalid value {} in duration {}".format(value, original))
+            except Exception as exc:
+                raise DurationError(
+                    "Invalid value {} in duration {}".format(value, original)
+                ) from exc
 
         microseconds = total / Duration._microsecond_size
         return timedelta(microseconds=sign * microseconds)
