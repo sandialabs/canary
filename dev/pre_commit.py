@@ -72,7 +72,7 @@ class Check(CanarySubcommand):
     aliases = ["check"]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Register check flags (-f format, -c lint, -m type, -b bandit, -s semgrep, -u vulture, -p deptry, -t test, etc.)."""
+        """Register check flags (-f format, -c lint, -m type, -b bandit, -s semgrep, -u vulture, -p deptry, -k codespell, -t test, etc.)."""
         parser.add_argument(
             "--update-version",
             action="store_true",
@@ -96,6 +96,7 @@ class Check(CanarySubcommand):
         parser.add_argument(
             "-p", nargs=0, action=Action, help="run deptry dependency checks (default)"
         )
+        parser.add_argument("-k", nargs=0, action=Action, help="run codespell spelling checks (default)")
         parser.add_argument("-t", nargs=0, action=Action, help="run pytest (default)")
         parser.add_argument("-C", nargs=0, action=Action, help="run coverage")
         parser.add_argument("-e", nargs=0, action=Action, help="run and check canary examples")
@@ -143,7 +144,7 @@ class Check(CanarySubcommand):
         )
 
         if not hasattr(args, "action") and not has_example_commands:
-            args.action = set("lfcmsupbt")
+            args.action = set("lfcmsupkbt")
         elif not hasattr(args, "action"):
             args.action = set()
 
@@ -162,6 +163,8 @@ class Check(CanarySubcommand):
             raise ValueError("vulture must be on PATH to run dead-code checks")
         if shutil.which("deptry") is None and "p" in args.action:
             raise ValueError("deptry must be on PATH to run dependency checks")
+        if shutil.which("codespell") is None and "k" in args.action:
+            raise ValueError("codespell must be on PATH to run spelling checks")
         if "m" in args.action:
             if shutil.which("ty") is None and shutil.which("mypy") is None:
                 raise ValueError("type checking requires ty or mypy be on PATH")
@@ -192,6 +195,9 @@ class Check(CanarySubcommand):
         if "p" in args.action and shutil.which("deptry"):
             self.deptry_check(args)
 
+        if "k" in args.action and shutil.which("codespell"):
+            self.codespell_check(args)
+
         if "m" in args.action:
             self.type_check_code(args)
 
@@ -208,7 +214,7 @@ class Check(CanarySubcommand):
 
         # All selected checks passed: stamp the date-based version
         # unconditionally.
-        if args.action & set("lfcmsupbtdC"):
+        if args.action & set("lfcmsupkbtdC"):
             self.stamp_version()
 
         logger.info("All checks complete!")
@@ -330,6 +336,28 @@ class Check(CanarySubcommand):
         with working_dir(self.root):
             pm = logger.progress_monitor("[bold]Checking[/] dependency declarations")
             deptry(".")
+            pm.done()
+
+    def codespell_check(self, args: argparse.Namespace):
+        """Run Codespell using repository-local configuration from ``pyproject.toml``."""
+        with working_dir(self.root):
+            pm = logger.progress_monitor("[bold]Checking[/] spelling")
+            codespell(
+                "src/_canary",
+                "src/canary_amd",
+                "src/canary_cdash",
+                "src/canary_cmake",
+                "src/canary_dist",
+                "src/canary_flux",
+                "src/canary_gitlab",
+                "src/canary_hpc",
+                "src/canary_nvidia",
+                "src/canary_pyt",
+                "src/canary_vvtest",
+                "dev",
+                "README.md",
+                "pyproject.toml",
+            )
             pm.done()
 
     def type_check_code(self, args: argparse.Namespace):
@@ -562,6 +590,25 @@ def deptry(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["encoding"] = "utf-8"
 
     command = ["deptry", *args]
+    cp = subprocess.run(command, **kwargs)
+
+    if cp.returncode != 0:
+        if cp.stdout:
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
+        if cp.stderr:
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
+        raise ValueError(f"{' '.join(command)} failed!")
+
+    return cp
+
+
+def codespell(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Run ``codespell`` with the given arguments, raising on non-zero exit."""
+    kwargs["stdout"] = stdout
+    kwargs["stderr"] = stderr
+    kwargs["encoding"] = "utf-8"
+
+    command = ["codespell", "--toml", "pyproject.toml", *args]
     cp = subprocess.run(command, **kwargs)
 
     if cp.returncode != 0:

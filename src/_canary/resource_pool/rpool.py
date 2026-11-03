@@ -679,7 +679,7 @@ class ResourcePool:
         if placements is None:
             return Outcome(
                 False,
-                reason=f"Cannot accomodate request requiring {len(request)} node(s) "
+                reason=f"Cannot accommodate request requiring {len(request)} node(s) "
                 f"from resource pool with {len(self.nodes)} node(s)",
             )
         return Outcome(True)

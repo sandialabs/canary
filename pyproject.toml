@@ -62,6 +62,7 @@ optional-dependencies.dev = [
     "semgrep",
     "vulture",
     "deptry",
+    "codespell",
     "sphinx",
     "sphinx-design",
     "xmlschema",
@@ -337,3 +338,8 @@ extend_exclude = [
 ]
 per_rule_ignores = { DEP001 = ["pyinstrument", "pkg_resources"] }
 optional_dependencies_dev_groups = ["dev"]
+
+[tool.codespell]
+skip = "src/canary/docs/build/*,src/canary/docs/lib/python/*,src/canary/docs/dot/*.pdf,src/_canary/third_party/*,src/*/tests/*"
+ignore-words = ".codespell-ignore-words.txt"
+quiet-level = 3

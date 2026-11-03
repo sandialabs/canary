@@ -256,9 +256,9 @@ def get_specs(
     Raises:
         ValueError: If *strategy* is not a registered strategy name.
     """
-    strat = get_strategy(strategy)
+    rerun_strategy = get_strategy(strategy)
     pspecs = db.get_partial_specs(tag=tag)
-    roots = {pspec.id for pspec in pspecs if strat.selects_root(pspec)}
+    roots = {pspec.id for pspec in pspecs if rerun_strategy.selects_root(pspec)}
     if not roots:
         return []
     return compute_rerun_closure(db, roots=roots)

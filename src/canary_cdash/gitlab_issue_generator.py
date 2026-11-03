@@ -35,7 +35,7 @@ def create_issues_from_failed_tests(
         cdash_project: The CDash project
         gitlab_url: The GitLab project url
         gitlab_project_id: The GitLab project's integer ID
-        access_token: The GitLab access token.  Must have API read/write priveleges
+        access_token: The GitLab access token.  Must have API read/write privileges
         date: Date to retrieve from CDash
         filtergroups: Groups to pull down from CDash.  Defaults to "Nightly"
         skip_sites: Sites (systems) on which to ignore issues. Accepts Python

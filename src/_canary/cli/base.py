@@ -22,7 +22,7 @@ class CanarySubcommand:
     Args:
       name: Subcommand name (e.g., ``canary my-subcommand``)
       description: Subcommand description, shown in ``canary --help``
-      in_repo: Subcommand should be exected inside a test session folder
+      in_repo: Subcommand should be executed inside a test session folder
       execute: Called when the subcommand is invoked
       setup_parser: Called when the subcommand parser is initialized
       epilog: Epilog printed for ``canary my-subcommand --help``

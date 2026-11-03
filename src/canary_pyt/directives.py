@@ -745,7 +745,7 @@ def include(file: str, *, when: WhenType | None = None) -> None:
     -----
 
     * ``include``\ d files can ``include`` other files
-    * If ``file`` is a relative path, it is assumed relative to the file ``includ``\ing it
+    * If ``file`` is a relative path, it is assumed relative to the file ``include``\ing it
     * The alias ``insert directive file`` is also recognized
 
     Examples

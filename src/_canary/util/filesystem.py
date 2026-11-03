@@ -411,7 +411,7 @@ def mkdirp(*paths: PathLike, mode: int | None = None) -> None:
     Arguments:
         paths (str): paths to create with mkdirp
 
-    Keyword Aguments:
+    Keyword Arguments:
         mode (permission bits or None, optional): optional permissions to
             set on the created directory -- use OS default if not provided
     """

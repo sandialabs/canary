@@ -445,7 +445,7 @@ def tokenize_table_text(table_text: str) -> Generator[TableToken, None, None]:
 
        a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
 
-    The splitting is complicated by accomodating spaces around the comma:
+    The splitting is complicated by accommodating spaces around the comma:
 
     .. code-block:: console
 

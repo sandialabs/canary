@@ -258,7 +258,7 @@ def _parse_wall_seconds(submit_args: Sequence[str]) -> float | None:
     """Extract a wall-limit (in seconds) from scheduler submit args, if pinned.
 
     Thin wrapper around :func:`canary_hpc.walltime.pinned_wall_seconds` that
-    returns ``None`` (instead of raising) for unparseable values.  Used only for
+    returns ``None`` (instead of raising) for unparsable values.  Used only for
     diagnostics; :meth:`TestBatch.wall_limit` uses the strict parser.
     """
     try:

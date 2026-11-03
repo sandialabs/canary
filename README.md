@@ -141,7 +141,7 @@ canary pre-commit
 ```
 
 `canary pre-commit` adds any missing license headers, formats and lints the tree,
-type-checks, runs bandit, runs Semgrep, runs Vulture, runs Deptry, runs the test suite, and, if everything passes,
+type-checks, runs bandit, runs Semgrep, runs Vulture, runs Deptry, runs Codespell, runs the test suite, and, if everything passes,
 stamps `pyproject.toml` with today's date-based version (`YY.M.D`).
 
 For documentation changes, run the same docs build that CI uses:

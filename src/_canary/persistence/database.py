@@ -1057,7 +1057,7 @@ class WorkspaceDatabase:
         """Extract the earliest meaningful timestamp from a serialised :class:`Timekeeper`.
 
         Returns the first positive value among ``_started``, ``_submitted``, and
-        ``_finished``, or ``-1.0`` if the text is absent or unparseable.
+        ``_finished``, or ``-1.0`` if the text is absent or unparsable.
         """
         if not text:
             return -1.0
@@ -1184,7 +1184,7 @@ def increment_hex_prefix(prefix: str) -> str | None:
     try:
         value = int(prefix, 16)
     except ValueError:
-        raise ValueError(f"Ivalid hex prefix: {prefix!r}") from None
+        raise ValueError(f"Invalid hex prefix: {prefix!r}") from None
     max_value = (1 << (4 * len(prefix))) - 1
     if value == max_value:
         logger.warning("No valid upper bound - prefix overflow")

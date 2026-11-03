@@ -11,7 +11,7 @@ Layout (all directories must live on the same filesystem so rename is atomic):
       tmp/      writers only; partial files live here
       ready/    committed items; the listener scans this (optionally sharded)
       claimed/  items owned by a listener until acked
-      failed/   unparseable or repeatedly failing items, kept for inspection
+      failed/   unparsable or repeatedly failing items, kept for inspection
 
 Delivery is at-least-once: a listener crash after claim() but before ack()
 leaves items in claimed/, and requeue_stale() returns them to ready/. Consumers
@@ -159,7 +159,7 @@ class FSQueue:
 
     def receive(self, limit: int = 1000) -> list[tuple[Path, Any]]:
         """
-        Claim and parse up to ``limit`` items. Unparseable items are moved to failed/.
+        Claim and parse up to ``limit`` items. Unparsable items are moved to failed/.
 
         Returns (path, obj) pairs; pass the paths to ack() after the DB commit.
         """

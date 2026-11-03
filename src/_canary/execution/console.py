@@ -393,7 +393,7 @@ class _LiveConsoleHandler(logging.builtin_logging.Handler):
 
     def emit(self, record: logging.builtin_logging.LogRecord) -> None:
         try:
-            # Re-use the canary Formatter to get the colored level prefix.
+            # Reuse the canary Formatter to get the colored level prefix.
             msg = self.format(record)
             self._console.log(msg, markup=True, highlight=False)
         except Exception:  # nosec B110

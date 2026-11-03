@@ -195,6 +195,6 @@ class MultiParameters(Parameters):
         elif isinstance(ix, int):
             return self._values[ix]
         rows = [self._values[i] for i in ix]
-        # return colum data, now row data
+        # return column data, not row data
         columns = tuple(zip(*rows))
         return columns

@@ -526,7 +526,7 @@ class JobSpec:
 
 
 class _GlobalSpecCache:
-    """Simple cache for storing re-used data feeding the spec ID"""
+    """Simple cache for storing reused data feeding the spec ID"""
 
     _key: dict[Path, Path] = {}
     """Maps the input file path to a key index (absolute path)"""

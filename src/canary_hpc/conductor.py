@@ -531,7 +531,7 @@ class CanaryHPCConductor:
     def setup_parser(
         parser: "canary.Parser | LegacyParserAdapter | argparse._ArgumentGroup",
     ) -> None:
-        """Exists to accomodate ``canary hpc run`` and ``canary run -b ...``"""
+        """Exists to accommodate ``canary hpc run`` and ``canary run -b ...``"""
         parser.add_argument(
             "--backend",
             "--scheduler",
