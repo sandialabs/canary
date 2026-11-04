@@ -39,6 +39,7 @@ canary usage
    :caption: Reruns and result control
 
    usage.rerun
+   usage.runhook
    usage.rebaseline
    usage.enable
    usage.xstatus

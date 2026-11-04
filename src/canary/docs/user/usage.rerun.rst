@@ -84,3 +84,6 @@ Examples:
    canary run --only failed .
    canary run --only not_run .
    canary run --only changed .
+
+The same ``--only`` strategies are also available when replaying stored finish
+hooks with :doc:`/user/usage.runhook`.

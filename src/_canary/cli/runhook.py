@@ -12,7 +12,6 @@ from ..app.pathspec import TagRequest
 from ..app.pathspec import classify_pathspec
 from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
-from .common import add_filter_arguments
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -26,6 +25,13 @@ def canary_addcommand(parser: "Parser") -> None:
 class RunHook(CanarySubcommand):
     name = "runhook"
     description = "Replay stored job hooks against existing results"
+    epilog = (
+        "Examples:\n\n"
+        "[pad]canary runhook canary_runtest_finish\n\n"
+        "[pad]canary runhook canary_runtest_finish --only failed\n\n"
+        "[pad]canary runhook canary_runtest_finish -k fast\n\n"
+        "[pad]canary runhook canary_runtest_finish --session latest TEST_ID"
+    )
 
     def setup_parser(self, parser: "Parser") -> None:
         sub = parser.add_subparsers(dest="runhook_command", metavar="HOOK")
@@ -42,7 +48,13 @@ class RunHook(CanarySubcommand):
             help='Session name, prefix, or "latest" used when defaulting to stored session results',
         )
         rerun.setup_parser(finish)
-        add_filter_arguments(finish, tagged=False)
+        finish.add_argument(
+            "-k",
+            dest="keyword_exprs",
+            metavar="expression",
+            action="append",
+            help="Restrict hook replay to stored jobs matching keyword expression",
+        )
         finish.set_defaults(_runhook_handler=self.run_finish)
 
     def execute(self, args: argparse.Namespace) -> int:

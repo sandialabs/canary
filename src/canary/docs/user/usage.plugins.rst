@@ -180,6 +180,18 @@ After the run, inspect the measurements directly:
 Because the values are stored as measurements, you can query them later without
 scraping logs.
 
+When iterating on a ``canary_runtest_finish`` plugin, you can replay the hook
+against existing stored results instead of re-running the tests:
+
+.. code-block:: console
+
+   $ canary runhook canary_runtest_finish
+   $ canary runhook canary_runtest_finish --only failed
+   $ canary runhook canary_runtest_finish -k accuracy
+
+This is often the fastest way to refine post-processing logic that turns output
+files into measurements or derived artifacts.
+
 Adding environment or site metadata
 -----------------------------------
 
@@ -236,6 +248,8 @@ Notes
   entry point is propagated to worker processes and nested execution contexts.
 * ``canary_runtest_finish`` failures are logged for diagnosis and do not change
   the job's outcome.
+* Use :doc:`/user/usage.runhook` to replay ``canary_runtest_finish`` on stored
+  results while iterating on a plugin.
 * Use ``canary exec JOB_ID`` when you want to debug hook code interactively in a
   single process.
 
