@@ -263,6 +263,21 @@ def test_agent_bootstrap_args_parse():
     assert args.force is True
 
 
+def test_runhook_canary_runtest_finish_args_parse():
+    parser = make_cli_parser()
+
+    args = parser.parse_args(["runhook", "canary_runtest_finish", "--session", "latest"])
+    assert args.command == "runhook"
+    assert args.runhook_command == "canary_runtest_finish"
+    assert args.session == "latest"
+    assert args.only is None
+
+    args = parser.parse_args(["runhook", "canary_runtest_finish", "--only", "failed"])
+    assert args.command == "runhook"
+    assert args.runhook_command == "canary_runtest_finish"
+    assert args.only == "failed"
+
+
 def test_quiet_flag_clamps_to_most_quiet_log_level():
 
     parser = make_argument_parser()

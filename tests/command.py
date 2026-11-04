@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 import canary
+from _canary import config as config_mod
 from _canary.cli import learn as learn_mod
 from _canary.cli.agent import BOOTSTRAP_SKILLS
 from _canary.cli.agent import write_agent_bootstrap
@@ -539,6 +540,135 @@ def test_analyze(setup):
         run = CanaryCommand("run")
         cp = run("--only", "all", "-k", "g", "--", "--stage=analyze")
         assert cp.returncode == 0
+
+
+def test_runhook_finish_replays_latest_session_jobs_with_only_filter(tmp_path):
+    from _canary.app.pathspec import TagRequest
+    from _canary.app.runhook import RunHookOptions
+    from _canary.app.runhook import run_hook
+
+    with working_dir(tmp_path), canary.config.override():
+        (tmp_path / "case.pyt").write_text(
+            """\
+import canary
+import canary_pyt
+canary_pyt.directives.parameterize('a', (1, 2))
+def test():
+    self = canary.get_instance()
+    if self.parameters.a == 2:
+        raise canary.TestFailed()
+if __name__ == '__main__':
+    test()
+"""
+        )
+
+        workspace = Workspace.create(tmp_path)
+        specs = workspace.collect({str(tmp_path): []})
+        session = workspace.run(specs, only="all")
+        assert session.returncode != 0
+
+        calls: list[tuple[str, str]] = []
+
+        class Recorder:
+            @canary.hookimpl
+            def canary_runtest_finish(self, case):
+                calls.append((case.name, case.status.outcome.name))
+
+        config_mod.pluginmanager.register(Recorder(), name="test.runhook.recorder")
+        try:
+            count = run_hook(
+                "canary_runtest_finish",
+                TagRequest(value=config_mod.get("run:default_tag")),
+                RunHookOptions(only="failed", work_tree=str(tmp_path)),
+            )
+        finally:
+            config_mod.pluginmanager.unregister(name="test.runhook.recorder")
+
+    assert count == 0
+    assert calls == [("case.a=2", "FAILED")]
+
+
+def test_runhook_finish_replays_latest_session_by_default_tag(tmp_path):
+    from _canary.app.pathspec import TagRequest
+    from _canary.app.runhook import RunHookOptions
+    from _canary.app.runhook import _resolve_hook_jobs
+
+    with working_dir(tmp_path), canary.config.override():
+        (tmp_path / "case.pyt").write_text(
+            """\
+import canary
+def test():
+    pass
+if __name__ == '__main__':
+    test()
+"""
+        )
+
+        workspace = Workspace.create(tmp_path)
+        specs = workspace.collect({str(tmp_path): []})
+        workspace.run(specs, only="all")
+
+        jobs = _resolve_hook_jobs(
+            workspace,
+            TagRequest(value=config_mod.get("run:default_tag")),
+            RunHookOptions(work_tree=str(tmp_path)),
+        )
+
+    assert [job.name for job in jobs] == ["case"]
+
+
+def test_runhook_finish_honors_keyword_filter(tmp_path):
+    from _canary.app.pathspec import TagRequest
+    from _canary.app.runhook import RunHookOptions
+    from _canary.app.runhook import run_hook
+
+    with working_dir(tmp_path), canary.config.override():
+        (tmp_path / "case_fast.pyt").write_text(
+            """\
+import canary
+import canary_pyt
+canary_pyt.directives.keywords('fast')
+def test():
+    pass
+if __name__ == '__main__':
+    test()
+"""
+        )
+        (tmp_path / "case_slow.pyt").write_text(
+            """\
+import canary
+import canary_pyt
+canary_pyt.directives.keywords('slow')
+def test():
+    pass
+if __name__ == '__main__':
+    test()
+"""
+        )
+
+        workspace = Workspace.create(tmp_path)
+        specs = workspace.collect({str(tmp_path): []})
+        workspace.run(specs, only="all")
+
+        calls: list[str] = []
+
+        class Recorder:
+            @canary.hookimpl
+            def canary_runtest_finish(self, case):
+                calls.append(case.name)
+
+        config_mod.pluginmanager.register(Recorder(), name="test.runhook.keyword")
+        try:
+            rc = run_hook(
+                "canary_runtest_finish",
+                TagRequest(value=config_mod.get("run:default_tag")),
+                RunHookOptions(keyword_exprs=["fast"], work_tree=str(tmp_path)),
+            )
+        finally:
+            config_mod.pluginmanager.unregister(name="test.runhook.keyword")
+
+    assert rc == 0
+    assert calls == ["case_fast"]
 
 
 def test_tree():

@@ -74,6 +74,7 @@ from ..app.failure_analysis import job_from_result_row
 from ..app.failure_analysis import list_existing_logs
 from ..app.failure_analysis import tail_lines
 from ..app.paths import remap_path
+from ..app.query_helpers import resolve_session_dir as _resolve_session_dir
 from ..plugins.hookspec import hookimpl
 from ..session.workspace import Session
 from ..session.workspace import Workspace
@@ -565,33 +566,6 @@ def _find_cache_path(job: "Job") -> Path | None:
 
     store = HistoryStore.open(start=job.workspace.root)
     return store.path_for(job)
-
-
-def _resolve_session_dir(workspace: Workspace, session: str) -> Path:
-    """Resolve a session name, prefix, or ``"latest"`` to its directory path."""
-    if session == "latest":
-        latest = workspace.refs_dir / "latest"
-        if not latest.exists():
-            raise FileNotFoundError(latest)
-        rel = latest.read_text().strip()
-        return (workspace.refs_dir / rel).resolve()
-
-    candidate = workspace.sessions_dir / session
-    if candidate.is_dir():
-        return candidate
-
-    matches = sorted(p for p in workspace.sessions_dir.glob(f"{session}*") if p.is_dir())
-
-    if not matches:
-        raise ValueError(f"{session!r}: no matching session found")
-
-    if len(matches) > 1:
-        names = ", ".join(p.name for p in matches[:8])
-        if len(matches) > 8:
-            names += ", ..."
-        raise ValueError(f"{session!r}: ambiguous session prefix; matches: {names}")
-
-    return matches[0]
 
 
 def _db_results_for_session(workspace: Workspace, session_name: str) -> list[dict[str, Any]]:

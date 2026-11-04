@@ -39,6 +39,8 @@ from .run import RunOptions
 from .run import run
 from .run_subprocess import RunHandle
 from .run_subprocess import run_in_subprocess
+from .runhook import RunHookOptions
+from .runhook import run_hook
 
 __all__ = [
     "collect",
@@ -47,6 +49,8 @@ __all__ = [
     "get_event_bus",
     "run",
     "RunOptions",
+    "run_hook",
+    "RunHookOptions",
     "run_in_subprocess",
     "RunHandle",
     "rebaseline",

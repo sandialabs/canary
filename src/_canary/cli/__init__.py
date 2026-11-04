@@ -32,6 +32,7 @@ from . import rebaseline
 from . import report
 from . import rm
 from . import run
+from . import runhook
 from . import select
 from . import selection
 from . import status
@@ -60,6 +61,7 @@ plugins = [
     report,
     rm,
     run,
+    runhook,
     select,
     selection,
     status,
