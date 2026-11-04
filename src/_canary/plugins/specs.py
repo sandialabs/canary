@@ -4,9 +4,8 @@
 
 """Plugin specification normalization helpers.
 
-Stage 1 introduces a session-only plugin representation shared by bootstrap
-loading and config snapshots.  A plugin spec always names the import target and
-may optionally include a directory to prepend to ``sys.path`` before import.
+Plugin specs always name the import target and may optionally include a
+directory to prepend to ``sys.path`` before import.
 """
 
 from __future__ import annotations
@@ -14,6 +13,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+
+PluginSpec = dict[str, str]
 
 
 def plugin_spec_schema() -> dict[str, Any]:
@@ -26,16 +27,7 @@ def parse_env_plugins(raw: str | None) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def derive_import_name(raw: str) -> str:
-    path = Path(raw)
-    if raw.endswith(".py"):
-        return path.stem
-    return path.name
-
-
-def normalize_plugin_spec(
-    raw: str, *, base: str | os.PathLike[str] | None = None
-) -> dict[str, str]:
+def normalize_plugin_spec(raw: str, *, base: str | os.PathLike[str] | None = None) -> PluginSpec:
     """Normalize a raw CLI/env plugin token into ``name``/``path`` form.
 
     Rules:
@@ -75,12 +67,32 @@ def normalize_plugin_spec(
 
 def normalize_plugin_specs(
     items: list[str] | None, *, base: str | os.PathLike[str] | None = None
-) -> list[dict[str, str]]:
+) -> list[PluginSpec]:
     return [normalize_plugin_spec(item, base=base) for item in (items or [])]
 
 
-def plugin_display_name(spec: dict[str, str]) -> str:
+def plugin_display_name(spec: PluginSpec) -> str:
     path = spec.get("path")
     if path:
         return os.path.join(path, spec["name"])
     return spec["name"]
+
+
+def normalize_plugin_for_storage_spec(raw: str, *, anchor: str | os.PathLike[str]) -> PluginSpec:
+    """Normalize a raw plugin token for persistence in workspace config."""
+
+    spec = normalize_plugin_spec(raw, base=anchor)
+    path = spec.get("path")
+    if path is None:
+        return {"name": spec["name"]}
+
+    anchor_abs = os.path.abspath(str(anchor))
+    path_abs = os.path.abspath(path)
+    try:
+        if os.path.commonpath([path_abs, anchor_abs]) == anchor_abs:
+            path_value = os.path.relpath(path_abs, anchor_abs)
+        else:
+            path_value = path_abs
+    except ValueError:
+        path_value = path_abs
+    return {"name": spec["name"], "path": path_value}

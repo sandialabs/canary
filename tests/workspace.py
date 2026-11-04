@@ -511,7 +511,7 @@ def test_create_persists_plugin_path_relative_to_anchor(tmp_path):
     _create_with_plugins(proj, [str(proj / "analysis" / "reverify.py")])
 
     cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
-    assert cfg["canary"]["plugins"] == ["analysis/reverify.py"]
+    assert cfg["canary"]["plugins"] == [{"name": "reverify", "path": "analysis"}]
 
 
 def test_create_keeps_module_name_plugin_verbatim(tmp_path):
@@ -522,7 +522,21 @@ def test_create_keeps_module_name_plugin_verbatim(tmp_path):
     _create_with_plugins(proj, ["mypkg.hooks"])
 
     cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
-    assert cfg["canary"]["plugins"] == ["mypkg.hooks"]
+    assert cfg["canary"]["plugins"] == [{"name": "mypkg.hooks"}]
+
+
+def test_create_persists_directory_plugin_as_name_plus_parent_path(tmp_path):
+    import yaml
+
+    proj = tmp_path / "run17"
+    pkg = proj / "plugins" / "myplug"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("VALUE = 1\n")
+
+    _create_with_plugins(proj, [str(pkg)])
+
+    cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
+    assert cfg["canary"]["plugins"] == [{"name": "myplug", "path": "plugins"}]
 
 
 def test_create_does_not_persist_session_plugins(tmp_path):
@@ -584,7 +598,11 @@ def test_stale_persisted_plugin_warns_and_does_not_crash(tmp_path, monkeypatch):
     _create_with_plugins(proj, [])
     # Inject plugins that cannot possibly load (missing file + bogus module).
     (proj / ".canary" / "config.yaml").write_text(
-        "canary:\n  plugins:\n  - analysis/missing.py\n  - totally.bogus.module\n"
+        "canary:\n"
+        "  plugins:\n"
+        "  - name: missing\n"
+        "    path: analysis\n"
+        "  - name: totally.bogus.module\n"
     )
 
     warnings: list[str] = []
@@ -596,7 +614,7 @@ def test_stale_persisted_plugin_warns_and_does_not_crash(tmp_path, monkeypatch):
         config._config.load()
 
     joined = "\n".join(warnings)
-    assert "analysis/missing.py" in joined
+    assert "analysis/missing" in joined
     assert "totally.bogus.module" in joined
 
 

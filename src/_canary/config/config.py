@@ -18,8 +18,10 @@ from schema import Schema
 from schema import SchemaError
 
 from ..plugins.pluginmanager import CanaryPluginManager
+from ..plugins.specs import normalize_plugin_for_storage_spec
 from ..plugins.specs import normalize_plugin_specs
 from ..plugins.specs import parse_env_plugins
+from ..plugins.specs import plugin_display_name
 from ..resource_pool.manager import ResourceManager
 from ..util import json_helper as json
 from ..util import logging
@@ -209,8 +211,9 @@ class Config:
             else:
                 self.pluginmanager.consider_plugin(resolved)
         except Exception as e:
+            display = plugin_display_name(resolved) if isinstance(resolved, dict) else plugin
             logger.warning(
-                f"failed to load plugin {plugin!r} recorded in {source}: {e}; "
+                f"failed to load plugin {display!r} recorded in {source}: {e}; "
                 "continuing without it (pass -p explicitly to force an error)"
             )
 
@@ -531,7 +534,7 @@ def is_plugin_path(name: str) -> bool:
     return os.sep in name or "/" in name
 
 
-def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str:
+def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str | dict[str, str]:
     """Normalize a plugin spec for persistence in a workspace ``config.yaml``.
 
     Path-like plugins are stored RELATIVE to the workspace *anchor* (the
@@ -541,21 +544,9 @@ def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str:
     container).  Paths outside the anchor tree are stored as absolute paths.
     Dotted module names and ``no:`` block directives are stored verbatim.
     """
-    if not is_plugin_path(name):
+    if name.startswith("no:"):
         return name
-    prefix = ""
-    raw = name
-    if raw.startswith("no:"):
-        prefix, raw = "no:", raw[3:]
-    abspath = os.path.abspath(os.path.join(str(anchor), raw)) if not os.path.isabs(raw) else raw
-    anchor_abs = os.path.abspath(str(anchor))
-    try:
-        if os.path.commonpath([abspath, anchor_abs]) == anchor_abs:
-            return f"{prefix}{os.path.relpath(abspath, anchor_abs)}"
-    except ValueError:
-        # Different drives / uncomparable paths — fall back to absolute.
-        pass
-    return f"{prefix}{abspath}"
+    return normalize_plugin_for_storage_spec(name, anchor=anchor)
 
 
 def resolve_plugin(name: str | dict[str, str], *, base: str | Path | None) -> str | dict[str, str]:

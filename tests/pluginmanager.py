@@ -215,6 +215,29 @@ def test_import_plugin_from_directory_relative_path(tmp_path, pm, monkeypatch):
     assert pm.get_plugin("rel_pkg") is not None
 
 
+def test_import_plugin_spec_imports_module_from_explicit_path(tmp_path, pm):
+    pkg = _write_package(tmp_path, "path_pkg", "VALUE = 7\n")
+
+    pm.import_plugin_spec({"name": "path_pkg", "path": str(tmp_path)})
+
+    mod = pm.get_plugin("path_pkg")
+    assert mod is not None
+    assert mod.VALUE == 7  # type: ignore[attr-defined]
+    assert sys.path[0] == str(tmp_path)
+
+
+def test_import_plugin_spec_duplicate_name_different_path_raises(tmp_path, pm):
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    _write_package(left, "dup_pkg", "VALUE = 1\n")
+    _write_package(right, "dup_pkg", "VALUE = 2\n")
+
+    pm.import_plugin_spec({"name": "dup_pkg", "path": str(left)})
+
+    with pytest.raises(Exception, match="different import path"):
+        pm.import_plugin_spec({"name": "dup_pkg", "path": str(right)})
+
+
 # --------------------------------------------------------------------------- #
 # consider_plugin with no: prefix                                              #
 # --------------------------------------------------------------------------- #
@@ -314,8 +337,11 @@ def test_normalize_plugin_for_storage_makes_inside_tree_relative(tmp_path):
     (anchor / "analysis").mkdir(parents=True)
     (anchor / "analysis" / "reverify.py").write_text("X = 1\n")
 
-    assert norm("analysis/reverify.py", anchor=anchor) == "analysis/reverify.py"
-    assert norm(str(anchor / "analysis" / "reverify.py"), anchor=anchor) == "analysis/reverify.py"
+    assert norm("analysis/reverify.py", anchor=anchor) == {"name": "reverify", "path": "analysis"}
+    assert norm(str(anchor / "analysis" / "reverify.py"), anchor=anchor) == {
+        "name": "reverify",
+        "path": "analysis",
+    }
 
 
 def test_normalize_plugin_for_storage_keeps_module_and_outside_paths(tmp_path):
@@ -324,12 +350,12 @@ def test_normalize_plugin_for_storage_keeps_module_and_outside_paths(tmp_path):
     anchor = tmp_path / "run17"
     anchor.mkdir()
     # dotted module names are never treated as paths
-    assert norm("mypkg.hooks", anchor=anchor) == "mypkg.hooks"
+    assert norm("mypkg.hooks", anchor=anchor) == {"name": "mypkg.hooks"}
     # a no:<module> directive is preserved verbatim
     assert norm("no:mypkg.hooks", anchor=anchor) == "no:mypkg.hooks"
     # a path outside the anchor tree is stored absolute
     outside = tmp_path / "elsewhere" / "x.py"
-    assert norm(str(outside), anchor=anchor) == str(outside)
+    assert norm(str(outside), anchor=anchor) == {"name": "x", "path": str(outside.parent)}
 
 
 def test_resolve_plugin_resolves_relative_against_base(tmp_path):
@@ -338,16 +364,23 @@ def test_resolve_plugin_resolves_relative_against_base(tmp_path):
     from _canary.config.config import resolve_plugin
 
     base = tmp_path / "container_mount"
-    assert resolve_plugin("analysis/reverify.py", base=base) == str(
-        base / "analysis" / "reverify.py"
-    )
+    assert resolve_plugin({"name": "reverify", "path": "analysis"}, base=base) == {
+        "name": "reverify",
+        "path": str(base / "analysis"),
+    }
     assert resolve_plugin("no:analysis/reverify.py", base=base) == "no:" + str(
         base / "analysis" / "reverify.py"
     )
     # module names, absolute paths, and a missing base are returned unchanged
-    assert resolve_plugin("mypkg.hooks", base=base) == "mypkg.hooks"
-    assert resolve_plugin("/opt/hooks/x.py", base=base) == "/opt/hooks/x.py"
-    assert resolve_plugin("analysis/reverify.py", base=None) == "analysis/reverify.py"
+    assert resolve_plugin({"name": "mypkg.hooks"}, base=base) == {"name": "mypkg.hooks"}
+    assert resolve_plugin({"name": "x", "path": "/opt/hooks"}, base=base) == {
+        "name": "x",
+        "path": "/opt/hooks",
+    }
+    assert resolve_plugin({"name": "reverify", "path": "analysis"}, base=None) == {
+        "name": "reverify",
+        "path": "analysis",
+    }
 
 
 def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
@@ -386,7 +419,7 @@ def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
         snap = config._config.snapshot()
     snap["invocation_dir"] = str(deck)
     snap["data"] = dict(snap.get("data", {}))
-    snap["data"]["plugins"] = ["analysis/reverify.py"]
+    snap["data"]["plugins"] = [{"name": "reverify", "path": "analysis"}]
 
     # Act as the batch child: cwd is the batch dir, config comes from the snapshot.
     with working_dir(batch), config.override():
