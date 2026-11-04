@@ -37,46 +37,6 @@ jobs:
             python -m pip install --upgrade pip
             pip install build
 
-        - name: Pin hpc-connect for the release build
-          # main tracks hpc-connect from git; a published wheel must instead
-          # depend on a released `hpc-connect==<X>`.  The local `bin/release`
-          # driver normally commits this pin on the release branch/tag, so the
-          # tagged tree is already pinned and this step is a no-op.  If the tag
-          # still has the git dependency (e.g. tagged without bin/release),
-          # pin it here: use the workflow_dispatch input if given, else derive
-          # from the tag (release/YY.MM.DD -> YY.M.D).  Never committed to main.
-          run: |
-            set -euo pipefail
-            if ! grep -q 'hpc-connect @ git' pyproject.toml; then
-              echo "hpc-connect already pinned in pyproject.toml; nothing to do:"
-              grep -n "hpc-connect" pyproject.toml
-              exit 0
-            fi
-            PIN="${{ github.event.inputs.hpc_connect_version }}"
-            if [ -z "$PIN" ]; then
-              TAG="${GITHUB_REF#refs/tags/release/}"
-              # YY.MM.DD -> YY.M.D (strip leading zeros in month/day)
-              PIN=$(python -c "import sys; y,m,d=sys.argv[1].split('.'); print(f'{int(y)}.{int(m)}.{int(d)}')" "$TAG")
-            fi
-            echo "Pinning hpc-connect==$PIN"
-            python - "$PIN" <<'PY'
-            import re, sys
-            pin = sys.argv[1]
-            with open("pyproject.toml", encoding="utf-8") as fh:
-                text = fh.read()
-            new, n = re.subn(
-                r'"hpc-connect @ git\+https://github\.com/sandialabs/hpc-connect\.git"',
-                f'"hpc-connect=={pin}"',
-                text,
-            )
-            if n != 1:
-                raise SystemExit(f"expected exactly one hpc-connect git dependency to pin, found {n}")
-            with open("pyproject.toml", "w", encoding="utf-8") as fh:
-                fh.write(new)
-            print(f"pinned hpc-connect=={pin}")
-            PY
-            grep -n "hpc-connect" pyproject.toml
-
         - name: Build distribution
           run: |
             python -m build
