@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import importlib.util
 import inspect
 import os
 import pathlib
@@ -13,6 +12,7 @@ from typing import Any
 import pluggy
 
 from . import hookspec
+from .specs import normalize_plugin_spec
 
 warnings.simplefilter("once", DeprecationWarning)
 
@@ -57,7 +57,9 @@ class CanaryPluginManager(pluggy.PluginManager):
             return
 
         try:
-            self._import_plugin_from_directory(dev_dir)
+            self.import_plugin_spec(
+                {"name": os.path.basename(dev_dir), "path": os.path.dirname(dev_dir)}
+            )
         except Exception as exc:
             import warnings
 
@@ -103,6 +105,9 @@ class CanaryPluginManager(pluggy.PluginManager):
         else:
             self.import_plugin(name)
 
+    def consider_plugin_spec(self, spec: dict[str, str]) -> None:
+        self.import_plugin_spec(spec)
+
     def ensure_loaded(self, name: str) -> None:
         if not self.has_plugin(name):
             self.import_plugin(name)
@@ -112,50 +117,41 @@ class CanaryPluginManager(pluggy.PluginManager):
             self.unregister(name)
 
     def import_plugin(self, name: str) -> None:
+        spec = normalize_plugin_spec(name)
+        self.import_plugin_spec(spec)
+
+    def import_plugin_spec(self, spec: dict[str, str]) -> None:
         """Import and register a plugin.
 
-        Three loading modes are supported:
-
-        1. **File path** — if *name* ends with ``.py`` and names an existing
-           file, the file is loaded as a module whose registration name is the
-           file stem (e.g. ``myhooks.py`` → registered as ``myhooks``).
-
-        2. **Directory path** — if *name* names an existing directory the
-           directory is treated as a package; its ``__init__.py`` is loaded and
-           the registration name is the directory's base name.
-
-        3. **Module name** — otherwise *name* is treated as a dotted Python
-           module name and imported via the normal import machinery (the
-           existing behaviour).
-
-        In all cases the ``no:`` prefix recognised by :meth:`consider_plugin`
-        uses the registration name, not the original path.
+        The normalized spec contains the module/package name and optionally a
+        directory to prepend to ``sys.path`` before import.
         """
-        assert isinstance(name, str), f"module name as text required, got {name!r}"
-
-        # ------------------------------------------------------------------ #
-        # File-path loading: -p /path/to/myhooks.py                          #
-        # ------------------------------------------------------------------ #
-        if name.endswith(".py") and os.path.isfile(name):
-            self._import_plugin_from_file(name)
+        name = spec["name"]
+        if self.is_blocked(name):
             return
 
-        # ------------------------------------------------------------------ #
-        # Directory / package loading: -p /path/to/mypkg                     #
-        # ------------------------------------------------------------------ #
-        if os.path.isdir(name):
-            self._import_plugin_from_directory(name)
-            return
+        if self.get_plugin(name) is not None:
+            existing = self.get_plugin(name)
+            existing_file = getattr(existing, "__file__", None) if existing is not None else None
+            if existing_file is not None and spec.get("path") is not None:
+                expected = os.path.abspath(os.path.join(spec["path"], f"{name}.py"))
+                expected_pkg = os.path.abspath(os.path.join(spec["path"], name, "__init__.py"))
+                actual = os.path.abspath(existing_file)
+                if actual in (expected, expected_pkg):
+                    return
+            if spec.get("path") is None:
+                return
+            raise PluginAlreadyImportedError(
+                f"Plugin {name!r} already registered from a different import path"
+            )
 
-        # ------------------------------------------------------------------ #
-        # Ordinary dotted module name (original behaviour)                   #
-        # ------------------------------------------------------------------ #
-        if self.is_blocked(name) or self.get_plugin(name) is not None:
-            return
+        path = spec.get("path")
+        if path and path not in sys.path:
+            sys.path.insert(0, path)
 
         try:
             __import__(name)
-        except ImportError as e:
+        except Exception as e:
             msg = f"Error importing plugin {name!r}: {e.args[0]}"
             raise ImportError(msg).with_traceback(e.__traceback__) from e
         else:
@@ -165,126 +161,6 @@ class CanaryPluginManager(pluggy.PluginManager):
                 msg = f"Plugin {name} already registered under the name {other}"
                 raise PluginAlreadyImportedError(msg)
             self.register(mod, name)
-
-    # ---------------------------------------------------------------------- #
-    # Private helpers                                                         #
-    # ---------------------------------------------------------------------- #
-
-    def _import_plugin_from_file(self, path: str) -> None:
-        """Load *path* (a ``.py`` file) as a plugin module.
-
-        The module is registered under the file stem so that ``no:<stem>``
-        can later unload it.  The module is also inserted into ``sys.modules``
-        under the same stem name so that relative imports inside the file
-        (if any) can resolve.
-        """
-        stem = derive_plugin_name(path)
-        abs_path = os.path.abspath(path)
-
-        if self.is_blocked(stem):
-            return
-        if self.get_plugin(stem) is not None:
-            existing = self.get_plugin(stem)
-            existing_file = getattr(existing, "__file__", None)
-            if existing_file is not None and os.path.abspath(existing_file) == abs_path:
-                return
-            raise PluginAlreadyImportedError(
-                f"Plugin file {path!r} already registered under the name {stem!r}"
-            )
-
-        spec = importlib.util.spec_from_file_location(stem, abs_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot create module spec for plugin file {path!r}")
-
-        if stem in sys.modules and stem not in self._name2plugin:
-            existing = sys.modules[stem]
-            existing_file = getattr(existing, "__file__", None)
-            if existing_file is not None and os.path.abspath(existing_file) == abs_path:
-                self.register(existing, stem)
-                return
-            raise PluginAlreadyImportedError(
-                f"Plugin file {path!r} would shadow existing module {stem!r}"
-            )
-
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules.setdefault(stem, mod)
-        try:
-            spec.loader.exec_module(mod)  # type: ignore[union-attr]
-        except Exception as e:
-            sys.modules.pop(stem, None)
-            msg = f"Error loading plugin file {path!r}: {e}"
-            raise ImportError(msg) from e
-
-        if mod in self._name2plugin.values():
-            other = next(k for k, v in self._name2plugin.items() if v == mod)
-            msg = f"Plugin {path!r} already registered under the name {other!r}"
-            raise PluginAlreadyImportedError(msg)
-
-        self.register(mod, stem)
-
-    def _import_plugin_from_directory(self, path: str) -> None:
-        """Load *path* (a directory) as a plugin package.
-
-        The directory's ``__init__.py`` is executed and the package is
-        registered under the directory's base name.  The package is also
-        inserted into ``sys.modules`` so intra-package imports work.
-        """
-        pkg_name = derive_plugin_name(path)
-        abs_path = os.path.abspath(path)
-        init = os.path.join(abs_path, "__init__.py")
-
-        if not os.path.isfile(init):
-            raise ImportError(
-                f"Plugin directory {path!r} does not contain an __init__.py; "
-                "it cannot be loaded as a package."
-            )
-
-        if self.is_blocked(pkg_name) or self.get_plugin(pkg_name) is not None:
-            existing = self.get_plugin(pkg_name)
-            existing_file = getattr(existing, "__file__", None) if existing is not None else None
-            if existing_file is not None and os.path.abspath(existing_file) == os.path.abspath(
-                init
-            ):
-                return
-            if self.is_blocked(pkg_name):
-                return
-            raise PluginAlreadyImportedError(
-                f"Plugin directory {path!r} already registered under the name {pkg_name!r}"
-            )
-
-        spec = importlib.util.spec_from_file_location(
-            pkg_name, init, submodule_search_locations=[abs_path]
-        )
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot create module spec for plugin directory {path!r}")
-
-        if pkg_name in sys.modules and pkg_name not in self._name2plugin:
-            existing = sys.modules[pkg_name]
-            existing_file = getattr(existing, "__file__", None)
-            if existing_file is not None and os.path.abspath(existing_file) == os.path.abspath(
-                init
-            ):
-                self.register(existing, pkg_name)
-                return
-            raise PluginAlreadyImportedError(
-                f"Plugin directory {path!r} would shadow existing module {pkg_name!r}"
-            )
-
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules.setdefault(pkg_name, mod)
-        try:
-            spec.loader.exec_module(mod)  # type: ignore[union-attr]
-        except Exception as e:
-            sys.modules.pop(pkg_name, None)
-            msg = f"Error loading plugin directory {path!r}: {e}"
-            raise ImportError(msg) from e
-
-        if mod in self._name2plugin.values():
-            other = next(k for k, v in self._name2plugin.items() if v == mod)
-            msg = f"Plugin {path!r} already registered under the name {other!r}"
-            raise PluginAlreadyImportedError(msg)
-
-        self.register(mod, pkg_name)
 
 
 def getname(obj: Any) -> str:

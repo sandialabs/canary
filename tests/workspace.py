@@ -525,6 +525,26 @@ def test_create_keeps_module_name_plugin_verbatim(tmp_path):
     assert cfg["canary"]["plugins"] == ["mypkg.hooks"]
 
 
+def test_create_does_not_persist_session_plugins(tmp_path):
+    import argparse
+
+    import yaml
+
+    from _canary import config
+
+    proj = tmp_path / "run17"
+    proj.mkdir()
+
+    with config.override():
+        config._config.options = argparse.Namespace(
+            config_mods={"debug": True}, session_plugins=["mypkg.hooks"]
+        )
+        Workspace.create(proj)
+
+    cfg = yaml.safe_load((proj / ".canary" / "config.yaml").read_text())
+    assert cfg["canary"] == {"debug": True}
+
+
 def test_persisted_relative_plugin_loads_after_tree_moved(tmp_path):
     """Emulate the /gpfs (host) vs /projects (container) mount mismatch: create a
     workspace under one prefix, move the whole tree to another, and confirm the

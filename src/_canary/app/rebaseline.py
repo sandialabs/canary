@@ -174,7 +174,6 @@ def _jobs_from_result_rows(workspace: Workspace, rows: list[dict[str, Any]]) -> 
             path=Path(row["workspace"]),
             session=row["session"],
         )
-        job = workspace.find(job=row["id"]) if False else None
         from ..core.job import Job
 
         job = Job(spec=spec, workspace=space)

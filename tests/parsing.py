@@ -172,7 +172,7 @@ def test_register_plugin_action_records_plugins():
 
     parser = make_argument_parser()
     args = parser.parse_args(["-p", "my.plugin", "-p", "other.plugin"])
-    assert args.config_mods["plugins"] == ["my.plugin", "other.plugin"]
+    assert args.session_plugins == ["my.plugin", "other.plugin"]
 
 
 def test_parser_read_args_from_file_updates_parser_argv(tmp_path):

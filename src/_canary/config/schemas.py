@@ -99,13 +99,16 @@ run_schema = Schema(
 )
 
 
+plugin_schema = Schema({"name": str, Optional("path"): str})
+
+
 config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
         Optional("no_pager"): Use(boolean),
         Optional("workspace"): workspace_schema,
-        Optional("plugins"): [str],
+        Optional("plugins"): [Or(str, plugin_schema)],
         Optional("environment"): environment_schema,
         Optional("scratch"): any_schema,
         Optional("run"): run_schema,
@@ -142,7 +145,7 @@ environment_variable_schema = EnvarSchema(
     {
         Optional("CANARY_DEBUG"): Use(boolean),
         Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
-        Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
+        Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.strip()]),
         Optional(Regex(r"^CANARY_TIMEOUT_\w+$")): Use(time_in_seconds),
         Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
     },

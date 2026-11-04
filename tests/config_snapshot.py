@@ -181,3 +181,31 @@ def test_snapshot_plugin_load_warning_names_snapshot_source(tmp_path, caplog):
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     assert "recorded in config snapshot" in text
+
+
+def test_set_main_options_merges_session_plugins_into_effective_config(tmp_path):
+    parser = make_argument_parser()
+    args = parser.parse_args(["-p", str(tmp_path / "plugins" / "my_plugin.py")])
+
+    with config.override() as cfg:
+        cfg.invocation_dir = str(tmp_path)
+        cfg.set_main_options(args)
+
+        assert cfg.session_plugins == [{"name": "my_plugin", "path": str(tmp_path / "plugins")}]
+        assert cfg.data["plugins"] == [{"name": "my_plugin", "path": str(tmp_path / "plugins")}]
+
+
+def test_bootstrap_plugin_specs_include_env_and_cli(monkeypatch, tmp_path):
+    from _canary.config.config import get_bootstrap_plugin_specs
+
+    monkeypatch.setenv("CANARY_PLUGINS", f"env.plugin,{tmp_path / 'pkg'}")
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "__init__.py").write_text("VALUE = 1\n")
+
+    specs = get_bootstrap_plugin_specs(argv_plugins=[str(tmp_path / "plug.py")])
+
+    assert specs == [
+        {"name": "env.plugin"},
+        {"name": "pkg", "path": str(tmp_path)},
+        {"name": "plug", "path": str(tmp_path)},
+    ]

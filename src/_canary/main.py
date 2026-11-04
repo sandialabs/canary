@@ -15,6 +15,7 @@ from typing import Any
 
 from . import config
 from .config import ConfigError
+from .config import config as config_mod
 from .config.argparsing import make_argument_parser
 from .error import SessionTerminated
 from .error import StopExecution
@@ -102,8 +103,8 @@ class CanaryMain:
         # Consider plugins passed in the environment and the command line early, before parsing the
         # main command line. This allows plugins to define a subcommand (which must be registered
         # before it can be run)
-        for p in args.plugins:
-            config.pluginmanager.consider_plugin(p)
+        for spec in config_mod.get_bootstrap_plugin_specs(argv_plugins=args.plugins):
+            config.pluginmanager.consider_plugin_spec(spec)
         return self
 
     def __exit__(self, _ex_type, _ex_value, _ex_traceback):

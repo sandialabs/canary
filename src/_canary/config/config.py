@@ -13,10 +13,13 @@ from typing import Literal
 
 import yaml
 from schema import Optional
+from schema import Or
 from schema import Schema
 from schema import SchemaError
 
 from ..plugins.pluginmanager import CanaryPluginManager
+from ..plugins.specs import normalize_plugin_specs
+from ..plugins.specs import parse_env_plugins
 from ..resource_pool.manager import ResourceManager
 from ..util import json_helper as json
 from ..util import logging
@@ -26,6 +29,7 @@ from ..util.compression import serialize
 from ..util.rich import set_color_when
 from .schemas import config_schema
 from .schemas import environment_variable_schema
+from .schemas import plugin_schema
 
 invocation_dir = os.getcwd()
 
@@ -90,6 +94,7 @@ class Config:
         self.resource_manager: ResourceManager = ResourceManager(self)
         self.data: dict[str, Any] = {}
         self.options: argparse.Namespace = argparse.Namespace()
+        self.session_plugins: list[dict[str, str]] = []
         if loadini:
             self.load()
 
@@ -103,7 +108,9 @@ class Config:
             data = merge(data, scope)  # type: ignore
         if env_scope := get_env_scope():
             data = merge(data, env_scope)  # type: ignore
-        bootstrap = Schema({Optional("plugins"): [str]}, ignore_extra_keys=True).validate(data)
+        bootstrap = Schema(
+            {Optional("plugins"): [Or(str, plugin_schema)]}, ignore_extra_keys=True
+        ).validate(data)
         # Relative path plugins are resolved against the workspace anchor (the
         # directory containing .canary) per the single rule for relative paths
         # in a workspace config.
@@ -184,7 +191,7 @@ class Config:
         self.pluginmanager.hook.canary_addconfig(config=self)
 
     def _consider_persisted_plugin(
-        self, plugin: str, *, base: str | Path | None, source: str
+        self, plugin: str | dict[str, str], *, base: str | Path | None, source: str
     ) -> None:
         """Load a plugin recorded in persisted config, best-effort.
 
@@ -197,7 +204,10 @@ class Config:
         """
         resolved = resolve_plugin(plugin, base=base)
         try:
-            self.pluginmanager.consider_plugin(resolved)
+            if isinstance(resolved, dict):
+                self.pluginmanager.consider_plugin_spec(resolved)
+            else:
+                self.pluginmanager.consider_plugin(resolved)
         except Exception as e:
             logger.warning(
                 f"failed to load plugin {plugin!r} recorded in {source}: {e}; "
@@ -348,6 +358,16 @@ class Config:
             data.update(validated_mods)
             if envmods := validated_mods.get("environment"):
                 self.apply_environment_mods(envmods)
+
+        persistent_plugins = data.get("plugins") or []
+        session_plugins = normalize_plugin_specs(
+            getattr(args, "session_plugins", None), base=self.invocation_dir
+        )
+        if session_plugins:
+            self.session_plugins = session_plugins
+            data["plugins"] = merge(list(persistent_plugins), session_plugins)
+        elif persistent_plugins:
+            data["plugins"] = persistent_plugins
 
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
@@ -538,7 +558,7 @@ def normalize_plugin_for_storage(name: str, *, anchor: str | Path) -> str:
     return f"{prefix}{abspath}"
 
 
-def resolve_plugin(name: str, *, base: str | Path | None) -> str:
+def resolve_plugin(name: str | dict[str, str], *, base: str | Path | None) -> str | dict[str, str]:
     """Resolve a persisted plugin spec to something loadable in this process.
 
     A relative *path* plugin is resolved against *base*, which is always the
@@ -553,6 +573,12 @@ def resolve_plugin(name: str, *, base: str | Path | None) -> str:
     Absolute paths, dotted module names, and ``no:`` block directives are
     returned unchanged.  Returns *name* unchanged when *base* is ``None``.
     """
+    if isinstance(name, dict):
+        spec = dict(name)
+        path = spec.get("path")
+        if path and base is not None and not os.path.isabs(path):
+            spec["path"] = os.path.abspath(os.path.join(str(base), path))
+        return spec
     if base is None or not is_plugin_path(name):
         return name
     prefix = ""
@@ -583,6 +609,11 @@ def get_env_scope() -> dict[str, Any]:
                 f"Invalid canary environment variable{where}: {_schema_message(e)}"
             ) from None
     return variables
+
+
+def get_bootstrap_plugin_specs(*, argv_plugins: list[str] | None = None) -> list[dict[str, str]]:
+    env_plugins = parse_env_plugins(os.getenv("CANARY_PLUGINS"))
+    return normalize_plugin_specs(env_plugins + list(argv_plugins or []), base=os.getcwd())
 
 
 def process_config_path(path: str) -> list[str]:

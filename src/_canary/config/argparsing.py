@@ -338,9 +338,9 @@ class RegisterPlugin(argparse.Action):
         option: str | Sequence[Any] | None,
         _option_str: str | None = None,
     ):
-        config_mods = getattr(namespace, self.dest, None) or {}
-        config_mods.setdefault("plugins", []).append(option)
-        setattr(namespace, self.dest, config_mods)
+        session_plugins = list(getattr(namespace, self.dest, None) or [])
+        session_plugins.append(option)
+        setattr(namespace, self.dest, session_plugins)
 
 
 class ConfigMods(argparse.Action):
@@ -405,7 +405,7 @@ def make_argument_parser(**kwargs):
         "-p",
         action=RegisterPlugin,
         default=None,
-        dest="config_mods",
+        dest="session_plugins",
         metavar="name",
         help="Load given plugin module name (multi-allowed). "
         "To avoid loading of plugins, use the `no:` prefix.",
