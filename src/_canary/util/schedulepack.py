@@ -460,53 +460,10 @@ def simulate_makespan(
 
     task_by_id = {task.id: task for task in tasks}
     task_ids = set(task_by_id)
-
-    # Per-task aggregate non-CPU requests, only for capacities we know about.
-    capacity: dict[str, int] = {}
-    if resource_capacity:
-        capacity = {k: int(v) for k, v in resource_capacity.items() if k not in ("cpus", "cpu")}
-    requests: dict[str, dict[str, int]] = {}
-    for task in tasks:
-        req: dict[str, int] = {}
-        if capacity:
-            for demand in task.demands:
-                for amount in demand.resources:
-                    rtype = "cpus" if amount.type == "cpu" else amount.type
-                    if rtype in capacity:
-                        req[rtype] = req.get(rtype, 0) + int(amount.slots)
-            for rtype, n in req.items():
-                if n > capacity[rtype]:
-                    raise ValueError(
-                        f"Task {task.id!r} requests {n} {rtype}, but only "
-                        f"{capacity[rtype]} are available"
-                    )
-        requests[task.id] = req
-
-    successors: dict[str, list[str]] = {task.id: [] for task in tasks}
-    indegree: dict[str, int] = {task.id: 0 for task in tasks}
-
-    for task in tasks:
-        for dep_id in task.dependencies:
-            if dep_id not in task_ids:
-                continue
-
-            successors[dep_id].append(task.id)
-            indegree[task.id] += 1
-
-    def ready_key(task_id: str) -> tuple[float, float, int, tuple[int, ...]]:
-        # Negated so that ascending order == highest priority first.
-        task = task_by_id[task_id]
-        return (
-            -task.scheduling_priority(),
-            -float(task.duration),
-            -int(task.width),
-            _neg_str(str(task.id)),
-        )
-
-    keys: dict[str, tuple] = {tid: ready_key(tid) for tid in task_by_id}
-    ready: list[tuple[tuple, str]] = sorted(
-        (keys[tid], tid) for tid, degree in indegree.items() if degree == 0
-    )
+    capacity, requests = _build_resource_requests(tasks, resource_capacity)
+    successors, indegree = _build_task_graph(tasks, task_ids)
+    keys = {tid: _simulate_ready_key(task_by_id[tid]) for tid in task_by_id}
+    ready = _initial_ready_queue(indegree, keys)
 
     now = 0.0
     available_width = width
@@ -519,29 +476,20 @@ def simulate_makespan(
     sequence = 0
     completed = 0
 
-    def fits(task: ScheduleTask) -> bool:
-        if task.width > available_width:
-            return False
-        for rtype, n in requests[task.id].items():
-            if n > available[rtype]:
-                return False
-        return True
-
     while completed < len(tasks):
         if ready and running_workers < max_workers:
-            keep: list[tuple[tuple, str]] = []
-            for entry in ready:
-                task = task_by_id[entry[1]]
-                if running_workers < max_workers and fits(task):
-                    available_width -= task.width
-                    for rtype, n in requests[task.id].items():
-                        available[rtype] -= n
-                    running_workers += 1
-                    heapq.heappush(running, (now + float(task.duration), sequence, task.id))
-                    sequence += 1
-                else:
-                    keep.append(entry)
-            ready = keep
+            ready, available_width, available, running_workers, sequence = _start_ready_tasks(
+                ready=ready,
+                now=now,
+                max_workers=max_workers,
+                running_workers=running_workers,
+                available_width=available_width,
+                available=available,
+                task_by_id=task_by_id,
+                requests=requests,
+                running=running,
+                sequence=sequence,
+            )
 
         if not running:
             if ready:
@@ -555,23 +503,160 @@ def simulate_makespan(
         next_finish = running[0][0]
         now = max(now, next_finish)
 
-        while running and running[0][0] <= now:
-            _, _, task_id = heapq.heappop(running)
-            task = task_by_id[task_id]
-
-            available_width += task.width
-            for rtype, n in requests[task_id].items():
-                available[rtype] += n
-            running_workers -= 1
-            completed += 1
-
-            for child_id in successors[task_id]:
-                indegree[child_id] -= 1
-
-                if indegree[child_id] == 0:
-                    bisect.insort(ready, (keys[child_id], child_id))
+        available_width, available, running_workers, completed_delta = _finish_completed_tasks(
+            now=now,
+            running=running,
+            task_by_id=task_by_id,
+            requests=requests,
+            available_width=available_width,
+            available=available,
+            running_workers=running_workers,
+            successors=successors,
+            indegree=indegree,
+            ready=ready,
+            keys=keys,
+        )
+        completed += completed_delta
 
     return now
+
+
+def _build_resource_requests(
+    tasks: Sequence[ScheduleTask], resource_capacity: dict[str, int] | None
+) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+    capacity: dict[str, int] = {}
+    if resource_capacity:
+        capacity = {k: int(v) for k, v in resource_capacity.items() if k not in ("cpus", "cpu")}
+
+    requests: dict[str, dict[str, int]] = {}
+    for task in tasks:
+        req: dict[str, int] = {}
+        if capacity:
+            for demand in task.demands:
+                for amount in demand.resources:
+                    rtype = "cpus" if amount.type == "cpu" else amount.type
+                    if rtype in capacity:
+                        req[rtype] = req.get(rtype, 0) + int(amount.slots)
+            for rtype, n in req.items():
+                if n > capacity[rtype]:
+                    raise ValueError(
+                        f"Task {task.id!r} requests {n} {rtype}, but only {capacity[rtype]} are available"
+                    )
+        requests[task.id] = req
+
+    return capacity, requests
+
+
+def _build_task_graph(
+    tasks: Sequence[ScheduleTask], task_ids: set[str]
+) -> tuple[dict[str, list[str]], dict[str, int]]:
+    successors: dict[str, list[str]] = {task.id: [] for task in tasks}
+    indegree: dict[str, int] = {task.id: 0 for task in tasks}
+
+    for task in tasks:
+        for dep_id in task.dependencies:
+            if dep_id not in task_ids:
+                continue
+            successors[dep_id].append(task.id)
+            indegree[task.id] += 1
+
+    return successors, indegree
+
+
+def _simulate_ready_key(task: ScheduleTask) -> tuple[float, float, int, tuple[int, ...]]:
+    # Negated so that ascending order == highest priority first.
+    return (
+        -task.scheduling_priority(),
+        -float(task.duration),
+        -int(task.width),
+        _neg_str(str(task.id)),
+    )
+
+
+def _initial_ready_queue(
+    indegree: dict[str, int], keys: dict[str, tuple[float, float, int, tuple[int, ...]]]
+) -> list[tuple[tuple[float, float, int, tuple[int, ...]], str]]:
+    return sorted((keys[tid], tid) for tid, degree in indegree.items() if degree == 0)
+
+
+def _task_fits(
+    task: ScheduleTask,
+    *,
+    available_width: int,
+    available: dict[str, int],
+    requests: dict[str, dict[str, int]],
+) -> bool:
+    if task.width > available_width:
+        return False
+    for rtype, n in requests[task.id].items():
+        if n > available[rtype]:
+            return False
+    return True
+
+
+def _start_ready_tasks(
+    *,
+    ready: list[tuple[tuple[float, float, int, tuple[int, ...]], str]],
+    now: float,
+    max_workers: int,
+    running_workers: int,
+    available_width: int,
+    available: dict[str, int],
+    task_by_id: dict[str, ScheduleTask],
+    requests: dict[str, dict[str, int]],
+    running: list[tuple[float, int, str]],
+    sequence: int,
+) -> tuple[
+    list[tuple[tuple[float, float, int, tuple[int, ...]], str]], int, dict[str, int], int, int
+]:
+    keep: list[tuple[tuple[float, float, int, tuple[int, ...]], str]] = []
+    for entry in ready:
+        task = task_by_id[entry[1]]
+        if running_workers < max_workers and _task_fits(
+            task, available_width=available_width, available=available, requests=requests
+        ):
+            available_width -= task.width
+            for rtype, n in requests[task.id].items():
+                available[rtype] -= n
+            running_workers += 1
+            heapq.heappush(running, (now + float(task.duration), sequence, task.id))
+            sequence += 1
+        else:
+            keep.append(entry)
+    return keep, available_width, available, running_workers, sequence
+
+
+def _finish_completed_tasks(
+    *,
+    now: float,
+    running: list[tuple[float, int, str]],
+    task_by_id: dict[str, ScheduleTask],
+    requests: dict[str, dict[str, int]],
+    available_width: int,
+    available: dict[str, int],
+    running_workers: int,
+    successors: dict[str, list[str]],
+    indegree: dict[str, int],
+    ready: list[tuple[tuple[float, float, int, tuple[int, ...]], str]],
+    keys: dict[str, tuple[float, float, int, tuple[int, ...]]],
+) -> tuple[int, dict[str, int], int, int]:
+    completed = 0
+    while running and running[0][0] <= now:
+        _, _, task_id = heapq.heappop(running)
+        task = task_by_id[task_id]
+
+        available_width += task.width
+        for rtype, n in requests[task_id].items():
+            available[rtype] += n
+        running_workers -= 1
+        completed += 1
+
+        for child_id in successors[task_id]:
+            indegree[child_id] -= 1
+            if indegree[child_id] == 0:
+                bisect.insort(ready, (keys[child_id], child_id))
+
+    return available_width, available, running_workers, completed
 
 
 def _neg_str(text: str) -> tuple[int, ...]:

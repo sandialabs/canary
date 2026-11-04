@@ -227,6 +227,43 @@ def test_simulate_makespan_detects_dependency_cycle() -> None:
         simulate_makespan(tasks, width=2)
 
 
+def test_simulate_makespan_simultaneous_finish_unlocks_multiple_successors() -> None:
+    tasks = [
+        task("a", width=1, duration=5.0),
+        task("b", width=1, duration=5.0),
+        task("c", width=1, duration=7.0, dependencies=("a",)),
+        task("d", width=1, duration=3.0, dependencies=("b",)),
+    ]
+
+    # a and b finish together at t=5, unlocking both c and d in the same event step.
+    # With width=2, c and d then run together from t=5 to t=12.
+    assert simulate_makespan(tasks, width=2) == pytest.approx(12.0)
+
+
+def test_simulate_makespan_ready_task_waits_for_non_cpu_resource_release() -> None:
+    tasks = [
+        resource_task("gpu_a", duration=5.0, cpus=1, gpus=1),
+        resource_task("gpu_b", duration=7.0, cpus=1, gpus=1),
+    ]
+
+    # Both tasks fit CPU width immediately, but only one GPU is available.
+    # The second task must wait for the first to finish rather than triggering
+    # the no-progress error reserved for impossible ready sets.
+    assert simulate_makespan(tasks, width=4, resource_capacity={"gpus": 1}) == pytest.approx(12.0)
+
+
+def test_simulate_makespan_released_successors_keep_priority_order() -> None:
+    tasks = [
+        task("root", width=1, duration=5.0),
+        task("long_high_priority", width=2, duration=10.0, dependencies=("root",), priority=100.0),
+        task("short_low_priority", width=2, duration=1.0, dependencies=("root",), priority=1.0),
+    ]
+
+    # When root completes, both successors become ready together. The high-priority
+    # task should run first, so the makespan is 5 + 10 + 1 instead of 5 + 1 + 10.
+    assert simulate_makespan(tasks, width=2) == pytest.approx(16.0)
+
+
 def test_pack_to_height_simulated_packs_independent_tasks_by_target_height() -> None:
     tasks = [
         task("a", width=1, duration=10.0),
