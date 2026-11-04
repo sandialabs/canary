@@ -15,11 +15,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 
 from .. import config
 from ..core.rules import KeywordRule
+from ..execution.testexec import ExecutionSpace
 from ..session.workspace import Workspace
-from ..util import json_helper as json
 from ..util import logging
 from .facade import open_workspace
 
@@ -46,8 +47,7 @@ def rebaseline(target: str = ".", keyword_exprs: list[str] | None = None) -> int
         The number of jobs rebaselined.
     """
     workspace = open_workspace()
-    jobs = resolve_rebaseline_jobs(workspace, target)
-    jobs = filter_jobs_by_keywords(jobs, keyword_exprs)
+    jobs = resolve_rebaseline_jobs(workspace, target, keyword_exprs=keyword_exprs)
 
     if not jobs:
         logger.warning("No jobs selected for rebaseline")
@@ -61,25 +61,130 @@ def rebaseline(target: str = ".", keyword_exprs: list[str] | None = None) -> int
     return len(jobs)
 
 
-def resolve_rebaseline_jobs(workspace: Workspace, target: str) -> list["Job"]:
+def resolve_rebaseline_jobs(
+    workspace: Workspace, target: str, keyword_exprs: list[str] | None = None
+) -> list["Job"]:
     """Return the jobs implied by *target* (a results path or a job id/name)."""
     path = Path(target)
     if path.exists():
-        return jobs_from_path(workspace, path)
-    return [workspace.find(job=target)]
+        return jobs_from_path(workspace, path, keyword_exprs=keyword_exprs)
+    jobs = [workspace.find(job=target)]
+    return filter_jobs_by_keywords(jobs, keyword_exprs)
 
 
-def jobs_from_path(workspace: Workspace, path: Path) -> list["Job"]:
-    """Return the jobs for every unique ``testcase.lock`` found under *path*."""
-    jobs: list["Job"] = []
-    seen: set[str] = set()
-    for lockfile in iter_lockfiles(path):
-        lock_data = json.loads(lockfile.read_text())
-        job_id = lock_data.spec.id
-        if job_id in seen:
-            continue
-        seen.add(job_id)
-        jobs.append(workspace.find(job=job_id))
+def jobs_from_path(
+    workspace: Workspace, path: Path, keyword_exprs: list[str] | None = None
+) -> list["Job"]:
+    """Resolve *path* to jobs using workspace metadata before materializing Job objects."""
+    job_ids, rows = _select_rebaseline_jobs_from_path(workspace, path)
+    if rows is not None:
+        rows = _filter_result_rows_by_keywords(workspace, rows, keyword_exprs)
+        return _jobs_from_result_rows(workspace, rows)
+
+    job_ids = _filter_job_ids_by_keywords(workspace, job_ids, keyword_exprs)
+    return workspace.load_jobs(job_ids)
+
+
+def _select_rebaseline_jobs_from_path(
+    workspace: Workspace, path: Path
+) -> tuple[list[str], list[dict[str, Any]] | None]:
+    """Return either latest-result spec ids or exact historical result rows for *path*."""
+    resolved = path.absolute()
+
+    if resolved.is_file():
+        if resolved.name != "testcase.lock":
+            raise ValueError(f"{resolved}: expected testcase.lock")
+        resolved = resolved.parent
+
+    if not resolved.is_dir():
+        raise ValueError(f"{resolved}: no such file or directory")
+
+    if rel_view := workspace.relative_to_view(resolved):
+        prefix = rel_view if resolved.is_file() else rel_view.rstrip("/") + "/%"
+        return workspace.db.select_from_view([prefix]), None
+
+    if workspace.is_session_dir(resolved):
+        return [], _select_rebaseline_result_rows_from_session_path(workspace, resolved)
+
+    if resolved == workspace.root.absolute():
+        return list(workspace.db.get_results().keys()), None
+
+    return _select_rebaseline_job_ids_from_source_path(workspace, resolved), None
+
+
+def _select_rebaseline_result_rows_from_session_path(
+    workspace: Workspace, path: Path
+) -> list[dict[str, Any]]:
+    rel = path.absolute().relative_to(workspace.sessions_dir)
+    session = rel.parts[0]
+    session_root = workspace.sessions_dir / session
+    rows = workspace.db.get_results_for_session(session)
+    if len(rel.parts) == 1:
+        return rows
+
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        job_dir = (session_root / row["workspace"]).resolve()
+        if job_dir == path or job_dir.is_relative_to(path) or path.is_relative_to(job_dir):
+            selected.append(row)
+    return selected
+
+
+def _select_rebaseline_job_ids_from_source_path(workspace: Workspace, path: Path) -> list[str]:
+    candidates = workspace.db.get_partial_specs()
+    selected: list[str] = []
+    for spec in candidates:
+        source = spec.file.resolve()
+        if source == path or source.is_relative_to(path):
+            selected.append(spec.id)
+    return selected
+
+
+def _filter_job_ids_by_keywords(
+    workspace: Workspace, job_ids: list[str], keyword_exprs: list[str] | None
+) -> list[str]:
+    if not keyword_exprs or not job_ids:
+        return job_ids
+    specs = workspace.db.load_specs(job_ids)
+    rule = KeywordRule(keyword_exprs)
+    return [spec.id for spec in specs if rule(spec)]
+
+
+def _filter_result_rows_by_keywords(
+    workspace: Workspace, rows: list[dict[str, Any]], keyword_exprs: list[str] | None
+) -> list[dict[str, Any]]:
+    if not keyword_exprs or not rows:
+        return rows
+    selected_ids = set(
+        _filter_job_ids_by_keywords(workspace, [row["id"] for row in rows], keyword_exprs)
+    )
+    return [row for row in rows if row["id"] in selected_ids]
+
+
+def _jobs_from_result_rows(workspace: Workspace, rows: list[dict[str, Any]]) -> list["Job"]:
+    if not rows:
+        return []
+    specs = workspace.db.load_specs([row["id"] for row in rows])
+    spec_map = {spec.id: spec for spec in specs}
+    jobs: list[Job] = []
+    for row in rows:
+        spec = spec_map[row["id"]]
+        space = ExecutionSpace(
+            root=workspace.sessions_dir / row["session"],
+            path=Path(row["workspace"]),
+            session=row["session"],
+        )
+        job = workspace.find(job=row["id"]) if False else None
+        from ..core.job import Job
+
+        job = Job(spec=spec, workspace=space)
+        job.status = row["status"]
+        job.timekeeper = row["timekeeper"]
+        job.measurements = row["measurements"]
+        job.state = row["state"]
+        if space.joinpath("testcase.lock").exists():
+            job.refresh()
+        jobs.append(job)
     return jobs
 
 
