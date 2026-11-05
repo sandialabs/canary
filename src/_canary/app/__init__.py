@@ -14,6 +14,7 @@ This module is a facade: it delegates to the existing implementation
 """
 
 from .exec_ import exec_job
+from .facade import archive_workspace
 from .facade import collect
 from .facade import create_workspace
 from .facade import delete_selection
@@ -45,6 +46,7 @@ from .runhook import run_hook
 __all__ = [
     "collect",
     "create_workspace",
+    "archive_workspace",
     "open_workspace",
     "get_event_bus",
     "run",

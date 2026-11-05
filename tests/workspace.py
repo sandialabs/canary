@@ -3,11 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import tarfile
 from pathlib import Path
 
 import pytest
 
 import _canary.session.workspace as _workspace_module
+from _canary.cli.archive import Archive
 from _canary.cli.rm import RemoveWorkspace
 from _canary.session.workspace import NotAWorkspaceError
 from _canary.session.workspace import Workspace
@@ -785,3 +787,52 @@ def test_rm_command_rejects_missing_path(chdir_tmp):
     rc = RemoveWorkspace().execute(argparse.Namespace(rm_path=str(chdir_tmp / "nope")))
     assert rc == 1
     assert ws.root.exists()
+
+
+def test_archive_workspace_dereferences_symlinks(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+
+    target = ws.root / "logs" / "target.txt"
+    target.write_text("payload")
+    link = ws.root / "logs" / "link.txt"
+    link.symlink_to(target.name)
+
+    archive = tmp_path / "workspace.tar.gz"
+    ws.archive(archive)
+
+    with tarfile.open(archive, "r:gz") as tf:
+        member = tf.getmember(f"{ws.root.name}/logs/link.txt")
+        assert member.isfile()
+        assert not member.issym()
+        extracted = tf.extractfile(member)
+        assert extracted is not None
+        assert extracted.read() == b"payload"
+
+
+def test_archive_workspace_rejects_destination_inside_workspace(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+
+    with pytest.raises(ValueError, match="outside the workspace tree"):
+        ws.archive(ws.root / "workspace.tar.gz")
+
+
+def test_archive_command_defaults_to_workspace_name_tar_gz(tmp_path):
+    import argparse
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+
+    with working_dir(root):
+        rc = Archive().execute(argparse.Namespace(dest=None))
+
+    assert rc == 0
+    archive = root / f"{ws.root.name}.tar.gz"
+    assert archive.exists()
+
+    with tarfile.open(archive, "r:gz") as tf:
+        assert tf.getmember(f"{ws.root.name}/WORKSPACE.TAG").isfile()

@@ -49,6 +49,11 @@ def create_workspace(path: str | Path | None = None, force: bool = False) -> Wor
     return Workspace.create(path, force=force)
 
 
+def archive_workspace(dest: str | Path, start: str | Path | None = None) -> Path:
+    """Archive the current workspace to *dest* and return the archive path."""
+    return open_workspace(start).archive(dest)
+
+
 def collect(
     scanpaths: dict[str, list[str]], on_options: list[str] | None = None
 ) -> list["JobSpec"]:

@@ -28,6 +28,7 @@ import fnmatch
 import os
 import re
 import sys
+import tarfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -853,6 +854,33 @@ class Workspace:
             "workspace_version": (self.root / "VERSION").read_text().strip(),
         }
         return info
+
+    def archive(self, dest: str | Path) -> Path:
+        """Create a self-contained tar archive of this workspace.
+
+        The archive always contains the workspace root directory itself as the
+        top-level entry and dereferences links so the result is portable.
+
+        Args:
+            dest: Output archive path. ``.tar``, ``.tar.gz``, and ``.tgz`` are
+                supported by filename convention; any other suffix produces an
+                uncompressed tar archive.
+
+        Returns:
+            The absolute archive path.
+
+        Raises:
+            ValueError: If *dest* points inside the workspace tree, which would
+                cause the archive to capture itself while being written.
+        """
+        dest = Path(dest).expanduser().absolute()
+        if dest.is_relative_to(self.root):
+            raise ValueError(f"archive destination must be outside the workspace tree: {dest}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        mode = "w:gz" if str(dest).endswith((".tgz", ".tar.gz")) else "w"
+        with tarfile.open(dest, mode, dereference=True) as tf:
+            tf.add(self.root, arcname=self.root.name, recursive=True)
+        return dest
 
     def collect(
         self, scanpaths: dict[str, list[str]], on_options: list[str] | None = None

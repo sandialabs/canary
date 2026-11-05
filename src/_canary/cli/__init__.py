@@ -13,6 +13,7 @@ automatically by the plugin manager when running from an editable checkout.
 """
 
 from . import agent
+from . import archive
 from . import collect
 from . import config
 from . import describe
@@ -42,6 +43,7 @@ from . import view
 
 plugins = [
     agent,
+    archive,
     collect,
     config,
     describe,

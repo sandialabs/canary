@@ -21,6 +21,7 @@ import pytest
 
 # Subcommand module -> the facade functions it is expected to use.
 FACADE_ROUTED_COMMANDS = {
+    "archive": {"open_workspace", "archive_workspace"},
     "collect": {"collect"},
     "init": {"create_workspace"},
     "view": {"open_workspace"},
