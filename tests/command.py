@@ -13,9 +13,9 @@ import yaml
 
 import canary
 from _canary import config as config_mod
+from _canary.agent import render_bootstrap_markdown
+from _canary.agent import write_agent_bootstrap
 from _canary.cli import learn as learn_mod
-from _canary.cli.agent import BOOTSTRAP_SKILLS
-from _canary.cli.agent import write_agent_bootstrap
 from _canary.cli.config import show_config
 from _canary.cli.describe import Describe
 from _canary.cli.find import Find
@@ -1437,6 +1437,7 @@ def test_skill_to_markdown_emits_frontmatter_and_body():
 def test_agent_bootstrap_generic_writes_bootstrap_index_and_skills(tmp_path):
     with working_dir(tmp_path):
         write_agent_bootstrap("generic")
+        installed_skill_paths = list_skill_paths(build_skills_tree(), ".")
 
         root = tmp_path / ".agent" / "canary"
         assert (root / "BOOTSTRAP.md").is_file()
@@ -1446,8 +1447,10 @@ def test_agent_bootstrap_generic_writes_bootstrap_index_and_skills(tmp_path):
         assert "This repository uses Canary as its workflow and execution layer." in bootstrap
         assert "canary learn capabilities . --list" in bootstrap
         assert "canary query -c TOPIC" in bootstrap
+        assert "Query-First Rule" in bootstrap
+        assert "Do not query the workspace SQLite database directly" in bootstrap
 
-        for query in BOOTSTRAP_SKILLS:
+        for query in installed_skill_paths:
             name = query.split(".", 1)[1]
             path = root / "skills" / f"{name}.md"
             assert path.is_file()
@@ -1468,9 +1471,14 @@ def test_agent_bootstrap_generic_brief_writes_only_bootstrap(tmp_path):
 def test_agent_bootstrap_opencode_writes_skill_layout(tmp_path):
     with working_dir(tmp_path):
         write_agent_bootstrap("opencode")
+        installed_skill_paths = list_skill_paths(build_skills_tree(), ".")
+
+        agent_root = tmp_path / ".agent" / "canary"
+        assert (agent_root / "BOOTSTRAP.md").is_file()
+        assert (agent_root / "INDEX.md").is_file()
 
         root = tmp_path / ".opencode" / "skills"
-        for query in BOOTSTRAP_SKILLS:
+        for query in installed_skill_paths:
             name = query.split(".", 1)[1]
             path = root / name / "SKILL.md"
             assert path.is_file()
@@ -1488,7 +1496,126 @@ def test_agent_bootstrap_opencode_brief_writes_generic_bootstrap_only(tmp_path):
         assert not (tmp_path / ".opencode").exists()
 
 
-def test_agent_bootstrap_fails_on_existing_managed_file(tmp_path):
+def test_agent_bootstrap_claude_writes_claude_md_and_skill_layout(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("claude")
+        installed_skill_paths = list_skill_paths(build_skills_tree(), ".")
+
+        claude_md = tmp_path / "CLAUDE.md"
+        assert claude_md.is_file()
+        guidance = claude_md.read_text(encoding="utf-8")
+        assert "# Canary Guidance for Claude Code" in guidance
+        assert "canary query -c TOPIC" in guidance
+        assert "<!-- BEGIN CANARY GUIDANCE -->" in guidance
+        assert "<!-- END CANARY GUIDANCE -->" in guidance
+
+        root = tmp_path / ".claude" / "skills"
+        for query in installed_skill_paths:
+            name = query.split(".", 1)[1]
+            path = root / name / "SKILL.md"
+            assert path.is_file()
+            text = path.read_text(encoding="utf-8")
+            assert text.startswith("---\n")
+            assert f"name: {name}" in text
+
+
+def test_agent_bootstrap_claude_brief_writes_only_claude_md(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("claude", brief=True)
+
+        assert (tmp_path / "CLAUDE.md").is_file()
+        assert not (tmp_path / ".claude").exists()
+
+
+def test_agent_bootstrap_claude_refuses_existing_claude_md(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / "CLAUDE.md"
+        path.write_text("existing\n", encoding="utf-8")
+
+        with pytest.raises(FileExistsError) as exc:
+            write_agent_bootstrap("claude")
+
+        assert "CLAUDE.md exists" in str(exc.value)
+        assert "--force" in str(exc.value)
+        assert "--append" in str(exc.value)
+        assert path.read_text(encoding="utf-8") == "existing\n"
+
+
+def test_agent_bootstrap_claude_force_overwrites_existing_claude_md(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / "CLAUDE.md"
+        path.write_text("existing\n", encoding="utf-8")
+
+        write_agent_bootstrap("claude", force=True, brief=True)
+
+        text = path.read_text(encoding="utf-8")
+        assert not text.startswith("existing\n")
+        assert "# Canary Guidance for Claude Code" in text
+
+
+def test_agent_bootstrap_claude_append_adds_guidance_to_existing_claude_md(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / "CLAUDE.md"
+        path.write_text("# Existing guidance\n\nKeep this.\n", encoding="utf-8")
+
+        write_agent_bootstrap("claude", append=True)
+
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("# Existing guidance\n\nKeep this.\n")
+        assert text.count("<!-- BEGIN CANARY GUIDANCE -->") == 1
+        assert "# Canary Guidance for Claude Code" in text
+        assert (tmp_path / ".claude" / "skills" / "canary-orientation" / "SKILL.md").is_file()
+
+
+def test_agent_bootstrap_claude_append_refreshes_existing_guidance_block(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / "CLAUDE.md"
+        path.write_text(
+            "# Existing guidance\n\n"
+            "<!-- BEGIN CANARY GUIDANCE -->\nold\n<!-- END CANARY GUIDANCE -->\n"
+            "after\n",
+            encoding="utf-8",
+        )
+
+        write_agent_bootstrap("claude", append=True, brief=True)
+
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("# Existing guidance\n\n")
+        assert text.endswith("after\n")
+        assert text.count("<!-- BEGIN CANARY GUIDANCE -->") == 1
+        assert "old" not in text
+        assert "# Canary Guidance for Claude Code" in text
+
+
+def test_agent_bootstrap_rerun_refreshes_existing_managed_files(tmp_path):
+    with working_dir(tmp_path):
+        write_agent_bootstrap("generic")
+
+        path = tmp_path / ".agent" / "canary" / "BOOTSTRAP.md"
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original + "\nlocal drift\n", encoding="utf-8")
+
+        write_agent_bootstrap("generic")
+
+        text = path.read_text(encoding="utf-8")
+        assert text == render_bootstrap_markdown()
+
+
+def test_agent_bootstrap_refreshes_legacy_opencode_skill_file(tmp_path):
+    with working_dir(tmp_path):
+        path = tmp_path / ".opencode" / "skills" / "canary-orientation" / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "---\nname: canary-orientation\ndescription: old\n---\n\nold body\n", encoding="utf-8"
+        )
+
+        write_agent_bootstrap("opencode")
+
+        text = path.read_text(encoding="utf-8")
+        assert "# Canary orientation for coding agents" in text
+
+
+def test_agent_bootstrap_fails_on_existing_unmanaged_file(tmp_path):
     with working_dir(tmp_path):
         path = tmp_path / ".agent" / "canary" / "BOOTSTRAP.md"
         path.parent.mkdir(parents=True, exist_ok=True)

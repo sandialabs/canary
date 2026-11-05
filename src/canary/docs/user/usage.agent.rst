@@ -26,6 +26,8 @@ This bootstrap content is intended to:
 - introduce Canary's execution model and core concepts
 - point the agent at installed capability and skill data
 - provide short, task-oriented guidance for common Canary workflows
+- steer the agent toward ``canary query`` and ``canary learn`` before raw
+  workspace inspection or ad hoc SQL
 
 Basic usage
 -----------
@@ -48,10 +50,14 @@ Supported targets
 
 ``generic``
    Writes a general-purpose bootstrap file for environments that want plain
-   agent-facing Canary guidance without editor-specific layout assumptions.
+   agent-facing Canary guidance without editor-specific layout assumptions. The
+   generated files live under ``.agent/canary/``.
 
 ``opencode``
-   Writes the managed files expected by the OpenCode-oriented workflow.
+   Writes the managed files expected by the OpenCode-oriented workflow under
+   ``.opencode/skills/`` and also writes the generic ``.agent/canary/``
+   guidance so non-OpenCode agents still have a harness-neutral Canary entry
+   point.
 
 Choose the target that matches the environment where the agent will be running.
 
@@ -99,9 +105,12 @@ For a new agent-oriented workspace, the normal sequence is:
 
 1. Run ``canary agent bootstrap`` for the appropriate target.
 2. Inspect what Canary knows with ``canary learn capabilities --list .`` and
-   ``canary learn skills --list .``.
+   ``canary learn skills --list .`` or ``canary query --skills . --list``.
 3. Use ``canary query -c ...`` or ``canary query --skills ...`` inside active
    debugging or extension-authoring loops.
+4. Prefer ``canary query`` subcommands over direct reads of ``.canary`` files
+   or direct SQLite inspection unless no structured query path exists for the
+   information you need.
 
 See also
 --------

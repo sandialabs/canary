@@ -254,6 +254,7 @@ def test_agent_bootstrap_args_parse():
     assert args.target == "generic"
     assert args.brief is False
     assert args.force is False
+    assert args.append is False
 
     args = parser.parse_args(["agent", "bootstrap", "opencode", "--brief", "--force"])
     assert args.command == "agent"
@@ -261,6 +262,12 @@ def test_agent_bootstrap_args_parse():
     assert args.target == "opencode"
     assert args.brief is True
     assert args.force is True
+
+    args = parser.parse_args(["agent", "bootstrap", "claude", "--append"])
+    assert args.command == "agent"
+    assert args.agent_command == "bootstrap"
+    assert args.target == "claude"
+    assert args.append is True
 
 
 def test_runhook_canary_runtest_finish_args_parse():

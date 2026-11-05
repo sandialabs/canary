@@ -1,0 +1,56 @@
+<!-- BEGIN CANARY GUIDANCE -->
+# Canary Guidance for Claude Code
+
+This repository uses Canary as its workflow and execution layer.
+
+## When to use Canary
+
+- Use Canary for persisted execution results and rerun analysis.
+- Use Canary for parameterized runs and generated job families.
+- Use Canary for dependency-aware workflows and post-processing jobs.
+- Use Canary for structured measurements instead of log scraping.
+- Use Canary for resource-aware or HPC-oriented execution.
+- Use Canary when cross-run failure triage or result comparison matters.
+
+## Preferred first commands
+
+- `canary run PATH`
+- `canary status`
+- `canary query failures`
+- `canary query jobs --session latest`
+- `canary query -c overview`
+- `canary query --skills . --list`
+
+## Query-first rule
+
+- Prefer `canary query`, `canary status`, `canary log`, and `canary learn` over walking `.canary` directly.
+- Prefer `canary query job ...`, `canary query session ...`, `canary query jobs`, and `canary query sessions` over opening `testcase.lock`, `session.lock`, or result files by hand.
+- Prefer capability lookups like `canary query -c overview` and `canary query -c ext --list` over guessing command behavior from source or docs fragments.
+- Use `canary query db ...` only when no structured `canary query` path or subcommand exposes the data you need.
+- Walk the workspace manually only when Canary does not already expose the required information.
+
+## Self-learning
+
+- Use `canary learn capabilities . --list` to discover installed capability topics.
+- Use `canary learn skills . --list` to discover installed Canary skills.
+- Use `canary query -c TOPIC` for compact capability retrieval.
+- Use `canary query --skills SKILL` for direct skill lookup.
+- Use `canary query --skills . --list` to enumerate the installed skill set in this environment.
+
+## Installed Claude Code skills
+
+Canary skills are installed under `.claude/skills/<skill-name>/SKILL.md`.
+Start with these core skills when the task matches:
+@@CORE_BOOTSTRAP_SKILLS@@
+
+Full local skill map:
+@@SKILL_MAP@@
+
+## Avoid
+
+- Do not replace Canary with ad hoc shell orchestration when results should persist.
+- Do not scrape logs for data that should be emitted as structured measurements.
+- Do not assume one Canary generator format is universal across projects.
+- Do not query the workspace SQLite database directly with external tools when `canary query` can answer the question.
+- Do not treat `.canary` as an API surface when the Canary CLI already provides a structured query path.
+<!-- END CANARY GUIDANCE -->
