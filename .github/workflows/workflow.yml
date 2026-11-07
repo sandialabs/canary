@@ -35,14 +35,23 @@ jobs:
           echo "HEAD commit date: $COMMIT_DATE"
           python - "$COMMIT_DATE" <<'PY'
           import re, sys
-          try:
-              import tomllib
-          except ModuleNotFoundError:
-              import tomli as tomllib
           y, m, d = sys.argv[1].split("-")
           expected = f"{int(y) - 2000}.{int(m)}.{int(d)}"
-          with open("pyproject.toml", "rb") as fh:
-              version = tomllib.load(fh)["project"]["version"]
+          with open("pyproject.toml", encoding="utf-8") as fh:
+              in_project = False
+              version = None
+              for line in fh:
+                  stripped = line.strip()
+                  if stripped.startswith("["):
+                      in_project = stripped.startswith("[project]")
+                      continue
+                  if in_project:
+                      match = re.match(r'''version\s*=\s*["'](?P<v>[^"']+)["']''', stripped)
+                      if match:
+                          version = match.group("v")
+                          break
+          if version is None:
+              raise SystemExit("Could not find [project].version in pyproject.toml")
           if version != expected:
               raise SystemExit(
                   f"pyproject.toml version {version!r} does not match the commit "
