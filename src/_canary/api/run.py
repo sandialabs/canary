@@ -97,6 +97,7 @@ def run(
     regex: str | None = None,
     only: StrategyType | None = None,
     view: ViewSettings | None = None,
+    parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
     wipe_workspace: bool = False,
     work_tree: Pathish | None = None,
 ) -> int:
@@ -122,6 +123,9 @@ def run(
         only: Rerun strategy.  Supported built-ins are defined by
             :mod:`_canary.rerun`.
         view: Optional result-view settings.
+        parsing_policy: How collection handles parse/import failures in test
+            files. ``pedantic`` stops on failures; ``permissive`` keeps them as
+            masked specs.
         wipe_workspace: Remove an existing workspace before running.  This is
             only valid for scanpath requests.
         work_tree: Workspace root.  Defaults to the current working directory,
@@ -163,6 +167,7 @@ def run(
         regex=regex,
         only=only,
         view=view,
+        parsing_policy=parsing_policy,
         wipe_workspace=wipe_workspace,
         work_tree=os.fspath(work_tree) if work_tree is not None else None,
     )

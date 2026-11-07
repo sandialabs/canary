@@ -32,11 +32,14 @@ from pathlib import Path
 from typing import Any
 from typing import Iterable
 from typing import Iterator
+from typing import Literal
 from typing import Type
 
 from .. import config
 from ..config.argparsing import Parser
 from ..config.schemas import testpaths_schema
+from ..core.jobspec import Mask
+from ..core.jobspec_ir import JobSpecIR
 from ..plugins.hookspec import hookimpl
 from ..scanpaths import scanpath_from_item
 from ..scanpaths import scanpaths_from_root_paths
@@ -119,6 +122,7 @@ class Collector:
         self.files: dict[str, list[str]] = {}  # root: paths
         self.generators: list["AbstractTestGenerator"] = []
         self.types: set[Type["AbstractTestGenerator"]] = set()
+        self.parsing_policy: Literal["pedantic", "permissive"] = "pedantic"
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
@@ -164,7 +168,11 @@ class Collector:
         pm = logger.progress_monitor("[bold]Instantiating[/] generators from collected files")
         errors = 0
         self.generators.clear()
-        allpaths = ((self.types, root, p) for root, paths in self.files.items() for p in paths)
+        allpaths = (
+            (self.types, root, p, self.parsing_policy)
+            for root, paths in self.files.items()
+            for p in paths
+        )
         with ProcessPoolExecutor(initializer=worker_init, initargs=(config.snapshot(),)) as ex:
             futures = [ex.submit(generate_one, arg) for arg in allpaths]
             for future in as_completed(futures):
@@ -173,7 +181,7 @@ class Collector:
                     errors += 1
                 elif result is not None:
                     self.generators.append(result)
-        if errors:
+        if errors and self.parsing_policy != "permissive":
             raise ValueError("Stopping due to previous errors")
         pm.done()
         return
@@ -466,16 +474,51 @@ def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:
     Returns:
         A tuple of (success_boolean, generator_instance_or_none).
     """
-    types, root, f = args
+    types, root, f, parsing_policy = args
     try:
         for type in types:
             if gen := type.factory(root=root, path=f):
                 return True, gen
         logger.error(f"{f}: no matching generator found")
         return False, None
-    except Exception:
+    except Exception as exc:
         logger.exception(f"Failed to parse test from {root}/{f}")
+        if parsing_policy == "permissive":
+            return True, ParseFailureGenerator(root=root, path=f, error=_format_parse_error(exc))
         return False, None
+
+
+def _format_parse_error(exc: Exception) -> str:
+    """Return the most useful parse-failure message from an exception chain."""
+    cause = exc
+    while True:
+        next_cause = cause.__cause__
+        if next_cause is None:
+            break
+        cause = next_cause
+    message = str(cause) or str(exc)
+    return message or cause.__class__.__name__
+
+
+class ParseFailureGenerator(AbstractTestGenerator):
+    """Fallback generator that turns parse failures into masked specs."""
+
+    def __init__(self, root: str, path: str, error: Exception | str) -> None:
+        super().__init__(root, path=path)
+        self.error = str(error)
+
+    def lock(self, on_options: list[str] | None = None) -> list[JobSpecIR]:
+        del on_options
+        reason = f"Failed to parse test from {self.file}: {self.error}"
+        return [
+            JobSpecIR(
+                file_root=Path(self.root),
+                file_path=Path(self.path),
+                family=self.name,
+                mask=Mask.masked(reason),
+                attributes={"parse_error": self.error},
+            )
+        ]
 
 
 def find_generators_in_path(path: str | Path) -> list[AbstractTestGenerator]:

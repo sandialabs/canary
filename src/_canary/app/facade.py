@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Literal
 
 from ..events import EventBus
 from ..session.workspace import Workspace
@@ -55,7 +56,9 @@ def archive_workspace(dest: str | Path, start: str | Path | None = None) -> Path
 
 
 def collect(
-    scanpaths: dict[str, list[str]], on_options: list[str] | None = None
+    scanpaths: dict[str, list[str]],
+    on_options: list[str] | None = None,
+    parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
 ) -> list["JobSpec"]:
     """Discover test generators under *scanpaths* and store the resolved specs.
 
@@ -63,7 +66,7 @@ def collect(
     resolved :class:`~_canary.core.jobspec.JobSpec` objects.  Raises
     :class:`~_canary.session.workspace.NotAWorkspaceError` when no workspace exists.
     """
-    return open_workspace().collect(scanpaths, on_options=on_options)
+    return open_workspace().collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
 
 
 def delete_selection(tag: str) -> None:

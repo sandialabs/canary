@@ -189,6 +189,7 @@ def test_run_builds_scanpaths_request_and_options(monkeypatch, tmp_path):
         owners="tfuller",
         regex="converged",
         only="failed",
+        parsing_policy="permissive",
         wipe_workspace=True,
         work_tree=work_tree,
     )
@@ -208,6 +209,7 @@ def test_run_builds_scanpaths_request_and_options(monkeypatch, tmp_path):
     assert options.owners == ["tfuller"]
     assert options.regex == "converged"
     assert options.only == "failed"
+    assert options.parsing_policy == "permissive"
     assert options.wipe_workspace is True
     assert options.work_tree == str(work_tree)
 

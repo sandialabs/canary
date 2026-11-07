@@ -159,6 +159,7 @@ class Run(CanarySubcommand):
             regex=args.regex_filter,
             only=args.only,
             view=view,
+            parsing_policy=args.parsing_policy or "pedantic",
             wipe_workspace=bool(args.wipe_workspace),
             work_tree=args.work_tree,
         )

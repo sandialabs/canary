@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 
 import yaml
 
@@ -883,7 +884,10 @@ class Workspace:
         return dest
 
     def collect(
-        self, scanpaths: dict[str, list[str]], on_options: list[str] | None = None
+        self,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
     ) -> list["JobSpec"]:
         """Find test job generators in scan_paths and add them to this workspace.
 
@@ -896,6 +900,7 @@ class Workspace:
         """
         collector = Collector()
         collector.add_scanpaths(scanpaths)
+        collector.parsing_policy = parsing_policy
         generators = collector.run()
         resolved = self.generate_jobspecs(generators=generators, on_options=on_options)
         self.store_specs(resolved)
@@ -1041,6 +1046,7 @@ class Workspace:
         tag: str | None,
         scanpaths: dict[str, list[str]],
         on_options: list[str] | None = None,
+        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
@@ -1060,7 +1066,7 @@ class Workspace:
         Returns:
             The created selection of JobSpecs.
         """
-        resolved = self.collect(scanpaths, on_options=on_options)
+        resolved = self.collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
         specs = self.select_from_specs(
             resolved,
             keyword_exprs=keyword_exprs,

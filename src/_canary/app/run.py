@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Any
+from typing import Literal
 
 from .. import rerun
 from ..session.workspace import NotAWorkspaceError
@@ -50,6 +51,9 @@ class RunOptions:
             default appropriate to the request (``all`` for spec-id/view-path
             requests, ``not_pass`` otherwise).
         view: Result-view settings, or ``None`` to reuse the workspace default.
+        parsing_policy: How collection handles parse/import failures in test
+            files. ``pedantic`` stops on failures; ``permissive`` keeps them as
+            masked specs.
         wipe_workspace: Remove an existing workspace before running (only valid
             for scanpaths requests).
         work_tree: Root of the workspace; defaults to the current directory.
@@ -63,6 +67,7 @@ class RunOptions:
     regex: str | None = None
     only: str | None = None
     view: ViewSettings | None = None
+    parsing_policy: Literal["pedantic", "permissive"] = "pedantic"
     wipe_workspace: bool = False
     work_tree: str | None = None
 
@@ -113,6 +118,7 @@ def _resolve_specs(workspace: Workspace, kind: str, value: Any, options: RunOpti
             tag=options.tag,
             scanpaths=value,
             on_options=options.on_options,
+            parsing_policy=options.parsing_policy,
             keyword_exprs=options.keyword_exprs,
             parameter_expr=options.parameter_expr,
             owners=options.owners,

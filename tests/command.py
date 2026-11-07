@@ -1701,6 +1701,23 @@ def test_rebaseline_from_directory(tmpdir):
         assert Path("expected.txt").read_text() == "new baseline\n"
 
 
+def test_run_permissive_masks_invalid_import_file(tmp_path):
+    with working_dir(tmp_path, create=True):
+        Path("bad_import.pyt").write_text("import does_not_exist\n")
+
+        cp = CanaryCommand("init")(".", capture_output=True, text=True)
+        assert cp.returncode == 0, cp.stdout + cp.stderr
+
+        cp = CanaryCommand("run")(
+            "-w", "-P", "permissive", "--empty-ok", ".", capture_output=True, text=True
+        )
+        assert cp.returncode == 0, cp.stdout + cp.stderr
+        output = cp.stdout + cp.stderr
+        assert "Excluded" in output
+        assert "Failed to parse test from" in output
+        assert "does_not_exist" in output
+
+
 # ---------------------------------------------------------------------------
 # canary query batch / batches tests
 # ---------------------------------------------------------------------------

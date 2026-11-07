@@ -49,3 +49,21 @@ def test_collect_without_workspace_raises(tmp_path, monkeypatch):
             pass
         else:
             raise AssertionError("collect must require an existing workspace")
+
+
+def test_collect_permissive_keeps_invalid_import_file_as_masked_spec(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    bad = tmp_path / "bad_import.pyt"
+    bad.write_text("import does_not_exist\n")
+
+    with canary.config.override():
+        app.create_workspace(tmp_path)
+        specs = app.collect({str(tmp_path): []}, parsing_policy="permissive")
+
+    assert len(specs) == 1
+    spec = specs[0]
+    assert spec.family == "bad_import"
+    assert spec.mask is not None
+    assert "Failed to parse test from" in (spec.mask.reason or "")
+    assert "does_not_exist" in (spec.mask.reason or "")
+    assert spec.attributes["parse_error"]
