@@ -34,7 +34,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Testing",
     "Topic :: Utilities",
@@ -104,7 +103,7 @@ canary_pyt = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_vvtest = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 line-length = 100
 
 [tool.ruff.format]
@@ -132,7 +131,7 @@ ignore = "W009"
 
 [tool.pyproject-fmt]
 indent = 4
-max_supported_python = "3.14"
+max_supported_python = "3.13"
 
 [tool.pytest.ini_options]
 testpaths = [
@@ -195,6 +194,7 @@ command_line = """-m pytest --import-mode=importlib
 directory = "html.cov"
 
 [tool.mypy]
+python_version = "3.10"
 exclude = [
     "src/canary/examples/*",
     "src/_canary/third_party/*",
