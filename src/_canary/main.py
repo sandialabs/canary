@@ -135,7 +135,7 @@ class Profiler:
         self.nlines = nlines
         self.profiler: Any
         try:
-            import pyinstrument  # ty: ignore[unresolved-import]
+            import pyinstrument  # ty: ignore[import-not-found]
 
             self.profiler = pyinstrument.Profiler()  # type: ignore
             self.type = 1

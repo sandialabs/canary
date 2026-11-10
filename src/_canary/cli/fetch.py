@@ -69,11 +69,12 @@ class Fetch(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         """Dispatch to the first plugin that handles ``args.fetch_what``."""
+        epilog = (self.epilog or "").replace("[pad]", "  ")
         if not getattr(args, "fetch_what", None):
-            print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
+            print(f"{self.description}.\n\n{epilog}")
             return 1
         result = canary.config.pluginmanager.hook.canary_fetch_execute(args=args)
         if result is not None:
             return result
-        print(f"{self.description}.\n\n{self.epilog.replace('[pad]', '  ')}")
+        print(f"{self.description}.\n\n{epilog}")
         return 1

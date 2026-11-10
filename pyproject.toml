@@ -296,7 +296,7 @@ include = ["src", "tests"]
 [tool.ty.rules]
 unused-type-ignore-comment = "ignore"
 unused-ignore-comment = "ignore"
-invalid-method-override = "ignore"
+incompatible-method-override = "ignore"
 
 
 [tool.bandit]

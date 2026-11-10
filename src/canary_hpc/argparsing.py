@@ -44,9 +44,11 @@ class CanaryHPCSchedulerArgs(argparse.Action):
             options.extend(shlex.split(arg))
         return options
 
-    def __call__(self, parser, namespace, value, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, option_string
+        assert isinstance(values, str)
         args = getattr(namespace, self.dest, None) or self.defaults()
-        args.extend(self.parse(strip_quotes(value)))
+        args.extend(self.parse(strip_quotes(values)))
         setattr(namespace, self.dest, args)
 
     @staticmethod
@@ -57,8 +59,10 @@ class CanaryHPCSchedulerArgs(argparse.Action):
 class CanaryHPCBatchExec(argparse.Action):
     "Arguments to determine how to partition test jobs"
 
-    def __call__(self, parser, namespace, value, option_string=None):
-        spec = self.parse(strip_quotes(value))
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, option_string
+        assert isinstance(values, str)
+        spec = self.parse(strip_quotes(values))
         setattr(namespace, self.dest, spec)
 
     @staticmethod
@@ -87,7 +91,9 @@ class CanaryHPCBatchSpec(argparse.Action):
     def defaults() -> dict[str, Any]:
         return {"nodes": None, "layout": None, "count": None, "duration": None}
 
-    def __call__(self, parser, namespace, value, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, option_string
+        assert isinstance(values, str)
         current = getattr(namespace, self.dest, None)
 
         if current is None:
@@ -97,7 +103,7 @@ class CanaryHPCBatchSpec(argparse.Action):
         else:
             raise TypeError(f"unexpected {self.dest} type: {type(current).__name__}")
 
-        spec.update(self.parse(strip_quotes(value)))
+        spec.update(self.parse(strip_quotes(values)))
         setattr(namespace, self.dest, spec)
 
     @staticmethod
@@ -259,8 +265,10 @@ class DeprecatedArg(argparse.Action):
 class CanaryHPCResourceSetter(argparse.Action):
     """Set all options from -b option. This is kept for backward compatibility."""
 
-    def __call__(self, parser, namespace, value, option_string=None):
-        if match := re.search(r"^spec=(.*)$", value):
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, option_string
+        assert isinstance(values, str)
+        if match := re.search(r"^spec=(.*)$", values):
             dest = "hpc_batchspec"
             raw = strip_quotes(match.group(1))
 
@@ -283,31 +291,31 @@ class CanaryHPCResourceSetter(argparse.Action):
             spec.update(CanaryHPCBatchSpec.parse(raw))
             setattr(namespace, dest, spec)
 
-        elif match := re.search(r"^exec=(.*)$", value):
+        elif match := re.search(r"^exec=(.*)$", values):
             dest = "hpc_batchexec"
             raw = strip_quotes(match.group(1))
             spec = CanaryHPCBatchExec.parse(raw)
             setattr(namespace, dest, spec)
 
-        elif match := re.search(r"^workers[:=](\d+)$", value):
+        elif match := re.search(r"^workers[:=](\d+)$", values):
             workers = int(match.group(1))
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
             setattr(namespace, "hpc_batch_workers", workers)
 
-        elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", value):
+        elif match := re.search(r"^(backend|scheduler|type)[:=](.+)$", values):
             raw = match.group(2)
             setattr(namespace, "hpc_backend", raw)
 
-        elif match := re.search(r"^(name|job_name|job-name)[:=](.+)$", value):
+        elif match := re.search(r"^(name|job_name|job-name)[:=](.+)$", values):
             raw = strip_quotes(match.group(2))
             setattr(namespace, "hpc_batch_name", raw)
 
-        elif match := re.search(r"^timeout[:=](.+)$", value):
+        elif match := re.search(r"^timeout[:=](.+)$", values):
             raw = strip_quotes(match.group(1))
             logger.warning("-b timeout=%s is deprecated and has no effect on batching", raw)
 
-        elif match := re.search(r"^queue[_-]?timeout[:=](.+)$", value):
+        elif match := re.search(r"^queue[_-]?timeout[:=](.+)$", values):
             # Backward compatibility: -b queue_timeout=T is the deprecated spelling
             # of --timeout queue=T.  Store it in the same `timeout` dict so it flows
             # through config.get_timeout_option("queue").
@@ -318,13 +326,13 @@ class CanaryHPCResourceSetter(argparse.Action):
             setattr(namespace, "timeout", timeouts)
 
         elif match := re.search(
-            r"^allow[_-]hyperthreading(?:[:=](true|false|1|0|yes|no))?$", value.lower()
+            r"^allow[_-]hyperthreading(?:[:=](true|false|1|0|yes|no))?$", values.lower()
         ):
             value_str = match.group(1)
             enabled = value_str in (None, "true", "1", "yes")
             setattr(namespace, "hpc_allow_hyperthreading", enabled)
 
-        elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
+        elif match := re.search(r"^(option|args|options|with)[:=](.*)$", values):
             dest = "hpc_submit_args"
             opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
@@ -332,4 +340,4 @@ class CanaryHPCResourceSetter(argparse.Action):
             setattr(namespace, dest, opts)
 
         else:
-            raise ValueError(f"invalid batch value: {value!r}")
+            raise ValueError(f"invalid batch value: {values!r}")

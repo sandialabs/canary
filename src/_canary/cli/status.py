@@ -507,11 +507,11 @@ class ReportCharAction(argparse.Action):
 
     chars = "pftdfnrsxaA"
 
-    def __call__(self, parser, args, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None):
         for value in values:
             if value not in self.chars:
                 parser.error(f"Invalid report char {value!r}, choose any from {self.chars!r}")
-        setattr(args, self.dest, values)
+        setattr(namespace, self.dest, values)
 
 
 class StatusFormatAction(argparse.Action):
@@ -529,16 +529,17 @@ class StatusFormatAction(argparse.Action):
         "Details",
     ]
 
-    def __call__(self, parser, namespace, value, option_string=None):
-        items = value.split(",")
+    def __call__(self, parser, namespace, values, option_string=None):
+        assert isinstance(values, str)
+        items = values.split(",")
         for i, item in enumerate(items):
             if choice := match_case_insensitive(item, self._choices):
                 items[i] = choice
             else:
                 choices = ",".join(self._choices)
                 parser.error(f"Invalid status format {item!r}, choose from {choices}")
-        value = ",".join(items)
-        setattr(namespace, self.dest, value)
+        values = ",".join(items)
+        setattr(namespace, self.dest, values)
 
 
 def match_case_insensitive(s: str, choices: list[str]) -> str | None:

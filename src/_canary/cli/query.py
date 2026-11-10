@@ -452,7 +452,8 @@ class Query(CanarySubcommand):
         result = canary.config.pluginmanager.hook.canary_query_execute(args=args)
         if result is not None:
             return result
-        print(f"{self.description}\n\n{self.epilog.replace('[pad]', '  ')}")
+        epilog = (self.epilog or "").replace("[pad]", "  ")
+        print(f"{self.description}\n\n{epilog}")
         return 1
 
 

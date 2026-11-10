@@ -86,7 +86,7 @@ def add_resource_arguments(parser: "Parser") -> None:
 class TimeoutResource(argparse.Action):
     """argparse ``Action`` that parses ``--timeout type=T`` (and deprecated variants) into a dict."""
 
-    def __call__(self, parser, args, values, option_string=None):
+    def __call__(self, parser, namespace, values, option_string=None):
         if option_string == "--session-timeout":
             logger.warning(f"--session-timeout is deprecated, use --timeout session={values}")
             type = "session"
@@ -107,9 +107,9 @@ class TimeoutResource(argparse.Action):
                     type = "*"
             else:
                 raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type=value'")
-        timeouts = getattr(args, "timeout", None) or {}
+        timeouts = getattr(namespace, "timeout", None) or {}
         timeouts[type] = value
-        setattr(args, "timeout", timeouts)
+        setattr(namespace, "timeout", timeouts)
 
     @staticmethod
     def helppage() -> str:

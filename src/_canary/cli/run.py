@@ -257,7 +257,6 @@ class PathSpec(argparse.Action):
         values: str | Sequence[Any] | None,
         option_string: Optional[str] = None,
     ) -> None:
-        from typing import cast
 
         assert isinstance(values, list)
 
@@ -275,7 +274,7 @@ class PathSpec(argparse.Action):
         # requires workspace access and is application logic, so it lives behind
         # the facade.  Errors are returned on the builder and re-raised here as a
         # usage error.
-        classify_pathspec(cast(list[str], list(values)), builder=builder)
+        classify_pathspec(list(values), builder=builder)
 
         if builder.errors:
             raise argparse.ArgumentError(self, "\n".join(builder.errors))

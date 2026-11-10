@@ -632,7 +632,7 @@ class server:
 
 
 def get_text(el: dom.Element) -> str:
-    return "".join(n.data for n in el.childNodes if n.nodeType == n.TEXT_NODE).strip()  # ty: ignore[unresolved-attribute]
+    return "".join(n.data for n in el.childNodes if n.nodeType == n.TEXT_NODE).strip()  # ty: ignore[missing-attribute]
 
 
 def clean_log_event(event):

@@ -315,14 +315,15 @@ class EnvironmentModification(argparse.Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        option: str | Sequence[Any] | None,
-        _option_str: str | None = None,
-    ):
-        assert isinstance(option, str)
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        del parser, option_string
+        assert isinstance(values, str)
         try:
-            var, val = [_.strip() for _ in option.split("=", 1)]
+            var, val = [_.strip() for _ in values.split("=", 1)]
         except ValueError:
-            msg = f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
+            msg = f"Invalid environment variable {values!r} specification. Expected form NAME=VAL"
             raise argparse.ArgumentTypeError(msg) from None
         config_mods = getattr(namespace, self.dest, None) or {}
         env_section = config_mods.setdefault("environment", {})
@@ -335,23 +336,26 @@ class RegisterPlugin(argparse.Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        option: str | Sequence[Any] | None,
-        _option_str: str | None = None,
-    ):
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        del parser, option_string
         session_plugins = list(getattr(namespace, self.dest, None) or [])
-        session_plugins.append(option)
+        session_plugins.append(values)
         setattr(namespace, self.dest, session_plugins)
 
 
 class ConfigMods(argparse.Action):
-    def __call__(self, parser, namespace, option, _option_str=None):
+    def __call__(self, parser, namespace, values, option_string=None):
+        del option_string
+        assert isinstance(values, str)
         data = {}
-        parts = option.split(":", 2)
+        parts = values.split(":", 2)
         if len(parts) < 2:
-            parser.error(f"Invalid -c value {option!r}; expected key:value")
+            parser.error(f"Invalid -c value {values!r}; expected key:value")
         value = parts.pop()
         if not parts or any(not part for part in parts):
-            parser.error(f"Invalid -c value {option!r}; expected key:value")
+            parser.error(f"Invalid -c value {values!r}; expected key:value")
         current = data
         while len(parts) > 1:
             key = parts.pop(0)

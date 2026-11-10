@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Iterator
+from typing import Generator
 from typing import Literal
 from typing import cast
 
@@ -513,7 +513,7 @@ class ViewManager:
         return (self.workspace.cache_dir / "view.lock").resolve()
 
     @contextmanager
-    def locked(self) -> Iterator[None]:
+    def locked(self) -> Generator[None, None, None]:
         """Context manager that holds an exclusive ``flock`` on :attr:`lock_file`."""
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.lock_file, "w") as fh:

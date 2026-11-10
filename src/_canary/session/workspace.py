@@ -893,7 +893,58 @@ class Workspace:
         }
         return info
 
-    def archive(self, dest: str | Path) -> Path:
+    def _archive_only_match(self, job: Job, only: str) -> bool:
+        if job.status.is_skipped():
+            return False
+        if only == "failed":
+            return job.status.is_failure()
+        if only == "passed":
+            return job.status.is_success()
+        if only == "not_pass":
+            return not job.status.is_success()
+        return True
+
+    def _archive_input_paths(self, job: Job) -> set[Path]:
+        paths: set[Path] = set()
+        data = job.measurements.data.get("inputs", [])
+        if not isinstance(data, list):
+            return paths
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            dest = item.get("dest")
+            if not dest:
+                continue
+            try:
+                rel = Path(dest)
+            except TypeError:
+                continue
+            if rel.is_absolute():
+                continue
+            paths.add(job.workspace.dir / rel)
+        return paths
+
+    def _archive_excludes(self, relpath: Path, patterns: list[str]) -> bool:
+        text = relpath.as_posix()
+        name = relpath.name
+        for pattern in patterns:
+            if fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(name, pattern):
+                return True
+        return False
+
+    def _archive_add_file(self, tf: tarfile.TarFile, path: Path, arcname: str) -> None:
+        if path.is_symlink():
+            target = path.resolve(strict=True)
+            return self._archive_add_file(tf, target, arcname)
+        tf.add(path, arcname=arcname, recursive=False)
+
+    def _archive_add_directory(self, tf: tarfile.TarFile, path: Path, arcname: str) -> None:
+        info = tf.gettarinfo(str(path), arcname)
+        tf.addfile(info)
+
+    def archive(
+        self, dest: str | Path, *, only: str = "all", exclude: list[str] | None = None
+    ) -> Path:
         """Create a self-contained tar archive of this workspace.
 
         The archive always contains the workspace root directory itself as the
@@ -915,9 +966,140 @@ class Workspace:
         if dest.is_relative_to(self.root):
             raise ValueError(f"archive destination must be outside the workspace tree: {dest}")
         dest.parent.mkdir(parents=True, exist_ok=True)
+        if only not in {"all", "failed", "not_pass", "passed"}:
+            raise ValueError(f"unknown archive selector: {only!r}")
+        patterns = list(exclude or [])
         mode = "w:gz" if str(dest).endswith((".tgz", ".tar.gz")) else "w"
-        with tarfile.open(dest, mode, dereference=True) as tf:
-            tf.add(self.root, arcname=self.root.name, recursive=True)
+        jobs = self.load_jobs()
+        all_jobs = list(jobs)
+        selected_jobs = [job for job in jobs if self._archive_only_match(job, only)]
+        job_dirs = {job.workspace.dir.resolve(): job for job in selected_jobs}
+        forced_paths: set[Path] = set()
+        for lockfile in self.root.rglob("*.lock"):
+            if lockfile.is_file():
+                forced_paths.add(lockfile.resolve())
+        for job in all_jobs:
+            forced_paths.add(job.lockfile.resolve())
+            forced_paths.update(
+                path.resolve() for path in self._archive_input_paths(job) if path.exists()
+            )
+
+        included_dirs: set[str] = set()
+        included_files: set[str] = set()
+        forced_parent_dirs = {path.parent.resolve() for path in forced_paths}
+
+        def ensure_parents(tf: tarfile.TarFile, relpath: Path) -> None:
+            parts = relpath.parts[:-1]
+            for i in range(len(parts)):
+                parent = Path(*parts[: i + 1])
+                name = str(parent).replace(os.sep, "/")
+                if name in included_dirs:
+                    continue
+                self._archive_add_directory(tf, self.root / parent, f"{self.root.name}/{name}")
+                included_dirs.add(name)
+
+        with tarfile.open(dest, mode, dereference=False) as tf:
+            self._archive_add_directory(tf, self.root, self.root.name)
+            included_dirs.add("")
+
+            for rel in (
+                Path("WORKSPACE.TAG"),
+                Path("VERSION"),
+                Path("config.yaml"),
+                Path("workspace.sqlite3"),
+            ):
+                path = self.root / rel
+                if path.exists():
+                    ensure_parents(tf, rel)
+                    arc = f"{self.root.name}/{rel.as_posix()}"
+                    self._archive_add_file(tf, path, arc)
+                    included_files.add(rel.as_posix())
+
+            for dirname in ("refs", "cache", "tmp", "logs", "reports"):
+                path = self.root / dirname
+                if not path.exists():
+                    continue
+                for child in sorted(path.rglob("*")):
+                    rel = child.relative_to(self.root)
+                    ensure_parents(tf, rel)
+                    arc = f"{self.root.name}/{rel.as_posix()}"
+                    if child.is_dir():
+                        if rel.as_posix() not in included_dirs:
+                            self._archive_add_directory(tf, child, arc)
+                            included_dirs.add(rel.as_posix())
+                        continue
+                    if rel.as_posix() in included_files:
+                        continue
+                    self._archive_add_file(tf, child, arc)
+                    included_files.add(rel.as_posix())
+
+            sessions_rel = Path("sessions")
+            sessions_root = self.root / sessions_rel
+            if sessions_root.exists():
+                ensure_parents(tf, sessions_rel / ".keep")
+                if sessions_rel.as_posix() not in included_dirs:
+                    self._archive_add_directory(
+                        tf, sessions_root, f"{self.root.name}/{sessions_rel.as_posix()}"
+                    )
+                    included_dirs.add(sessions_rel.as_posix())
+
+            for session_dir in sorted(self.sessions_dir.glob("*")):
+                if not session_dir.is_dir():
+                    continue
+                rel_session = session_dir.relative_to(self.root)
+                if rel_session.as_posix() not in included_dirs:
+                    ensure_parents(tf, rel_session / ".keep")
+                    self._archive_add_directory(
+                        tf, session_dir, f"{self.root.name}/{rel_session.as_posix()}"
+                    )
+                    included_dirs.add(rel_session.as_posix())
+
+            for path in sorted(self.root.rglob("*")):
+                rel = path.relative_to(self.root)
+                rel_text = rel.as_posix()
+                if rel_text in included_files:
+                    continue
+                if path.is_dir():
+                    if rel_text in included_dirs:
+                        continue
+                    if rel.parts and rel.parts[0] == "sessions":
+                        keep_dir = False
+                        resolved_dir = path.resolve()
+                        if resolved_dir in forced_parent_dirs:
+                            keep_dir = True
+                        else:
+                            for job_dir in job_dirs:
+                                if resolved_dir == job_dir or job_dir.is_relative_to(resolved_dir):
+                                    keep_dir = True
+                                    break
+                        if not keep_dir:
+                            continue
+                    ensure_parents(tf, rel / ".keep")
+                    self._archive_add_directory(tf, path, f"{self.root.name}/{rel_text}")
+                    included_dirs.add(rel_text)
+                    continue
+
+                if rel.parts and rel.parts[0] == "sessions":
+                    keep = False
+                    resolved = path.resolve() if path.exists() else path
+                    if resolved in forced_paths:
+                        keep = True
+                    else:
+                        for job_dir in job_dirs:
+                            if resolved.is_relative_to(job_dir):
+                                keep = True
+                                break
+                    if not keep:
+                        continue
+                    if resolved not in forced_paths and self._archive_excludes(rel, patterns):
+                        continue
+                else:
+                    if self._archive_excludes(rel, patterns):
+                        continue
+
+                ensure_parents(tf, rel)
+                self._archive_add_file(tf, path, f"{self.root.name}/{rel_text}")
+                included_files.add(rel_text)
         return dest
 
     def collect(

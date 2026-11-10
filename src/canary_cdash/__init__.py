@@ -306,10 +306,12 @@ class CDashReporter(canary.CanaryReporter):
 
 
 class SubprojectLabels(argparse.Action):
-    def __call__(self, parser, namespace, value, option_string=None):
-        values = getattr(namespace, self.dest, None) or []
-        values.extend(csvsplit(value))
-        setattr(namespace, self.dest, values)
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, option_string
+        assert isinstance(values, str)
+        current = getattr(namespace, self.dest, None) or []
+        current.extend(csvsplit(values))
+        setattr(namespace, self.dest, current)
 
 
 class CDashHooks:

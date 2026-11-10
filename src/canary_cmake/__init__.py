@@ -140,9 +140,10 @@ def add_ctest_options(parser: canary.Parser) -> None:
 
 
 class MapToShowCapture(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        args.show_capture = "oe"
-        setattr(args, self.dest, True)
+    def __call__(self, parser, namespace, values, option_string=None):
+        del parser, values, option_string
+        namespace.show_capture = "oe"
+        setattr(namespace, self.dest, True)
 
 
 @canary.hookimpl(tryfirst=True)

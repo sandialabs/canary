@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Collection
-from typing import Iterator
+from typing import Generator
 
 from ..core import jobspec
 from ..core.job import JobPhase
@@ -245,7 +245,7 @@ class WorkspaceDatabase:
         return
 
     @contextlib.contextmanager
-    def transaction(self, immediate: bool = False) -> Iterator[sqlite3.Connection]:
+    def transaction(self, immediate: bool = False) -> Generator[sqlite3.Connection, None, None]:
         """Run the enclosed statements atomically.
 
         The connection is opened in autocommit mode (``isolation_level=None``),
@@ -279,7 +279,7 @@ class WorkspaceDatabase:
             conn.commit()
 
     @contextlib.contextmanager
-    def _temp_ids(self, ids: "Collection[str]") -> Iterator[sqlite3.Connection]:
+    def _temp_ids(self, ids: "Collection[str]") -> Generator[sqlite3.Connection, None, None]:
         """Populate a temporary ``_ids`` table inside a transaction; always dropped."""
         with self.transaction() as conn:
             conn.execute("DROP TABLE IF EXISTS temp._ids")

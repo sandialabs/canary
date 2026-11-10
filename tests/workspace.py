@@ -20,6 +20,48 @@ from _canary.view import ResultsView
 from _canary.view import ViewSettings
 
 
+def _make_archivable_job(
+    ws: Workspace, session: str, relpath: str, *, status: str, input_name: str = "input.inp"
+):
+    from _canary.core.job import Job
+    from _canary.core.jobspec import JobSpec
+    from _canary.execution.testexec import ExecutionSpace
+
+    session_dir = ws.sessions_dir / session
+    job_dir = session_dir / relpath
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "execute.log").write_text(f"log for {relpath}\n")
+    (job_dir / "testcase.lock").write_text("{}\n")
+    input_path = job_dir / input_name
+    input_path.write_text(f"input for {relpath}\n")
+
+    spec_root = ws.root.parent / "specroot"
+    spec_root.mkdir(exist_ok=True)
+    spec_file = spec_root / f"{Path(relpath).name}.vvt"
+    spec_file.write_text(f"spec for {relpath}\n")
+
+    spec = JobSpec(file_root=spec_root, file_path=Path(spec_file.name), family=Path(relpath).name)
+    spec.exec_path = Path(relpath)
+    spec.view_path = Path(relpath)
+    space = ExecutionSpace(root=session_dir, path=Path(relpath), session=session)
+    job = Job(spec=spec, workspace=space, dependencies=[])
+    job.set_status(outcome=status)
+    job.measurements.add_measurement(
+        "inputs",
+        [
+            {
+                "source": f"/original/{input_name}",
+                "dest": input_name,
+                "kind": "link",
+                "exists_now": True,
+                "size": input_path.stat().st_size,
+                "sha256": None,
+            }
+        ],
+    )
+    return job, input_path
+
+
 @pytest.fixture
 def chdir_tmp(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -915,3 +957,81 @@ def test_archive_command_defaults_to_workspace_name_tar_gz(tmp_path):
 
     with tarfile.open(archive, "r:gz") as tf:
         assert tf.getmember(f"{ws.root.name}/WORKSPACE.TAG").isfile()
+
+
+def test_archive_workspace_only_failed_filters_job_directories(tmp_path, monkeypatch):
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+
+    failed_job, _failed_input = _make_archivable_job(ws, "s1", "suite/failed_case", status="FAILED")
+    passed_job, _passed_input = _make_archivable_job(
+        ws, "s1", "suite/passed_case", status="SUCCESS"
+    )
+
+    monkeypatch.setattr(ws, "load_jobs", lambda ids=None: [failed_job, passed_job])
+
+    archive = tmp_path / "workspace-failed.tar.gz"
+    ws.archive(archive, only="failed")
+
+    with tarfile.open(archive, "r:gz") as tf:
+        names = set(tf.getnames())
+
+    assert f"{ws.root.name}/sessions/s1/suite/failed_case/execute.log" in names
+    assert f"{ws.root.name}/sessions/s1/suite/passed_case/execute.log" not in names
+    assert f"{ws.root.name}/sessions/s1/suite/passed_case/testcase.lock" in names
+
+
+def test_archive_workspace_exclude_skips_matching_files_but_keeps_inputs_and_locks(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+
+    job, input_path = _make_archivable_job(
+        ws, "s1", "suite/case", status="FAILED", input_name="driver.con"
+    )
+    extra = job.workspace.dir / "mesh.exo"
+    extra.write_text("exo\n")
+    skipped = job.workspace.dir / "debug.tmp"
+    skipped.write_text("tmp\n")
+
+    monkeypatch.setattr(ws, "load_jobs", lambda ids=None: [job])
+
+    archive = tmp_path / "workspace-exclude.tar.gz"
+    ws.archive(archive, exclude=["*.tmp", "*.con", "*.exo*"])
+
+    with tarfile.open(archive, "r:gz") as tf:
+        names = set(tf.getnames())
+
+    assert f"{ws.root.name}/sessions/s1/suite/case/debug.tmp" not in names
+    assert f"{ws.root.name}/sessions/s1/suite/case/mesh.exo" not in names
+    assert f"{ws.root.name}/sessions/s1/suite/case/{input_path.name}" in names
+    assert f"{ws.root.name}/sessions/s1/suite/case/testcase.lock" in names
+
+
+def test_archive_command_passes_only_and_exclude(tmp_path, monkeypatch):
+    import argparse
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    ws = Workspace.create(root)
+    called = {}
+
+    monkeypatch.setattr("_canary.cli.archive.app.open_workspace", lambda: ws)
+
+    def fake_archive_workspace(dest, *, only="all", exclude=None, start=None):
+        called["dest"] = dest
+        called["only"] = only
+        called["exclude"] = exclude
+        dest.write_text("archive\n")
+        return dest
+
+    monkeypatch.setattr("_canary.cli.archive.app.archive_workspace", fake_archive_workspace)
+
+    archive = tmp_path / "filtered.tar.gz"
+    rc = Archive().execute(argparse.Namespace(dest=str(archive), only="failed", exclude=["*.exo*"]))
+
+    assert rc == 0
+    assert called == {"dest": archive, "only": "failed", "exclude": ["*.exo*"]}

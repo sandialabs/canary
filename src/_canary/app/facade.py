@@ -50,9 +50,15 @@ def create_workspace(path: str | Path | None = None, force: bool = False) -> Wor
     return Workspace.create(path, force=force)
 
 
-def archive_workspace(dest: str | Path, start: str | Path | None = None) -> Path:
+def archive_workspace(
+    dest: str | Path,
+    start: str | Path | None = None,
+    *,
+    only: str = "all",
+    exclude: list[str] | None = None,
+) -> Path:
     """Archive the current workspace to *dest* and return the archive path."""
-    return open_workspace(start).archive(dest)
+    return open_workspace(start).archive(dest, only=only, exclude=exclude)
 
 
 def collect(
