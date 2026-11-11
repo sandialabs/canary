@@ -671,6 +671,58 @@ if __name__ == '__main__':
     assert calls == ["case_fast"]
 
 
+def test_runhook_sessionfinish_replays_latest_session(tmp_path):
+    from _canary.app.runhook import RunHookOptions
+    from _canary.app.runhook import run_hook
+
+    with working_dir(tmp_path), canary.config.override():
+        (tmp_path / "case.pyt").write_text(
+            """\
+import canary
+def test():
+    pass
+if __name__ == '__main__':
+    test()
+"""
+        )
+
+        workspace = Workspace.create(tmp_path)
+        specs = workspace.collect({str(tmp_path): []})
+        session = workspace.run(specs, only="all")
+        session.add_measurement("persisted", 7)
+        session.save()
+
+        calls: list[tuple[str, list[str], int | None]] = []
+
+        class Recorder:
+            @canary.hookimpl
+            def canary_sessionfinish(self, session):
+                calls.append(
+                    (
+                        session.name,
+                        [job.name for job in session.jobs],
+                        session.measurements.data.get("persisted"),
+                    )
+                )
+                session.add_measurement("replayed", len(session.jobs))
+
+        config_mod.pluginmanager.register(Recorder(), name="test.runhook.sessionfinish")
+        try:
+            rc = run_hook(
+                "canary_sessionfinish",
+                None,
+                RunHookOptions(session="latest", work_tree=str(tmp_path)),
+            )
+        finally:
+            config_mod.pluginmanager.unregister(name="test.runhook.sessionfinish")
+
+        saved = session.load_lock_data(session.prefix)
+
+    assert rc == 0
+    assert calls == [(session.name, ["case"], 7)]
+    assert saved["measurements"] == {"persisted": 7, "replayed": 1}
+
+
 def test_tree():
     from importlib import resources
 

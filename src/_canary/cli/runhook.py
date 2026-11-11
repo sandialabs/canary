@@ -24,13 +24,14 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class RunHook(CanarySubcommand):
     name = "runhook"
-    description = "Replay stored job hooks against existing results"
+    description = "Replay stored hooks against existing results"
     epilog = (
         "Examples:\n\n"
         "[pad]canary runhook canary_runtest_finish\n\n"
         "[pad]canary runhook canary_runtest_finish --only failed\n\n"
         "[pad]canary runhook canary_runtest_finish -k fast\n\n"
-        "[pad]canary runhook canary_runtest_finish --session latest TEST_ID"
+        "[pad]canary runhook canary_runtest_finish --session latest TEST_ID\n\n"
+        "[pad]canary runhook canary_sessionfinish --session latest"
     )
 
     def setup_parser(self, parser: "Parser") -> None:
@@ -57,6 +58,16 @@ class RunHook(CanarySubcommand):
         )
         finish.set_defaults(_runhook_handler=self.run_finish)
 
+        sessionfinish = sub.add_parser(
+            "canary_sessionfinish", help="Replay the session finish hook"
+        )
+        sessionfinish.add_argument(
+            "--session",
+            default="latest",
+            help='Session name, prefix, or "latest" identifying the stored session to replay',
+        )
+        sessionfinish.set_defaults(_runhook_handler=self.run_sessionfinish)
+
     def execute(self, args: argparse.Namespace) -> int:
         handler = getattr(args, "_runhook_handler", None)
         if handler is None:
@@ -72,6 +83,9 @@ class RunHook(CanarySubcommand):
                 keyword_exprs=args.keyword_exprs, only=args.only, session=args.session
             ),
         )
+
+    def run_sessionfinish(self, args: argparse.Namespace) -> int:
+        return app.run_hook("canary_sessionfinish", None, app.RunHookOptions(session=args.session))
 
 
 def _build_request(items: list[str]):

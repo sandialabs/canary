@@ -285,6 +285,15 @@ def test_runhook_canary_runtest_finish_args_parse():
     assert args.only == "failed"
 
 
+def test_runhook_canary_sessionfinish_args_parse():
+    parser = make_cli_parser()
+
+    args = parser.parse_args(["runhook", "canary_sessionfinish", "--session", "latest"])
+    assert args.command == "runhook"
+    assert args.runhook_command == "canary_sessionfinish"
+    assert args.session == "latest"
+
+
 def test_quiet_flag_clamps_to_most_quiet_log_level():
 
     parser = make_argument_parser()
