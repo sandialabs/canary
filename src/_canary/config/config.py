@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -51,6 +52,9 @@ CONFIG_ENV_CFG64 = "CANARYCFG64"
 ConfigScopes = Literal["site", "global", "local"]
 
 logger = logging.get_logger(__name__)
+
+AUTOLOAD_PLUGIN_NAME = "canaryhooks"
+AUTOLOAD_PLUGIN_FILENAME = f"{AUTOLOAD_PLUGIN_NAME}.py"
 
 
 def default_config_values() -> dict[str, Any]:
@@ -366,9 +370,14 @@ class Config:
         session_plugins = normalize_plugin_specs(
             getattr(args, "session_plugins", None), base=self.invocation_dir
         )
-        if session_plugins:
-            self.session_plugins = session_plugins
-            data["plugins"] = merge(list(persistent_plugins), session_plugins)
+        autoload_plugin = maybe_get_autoload_plugin_spec(base=self.invocation_dir)
+        effective_plugins = list(session_plugins)
+        if autoload_plugin is not None and autoload_plugin not in effective_plugins:
+            effective_plugins.append(autoload_plugin)
+
+        if effective_plugins:
+            self.session_plugins = effective_plugins
+            data["plugins"] = merge(list(persistent_plugins), effective_plugins)
         elif persistent_plugins:
             data["plugins"] = persistent_plugins
 
@@ -604,7 +613,22 @@ def get_env_scope() -> dict[str, Any]:
 
 def get_bootstrap_plugin_specs(*, argv_plugins: list[str] | None = None) -> list[dict[str, str]]:
     env_plugins = parse_env_plugins(os.getenv("CANARY_PLUGINS"))
-    return normalize_plugin_specs(env_plugins + list(argv_plugins or []), base=os.getcwd())
+    specs = normalize_plugin_specs(env_plugins + list(argv_plugins or []), base=os.getcwd())
+    autoload = maybe_get_autoload_plugin_spec(base=os.getcwd())
+    if autoload is not None and autoload not in specs:
+        specs.append(autoload)
+    return specs
+
+
+def maybe_get_autoload_plugin_spec(*, base: str | Path) -> dict[str, str] | None:
+    local = Path(base) / AUTOLOAD_PLUGIN_FILENAME
+    if local.is_file():
+        return normalize_plugin_specs([AUTOLOAD_PLUGIN_FILENAME], base=base)[0]
+
+    if importlib.util.find_spec(AUTOLOAD_PLUGIN_NAME) is not None:
+        return {"name": AUTOLOAD_PLUGIN_NAME}
+
+    return None
 
 
 def process_config_path(path: str) -> list[str]:

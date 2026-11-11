@@ -428,3 +428,30 @@ def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
         assert pm.get_plugin("reverify") is not None
         impls = [h.plugin_name for h in pm.hook.canary_runtest_finish.get_hookimpls()]
         assert "reverify" in impls
+
+
+def test_maybe_get_autoload_plugin_spec_prefers_local_file(tmp_path, monkeypatch):
+    from _canary.config.config import maybe_get_autoload_plugin_spec
+
+    local = tmp_path / "canaryhooks.py"
+    local.write_text("VALUE = 1\n")
+    pkgdir = tmp_path / "pkgdir"
+    pkgdir.mkdir()
+    (pkgdir / "canaryhooks.py").write_text("VALUE = 2\n")
+    monkeypatch.syspath_prepend(str(pkgdir))
+
+    assert maybe_get_autoload_plugin_spec(base=tmp_path) == {
+        "name": "canaryhooks",
+        "path": str(tmp_path),
+    }
+
+
+def test_maybe_get_autoload_plugin_spec_uses_importable_module(tmp_path, monkeypatch):
+    from _canary.config.config import maybe_get_autoload_plugin_spec
+
+    pkgdir = tmp_path / "pkgdir"
+    pkgdir.mkdir()
+    (pkgdir / "canaryhooks.py").write_text("VALUE = 2\n")
+    monkeypatch.syspath_prepend(str(pkgdir))
+
+    assert maybe_get_autoload_plugin_spec(base=tmp_path) == {"name": "canaryhooks"}

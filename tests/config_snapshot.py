@@ -209,3 +209,69 @@ def test_bootstrap_plugin_specs_include_env_and_cli(monkeypatch, tmp_path):
         {"name": "pkg", "path": str(tmp_path)},
         {"name": "plug", "path": str(tmp_path)},
     ]
+
+
+def test_bootstrap_plugin_specs_append_autoloaded_canaryhooks(monkeypatch, tmp_path):
+    from _canary.config.config import get_bootstrap_plugin_specs
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "canaryhooks.py").write_text("VALUE = 1\n")
+
+    specs = get_bootstrap_plugin_specs(argv_plugins=[str(tmp_path / "plug.py")])
+
+    assert specs == [
+        {"name": "plug", "path": str(tmp_path)},
+        {"name": "canaryhooks", "path": str(tmp_path)},
+    ]
+
+
+def test_bootstrap_plugin_specs_fall_back_to_importable_canaryhooks(monkeypatch, tmp_path):
+    from _canary.config.config import get_bootstrap_plugin_specs
+
+    hooks_dir = tmp_path / "hooks"
+    hooks_dir.mkdir()
+    (hooks_dir / "canaryhooks.py").write_text("VALUE = 1\n")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(hooks_dir))
+
+    specs = get_bootstrap_plugin_specs()
+
+    assert specs == [{"name": "canaryhooks"}]
+
+
+def test_set_main_options_appends_autoloaded_canaryhooks(tmp_path, monkeypatch):
+    parser = make_argument_parser()
+    args = parser.parse_args(["-p", str(tmp_path / "plugins" / "my_plugin.py")])
+    (tmp_path / "canaryhooks.py").write_text("VALUE = 1\n")
+
+    with config.override() as cfg:
+        cfg.invocation_dir = str(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        cfg.set_main_options(args)
+
+        assert cfg.session_plugins == [
+            {"name": "my_plugin", "path": str(tmp_path / "plugins")},
+            {"name": "canaryhooks", "path": str(tmp_path)},
+        ]
+        assert cfg.data["plugins"] == [
+            {"name": "my_plugin", "path": str(tmp_path / "plugins")},
+            {"name": "canaryhooks", "path": str(tmp_path)},
+        ]
+
+
+def test_set_main_options_fall_back_to_importable_canaryhooks(tmp_path, monkeypatch):
+    parser = make_argument_parser()
+    args = parser.parse_args([])
+    hooks_dir = tmp_path / "hooks"
+    hooks_dir.mkdir()
+    (hooks_dir / "canaryhooks.py").write_text("VALUE = 1\n")
+
+    with config.override() as cfg:
+        cfg.invocation_dir = str(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.syspath_prepend(str(hooks_dir))
+        cfg.set_main_options(args)
+
+        assert cfg.session_plugins == [{"name": "canaryhooks"}]
+        assert cfg.data["plugins"] == [{"name": "canaryhooks"}]
