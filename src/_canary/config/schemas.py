@@ -117,7 +117,9 @@ config_schema = Schema(
     },
     ignore_extra_keys=True,
 )
-testpaths_schema = Schema({"testpaths": [{"root": str, "paths": [str]}]})
+testpaths_schema = Schema(
+    {Optional("description"): str, "testpaths": [{"root": str, "paths": [str]}]}
+)
 
 
 class EnvarSchema(Schema):

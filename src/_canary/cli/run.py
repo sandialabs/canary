@@ -5,13 +5,10 @@
 """Implements the ``canary run`` subcommand for discovering and executing test suites."""
 
 import argparse
-import os
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
-
-import yaml
 
 from .. import config
 from .. import rerun
@@ -22,12 +19,11 @@ from ..app.pathspec import TagRequest
 from ..app.pathspec import classify_pathspec
 from ..app.run import RunOptions
 from ..app.run import run as app_run
-from ..config.schemas import testpaths_schema
 from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
+from ..scanpaths import TestPathsFileError
+from ..scanpaths import read_testpaths_file
 from ..select import Selector
-from ..util import json_helper as json
-from ..util.filesystem import working_dir
 from ..util.rich import bold
 from ..view import ViewSettings
 from .base import CanarySubcommand
@@ -418,7 +414,11 @@ class ReadPathsFromFile(argparse.Action):
         builder.require_kind("scanpaths", f"file {values}")
         if builder.errors:
             raise argparse.ArgumentError(self, builder.errors[0])
-        builder.scanpaths.update(self.read_paths(values))
+        try:
+            scanpaths = self.read_paths(values)
+        except TestPathsFileError as e:
+            raise argparse.ArgumentError(self, str(e)) from e
+        builder.scanpaths.update(scanpaths)
         request = builder.finalize()
         setattr(namespace, "request", request)
         setattr(namespace, self.dest, values)
@@ -428,24 +428,13 @@ class ReadPathsFromFile(argparse.Action):
 
     @staticmethod
     def read_paths(file: str) -> dict[str, list[str]]:
-        """Parse a YAML or JSON testpaths file and return ``{abs_root: [rel_paths]}``."""
-        data: dict
-        if file.endswith(".json"):
-            with open(file, "r") as fh:
-                data = json.load(fh)
-        else:
-            with open(file, "r") as fh:
-                data = yaml.safe_load(fh)
-        testpaths_schema.validate(data)
-        file_dir = os.path.abspath(os.path.dirname(file) or ".")
-        paths: dict[str, list[str]] = {}
-        with working_dir(file_dir):
-            for p in data["testpaths"]:
-                if isinstance(p, str):
-                    paths.setdefault(os.path.abspath(p), [])
-                else:
-                    paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
-        return paths
+        """Parse a YAML or JSON testpaths file and return ``{abs_root: [rel_paths]}``.
+
+        Raises:
+            TestPathsFileError: If the file is unreadable or malformed, or names
+                a root or path that does not exist.
+        """
+        return read_testpaths_file(file)
 
     @staticmethod
     def canary_help() -> str:
@@ -454,11 +443,16 @@ class ReadPathsFromFile(argparse.Action):
 pathspec file schema syntax:
 
   {
+    "description": str,   (optional; e.g. how the list was derived)
     "testpaths": [
       {
         "root": str,
         "paths": [str]
       }
     ]
-  }"""
+  }
+
+  root is resolved relative to the file's directory; paths are files,
+  directories, or glob patterns under root.  Every root and path must
+  exist: canary reports all missing entries and stops before running."""
         return text

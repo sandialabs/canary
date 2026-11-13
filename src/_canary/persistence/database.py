@@ -1002,7 +1002,8 @@ class WorkspaceDatabase:
           lr.status_category,
           lr.status_outcome,
           lr.status_reason,
-          lr.status_code
+          lr.status_code,
+          json_extract(s.data, '$.assets')
         FROM specs s
         JOIN specs_meta sm
           ON sm.spec_id = s.spec_id
@@ -1022,6 +1023,7 @@ class WorkspaceDatabase:
                 started_at=start,
                 result_category=row[4],
                 result_outcome=row[5],
+                resources=_asset_sources(row[8]),
             )
             candidates.append(c)
         return candidates
@@ -1154,6 +1156,8 @@ class PartialSpec:
             ``None`` if the spec has never run.
         started_at: Unix timestamp of the latest execution start (or submission
             / finish if start was not recorded), or ``-1.0`` if never run.
+        resources: Source paths of the spec's copied/linked assets (test
+            resource files and directories).
     """
 
     id: str
@@ -1162,6 +1166,23 @@ class PartialSpec:
     result_category: str
     result_outcome: str
     started_at: float
+    resources: list[Path] = dataclasses.field(default_factory=list)
+
+
+def _asset_sources(assets_json: str | None) -> list[Path]:
+    """Return the ``src`` paths from a spec's serialized ``assets`` array."""
+    if not assets_json:
+        return []
+    try:
+        assets = json.loads(assets_json)
+    except ValueError:
+        return []
+    sources: list[Path] = []
+    for asset in assets:
+        src = asset.get("src") if isinstance(asset, dict) else getattr(asset, "src", None)
+        if src:
+            sources.append(Path(src))
+    return sources
 
 
 def increment_hex_prefix(prefix: str) -> str | None:

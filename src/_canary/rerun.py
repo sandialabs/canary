@@ -27,9 +27,12 @@ Built-in strategies:
   (failed, diffed, timed out, aborted, or never run).
 - ``failed`` — run specs whose latest result failed.
 - ``not_run`` — run specs that have never produced a result.
-- ``changed`` — run specs whose source file changed since the last run.
+- ``changed`` — run specs whose source file, or any file it copies or links
+  into its workspace (``assets``), changed since the last run.
 """
 
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable
 from typing import Literal
@@ -165,28 +168,52 @@ class _NotRun(Strategy):
         return RunDecision(False, reason=f"previous result = {job.status.category!r}")
 
 
+def _newest_mtime(path: Path) -> float | None:
+    """Return the newest mtime of *path* (recursing into directories), or ``None`` if missing."""
+    try:
+        newest = path.stat().st_mtime
+    except OSError:
+        return None
+    if path.is_dir():
+        for dirpath, dirnames, filenames in os.walk(path):
+            for name in (*dirnames, *filenames):
+                try:
+                    newest = max(newest, os.stat(os.path.join(dirpath, name)).st_mtime)
+                except OSError:  # nosec B112 — dangling link or racing delete; skip it
+                    continue
+    return newest
+
+
+def _inputs_changed_since(paths: Iterable[Path], started: float) -> bool:
+    """Return True if any of *paths* is missing or was modified after *started*."""
+    for path in paths:
+        mtime = _newest_mtime(path)
+        if mtime is None or mtime > started:
+            return True
+    return False
+
+
 class _Changed(Strategy):
     name = "changed"
-    help = "run tests whose source file changed since the last run"
+    help = "run tests whose source file or copied/linked resource files changed since the last run"
 
     def selects_root(self, pspec: "PartialSpec") -> bool:
-        try:
-            mtime = pspec.file.stat().st_mtime
-        except FileNotFoundError:
-            return True
         # A never-run spec (started_at <= 0) has no prior run to compare
         # against, so it is treated as changed and seeded.
-        return pspec.started_at <= 0 or mtime > pspec.started_at
+        if pspec.started_at <= 0:
+            return True
+        return _inputs_changed_since([pspec.file, *pspec.resources], pspec.started_at)
 
     def should_run(self, job: "Job") -> RunDecision:
         started = job.timekeeper._started
-        try:
-            mtime = job.spec.file.stat().st_mtime
-        except FileNotFoundError:
+        if started < 0:
             return RunDecision(True)
-        if started < 0 or mtime > started:
+        inputs = [Path(job.spec.file), *(Path(asset.src) for asset in job.spec.assets)]
+        if _inputs_changed_since(inputs, started):
             return RunDecision(True)
-        return RunDecision(False, reason="job spec has not changed since last run")
+        return RunDecision(
+            False, reason="job spec and resource files have not changed since last run"
+        )
 
 
 register(_All())

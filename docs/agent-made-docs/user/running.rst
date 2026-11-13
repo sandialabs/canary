@@ -126,7 +126,8 @@ Canary's rerun behavior depends on the ``--only`` strategy:
    * - ``not_run``
      - Run only jobs that were not executed previously
    * - ``changed``
-     - Run jobs with changed source files or dependencies
+     - Run jobs whose test file, or any resource file it copies or links
+       (``assets``), changed since its last run; downstream dependents rerun too
 
 Examples:
 

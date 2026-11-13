@@ -315,6 +315,7 @@
           "flags": {
             "JOBID": "Job ID (7-char prefix or full 64-char SHA256).",
             "path": "Optional dot-notation JSON path (default: whole document). Use 'env' or 'env.KEY' to query the runtime environment snapshot.",
+            "--session": "Read the testcase.lock written by this session's run of the job (name, prefix, or \"latest\"). Without it the job's most recent run is shown, and a note on stderr lists earlier sessions that hold results for the same job ID.",
             "--cache": "Show per-job timing cache statistics (mean/min/max runtime history).",
             "--all-runs": "Show all historical runs of this job across all sessions (oldest first), each with session, exit_code, status, and timings. Flag-gated because the same spec_id across code rebuilds may not represent the same computation.",
             "--clean": "Strip __type__ wrappers; normalise legacy enum dicts to plain strings.",
@@ -337,6 +338,7 @@
             "canary query job abc1234 env.PATH",
             "canary query job abc1234 --cache",
             "canary query job abc1234 --all-runs",
+            "canary query job abc1234 measurements --session 2026-11-11T16-21-16",
             "canary query job abc1234 --clean --terse"
           ]
         },
@@ -406,6 +408,7 @@
             "exit_code",
             "status (category, outcome, reason)",
             "timings (pending, setup, running, teardown, total)",
+            "duration (seconds, float; running time, else total, null if unavailable; matches testcase.lock timekeeper duration)",
             "started_at (unix epoch float, null if unavailable; absolute start of job execution)",
             "stopped_at (unix epoch float, null if unavailable; absolute end of job execution)",
             "last_activity (unix epoch float, null for local-worker jobs; HPC batch I/O liveness signal)",
@@ -450,6 +453,7 @@
             "jobs",
             "secondary_errors"
           ],
+          "signature_sources": "Python tracebacks (including canary.TestFailed/TestDiffed raised by .pyt scripts, with the raising frame), shell command-not-found, segfaults, MPI aborts, and exodiff/vdiff messages; otherwise the job's status reason.",
           "examples": [
             "canary query failures",
             "canary query failures --group-by frame",

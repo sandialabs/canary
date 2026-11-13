@@ -129,3 +129,84 @@ def _explicit_root_prefix(item: str) -> tuple[str, str] | None:
         if glob.has_magic(prefix):
             raise ValueError(f"{item}: ':' is only allowed before the first globbed component")
     return None
+
+
+class TestPathsFileError(ValueError):
+    """A ``testpaths`` file (``-f FILE``) is unreadable, malformed, or lists missing paths."""
+
+    __test__ = False  # not a pytest test class, despite the name
+
+
+def read_testpaths_file(file: str) -> dict[str, list[str]]:
+    """Read a JSON or YAML ``testpaths`` file and return ``{abs_root: [rel_paths]}``.
+
+    Each ``root`` is resolved relative to the file's directory, and each entry
+    in ``paths`` relative to its root.  Entries may be files, directories, or
+    glob patterns.  Every root and path is checked; all problems are reported
+    together so a stale list can be fixed in one pass.
+
+    Raises:
+        TestPathsFileError: If the file cannot be read or parsed, does not match
+            the schema (see ``canary help --pathfile``), or names a root or path
+            that does not exist.
+    """
+    from schema import SchemaError
+
+    from .config.schemas import testpaths_schema
+
+    try:
+        with open(file, "r") as fh:
+            text = fh.read()
+    except OSError as e:
+        raise TestPathsFileError(f"{file}: cannot read testpaths file: {e.strerror}") from e
+
+    try:
+        if file.endswith(".json"):
+            import json
+
+            data = json.loads(text)
+        else:
+            import yaml
+
+            data = yaml.safe_load(text)
+    except ValueError as e:  # json.JSONDecodeError is a ValueError
+        raise TestPathsFileError(f"{file}: invalid JSON: {e}") from e
+    except Exception as e:  # yaml.YAMLError
+        raise TestPathsFileError(f"{file}: invalid YAML: {e}") from e
+
+    try:
+        testpaths_schema.validate(data)
+    except SchemaError as e:
+        raise TestPathsFileError(
+            f"{file}: does not match the testpaths schema ({e}); see 'canary help --pathfile'"
+        ) from e
+
+    file_dir = os.path.dirname(os.path.abspath(file))
+    paths: dict[str, list[str]] = {}
+    problems: list[str] = []
+    for entry in data["testpaths"]:
+        root = os.path.normpath(os.path.join(file_dir, entry["root"]))
+        if not os.path.isdir(root):
+            what = "is not a directory" if os.path.exists(root) else "does not exist"
+            problems.append(f"root {entry['root']!r} {what} ({root})")
+            continue
+        if not entry["paths"]:
+            merge_scanpaths(paths, {root: []})
+            continue
+        for path in entry["paths"]:
+            try:
+                merge_scanpaths(paths, _scanpath_from_root_path(root, path))
+            except ValueError as e:
+                problems.append(f"{os.path.join(entry['root'], path)}: {_short_reason(e, path)}")
+    if problems:
+        listing = "\n".join(f"  - {problem}" for problem in problems)
+        noun = "problem" if len(problems) == 1 else "problems"
+        raise TestPathsFileError(f"{file}: {len(problems)} {noun} in testpaths file:\n{listing}")
+    return paths
+
+
+def _short_reason(error: ValueError, path: str) -> str:
+    """Strip the leading ``path: `` that the scanpath helpers prefix onto messages."""
+    message = str(error)
+    prefix = f"{path}: "
+    return message[len(prefix) :] if message.startswith(prefix) else message

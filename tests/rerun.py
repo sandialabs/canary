@@ -491,3 +491,104 @@ if __name__ == "__main__":
     assert session2.returncode == 0
     assert jobs2["upstream"].status.is_success()
     assert jobs2["downstream"].status.is_success()
+
+
+def _changed_job_with_asset(tmp_path: Path, asset: Path, started: float) -> Job:
+    from _canary.core.jobspec import Asset
+
+    spec_file = tmp_path / "case.pyt"
+    spec_file.write_text("# stub\n")
+    job = make_job(tmp_path, "case", outcome="SUCCESS", started_at=started)
+    job.spec = JobSpec(
+        file_root=tmp_path,
+        file_path=spec_file,
+        family="case",
+        id="e" * 64,
+        timeout=10.0,
+        assets=[Asset(src=asset, dst=None, action="copy")],
+    )
+    job.timekeeper._started = started
+    return job
+
+
+def _set_mtime(path: Path, mtime: float) -> None:
+    import os
+
+    os.utime(path, (mtime, mtime))
+
+
+def test_rerun_changed_does_not_mask_job_with_modified_resource(tmp_path):
+    """only='changed' reruns a job whose copied/linked resource file changed."""
+    asset = tmp_path / "data.txt"
+    asset.write_text("v1\n")
+    started = time.time()
+    job = _changed_job_with_asset(tmp_path, asset, started)
+    _set_mtime(job.spec.file, started - 10.0)
+    _set_mtime(asset, started + 10.0)
+
+    selector = RuntimeSelector([job], workspace=tmp_path)
+    selector.add_rule(RerunRule("changed"))
+    selector.run()
+
+    assert not job.mask, "modified resource should trigger a rerun"
+
+
+def test_rerun_changed_masks_job_with_unchanged_resource(tmp_path):
+    asset = tmp_path / "data.txt"
+    asset.write_text("v1\n")
+    started = time.time()
+    job = _changed_job_with_asset(tmp_path, asset, started)
+    _set_mtime(job.spec.file, started - 10.0)
+    _set_mtime(asset, started - 10.0)
+
+    selector = RuntimeSelector([job], workspace=tmp_path)
+    selector.add_rule(RerunRule("changed"))
+    selector.run()
+
+    assert job.mask, "unchanged spec and resource should be masked"
+
+
+def test_rerun_changed_detects_change_inside_resource_directory(tmp_path):
+    asset_dir = tmp_path / "meshes"
+    inner = asset_dir / "sub" / "mesh.g"
+    inner.parent.mkdir(parents=True)
+    inner.write_text("mesh\n")
+    started = time.time()
+    job = _changed_job_with_asset(tmp_path, asset_dir, started)
+    for path in (job.spec.file, asset_dir, inner.parent):
+        _set_mtime(path, started - 10.0)
+    _set_mtime(inner, started + 10.0)
+
+    selector = RuntimeSelector([job], workspace=tmp_path)
+    selector.add_rule(RerunRule("changed"))
+    selector.run()
+
+    assert not job.mask, "a change inside a resource directory should trigger a rerun"
+
+
+def test_changed_root_selection_sees_resource_changes(tmp_path):
+    """The database root selection (bare ``canary run --only changed``) checks resources too."""
+    write(
+        tmp_path / "res.pyt",
+        """\
+import canary
+canary.directives.copy("data.txt")
+def test():
+    pass
+if __name__ == "__main__":
+    test()
+""",
+    )
+    write(tmp_path / "data.txt", "v1\n")
+    workspace, specs = create_workspace(tmp_path)
+    run_specs(workspace, specs)
+
+    from _canary import rerun
+
+    with working_dir(workspace.root), canary.config.override():
+        (pspec,) = workspace.db.get_partial_specs()
+        assert pspec.resources == [tmp_path / "data.txt"]
+        strat = rerun.get_strategy("changed")
+        assert not strat.selects_root(pspec)
+        _set_mtime(tmp_path / "data.txt", pspec.started_at + 10.0)
+        assert strat.selects_root(pspec)

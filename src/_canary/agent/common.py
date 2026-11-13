@@ -12,6 +12,7 @@ from ..util.query_data import skill_to_markdown
 
 CORE_BOOTSTRAP_SKILLS = (
     "canary-test-authoring",
+    "canary-dev-testpaths",
     "canary-run-debug",
     "canary-workflows-results",
     "canary-extension-development",

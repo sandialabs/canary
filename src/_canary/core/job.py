@@ -743,7 +743,7 @@ class Job(BaseJob):
             default_reason = None
             if stat == "FAILED":
                 default_reason = "Empty TestFailed exception raised during execution"
-            self.status.set(outcome=stat, reason=None if not e.args else e.args[0])
+            self.status.set(outcome=stat, reason=default_reason if not e.args else e.args[0])
         except TestSkipped as e:
             self.status.set(outcome="SKIPPED", reason=None if not e.args else e.args[0])
         except TestTimedOut as e:

@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 
+import pytest
+
 import canary
 from _canary import app
 from _canary.cli.run import PathSpec
@@ -153,3 +155,95 @@ def test_recursedirs_type_rejects_colon_after_first_globbed_component(tmp_path):
         )
     else:
         raise AssertionError("Expected ValueError for ':' after a globbed component")
+
+
+def _write_testpaths(path, data):
+    path.write_text(json.dumps(data))
+    return str(path)
+
+
+def test_testpaths_file_reports_every_missing_path(tmp_path):
+    from _canary.scanpaths import TestPathsFileError
+    from _canary.scanpaths import read_testpaths_file
+
+    touchp(str(tmp_path / "tests" / "a.pyt"))
+    file = _write_testpaths(
+        tmp_path / "x_testpaths.json",
+        {
+            "testpaths": [
+                {"root": "tests", "paths": ["a.pyt", "gone.pyt", "sub/*.vvt"]},
+                {"root": "no-such-root", "paths": ["b.pyt"]},
+            ]
+        },
+    )
+    with pytest.raises(TestPathsFileError) as excinfo:
+        read_testpaths_file(file)
+    message = str(excinfo.value)
+    assert "3 problems" in message
+    assert "tests/gone.pyt: no such file or directory" in message
+    assert "tests/sub/*.vvt: no paths matched pattern" in message
+    assert "root 'no-such-root' does not exist" in message
+    assert "a.pyt" not in message.replace("gone.pyt", "")
+
+
+def test_testpaths_file_resolves_relative_to_file_and_accepts_description(tmp_path):
+    from _canary.scanpaths import read_testpaths_file
+
+    touchp(str(tmp_path / "tests" / "a.pyt"))
+    touchp(str(tmp_path / "tests" / "sub" / "b.pyt"))
+    file = _write_testpaths(
+        tmp_path / "x_testpaths.json",
+        {
+            "description": "derived by grepping for model FOO",
+            "testpaths": [{"root": "tests", "paths": ["a.pyt", "sub/*.pyt"]}],
+        },
+    )
+    with working_dir(str(tmp_path.parent)):
+        paths = read_testpaths_file(file)
+    assert paths == {str(tmp_path / "tests"): ["a.pyt", os.path.join("sub", "b.pyt")]}
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        ("{bad", "invalid JSON"),
+        (json.dumps({"testpaths": [{"root": "tests"}]}), "does not match the testpaths schema"),
+    ],
+)
+def test_testpaths_file_reports_malformed_file(tmp_path, content, expected):
+    from _canary.scanpaths import TestPathsFileError
+    from _canary.scanpaths import read_testpaths_file
+
+    file = tmp_path / "x_testpaths.json"
+    file.write_text(content)
+    with pytest.raises(TestPathsFileError, match=expected):
+        read_testpaths_file(str(file))
+
+
+def test_testpaths_file_reports_unreadable_file(tmp_path):
+    from _canary.scanpaths import TestPathsFileError
+    from _canary.scanpaths import read_testpaths_file
+
+    with pytest.raises(TestPathsFileError, match="cannot read testpaths file"):
+        read_testpaths_file(str(tmp_path / "missing.json"))
+
+
+def test_run_dash_f_rejects_missing_paths_with_message(tmp_path):
+    """``canary run -f`` surfaces the missing entries as an argparse error."""
+    file = _write_testpaths(
+        tmp_path / "x_testpaths.json", {"testpaths": [{"root": ".", "paths": ["gone.pyt"]}]}
+    )
+    action = ReadPathsFromFile(["-f"], "f_pathspec")
+    with pytest.raises(argparse.ArgumentError, match="gone.pyt: no such file or directory"):
+        action(None, argparse.Namespace(), file, option_string="-f")
+
+
+def test_collect_dash_f_rejects_missing_paths_with_message(tmp_path):
+    """``canary find/collect -f`` shows the message instead of 'invalid ... value'."""
+    from _canary.generation.collect import read_recursedirs
+
+    file = _write_testpaths(
+        tmp_path / "x_testpaths.json", {"testpaths": [{"root": ".", "paths": ["gone.pyt"]}]}
+    )
+    with pytest.raises(argparse.ArgumentTypeError, match="gone.pyt: no such file or directory"):
+        read_recursedirs(file)

@@ -19,7 +19,8 @@ _FRAME_RE = re.compile(
     re.MULTILINE,
 )
 _EXCEPTION_LINE_RE = re.compile(
-    r"^(?P<type>[\w.]+(?:Error|Exception)|SystemExit|KeyboardInterrupt):\s*(?P<message>.*)$"
+    r"^(?P<type>[\w.]+(?:Error|Exception)|(?:[\w.]+\.)?Test(?:Failed|Diffed|Skipped|TimedOut)"
+    r"|SystemExit|KeyboardInterrupt)(?::\s*(?P<message>.*))?$"
 )
 _COMMAND_NOT_FOUND_RE = re.compile(r"(?P<message>/(?:bin/)?sh:\s+.+?: command not found)")
 _SEGFAULT_RE = re.compile(r"(?P<message>Segmentation fault(?: \([^\)]*\))?)")

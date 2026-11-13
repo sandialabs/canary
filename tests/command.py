@@ -5,6 +5,7 @@
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -40,6 +41,7 @@ from _canary.util.testing import CanaryCommand
 EXPECTED_CORE_SKILLS = {
     "canary-orientation",
     "canary-test-authoring",
+    "canary-dev-testpaths",
     "canary-run-debug",
     "canary-workflows-results",
     "canary-extension-development",
@@ -2998,3 +3000,146 @@ def test_watch_flag_in_query_session_namespace(setup, capsys):
     assert len(lines) >= 1
     rows = json.loads(lines[0])
     assert isinstance(rows, list)
+
+
+def test_failure_signature_captures_testfailed_message(tmp_path):
+    """A .pyt raising canary.TestFailed is triaged by its message, not its exit code."""
+    from _canary.app.failure_analysis import _DEFAULT_FRAME_FILTER
+    from _canary.app.failure_analysis import analyze_failure_log
+
+    log = tmp_path / "canary-out.txt"
+    log.write_text(
+        "[2026-11-13-07:59:34] Begin executing case\n"
+        "Traceback (most recent call last):\n"
+        '  File "/ws/case/case.pyt", line 9, in <module>\n'
+        "    test()\n"
+        '  File "/ws/case/case.pyt", line 6, in test\n'
+        '    raise canary.TestFailed("material was not discarded at cycle 12")\n'
+        "_canary.core.error.TestFailed: material was not discarded at cycle 12\n"
+    )
+    workspace = SimpleNamespace(root=tmp_path / ".canary")
+    analysis = analyze_failure_log(
+        workspace,
+        log,
+        frame_filter=_DEFAULT_FRAME_FILTER,
+        status_reason="Test exited with exit code = 65",
+    )
+    assert analysis is not None
+    assert analysis["signature"] == (
+        "_canary.core.error.TestFailed: material was not discarded at cycle 12"
+    )
+    assert analysis["exception_type"] == "_canary.core.error.TestFailed"
+    assert analysis["frame"]["line"] == 6
+    assert analysis["frame"]["function"] == "test"
+    assert analysis["log_line"] == 2
+
+
+def test_failure_signature_captures_bare_testfailed(tmp_path):
+    from _canary.app.failure_analysis import _DEFAULT_FRAME_FILTER
+    from _canary.app.failure_analysis import analyze_failure_log
+
+    log = tmp_path / "canary-out.txt"
+    log.write_text(
+        "Traceback (most recent call last):\n"
+        '  File "/ws/case/case.pyt", line 6, in test\n'
+        "    raise canary.TestFailed()\n"
+        "_canary.core.error.TestFailed\n"
+    )
+    workspace = SimpleNamespace(root=tmp_path / ".canary")
+    analysis = analyze_failure_log(
+        workspace, log, frame_filter=_DEFAULT_FRAME_FILTER, status_reason="exit code = 65"
+    )
+    assert analysis["exception_type"] == "_canary.core.error.TestFailed"
+
+
+def test_query_failures_reports_testfailed_from_pyt(setup, capsys):
+    """e.pyt a=3 raises an empty TestFailed; triage should name the exception."""
+    rc = _run_query_failures(setup, session=setup.session.name)
+    assert rc == 0
+    groups = json.loads(capsys.readouterr().out)
+    failed = [g for g in groups if "FAILED" in g["outcomes"]]
+    assert failed
+    assert any(g["exception_type"] and g["exception_type"].endswith("TestFailed") for g in failed)
+
+
+def test_query_jobs_reports_duration(setup, capsys):
+    rc = _run_query_jobs(setup)
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    target = next(row for row in rows if row["id"] == setup.f_a1_id)
+    assert target["duration"] == target["timings"]["running"]
+    assert target["duration"] > 0
+
+
+@pytest.fixture(scope="module")
+def two_session_setup(tmp_path_factory):
+    """Run the same job in two sessions so a job ID has results in both."""
+    d = tmp_path_factory.mktemp("canary-two-sessions")
+    with working_dir(d):
+        with open("m.pyt", "w") as fh:
+            fh.write(
+                """\
+import canary
+def test():
+    pass
+if __name__ == "__main__":
+    test()
+"""
+            )
+        with canary.config.override():
+            workspace = Workspace.create(d)
+            specs = workspace.collect({str(d): []})
+            first = workspace.run(specs, only="all")
+            time.sleep(0.01)
+            second = workspace.run(specs, only="all")
+        job = workspace.load_jobs()[0]
+    return SimpleNamespace(
+        root=d, job_id=job.id, first=first.name, second=second.name, workspace=workspace
+    )
+
+
+def _query_job(ns, path=".", session=None):
+    from _canary.cli.query import _exec_job
+
+    args = argparse.Namespace(
+        query_subcmd="job",
+        jobid=ns.job_id[:7],
+        path=path,
+        session=session,
+        cache=False,
+        all_runs=False,
+        clean=False,
+        terse=True,
+        list_keys=False,
+    )
+    with working_dir(ns.root), canary.config.override():
+        return _exec_job(args)
+
+
+def test_query_job_session_selects_that_sessions_lock(two_session_setup, capsys):
+    ns = two_session_setup
+    assert ns.first != ns.second
+    assert _query_job(ns, "workspace.session", session=ns.first) == 0
+    assert json.loads(capsys.readouterr().out) == ns.first
+    assert _query_job(ns, "workspace.session", session=ns.second) == 0
+    assert json.loads(capsys.readouterr().out) == ns.second
+
+
+def test_query_job_without_session_notes_superseded_runs(two_session_setup, capsys):
+    ns = two_session_setup
+    assert _query_job(ns, "workspace.session") == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == ns.second
+    assert "results from 2 sessions" in captured.err
+    assert ns.first in captured.err
+
+
+def test_query_job_session_without_result_raises(two_session_setup, tmp_path):
+    ns = two_session_setup
+    bogus = ns.workspace.sessions_dir / "1999-01-01T00-00-00.000000"
+    bogus.mkdir()
+    try:
+        with pytest.raises(ValueError, match="has no result in session"):
+            _query_job(ns, session=bogus.name)
+    finally:
+        bogus.rmdir()

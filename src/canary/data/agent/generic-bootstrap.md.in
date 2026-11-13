@@ -44,6 +44,10 @@ This repository uses Canary as its workflow and execution layer.
 - Do not query the workspace SQLite database directly with external tools when `canary query` can answer the question.
 - Do not treat `.canary` as an API surface when the Canary CLI already provides a structured query path.
 
+## Development Work
+
+- When you start changing code or resources that tests exercise, create a `<topic>_testpaths.json` pathspec file (`canary help --pathfile`) listing the new, changed, and affected existing tests across every test root, verify it with `canary find -f FILE --files`, keep it current, and tell the user to run it with `canary run -f FILE`. See `canary-dev-testpaths`.
+
 ## Local Skill Map
 
 @@SKILL_MAP@@

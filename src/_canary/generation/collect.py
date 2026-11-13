@@ -22,7 +22,6 @@ Usage patterns:
 import argparse
 import dataclasses
 import fnmatch
-import json
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
@@ -37,12 +36,12 @@ from typing import Type
 
 from .. import config
 from ..config.argparsing import Parser
-from ..config.schemas import testpaths_schema
 from ..core.jobspec import Mask
 from ..core.jobspec_ir import JobSpecIR
 from ..plugins.hookspec import hookimpl
+from ..scanpaths import TestPathsFileError
+from ..scanpaths import read_testpaths_file
 from ..scanpaths import scanpath_from_item
-from ..scanpaths import scanpaths_from_root_paths
 from ..util import logging
 from ..util.filesystem import working_dir
 from .generator import AbstractTestGenerator
@@ -77,30 +76,16 @@ def read_recursedirs(file: str) -> dict[str, list[str]]:
 
     Returns:
         A dictionary mapping root directories to lists of relative paths.
-    """
-    data: dict
-    if file.endswith(".json"):
-        with open(file, "r") as fh:
-            data = json.load(fh)
-    else:
-        import yaml
 
-        with open(file, "r") as fh:
-            data = yaml.safe_load(fh)
-    testpaths_schema.validate(data)
-    file_dir = os.path.abspath(os.path.dirname(file) or ".")
-    paths: dict[str, list[str]] = {}
-    with working_dir(file_dir):
-        for p in data["testpaths"]:
-            root = os.path.abspath(p["root"])
-            expanded = scanpaths_from_root_paths(root, p["paths"])
-            for ex_root, ex_paths in expanded.items():
-                current = paths.get(ex_root)
-                if current == [] or ex_paths == []:
-                    paths[ex_root] = []
-                else:
-                    paths.setdefault(ex_root, []).extend(ex_paths)
-    return paths
+    Raises:
+        argparse.ArgumentTypeError: If the file is unreadable or malformed, or
+            names a root or path that does not exist.  argparse shows this
+            message verbatim, unlike a plain ``ValueError``.
+    """
+    try:
+        return read_testpaths_file(file)
+    except TestPathsFileError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
 
 
 class update_action(argparse.Action):

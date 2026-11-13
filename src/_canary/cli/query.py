@@ -198,6 +198,15 @@ class Query(CanarySubcommand):
                 "(e.g. 'env.CUDA_VISIBLE_DEVICES')."
             ),
         )
+        p_job.add_argument(
+            "--session",
+            metavar="SESSION",
+            default=None,
+            help=(
+                'Read the job\'s testcase.lock from this session (name, prefix, or "latest") '
+                "instead of the job's most recent run"
+            ),
+        )
         p_job.add_argument("--cache", action="store_true", help="Show timing cache for this job")
         p_job.add_argument("--clean", action="store_true", help="Strip __type__ wrappers")
         p_job.add_argument("--terse", action="store_true", help="Compact single-line JSON")
@@ -552,13 +561,62 @@ def _parse_shortcut_target(values: list[str], kind: str) -> tuple[str, str] | No
 # ---------------------------------------------------------------------------
 
 
-def _job_lockfile(workspace: Workspace, jobid: str) -> Path:
-    """Resolve *jobid* to its ``testcase.lock`` path, raising if not found."""
+def _job_lockfile(workspace: Workspace, jobid: str, session: str | None = None) -> Path:
+    """Resolve *jobid* to its ``testcase.lock`` path, raising if not found.
+
+    With *session* (a name, prefix, or ``latest``), return the lock file written
+    by that session's run of the job rather than the job's latest run.
+    """
     job = workspace.find_job(jobid)
-    lockfile = job.lockfile
+    if session is None:
+        lockfile = job.lockfile
+    else:
+        session_dir = _resolve_session_dir(workspace, session)
+        row = _job_row_in_session(workspace, job.id, session_dir.name)
+        if row is None:
+            raise ValueError(f"job {jobid!r} has no result in session {session_dir.name!r}")
+        lockfile = session_dir / row["workspace"] / "testcase.lock"
     if not lockfile.exists():
         raise FileNotFoundError(lockfile)
     return lockfile
+
+
+def _job_history(workspace: Workspace, job_id: str) -> list[dict[str, Any]]:
+    """Return every result row for *job_id*, oldest session first."""
+    workspace.db.connect()
+    try:
+        return list(workspace.db.get_result_history(job_id))
+    finally:
+        workspace.db.close()
+
+
+def _job_row_in_session(workspace: Workspace, job_id: str, session: str) -> dict[str, Any] | None:
+    """Return the result row for *job_id* recorded by *session*, or ``None``."""
+    for row in _job_history(workspace, job_id):
+        if row["session"] == session:
+            return row
+    return None
+
+
+def _warn_if_superseded(workspace: Workspace, jobid: str) -> None:
+    """Note on stderr when a job has results from more than one session.
+
+    ``canary query job`` without ``--session`` shows the latest run; earlier
+    sessions' results for the same job ID are easy to mistake for it.
+    """
+    try:
+        job = workspace.find_job(jobid)
+        sessions = [row["session"] for row in _job_history(workspace, job.id)]
+    except Exception:  # nosec B110 — the note is advisory; never fail the query over it
+        return
+    if len(sessions) < 2:
+        return
+    earlier = ", ".join(sessions[:-1])
+    sys.stderr.write(
+        f"note: job {job.id[:7]} has results from {len(sessions)} sessions; "
+        f"showing the latest ({sessions[-1]}). Earlier: {earlier}. "
+        "Use --session S to select one, or --all-runs for the history.\n"
+    )
 
 
 def _find_cache_path(job: "Job") -> Path | None:
@@ -706,8 +764,10 @@ def _exec_job(args: argparse.Namespace) -> int:
         print_json(info, terse=args.terse)
         return 0
 
+    session = getattr(args, "session", None)
+
     if getattr(args, "missing_inputs", False):
-        lockfile = _job_lockfile(workspace, args.jobid)
+        lockfile = _job_lockfile(workspace, args.jobid, session=session)
         data = json.loads(lockfile.read_text())
         inputs = data.get("measurements", {}).get("data", {}).get("inputs", [])
         missing = [item for item in inputs if not item.get("exists_now")]
@@ -738,7 +798,9 @@ def _exec_job(args: argparse.Namespace) -> int:
         print_json(data, terse=args.terse)
         return 0
 
-    lockfile = _job_lockfile(workspace, args.jobid)
+    lockfile = _job_lockfile(workspace, args.jobid, session=session)
+    if session is None:
+        _warn_if_superseded(workspace, args.jobid)
     data = json.loads(lockfile.read_text())
 
     # Merge env.json as a top-level "env" key so that path expressions like
@@ -1024,6 +1086,19 @@ def _batch_last_activity_for_job(workspace: Workspace, job_id: str, session: str
     return None
 
 
+def _entry_duration(timings: dict[str, float]) -> float | None:
+    """Return the job's recorded duration: running time, else total, else ``None``.
+
+    Matches ``testcase.lock``'s ``timekeeper.duration`` (the running phase) for
+    local jobs, and falls back to the batch wall-clock for HPC child jobs.
+    """
+    for key in ("running", "total"):
+        value = timings.get(key, -1.0)
+        if value is not None and value >= 0:
+            return value
+    return None
+
+
 def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, Any]:
     """Convert a DB result row dict into the standard job entry format.
 
@@ -1123,6 +1198,7 @@ def _row_to_job_entry(workspace: Workspace, row: dict[str, Any]) -> dict[str, An
             "reason": row["status"].reason,
         },
         "timings": timings,
+        "duration": _entry_duration(timings),
         "started_at": started_at,
         "stopped_at": stopped_at,
         "last_activity": last_activity,
