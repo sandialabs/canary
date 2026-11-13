@@ -4,15 +4,16 @@
 
 """Application-level rebaseline operation.
 
-Resolve the jobs implied by a target (a results directory containing
-``testcase.lock`` files, or a job id/name), optionally filter them by keyword,
-and invoke the ``canary_runtest_rebaseline`` hook for each.  The ``rebaseline``
+Resolve the jobs implied by one or more targets (results directories or job
+ids/names), optionally filter them by keyword, and invoke the
+``canary_runtest_rebaseline`` hook for each.  The ``rebaseline``
 CLI subcommand is a thin adapter over :func:`rebaseline`.
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -30,24 +31,31 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def rebaseline(target: str = ".", keyword_exprs: list[str] | None = None) -> int:
+def rebaseline(target: str | Sequence[str] = ".", keyword_exprs: list[str] | None = None) -> int:
     """Rebaseline the jobs selected by *target*, filtered by *keyword_exprs*.
 
-    Opens the current workspace, resolves *target* into jobs, applies the
+    Opens the current workspace, resolves every target into jobs, applies the
     keyword filter, and runs the ``canary_runtest_rebaseline`` hook for each
-    selected job.
+    selected job.  All targets are resolved before any baseline is touched, so
+    an unresolvable target aborts the operation without partial updates.  A job
+    selected by more than one target is rebaselined once.
 
     Args:
-        target: A results directory (``testcase.lock`` files are found
-            recursively) or a job id/name.
+        target: A results directory (or ``testcase.lock`` file) or a job
+            id/name, or a sequence of them.  An empty sequence selects nothing.
         keyword_exprs: Optional keyword expressions restricting which jobs are
             rebaselined.
 
     Returns:
         The number of jobs rebaselined.
     """
+    targets = [target] if isinstance(target, str) else list(target)
+    if not targets:
+        # An explicitly empty selection means "nothing", never "everything".
+        logger.warning("No jobs selected for rebaseline")
+        return 0
     workspace = open_workspace()
-    jobs = resolve_rebaseline_jobs(workspace, target, keyword_exprs=keyword_exprs)
+    jobs = resolve_rebaseline_targets(workspace, targets, keyword_exprs=keyword_exprs)
 
     if not jobs:
         logger.warning("No jobs selected for rebaseline")
@@ -59,6 +67,29 @@ def rebaseline(target: str = ".", keyword_exprs: list[str] | None = None) -> int
 
     logger.info(f"[bold]Rebaselined[/] {len(jobs)} job(s)")
     return len(jobs)
+
+
+def resolve_rebaseline_targets(
+    workspace: Workspace, targets: Sequence[str], keyword_exprs: list[str] | None = None
+) -> list["Job"]:
+    """Resolve every target in *targets* and return the de-duplicated union of jobs.
+
+    Order follows *targets* (then each target's own ordering).  Two selections
+    are duplicates when they name the same job *and* the same results
+    directory, so naming a job twice (e.g. by id and by name) rebaselines it
+    once, while explicitly selecting results from two sessions keeps both.
+    """
+    seen: set[tuple[str, str | None]] = set()
+    jobs: list[Job] = []
+    for target in targets:
+        for job in resolve_rebaseline_jobs(workspace, target, keyword_exprs=keyword_exprs):
+            space = getattr(job, "workspace", None)
+            key = (job.id, str(space.dir) if space is not None else None)
+            if key in seen:
+                continue
+            seen.add(key)
+            jobs.append(job)
+    return jobs
 
 
 def resolve_rebaseline_jobs(

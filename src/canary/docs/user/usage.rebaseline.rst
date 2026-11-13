@@ -32,7 +32,18 @@ results, use :doc:`/user/usage.runhook` instead of ``rebaseline``.
 
    canary -C TestResults rebaseline -k fail
 
-To rebaseline a single test, change to that tests execution directory and run:
+To rebaseline specific tests, pass one or more job IDs (or names):
+
+.. code-block:: console
+
+   canary rebaseline ID1 ID2 ID3
+
+Targets may mix job IDs, job names, and results directories.  All targets are
+resolved before any baseline is updated, so an unknown ID aborts the command
+without changing anything, and a job selected by more than one target is
+rebaselined only once.  ``-k`` applies to every target.
+
+Alternatively, change to a test's execution directory and run:
 
 .. code-block:: console
 

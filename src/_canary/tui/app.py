@@ -223,10 +223,7 @@ class ExplorerModel:
         """Rebaseline each selected spec id and return the total job count."""
         from ..app.rebaseline import rebaseline
 
-        n = 0
-        for spec_id in spec_ids:
-            n += rebaseline(target=spec_id)
-        return n
+        return rebaseline(target=spec_ids)
 
     def load_request(self, request: Any) -> tuple[bool, str]:
         """Load/discover specs for *request* without executing them.

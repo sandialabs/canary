@@ -178,6 +178,7 @@ Update baseline files when expected results change:
 
       $ canary rebaseline .
       $ canary rebaseline DIFFED_JOB_ID
+      $ canary rebaseline DIFFED_JOB_ID1 DIFFED_JOB_ID2
 
 4. **Verify**:
 

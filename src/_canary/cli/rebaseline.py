@@ -31,17 +31,17 @@ class Rebaseline(CanarySubcommand):
             help="Restrict rebaseline to jobs matching keyword expression",
         )
         parser.add_argument(
-            "target",
-            nargs="?",
-            default=".",
+            "targets",
+            nargs="*",
             metavar="DIR_OR_JOBID",
             help=(
-                "Directory containing test results or a job id/name. "
-                "If a directory is given, testcase.lock files are found recursively. "
+                "One or more results directories or job ids/names. "
+                "Directories select the jobs whose results lie at or below them. "
+                "Jobs selected by more than one target are rebaselined once. "
                 "[default: current directory]"
             ),
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        app.rebaseline(args.target, keyword_exprs=args.keyword_exprs)
+        app.rebaseline(args.targets or ["."], keyword_exprs=args.keyword_exprs)
         return 0

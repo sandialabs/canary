@@ -1753,6 +1753,52 @@ def test_rebaseline_from_directory(tmpdir):
         assert Path("expected.txt").read_text() == "new baseline\n"
 
 
+def test_rebaseline_multiple_job_ids(tmp_path):
+    """``canary rebaseline ID1 ID2`` rebaselines exactly the named jobs."""
+    from _canary.session.workspace import Workspace
+
+    pyt = "\n".join(
+        [
+            "import pathlib",
+            "import canary_pyt",
+            "canary_pyt.directives.baseline(src='actual.txt', dst='{name}.gold')",
+            "pathlib.Path('actual.txt').write_text('original\\n')",
+            "",
+        ]
+    )
+    names = ("alpha", "beta", "gamma")
+    with working_dir(tmp_path, create=True):
+        for name in names:
+            Path(f"{name}.pyt").write_text(pyt.format(name=name))
+            Path(f"{name}.gold").write_text("old\n")
+
+        cp = CanaryCommand("run")("-w", ".", capture_output=True, text=True)
+        assert cp.returncode == 0, cp.stdout + cp.stderr
+
+        jobs = {job.name: job for job in Workspace.load().load_jobs()}
+        assert set(jobs) == set(names)
+        for name in names:
+            jobs[name].workspace.joinpath("actual.txt").write_text(f"new {name}\n")
+
+        # Mix a full id and a name; repeat one to check it is rebaselined once.
+        targets = [jobs["alpha"].id, "gamma", jobs["alpha"].id]
+        cp = CanaryCommand("rebaseline")(*targets, capture_output=True, text=True)
+        assert cp.returncode == 0, cp.stdout + cp.stderr
+        assert "Rebaselined 2 job(s)" in cp.stdout + cp.stderr
+
+        assert Path("alpha.gold").read_text() == "new alpha\n"
+        assert Path("beta.gold").read_text() == "old\n"
+        assert Path("gamma.gold").read_text() == "new gamma\n"
+
+        # An unresolvable id aborts before any baseline is touched.
+        jobs["beta"].workspace.joinpath("actual.txt").write_text("newer beta\n")
+        cp = CanaryCommand("rebaseline")(
+            jobs["beta"].id, "no-such-job", capture_output=True, text=True
+        )
+        assert cp.returncode != 0
+        assert Path("beta.gold").read_text() == "old\n"
+
+
 def test_run_permissive_masks_invalid_import_file(tmp_path):
     with working_dir(tmp_path, create=True):
         Path("bad_import.pyt").write_text("import does_not_exist\n")

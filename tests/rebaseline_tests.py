@@ -367,3 +367,127 @@ def test_resolve_rebaseline_jobs_from_workspace_root_uses_latest_results_without
 
     assert sorted(job.id for job in jobs) == ["id-a", "id-b"]
     assert workspace._loaded_jobs == ["id-a", "id-b"]
+
+
+# ---------------------------------------------------------------------------
+# Multiple targets
+# ---------------------------------------------------------------------------
+
+
+def _patch_rebaseline_app(monkeypatch, workspace):
+    """Route app.rebaseline at *workspace* and record hook calls instead of running them."""
+    calls: list[str] = []
+    hook = SimpleNamespace(canary_runtest_rebaseline=lambda case: calls.append(case.id))
+    monkeypatch.setattr(rebaseline_mod, "open_workspace", lambda: workspace)
+    monkeypatch.setattr(
+        rebaseline_mod, "config", SimpleNamespace(pluginmanager=SimpleNamespace(hook=hook))
+    )
+    return calls
+
+
+def test_resolve_rebaseline_targets_unions_job_ids_in_order(tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+
+    jobs = rebaseline_mod.resolve_rebaseline_targets(workspace, ["job-b", "job-a"])
+
+    assert [job.id for job in jobs] == ["id-b", "id-a"]
+
+
+def test_resolve_rebaseline_targets_deduplicates_same_job(tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+    workspace.db._resolved["id-a"] = "id-a"  # the full id resolves, as does the name
+
+    jobs = rebaseline_mod.resolve_rebaseline_targets(workspace, ["job-a", "id-a", "job-a"])
+
+    assert [job.id for job in jobs] == ["id-a"]
+
+
+def test_resolve_rebaseline_targets_keeps_same_job_from_distinct_result_dirs(tmp_path):
+    """Explicitly selecting one job's results from two sessions keeps both selections."""
+    workspace = _FakeWorkspace(tmp_path)
+    s1, s2 = SimpleNamespace(dir=tmp_path / "s1" / "case"), SimpleNamespace(dir=tmp_path / "s2")
+    by_target = {"one": [_DBJob("id-a", workspace=s1)], "two": [_DBJob("id-a", workspace=s2)]}
+
+    def fake_resolve(ws, target, keyword_exprs=None):
+        return by_target[target]
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(rebaseline_mod, "resolve_rebaseline_jobs", fake_resolve)
+        jobs = rebaseline_mod.resolve_rebaseline_targets(workspace, ["one", "two", "one"])
+
+    assert [job.workspace for job in jobs] == [s1, s2]
+
+
+def test_resolve_rebaseline_targets_applies_keywords_to_every_target(tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+
+    jobs = rebaseline_mod.resolve_rebaseline_targets(
+        workspace, ["job-a", "job-b"], keyword_exprs=["slow"]
+    )
+
+    assert [job.id for job in jobs] == ["id-b"]
+
+
+def test_rebaseline_accepts_multiple_targets(monkeypatch, tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+    calls = _patch_rebaseline_app(monkeypatch, workspace)
+
+    n = rebaseline_mod.rebaseline(["job-a", "job-b"])
+
+    assert n == 2
+    assert calls == ["id-a", "id-b"]
+
+
+def test_rebaseline_single_string_target_still_supported(monkeypatch, tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+    calls = _patch_rebaseline_app(monkeypatch, workspace)
+
+    assert rebaseline_mod.rebaseline("job-b") == 1
+    assert calls == ["id-b"]
+
+
+def test_rebaseline_unknown_target_aborts_before_any_rebaseline(monkeypatch, tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+    calls = _patch_rebaseline_app(monkeypatch, workspace)
+
+    def find(*, job=None, spec=None):
+        if (spec_id := workspace.db.resolve_spec_id(job)) is None:
+            raise ValueError(f"{job}: no matching test job found")
+        return workspace._jobs[spec_id]
+
+    monkeypatch.setattr(workspace, "find", find)
+
+    with pytest.raises(ValueError, match="nope"):
+        rebaseline_mod.rebaseline(["job-a", "nope", "job-b"])
+    assert calls == []
+
+
+def test_rebaseline_empty_target_list_selects_nothing(monkeypatch, tmp_path):
+    workspace = _FakeWorkspace(tmp_path)
+    calls = _patch_rebaseline_app(monkeypatch, workspace)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("an empty target list must not resolve anything")
+
+    monkeypatch.setattr(rebaseline_mod, "resolve_rebaseline_jobs", fail)
+
+    assert rebaseline_mod.rebaseline([]) == 0
+    assert calls == []
+
+
+def test_rebaseline_cli_accepts_multiple_targets_and_defaults_to_cwd(monkeypatch):
+    from _canary.cli import rebaseline as cli_rebaseline
+
+    seen: list = []
+    # Patch the ``app`` object the CLI module actually holds.  A dotted-string
+    # target ("_canary.app.rebaseline") is resolved via the ``_canary.app``
+    # package attribute, which earlier tests can leave pointing at a stale copy
+    # of the module that differs from sys.modules["_canary.app"].
+    monkeypatch.setattr(
+        cli_rebaseline.app, "rebaseline", lambda targets, keyword_exprs=None: seen.append(targets)
+    )
+    cmd = cli_rebaseline.Rebaseline()
+    cmd.execute(SimpleNamespace(targets=["a", "b"], keyword_exprs=None))
+    cmd.execute(SimpleNamespace(targets=[], keyword_exprs=None))
+
+    assert seen == [["a", "b"], ["."]]
