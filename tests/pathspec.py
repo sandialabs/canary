@@ -247,3 +247,37 @@ def test_collect_dash_f_rejects_missing_paths_with_message(tmp_path):
     )
     with pytest.raises(argparse.ArgumentTypeError, match="gone.pyt: no such file or directory"):
         read_recursedirs(file)
+
+
+def test_collector_reports_once_per_root_and_does_not_search_listed_files(tmp_path, monkeypatch):
+    """Files listed under a root are taken as given, with one progress line per root."""
+    from _canary.generation import collect as collect_mod
+    from _canary.generation.collect import Collector
+
+    touchp(str(tmp_path / "a" / "single" / "file.pyt"))
+    touchp(str(tmp_path / "a" / "single" / "sibling.pyt"))  # same dir, not listed
+    touchp(str(tmp_path / "another" / "file.pyt"))
+    touchp(str(tmp_path / "dir" / "deep" / "x.pyt"))
+
+    messages: list[str] = []
+    real = collect_mod.logger.progress_monitor
+
+    def spy(message, *args, **kwargs):
+        messages.append(message)
+        return real(message, *args, **kwargs)
+
+    monkeypatch.setattr(collect_mod.logger, "progress_monitor", spy)
+    monkeypatch.setattr(Collector, "matches", lambda self, name: name.endswith(".pyt"))
+    collector = Collector()
+    collector.collect_from_root(str(tmp_path), ["a/single/file.pyt", "another/file.pyt", "dir"])
+
+    assert sorted(collector.files[str(tmp_path)]) == sorted(
+        [
+            os.path.join("a", "single", "file.pyt"),
+            os.path.join("another", "file.pyt"),
+            os.path.join("dir", "deep", "x.pyt"),
+        ]
+    )
+    collecting = [m for m in messages if "Collecting" in m]
+    assert len(collecting) == 1
+    assert collecting[0].endswith(f"generator files in {tmp_path}")

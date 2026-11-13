@@ -20,7 +20,6 @@ Usage patterns:
 """
 
 import argparse
-import dataclasses
 import fnmatch
 import os
 import subprocess
@@ -136,13 +135,13 @@ class Collector:
             A list of instantiated test generators.
         """
         config.pluginmanager.hook.canary_collectstart(collector=self)
-        for scanpath in self.iter_scanpaths():
-            if scanpath.root.startswith(vc_prefixes):
-                self.collect_from_vc(scanpath.root)
-            elif os.path.exists(scanpath.root):
-                self.collect_from_path(scanpath)
+        for root, paths in self.scanpaths.items():
+            if root.startswith(vc_prefixes):
+                self.collect_from_vc(root)
+            elif os.path.exists(root):
+                self.collect_from_root(root, paths)
             else:
-                logger.warning(f"Skipping non-existent path {scanpath.root}")
+                logger.warning(f"Skipping non-existent path {root}")
         config.pluginmanager.hook.canary_collect_modifyitems(collector=self)
         self.finalize()
         config.pluginmanager.hook.canary_collect_report(collector=self)
@@ -171,35 +170,44 @@ class Collector:
         pm.done()
         return
 
-    def collect_from_path(self, scanpath: "ScanPath") -> None:
-        """Collects generator files from a local filesystem path.
+    def collect_from_root(self, root: str, paths: list[str]) -> None:
+        """Collects generator files under one local root.
+
+        Listed files are taken as given; listed directories (or the whole root,
+        when *paths* is empty) are searched recursively.  One progress line is
+        reported per root, however many paths are listed under it.
 
         Args:
-            scanpath: The path configuration to scan.
+            root: Absolute root directory.
+            paths: Paths relative to *root*; empty means scan all of *root*.
         """
-        root_path = Path(scanpath.root)
+        root_path = Path(root)
         assert root_path.exists()
         cwd = Path.cwd()
         sp = root_path if not root_path.is_relative_to(cwd) else root_path.relative_to(cwd)
-        pm = logger.progress_monitor(f"[bold]Collecting[/] generator files from {sp}")
-        full_path = root_path if scanpath.path is None else root_path / scanpath.path
-        if full_path.is_file() and self.matches(full_path.name):
-            assert scanpath.path is not None
-            relpath = os.path.relpath(str(full_path), scanpath.root)
-            self.add_file(str(scanpath.root), str(relpath))
-        elif full_path.is_dir():
-            paths: list[str] = []
-            for dirname, dirs, files in os.walk(full_path):
-                if self.skip(dirname):
-                    dirs[:] = ()
-                    continue
-                for f in files:
-                    if self.matches(f):
-                        relpath = os.path.relpath(os.path.join(dirname, f), scanpath.root)
-                        paths.append(str(relpath))
-            if paths:
-                self.add_files(scanpath.root, paths)
+        pm = logger.progress_monitor(f"[bold]Collecting[/] generator files in {sp}")
+        found: list[str] = []
+        for full_path in [root_path / path for path in paths] or [root_path]:
+            if full_path.is_file():
+                if self.matches(full_path.name):
+                    found.append(os.path.relpath(full_path, root))
+            elif full_path.is_dir():
+                found.extend(self._walk_for_generators(full_path, root))
+        if found:
+            self.add_files(root, found)
         pm.done()
+
+    def _walk_for_generators(self, directory: Path, root: str) -> list[str]:
+        """Return generator files under *directory*, relative to *root*, honoring skip dirs."""
+        found: list[str] = []
+        for dirname, dirs, files in os.walk(directory):
+            if self.skip(dirname):
+                dirs[:] = ()
+                continue
+            for f in files:
+                if self.matches(f):
+                    found.append(os.path.relpath(os.path.join(dirname, f), root))
+        return found
 
     def collect_from_vc(self, root: str) -> None:
         """Collects generator files from a version control system.
@@ -277,19 +285,6 @@ class Collector:
                 raise ValueError(f"Subpath {relpath} must be child of {root}.")
             my_paths.add(os.path.normpath(relpath))
         self.scanpaths[root] = sorted(my_paths, key=lambda p: (len(p.split(os.sep)), p))
-
-    def iter_scanpaths(self) -> Iterator["ScanPath"]:
-        """Iterates over all configured scan paths.
-
-        Returns:
-            An iterator of ScanPath objects.
-        """
-        for root, paths in self.scanpaths.items():
-            if not paths:
-                yield ScanPath(root=root)
-            else:
-                for path in paths:
-                    yield ScanPath(root=root, path=path)
 
     def add_file(self, root: str, path: str) -> None:
         """Adds a single file to the collection.
@@ -442,12 +437,6 @@ def repo_ls(root: str, patterns: Iterable[str]) -> list[str]:
             else:
                 files.extend([os.path.join(p, f) for f in proj_files])
     return files
-
-
-@dataclasses.dataclass
-class ScanPath:
-    root: str
-    path: str | None = None
 
 
 def generate_one(args) -> tuple[bool, "AbstractTestGenerator | None"]:

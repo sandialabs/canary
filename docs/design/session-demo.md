@@ -98,7 +98,7 @@ Adding the `examples/basic` directory to the session adds generators, but does n
 
 ```console
 $ canary selection create -r ./examples/basdic basic
-INFO: Collecting generator files from examples/basic... done (0.00s.)
+INFO: Collecting generator files in examples/basic... done (0.00s.)
 INFO: Instantiating generators from collected files... done (0.81s.)
 INFO: Generating test specs from generators... done (0.00s.)
 INFO: Searching for duplicated tests
@@ -174,7 +174,7 @@ We add the `examples` directory (which includes the previous set of tests, but i
 
 ```console
 $ canary selection create -r examples examples
-INFO: Collecting generator files from examples... done (0.03s.)
+INFO: Collecting generator files in examples... done (0.03s.)
 INFO: Instantiating generators from collected files... done (0.72s.)
 INFO: Generating test specs from generators... done (0.97s.)
 INFO: Searching for duplicated tests
