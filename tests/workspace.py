@@ -28,10 +28,18 @@ def chdir_tmp(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def reset_workspace_override():
-    """Ensure _override_workspace_dir is cleared between tests."""
+    """Ensure the workspace override (global and ``CANARY_DIR``) is cleared between tests.
+
+    ``set_workspace_dir()`` exports ``CANARY_DIR``, so restore the environment
+    too or the override would leak into later tests.
+    """
+    saved = os.environ.pop("CANARY_DIR", None)
     _workspace_module._override_workspace_dir = None
     yield
     _workspace_module._override_workspace_dir = None
+    os.environ.pop("CANARY_DIR", None)
+    if saved is not None:
+        os.environ["CANARY_DIR"] = saved
 
 
 def test_create_and_load_workspace(chdir_tmp):
@@ -256,6 +264,77 @@ def test_canary_dir_cli_flag(tmp_path, monkeypatch):
     with CanaryMain(["--canary-dir", str(ws.root)]):
         ws2 = Workspace.load()
         assert ws2.root == ws.root
+
+
+def test_set_workspace_dir_exports_env(tmp_path):
+    """set_workspace_dir() exports the resolved absolute root as CANARY_DIR."""
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+    set_workspace_dir(proj)
+    assert os.environ["CANARY_DIR"] == str(ws.root)
+
+
+def test_workspace_override_from_config_snapshot(tmp_path, monkeypatch):
+    """A child with no global/env override resolves canary_dir from the config snapshot.
+
+    Forkserver workers and test subprocesses only receive the parent's config
+    snapshot; the CLI value may be relative to the parent's invocation dir.
+    """
+    import canary
+
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+    relocated = proj / "canary.session"
+    ws.root.rename(relocated)
+
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    with canary.config.override():
+        canary.config.options.canary_dir = "project/canary.session"
+        monkeypatch.setattr(canary.config, "invocation_dir", str(tmp_path))
+        ws2 = Workspace.load()
+    assert ws2.root == relocated
+
+
+RELOCATED_PYT = """\
+import sys
+import canary
+
+def test():
+    job = canary.get_job()
+    assert job is not None and job.name == "probe"
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+
+
+def test_canary_dir_propagates_to_child_jobs(tmp_path):
+    """Regression: --canary-dir must reach job subprocesses run by pool workers.
+
+    The workspace is relocated so upward ``.canary`` discovery from the job's
+    exec dir cannot find it; the job only succeeds if the override propagates.
+    """
+    from _canary.util.testing import CanaryCommand
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "probe.pyt").write_text(RELOCATED_PYT)
+    proj = tmp_path / "project"
+    proj.mkdir()
+    ws = Workspace.create(proj)
+    ws.root.rename(proj / "canary.session")
+
+    env = {k: v for k, v in os.environ.items() if k != "CANARY_DIR"}
+    run = CanaryCommand("run")
+    run.add_default_args("--canary-dir", "project/canary.session")
+    with working_dir(str(tmp_path)):
+        cp = run("tests", env=env, capture_output=True, text=True)
+    assert cp.returncode == 0, cp.stdout + cp.stderr
 
 
 def test_canary_dir_flag_eq_form(tmp_path, monkeypatch):

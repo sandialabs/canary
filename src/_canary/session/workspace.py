@@ -154,6 +154,43 @@ def set_workspace_dir(path: str | Path) -> None:
     """
     global _override_workspace_dir
     _override_workspace_dir = _resolve_explicit_workspace_dir(path)
+    # Export the resolved absolute path so subprocesses launched from this
+    # process (tests, ``canary`` invocations inside tests, batch scripts) see it.
+    os.environ["CANARY_DIR"] = str(_override_workspace_dir)
+
+
+def _get_workspace_override() -> Path | None:
+    """Return the explicit workspace root in effect for this process, if any.
+
+    ``_override_workspace_dir`` is only set in the process that parsed the
+    command line.  Child processes (multiprocessing workers started from the
+    forkserver, test subprocesses, HPC/flux batch children) do not inherit it,
+    so fall back to the channels that *do* propagate:
+
+    1. ``CANARY_DIR`` in the environment.
+    2. ``canary_dir`` in the configuration snapshot (``CANARYCFG64`` /
+       worker ``initargs``), resolved against the snapshot's invocation dir
+       because the CLI value may be relative.
+    """
+    global _override_workspace_dir
+    if _override_workspace_dir is not None:
+        return _override_workspace_dir
+    candidate: Path | None = None
+    if env := os.environ.get("CANARY_DIR"):
+        candidate = Path(env)
+    else:
+        try:
+            opt = config.getoption("canary_dir")
+        except Exception:  # config not loadable in this context
+            opt = None
+        if opt:
+            candidate = Path(opt)
+            if not candidate.is_absolute():
+                candidate = Path(config.invocation_dir) / candidate
+    if candidate is None:
+        return None
+    _override_workspace_dir = _resolve_explicit_workspace_dir(candidate)
+    return _override_workspace_dir
 
 
 @dataclasses.dataclass
@@ -639,10 +676,10 @@ class Workspace:
         Raises:
             NotAWorkspaceError: If no workspace is found.
         """
-        if _override_workspace_dir is not None:
-            logger.debug(f"Loading Canary workspace from override: {_override_workspace_dir}")
+        if (override := _get_workspace_override()) is not None:
+            logger.debug(f"Loading Canary workspace from override: {override}")
             ws: Workspace = object.__new__(cls)
-            ws.initialize_properties_from_root(root=_override_workspace_dir)
+            ws.initialize_properties_from_root(root=override)
             ws.db = WorkspaceDatabase.load(ws.root)
             return ws
         start = Path(start or Path.cwd())
