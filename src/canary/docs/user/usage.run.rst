@@ -88,7 +88,7 @@ Select tests can be executed by specifying their paths in a ``json`` or ``yaml``
       ...
       - <path_n>
 
-where ``<root>`` is a parent directory of the tests and ``<path_i>`` are the file paths relative to ``<root>``.  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  Consider, for example, the examples directory tree:
+where ``<root>`` is a parent directory of the tests and ``<path_i>`` are files, directories, or glob patterns relative to ``<root>``.  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  ``paths`` is optional: if it is omitted, ``null``, or empty, all of ``<root>`` is scanned.  An optional top-level ``description`` string may record how the list was made.  Every root and path must exist; otherwise canary lists each missing entry and stops before running anything.  Consider, for example, the examples directory tree:
 
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}]

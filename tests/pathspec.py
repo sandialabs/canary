@@ -207,7 +207,10 @@ def test_testpaths_file_resolves_relative_to_file_and_accepts_description(tmp_pa
     "content, expected",
     [
         ("{bad", "invalid JSON"),
-        (json.dumps({"testpaths": [{"root": "tests"}]}), "does not match the testpaths schema"),
+        (
+            json.dumps({"testpaths": [{"root": "tests", "paths": "a.pyt"}]}),
+            "does not match the testpaths schema",
+        ),
     ],
 )
 def test_testpaths_file_reports_malformed_file(tmp_path, content, expected):
@@ -281,3 +284,24 @@ def test_collector_reports_once_per_root_and_does_not_search_listed_files(tmp_pa
     collecting = [m for m in messages if "Collecting" in m]
     assert len(collecting) == 1
     assert collecting[0].endswith(f"generator files in {tmp_path}")
+
+
+@pytest.mark.parametrize("entry_paths", ["missing", None, []])
+def test_testpaths_entry_without_paths_scans_root(tmp_path, entry_paths):
+    from _canary.scanpaths import read_testpaths_file
+
+    touchp(str(tmp_path / "tests" / "a.pyt"))
+    entry: dict = {"root": "tests"}
+    if entry_paths != "missing":
+        entry["paths"] = entry_paths
+    file = _write_testpaths(tmp_path / "x_testpaths.json", {"testpaths": [entry]})
+    assert read_testpaths_file(file) == {str(tmp_path / "tests"): []}
+
+
+def test_testpaths_yaml_entry_with_root_only(tmp_path):
+    from _canary.scanpaths import read_testpaths_file
+
+    touchp(str(tmp_path / "tests" / "a.pyt"))
+    file = tmp_path / "x_testpaths.yaml"
+    file.write_text("testpaths:\n  - root: tests\n  - root: tests\n    paths:\n")
+    assert read_testpaths_file(str(file)) == {str(tmp_path / "tests"): []}

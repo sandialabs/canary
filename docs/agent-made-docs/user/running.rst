@@ -309,6 +309,12 @@ Pathspec file format:
        paths:
          - suite1/
          - suite2/
+     - root: /scan/all/of/this   # no paths: scan the whole root
+
+``paths`` may list files, directories, or glob patterns, and is optional; a
+missing, ``null``, or empty ``paths`` scans the whole root.  Relative roots are
+resolved against the file's directory.  Every root and path must exist, or
+canary lists the missing entries and stops.
 
 **Tag management**:
 

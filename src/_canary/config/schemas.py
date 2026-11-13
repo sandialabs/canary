@@ -118,7 +118,7 @@ config_schema = Schema(
     ignore_extra_keys=True,
 )
 testpaths_schema = Schema(
-    {Optional("description"): str, "testpaths": [{"root": str, "paths": [str]}]}
+    {Optional("description"): str, "testpaths": [{"root": str, Optional("paths"): Or(None, [str])}]}
 )
 
 

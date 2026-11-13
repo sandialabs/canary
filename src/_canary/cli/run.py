@@ -447,12 +447,13 @@ pathspec file schema syntax:
     "testpaths": [
       {
         "root": str,
-        "paths": [str]
+        "paths": [str]        (optional)
       }
     ]
   }
 
   root is resolved relative to the file's directory; paths are files,
-  directories, or glob patterns under root.  Every root and path must
-  exist: canary reports all missing entries and stops before running."""
+  directories, or glob patterns under root.  Omit paths (or set it to
+  null or []) to scan all of root.  Every root and path must exist:
+  canary reports all missing entries and stops before running."""
         return text

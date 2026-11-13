@@ -141,7 +141,8 @@ def read_testpaths_file(file: str) -> dict[str, list[str]]:
     """Read a JSON or YAML ``testpaths`` file and return ``{abs_root: [rel_paths]}``.
 
     Each ``root`` is resolved relative to the file's directory, and each entry
-    in ``paths`` relative to its root.  Entries may be files, directories, or
+    in ``paths`` relative to its root.  A missing, ``null``, or empty ``paths``
+    scans the whole root.  Entries may be files, directories, or
     glob patterns.  Every root and path is checked; all problems are reported
     together so a stale list can be fixed in one pass.
 
@@ -190,10 +191,11 @@ def read_testpaths_file(file: str) -> dict[str, list[str]]:
             what = "is not a directory" if os.path.exists(root) else "does not exist"
             problems.append(f"root {entry['root']!r} {what} ({root})")
             continue
-        if not entry["paths"]:
+        entry_paths = entry.get("paths") or []
+        if not entry_paths:
             merge_scanpaths(paths, {root: []})
             continue
-        for path in entry["paths"]:
+        for path in entry_paths:
             try:
                 merge_scanpaths(paths, _scanpath_from_root_path(root, path))
             except ValueError as e:
