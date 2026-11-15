@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 import argparse
 import dataclasses
+import datetime
+import json
 import logging
 import os
 import sys
@@ -58,20 +60,8 @@ class _BatchRow(TypedDict):
     width: str | int
 
 
-def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
-    """Log a table summarising the batch pack.
-
-    The table shows one row per batch sorted by descending job count so the
-    most loaded batches are immediately visible.
-    """
-    from rich import box
-    from rich.console import Console
-    from rich.table import Table
-
-    if not batch_specs:
-        return
-
-    # ---- gather per-batch data ----------------------------------------
+def _batch_rows(batch_specs: "list[BatchSpec]") -> list[_BatchRow]:
+    """Per-batch summary data (used for the console table and ``meta.json``)."""
     rows: list[_BatchRow] = []
     for spec in batch_specs:
         meta = spec.schedule_metadata or {}
@@ -94,7 +84,69 @@ def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
                 width=width,
             )
         )
+    return rows
 
+
+def write_meta(
+    root: Path,
+    *,
+    session: str,
+    backend: str,
+    batchspec: BatchingSpec,
+    workers: int | None,
+    resources_per_node: dict[str, int],
+    batch_specs: "list[BatchSpec]",
+) -> None:
+    """Write a human readable ``meta.json`` describing this session's batching to *root*."""
+    from _canary.util.time import hhmmss
+
+    count: int | str | None = batchspec.count
+    if batchspec.count_is_max():
+        count = "max"
+    meta = {
+        "session": session,
+        "created_on": datetime.datetime.now().isoformat(timespec="seconds"),
+        "backend": backend,
+        "batching": {
+            "layout": batchspec.layout,
+            "nodes": batchspec.node_policy,
+            "count": count,
+            "duration": None if batchspec.duration is None else hhmmss(batchspec.duration),
+        },
+        "batch_workers": workers,
+        "submit_args": list(canary.config.getoption("hpc_submit_args") or []),
+        "resources_per_node": dict(resources_per_node),
+        "batches": [
+            {
+                "id": spec.id,
+                "dir": row["id"],
+                "jobs": row["n_jobs"],
+                "nodes": row["node_count"],
+                "width": row["width"],
+                "estimated_runtime": hhmmss(row["est_s"]),
+                "wall_limit": hhmmss(row["wall_s"]),
+            }
+            for spec, row in zip(batch_specs, _batch_rows(batch_specs))
+        ],
+    }
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+
+
+def _log_batch_summary(batch_specs: "list[BatchSpec]") -> None:
+    """Log a table summarising the batch pack.
+
+    The table shows one row per batch sorted by descending job count so the
+    most loaded batches are immediately visible.
+    """
+    from rich import box
+    from rich.console import Console
+    from rich.table import Table
+
+    if not batch_specs:
+        return
+
+    rows = _batch_rows(batch_specs)
     rows.sort(key=lambda r: -r["n_jobs"])
 
     def _fmt_min(seconds: float) -> str:
@@ -455,6 +507,15 @@ class CanaryHPCConductor:
         _log_batch_summary(batch_specs)
         root = runner.workspace.sessions_dir / runner.session / "hpc.batches"
         logger.debug("Batch workspace root: %s", root)
+        write_meta(
+            root,
+            session=runner.session,
+            backend=self.backend.name,
+            batchspec=normalize_batching_spec(batchspec),
+            workers=workers,
+            resources_per_node=resources_per_node,
+            batch_specs=batch_specs,
+        )
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}
         for batch_spec in batch_specs:

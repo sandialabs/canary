@@ -160,6 +160,25 @@ to re-execute only the jobs whose results live at that location:
 
    canary run ./TestResults/path/to/subdirectory/
 
+Run several sessions at once
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Several ``canary run`` (or ``canary hpc run``) sessions may run in the same
+workspace at the same time, from the same or different machines sharing the
+filesystem.  For example, to start more jobs while a long session is running:
+
+.. code-block:: console
+
+   # terminal 1
+   canary run analysis/
+
+   # terminal 2 (possibly on another machine)
+   canary -C /path/to/workspace run more_analysis/
+
+Each session reports its own jobs; all results are recorded in the workspace
+and shown by ``canary status``.  Sessions on the same machine do not share
+resources: limit each one (e.g. with ``--workers``) to avoid oversubscribing it.
+
 Run configuration summary
 --------------------------
 

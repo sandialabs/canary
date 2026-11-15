@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import glob
+import json
 import os
 import re
 import subprocess
@@ -130,6 +131,24 @@ def test_batched(tmpdir):
 
         assert_testresults_contains_basic_tests(12)
         assert_batch_files(expected_count=4)
+
+
+def test_batched_writes_meta(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        write_basic_tests(12)
+
+        hpc = CanaryCommand("hpc")
+        cp = hpc("run", "-w", "--batch-spec=count=4", "--scheduler=shell", ".", debug=True)
+        assert_success(cp)
+
+        (file,) = glob.glob(".canary/sessions/*/hpc.batches/meta.json")
+        meta = json.load(open(file))
+        assert meta["batching"]["count"] == 4
+        assert meta["batching"]["duration"] is None
+        assert len(meta["batches"]) == 4
+        assert sum(b["jobs"] for b in meta["batches"]) == 12
+        for batch in meta["batches"]:
+            assert os.path.isdir(os.path.join(os.path.dirname(file), batch["dir"]))
 
 
 def test_batched_extra_args(tmpdir):

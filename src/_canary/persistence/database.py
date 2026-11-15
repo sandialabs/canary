@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Collection
 from typing import Generator
+from typing import Iterable
 
 from ..core import jobspec
 from ..core.job import JobPhase
@@ -73,13 +74,14 @@ class WorkspaceDatabase:
     Attributes:
         root: Root directory of the workspace.
         path: Absolute path to the SQLite database file.
-        queue: :class:`~_canary.util.multiprocessing.FSQueue` spool directory
-            used by worker processes to submit results asynchronously.
+        queue: :class:`ResultSpool` used by worker processes to submit results
+            asynchronously.  Results are spooled per session, so concurrent
+            canary sessions in one workspace do not interfere.
     """
 
     def __init__(self, root: Path):
         self.root = Path(root)
-        self.queue = FSQueue(self.root / "tmp/db")
+        self.queue = ResultSpool(self.root)
         self.path = root / "workspace.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection: sqlite3.Connection | None = None
@@ -93,9 +95,9 @@ class WorkspaceDatabase:
         assert self._connection is not None
         return self._connection
 
-    def listener(self) -> "ResultListener":
-        """Return a new :class:`ResultListener` thread bound to this database."""
-        return ResultListener(self)
+    def listener(self, *sessions: str) -> "ResultListener":
+        """Return a new :class:`ResultListener` thread draining the result spools of *sessions*."""
+        return ResultListener(self, sessions=sessions)
 
     def close(self) -> None:
         """Close the SQLite connection if it is open."""
@@ -1078,14 +1080,47 @@ class WorkspaceDatabase:
         return -1.0
 
 
-class ResultListener(threading.Thread):
-    """
-    Watches a spool directory for JSON test results and writes them to SQLite in batches.
+#: Name of the result spool directory inside each session directory.  Chosen so
+#: that it will not collide with a test's execution directory.
+SPOOL_DIRNAME = ".canary-spool"
+
+
+class ResultSpool:
+    """Spools result records to the session they belong to.
+
+    Each session has its own spool (``sessions/<session>/.canary-spool``) drained
+    by that session's :class:`ResultListener`, so several canary sessions can
+    run in the same workspace at once (from the same or different machines).
+    Records without a session go to the legacy workspace spool (``tmp/db``).
     """
 
-    def __init__(self, db: WorkspaceDatabase, poll_interval: float = 0.05) -> None:
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self._queues: dict[str, FSQueue] = {}
+
+    def for_session(self, session: str | None) -> FSQueue:
+        key = session or ""
+        if key not in self._queues:
+            path = self.root / "sessions" / key / SPOOL_DIRNAME if key else self.root / "tmp/db"
+            self._queues[key] = FSQueue(path)
+        return self._queues[key]
+
+    def put(self, job: Any) -> None:
+        session = getattr(getattr(job, "workspace", None), "session", None)
+        self.for_session(session).put(job)
+
+
+class ResultListener(threading.Thread):
+    """
+    Watches a session's result spool and writes the results to SQLite in batches.
+    """
+
+    def __init__(
+        self, db: WorkspaceDatabase, poll_interval: float = 0.05, sessions: Iterable[str] = ()
+    ) -> None:
         super().__init__(daemon=True)
         self.db = WorkspaceDatabase.load(db.root)
+        self.queues = [self.db.queue.for_session(s) for s in sessions or [None]]
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._processed: set[str] = set()
@@ -1094,10 +1129,11 @@ class ResultListener(threading.Thread):
         """Main thread loop."""
         self.db.connect()
         try:
-            # Single-listener case: recover any records left claimed by a previous
-            # crashed listener before we start draining.
-            self.db.queue.reap_tmp(older_than=0)
-            self.db.queue.requeue_stale(older_than=0)
+            # This is the only listener for these sessions' spools: recover any
+            # records left claimed by a previous crashed listener.
+            for queue in self.queues:
+                queue.reap_tmp(older_than=0)
+                queue.requeue_stale(older_than=0)
 
             while not self._stop_event.is_set():
                 try:
@@ -1118,7 +1154,13 @@ class ResultListener(threading.Thread):
             self.db.close()
 
     def _drain_once(self) -> bool:
-        batch = self.db.queue.receive()
+        drained = False
+        for queue in self.queues:
+            drained = self._drain_queue(queue) or drained
+        return drained
+
+    def _drain_queue(self, queue: FSQueue) -> bool:
+        batch = queue.receive()
         if not batch:
             return False
 
@@ -1129,10 +1171,10 @@ class ResultListener(threading.Thread):
         except Exception:
             # Do not lose records if SQLite write fails. Return them to ready/
             # so a later listener iteration/process can retry.
-            self.db.queue.release(list(paths))
+            queue.release(list(paths))
             raise
 
-        self.db.queue.ack(list(paths))
+        queue.ack(list(paths))
         self._processed.update(obj.id for obj in objs)
         return True
 

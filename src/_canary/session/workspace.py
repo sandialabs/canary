@@ -771,7 +771,9 @@ class Workspace:
         self.db.close()
         listener: "ResultListener | None" = None
         if self.canary_level == 0:
-            listener = self.db.listener()
+            # In-place reruns keep jobs in their original session directories
+            sessions = {s.name} | {j.workspace.session for j in s.jobs if j.workspace.session}
+            listener = self.db.listener(*sorted(sessions))
             listener.start()
         if view_t is None:
             last = self.latest_view()

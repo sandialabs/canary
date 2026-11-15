@@ -14,6 +14,7 @@ import tokenize
 from string import Template
 from typing import AbstractSet
 from typing import Any
+from typing import Generator
 from typing import Iterator
 from typing import Type
 
@@ -340,7 +341,7 @@ _option_collector: contextvars.ContextVar[set[str] | None] = contextvars.Context
 
 
 @contextlib.contextmanager
-def collect_options() -> Iterator[set[str]]:
+def collect_options() -> Generator[set[str], None, None]:
     """Collect the ``on_options`` that satisfy option queries made inside this block.
 
     Every :class:`OptionMatcher` query evaluated while the block is active adds

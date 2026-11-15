@@ -48,6 +48,7 @@ class FakeDB:
 def test_result_listener_releases_failed_batch_for_retry() -> None:
     listener = object.__new__(ResultListener)
     listener.db = FakeDB()
+    listener.queues = [listener.db.queue]
     listener._processed = set()
 
     try:

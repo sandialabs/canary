@@ -243,9 +243,7 @@ def test_jobspec_options_change_id_only_when_non_empty(repo: Path):
 
 def test_jobspec_options_do_not_collide_with_parameter_named_options(repo: Path):
     a = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), options=["dbg"])
-    b = JobSpec(
-        file_root=repo, file_path=Path("suite/test_x.py"), parameters={"options": "dbg"}
-    )
+    b = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), parameters={"options": "dbg"})
     assert a.id != b.id
 
 

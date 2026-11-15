@@ -1857,7 +1857,7 @@ def batch_setup(tmp_path_factory):
     session_dirs = sorted((d / ".canary" / "sessions").glob("*"))
     assert session_dirs, "No session directories created"
     session_name = session_dirs[0].name
-    batch_dirs = sorted((session_dirs[0] / "hpc.batches").glob("*"))
+    batch_dirs = sorted(p for p in (session_dirs[0] / "hpc.batches").glob("*") if p.is_dir())
     assert len(batch_dirs) == 2, f"Expected 2 batch dirs, got {len(batch_dirs)}: {batch_dirs}"
 
     yield SimpleNamespace(
