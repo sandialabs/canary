@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+import contextlib
+import contextvars
 import dataclasses
 import fnmatch
 import io
@@ -324,7 +326,35 @@ class OptionMatcher:
     own_opt_names: AbstractSet[str]
 
     def __call__(self, name: str) -> bool:
-        return anymatch(self.own_opt_names, name)
+        collector = _option_collector.get()
+        if collector is None:
+            return anymatch(self.own_opt_names, name)
+        matched = {opt for opt in self.own_opt_names if fnmatch.fnmatchcase(opt, name)}
+        collector.update(matched)
+        return bool(matched)
+
+
+_option_collector: contextvars.ContextVar[set[str] | None] = contextvars.ContextVar(
+    "canary_option_collector", default=None
+)
+
+
+@contextlib.contextmanager
+def collect_options() -> Iterator[set[str]]:
+    """Collect the ``on_options`` that satisfy option queries made inside this block.
+
+    Every :class:`OptionMatcher` query evaluated while the block is active adds
+    the option values it matched to the yielded set.  Generators wrap the
+    generation of each test instance in this block and pass the result to
+    ``JobSpecIR(options=...)`` so the spec's ID includes exactly the options
+    that influenced it.
+    """
+    collector: set[str] = set()
+    token = _option_collector.set(collector)
+    try:
+        yield collector
+    finally:
+        _option_collector.reset(token)
 
 
 @dataclasses.dataclass

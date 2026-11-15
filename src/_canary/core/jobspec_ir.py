@@ -35,6 +35,7 @@ from .jobspec import Mask
 from .jobspec import SpecDependency
 from .jobspec import build_spec_id
 from .jobspec import default_timeout
+from .jobspec import normalize_options
 from .jobspec import validate_parameter_component
 from .jobspec import validate_parameters
 from .jobspec import validate_relative_path
@@ -164,6 +165,7 @@ class JobSpecIR:
         baseline: List of baseline copy/script actions for diff testing.
         view_path: Override for the view-relative path of the job result dir.
         exec_path: Override for the job execution directory.
+        options: The ``-o`` options that influenced this spec's generation
     """
 
     def __init__(
@@ -194,6 +196,7 @@ class JobSpecIR:
         baseline: list[BaselineAction] | None = None,
         view_path: str | None = None,
         exec_path: str | None = None,
+        options: list[str] | None = None,
     ):
         self.file_root: Path = Path(file_root)
         self.file_path: Path = Path(file_path)
@@ -241,10 +244,13 @@ class JobSpecIR:
             validate_relative_path("view_path", view_path, family=self.family)
         self.exec_path: str | None = exec_path
         self.view_path: str | None = view_path
+        self.options: list[str] | None = normalize_options(options)
 
         if id is None:
             kwds = self.parameters | self.meta_parameters
             kwds.pop("runtime")
+            if self.options:
+                kwds["__consumed_options__"] = self.options
             id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
         self.id: str = id
 
@@ -328,6 +334,7 @@ class JobSpecIR:
             stderr=self.stderr,
             id=self.id,
             command=self.command,
+            options=self.options,
             exec_path=NULL_PATH if not self.exec_path else Path(self.exec_path),
             view_path=NULL_PATH if not self.view_path else Path(self.view_path),
         )

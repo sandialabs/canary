@@ -27,6 +27,7 @@ from _canary.core.jobspec import Mask
 from _canary.core.jobspec_ir import DependencySelector
 from _canary.core.jobspec_ir import JobSpecIR
 from _canary.core.status import Outcome
+from _canary.core.when import collect_options
 from _canary.third_party.monkeypatch import monkeypatch
 from _canary.util import logging
 from _canary.util import reducer
@@ -885,53 +886,61 @@ class PYTLockEmitter:
         on_options: list[str] | None,
         family_mask: str | None,
     ) -> tuple[JobSpecIR, list[ModuleSpec], dict[str, Any], str | None, str | None]:
-        meta_params = model.get_meta_parameters(family, parameters, on_options=on_options)
-        kw = model._sub_kwds(family, parameters, meta_parameters=meta_params)
-        current_mask = model.get_skip_reason(family, parameters, on_options=on_options)
-        keywords = model.get_keywords(family, parameters, on_options=on_options)
-        modules = model.get_modules(family, parameters, on_options=on_options)
-        timeout = model.get_timeout(family, parameters, on_options=on_options)
-        preload = model.get_preload(family, parameters, on_options=on_options)
-        exec_path = model.get_exec_path(family, parameters, on_options=on_options, subs=kw)
-        xstatus = model.get_xstatus(family, parameters, on_options=on_options)
-        exclusive = model.get_exclusive(family, parameters, on_options=on_options)
-        rcfiles = model.get_rcfiles(family, parameters, on_options=on_options)
-        artifacts = model.get_artifacts(family, parameters, on_options=on_options, subs=kw)
-        attributes = model.get_attributes(family, parameters, on_options=on_options)
-        baseline = model.get_baseline(family, parameters, on_options=on_options, subs=kw)
-        assets = model.get_sources(family, parameters, on_options=on_options, subs=kw)
-        deps = model.get_dependencies(family, parameters, on_options=on_options, subs=kw)
-        explicit_id = model.get_id(
-            family, parameters, meta_parameters=meta_params, on_options=on_options
-        )
+        with collect_options() as instance_option_collector:
+            meta_params = model.get_meta_parameters(family, parameters, on_options=on_options)
+            kw = model._sub_kwds(family, parameters, meta_parameters=meta_params)
+            current_mask = model.get_skip_reason(family, parameters, on_options=on_options)
+            keywords = model.get_keywords(family, parameters, on_options=on_options)
+            modules = model.get_modules(family, parameters, on_options=on_options)
+            timeout = model.get_timeout(family, parameters, on_options=on_options)
+            preload = model.get_preload(family, parameters, on_options=on_options)
+            exec_path = model.get_exec_path(family, parameters, on_options=on_options, subs=kw)
+            xstatus = model.get_xstatus(family, parameters, on_options=on_options)
+            exclusive = model.get_exclusive(family, parameters, on_options=on_options)
+            rcfiles = model.get_rcfiles(family, parameters, on_options=on_options)
+            artifacts = model.get_artifacts(family, parameters, on_options=on_options, subs=kw)
+            attributes = model.get_attributes(family, parameters, on_options=on_options)
+            baseline = model.get_baseline(family, parameters, on_options=on_options, subs=kw)
+            assets = model.get_sources(family, parameters, on_options=on_options, subs=kw)
+            deps = model.get_dependencies(family, parameters, on_options=on_options, subs=kw)
+            explicit_id = model.get_id(
+                family, parameters, meta_parameters=meta_params, on_options=on_options
+            )
+            # Evaluate everything option-dependent before constructing the IR so
+            # the collector is complete when the ID is computed.
+            family_mask = self._update_family_mask(
+                model,
+                family,
+                parameters=parameters,
+                on_options=on_options,
+                family_mask=current_mask,
+            )
 
-        ir = JobSpecIR(
-            id=explicit_id,
-            file_root=Path(model.root),
-            file_path=Path(model.path),
-            family=family,
-            keywords=keywords,
-            parameters=parameters,
-            meta_parameters=meta_params,
-            modules=[m.name for m in modules],
-            owners=model.owners,
-            timeout=timeout or -1.0,
-            baseline=baseline,
-            assets=assets,
-            xstatus=xstatus,
-            preload=preload,
-            rcfiles=rcfiles,
-            artifacts=artifacts,
-            exclusive=exclusive,
-            dependencies=deps,
-            command=list(model.command),
-            exec_path=exec_path,
-        )
+            ir = JobSpecIR(
+                id=explicit_id,
+                file_root=Path(model.root),
+                file_path=Path(model.path),
+                family=family,
+                keywords=keywords,
+                parameters=parameters,
+                meta_parameters=meta_params,
+                modules=[m.name for m in modules],
+                owners=model.owners,
+                timeout=timeout or -1.0,
+                baseline=baseline,
+                assets=assets,
+                xstatus=xstatus,
+                preload=preload,
+                rcfiles=rcfiles,
+                artifacts=artifacts,
+                exclusive=exclusive,
+                dependencies=deps,
+                command=list(model.command),
+                exec_path=exec_path,
+                options=sorted(instance_option_collector),
+            )
         self._add_standard_artifacts(ir)
 
-        family_mask = self._update_family_mask(
-            model, family, parameters=parameters, on_options=on_options, family_mask=current_mask
-        )
         if family_mask is not None:
             ir.mask = Mask.masked(family_mask)
 
@@ -982,6 +991,9 @@ class PYTLockEmitter:
             attributes={"multicase": True, "paramsets": pset_meta},
             dependencies=deps,
             exec_path=model.get_exec_path(family, on_options=on_options, subs=kw),
+            # The aggregate depends on the whole family, so its ID carries
+            # every option that influenced any of its children.
+            options=sorted({opt for ir in my_irs for opt in ir.options or ()}),
         )
         self._add_standard_artifacts(parent)
         self._set_parent_command(parent, model, aggregate)

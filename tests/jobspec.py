@@ -228,3 +228,49 @@ def test_build_spec_id_uses_canary_root_anchor(tmp_path):
     id_without_marker = build_spec_id("fam", f)
 
     assert id_with_marker != id_without_marker
+
+
+def test_jobspec_options_change_id_only_when_non_empty(repo: Path):
+    def spec(**kw):
+        return JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), **kw)
+
+    assert spec().id == spec(options=None).id == spec(options=[]).id
+    assert spec(options=["dbg"]).id != spec().id
+    # order and duplicates do not matter
+    assert spec(options=["b", "a", "a"]).id == spec(options=["a", "b"]).id
+    assert spec(options=["b", "a"]).options == ["a", "b"]
+
+
+def test_jobspec_options_do_not_collide_with_parameter_named_options(repo: Path):
+    a = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), options=["dbg"])
+    b = JobSpec(
+        file_root=repo, file_path=Path("suite/test_x.py"), parameters={"options": "dbg"}
+    )
+    assert a.id != b.id
+
+
+def test_jobspec_ir_options_carry_through_finalize(repo: Path):
+    from _canary.core.jobspec_ir import JobSpecIR
+
+    ir = JobSpecIR(file_root=repo, file_path=Path("suite/test_x.py"), options=["dbg"])
+    plain = JobSpecIR(file_root=repo, file_path=Path("suite/test_x.py"))
+    assert ir.id != plain.id
+    spec = ir.finalize(lookup={})
+    assert spec.id == ir.id
+    assert spec.options == ["dbg"]
+    # a JobSpec built directly from the same inputs agrees with the IR
+    direct = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), options=["dbg"])
+    assert direct.id == ir.id
+
+
+def test_jobspec_options_roundtrip_and_legacy_blob(repo: Path):
+    spec = JobSpec(file_root=repo, file_path=Path("suite/test_x.py"), options=["dbg"])
+    out = json.loads(json.dumps(spec))
+    assert out.options == ["dbg"]
+    assert out.id == spec.id
+
+    legacy = spec.__serialize__()
+    legacy.pop("options")
+    old = JobSpec.__deserialize__(dict(legacy))
+    assert old.options is None
+    assert old.id == spec.id  # stored IDs are never recomputed

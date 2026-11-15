@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Iterable
 from typing import Literal
 from typing import MutableSequence
 from typing import TextIO
@@ -253,6 +254,7 @@ class JobSpec:
     meta_parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     command: list[str] = dataclasses.field(default_factory=list)
     mask: Mask = dataclasses.field(default_factory=Mask.unmasked)
+    options: list[str] | None = None
 
     exec_path: Path = dataclasses.field(default=NULL_PATH)
     view_path: Path = dataclasses.field(default=NULL_PATH)
@@ -261,9 +263,12 @@ class JobSpec:
         self.family = self.family or self.file.stem
         validate_parameter_component("test name", self.family)
         validate_parameters(self.parameters, family=self.family)
+        self.options = normalize_options(self.options)
         if not self.id:
             kwds = self.parameters | self.meta_parameters
             kwds.pop("runtime", None)
+            if self.options:
+                kwds["__consumed_options__"] = self.options
             self.id = build_spec_id(self.family, self.file_root / self.file_path, **kwds)
         else:
             validate_spec_id(self.id)
@@ -319,6 +324,7 @@ class JobSpec:
             "meta_parameters": self.meta_parameters,
             "command": self.command,
             "mask": self.mask,
+            "options": self.options,
             "exec_path": self.exec_path,
             "view_path": self.view_path,
         }
@@ -610,6 +616,11 @@ def build_spec_id(*args: Any, **kwargs: Any) -> str:
     for key in sorted(kwargs):
         hasher.update(f"{key}={stringify(kwargs[key], float_fmt=float_fmt)}".encode())
     return hasher.hexdigest()
+
+
+def normalize_options(options: Iterable[str] | None) -> list[str] | None:
+    """Return *options* sorted and de-duplicated, or ``None`` if empty."""
+    return sorted(set(options)) if options else None
 
 
 def default_timeout(keywords: list[str]) -> float:

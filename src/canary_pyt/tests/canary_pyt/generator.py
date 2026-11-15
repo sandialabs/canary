@@ -600,3 +600,115 @@ def test_set_id_template_expands_parent_analyze_with_blank_parameters(tmp_path: 
 
     assert sorted(s.id for s in children) == ["deadbeef1", "deadbeef2"]
     assert parent.id == "deadbeef"
+
+
+# --- -o options are part of the spec ID when they influence generation -------
+
+
+def _ids(specs) -> list[str]:
+    return sorted(s.id for s in specs)
+
+
+def test_options_not_consulted_do_not_change_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_keywords("fast")
+    without = lock_model(m)
+    with_opts = lock_model(m, on_options=["dbg", "intel"])
+    assert _ids(without) == _ids(with_opts)
+    assert all(s.options is None for s in with_opts)
+
+
+def test_options_that_match_are_part_of_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_keywords("dbgkw", when={"options": "dbg"})
+    without = lock_model(m)
+    with_dbg = lock_model(m, on_options=["dbg"])
+    with_dbg_intel = lock_model(m, on_options=["dbg", "intel"])
+    assert without[0].options is None
+    assert with_dbg[0].options == ["dbg"]
+    assert with_dbg[0].id != without[0].id
+    # an option the file never asks about does not affect the ID
+    assert with_dbg_intel[0].id == with_dbg[0].id
+
+
+def test_option_consulted_but_not_matched_keeps_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_keywords("dbgkw", when={"options": "dbg"})
+    assert lock_model(m)[0].id == lock_model(m, on_options=["opt"])[0].id
+
+
+def test_wildcard_option_records_matched_values(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_keywords("dbgkw", when={"options": "db*"})
+    specs = lock_model(m, on_options=["dbg", "intel"])
+    assert specs[0].options == ["dbg"]
+
+
+def test_enable_option_is_part_of_id(tmp_path: Path) -> None:
+    # enable() is evaluated for the mask; it must be seen before the ID is built
+    m = make_model(tmp_path, "x.pyt")
+    m.set_enable(True, when={"options": "opt"})
+    specs = lock_model(m, on_options=["opt"])
+    assert specs[0].options == ["opt"]
+    assert specs[0].id != lock_model(m)[0].id
+
+
+def test_options_parent_references_child_ids(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_family("a")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+    m.add_keywords("dbgkw", when={"options": "dbg"})
+    m.set_aggregate(flag="--analyze", requires="success")
+    specs = lock_model(m, on_options=["dbg"])
+
+    children = [s for s in specs if not s.attributes.get("multicase")]
+    parent = [s for s in specs if s.attributes.get("multicase") is True][0]
+    assert all(c.options == ["dbg"] for c in children)
+    assert parent.options == ["dbg"]
+    assert sorted(d.pattern for d in parent.dependencies) == sorted(c.id for c in children)
+    assert set(_ids(specs)).isdisjoint(_ids(lock_model(m)))
+
+
+def test_instance_gets_own_options_and_aggregate_gets_family_options(tmp_path: Path) -> None:
+    # The option query is parameter-dependent, so each instance asks a different
+    # question: p=1 asks about opt_1 and p=2 about opt_2.
+    m = make_model(tmp_path, "x.pyt")
+    m.add_family("a")
+    m.add_parameter_set(ParameterSet.list_parameter_space("p", [1, 2]))
+    m.add_keywords("kw", when={"options": "opt_${p}"})
+    m.set_aggregate(flag="--analyze", requires="success")
+    specs = lock_model(m, on_options=["opt_1", "opt_2"])
+
+    by_p = {s.parameters.get("p"): s for s in specs if not s.attributes.get("multicase")}
+    parent = [s for s in specs if s.attributes.get("multicase") is True][0]
+    assert by_p[1].options == ["opt_1"]
+    assert by_p[2].options == ["opt_2"]
+    assert parent.options == ["opt_1", "opt_2"]
+
+    # an instance whose own generation matched no option keeps its plain ID,
+    # even though a sibling in the same family did match one
+    only_1 = lock_model(m, on_options=["opt_1"])
+    plain = lock_model(m)
+    plain_p2 = [s for s in plain if s.parameters.get("p") == 2][0]
+    only_1_p2 = [s for s in only_1 if s.parameters.get("p") == 2][0]
+    assert only_1_p2.options is None
+    assert only_1_p2.id == plain_p2.id
+
+
+def test_options_do_not_leak_across_families(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.add_family("a")
+    m.add_family("b")
+    m.add_keywords("kw", when={"testname": "a", "options": "dbg"})
+    specs = {s.family: s for s in lock_model(m, on_options=["dbg"])}
+    assert specs["a"].options == ["dbg"]
+    assert specs["b"].options is None
+
+
+def test_options_do_not_override_explicit_id(tmp_path: Path) -> None:
+    m = make_model(tmp_path, "x.pyt")
+    m.set_id("deadbeef")
+    m.add_keywords("dbgkw", when={"options": "dbg"})
+    specs = lock_model(m, on_options=["dbg"])
+    assert specs[0].id == "deadbeef"
+    assert specs[0].options == ["dbg"]
