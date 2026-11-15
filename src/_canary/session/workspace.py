@@ -55,6 +55,7 @@ from ..generation.collect import Collector
 from ..generation.generate import Generator
 from ..generation.generator import AbstractTestGenerator
 from ..persistence.database import WorkspaceDatabase
+from ..scanpaths import case_selectors
 from ..util import json_helper as json
 from ..util import logging
 from ..util.filesystem import async_rmtree
@@ -1186,6 +1187,7 @@ class Workspace:
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
+        extra_rules: list["rules.Rule"] | None = None,
     ) -> list["JobSpec"]:
         """Filters a list of JobSpecs using the provided rules.
 
@@ -1196,6 +1198,7 @@ class Workspace:
             parameter_expr: Filter by parameter expressions.
             owners: Filter by owners.
             regex: Filter by regular expression.
+            extra_rules: Additional selection rules (e.g. a ``file::case`` rule).
 
         Returns:
             The filtered list of JobSpecs.
@@ -1211,6 +1214,8 @@ class Workspace:
             selector.add_rule(rules.RegexRule(regex))
         if prefixes:
             selector.add_rule(rules.PrefixRule(prefixes=prefixes))
+        for rule in extra_rules or ():
+            selector.add_rule(rule)
         specs = selector.run()
         return specs
 
@@ -1288,12 +1293,16 @@ class Workspace:
             The created selection of JobSpecs.
         """
         resolved = self.collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
+        case_rule: rules.CaseRule | None = None
+        if cases := case_selectors(scanpaths):
+            case_rule = rules.CaseRule.from_specs(resolved, cases)
         specs = self.select_from_specs(
             resolved,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
+            extra_rules=[case_rule] if case_rule else None,
         )
         tag = tag or unique_random_name(self.db.tags)
         self.db.put_selection(

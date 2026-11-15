@@ -73,6 +73,17 @@ If a path separator is replaced with a colon ``:``, the path is interpreted as `
    :before_script: [{"args": "cp -R $examples ."}]
    :script: [{"args": "canary run .:basic/first/first.pyt", "cwd": "examples"}, {"args": "ls -F TestResults", "cwd": "examples"}]
 
+Run specific test cases
+~~~~~~~~~~~~~~~~~~~~~~~
+
+A file generating several test cases can be restricted to some of them by appending a test case selector, ``file::family.p1=v1.p2=v2``:
+
+.. doc-run::
+   :before_script: [{"args": "cp -R $examples ."}]
+   :script: [{"args": "canary run parameterize/parameterize2.pyt::parameterize2.a=5.b=6", "cwd": "examples"}]
+
+A case matches when its family matches and each given parameter equals the case's value.  Parameter order does not matter and omitted parameters match any value, so ``file::family`` selects every case in ``family`` and ``file::family.a=5`` selects every case with ``a=5``.  Upstream dependencies of the selected cases are also run.  If the same file is also given without a selector (directly or through a parent directory), all of its cases run.  A selector that matches no case is an error.  Selectors may also be used in the ``paths`` of a testpaths file (below).
+
 Running tests from a file
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -88,7 +99,7 @@ Select tests can be executed by specifying their paths in a ``json`` or ``yaml``
       ...
       - <path_n>
 
-where ``<root>`` is a parent directory of the tests and ``<path_i>`` are files, directories, or glob patterns relative to ``<root>``.  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  ``paths`` is optional: if it is omitted, ``null``, or empty, all of ``<root>`` is scanned.  An optional top-level ``description`` string may record how the list was made.  Every root and path must exist; otherwise canary lists each missing entry and stops before running anything.  Consider, for example, the examples directory tree:
+where ``<root>`` is a parent directory of the tests and ``<path_i>`` are files, directories, or glob patterns relative to ``<root>``; a file may carry a test case selector (``file::family.p1=v1``, see above).  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  ``paths`` is optional: if it is omitted, ``null``, or empty, all of ``<root>`` is scanned.  An optional top-level ``description`` string may record how the list was made.  Every root and path must exist; otherwise canary lists each missing entry and stops before running anything.  Consider, for example, the examples directory tree:
 
 .. doc-run::
    :before_script: [{"args": "cp -R $examples ."}]

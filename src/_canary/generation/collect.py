@@ -41,6 +41,7 @@ from ..plugins.hookspec import hookimpl
 from ..scanpaths import TestPathsFileError
 from ..scanpaths import read_testpaths_file
 from ..scanpaths import scanpath_from_item
+from ..scanpaths import split_case_selector
 from ..util import logging
 from ..util.filesystem import working_dir
 from .generator import AbstractTestGenerator
@@ -280,6 +281,8 @@ class Collector:
             paths = [tail]
         my_paths = set(self.scanpaths.get(root, []))
         for path in paths:
+            # ``file::case`` selectors restrict spec selection, not collection
+            path, _ = split_case_selector(path)
             relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
             if relpath.startswith(".."):
                 raise ValueError(f"Subpath {relpath} must be child of {root}.")
@@ -305,6 +308,8 @@ class Collector:
         root = os.path.abspath(root)
         my_files: set[str] = set(self.files.get(root, []))
         for path in paths:
+            # ``file::case`` selectors restrict spec selection, not collection
+            path, _ = split_case_selector(path)
             relpath = os.path.relpath(path, root) if os.path.isabs(path) else path
             if relpath.startswith(".."):
                 raise ValueError(f"Subpath {relpath} must be child of {root}.")
