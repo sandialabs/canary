@@ -47,6 +47,7 @@ EXPECTED_PUBLIC_NAMES = frozenset(
         "Artifact",
         "Asset",
         "Mask",
+        "ResourcePool",
         # test-instance user-facing DTOs
         "TestInstance",
         "TestMultiInstance",
