@@ -74,14 +74,12 @@ scripts.canary = "canary:console_main"
 scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
-canary_amd = "canary_amd"
 canary_cdash = "canary_cdash"
 canary_cmake = "canary_cmake"
 canary_dist = "canary_dist"
 canary_flux = "canary_flux"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
-canary_nvidia = "canary_nvidia"
 canary_pyt = "canary_pyt"
 canary_vvtest = "canary_vvtest"
 

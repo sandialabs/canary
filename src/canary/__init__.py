@@ -38,6 +38,7 @@ from _canary.execution.launcher import SubprocessLauncher
 from _canary.generation.generator import AbstractSpecGenerator
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.hookspec import hookspec
+from _canary.resource_pool import ResourcePool
 from _canary.testinst import LockFileNotFoundError
 from _canary.testinst import MissingTestInstance
 from _canary.testinst import TestInstance
@@ -114,6 +115,7 @@ __all__ = [
     "TestCase",
     "Launcher",
     "logging",
+    "ResourcePool",
     "MissingTestInstance",
     "SubprocessLauncher",
     "TestInstance",

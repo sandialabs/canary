@@ -45,7 +45,7 @@ To disable a specific plugin at runtime:
 
 .. code-block:: console
 
-   CANARY_PLUGINS=no:builtin.gpu_select canary run .
+   CANARY_PLUGINS=no:plugin_name canary run .
 
 
 Writing hooks

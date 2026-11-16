@@ -24,8 +24,25 @@ _AMD_COMPATIBLE_VENDORS = {"AMD", "ROCM"}
 
 
 @canary.hookimpl
-def canary_gpu_backend_detect(config: canary.Config) -> str | None:
-    return "amd" if (shutil.which("amd-smi") or shutil.which("rocm-smi")) else None
+def canary_resource_pool_update(config: "canary.Config", pool: "canary.ResourcePool") -> None:
+    """Fill local-node GPU resources from the selected GPU backend.
+
+    GPU backend discovery is local-node discovery, so this hook populates the
+    first node's resources. Multi-node/HPC plugins can replace or populate nodes
+    separately.
+    """
+    node = pool.first_node()
+    if node.has_resource("gpus") and node.get_resource("gpus"):
+        return
+    gpu_specs = _amd_smi_list_gpus(config)
+    if gpu_specs:
+        node.set_resource("gpus", gpu_specs)
+
+
+@canary.hookimpl
+def canary_configure(config: canary.Config) -> str | None:
+    if shutil.which("amd-smi") is None and shutil.which("rocm-smi") is None:
+        raise ValueError("canary_amd plugin requires amd-smi or rocm-smi on PATH")
 
 
 @canary.hookimpl
@@ -107,7 +124,8 @@ def _amd_smi_list_gpus(config: canary.Config) -> list[dict] | None:
                 uuid = entry["uuid"]
                 if not uuid.startswith("GPU-"):
                     uuid = f"GPU-{uuid}"
-                gpu_specs.append({"vendor": "amd", "id": id, "uuid": uuid, "slots": 1})
+                properties = {"vendor": "amd", "uuid": uuid}
+                gpu_specs.append({"id": id, "slots": 1, "properties": properties})
             return gpu_specs
         except Exception:
             logger = canary.get_logger(__name__)
@@ -131,10 +149,10 @@ def _rocm_smi_list_gpus(config: canary.Config) -> list[dict] | None:
             idxs = dedup(idxs)
             # rocm-smi typically doesn't provide a stable UUID in this output.
             # Store the index as both ID and "uuid" position to keep formatting consistent.
-            # (If you can get a UUID from your rocm-smi version, replace this.)
             if idxs:
-                gpu_specs = [{"vendor": "amd", "id": i, "uuid": i, "slots": 1} for i in idxs]
-                return gpu_specs
+                return [
+                    {"properties": {"vendor": "amd", "uuid": i}, "id": i, "slots": 1} for i in idxs
+                ]
         except Exception:
             logger = canary.get_logger(__name__)
             logger.debug(f"Failed to determine GPU counts from '{' '.join(args)}'")

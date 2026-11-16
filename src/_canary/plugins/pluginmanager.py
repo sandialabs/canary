@@ -73,7 +73,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         from ..execution import runtest
         from ..generation import collect
         from ..generation import generate
-        from ..resource_pool import gpu_select
         from ..resource_pool import hooks as rp_hooks
         from . import canaryconf_impl
         from . import hooks
@@ -88,7 +87,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(collect, "builtin.collect")
         self.register(hooks, "builtin.hooks")
         self.register(generate, "builtin.generate")
-        self.register(gpu_select, "builtin.gpu_select")
         self.register(launcher, "builtin.launcher")
         self.register(runtest, "builtin.runtest")
         self.register(rp_hooks, "builtin.resource_pool")

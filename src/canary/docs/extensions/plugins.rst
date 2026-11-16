@@ -27,7 +27,6 @@ Canary loads plugins in this order:
    - **builtin.launcher**: Job execution launchers
    - **builtin.select**: Job selection and filtering
    - **builtin.resource_pool**: Resource management
-   - **builtin.gpu_select**: GPU resource handling
 
 2. **Setuptools entry points**: Plugins registered via ``canary`` entry point
 
@@ -102,7 +101,7 @@ Disable plugins using ``no:`` prefix:
 
 .. code-block:: console
 
-   $ CANARY_PLUGINS=no:builtin.gpu_select canary run .
+   $ CANARY_PLUGINS=no:plugin_name canary run .
 
 This prevents the GPU selection plugin from loading.
 

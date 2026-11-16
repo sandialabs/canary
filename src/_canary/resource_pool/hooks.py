@@ -68,6 +68,20 @@ def canary_addoption(parser: "Parser") -> None:
         group="resource control",
         help="Include hyperthreads in resource detection [default: %(default)s]",
     )
+    parser.add_argument("--gpu-backend", type=_deprecated_gpu_backend, help=argparse.SUPPRESS)
+
+
+def _deprecated_gpu_backend(arg: str) -> None:
+    msg: str = f"--gpu-backend={arg} is deprecated, "
+    if arg.lower() in {"cuda", "nvidia"}:
+        msg += "use -p canary_nvidia to enable NVIDIA gpu support"
+    elif arg.lower() in {"rocm", "amd"}:
+        msg += "use -p canary_amd to enable AMD gpu support"
+    elif arg.lower() == "none":
+        msg += "remove option"
+    else:
+        msg = "use -r gpus=N to populate resource pool with GPUs"
+    raise argparse.ArgumentTypeError(msg)
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")

@@ -9,13 +9,25 @@ import canary
 
 
 @canary.hookimpl
-def canary_gpu_backend_detect(config: canary.Config) -> str | None:
-    return "nvidia" if shutil.which("nvidia-smi") else None
+def canary_configure(config: canary.Config) -> str | None:
+    if shutil.which("nvidia-smi") is None:
+        raise ValueError("canary_nvidia plugin requires nvidia-smi on PATH")
 
 
 @canary.hookimpl
-def canary_gpu_list_gpus(config: canary.Config) -> list[dict] | None:
-    return _nvidia_smi_list_gpus(config)
+def canary_resource_pool_update(config: "canary.Config", pool: "canary.ResourcePool") -> None:
+    """Fill local-node GPU resources from the selected GPU backend.
+
+    GPU backend discovery is local-node discovery, so this hook populates the
+    first node's resources. Multi-node/HPC plugins can replace or populate nodes
+    separately.
+    """
+    node = pool.first_node()
+    if node.has_resource("gpus") and node.get_resource("gpus"):
+        return
+    gpu_specs = _nvidia_smi_list_gpus(config)
+    if gpu_specs:
+        node.set_resource("gpus", gpu_specs)
 
 
 @canary.hookimpl
@@ -79,7 +91,8 @@ def _nvidia_smi_list_gpus(config: canary.Config) -> list[dict] | None:
             txt = subprocess.check_output(args, stderr=subprocess.DEVNULL, text=True)
             for line in txt.splitlines():
                 id, uuid, _ = [_.strip() for _ in line.split(",", 2)]
-                gpu_specs.append({"vendor": "nvidia", "id": id, "uuid": uuid, "slots": 1})
+                properties = {"vendor": "nvidia", "uuid": uuid}
+                gpu_specs.append({"id": id, "slots": 1, "properties": properties})
             return gpu_specs
         except Exception:
             logger = canary.get_logger(__name__)
