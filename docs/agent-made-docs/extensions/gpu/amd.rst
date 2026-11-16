@@ -277,7 +277,7 @@ Basic Usage
 .. code-block:: console
 
    # Auto-detect and use AMD backend
-   python3 -m canary run --gpu-backend=amd ./tests
+   python3 -m canary -p canary_amd run ./tests
 
 Explicit GPU Request
 ~~~~~~~~~~~~~~~~~~~~
@@ -285,7 +285,7 @@ Explicit GPU Request
 .. code-block:: console
 
    # Request 2 GPUs
-   python3 -m canary run --gpu-backend=amd -p gpus=2 ./tests
+   python3 -m canary -p canary_amd run -p gpus=2 ./tests
 
 Vendor-Specific Request
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -293,7 +293,7 @@ Vendor-Specific Request
 .. code-block:: console
 
    # Request AMD GPUs explicitly
-   python3 -m canary run --gpu-backend=amd -p "gpus=1,vendor=AMD" ./tests
+   python3 -m canary -p canary_amd run -p "gpus=1,vendor=AMD" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -301,7 +301,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered AMD GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   python3 -m canary -p canary_amd config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -352,7 +352,7 @@ Debugging AMD GPU support:
 .. code-block:: console
 
    # Check backend detection
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   python3 -m canary -p canary_amd run --verbose ./tests
 
    # Test amd-smi manually
    amd-smi list --json
@@ -365,7 +365,7 @@ Debugging AMD GPU support:
    which rocm-smi
 
    # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=amd -p gpus=1 tests/gpu_test.py
+   python3 -m canary -p canary_amd run -p gpus=1 tests/gpu_test.py
 
 Limitations
 -----------

@@ -281,7 +281,7 @@ Basic Usage
 .. code-block:: console
 
    # Use AMD backend
-   canary --gpu-backend=amd run ./tests
+   canary -p canary_amd run ./tests
 
 Parameter-based GPU Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -289,7 +289,7 @@ Parameter-based GPU Selection
 .. code-block:: console
 
    # Run only tests whose parameters request 2 GPUs
-   canary --gpu-backend=amd run -p gpus=2 ./tests
+   canary -p canary_amd run -p gpus=2 ./tests
 
 Vendor-Specific Parameter Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -297,7 +297,7 @@ Vendor-Specific Parameter Selection
 .. code-block:: console
 
    # Run only tests whose parameters request an AMD GPU
-   canary --gpu-backend=amd run -p "gpus=1,vendor=AMD" ./tests
+   canary -p canary_amd run -p "gpus=1,vendor=AMD" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -305,7 +305,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered AMD GPU resources
-   canary --gpu-backend=amd config show resource-pool
+   canary -p canary_amd config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

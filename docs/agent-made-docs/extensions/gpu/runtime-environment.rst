@@ -267,13 +267,13 @@ To debug environment variable configuration:
 .. code-block:: console
 
    # Run with verbose logging
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary -p canary_nvidia run --verbose ./tests
 
    # Check job environment
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/env_check.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/env_check.py
 
    # Test specific GPU allocation
-   python3 -m canary run --gpu-backend=amd -p "gpus=2,vendor=AMD" tests/gpu_test.py
+   python3 -m canary -p canary_amd run -p "gpus=2,vendor=AMD" tests/gpu_test.py
 
 Environment Variable Limitations
 ---------------------------------

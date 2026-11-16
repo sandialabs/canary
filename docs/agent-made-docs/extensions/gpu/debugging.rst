@@ -21,39 +21,6 @@ Systematic debugging involves:
 Common Debugging Scenarios
 --------------------------
 
-No GPU Backend Detected
-~~~~~~~~~~~~~~~~~~~~~~~
-
-**Symptoms**:
-
-- ``--gpu-backend=auto`` fails with "no GPU backend detected"
-- Specific backend selection fails
-- No GPU resources available
-
-**Diagnosis Steps**:
-
-1. Check vendor tool availability
-2. Verify tool installation and PATH
-3. Test tool execution manually
-4. Review backend detection logic
-
-**Debugging Commands**:
-
-.. code-block:: console
-
-   # Check which tools are available
-   which nvidia-smi
-   which amd-smi
-   which rocm-smi
-
-   # Test tool execution
-   nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader,nounits
-   amd-smi list --json
-   rocm-smi
-
-   # Check backend detection with verbose logging
-   python3 -m canary run --gpu-backend=auto --verbose ./tests
-
 GPU Detection but No Resources
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -79,11 +46,11 @@ GPU Detection but No Resources
    amd-smi list --json
 
    # Check resource pool with specific backend
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   python3 -m canary -p canary_nvidia config show resource-pool
+   python3 -m canary -p canary_amd config show resource-pool
 
    # Test with verbose logging
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary -p canary_nvidia run --verbose ./tests
 
 GPU Resources Available but Not Allocated
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -109,10 +76,10 @@ GPU Resources Available but Not Allocated
    python3 -m canary show --resources ./tests
 
    # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 ./tests
+   python3 -m canary -p canary_nvidia run -p gpus=1 ./tests
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   python3 -m canary -p canary_nvidia config show resource-pool
 
 Environment Variables Not Set
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -135,32 +102,16 @@ Environment Variables Not Set
 .. code-block:: console
 
    # Test with environment variable check
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/env_check.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/env_check.py
 
    # Check allocated resources
    python3 -m canary show --resources tests/gpu_test.py
 
    # Test without user overrides
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/simple_gpu.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/simple_gpu.py
 
 Debugging Tools
 ---------------
-
-Verbose Logging
-~~~~~~~~~~~~~~~
-
-Enable verbose logging for detailed diagnostic information:
-
-.. code-block:: console
-
-   # Verbose backend detection
-   python3 -m canary run --gpu-backend=auto --verbose ./tests
-
-   # Verbose test run
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
-
-   # Verbose resource inspection
-   python3 -m canary config show resource-pool --verbose
 
 Log Analysis
 ~~~~~~~~~~~~
@@ -176,7 +127,7 @@ Analyze logs for GPU-related messages:
    grep -i "gpu\|nvidia\|amd" ~/.canary/logs/canary.log
 
    # Check specific log levels
-   python3 -m canary run --gpu-backend=nvidia --log-level=DEBUG ./tests
+   python3 -m canary -p canary_nvidia run --log-level=DEBUG ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -186,7 +137,7 @@ Inspect GPU resources and allocation:
 .. code-block:: console
 
    # Show resource pool with GPU backend
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   python3 -m canary -p canary_nvidia config show resource-pool
 
    # Show job resource requirements
    python3 -m canary show --resources ./tests
@@ -231,31 +182,31 @@ Step-by-Step Debugging
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=auto --verbose ./tests
+      python3 -m canary -p canary_nvidia run --verbose ./tests
 
 3. **Check Resource Pool**:
 
    .. code-block:: console
 
-      python3 -m canary config show resource-pool --gpu-backend=nvidia
+      python3 -m canary -p canary_nvidia config show resource-pool
 
 4. **Test Simple Allocation**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/simple.py
+      python3 -m canary -p canary_nvidia run -p gpus=1 tests/simple.py
 
 5. **Verify Environment**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/env_check.py
+      python3 -m canary -p canary_nvidia run -p gpus=1 tests/env_check.py
 
 6. **Test Complex Scenario**:
 
    .. code-block:: console
 
-      python3 -m canary run --gpu-backend=nvidia -p "gpus=2,vendor=NVIDIA" ./tests
+      python3 -m canary -p canary_nvidia run -p "gpus=2,vendor=NVIDIA" ./tests
 
 Debugging Checklist
 ~~~~~~~~~~~~~~~~~~~
@@ -354,16 +305,16 @@ NVIDIA Debugging
 .. code-block:: console
 
    # Check NVIDIA backend detection
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary -p canary_nvidia run --verbose ./tests
 
    # Test nvidia-smi manually
    nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader,nounits
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   python3 -m canary -p canary_nvidia config show resource-pool
 
    # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=nvidia -p gpus=2 tests/gpu_test.py
+   python3 -m canary -p canary_nvidia run -p gpus=2 tests/gpu_test.py
 
 AMD Debugging
 ~~~~~~~~~~~~~
@@ -371,7 +322,7 @@ AMD Debugging
 .. code-block:: console
 
    # Check AMD backend detection
-   python3 -m canary run --gpu-backend=amd --verbose ./tests
+   python3 -m canary -p canary_amd run --verbose ./tests
 
    # Test amd-smi manually
    amd-smi list --json
@@ -380,25 +331,10 @@ AMD Debugging
    rocm-smi
 
    # Check resource pool
-   python3 -m canary config show resource-pool --gpu-backend=amd
+   python3 -m canary -p canary_amd config show resource-pool
 
    # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=amd -p gpus=2 tests/gpu_test.py
-
-Mixed Vendor Debugging
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Check which backends are available
-   python3 -m canary run --gpu-backend=auto --verbose ./tests
-
-   # Test vendor-specific allocation
-   python3 -m canary run --gpu-backend=auto -p "gpus=1,vendor=NVIDIA" ./tests
-   python3 -m canary run --gpu-backend=auto -p "gpus=1,vendor=AMD" ./tests
-
-   # Check resource pool with mixed vendors
-   python3 -m canary config show resource-pool --gpu-backend=auto
+   python3 -m canary -p canary_amd run -p gpus=2 tests/gpu_test.py
 
 Advanced Debugging
 ------------------
@@ -458,7 +394,7 @@ Test environment variable configuration:
 .. code-block:: console
 
    # Test environment variables
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/env_check.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/env_check.py
 
 Vendor Compatibility Testing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -515,7 +451,7 @@ Isolate GPU issues by testing components individually:
    python3 -c "import canary_nvidia; import canary; config = canary.Config(); print(canary_nvidia.canary_gpu_list_gpus(config))"
 
    # Test resource pool separately
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   python3 -m canary -p canary_nvidia config show resource-pool
 
 Divide and Conquer
 ~~~~~~~~~~~~~~~~~~
@@ -536,10 +472,10 @@ Create minimal test cases:
 .. code-block:: console
 
    # Test with minimal test
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/minimal.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/minimal.py
 
    # Test with simple resource requirement
-   python3 -m canary run --gpu-backend=nvidia tests/simple_gpu.py
+   python3 -m canary -p canary_nvidia run tests/simple_gpu.py
 
 Gradual Complexity
 ~~~~~~~~~~~~~~~~~~
@@ -549,13 +485,13 @@ Increase complexity gradually:
 .. code-block:: console
 
    # Start simple
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/simple.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/simple.py
 
    # Add complexity
-   python3 -m canary run --gpu-backend=nvidia -p "gpus=2,vendor=NVIDIA" tests/medium.py
+   python3 -m canary -p canary_nvidia run -p "gpus=2,vendor=NVIDIA" tests/medium.py
 
    # Full complexity
-   python3 -m canary run --gpu-backend=nvidia -p "gpus=4" ./tests
+   python3 -m canary -p canary_nvidia run -p "gpus=4" ./tests
 
 Debugging Limitations
 ---------------------

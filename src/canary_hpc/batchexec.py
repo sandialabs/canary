@@ -658,15 +658,12 @@ class HPCConnectBatchRunner(HPCConnectRunner):
 
     def canary_invocation(self, batch: "TestBatch") -> str:
         """Write the canary invocation used to run this batch."""
+        from . import allow_hyperthreading
+
+        # Forward on the CLI: the scheduler job runs with a fresh environment.
         default_args = ["-C", str(batch.workspace.dir)]
         if canary.config.get("debug"):
             default_args.append("-d")
-        gpu_backend = canary.config.getoption("gpu_backend")
-        if gpu_backend not in (None, "auto"):
-            default_args.append(f"--gpu-backend={gpu_backend}")
-        # Forward on the CLI: the scheduler job runs with a fresh environment.
-        from . import allow_hyperthreading
-
         if allow_hyperthreading():
             default_args.append("--hpc-allow-hyperthreading")
         args: list[str] = [sys.executable, "-m", "canary", *default_args, "hpc", "exec"]

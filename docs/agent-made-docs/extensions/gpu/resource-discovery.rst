@@ -12,7 +12,7 @@ Discovery Process
 
 GPU discovery follows this process:
 
-1. **Backend Selection**: User selects GPU backend via --gpu-backend option
+1. **Backend Selection**: User loads a GPU detection plugin (ie, ``canary_nvidia``)
 2. **Tool Detection**: Extension checks for vendor-specific CLI tools
 3. **Device Enumeration**: Extension lists available GPU devices
 4. **Resource Conversion**: Device information converted to Canary resource format
@@ -322,11 +322,8 @@ To debug GPU discovery issues:
 
 .. code-block:: console
 
-   # Test backend detection
-   python3 -m canary run --gpu-backend=auto --verbose ./tests
-
    # Test specific backend
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary -p canary_nvidia run --verbose ./tests
 
    # Check resource pool
    python3 -m canary config show resource-pool
@@ -344,24 +341,16 @@ To debug GPU discovery issues:
 Discovery Examples
 ------------------
 
-Basic Discovery
-~~~~~~~~~~~~~~~
-
-.. code-block:: console
-
-   # Auto-detect and use available GPU backend
-   python3 -m canary run --gpu-backend=auto ./tests
-
 Explicit Backend
 ~~~~~~~~~~~~~~~~
 
 .. code-block:: console
 
    # Use NVIDIA backend explicitly
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   python3 -m canary -p canary_nvidia run ./tests
 
    # Use AMD backend explicitly
-   python3 -m canary run --gpu-backend=amd ./tests
+   python3 -m canary -p canary_amd run ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -369,7 +358,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=auto
+   python3 -m canary -p canary_nvidia config show resource-pool
 
 Manual Override
 ~~~~~~~~~~~~~~~

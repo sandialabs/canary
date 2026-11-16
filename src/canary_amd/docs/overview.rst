@@ -103,13 +103,13 @@ Basic Usage
 .. code-block:: console
 
    # Use AMD backend explicitly
-   canary --gpu-backend=amd run ./tests
+   canary -p canary_amd run ./tests
 
    # Run only tests whose parameters request 2 GPUs
-   canary --gpu-backend=amd run -p gpus=2 ./tests
+   canary -p canary_amd run -p gpus=2 ./tests
 
    # Auto-detect available GPU backend (selects AMD if amd-smi or rocm-smi is found)
-   canary --gpu-backend=auto run ./tests
+   canary -p canary_auto run ./tests
 
 GPU Backend Selection
 ---------------------

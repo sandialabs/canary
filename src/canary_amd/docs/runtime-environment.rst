@@ -232,13 +232,13 @@ Debugging Environment Variables
 .. code-block:: console
 
    # Run with higher console logging
-   canary -v --gpu-backend=amd run ./tests
+   canary -p canary_amd run ./tests
 
    # Run a test whose parameters request one GPU and inspect its environment
-   canary --gpu-backend=amd run -p gpus=1 tests/env_check.py
+   canary -p canary_amd run -p gpus=1 tests/env_check.py
 
    # Run a test whose parameters request AMD GPUs explicitly
-   canary --gpu-backend=amd run -p "gpus=2,vendor=AMD" tests/gpu_test.py
+   canary -p canary_amd run -p "gpus=2,vendor=AMD" tests/gpu_test.py
 
 Environment Variable Limitations
 ----------------------------------

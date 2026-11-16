@@ -14,7 +14,7 @@ Discovery Process
 
 NVIDIA GPU discovery follows this process:
 
-1. **Backend Selection**: User selects the NVIDIA GPU backend via ``--gpu-backend=nvidia``
+1. **Backend Selection**: User selects the NVIDIA GPU backend via ``-p canary_nvidia``
    (or ``auto`` if only NVIDIA tools are found)
 2. **Tool Detection**: Extension checks for ``nvidia-smi`` in PATH
 3. **Device Enumeration**: Extension lists available NVIDIA GPU devices
@@ -222,10 +222,10 @@ Debugging Discovery
 .. code-block:: console
 
    # Test backend detection
-   canary -v --gpu-backend=nvidia run ./tests
+   canary -p canary_nvidia run ./tests
 
    # Check resource pool
-   canary --gpu-backend=nvidia config show resource-pool
+   canary -p canary_nvidia config show resource-pool
 
    # Test nvidia-smi manually
    nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader,nounits
@@ -242,7 +242,7 @@ Basic Discovery
 .. code-block:: console
 
    # Auto-detect and use NVIDIA backend
-   canary --gpu-backend=auto run ./tests
+   canary -p canary_auto run ./tests
 
 Explicit Backend
 ~~~~~~~~~~~~~~~~
@@ -250,7 +250,7 @@ Explicit Backend
 .. code-block:: console
 
    # Use NVIDIA backend explicitly
-   canary --gpu-backend=nvidia run ./tests
+   canary -p canary_nvidia run ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -258,7 +258,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered NVIDIA GPU resources
-   canary --gpu-backend=nvidia config show resource-pool
+   canary -p canary_nvidia config show resource-pool
 
 Manual Override
 ~~~~~~~~~~~~~~~

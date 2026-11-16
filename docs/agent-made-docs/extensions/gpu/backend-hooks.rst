@@ -214,17 +214,11 @@ Hook Interaction Flow
 
 The GPU hooks interact with Canary in this sequence:
 
-1. **Configuration Phase**:
-   - canary_gpu_backend_detect called for all registered GPU extensions
-   - Available backends registered for selection
-   - User selection (--gpu-backend) determines active backend
-
-2. **Resource Pool Population**:
-   - canary_gpu_list_gpus called for selected backend
-   - Returned GPU specs added to resource pool
+1. **Resource Pool Population**:
+   - ``canary_resource_pool_update`` can be implemented to fill resource pool with GPU information
    - GPUs become available for job allocation
 
-3. **Job Execution**:
+2. **Job Execution**:
    - Jobs request GPU resources through resource requirements
    - Canary allocates GPU resources to jobs
    - canary_runteststart called before job execution
@@ -358,16 +352,13 @@ To debug GPU hook behavior:
 
 .. code-block:: console
 
-   # Check which backends are detected
-   python3 -m canary run --gpu-backend=auto --verbose ./tests
-
    # Force specific backend
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary run -p canary_nvidia --verbose ./tests
 
    # Check resource pool with GPU backend
-   python3 -m canary config show resource-pool --gpu-backend=auto
+   python3 -m canary -p canary_nvidia config show resource-pool
 
    # Test with explicit GPU requirements
-   python3 -m canary run --gpu-backend=auto -p gpus=1 --verbose ./tests
+   python3 -m canary -p canary_nvidia run -p gpus=1 --verbose ./tests
 
 Hook behavior is logged at DEBUG level when verbose mode is enabled.

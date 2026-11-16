@@ -216,7 +216,7 @@ Basic Usage
 .. code-block:: console
 
    # Use NVIDIA backend
-   canary --gpu-backend=nvidia run ./tests
+   canary -p canary_nvidia run ./tests
 
 Parameter-based GPU Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -224,7 +224,7 @@ Parameter-based GPU Selection
 .. code-block:: console
 
    # Run only tests whose parameters request 2 GPUs
-   canary --gpu-backend=nvidia run -p gpus=2 ./tests
+   canary -p canary_nvidia run -p gpus=2 ./tests
 
 Vendor-Specific Parameter Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -232,7 +232,7 @@ Vendor-Specific Parameter Selection
 .. code-block:: console
 
    # Run only tests whose parameters request an NVIDIA GPU
-   canary --gpu-backend=nvidia run -p "gpus=1,vendor=NVIDIA" ./tests
+   canary -p canary_nvidia run -p "gpus=1,vendor=NVIDIA" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -240,7 +240,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered NVIDIA GPU resources
-   canary --gpu-backend=nvidia config show resource-pool
+   canary -p canary_nvidia config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

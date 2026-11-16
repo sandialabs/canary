@@ -217,7 +217,7 @@ Basic Usage
 .. code-block:: console
 
    # Auto-detect and use NVIDIA backend
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   python3 -m canary -p canary_nvidia run ./tests
 
 Explicit GPU Request
 ~~~~~~~~~~~~~~~~~~~~
@@ -225,7 +225,7 @@ Explicit GPU Request
 .. code-block:: console
 
    # Request 2 GPUs
-   python3 -m canary run --gpu-backend=nvidia -p gpus=2 ./tests
+   python3 -m canary -p canary_nvidia run -p gpus=2 ./tests
 
 Vendor-Specific Request
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -233,7 +233,7 @@ Vendor-Specific Request
 .. code-block:: console
 
    # Request NVIDIA GPUs explicitly
-   python3 -m canary run --gpu-backend=nvidia -p "gpus=1,vendor=NVIDIA" ./tests
+   python3 -m canary -p canary_nvidia run -p "gpus=1,vendor=NVIDIA" ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -241,7 +241,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered NVIDIA GPU resources
-   python3 -m canary config show resource-pool --gpu-backend=nvidia
+   python3 -m canary -p canary_nvidia config show resource-pool
 
 Manual Resource Definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -289,7 +289,7 @@ Debugging NVIDIA GPU support:
 .. code-block:: console
 
    # Check backend detection
-   python3 -m canary run --gpu-backend=nvidia --verbose ./tests
+   python3 -m canary -p canary_nvidia run --verbose ./tests
 
    # Test nvidia-smi manually
    nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader,nounits
@@ -298,7 +298,7 @@ Debugging NVIDIA GPU support:
    which nvidia-smi
 
    # Test with explicit GPU request
-   python3 -m canary run --gpu-backend=nvidia -p gpus=1 tests/gpu_test.py
+   python3 -m canary -p canary_nvidia run -p gpus=1 tests/gpu_test.py
 
 Limitations
 -----------

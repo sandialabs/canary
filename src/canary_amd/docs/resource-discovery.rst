@@ -14,7 +14,7 @@ Discovery Process
 
 AMD GPU discovery follows this process:
 
-1. **Backend Selection**: User selects the AMD GPU backend via ``--gpu-backend=amd``
+1. **Backend Selection**: User selects the AMD GPU backend via ``-p canary_amd``
    (or ``auto`` if only AMD tools are found)
 2. **Tool Detection**: Extension checks for ``amd-smi`` or ``rocm-smi`` in PATH
 3. **Device Enumeration**: Extension lists available AMD GPU devices
@@ -236,10 +236,10 @@ Debugging Discovery
 .. code-block:: console
 
    # Test backend detection
-   canary -v --gpu-backend=amd run ./tests
+   canary -p canary_amd run ./tests
 
    # Check resource pool
-   canary --gpu-backend=amd config show resource-pool
+   canary -p canary_amd config show resource-pool
 
    # Test amd-smi manually
    amd-smi list --json
@@ -260,7 +260,7 @@ Basic Discovery
 .. code-block:: console
 
    # Auto-detect and use AMD backend
-   canary --gpu-backend=auto run ./tests
+   canary -p canary_auto run ./tests
 
 Explicit Backend
 ~~~~~~~~~~~~~~~~
@@ -268,7 +268,7 @@ Explicit Backend
 .. code-block:: console
 
    # Use AMD backend explicitly
-   canary --gpu-backend=amd run ./tests
+   canary -p canary_amd run ./tests
 
 Resource Inspection
 ~~~~~~~~~~~~~~~~~~~
@@ -276,7 +276,7 @@ Resource Inspection
 .. code-block:: console
 
    # Check discovered AMD GPU resources
-   canary --gpu-backend=amd config show resource-pool
+   canary -p canary_amd config show resource-pool
 
 Manual Override
 ~~~~~~~~~~~~~~~

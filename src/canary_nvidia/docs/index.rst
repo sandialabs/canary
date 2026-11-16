@@ -28,7 +28,7 @@ Run tests with the NVIDIA GPU backend:
 
 .. code-block:: console
 
-   canary --gpu-backend=nvidia run ./tests
+   canary -p canary_nvidia run ./tests
 
 For AMD GPU support, see the ``canary_amd`` plugin.
 

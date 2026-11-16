@@ -124,17 +124,14 @@ To use GPU vendor extensions, specify the desired backend:
 
 .. code-block:: console
 
-   # Auto-detect available GPU backend
-   python3 -m canary run --gpu-backend=auto ./tests
-
    # Use NVIDIA backend explicitly
-   python3 -m canary run --gpu-backend=nvidia ./tests
+   python3 -m canary -p canary_nvidia run ./tests
 
    # Use AMD backend explicitly
-   python3 -m canary run --gpu-backend=amd ./tests
+   python3 -m canary -p canary_amd run ./tests
 
    # Run tests requiring 2 GPUs
-   python3 -m canary run --gpu-backend=auto -p gpus=2 ./tests
+   python3 -m canary -p canary_amd run -p gpus=2 ./tests
 
 GPU Backend Selection
 ---------------------
