@@ -38,27 +38,25 @@ from .. import config
 from .. import select
 from .. import version
 from ..config import config as config_mod
-from ..core import jobspec
 from ..core import rules
-from ..core.job import Dependency
 from ..core.job import Job
-from ..execution.testexec import ExecutionSpace
-from ..generation.collect import Collector
-from ..generation.generate import Generator
 from ..generation.generator import AbstractTestGenerator
 from ..persistence.database import WorkspaceDatabase
 from ..persistence.listener import ResultListener
-from ..scanpaths import case_selectors
 from ..util import json_helper as json
 from ..util import logging
 from ..util.filesystem import async_rmtree
 from ..util.filesystem import atomic_write
 from ..util.filesystem import force_remove
 from ..util.filesystem import write_directory_tag
-from ..util.names import unique_random_name
 from ..view import ResultsView
 from ..view import ViewManager
 from ..view import ViewSettings
+from .collection import SpecCollector
+from .locator import NotAWorkspaceError as _NotAWorkspaceError
+from .locator import WorkspaceLocator
+from .reconstruction import JobReconstructor
+from .selection import SpecSelector
 from .session import Session
 
 if TYPE_CHECKING:
@@ -121,13 +119,7 @@ def _resolve_explicit_workspace_dir(path: str | Path) -> Path:
     Raises:
         NotAWorkspaceError: If neither form resolves to a valid workspace.
     """
-    p = Path(path).absolute()
-    if Workspace.exists_at(p):
-        return p
-    candidate = p / workspace_path
-    if Workspace.exists_at(candidate):
-        return candidate
-    raise NotAWorkspaceError(f"not a Canary workspace: {p}")
+    return WorkspaceLocator.resolve_explicit_workspace_dir(path)
 
 
 def set_workspace_dir(path: str | Path) -> None:
@@ -222,6 +214,11 @@ class Workspace:
 
         self.view_manager: ViewManager | None
 
+        # Specialized components
+        self._collector: SpecCollector
+        self._selector: SpecSelector
+        self._reconstructor: JobReconstructor
+
         raise RuntimeError("Use Workspace factory methods create and load")
 
     def __repr__(self) -> str:
@@ -258,7 +255,7 @@ class Workspace:
 
     @staticmethod
     def exists_at(p: Path) -> bool:
-        return (p / workspace_tag).exists()
+        return WorkspaceLocator.exists_at(p)
 
     @staticmethod
     def workspace_at(path: str | Path) -> Path | None:
@@ -271,11 +268,7 @@ class Workspace:
         mistaken for workspaces.  Intended for destructive operations, which must
         never act on an ancestor of the path the user named.
         """
-        p = Path(path).absolute()
-        candidate = p if p.name == workspace_path else p / workspace_path
-        if candidate.is_dir() and not candidate.is_symlink() and Workspace.exists_at(candidate):
-            return candidate
-        return None
+        return WorkspaceLocator.workspace_at(path)
 
     @staticmethod
     def removable_workspace_at(path: str | Path) -> Path | None:
@@ -285,16 +278,7 @@ class Workspace:
         ``.canary`` directory at the named path, while discovery/load stays
         strict and tag-based.
         """
-        p = Path(path).absolute()
-        candidate = p if p.name == workspace_path else p / workspace_path
-        if not candidate.is_dir() or candidate.is_symlink():
-            return None
-        if Workspace.exists_at(candidate):
-            return candidate
-        for name in workspace_breadcrumbs[1:]:
-            if (candidate / name).exists():
-                return candidate
-        return None
+        return WorkspaceLocator.removable_workspace_at(path)
 
     @staticmethod
     def _workspace_tombstone_for(path: Path) -> Path:
@@ -451,18 +435,7 @@ class Workspace:
         Returns:
             The anchor Path if found, otherwise None.
         """
-        if start is None:
-            start = Path.cwd()
-        current_path = Path(start).absolute()
-        if current_path.stem == workspace_path:
-            return current_path.parent if Workspace.workspace_at(current_path) is not None else None
-        while True:
-            if Workspace.workspace_at(current_path) is not None:
-                return current_path.parent if current_path.name == workspace_path else current_path
-            if current_path.parent == current_path:
-                break
-            current_path = current_path.parent
-        return None
+        return WorkspaceLocator.find_anchor(start)
 
     @staticmethod
     def find_workspace(start: str | Path | None = None) -> Path | None:
@@ -475,9 +448,7 @@ class Workspace:
         Returns:
             The path to the workspace directory if found, otherwise None.
         """
-        if anchor := Workspace.find_anchor(start=start):
-            return anchor / workspace_path
-        return None
+        return WorkspaceLocator.find_workspace(start)
 
     @classmethod
     def create(cls, path: str | Path | None = None, force: bool = False) -> "Workspace":
@@ -543,6 +514,9 @@ class Workspace:
         os.replace(tmp_root, self.root)
         tmp_db.close()
         self.db = WorkspaceDatabase.create(self.root)
+        self._collector = SpecCollector(self.root, self.db)
+        self._selector = SpecSelector(self.root, self.db)
+        self._reconstructor = JobReconstructor(self.root, self.sessions_dir, self.db)
 
         return self
 
@@ -585,6 +559,9 @@ class Workspace:
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
         self.db = WorkspaceDatabase.load(self.root)
+        self._collector = SpecCollector(self.root, self.db)
+        self._selector = SpecSelector(self.root, self.db)
+        self._reconstructor = JobReconstructor(self.root, self.sessions_dir, self.db)
         return self
 
     def run(
@@ -759,10 +736,7 @@ class Workspace:
         Raises:
             NotASelection: If *tag* is not a selection.
         """
-        specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
-        metadata = self.db.get_selection_metadata(tag)
-        created_on = metadata.pop("created_on", None)
-        return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
+        return self._selector.tag_info(tag)
 
     def info(self) -> dict[str, Any]:
         """Returns summary information about the workspace.
@@ -1010,13 +984,7 @@ class Workspace:
         Returns:
             A list of resolved JobSpecs.
         """
-        collector = Collector()
-        collector.add_scanpaths(scanpaths)
-        collector.parsing_policy = parsing_policy
-        generators = collector.run()
-        resolved = self.generate_jobspecs(generators=generators, on_options=on_options)
-        self.store_specs(resolved)
-        return resolved
+        return self._collector.collect(scanpaths, on_options, parsing_policy)
 
     def store_specs(self, specs: list["JobSpec"]) -> None:
         """Caches the provided job specifications into the workspace database.
@@ -1024,9 +992,7 @@ class Workspace:
         Args:
             specs: The resolved job specifications to store.
         """
-        pm = logger.progress_monitor("[bold]Caching[/] test specs")
-        self.db.put_specs(specs)
-        pm.done()
+        return self._collector.store_specs(specs)
 
     def select(
         self,
@@ -1050,24 +1016,7 @@ class Workspace:
         Returns:
             The list of selected JobSpecs.
         """
-        resolved = self.db.load_specs()
-        specs = self.select_from_specs(
-            resolved,
-            prefixes=prefixes,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-        )
-        self.db.put_selection(
-            tag,
-            specs,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-        )
-        return specs
+        return self._selector.select(tag, prefixes, keyword_exprs, parameter_expr, owners, regex)
 
     def select_from_specs(
         self,
@@ -1093,21 +1042,9 @@ class Workspace:
         Returns:
             The filtered list of JobSpecs.
         """
-        selector = select.Selector(resolved, self.root)
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
-        if prefixes:
-            selector.add_rule(rules.PrefixRule(prefixes=prefixes))
-        for rule in extra_rules or ():
-            selector.add_rule(rule)
-        specs = selector.run()
-        return specs
+        return self._selector.select_from_specs(
+            resolved, prefixes, keyword_exprs, parameter_expr, owners, regex, extra_rules
+        )
 
     def select_from_tag(
         self,
@@ -1137,25 +1074,9 @@ class Workspace:
         Returns:
             The list of selected JobSpecs.
         """
-        resolved = self.db.load_specs_by_tagname(source_tag)
-        specs = self.select_from_specs(
-            resolved,
-            prefixes=prefixes,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
+        return self._selector.select_from_tag(
+            tag, source_tag, prefixes, keyword_exprs, parameter_expr, owners, regex
         )
-        self.db.put_selection(
-            tag,
-            specs,
-            prefixes=prefixes,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-        )
-        return specs
 
     def create_selection(
         self,
@@ -1182,31 +1103,17 @@ class Workspace:
         Returns:
             The created selection of JobSpecs.
         """
-        resolved = self.collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
-        case_rule: rules.CaseRule | None = None
-        if cases := case_selectors(scanpaths):
-            case_rule = rules.CaseRule.from_specs(resolved, cases)
-        specs = self.select_from_specs(
-            resolved,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-            extra_rules=[case_rule] if case_rule else None,
-        )
-        tag = tag or unique_random_name(self.db.tags)
-        self.db.put_selection(
+        return self._selector.create_selection(
             tag,
-            specs,
-            scanpaths=scanpaths,
-            on_options=on_options,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
+            scanpaths,
+            self._collector,
+            on_options,
+            parsing_policy,
+            keyword_exprs,
+            parameter_expr,
+            owners,
+            regex,
         )
-        logger.info(f"[bold]Created[/] selection '[bold]{tag}[/]'")
-        return specs
 
     def apply_selection_rules(
         self,
@@ -1227,19 +1134,9 @@ class Workspace:
             regex: Filter by regex.
             ids: Filter by specific IDs.
         """
-        selector = select.Selector(specs, self.root)
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
-        if ids:
-            selector.add_rule(rules.IDsRule(ids))
-        if selector.rules:
-            selector.run()
+        return self._selector.apply_selection_rules(
+            specs, keyword_exprs, parameter_expr, owners, regex, ids
+        )
 
     def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
         """Loads jobs from the database, reconstructing them with their latest results.
@@ -1250,29 +1147,7 @@ class Workspace:
         Returns:
             A list of Job objects in static dependency order.
         """
-        from ..core.jobspec_graph import make_spec_graph
-
-        lookup: dict[str, Job] = {}
-        latest = self.db.get_results(ids, include_upstreams=True)
-        specs = self.db.load_specs(ids, include_upstreams=True)
-        graph = make_spec_graph(specs)
-        for spec in graph.topo_order():
-            if mine := latest.get(spec.id):
-                deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-                space = ExecutionSpace(
-                    root=self.sessions_dir / mine["session"],
-                    path=Path(mine["workspace"]),
-                    session=mine["session"],
-                )
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-                job.status = mine["status"]
-                job.timekeeper = mine["timekeeper"]
-                job.measurements = mine["measurements"]
-                job.state = mine["state"]
-                lookup[spec.id] = job
-        if ids:
-            return [job for job in lookup.values() if job.id in ids]
-        return list(lookup.values())
+        return self._reconstructor.load_jobs(ids)
 
     def select_from_view(self, path: Path) -> list["JobSpec"]:
         """Identifies JobSpecs based on 'testcase.lock' files found in the view.
@@ -1283,12 +1158,7 @@ class Workspace:
         Returns:
             A list of corresponding JobSpecs.
         """
-        ids: list[str] = []
-        for file in path.rglob("*/testcase.lock"):
-            job = json.loads(file.read_text())
-            ids.append(job.spec.id)
-        resolved = self.db.load_specs(ids=ids)
-        return resolved
+        return self._reconstructor.select_from_view(path)
 
     def remove_tag(self, tag: str) -> bool:
         """Deletes a selection tag from the database.
@@ -1299,11 +1169,7 @@ class Workspace:
         Returns:
             True if the tag was removed, False if it didn't exist.
         """
-        if not self.db.is_selection(tag):
-            logger.error(f"{tag!r} is not a tag")
-            return False
-        self.db.delete_selection(tag)
-        return True
+        return self._selector.remove_tag(tag)
 
     def is_tag(self, tag: str) -> bool:
         """Checks if a given string is a valid selection tag.
@@ -1314,7 +1180,7 @@ class Workspace:
         Returns:
             True if it is a selection tag, False otherwise.
         """
-        return self.db.is_selection(tag)
+        return self._selector.is_tag(tag)
 
     def generate_jobspecs(
         self, generators: list["AbstractTestGenerator"], on_options: list[str] | None = None
@@ -1328,10 +1194,7 @@ class Workspace:
         Returns:
             A list of resolved JobSpecs.
         """
-        on_options = on_options or []
-        generator = Generator(generators, workspace=self.root, on_options=on_options or [])
-        resolved = generator.run()
-        return resolved
+        return self._collector.generate_jobspecs(generators, on_options)
 
     def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
         """Creates Job objects from JobSpecs, attempting to link latest results.
@@ -1343,47 +1206,11 @@ class Workspace:
         Returns:
             A list of constructed Job objects.
         """
-        from ..core.jobspec_graph import make_spec_graph
-
-        lookup: dict[str, Job] = {}
-        jobs: list[Job] = []
-        latest = self.db.get_results([spec.id for spec in specs])
-        graph = make_spec_graph(specs)
-        for spec in graph.topo_order():
-            deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            job: Job
-            if spec.id in latest:
-                # This job won't run, but it may be needed by dependents
-                mine = latest[spec.id]
-                space = ExecutionSpace(
-                    root=self.sessions_dir / mine["session"],
-                    path=Path(mine["workspace"]),
-                    session=mine["session"],
-                )
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-                job.status = mine["status"]
-                job.state = mine["state"]
-                job.timekeeper = mine["timekeeper"]
-                job.measurements = mine["measurements"]
-            else:
-                space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-            lookup[spec.id] = job
-            jobs.append(job)
-        return jobs
+        return self._reconstructor.construct_jobs(specs, session)
 
     @staticmethod
     def _replace_session_dir_variables(job: "Job", *, old: Path, new: Path) -> None:
-        variables = job.variables
-        old_s, new_s = str(old), str(new)
-        for key in _SESSION_DIR_VARIABLES:
-            value = variables.get(key)
-            if not isinstance(value, str):
-                continue
-            if value == old_s:
-                variables[key] = new_s
-            elif value.startswith(old_s + os.pathsep):
-                variables[key] = new_s + value[len(old_s) :]
+        return JobReconstructor.replace_session_dir_variables(job, old=old, new=new)
 
     @staticmethod
     def refresh_masked_jobs(jobs: list["Job"]) -> None:
@@ -1400,15 +1227,7 @@ class Workspace:
         Args:
             jobs: Jobs constructed for this run.  Only masked jobs are refreshed.
         """
-        for job in jobs:
-            if not job.mask or not job.lockfile.exists():
-                continue
-            try:
-                job.refresh()
-            except Exception:
-                logger.debug(
-                    "Failed to refresh job %s from its lock file", job.id[:7], exc_info=True
-                )
+        return JobReconstructor.refresh_masked_jobs(jobs)
 
     def get_selection(self, tag: str | None) -> list["JobSpec"]:
         """Retrieves a list of JobSpecs associated with a tag.
@@ -1419,9 +1238,7 @@ class Workspace:
         Returns:
             A list of JobSpecs.
         """
-        if tag is None or tag == ":all:":
-            return self.db.load_specs()
-        return self.db.load_specs_by_tagname(tag)
+        return self._selector.get_selection(tag)
 
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locates a Job or JobSpec in the workspace.
@@ -1433,11 +1250,7 @@ class Workspace:
         Returns:
             The found Job or JobSpec.
         """
-        assert not (job and spec)
-        if job is not None:
-            return self.find_job(job)
-        if spec is not None:
-            return self.find_jobspec(spec)
+        return self._reconstructor.find(job=job, spec=spec)
 
     def find_job(self, root: str) -> Job:
         """Locates a Job by ID or matching pattern.
@@ -1451,23 +1264,7 @@ class Workspace:
         Raises:
             ValueError: If no matching job is found.
         """
-        id = self.db.resolve_spec_id(root)
-        if id is not None:
-            try:
-                return self.load_jobs([id])[0]
-            except IndexError as exc:
-                raise ValueError(f"{id}: no matching test job found in {self.root}") from exc
-        # Do the full (slow) lookup
-        candidates: list[Job] = []
-        jobs = self.load_jobs()
-        for job in jobs:
-            if job.spec.matches(root):
-                return job
-            elif job.spec.matches(root, fuzzy=True):
-                candidates.append(job)
-        if candidates:
-            return candidates[0]
-        raise ValueError(f"{root}: no matching test job found in {self.root}")
+        return self._reconstructor.find_job(root)
 
     def find_jobspec(self, root: str) -> "JobSpec":
         """Locates a JobSpec by ID or matching pattern.
@@ -1481,18 +1278,7 @@ class Workspace:
         Raises:
             ValueError: If no matching spec is found.
         """
-        id = self.db.resolve_spec_id(root)
-        if id is not None:
-            try:
-                return self.db.load_specs([id])[0]
-            except IndexError as exc:
-                raise ValueError(f"{id}: no matching spec found in {self.root}") from exc
-        # Do the full (slow) lookup
-        specs = self.db.load_specs()
-        for spec in specs:
-            if spec.matches(root):
-                return spec
-        raise ValueError(f"{root}: no matching spec found in {self.root}")
+        return self._reconstructor.find_jobspec(root)
 
     def find_specids(self, ids: list[str]) -> list[str | None]:
         """Resolves a list of potentially partial IDs or names to full spec IDs.
@@ -1503,24 +1289,7 @@ class Workspace:
         Returns:
             A list of resolved spec IDs, or None if not found.
         """
-        specs = self.db.load_specs()
-        found: list[str | None] = []
-        for id in ids:
-            if id.startswith(jobspec.select_sygil):
-                id = id[1:]
-            for spec in specs:
-                if spec.id.startswith(id):
-                    found.append(spec.id)
-                    break
-                elif id in (spec.name, spec.display_name(), spec.display_name(resolve=True)):
-                    found.append(spec.id)
-                    break
-                elif fnmatch.fnmatch(id, spec.name):
-                    found.append(spec.id)
-                    break
-            else:
-                found.append(None)
-        return found
+        return self._reconstructor.find_specids(ids)
 
     def testcase_done_callback(self, event: "ExecutionEvent") -> None:
         """Callback to queue job results for database persistence.
@@ -1555,10 +1324,8 @@ class WorkspaceExistsError(Exception):
     pass
 
 
-class NotAWorkspaceError(Exception):
-    """Raised when a directory is not recognized as a Canary workspace."""
-
-    pass
+# Re-export from locator for backward compatibility
+NotAWorkspaceError = _NotAWorkspaceError
 
 
 class SpecNotFoundError(Exception):
