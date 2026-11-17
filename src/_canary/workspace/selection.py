@@ -11,6 +11,7 @@ tagged selections in the database.
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 
 from .. import select
 from ..core import rules
@@ -21,6 +22,7 @@ from ..util.names import unique_random_name
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
     from ..persistence.database import WorkspaceDatabase
+    from .collection import SpecCollector
 
 logger = logging.get_logger(__name__)
 
@@ -173,9 +175,9 @@ class SpecSelector:
         self,
         tag: str | None,
         scanpaths: dict[str, list[str]],
-        collector: Any,  # SpecCollector
+        collector: "SpecCollector",
         on_options: list[str] | None = None,
-        parsing_policy: str = "pedantic",
+        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,

@@ -9,7 +9,6 @@ from the database with their results and dependencies resolved.
 """
 
 import fnmatch
-import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_SESSION_DIR_VARIABLES = ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "PATH")
+_SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
 
 
 class JobReconstructor:
@@ -158,11 +157,12 @@ class JobReconstructor:
         Returns:
             The found Job or JobSpec.
         """
-        assert not (job and spec)
+        if (job is None) == (spec is None):
+            raise TypeError("find() requires exactly one of job= or spec=")
         if job is not None:
             return self.find_job(job)
-        if spec is not None:
-            return self.find_jobspec(spec)
+        assert spec is not None
+        return self.find_jobspec(spec)
 
     def find_job(self, root: str) -> Job:
         """Locate Job by ID or matching pattern.
@@ -244,22 +244,6 @@ class JobReconstructor:
             else:
                 found.append(None)
         return found
-
-    def select_from_view(self, path: Path) -> list["JobSpec"]:
-        """Find specs from testcase.lock files in view.
-
-        Args:
-            path: The directory path to scan for lock files.
-
-        Returns:
-            List of corresponding JobSpecs.
-        """
-        ids: list[str] = []
-        for file in path.rglob("*/testcase.lock"):
-            job = json.loads(file.read_text())
-            ids.append(job.spec.id)
-        resolved = self.db.load_specs(ids=ids)
-        return resolved
 
     @staticmethod
     def replace_session_dir_variables(job: "Job", *, old: Path, new: Path) -> None:

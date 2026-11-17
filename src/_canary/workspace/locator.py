@@ -12,6 +12,17 @@ from pathlib import Path
 
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
+workspace_breadcrumbs = (
+    workspace_tag,
+    "VERSION",
+    "workspace.sqlite3",
+    "config.yaml",
+    "refs",
+    "sessions",
+    "cache",
+    "logs",
+    "reports",
+)
 
 
 class NotAWorkspaceError(Exception):
@@ -79,7 +90,6 @@ class WorkspaceLocator:
         Returns:
             The workspace directory if found and removable, None otherwise.
         """
-        from . import workspace as ws_module  # Avoid circular import
 
         p = Path(path).absolute()
         candidate = p if p.name == workspace_path else p / workspace_path
@@ -88,7 +98,7 @@ class WorkspaceLocator:
         if WorkspaceLocator.exists_at(candidate):
             return candidate
         # Check for workspace breadcrumbs even without tag
-        for name in ws_module.workspace_breadcrumbs[1:]:
+        for name in workspace_breadcrumbs[1:]:
             if (candidate / name).exists():
                 return candidate
         return None

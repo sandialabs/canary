@@ -7,7 +7,10 @@ import threading
 from typing import Any
 from typing import cast
 
+import pytest
+
 from _canary.core.job import BaseJob
+from _canary.execution.queue import Empty
 from _canary.execution.queue import ResourceQueue
 
 
@@ -64,107 +67,88 @@ class DummyJob:
         return {"cpus": [{"id": "0", "slots": 1, "node": "n0"}]}
 
 
-def test_incremental_cost_recalculation_allows_dynamic_jobs():
-    """Test that jobs can be added dynamically with incremental cost recalculation."""
-    q = ResourceQueue(
-        lock=threading.Lock(),
-        resource_pool=cast(Any, FakePool()),
-        jobs=None,
-        cost_recalculation="incremental",
-    )
+class TrackingLock:
+    """threading.Lock stand-in that records whether it is held."""
 
-    # Add first batch of jobs
-    job1 = DummyJob(id="1" * 64, cpus=1)
-    job2 = DummyJob(id="2" * 64, cpus=2)
-    q.put(cast(BaseJob, job1), cast(BaseJob, job2))
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.held = False
+        self.acquisitions = 0
 
-    # Should be marked dirty
-    assert q._dirty is True
+    def __enter__(self):
+        self._lock.acquire()
+        self.held = True
+        self.acquisitions += 1
+        return self
 
-    # Get first job - should trigger cost calculation
-    first_job = q.get()
-    assert first_job.id in (job1.id, job2.id)
-    assert q._dirty is False
-
-    # Mark it done so it's not in _busy
-    q.done(first_job)
-
-    # Now add more jobs dynamically
-    job3 = DummyJob(id="3" * 64, cpus=1)
-    job4 = DummyJob(id="4" * 64, cpus=1)
-    q.put(cast(BaseJob, job3), cast(BaseJob, job4))
-
-    # Should be marked dirty again
-    assert q._dirty is True
-
-    # Get next job - should recalculate costs
-    second_job = q.get()
-    # Second job should be one of the remaining jobs
-    remaining_ids = {job1.id, job2.id, job3.id, job4.id} - {first_job.id}
-    assert second_job.id in remaining_ids
-    assert q._dirty is False
+    def __exit__(self, *exc):
+        self.held = False
+        self._lock.release()
 
 
-def test_total_cost_recalculation_recomputes_all():
-    """Test that total mode recalculates all job costs."""
-    q = ResourceQueue(
-        lock=threading.Lock(),
-        resource_pool=cast(Any, FakePool()),
-        jobs=None,
-        cost_recalculation="total",
-    )
-
-    # Add first batch
-    job1 = DummyJob(id="1" * 64, cpus=1)
-    job2 = DummyJob(id="2" * 64, cpus=2)
-    q.put(cast(BaseJob, job1), cast(BaseJob, job2))
-
-    # Get first job
-    first_job = q.get()
-    assert first_job.id in (job1.id, job2.id)
-
-    # Add more jobs - in total mode, all jobs get recalculated
-    job3 = DummyJob(id="3" * 64, cpus=3)
-    q.put(cast(BaseJob, job3))
-
-    assert q._dirty is True
-
-    # Get next job
-    second_job = q.get()
-    assert second_job.id in (job2.id, job3.id)
-    assert q._dirty is False
+def make_queue(lock=None) -> ResourceQueue:
+    return ResourceQueue(lock=lock or threading.Lock(), resource_pool=cast(Any, FakePool()))
 
 
-def test_put_without_get_keeps_dirty_flag():
-    """Test that put() sets dirty flag and it persists until get()."""
-    q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
+def job(name: str, cpus: int = 1) -> BaseJob:
+    return cast(BaseJob, DummyJob(id=name * 64, cpus=cpus))
 
-    job1 = DummyJob(id="1" * 64)
-    q.put(cast(BaseJob, job1))
-    assert q._dirty is True
 
-    # Multiple puts keep it dirty
-    job2 = DummyJob(id="2" * 64)
-    q.put(cast(BaseJob, job2))
-    assert q._dirty is True
+def drain(q: ResourceQueue) -> list[str]:
+    order: list[str] = []
+    while True:
+        try:
+            j = q.get()
+        except Empty:
+            return order
+        order.append(j.id[0])
+        q.done(j)
 
-    # Only get() clears it
+
+def test_priority_within_a_cohort():
+    q = make_queue()
+    q.put(job("a", cpus=1), job("b", cpus=3))
+    assert drain(q) == ["b", "a"]
+
+
+def test_jobs_added_after_get_are_scheduled_after_the_earlier_cohort():
+    q = make_queue()
+    q.put(job("a", cpus=1), job("b", cpus=2))
+    first = q.get()
+    q.done(first)
+    assert first.id[0] == "b"
+    # "c" has the highest priority, but "a" was queued in an earlier cohort.
+    q.put(job("c", cpus=4), job("d", cpus=1))
+    assert drain(q) == ["a", "c", "d"]
+
+
+def test_empty_is_cleared_by_a_later_put():
+    q = make_queue()
+    q.put(job("a"))
+    assert drain(q) == ["a"]
+    with pytest.raises(Empty):
+        q.get()
+    q.put(job("b"))
+    assert drain(q) == ["b"]
+
+
+def test_costing_happens_under_the_same_lock_as_the_pop():
+    """A put() between costing and popping must not let an uncosted slot jump the queue.
+
+    Guaranteed when get() costs and pops within a single lock acquisition.
+    """
+    lock = TrackingLock()
+    q = make_queue(lock=lock)
+    seen: list[bool] = []
+    original = q._cost_cohort
+
+    def spy(slots):
+        seen.append(lock.held)
+        return original(slots)
+
+    q._cost_cohort = spy  # type: ignore[method-assign]
+    q.put(job("a"))
+    before = lock.acquisitions
     q.get()
-    assert q._dirty is False
-
-
-def test_cohort_timestamp_in_cost_tuple():
-    """Test that cost is a tuple with timestamp."""
-    q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
-
-    job1 = DummyJob(id="1" * 64)
-    q.put(cast(BaseJob, job1))
-
-    # Before get(), should have sentinel
-    assert q._heap[0].cost == (0.0, 0.0)
-
-    # After get() (which triggers update_costs), should have (timestamp, cost)
-    retrieved = q.get()
-    # Check the internal heap structure after job is moved to _busy
-    # The cost is calculated during get()
-    assert retrieved.id == job1.id
+    assert seen == [True]
+    assert lock.acquisitions - before == 1

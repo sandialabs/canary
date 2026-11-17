@@ -431,3 +431,83 @@ def test_stats_reports_latest_session_outcomes(db: WorkspaceDatabase, make_sessi
     # make_session sets every job to SUCCESS, so the latest-session histogram
     # must attribute all specs to a single outcome bucket.
     assert sum(stats["outcomes"].values()) == len(session.jobs)
+
+
+# -----------------------------------------------------------------------------
+# Order-independent result upserts (shared result spool)
+# -----------------------------------------------------------------------------
+
+
+def _versioned_job(
+    db: WorkspaceDatabase, *, session: str, submitted: float, phase: str, outcome: str
+):
+    from _canary.core.job import Job
+    from _canary.core.job import JobPhase
+    from _canary.core.jobspec import JobSpec
+    from _canary.execution.testexec import ExecutionSpace
+
+    root = db.path.parent
+    spec = JobSpec(
+        file_root=root, file_path=Path("case.pyt"), family="case", id="d" * 64, timeout=10.0
+    )
+    db.put_specs([spec])
+    job = Job(
+        spec=spec,
+        workspace=ExecutionSpace(
+            root=root / "sessions" / session, path=Path("case"), session=session
+        ),
+    )
+    job.timekeeper.open(at=submitted)
+    job.state.phase = JobPhase(phase)
+    job.status.set(outcome=outcome)
+    return job
+
+
+def test_put_results_late_running_record_does_not_replace_done(db: WorkspaceDatabase):
+    done = _versioned_job(db, session="s1", submitted=10.0, phase="DONE", outcome="SUCCESS")
+    running = _versioned_job(db, session="s1", submitted=10.0, phase="RUNNING", outcome="NONE")
+    db.put_results(done)
+    db.put_results(running)
+    result = db.get_results()[done.id]
+    assert result["state"].phase.value == "DONE"
+    assert result["status"].outcome.name == "SUCCESS"
+
+
+def test_put_results_same_batch_out_of_order(db: WorkspaceDatabase):
+    done = _versioned_job(db, session="s1", submitted=10.0, phase="DONE", outcome="FAILED")
+    pending = _versioned_job(db, session="s1", submitted=10.0, phase="PENDING", outcome="NONE")
+    db.put_results(done, pending)
+    assert db.get_results()[done.id]["status"].outcome.name == "FAILED"
+
+
+def test_put_results_new_attempt_replaces_previous_attempt(db: WorkspaceDatabase):
+    old = _versioned_job(db, session="s1", submitted=10.0, phase="DONE", outcome="FAILED")
+    new = _versioned_job(db, session="s1", submitted=20.0, phase="RUNNING", outcome="NONE")
+    db.put_results(old)
+    db.put_results(new)
+    assert db.get_results()[old.id]["state"].phase.value == "RUNNING"
+
+
+def test_put_results_late_done_replaces_reconciled_row(db: WorkspaceDatabase):
+    running = _versioned_job(db, session="s1", submitted=10.0, phase="RUNNING", outcome="NONE")
+    db.put_results(running)
+    assert db.reconcile_running_jobs("s1") == 1
+    assert db.get_results()[running.id]["status"].outcome.name == "BROKEN"
+    done = _versioned_job(db, session="s1", submitted=10.0, phase="DONE", outcome="SUCCESS")
+    db.put_results(done)
+    assert db.get_results()[running.id]["status"].outcome.name == "SUCCESS"
+
+
+def test_put_results_accepted_write_becomes_latest_row(db: WorkspaceDatabase):
+    a = _versioned_job(db, session="a", submitted=10.0, phase="DONE", outcome="FAILED")
+    b = _versioned_job(db, session="b", submitted=20.0, phase="DONE", outcome="FAILED")
+    db.put_results(a)
+    db.put_results(b)
+    rerun_a = _versioned_job(db, session="a", submitted=30.0, phase="DONE", outcome="SUCCESS")
+    db.put_results(rerun_a)
+    result = db.get_results()[a.id]
+    assert result["session"] == "a"
+    assert result["status"].outcome.name == "SUCCESS"
+    stale_b = _versioned_job(db, session="b", submitted=20.0, phase="RUNNING", outcome="NONE")
+    db.put_results(stale_b)
+    assert db.get_results()[a.id]["session"] == "a"

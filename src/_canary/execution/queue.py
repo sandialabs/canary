@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import heapq
+import itertools
 import math
 import threading
 import time
@@ -11,7 +12,6 @@ from dataclasses import field
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
-from typing import Literal
 
 from .. import history
 from ..core.job import BaseJob
@@ -36,9 +36,16 @@ class Busy(Exception):
 
 @dataclass(order=True)
 class HeapSlot:
-    # (0.0, 0.0) sentinel means job needs costing
+    """Heap entry.  Ordered by ``cost = (cohort, -priority)``; smallest first.
+
+    ``cohort`` numbers each batch of jobs costed together, so jobs added to a running
+    queue are scheduled after the jobs already in it.  A slot is not costed until
+    :meth:`ResourceQueue._update_costs_locked` runs, which always happens before a pop.
+    """
+
     job: BaseJob = field(compare=False)
-    cost: tuple[float, float] = field(default=(0.0, 0.0))
+    cost: tuple[int, float] = field(default=(0, 0.0))
+    costed: bool = field(default=False, compare=False)
     resources: list["NodeRequest"] = field(compare=False, init=False, repr=False)
 
     def __post_init__(self):
@@ -52,10 +59,10 @@ class ResourceQueue:
     and exclusive job semantics. Raises Busy if no job can be run
     with available resources.
 
-    Supports dynamic job addition with two cost recalculation modes:
-    - "incremental": New jobs are costed with updated scale factors, old jobs retain their costs.
-      Jobs run in cohort order (submission time), then by priority within cohort.
-    - "total": All jobs are re-costed on each addition, all jobs compete globally by priority.
+    Jobs may be added with :meth:`put` at any time, including after :meth:`get` has
+    been called.  Each group of jobs added between two costings forms a *cohort*;
+    cohorts are scheduled in the order they were added and jobs are prioritised by
+    cost within their cohort.
     """
 
     def __init__(
@@ -64,7 +71,6 @@ class ResourceQueue:
         resource_pool: "ResourcePool",
         store: history.HistoryStore | None = None,
         jobs: list[BaseJob] | None = None,
-        cost_recalculation: Literal["incremental", "total"] = "incremental",
     ) -> None:
         self.lock = lock
         self.store = store or history.HistoryStore(None)
@@ -73,15 +79,9 @@ class ResourceQueue:
         self._finished: dict[str, Any] = {}
         self.exclusive_job_id: str | None = None
         self.rpool = resource_pool
-        self.cost_recalculation = cost_recalculation
         self._dirty = False
+        self._cohorts = itertools.count()
         self.alogger = logging.AdaptiveDebugLogger(__name__)
-
-        # Incremental mode only: cumulative scale factors
-        self._scale_cpu_work_sum = 0.0
-        self._scale_max_runtime = 0.0
-        self._width: float | None = None
-
         if jobs:
             self.put(*jobs)
 
@@ -89,76 +89,36 @@ class ResourceQueue:
         return len(self._heap)
 
     def update_costs(self) -> None:
-        """Calculate costs for jobs that need costing.
-
-        Incremental mode: cost only new jobs, update scale factors cumulatively.
-        Total mode: recost all jobs with fresh scale factors, all get same timestamp.
-        """
+        """Cost every job added since the last costing."""
         with self.lock:
-            if not self._dirty:
-                return
+            self._update_costs_locked()
 
-            if not self._heap:
-                self._dirty = False
-                return
+    def _update_costs_locked(self) -> None:
+        """Cost the uncosted slots as one new cohort.  Caller must hold ``self.lock``."""
+        if not self._dirty:
+            return
+        self._dirty = False
+        slots = [slot for slot in self._heap if not slot.costed]
+        if not slots:
+            return
+        cohort = next(self._cohorts)
+        for slot, priority in zip(slots, self._cost_cohort(slots)):
+            slot.cost = (cohort, priority)
+            slot.costed = True
+        heapq.heapify(self._heap)
 
-            now = time.time()
+    def _cost_cohort(self, slots: list[HeapSlot]) -> list[float]:
+        """Return the cost of each slot in a cohort (smaller runs first)."""
+        jobs = [slot.job for slot in slots]
+        runtimes = {job.id: history.estimate_runtime(job, store=self.store) for job in jobs}
+        cpus = {job.id: sum(_.count("cpus") for _ in job.required_resources()) for job in jobs}
+        width: float = float(self.rpool.count("cpus"))
+        cpu_work: float = sum(cpus[j.id] * runtimes[j.id] for j in jobs)
+        scale: float = max(cpu_work / width, max(runtimes.values()))
+        return [-math.hypot(cpus[j.id] / width, runtimes[j.id] / scale) for j in jobs]
 
-            if self._width is None:
-                self._width = float(self.rpool.count("cpus"))
-
-            if self.cost_recalculation == "total":
-                all_jobs = [slot.job for slot in self._heap]
-                runtimes = {
-                    job.id: history.estimate_runtime(job, store=self.store) for job in all_jobs
-                }
-                cpus = {
-                    job.id: sum(_.count("cpus") for _ in job.required_resources())
-                    for job in all_jobs
-                }
-
-                cpu_work = sum(cpus[j.id] * runtimes[j.id] for j in all_jobs)
-                scale = max(cpu_work / self._width, max(runtimes.values()))
-
-                for slot in self._heap:
-                    calc_cost = -math.hypot(
-                        cpus[slot.job.id] / self._width, runtimes[slot.job.id] / scale
-                    )
-                    slot.cost = (now, calc_cost)
-
-            else:
-                new_jobs = [slot.job for slot in self._heap if slot.cost == (0.0, 0.0)]
-
-                if not new_jobs:
-                    self._dirty = False
-                    return
-
-                runtimes = {
-                    job.id: history.estimate_runtime(job, store=self.store) for job in new_jobs
-                }
-                cpus = {
-                    job.id: sum(_.count("cpus") for _ in job.required_resources())
-                    for job in new_jobs
-                }
-
-                cpu_work_new = sum(cpus[j.id] * runtimes[j.id] for j in new_jobs)
-                self._scale_cpu_work_sum += cpu_work_new
-                if runtimes:
-                    self._scale_max_runtime = max(
-                        self._scale_max_runtime, max(runtimes.values()) if runtimes else 0.0
-                    )
-
-                scale = max(self._scale_cpu_work_sum / self._width, self._scale_max_runtime)
-
-                for slot in self._heap:
-                    if slot.cost == (0.0, 0.0):
-                        calc_cost = -math.hypot(
-                            cpus[slot.job.id] / self._width, runtimes[slot.job.id] / scale
-                        )
-                        slot.cost = (now, calc_cost)
-
-            heapq.heapify(self._heap)
-            self._dirty = False
+    def put_many(self, jobs: Iterable[BaseJob]) -> None:
+        self.put(*jobs)
 
     def put(self, *jobs: BaseJob) -> None:
         with self.lock:
@@ -169,16 +129,13 @@ class ResourceQueue:
                     raise ValueError(f"{job}: a test should require at least 1 cpu")
                 if not self.rpool.accommodates(required):
                     raise ValueError(f"Not enough resources for job {job}")
-                slot = HeapSlot(job=job, cost=(0.0, 0.0))
-                heapq.heappush(self._heap, slot)
+                heapq.heappush(self._heap, HeapSlot(job=job))
             if jobs:
                 self._dirty = True
 
     def get(self) -> BaseJob:
-        if self._dirty:
-            self.update_costs()
-
         with self.lock:
+            self._update_costs_locked()
             if not self._heap:
                 logger.debug("Queue empty on get()")
                 raise Empty

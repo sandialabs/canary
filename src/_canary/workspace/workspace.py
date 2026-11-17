@@ -23,6 +23,7 @@ Example:
 
 import datetime
 import fnmatch
+import functools
 import os
 import re
 import tarfile
@@ -55,6 +56,8 @@ from ..view import ViewSettings
 from .collection import SpecCollector
 from .locator import NotAWorkspaceError as _NotAWorkspaceError
 from .locator import WorkspaceLocator
+from .locator import workspace_path
+from .locator import workspace_tag
 from .reconstruction import JobReconstructor
 from .selection import SpecSelector
 from .session import Session
@@ -65,24 +68,9 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
-
-workspace_path = ".canary"
-workspace_tag = "WORKSPACE.TAG"
 workspace_log = "canary.log"
 workspace_tombstone_re = re.compile(r"^\.canary\.\d+\.\d+$")
 view_tombstone_re = re.compile(r"^\.canary\.view\..+\.\d+\.\d+$")
-workspace_breadcrumbs = (
-    workspace_tag,
-    "VERSION",
-    "workspace.sqlite3",
-    "config.yaml",
-    "refs",
-    "sessions",
-    "cache",
-    "logs",
-    "reports",
-)
 
 
 def _display_path(path: str | Path) -> str:
@@ -214,15 +202,25 @@ class Workspace:
 
         self.view_manager: ViewManager | None
 
-        # Specialized components
-        self._collector: SpecCollector
-        self._selector: SpecSelector
-        self._reconstructor: JobReconstructor
-
         raise RuntimeError("Use Workspace factory methods create and load")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.root})"
+
+    @functools.cached_property
+    def _collector(self) -> SpecCollector:
+        """Lazy-initialized spec collector component."""
+        return SpecCollector(self.root, self.db)
+
+    @functools.cached_property
+    def _selector(self) -> SpecSelector:
+        """Lazy-initialized spec selector component."""
+        return SpecSelector(self.root, self.db)
+
+    @functools.cached_property
+    def _reconstructor(self) -> JobReconstructor:
+        """Lazy-initialized job reconstructor component."""
+        return JobReconstructor(self.root, self.sessions_dir, self.db)
 
     def initialize_properties(self, *, anchor: Path) -> None:
         """Sets up the internal directory structure paths based on the anchor.
@@ -514,9 +512,6 @@ class Workspace:
         os.replace(tmp_root, self.root)
         tmp_db.close()
         self.db = WorkspaceDatabase.create(self.root)
-        self._collector = SpecCollector(self.root, self.db)
-        self._selector = SpecSelector(self.root, self.db)
-        self._reconstructor = JobReconstructor(self.root, self.sessions_dir, self.db)
 
         return self
 
@@ -559,9 +554,6 @@ class Workspace:
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
         self.db = WorkspaceDatabase.load(self.root)
-        self._collector = SpecCollector(self.root, self.db)
-        self._selector = SpecSelector(self.root, self.db)
-        self._reconstructor = JobReconstructor(self.root, self.sessions_dir, self.db)
         return self
 
     def run(
@@ -1148,17 +1140,6 @@ class Workspace:
             A list of Job objects in static dependency order.
         """
         return self._reconstructor.load_jobs(ids)
-
-    def select_from_view(self, path: Path) -> list["JobSpec"]:
-        """Identifies JobSpecs based on 'testcase.lock' files found in the view.
-
-        Args:
-            path: The directory path to scan for lock files.
-
-        Returns:
-            A list of corresponding JobSpecs.
-        """
-        return self._reconstructor.select_from_view(path)
 
     def remove_tag(self, tag: str) -> bool:
         """Deletes a selection tag from the database.

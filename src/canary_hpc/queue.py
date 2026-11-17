@@ -27,29 +27,18 @@ class ResourceQueue(queue.ResourceQueue):
                 raise ValueError(f"Job {job} is not runnable ({job.state=})")
         with self.lock:
             for batch in jobs:
-                slot = queue.HeapSlot(job=batch, cost=(0.0, 0.0))  # ty: ignore[invalid-argument-type]
-                heapq.heappush(self._heap, slot)
+                heapq.heappush(self._heap, queue.HeapSlot(job=batch))
             if jobs:
                 self._dirty = True
 
-    def update_costs(self) -> None:
-        """Cost is batch runtime * max(cpu requirements per job in batch)."""
-        with self.lock:
-            if not self._dirty:
-                return
-            if not self._heap:
-                self._dirty = False
-                return
-
-            now = time.time()
-            for slot in self._heap:
-                if slot.cost == (0.0, 0.0):
-                    assert isinstance(slot.job, TestBatch)
-                    calc_cost = -(slot.job.runtime * max([j.cpus for j in slot.job]))
-                    slot.cost = (now, calc_cost)
-
-            heapq.heapify(self._heap)
-            self._dirty = False
+    def _cost_cohort(self, slots: list[queue.HeapSlot]) -> list[float]:
+        """Cost is -(batch runtime * max(cpu requirements per job in batch))."""
+        costs: list[float] = []
+        for slot in slots:
+            batch = slot.job
+            assert isinstance(batch, TestBatch)
+            costs.append(-(batch.runtime * max([j.cpus for j in batch])))
+        return costs
 
     def clear(self, status: str = "CANCELLED", reason: str | None = None, code: int = -1) -> None:
         """Terminate every still-queued (pending) batch and its child jobs.

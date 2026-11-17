@@ -49,7 +49,6 @@ def test_result_listener_releases_failed_batch_for_retry() -> None:
     listener = object.__new__(ResultListener)
     listener.db = FakeDB()
     listener.queue = listener.db.queue
-    listener._processed = set()
 
     try:
         listener._drain_once()
@@ -65,4 +64,3 @@ def test_result_listener_releases_failed_batch_for_retry() -> None:
 
     assert drained is True
     assert listener.db.queue.acked == [[Path("claimed/1")]]
-    assert listener._processed == {"job-1"}

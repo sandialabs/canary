@@ -544,23 +544,37 @@ class WorkspaceDatabase:
     def put_results(self, *jobs: "Job") -> None:
         """Store one or more job results in the database.
 
-        Each job is serialised via :meth:`format_single_result` and upserted
-        into the ``results`` table keyed by ``(spec_id, session)``.  A
-        ``INSERT OR REPLACE`` strategy is used so re-runs within the same
-        session overwrite the previous entry.
+        Each job is serialised via :meth:`format_single_result` and upserted into the
+        ``results`` table keyed by ``(spec_id, session)``.
+
+        The upsert is order-independent: a row is only replaced by a record whose
+        version ``(attempt, phase rank)`` is not older than the stored one,
+        where *attempt* is the timekeeper's submission time (reset at the start of
+        every attempt) and the phase rank follows ``PENDING < STAGING < RUNNING <
+        FINISHING < DONE``.  Result records are spooled several times per job and may
+        be delivered out of order (several listeners share the spool, and producers on
+        different hosts have different clocks), so a late ``RUNNING`` record must never
+        replace a ``DONE`` one.  A new attempt (e.g. an in-place rerun) has a later
+        submission time and therefore replaces the previous attempt's row.
 
         Args:
             *jobs: One or more :class:`~_canary.core.job.Job` objects to persist.
         """
-
         rows = [self.format_single_result(job) for job in jobs]
-        sql = """
-        INSERT OR REPLACE INTO results (
-          spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace,
-          job_state, status_category, status_outcome, status_reason, status_code,
-          timekeeper, measurements
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+        cols = ", ".join(RESULTS_COLUMNS)
+        placeholders = ", ".join("?" for _ in RESULTS_COLUMNS)
+        # INSERT OR REPLACE (not ON CONFLICT DO UPDATE) so an accepted write gets a new
+        # rowid: "latest result" queries order by rowid.
+        sql = f"""
+        WITH new ({cols}) AS (VALUES ({placeholders}))
+        INSERT OR REPLACE INTO results ({cols})
+        SELECT {cols} FROM new
+        WHERE NOT EXISTS (
+          SELECT 1 FROM results AS cur
+          WHERE cur.spec_id = new.spec_id AND cur.session = new.session
+            AND ({_result_version_sql("cur")}) > ({_result_version_sql("new")})
+        )
+        """  # nosec B608
         with self.transaction():
             self.connection.executemany(sql, rows)
 
@@ -1074,21 +1088,21 @@ class WorkspaceDatabase:
 
 
 class ResultSpool:
-    """Spools result records to a single workspace-wide queue.
+    """Spools result records to the single workspace-wide queue ``.canary/var/spool/``.
 
-    All results are written to ``.canary/var/spool/`` regardless of session.
-    The :class:`~_canary.persistence.listener.ResultListener` drains this queue
-    and writes results to the database with session information intact. Multiple
-    canary sessions can run concurrently and safely share the spool via FSQueue's
-    multi-consumer primitives.
+    Several canary sessions (and their listeners) may share the spool at once.  This is
+    safe because (1) no consumer performs destructive recovery on live items: stale
+    claims and orphaned tmp files are only recovered once they are far older than any
+    claim->ack or write could take, and (2) :meth:`WorkspaceDatabase.put_results` never
+    lets an older record overwrite a newer one, so the delivery order does not matter.
     """
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
-        self._queue = FSQueue(root / "var" / "spool")
+        self.fsqueue = FSQueue(self.root / "var" / "spool")
 
     def put(self, job: Any) -> None:
-        self._queue.put(job)
+        self.fsqueue.put(job)
 
 
 @dataclasses.dataclass
@@ -1218,6 +1232,18 @@ RESULTS_DDL = """CREATE TABLE IF NOT EXISTS {name} (
             measurements TEXT,
             PRIMARY KEY (spec_id, session)
             )"""
+
+
+_PHASE_RANK_SQL = (
+    "CASE {t}.job_state WHEN 'PENDING' THEN 0 WHEN 'STAGING' THEN 1 WHEN 'RUNNING' THEN 2 "
+    "WHEN 'FINISHING' THEN 3 WHEN 'DONE' THEN 4 ELSE 0 END"
+)
+
+
+def _result_version_sql(table: str) -> str:
+    """SQL row value ``(attempt, phase rank)`` used to order result records of one job."""
+    attempt = f"COALESCE(json_extract({table}.timekeeper, '$._submitted'), -1.0)"
+    return f"{attempt}, {_PHASE_RANK_SQL.format(t=table)}"
 
 
 class DatabaseVersionError(RuntimeError):
