@@ -21,19 +21,19 @@ import rich
 from .. import config
 from ..config.argparsing import Parser
 from ..generation.generator import AbstractTestGenerator
-from ..session.workspace import Session
 from ..third_party.monkeypatch import monkeypatch
 from ..util import logging
 from ..util.query_data import load_query_data
 from ..util.sendmail import sendmail
 from ..util.string import pluralize
 from ..util.term import terminal_size
+from ..workspace.session import Session
 from .hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
-    from ..session.workspace import Session
+    from ..workspace.session import Session
 
 
 logger = logging.get_logger(__name__)

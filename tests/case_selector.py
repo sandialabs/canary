@@ -15,7 +15,7 @@ from _canary.cli.run import ReadPathsFromFile
 from _canary.core.rules import parse_case_selector
 from _canary.scanpaths import case_selectors
 from _canary.scanpaths import split_case_selector
-from _canary.session.workspace import Workspace
+from _canary.workspace.workspace import Workspace
 
 FOO = """\
 import sys

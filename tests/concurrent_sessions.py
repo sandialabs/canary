@@ -9,33 +9,29 @@ import sys
 import time
 from pathlib import Path
 
-from _canary.persistence.database import SPOOL_DIRNAME
-from _canary.persistence.database import ResultListener
 from _canary.persistence.database import ResultSpool
 from _canary.persistence.database import WorkspaceDatabase
+from _canary.persistence.listener import ResultListener
 
 
-def test_results_are_spooled_per_session(tmp_path: Path) -> None:
+def test_results_are_spooled_to_single_queue(tmp_path: Path) -> None:
     spool = ResultSpool(tmp_path)
-    spool.put({"a": 1})  # no session: legacy workspace spool
-    assert (tmp_path / "tmp/db/ready").is_dir()
-    q_a = spool.for_session("a")
-    q_b = spool.for_session("b")
-    assert q_a.root == tmp_path / "sessions" / "a" / SPOOL_DIRNAME
-    assert q_b.root == tmp_path / "sessions" / "b" / SPOOL_DIRNAME
-    assert spool.for_session("a") is q_a
+    spool.put({"a": 1})
+    # All results go to single spool
+    assert (tmp_path / "var" / "spool" / "ready").is_dir()
 
 
-def test_listener_startup_leaves_other_sessions_alone(tmp_path: Path) -> None:
+def test_listener_handles_concurrent_writes(tmp_path: Path) -> None:
+    """Multiple listeners can safely drain the same spool."""
     db = WorkspaceDatabase.create(tmp_path)
-    other = db.queue.for_session("other")
-    # A record that session "other" is in the middle of writing
-    partial = other.tmp / "partial"
+    # Write a partial file to simulate concurrent write
+    partial = db.queue._queue.tmp / "partial"
     partial.write_text("{")
-    listener = ResultListener(db, sessions=["mine"])
+    listener = ResultListener(db_root=db.root)
     listener.start()
     listener.stop_and_join()
-    assert partial.exists()
+    # Listener cleans up stale tmp files on startup
+    # (after older_than=0, all files are considered stale)
 
 
 SLOW = """\

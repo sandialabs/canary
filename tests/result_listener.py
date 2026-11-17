@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from _canary.persistence.database import ResultListener
+from _canary.persistence.listener import ResultListener
 
 
 class FakeJob:
@@ -48,7 +48,7 @@ class FakeDB:
 def test_result_listener_releases_failed_batch_for_retry() -> None:
     listener = object.__new__(ResultListener)
     listener.db = FakeDB()
-    listener.queues = [listener.db.queue]
+    listener.queue = listener.db.queue
     listener._processed = set()
 
     try:

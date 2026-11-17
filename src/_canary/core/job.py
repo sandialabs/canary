@@ -919,7 +919,7 @@ class Job(BaseJob):
 
 
 def load_job_from_file(arg: Path | str | None) -> Job:
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     path = Path(arg or ".").absolute()
     file = path / "testcase.lock" if path.is_dir() else path
@@ -930,7 +930,7 @@ def load_job_from_file(arg: Path | str | None) -> Job:
 
 
 def load_job_from_state(lock_data: "Job") -> "Job":
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     workspace = Workspace.load()
     return workspace.find(job=lock_data.spec.id)

@@ -21,8 +21,8 @@ from typing import Sequence
 
 from _canary.api.failures import failures
 from _canary.cli import query as _query_cmd
-from _canary.session.workspace import Workspace
 from _canary.util.query_data import query_json
+from _canary.workspace.workspace import Workspace
 
 SortBy = Literal["name", "status", "session", "duration"]
 _MISSING = object()

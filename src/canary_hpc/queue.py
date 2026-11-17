@@ -22,30 +22,34 @@ key_type: TypeAlias = tuple[canary.status.Category, canary.status.Outcome]
 
 class ResourceQueue(queue.ResourceQueue):
     def put(self, *jobs: BaseJob) -> None:
-        if self.prepared:
-            name = type(self).__name__
-            raise RuntimeError(f"{name}.put() cannot be called after calling {name}.prepare()")
         for job in jobs:
             if not job.is_runnable():
                 raise ValueError(f"Job {job} is not runnable ({job.state=})")
         with self.lock:
             for batch in jobs:
-                slot = queue.HeapSlot(job=batch)  # ty: ignore[invalid-argument-type]
+                slot = queue.HeapSlot(job=batch, cost=(0.0, 0.0))  # ty: ignore[invalid-argument-type]
                 heapq.heappush(self._heap, slot)
+            if jobs:
+                self._dirty = True
 
-    def prepare(self) -> None:
-        """Empty method that a subclass can implement"""
-        if self.prepared:
-            name = type(self).__name__
-            raise RuntimeError(f"{name} already prepared")
+    def update_costs(self) -> None:
+        """Cost is batch runtime * max(cpu requirements per job in batch)."""
         with self.lock:
+            if not self._dirty:
+                return
             if not self._heap:
-                raise queue.Empty()
+                self._dirty = False
+                return
+
+            now = time.time()
             for slot in self._heap:
-                assert isinstance(slot.job, TestBatch)
-                slot.cost = -(slot.job.runtime * max([j.cpus for j in slot.job]))
+                if slot.cost == (0.0, 0.0):
+                    assert isinstance(slot.job, TestBatch)
+                    calc_cost = -(slot.job.runtime * max([j.cpus for j in slot.job]))
+                    slot.cost = (now, calc_cost)
+
             heapq.heapify(self._heap)
-        self.prepared = True
+            self._dirty = False
 
     def clear(self, status: str = "CANCELLED", reason: str | None = None, code: int = -1) -> None:
         """Terminate every still-queued (pending) batch and its child jobs.

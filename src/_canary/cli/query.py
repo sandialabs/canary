@@ -76,12 +76,12 @@ from ..app.failure_analysis import tail_lines
 from ..app.paths import remap_path
 from ..app.query_helpers import resolve_session_dir as _resolve_session_dir
 from ..plugins.hookspec import hookimpl
-from ..session.workspace import Session
-from ..session.workspace import Workspace
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
 from ..util.query_data import print_query_paths
 from ..util.query_data import query_json
+from ..workspace.session import Session
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 from .learn import execute_capabilities_query
 from .learn import execute_skills_query

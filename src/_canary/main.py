@@ -96,7 +96,7 @@ class CanaryMain:
         # CLI flag takes precedence over env var.
         canary_dir = args.canary_dir or os.environ.get("CANARY_DIR")
         if canary_dir:
-            from .session.workspace import set_workspace_dir
+            from .workspace.workspace import set_workspace_dir
 
             set_workspace_dir(canary_dir)
 

@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from ..session.workspace import Workspace
+from ..workspace.workspace import Workspace
 
 
 def resolve_session_dir(workspace: Workspace, session: str) -> Path:

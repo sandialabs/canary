@@ -400,7 +400,7 @@ def test_snapshot_relative_plugin_loads_from_batch_child_cwd(tmp_path):
 
     deck = tmp_path / "deckroot"
     # The deck root is the ONLY .canary workspace.
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     deck.mkdir()
     Workspace.create(deck)

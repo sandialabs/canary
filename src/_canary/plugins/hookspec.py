@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..resource_pool.rpool import Outcome
     from ..select import RuntimeSelector
     from ..select import Selector
-    from ..session.workspace import Session
+    from ..workspace.session import Session
     from .pluginmanager import CanaryPluginManager
 
 

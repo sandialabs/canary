@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 
-import _canary.session.workspace as _workspace_module
+import _canary.workspace.workspace as _workspace_module
 from _canary.cli.archive import Archive
 from _canary.cli.rm import RemoveWorkspace
-from _canary.session.workspace import NotAWorkspaceError
-from _canary.session.workspace import Workspace
-from _canary.session.workspace import WorkspaceExistsError
-from _canary.session.workspace import set_workspace_dir
 from _canary.util.filesystem import working_dir
 from _canary.view import ResultsView
 from _canary.view import ViewSettings
+from _canary.workspace.workspace import NotAWorkspaceError
+from _canary.workspace.workspace import Workspace
+from _canary.workspace.workspace import WorkspaceExistsError
+from _canary.workspace.workspace import set_workspace_dir
 
 
 def _make_archivable_job(
@@ -219,7 +219,7 @@ def test_session_lock_records_root_at_creation(tmp_path):
     session_dir = ws.sessions_dir / "s1"
     session_dir.mkdir(parents=True)
 
-    from _canary.session.workspace import Session
+    from _canary.workspace.workspace import Session
 
     session = Session(name="s1", jobs=[], prefix=session_dir)
     data = session.to_lock_data()
@@ -576,7 +576,7 @@ def test_register_latest_session_uses_atomic_write(tmp_path, monkeypatch):
     def fake_atomic_write(path: Path, text: str) -> None:
         calls.append((path, text))
 
-    monkeypatch.setattr("_canary.session.workspace.atomic_write", fake_atomic_write)
+    monkeypatch.setattr("_canary.workspace.workspace.atomic_write", fake_atomic_write)
 
     ws.register_latest_session(session)  # type: ignore[arg-type]
 

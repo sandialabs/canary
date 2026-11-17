@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 import canary
-from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
 from _canary.view import ResultsView
 from _canary.view import ViewManifest
 from _canary.view import ViewManifestEntry
 from _canary.view import ViewSettings
+from _canary.workspace.workspace import Workspace
 
 
 def write(path: Path, text: str) -> None:

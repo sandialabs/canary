@@ -25,7 +25,7 @@ LAZY_ONLY_MODULES = frozenset(
     {
         "_canary.app",
         "_canary.main",
-        "_canary.session.workspace",
+        "_canary.workspace.workspace",
         "_canary.persistence.database",
         "_canary.generation.collect",
         "_canary.select",

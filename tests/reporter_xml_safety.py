@@ -9,9 +9,9 @@ import pytest
 
 from _canary.reporters.junit import JunitReporter
 from _canary.reporters.junit import JunitReportRequest
-from _canary.session.workspace import Workspace
 from _canary.util import xmlsafe
 from _canary.util.filesystem import working_dir
+from _canary.workspace.workspace import Workspace
 
 HOSTILE = "end ]]> of cdata\x00 nul \x07 bell \x1b[31mred\x1b[0m \x0b vt \x1b]8;;http://x\x07link"
 

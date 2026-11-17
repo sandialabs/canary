@@ -8,7 +8,7 @@ import canary
 from _canary.config import timeout_multiplier
 from _canary.config.schemas import environment_variable_schema
 from _canary.core.rules import SessionTimeoutRule
-from _canary.session.workspace import Workspace
+from _canary.workspace.workspace import Workspace
 
 
 def test_timeout_environment_variables_map_into_run_timeout() -> None:
@@ -62,7 +62,7 @@ def test_workspace_run_uses_session_timeout_from_config_when_cli_timeout_missing
 
         ws.construct_jobs = lambda specs, session_dir: jobs  # type: ignore[method-assign]
 
-        import _canary.session.workspace as workspace_mod
+        import _canary.workspace.workspace as workspace_mod
 
         original_selector = workspace_mod.select.RuntimeSelector
         workspace_mod.select.RuntimeSelector = DummySelector  # type: ignore[assignment]

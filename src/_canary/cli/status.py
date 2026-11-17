@@ -146,8 +146,8 @@ class Status(CanarySubcommand):
         """Load workspace results and print the status table or JSON output, returning 0."""
         from .. import tui
         from ..error import StopExecution
-        from ..session.workspace import NotAWorkspaceError
         from ..util.pager import page_rich
+        from ..workspace.workspace import NotAWorkspaceError
 
         if getattr(args, "interactive", False):
             try:

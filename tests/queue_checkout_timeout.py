@@ -73,7 +73,7 @@ def test_resource_queue_passes_checkout_timeout_when_job_requests_it() -> None:
     job = FakeJob(checkout_timeout=321.0)
 
     queue.put(job)
-    queue.prepare()
+    queue.update_costs()
     queue.get()
 
     resources, kwds = rpool.calls[0]
@@ -87,7 +87,7 @@ def test_resource_queue_omits_checkout_timeout_by_default() -> None:
     job = FakeJob(checkout_timeout=None)
 
     queue.put(job)
-    queue.prepare()
+    queue.update_costs()
     queue.get()
 
     resources, kwds = rpool.calls[0]

@@ -51,7 +51,7 @@ class Tui(CanarySubcommand):
         from .. import tui
         from ..app.pathspec import classify_pathspec
         from ..error import StopExecution
-        from ..session.workspace import NotAWorkspaceError
+        from ..workspace.workspace import NotAWorkspaceError
 
         load_request = None
         if getattr(args, "paths", None):

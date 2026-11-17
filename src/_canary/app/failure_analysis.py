@@ -11,7 +11,7 @@ from typing import Any
 
 from ..core.status import Outcome
 from ..execution.testexec import ExecutionSpace
-from ..session.workspace import Workspace
+from ..workspace.workspace import Workspace
 
 _TRACEBACK_START_RE = re.compile(r"^Traceback \(most recent call last\):\s*$", re.MULTILINE)
 _FRAME_RE = re.compile(

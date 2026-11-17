@@ -240,8 +240,8 @@ class ExplorerModel:
 
         try:
             if kind == "scanpaths":
-                from ..session.workspace import NotAWorkspaceError
-                from ..session.workspace import Workspace
+                from ..workspace.workspace import NotAWorkspaceError
+                from ..workspace.workspace import Workspace
 
                 try:
                     workspace = Workspace.load()

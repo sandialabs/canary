@@ -466,8 +466,8 @@ def xtest_setup_teardown_run_in_process(tmp_path):
     teardown ran after it.
     """
     import canary
-    from _canary.session.workspace import Workspace
     from _canary.util.filesystem import working_dir
+    from _canary.workspace.workspace import Workspace
 
     root = tmp_path / "suite"
     root.mkdir()

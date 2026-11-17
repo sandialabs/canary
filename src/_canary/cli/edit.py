@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 
 from .. import app
 from ..plugins.hookspec import hookimpl
-from ..session.workspace import NotAWorkspaceError
 from ..util.editor import editor
+from ..workspace.workspace import NotAWorkspaceError
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:

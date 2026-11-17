@@ -21,8 +21,8 @@ from typing import Any
 from .. import config
 from ..core.rules import KeywordRule
 from ..execution.testexec import ExecutionSpace
-from ..session.workspace import Workspace
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .facade import open_workspace
 
 if TYPE_CHECKING:

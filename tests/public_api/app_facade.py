@@ -13,10 +13,10 @@ import sys
 
 import pytest
 
-import _canary.session.workspace as _workspace_module
+import _canary.workspace.workspace as _workspace_module
 from _canary import app
 from _canary.events import EventBus
-from _canary.session.workspace import NotAWorkspaceError
+from _canary.workspace.workspace import NotAWorkspaceError
 
 
 @pytest.fixture(autouse=True)

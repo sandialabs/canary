@@ -505,7 +505,7 @@ def read_config_file(file: str | Path) -> dict[str, Any] | None:
 
 
 def get_scope_filename(scope: str) -> Path:
-    from ..session.workspace import Workspace
+    from ..workspace.workspace import Workspace
 
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
@@ -592,7 +592,7 @@ def resolve_plugin(name: str | dict[str, str], *, base: str | Path | None) -> st
 
 def workspace_anchor() -> Path | None:
     """Return the workspace anchor (directory containing ``.canary``) or None."""
-    from ..session.workspace import Workspace
+    from ..workspace.workspace import Workspace
 
     return Workspace.find_anchor()
 

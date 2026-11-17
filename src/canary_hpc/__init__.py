@@ -392,11 +392,11 @@ def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: st
 def _exec_query_batch(args: "argparse.Namespace") -> int:
     """Implement ``canary query batch <BATCHID> [path]``."""
     from _canary.cli.query import _clean
-    from _canary.session.workspace import Workspace
     from _canary.util.query_data import list_json_object_paths
     from _canary.util.query_data import print_json
     from _canary.util.query_data import print_query_paths
     from _canary.util.query_data import query_json
+    from _canary.workspace.workspace import Workspace
 
     workspace = Workspace.load()
     batch_dir = _resolve_batch_dir(workspace, getattr(args, "session", None), args.batchid)
@@ -449,8 +449,8 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
 
     from _canary.cli.query import _parse_where
     from _canary.cli.query import _resolve_session_dir
-    from _canary.session.workspace import Workspace
     from _canary.util.query_data import print_json
+    from _canary.workspace.workspace import Workspace
 
     workspace = Workspace.load()
     session_arg = getattr(args, "session", "latest")
@@ -605,8 +605,8 @@ def _format_batch_progress(rows: list[dict]) -> str:
 
 
 def display_batch_log(id: str) -> None:
-    from _canary.session.workspace import Workspace
     from _canary.util.pager import page
+    from _canary.workspace.workspace import Workspace
 
     workspace = Workspace.load()
     # Search all sessions for a batch matching the given ID prefix.

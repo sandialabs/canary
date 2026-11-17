@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from typing import Literal
 
 from ..events import EventBus
-from ..session.workspace import Workspace
+from ..workspace.workspace import Workspace
 
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
@@ -37,7 +37,7 @@ def open_workspace(start: str | Path | None = None) -> Workspace:
     """Load the nearest existing workspace.
 
     Delegates to :meth:`Workspace.load`; see it for the resolution order and the
-    :class:`~_canary.session.workspace.NotAWorkspaceError` raised when none is found.
+    :class:`~_canary.workspace.workspace.NotAWorkspaceError` raised when none is found.
     """
     return Workspace.load(start)
 
@@ -70,7 +70,7 @@ def collect(
 
     Opens the nearest existing workspace, runs collection, and returns the
     resolved :class:`~_canary.core.jobspec.JobSpec` objects.  Raises
-    :class:`~_canary.session.workspace.NotAWorkspaceError` when no workspace exists.
+    :class:`~_canary.workspace.workspace.NotAWorkspaceError` when no workspace exists.
     """
     return open_workspace().collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
 
@@ -108,7 +108,7 @@ def select(
     should check :func:`is_selection` first.
 
     Raises:
-        ~_canary.session.workspace.NotAWorkspaceError: If no workspace exists.
+        ~_canary.workspace.workspace.NotAWorkspaceError: If no workspace exists.
     """
     workspace = open_workspace()
     filters: dict = dict(

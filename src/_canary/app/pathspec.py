@@ -32,8 +32,8 @@ from typing import Optional
 from ..generation.collect import vc_prefixes
 from ..scanpaths import merge_scanpaths
 from ..scanpaths import scanpath_from_item
-from ..session.workspace import NotAWorkspaceError
-from ..session.workspace import Workspace
+from ..workspace.workspace import NotAWorkspaceError
+from ..workspace.workspace import Workspace
 
 ScanPathPayload = dict[str, list[str]]  # root -> [files]; empty list means "scan all"
 ViewPathPayload = list[str]  # e.g. ["rel/path/%", ...]

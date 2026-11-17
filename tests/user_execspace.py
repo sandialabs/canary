@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 
 from _canary.plugins import user_execspace as ues
-from _canary.session.workspace import Workspace
 from _canary.util import json_helper
 from _canary.util.filesystem import working_dir
 from _canary.util.testing import CanaryCommand
+from _canary.workspace.workspace import Workspace
 
 PASS_BODY = """\
 import os

@@ -8,7 +8,7 @@ from typing import Any
 
 from _canary.app.failure_analysis import collect_failure_groups
 from _canary.cli import query as _query_cmd
-from _canary.session.workspace import Workspace
+from _canary.workspace.workspace import Workspace
 
 
 def failures(

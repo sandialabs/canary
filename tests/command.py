@@ -32,11 +32,11 @@ from _canary.cli.log import Log
 from _canary.cli.query import Query
 from _canary.cli.status import Status
 from _canary.cli.tree import Tree
-from _canary.session.workspace import Workspace
 from _canary.util.filesystem import working_dir
 from _canary.util.query_data import query_json
 from _canary.util.query_data import skill_to_markdown
 from _canary.util.testing import CanaryCommand
+from _canary.workspace.workspace import Workspace
 
 EXPECTED_CORE_SKILLS = {
     "canary-orientation",
@@ -389,7 +389,7 @@ def test_status(setup):
 def test_status_summary_always_printed(setup, capsys):
     """status always prints a summary line even when everything passes."""
     from _canary.cli.status import _build_summary_line
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -1757,7 +1757,7 @@ def test_rebaseline_from_directory(tmpdir):
 
 def test_rebaseline_multiple_job_ids(tmp_path):
     """``canary rebaseline ID1 ID2`` rebaselines exactly the named jobs."""
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     pyt = "\n".join(
         [
@@ -1836,8 +1836,8 @@ def batch_setup(tmp_path_factory):
     """Run a small HPC batch (shell backend, 2 batches) and yield workspace info."""
 
     import _canary.config as cfg
-    from _canary.session.workspace import Workspace
     from _canary.util.filesystem import working_dir
+    from _canary.workspace.workspace import Workspace
     from canary_hpc.conductor import CanaryHPCConductor
 
     d = tmp_path_factory.mktemp("query-batch")
@@ -2385,7 +2385,7 @@ def test_query_compare_detects_fixed_and_regressions(setup, capsys):
     from _canary.core.job import JobPhase
     from _canary.core.job import JobState
     from _canary.core.status import Status
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2455,7 +2455,7 @@ def test_query_compare_digest(setup, capsys):
     from _canary.core.job import JobPhase
     from _canary.core.job import JobState
     from _canary.core.status import Status
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2508,7 +2508,7 @@ def test_query_compare_digest(setup, capsys):
 def test_query_job_blockers(setup, capsys):
     from _canary.cli.query import _exec_job
     from _canary.core.status import Status
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2543,7 +2543,7 @@ def test_query_job_blockers(setup, capsys):
 
 def test_query_job_missing_inputs(setup, capsys):
     from _canary.cli.query import _exec_job
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2670,7 +2670,7 @@ def test_query_jobs_terse_outputs_single_line(setup, capsys):
 def test_batch_timings_fallback_no_batch_dir(setup):
     """_batch_timings_for_job returns all -1.0 when there is no batches/ directory."""
     from _canary.cli.query import _batch_timings_for_job
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2692,7 +2692,7 @@ def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
     import json as _json
 
     from _canary.cli.query import _batch_timings_for_job
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2787,7 +2787,7 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
     import json as _json
 
     from _canary.cli.query import _exec_jobs
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2838,7 +2838,7 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
 def test_batch_last_activity_no_batch_dir(setup):
     """_batch_last_activity_for_job returns None when no batches/ dir exists."""
     from _canary.cli.query import _batch_last_activity_for_job
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
         workspace = Workspace.load()
@@ -2880,7 +2880,7 @@ def test_watch_loop_exits_when_terminal(setup, capsys):
         call_count += 1
         # Build the real job list from the DB
         from _canary.cli.query import _watch_loop  # noqa: F401
-        from _canary.session.workspace import Workspace
+        from _canary.workspace.workspace import Workspace
 
         workspace = Workspace.load()
         from _canary.cli.query import _db_results_for_session
@@ -2902,7 +2902,7 @@ def test_watch_loop_exits_when_terminal(setup, capsys):
 def test_watch_loop_terse_emits_ndjson(setup, capsys):
     """In --terse mode, _watch_loop emits one compact JSON line per cycle."""
     from _canary.cli.query import _watch_loop
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     def fetch():
         workspace = Workspace.load()
@@ -2927,7 +2927,7 @@ def test_watch_loop_terse_emits_ndjson(setup, capsys):
 def test_watch_loop_digest_mode(setup, capsys):
     """In --digest mode, _watch_loop emits one 'name CATEGORY' line per job per cycle."""
     from _canary.cli.query import _watch_loop
-    from _canary.session.workspace import Workspace
+    from _canary.workspace.workspace import Workspace
 
     def fetch():
         workspace = Workspace.load()

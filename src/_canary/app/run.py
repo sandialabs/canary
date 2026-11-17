@@ -24,11 +24,11 @@ from typing import Any
 from typing import Literal
 
 from .. import rerun
-from ..session.workspace import NotAWorkspaceError
-from ..session.workspace import Workspace
 from ..util import logging
 from ..util.string import pluralize
 from ..view import ViewSettings
+from ..workspace.workspace import NotAWorkspaceError
+from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 

@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
-from _canary.session.workspace import Workspace
+from _canary.workspace.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

@@ -66,7 +66,7 @@ from .queue import ResourceQueue
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
-    from ..session.workspace import Workspace
+    from ..workspace.workspace import Workspace
 
 
 logger = logging.get_logger(__name__)
@@ -202,7 +202,7 @@ def default_runtests(runner: Runner) -> bool:
         store = HistoryStore.open(start=runner.workspace.root)
         queue = ResourceQueue(lock=global_lock, resource_pool=rpool, store=store)
         queue.put(*runner.jobs)  # type: ignore
-        queue.prepare()
+        queue.update_costs()
     except Exception:
         logger.exception("Unable to create resource queue")
         raise

@@ -15,9 +15,9 @@ from .. import config
 from ..core.job import Measurements
 from ..core.rules import RerunRule
 from ..select import RuntimeSelector
-from ..session.workspace import Session
-from ..session.workspace import Workspace
 from ..util import logging
+from ..workspace.session import Session
+from ..workspace.workspace import Workspace
 from .facade import open_workspace
 from .query_helpers import resolve_session_dir
 from .rebaseline import _jobs_from_result_rows

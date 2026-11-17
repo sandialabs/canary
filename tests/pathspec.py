@@ -13,9 +13,9 @@ from _canary import app
 from _canary.cli.run import PathSpec
 from _canary.cli.run import ReadPathsFromFile
 from _canary.generation.collect import recursedirs_type
-from _canary.session.workspace import Workspace
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
+from _canary.workspace.workspace import Workspace
 
 
 def test_pathspec_parse_new(tmpdir):
