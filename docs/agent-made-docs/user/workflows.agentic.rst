@@ -7,529 +7,238 @@
 Agentic Workflows
 =================
 
-Canary provides a robust foundation for agent-based workflow automation. Agents can leverage Canary's structured execution model, comprehensive querying capabilities, and extensible plugin architecture to implement sophisticated workflow management.
+An agent drives Canary the same way a person does: it runs a session, reads the
+results, decides what to do next, and runs again.  Canary keeps every session and
+result in the workspace (``.canary/``), so an agent can stop and resume, compare
+sessions, and read structured data instead of scraping logs.
 
-Canary as Agent-Friendly Substrate
------------------------------------
+Two interfaces matter:
 
-Canary offers several features that make it ideal for agent integration:
+* The ``canary`` command line for running (``canary run``) and for reading
+  (``canary status --json``, ``canary query ...``).  Output is JSON.
+* The Python read API in ``_canary.api`` (``status``, ``query``) for agents written
+  in Python.
 
-- **Structured Measurements**: Rich, queryable execution data
-- **Comprehensive Query API**: Programmatic access to all execution state
-- **Plugin Hooks**: Extensible integration points for custom logic
-- **Persistent Workspace**: State management across agent sessions
-- **Dependency Management**: Complex workflow orchestration
+The agent loop
+--------------
 
-Structured Measurements
------------------------
+1. **Run.**  ``canary run PATH`` creates the workspace on first use and runs every
+   job found under ``PATH``.  The exit code is 0 when everything passed.
 
-Agents should prefer structured measurements over log scraping:
+   .. code-block:: console
 
-.. code-block:: python
+      $ canary run tests
+      $ echo $?
+      8
 
-   from canary import get_instance
+2. **Read the outcome.**  ``canary status --json`` lists the jobs that did not
+   pass (``--all`` lists every job):
 
-   def test_function():
-       self = get_instance()
-       # Add structured measurements
-       self.add_measurement("accuracy", 0.95)
-       self.add_measurement("loss", 0.05)
-       self.add_measurement("iterations", 1000)
+   .. code-block:: console
 
-Query measurements programmatically:
+      $ canary status --json
+      [
+        {
+          "id": "f2ca362",
+          "name": "bad",
+          "session": "2026-11-18T11-49-30.278324",
+          "exit_code": 1,
+          "status": {"category": "FAIL", "outcome": "FAILED",
+                     "reason": "Test exited with exit code = 1"},
+          ...
+        }
+      ]
 
-.. code-block:: console
+3. **Read structured data.**  Job measurements live under ``measurements.data``;
+   session measurements directly under ``measurements``:
 
-   $ canary query -j JOB_ID measurements.accuracy
-   0.95
+   .. code-block:: console
 
-Agent Loop Pattern
-------------------
+      $ canary query -j 2b46fb8 measurements.data.loss
+      0.02
+      $ canary query -s latest measurements.campaign
+      "demo-1"
 
-The canonical agent loop using Canary:
+4. **Decide and run again.**  Rerun what failed, one job by ID, or a filtered
+   subset:
 
-1. **Create/Load Workspace**:
+   .. code-block:: console
 
-   .. code-block:: python
+      $ canary run --only failed tests     # only jobs that failed last time
+      $ canary run f2ca362                 # one job (defaults to --only all)
+      $ canary run -k regression tests     # jobs with the "regression" keyword
 
-      from canary import Workspace
-      from _canary.engine.engine import Engine
+``canary run PATH`` defaults to ``--only not_pass``: jobs that already passed are not
+rerun.  Use ``--only all`` to rerun everything.
 
-      # Load existing workspace
-      workspace = Workspace.load()
+Recording measurements
+----------------------
 
-      # Or create new workspace
-      workspace = Workspace.create(".")
-
-2. **Select Jobs**:
-
-   .. code-block:: python
-
-      # Select jobs based on criteria
-      engine = Engine(workspace)
-      specs = engine.collect(scanpaths={".": ["*.pyt"]})
-      selected = [spec for spec in specs if "regression" in spec.keywords]
-
-3. **Run Workflow**:
-
-   .. code-block:: python
-
-      # Execute selected jobs
-      session = engine.run(selected)
-
-4. **Inspect Status and Query Data**:
-
-   .. code-block:: python
-
-      # Query results programmatically
-      results = workspace.db.get_results()
-
-      for job_id, result in results.items():
-          status = result["status"]
-          measurements = result["measurements"]
-          # Analyze results
-
-5. **Decide Next Action**:
-
-   .. code-block:: python
-
-      # Implement decision logic
-      if any(r["status"]["category"] == "FAIL" for r in results.values()):
-          # Rerun failed jobs
-          engine.run(selected, only="failed")
-      else:
-          # All jobs passed, proceed to next phase
-          proceed_to_next_phase()
-
-Plugin Hooks for Agents
------------------------
-
-Use plugin hooks to integrate agent logic:
-
-**Session Start Hook**:
+Measurements are recorded by hooks, which run in the process that owns the job.
+Put them in a ``canaryhooks.py`` next to where you run Canary; ``canary run``
+loads it automatically.  A test writes its results to a file in its working
+directory, and a ``canary_runtest_finish`` hook turns them into measurements:
 
 .. code-block:: python
 
-   from canary import hookimpl
+   # tests/opt.pyt
+   import json
+   import sys
 
-   @hookimpl
+   import canary
+
+   canary.directives.keywords("regression")
+   canary.directives.parameterize("lr", (0.1, 0.01))
+
+
+   def test():
+       lr = canary.get_instance().parameters.lr
+       with open("result.json", "w") as fh:
+           json.dump({"loss": lr * 2}, fh)
+       return 0
+
+
+   if __name__ == "__main__":
+       sys.exit(test())
+
+.. code-block:: python
+
+   # canaryhooks.py
+   import json
+
+   import canary
+
+
+   @canary.hookimpl
+   def canary_runtest_finish(case):
+       result = case.workspace.joinpath("result.json")
+       if result.exists():
+           case.add_measurement("loss", json.loads(result.read_text())["loss"])
+
+
+   @canary.hookimpl
    def canary_sessionstart(session):
-       # Add agent-specific metadata
-       session.add_measurement("agent_name", "optimization-agent")
-       session.add_measurement("campaign", "run-2024-01-01")
-       session.add_measurement("objective", "minimize_loss")
+       session.add_measurement("campaign", "demo-1")
 
-**Test Finish Hook**:
 
-.. code-block:: python
-
-   @hookimpl
-   def canary_runtest_finish(job):
-       # Add custom measurements based on job results
-       if job.status.is_success():
-           # Extract metrics from job output
-           metrics = parse_job_output(job)
-           for name, value in metrics.items():
-               job.add_measurement(name, value)
-
-**Session Finish Hook**:
-
-.. code-block:: python
-
-   @hookimpl
+   @canary.hookimpl
    def canary_sessionfinish(session):
-       # Aggregate session-level metrics
-       results = session.workspace.db.get_results()
-       total_duration = sum(r["timekeeper"]["duration"] for r in results.values())
-       session.add_measurement("total_duration", total_duration)
+       session.add_measurement("job_count", len(session.jobs))
 
-       # Implement agent decision logic
-       if should_continue(results):
-           session.add_measurement("next_action", "continue")
-       else:
-           session.add_measurement("next_action", "stop")
+The hook argument is named ``case`` (a :class:`~_canary.core.job.Job`); pluggy
+matches hook arguments by name.  Calling ``add_measurement`` from inside the test
+process does not persist: the parent's record of the job replaces it.
 
-Querying with Agents
---------------------
+Reading results from Python
+---------------------------
 
-Agents can query structured data programmatically:
+``_canary.api.status`` and ``_canary.api.query`` return plain dicts and lists, read
+from the workspace in the current directory:
 
 .. code-block:: python
 
-   from canary import Workspace
+   from _canary.api import query, status
 
-   workspace = Workspace.load()
+   status.ok()                        # True if nothing failed
+   status.summary()                   # {"total": 3, "passed": 2, "failed": 1, ...}
+   [e["name"] for e in status.failed()]               # ["bad"]
 
-   # Query latest session measurements
-   results = workspace.db.get_results()
+   query.measurement_table(key="loss")
+   # [{"id": "2b46fb8", "name": "opt.lr=0.01", "key": "loss", "value": 0.02, ...}, ...]
+   query.measurement("2b46fb8", "loss")                # 0.02
+   query.raw_session_value("latest", "measurements.campaign")   # "demo-1"
+   query.job_history("f2ca362")       # one entry per run of that job
 
-   for job_id, result in results.items():
-       # Access structured data
-       status = result["status"]
-       measurements = result["measurements"]
-       duration = result["timekeeper"]["duration"]
+``query.measurement_table`` reads the latest session by default; pass
+``session=None`` for the latest run of each job across all sessions.
 
-       # Implement agent logic
-       if status["category"] == "PASS":
-           if measurements.get("accuracy", 0) > 0.95:
-               mark_as_high_quality(job_id)
-           else:
-               schedule_for_review(job_id)
+``_canary.api.run.run("tests")`` starts a run in-process.  It does **not** load
+``canaryhooks.py``, so measurement hooks do not fire; run through the
+``canary run`` command when you rely on hooks.  On Python 3.14 the worker pool
+re-imports the main module, so a script that calls ``run`` needs an
+``if __name__ == "__main__":`` guard.
 
-Advanced Query Examples
------------------------
-
-**Query specific measurements**:
-
-.. code-block:: console
-
-   $ canary query -s latest measurements.campaign
-   "optimization-run-17"
-
-   $ canary query -j JOB_ID measurements.data.max_stress
-   1.23e8
-
-**Query nested structures**:
+Querying the workspace
+----------------------
 
 .. code-block:: console
 
-   $ canary query -j JOB_ID .resources.cpus
-   [{"node": "host1", "id": "0", "slots": 4}]
+   $ canary query jobs --where "status.category==FAIL" --digest
+   bad FAIL
+   $ canary query sessions                      # one entry per session, with counts
+   $ canary query compare BASE_SESSION NEW_SESSION --digest
+   bad FAILED->FAILED
+   $ canary query failures --session latest     # failures grouped by log signature
+   $ canary query db "SELECT spec_name, json_extract(measurements, '$.data.loss') AS loss
+                      FROM results WHERE loss IS NOT NULL"
 
-**Query status patterns**:
+``canary query -j JOB --list`` and ``canary query -s SESSION --list`` show the keys
+available at a path.
 
-.. code-block:: console
+Example: an optimization loop
+-----------------------------
 
-   $ canary query -s latest .status.*
-   {
-     "category": "PASS",
-     "outcome": "PASSED",
-     "reason": null,
-     "code": 0
-   }
+The agent runs the parameterized test through the CLI (so the measurement hook
+fires) and reads the measurements through the Python API:
 
-Agent Safety Guidance
+.. code-block:: python
+
+   import subprocess
+
+   from _canary.api import query
+
+
+   def best_loss() -> tuple[str, float]:
+       rows = query.measurement_table(key="loss")
+       best = min(rows, key=lambda row: row["value"])
+       return best["name"], best["value"]
+
+
+   def main(max_iterations: int = 5) -> None:
+       for iteration in range(max_iterations):
+           subprocess.run(["canary", "run", "--only", "all", "tests"], check=False)
+           name, loss = best_loss()
+           print(f"iteration {iteration}: best {name} loss={loss}")
+           if loss < 0.05:
+               break
+           update_parameters(name)  # your logic: edit inputs for the next run
+
+
+   if __name__ == "__main__":
+       main()
+
+For CI, ``canary run`` exits non-zero when any job fails, and ``canary report
+junit`` (or ``json``, ``markdown``, ``html``) writes a report from the latest
+results.
+
+Agent safety guidance
 ---------------------
 
-**Do Not Edit Lock Files**:
+* **Do not edit lock files** (``testcase.lock``, ``session.lock``) or the database.
+  Canary owns them; record data through measurements.
+* **Prefer structured data.**  Record values with ``add_measurement`` in a hook and
+  read them with ``canary query``; scrape logs only when nothing structured exists.
+* **Bound each run.**  Name explicit paths, IDs, keywords (``-k``) or parameters
+  (``-p``), and choose ``--only`` deliberately.
+* **Keep provenance.**  Session measurements (``canary_sessionstart``) record why a
+  run happened; ``canary query sessions`` keeps every session's argv and counts.
 
-- Lock files are managed by Canary
-- Direct editing can corrupt workspace state
-- Use Canary APIs for all modifications
+Troubleshooting
+---------------
 
-**Prefer Structured Data**:
-
-- Use ``add_measurement()`` instead of log parsing
-- Query structured data with ``canary query``
-- Avoid scraping logs when structured data exists
-
-**Use Bounded Runs**:
-
-- Specify explicit job selections
-- Use ``--only`` strategies for control
-- Avoid unlimited ``:all:`` selections in agents
-
-**Preserve Artifacts**:
-
-- Maintain complete execution records
-- Archive important results
-- Document provenance and decision rationale
-
-**Record Provenance**:
-
-- Track agent decisions and rationale
-- Document configuration and environment
-- Maintain audit trail of actions
-
-Agent Workflow Examples
------------------------
-
-**Optimization Agent**:
-
-.. code-block:: python
-
-   def optimization_loop():
-       workspace = Workspace.load()
-       iteration = 0
-       best_loss = float('inf')
-
-       while iteration < MAX_ITERATIONS:
-           iteration += 1
-
-           # Run parameterized tests
-           engine = Engine(workspace)
-           specs = engine.collect(scanpaths={".": ["optimization_*.pyt"]})
-           session = engine.run(specs, only="all")
-
-           # Query results
-           results = workspace.db.get_results()
-
-           # Find best result
-           current_best = float('inf')
-           for job_id, result in results.items():
-               loss = result["measurements"].get("loss", float('inf'))
-               if loss < current_best:
-                   current_best = loss
-                   best_job_id = job_id
-
-           # Update parameters based on results
-           if current_best < best_loss:
-               best_loss = current_best
-               update_parameters(best_job_id)
-           else:
-               adjust_strategy()
-
-           # Check convergence
-           if converged(current_best, best_loss):
-               break
-
-**Regression Testing Agent**:
-
-.. code-block:: python
-
-   def regression_agent():
-       workspace = Workspace.load()
-
-       # Load baseline results
-       baseline_results = load_baseline()
-
-       # Run current tests
-       engine = Engine(workspace)
-       engine.run(engine.collect(scanpaths={".": []}), only="all")
-       current_results = workspace.db.get_results()
-
-       # Compare results
-       regressions = []
-       for job_id in baseline_results:
-           if job_id in current_results:
-               baseline = baseline_results[job_id]
-               current = current_results[job_id]
-
-               if compare_results(baseline, current):
-                   regressions.append(job_id)
-
-       # Handle regressions
-       if regressions:
-           notify_regressions(regressions)
-           rerun_and_analyze(regressions)
-       else:
-           mark_as_stable()
-
-**CI Integration Agent**:
-
-.. code-block:: python
-
-   def ci_agent():
-       workspace = Workspace.load()
-
-       # Clean workspace
-       workspace.clean()
-
-       # Collect and run tests
-       engine = Engine(workspace)
-       specs = engine.collect(scanpaths={"tests/": ["*.pyt"]})
-       session = engine.run(specs, only="all")
-
-       # Generate reports
-       junit_report = workspace.report("junit")
-       json_report = workspace.report("json")
-
-       # Analyze results
-       results = workspace.db.get_results()
-
-       if any(r["status"]["category"] == "FAIL" for r in results.values()):
-           # Handle failures
-           generate_failure_report()
-           notify_ci_failure()
-           return False
-       else:
-           # Success
-           generate_success_report()
-           notify_ci_success()
-           return True
-
-Agent Plugin Example
---------------------
-
-Complete agent plugin with hooks:
-
-.. code-block:: python
-
-   # agent_plugin.py
-   from canary import hookimpl
-   import datetime
-
-   @hookimpl
-   def canary_addconfig(config):
-       # Add agent-specific configuration
-       config.data.setdefault("agent", {})
-       config.data["agent"]["name"] = "default-agent"
-       config.data["agent"]["max_iterations"] = 10
-
-   @hookimpl
-   def canary_sessionstart(session):
-       # Initialize agent metadata
-       timestamp = datetime.datetime.now().isoformat()
-       session.add_measurement("agent_start", timestamp)
-       session.add_measurement("agent_name", session.config.get("agent", {}).get("name", "unknown"))
-
-   @hookimpl
-   def canary_runtest_finish(job):
-       # Add custom metrics to each job
-       if job.status.is_success():
-           # Parse and add metrics from job output
-           output = job.workspace.joinpath(job.stdout).read_text()
-           metrics = parse_custom_metrics(output)
-           for name, value in metrics.items():
-               job.add_measurement(f"custom_{name}", value)
-
-   @hookimpl
-   def canary_sessionfinish(session):
-       # Aggregate agent results
-       results = session.workspace.db.get_results()
-
-       total_jobs = len(results)
-       passed_jobs = sum(1 for r in results.values() if r["status"]["category"] == "PASS")
-       failed_jobs = total_jobs - passed_jobs
-
-       session.add_measurement("agent_jobs_total", total_jobs)
-       session.add_measurement("agent_jobs_passed", passed_jobs)
-       session.add_measurement("agent_jobs_failed", failed_jobs)
-       session.add_measurement("agent_success_rate", passed_jobs / total_jobs if total_jobs > 0 else 0)
-
-       # Determine next action
-       if failed_jobs > 0:
-           session.add_measurement("agent_next_action", "rerun_failed")
-       else:
-           session.add_measurement("agent_next_action", "complete")
-
-Agent Best Practices
---------------------
-
-**Idempotent Operations**:
-
-- Design agents to handle reruns gracefully
-- Use unique session tags for each run
-- Avoid destructive operations without confirmation
-
-**State Management**:
-
-- Persist agent state in workspace
-- Use measurements for agent metadata
-- Document state transitions
-
-**Error Handling**:
-
-- Implement robust error recovery
-- Use Canary's status system for error reporting
-- Provide meaningful error messages
-
-**Performance Monitoring**:
-
-- Track execution metrics
-- Monitor resource usage
-- Optimize based on performance data
-
-**Configuration Management**:
-
-- Externalize agent configuration
-- Use Canary's config system
-- Document configuration requirements
-
-Agent Troubleshooting
----------------------
-
-**Agent Loop Not Progressing**:
+**A measurement is missing**:
 
 .. code-block:: console
 
-   $ canary query -s latest measurements.agent_next_action
-   "rerun_failed"
+   $ canary query -j 2b46fb8 measurements.data.loss
+   ERROR: "No such key: 'loss'. Available keys: command_line, cpu_percent, ..."
 
-Solution: Check for infinite loops in agent logic
+Check that ``canaryhooks.py`` is in the directory you run ``canary`` from, that the
+hook takes an argument named ``case``, and that the run went through ``canary run``
+(not the in-process Python ``run``).
 
-**Missing Measurements**:
-
-.. code-block:: console
-
-   $ canary query -j JOB_ID measurements.custom_metric
-   Error: No such key
-
-Solution: Verify hook implementation and job execution
-
-**Stale Agent State**:
-
-.. code-block:: console
-
-   $ canary query -s latest measurements.agent_iteration
-   5  # But should be higher
-
-Solution: Check workspace persistence and agent logic
-
-**Resource Contention**:
-
-.. code-block:: console
-
-   $ canary run --workers=16 .
-   Error: insufficient resources
-
-Solution: Adjust worker count or resource allocation
-
-Agent Integration Patterns
---------------------------
-
-**GitHub Actions Integration**:
-
-.. code-block:: yaml
-
-   - name: Run Canary Agent
-     run: |
-       python agent.py
-       canary query -s latest measurements.agent_success_rate > success_rate.txt
-       if [ $(cat success_rate.txt) -lt 0.95 ]; then
-         echo "Agent success rate too low"
-         exit 1
-       fi
-
-**Continuous Optimization**:
-
-.. code-block:: python
-
-   def continuous_optimization():
-       while True:
-           # Run optimization cycle
-           success = run_optimization_cycle()
-
-           # Query results
-           results = query_current_results()
-
-           # Check for improvement
-           if not improved(results):
-               break
-
-           # Sleep before next cycle
-           time.sleep(3600)
-
-**Multi-Agent Coordination**:
-
-.. code-block:: python
-
-   def coordinator_agent():
-       # Launch specialized agents
-       agents = [
-           OptimizationAgent(),
-           RegressionAgent(),
-           ValidationAgent()
-       ]
-
-       # Run agents in sequence
-       for agent in agents:
-           agent.run()
-
-           # Check agent results
-           if not agent.successful():
-               handle_agent_failure(agent)
-               break
+**Nothing reran**: ``canary run PATH`` skips jobs that already passed
+(``--only not_pass``).  Use ``--only all``.
 
 See Also
 --------

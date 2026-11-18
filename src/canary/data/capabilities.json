@@ -33,7 +33,7 @@
     },
     "concepts": {
       "pipeline": {
-        "summary": "Canary separates user-facing job definitions from execution. Generators create specs; the workspace resolves and stores specs; sessions construct jobs; the executor runs jobs and persists results.",
+        "summary": "Canary separates user-facing job definitions from execution. Generators create specs; the Engine collects and selects them, builds the jobs of a session and runs it; the workspace stores specs, results and sessions.",
         "stages": [
           {
             "name": "definition",
@@ -53,7 +53,7 @@
           },
           {
             "name": "session_construction",
-            "description": "A Workspace constructs Job objects from JobSpec objects for a Session."
+            "description": "The Engine constructs Job objects from JobSpec objects (and the latest stored results) for a Session."
           },
           {
             "name": "execution",
@@ -145,8 +145,9 @@
         ".canary/sessions/<session>/batches/<id>/batch.lock": "HPC batch execution record (written by canary_hpc extension).",
         ".canary/logs": "JSON log files.",
         ".canary/reports": "Generated reports.",
-        ".canary/cache": "Runtime caches and view metadata (job timing cache, view manifests).",
-        ".canary/tmp": "Temporary files including result spool data."
+        ".canary/cache": "Runtime caches: job timing cache, the registered view, and the view lock.",
+        ".canary/tmp": "Temporary files.",
+        ".canary/var/spool": "Result spool: job results waiting for the parent process to write them to the database."
       },
       "commands": {
         "init": "canary init",
@@ -170,7 +171,8 @@
       "measurement_api": {
         "method": "Job.add_measurement(name, value)",
         "storage": "Serialized into testcase.lock and result records.",
-        "query_example": "canary query -j JOBID measurements.data.<name>"
+        "query_example": "canary query -j JOBID measurements.data.<name>",
+        "where_to_call": "Call it from a hook such as canary_runtest_finish(case), which runs in the process that owns the job. Calling it inside the test process (e.g. on canary.get_job()) is lost: the parent writes the job's final record."
       },
       "readiness": {
         "is_ready": "True when all dependencies are done and satisfied.",
@@ -179,7 +181,7 @@
       }
     },
     "sessions": {
-      "summary": "A Session is a persistent execution run containing jobs, session name, prefix directory, measurements, job IDs, start/finish timestamps, and return code.",
+      "summary": "A Session is the persistent record of one run: jobs, session name, prefix directory, measurements, job IDs, start/finish timestamps, and return code. It holds data only; the Engine runs it.",
       "lock_file": "session.lock",
       "measurement_api": {
         "method": "Session.add_measurement(name, value)",
@@ -188,7 +190,7 @@
       "lifecycle": {
         "start_hook": "canary_sessionstart(session)",
         "finish_hook": "canary_sessionfinish(session)",
-        "run": "Session.run constructs a Runner for runnable jobs and invokes canary_runtests."
+        "run": "Engine.execute (_canary.engine.engine.Engine) runs a prepared Session: it builds a Runner for the runnable jobs and invokes canary_runtests."
       },
       "latest": "The workspace refs/latest file points to the latest session directory."
     },
@@ -430,7 +432,7 @@
             "canary query jobs --watch=30",
             "canary query jobs --session latest --watch"
           ],
-          "last_activity_note": "last_activity is a unix epoch float from the owning batch.lock, updated by the HPC polling loop each check_interval (30-300 s) from the mtime of the batch stdout file. It advances as long as the job is writing output and stops advancing if the job hangs. null for local-worker jobs (no owning batch) or when the batch has not yet started writing. NON-GOAL: this is I/O liveness, NOT simulation progress \u2014 canary does not parse application output."
+          "last_activity_note": "last_activity is a unix epoch float from the owning batch.lock, updated by the HPC polling loop each check_interval (30-300 s) from the mtime of the batch stdout file. It advances as long as the job is writing output and stops advancing if the job hangs. null for local-worker jobs (no owning batch) or when the batch has not yet started writing. NON-GOAL: this is I/O liveness, NOT simulation progress — canary does not parse application output."
         },
         "failures": {
           "summary": "Group failed and diffed jobs by normalized log-derived failure signature.",
@@ -510,12 +512,12 @@
             "SELECT ...": "Execute a read-only SQL SELECT and return JSON rows."
           },
           "tables": {
-            "specs": "(spec_id, data) \u2014 full serialised JobSpec blobs.",
-            "specs_meta": "(spec_id, source, view) \u2014 fast path lookup.",
-            "spec_deps": "(spec_id, dep_id) \u2014 dependency edges.",
+            "specs": "(spec_id, data) — full serialised JobSpec blobs.",
+            "specs_meta": "(spec_id, source, view) — fast path lookup.",
+            "spec_deps": "(spec_id, dep_id) — dependency edges.",
             "results": "(spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace, job_state, status_category, status_outcome, status_reason, status_code, timekeeper, measurements)",
-            "selections": "(tag, spec_id) \u2014 named tag sets.",
-            "selection_meta": "(tag, data) \u2014 tag creation metadata."
+            "selections": "(tag, spec_id) — named tag sets.",
+            "selection_meta": "(tag, data) — tag creation metadata."
           },
           "examples": [
             "canary query db stats",
@@ -596,9 +598,9 @@
         },
         "hookimpl_semantics": {
           "firstresult_hooks": "When firstresult=True, only the first non-None return value is used. YOUR implementation REPLACES the built-in. Use this only when you intend to fully replace default behavior.",
-          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runteststart and canary_runtest_finish are firstresult=False \u2014 every implementation runs, so just return None. The built-in default runs first (tryfirst); use @canary.hookimpl(trylast=True) if you must run after all other implementations.",
-          "trylast": "@canary.hookimpl(trylast=True) \u2014 your impl runs after all others (safe for additive post-processing).",
-          "tryfirst": "@canary.hookimpl(tryfirst=True) \u2014 your impl runs before all others."
+          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runteststart and canary_runtest_finish are firstresult=False — every implementation runs, so just return None. The built-in default runs first (tryfirst); use @canary.hookimpl(trylast=True) if you must run after all other implementations.",
+          "trylast": "@canary.hookimpl(trylast=True) — your impl runs after all others (safe for additive post-processing).",
+          "tryfirst": "@canary.hookimpl(tryfirst=True) — your impl runs before all others."
         },
         "canary_runtest_finish_recipe": {
           "firstresult": false,
@@ -606,9 +608,9 @@
           "signature": "def canary_runtest_finish(case: Job) -> None",
           "safe_pattern": "Return None; this is a non-firstresult hook so every implementation runs. The built-in default (tryfirst) runs case.finish()+save first; use @canary.hookimpl(trylast=True) to run after all other implementations.",
           "useful_attributes": {
-            "case.name": "Job family name.",
-            "case.parameters": "dict of parameter name -> value.",
-            "case.exec_dir": "Absolute path to the job's execution/working directory (same as cwd when hook fires).",
+            "case.name": "Job name including parameters (e.g. opt.lr=0.1); the family is case.spec.family.",
+            "case.spec.parameters": "dict of parameter name -> value.",
+            "case.workspace.dir": "Absolute path to the job's execution/working directory (same as cwd when hook fires); case.workspace.joinpath(name) for a file in it.",
             "case.status": "Status object with .category, .outcome, .reason.",
             "case.add_measurement(name, value)": "Attach a structured key/value to the job record.",
             "case.finish()": "Called by the built-in; completes teardown and saves the job."
@@ -684,7 +686,7 @@
         "canary_generate_report": "Report generation results."
       },
       "execution": {
-        "canary_runtests": "Override or provide a test-session execution backend.",
+        "canary_runtests": "Override or provide a test-session execution backend (firstresult). The backend runs runner.jobs and reaches the workspace only through runner.context (_canary.execution.context.ExecutionContext: root, sessions_dir, cache_dir, reports_dir, record(job)); call record(job) whenever a job's state changes.",
         "canary_runtest_launcher": "Return a Launcher for an individual Job.",
         "canary_runteststart": "Setup phase for one Job.",
         "canary_runtest": "Execution phase for one Job. A firstresult hook: the built-in runner is registered trylast, so plugins (and the --repeat-* implementations) can override execution by returning a non-None value, or return None to fall through to the default runner.",
@@ -877,7 +879,7 @@
         ]
       },
       "status": {
-        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (\u226420 jobs). Use --all to force full table; --failed for failures-only.",
+        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (≤20 jobs). Use --all to force full table; --failed for failures-only.",
         "typical": [
           "canary status",
           "canary status --all",
@@ -900,7 +902,7 @@
         },
         "behavior": {
           "summary_line": "Always printed. Format: 'N jobs: X passed, Y failed, Z timeout'. Green on all-pass.",
-          "small_run_auto_expand": "When total jobs \u2264 20 (and --failed not set), the full table is shown automatically.",
+          "small_run_auto_expand": "When total jobs ≤ 20 (and --failed not set), the full table is shown automatically.",
           "large_run_default": "When total jobs > 20, only non-pass jobs are shown (equivalent to -r dftns).",
           "never_empty": "Output is never empty. When everything passes, only the summary line is printed."
         },
@@ -920,11 +922,11 @@
           "reason": "str or null"
         },
         "timings_object": {
-          "pending": "submitted\u2192staged",
-          "setup": "staged\u2192started",
-          "running": "started\u2192stopped",
-          "teardown": "stopped\u2192finished",
-          "total": "submitted\u2192finished"
+          "pending": "submitted→staged",
+          "setup": "staged→started",
+          "running": "started→stopped",
+          "teardown": "stopped→finished",
+          "total": "submitted→finished"
         }
       },
       "info": {
@@ -963,25 +965,35 @@
         "Use selections and rerun strategies to minimize repeated work."
       ],
       "basic_loop": [
-        "Write or modify job definitions.",
-        "Run canary run PATH or canary run TAG.",
-        "Inspect status with canary status.",
-        "Query structured data with canary query.",
-        "Use measurements and statuses to decide next action."
+        "Write or modify job definitions; record measurements in a canaryhooks.py canary_runtest_finish(case) hook.",
+        "Run canary run PATH (or TAG, or JOBID). The exit code is 0 only if every job passed.",
+        "Inspect non-passing jobs with canary status --json (--all for every job).",
+        "Query structured data: canary query -j JOBID measurements.data.NAME, canary query -s latest measurements.NAME.",
+        "Decide the next action and rerun with canary run --only failed PATH, or canary run JOBID."
       ],
       "recommended_queries": [
         "canary query -c overview",
         "canary query -c hooks.post",
+        "canary status --json",
         "canary query -j JOBID measurements.data",
         "canary query -s latest measurements",
-        "canary query -s latest job_ids"
+        "canary query jobs --where status.category==FAIL --digest",
+        "canary query compare BASE_SESSION NEW_SESSION --digest"
       ],
       "common_mistakes": [
         "Scraping canary-out.txt for data that could be emitted as a structured measurement.",
         "Assuming one job-definition format is the only way to define jobs.",
         "Ignoring dependency outcomes when interpreting skipped or blocked jobs.",
         "Assuming SQLite contains every artifact or full serialized job state.",
-        "Changing resource requirements without checking the resource pool."
+        "Changing resource requirements without checking the resource pool.",
+        "Calling add_measurement inside the test process instead of a canary_runtest_finish hook (the value is lost).",
+        "Expecting canary run PATH to rerun jobs that already passed (the default is --only not_pass; use --only all)."
+      ],
+      "python_api": [
+        "from _canary.api import query, status reads the workspace in the current directory and returns plain dicts and lists.",
+        "status.ok(), status.summary(), status.failed() for outcomes.",
+        "query.measurement_table(key=NAME) (latest session; session=None for the latest run of each job), query.measurement(JOBID, NAME), query.raw_session_value('latest', 'measurements.NAME'), query.job_history(JOBID).",
+        "_canary.api.run.run(PATH) runs in-process but does not load canaryhooks.py; use the canary run CLI when hooks must fire. A script that calls it needs an if __name__ == '__main__': guard."
       ]
     },
     "apis": {
@@ -1023,7 +1035,13 @@
       "measurements": [
         "_canary.core.job.Measurements",
         "_canary.core.job.Job.add_measurement",
-        "_canary.session.workspace.Session.add_measurement"
+        "_canary.workspace.session.Session.add_measurement"
+      ],
+      "python": [
+        "_canary.api.run.run",
+        "_canary.api.status",
+        "_canary.api.query",
+        "_canary.api.failures.failures"
       ]
     },
     "limitations": {
