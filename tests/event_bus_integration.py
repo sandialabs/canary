@@ -14,6 +14,7 @@ the healthy-job progression with the job carried on each event.
 import argparse
 
 import canary
+from _canary.engine.engine import Engine
 from _canary.events import Event
 from _canary.events import get_event_bus
 from _canary.util.filesystem import working_dir
@@ -37,9 +38,9 @@ def test_run_publishes_job_lifecycle_events_to_bus(tmp_path):
     try:
         with working_dir(tmp_path), canary.config.override() as cfg:
             workspace = Workspace.create(tmp_path)
-            specs = workspace.collect({str(tmp_path): []})
+            specs = Engine(workspace).collect({str(tmp_path): []})
             cfg.options = argparse.Namespace()
-            workspace.run(specs, only="all")
+            Engine(workspace).run(specs, only="all")
     finally:
         bus.unsubscribe(sub)
 

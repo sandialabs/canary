@@ -29,9 +29,11 @@ from _canary.core.job import Dependency
 from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
 from _canary.core.rules import RerunRule
+from _canary.engine.engine import Engine
+from _canary.engine.engine import replace_session_dir_variables
+from _canary.engine.jobs import construct_jobs
 from _canary.select import RuntimeSelector
 from _canary.util.filesystem import working_dir
-from _canary.workspace.runner import replace_session_dir_variables
 from _canary.workspace.workspace import Workspace
 
 # ---------------------------------------------------------------------------
@@ -84,13 +86,13 @@ def _seed_passed_job(workspace: Workspace, spec: JobSpec, started_at: float) -> 
 def create_workspace(root: Path) -> tuple[Workspace, list[canary.JobSpec]]:
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
         return workspace, specs
 
 
 def run_specs(workspace: Workspace, specs: list[canary.JobSpec], *, only: str = "all"):
     with working_dir(workspace.root), canary.config.override():
-        return workspace.run(specs, only=only)
+        return Engine(workspace).run(specs, only=only)
 
 
 def jobs_by_name(workspace: Workspace) -> dict[str, canary.Job]:
@@ -412,7 +414,7 @@ if __name__ == "__main__":
     _seed_passed_job(workspace, spec, started_at=time.time() - 5.0)
 
     session_dir = workspace.sessions_dir / "rerun-target"
-    jobs = workspace.construct_jobs(specs, session_dir)
+    jobs = construct_jobs(workspace, specs, session_dir)
     job = jobs[0]
 
     old_exec_dir = job.workspace.dir

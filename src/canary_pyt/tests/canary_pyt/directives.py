@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.engine.engine import Engine
 from _canary.error import StopExecution
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
@@ -48,7 +49,7 @@ def create_workspace_and_collect(
     on_options: list[str] | None = None,
 ) -> tuple[Workspace, list]:
     workspace = Workspace.create(root)
-    specs = workspace.collect(scanpaths or {str(root): []}, on_options=on_options)
+    specs = Engine(workspace).collect(scanpaths or {str(root): []}, on_options=on_options)
     return workspace, specs
 
 
@@ -62,7 +63,7 @@ def run_specs(
 ):
     with working_dir(root), canary.config.override():
         workspace, specs = create_workspace_and_collect(root, scanpaths, on_options=on_options)
-        session = workspace.run(specs, only=only)
+        session = Engine(workspace).run(specs, only=only)
         if session.returncode != expected_returncode:
             dump_outputs(root)
         assert session.returncode == expected_returncode
@@ -538,7 +539,7 @@ if __name__ == '__main__':
     with working_dir(root), canary.config.override():
         workspace, specs = create_workspace_and_collect(root)
         with pytest.raises(StopExecution) as exc:
-            workspace.run(specs, only="all")
+            Engine(workspace).run(specs, only="all")
         assert exc.value.exit_code == 7
 
     root_enabled = tmp_path / "enable_on"
@@ -577,7 +578,7 @@ if __name__ == '__main__':
         assert specs[0].mask
         assert specs[0].mask.reason == "just because"
         with pytest.raises(StopExecution) as exc:
-            workspace.run(specs, only="all")
+            Engine(workspace).run(specs, only="all")
         assert exc.value.exit_code == 7
 
 
@@ -753,7 +754,7 @@ if __name__ == '__main__':
             pytest.skip(f"canary_vvtest not available: {e}")
 
         workspace, specs = create_workspace_and_collect(root)
-        session = workspace.run(specs, only="all")
+        session = Engine(workspace).run(specs, only="all")
         if session.returncode != 0:
             dump_outputs(root)
         assert session.returncode == 0

@@ -6,9 +6,9 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .. import app
 from ..plugins.hookspec import hookimpl
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 
 logger = logging.get_logger(__name__)
@@ -63,9 +63,9 @@ class Archive(CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        workspace = app.open_workspace()
+        workspace = Workspace.load()
         dest = Path(args.dest) if args.dest else Path.cwd() / f"{workspace.root.name}.tar.gz"
-        archive = app.archive_workspace(
+        archive = workspace.archive(
             dest, only=getattr(args, "only", "all"), exclude=getattr(args, "exclude", None)
         )
         logger.info(f"[bold]Archived[/] workspace to {archive}")

@@ -11,6 +11,7 @@ from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 from .run import ScanPathSpec
 
@@ -51,7 +52,7 @@ class Selection(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         if args.select_command == "create":
-            if app.is_selection(args.tag):
+            if Workspace.load().is_tag(args.tag):
                 raise ValueError(
                     logging.colorize(
                         f"Selection {args.tag!r} already exists, run "
@@ -62,7 +63,7 @@ class Selection(CanarySubcommand):
                 args.scanpaths = args.request.value
             if not args.scanpaths:
                 raise ValueError("No paths to search")
-            app.open_workspace().create_selection(
+            app.create_selection(
                 args.tag,
                 args.scanpaths,
                 on_options=args.on_options,
@@ -73,9 +74,9 @@ class Selection(CanarySubcommand):
             )
             logger.info(f"To run this selection execute '[bold]canary run {args.tag}[/]'")
         elif args.select_command == "rm":
-            app.delete_selection(args.tag)
+            Workspace.load().db.delete_selection(args.tag)
         elif args.select_command == "rename":
-            app.rename_selection(args.old, args.new)
+            Workspace.load().db.rename_selection(args.old, args.new)
         else:
             raise ValueError(f"Unknown command canary selection {args.select_command}")
         return 0

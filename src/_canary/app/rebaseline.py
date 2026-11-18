@@ -23,7 +23,6 @@ from ..core.execspace import ExecutionSpace
 from ..core.rules import KeywordRule
 from ..util import logging
 from ..workspace.workspace import Workspace
-from .facade import open_workspace
 
 if TYPE_CHECKING:
     from ..core.job import Job
@@ -54,7 +53,7 @@ def rebaseline(target: str | Sequence[str] = ".", keyword_exprs: list[str] | Non
         # An explicitly empty selection means "nothing", never "everything".
         logger.warning("No jobs selected for rebaseline")
         return 0
-    workspace = open_workspace()
+    workspace = Workspace.load()
     jobs = resolve_rebaseline_targets(workspace, targets, keyword_exprs=keyword_exprs)
 
     if not jobs:

@@ -5,12 +5,13 @@
 """Workspace components work on every construction path (REVIEW B1)."""
 
 import _canary.workspace.workspace as ws_module
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 from _canary.workspace.workspace import set_workspace_dir
 
 
 def _exercise_components(ws: Workspace) -> None:
-    assert ws.collect({}) == []  # collection
+    assert Engine(ws).collect({}) == []  # collection
     assert ws.is_tag("no-such-tag") is False  # SpecSelector
     assert ws.load_jobs() == []  # JobReconstructor
 

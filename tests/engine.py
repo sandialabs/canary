@@ -1,16 +1,18 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-"""SessionRunner: Workspace.run() split into prepare() and execute()."""
+"""Engine: Workspace.run() split into prepare() and execute()."""
 
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import canary
 from _canary.core.execspace import ExecutionSpace
 from _canary.core.job import Job
 from _canary.core.job import JobPhase
 from _canary.core.jobspec import JobSpec
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
 
@@ -32,7 +34,7 @@ def make_workspace(root: Path, *names: str) -> tuple[Workspace, dict[str, JobSpe
         (root / f"{name}.pyt").write_text(PASSING)
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
     return workspace, {spec.family: spec for spec in specs}
 
 
@@ -52,7 +54,7 @@ def seed_result(workspace: Workspace, spec: JobSpec, *, outcome: str, submitted:
 def test_prepare_does_not_execute_or_persist(tmp_path):
     workspace, specs = make_workspace(tmp_path, "a")
     with working_dir(tmp_path), canary.config.override():
-        session = workspace._runner.prepare(list(specs.values()), only="all")
+        session = Engine(workspace).prepare(list(specs.values()), only="all")
     assert [job.name for job in session.jobs] == ["a"]
     assert session.reused is False
     assert all(job.workspace.session == session.name for job in session.jobs)
@@ -66,7 +68,7 @@ def test_prepare_with_a_masked_job(tmp_path):
     workspace, specs = make_workspace(tmp_path, "a", "b")
     seed_result(workspace, specs["a"], outcome="SUCCESS", submitted=time.time() - 10)
     with working_dir(tmp_path), canary.config.override():
-        session = workspace._runner.prepare(list(specs.values()), only="not_pass")
+        session = Engine(workspace).prepare(list(specs.values()), only="not_pass")
     assert [job.name for job in session.jobs] == ["b"]
 
 
@@ -76,7 +78,7 @@ def test_prepare_inplace_starts_a_new_attempt(tmp_path):
     old = seed_result(workspace, specs["a"], outcome="FAILED", submitted=time.time() - 10)
     old.workspace.dir.mkdir(parents=True)
     with working_dir(tmp_path), canary.config.override():
-        session = workspace._runner.prepare([specs["a"]], inplace=True, only="all")
+        session = Engine(workspace).prepare([specs["a"]], inplace=True, only="all")
     (job,) = session.jobs
     assert job.workspace.session == SEEDED
     assert job.timekeeper._submitted == -1.0
@@ -104,7 +106,7 @@ def test_prepare_rewrites_session_dir_variables(tmp_path):
     Job.get_environ_from_spec = environ  # type: ignore[method-assign]
     try:
         with working_dir(tmp_path), canary.config.override():
-            session = workspace._runner.prepare([specs["a"]], only="all")
+            session = Engine(workspace).prepare([specs["a"]], only="all")
     finally:
         Job.get_environ_from_spec = original  # type: ignore[method-assign]
     (job,) = session.jobs
@@ -117,7 +119,7 @@ def test_prepare_rewrites_session_dir_variables(tmp_path):
 def test_execute_prepared_session(tmp_path):
     workspace, specs = make_workspace(tmp_path, "a")
     with working_dir(tmp_path), canary.config.override():
-        runner = workspace._runner
+        runner = Engine(workspace)
         session = runner.execute(runner.prepare(list(specs.values()), only="all"))
     assert session.returncode == 0
     latest = (workspace.refs_dir / "latest").read_text()
@@ -125,3 +127,25 @@ def test_execute_prepared_session(tmp_path):
     row = workspace.db.get_results()[specs["a"].id]
     assert row["session"] == session.name
     assert row["status"].outcome.name == "SUCCESS"
+    view = workspace.latest_view()  # the engine registered the live view
+    assert view is not None and view.dir.exists()
+
+
+def test_context_exposes_paths_and_record_spools_then_syncs(tmp_path, monkeypatch):
+    workspace, specs = make_workspace(tmp_path, "a")
+    calls: list[tuple[str, Job]] = []
+    monkeypatch.setattr(workspace.db.queue, "put", lambda job: calls.append(("spool", job)))
+
+    def sync(job: Job) -> None:
+        calls.append(("sync", job))
+        raise RuntimeError("view failure must not escape record")
+
+    context = Engine(workspace)._context(SimpleNamespace(sync=sync))  # type: ignore[arg-type]
+    assert context.root == workspace.root
+    assert context.sessions_dir == workspace.sessions_dir
+    assert context.cache_dir == workspace.cache_dir
+    assert context.reports_dir == workspace.reports_dir
+
+    job = seed_result(workspace, specs["a"], outcome="SUCCESS", submitted=time.time())
+    context.record(job)
+    assert calls == [("spool", job), ("sync", job)]

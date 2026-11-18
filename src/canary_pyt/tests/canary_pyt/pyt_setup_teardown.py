@@ -14,6 +14,7 @@ Covers:
 
 import canary_pyt
 import canary_pyt.pyt as pyt
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 
 
@@ -179,8 +180,8 @@ def test_setup_teardown_run_end_to_end(tmp_path):
     with working_dir(root):
         with canary.config.override():
             workspace = Workspace.create(root)
-            specs = workspace.collect({str(root): []})
-            workspace.run(specs, only="all")
+            specs = Engine(workspace).collect({str(root): []})
+            Engine(workspace).run(specs, only="all")
         jobs = workspace.load_jobs()
 
     assert (root / "setup.marker").exists()

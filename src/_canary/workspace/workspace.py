@@ -11,14 +11,16 @@ databases, and "views" (consolidated results).
 Key functionalities include:
     - Creating and loading persistent workspaces on disk.
     - Managing a "View" of the latest test results via symlinks, hardlinks, or copies.
-    - Coordinating the execution of `Job` objects within a `Session`.
     - Interfacing with the `WorkspaceDatabase` to store and retrieve job specifications.
-    - Providing selection mechanisms to filter tests by tags, regex, or owners.
+    - Read queries: loading jobs with their results and finding jobs and specs.
+
+Collecting, selecting and running live on :class:`~_canary.engine.engine.Engine`.
 
 Example:
     >>> ws = Workspace.create(path=".")
-    >>> specs = ws.collect(scanpaths={"/src/tests": []})
-    >>> session = ws.run(specs=specs)
+    >>> engine = Engine(ws)
+    >>> specs = engine.collect(scanpaths={"/src/tests": []})
+    >>> session = engine.run(specs=specs)
 """
 
 import fnmatch
@@ -30,14 +32,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Literal
 
 import yaml
 
 from .. import config
 from .. import version
 from ..config import config as config_mod
-from ..core import rules
 from ..core.job import Job
 from ..persistence.database import WorkspaceDatabase
 from ..util import json_helper as json
@@ -50,18 +50,13 @@ from ..view import ResultsView
 from ..view import ViewManager
 from ..view import ViewSettings
 from . import locator
-from .collection import collect_specs
 from .locator import NotAWorkspaceError
 from .locator import workspace_path
 from .locator import workspace_tag
 from .reconstruction import JobReconstructor
-from .runner import SessionRunner
-from .selection import SpecSelector
-from .session import Session
 
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
-    from ..execution.queue_executor import ExecutionEvent
 
 logger = logging.get_logger(__name__)
 
@@ -181,27 +176,15 @@ class Workspace:
 
         self.canary_level: int
 
-        self.view_manager: ViewManager | None
-
         raise RuntimeError("Use Workspace factory methods create and load")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.root})"
 
     @functools.cached_property
-    def _selector(self) -> SpecSelector:
-        """Lazy-initialized spec selector component."""
-        return SpecSelector(self.root, self.db)
-
-    @functools.cached_property
     def _reconstructor(self) -> JobReconstructor:
         """Lazy-initialized job reconstructor component."""
         return JobReconstructor(self.root, self.sessions_dir, self.db)
-
-    @functools.cached_property
-    def _runner(self) -> SessionRunner:
-        """Lazy-initialized session runner component."""
-        return SessionRunner(self, self._reconstructor)
 
     def initialize_properties(self, *, anchor: Path) -> None:
         """Sets up the internal directory structure paths based on the anchor.
@@ -226,7 +209,6 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.reports_dir = self.root / "reports"
         self.canary_level = 0
-        self.view_manager = None
         if var := os.getenv("CANARY_LEVEL_OVERRIDE"):
             self.canary_level = int(var)
         elif var := os.getenv("CANARY_LEVEL"):
@@ -483,35 +465,12 @@ class Workspace:
         self.db = WorkspaceDatabase.load(self.root)
         return self
 
-    def run(
-        self,
-        specs: list["JobSpec"],
-        session: str | None = None,
-        inplace: bool = False,
-        view_t: ViewSettings | None = None,
-        only: str = "not_pass",
-    ) -> Session:
-        """Executes a set of job specifications in a new or existing session.
-
-        Args:
-            specs: List of job specs to run.
-            session: Optional existing session name to reuse.
-            inplace: If True, run jobs in their existing result directories.
-            view_t: View settings.
-            only: Rerun strategy (e.g., 'not_pass').
-
-        Returns:
-            The resulting Session object.
-        """
-        s = self._runner.prepare(specs, session=session, inplace=inplace, only=only)
-        return self._runner.execute(s, view_t=view_t)
-
     def rebuild_view(self, view_t: ViewSettings | None = None) -> None:
         if view_t is None:
             last = self.latest_view()
             view_t = last.settings if last is not None else ViewSettings.default()
-        manager = ViewManager(workspace=self, session=None, settings=view_t)
-        view = manager.rebuild()
+        manager = ViewManager(root=self.root.parent, cache_dir=self.cache_dir, settings=view_t)
+        view = manager.rebuild(self.load_jobs(), self.latest_view())
         if view is not None:
             self.register_view(view)
 
@@ -542,8 +501,23 @@ class Workspace:
         return p.is_relative_to(self.sessions_dir)
 
     def tag_info(self, tag: str) -> dict[str, Any]:
-        """Return metadata and unmasked specs for *tag* (see :meth:`SpecSelector.tag_info`)."""
-        return self._selector.tag_info(tag)
+        """Return metadata and the (unmasked) specs for selection *tag*.
+
+        Args:
+            tag: The selection tag to describe.
+
+        Returns:
+            A dict with ``tag``, ``created_on`` (popped from metadata),
+            ``metadata`` (the remaining selection metadata), and ``specs`` (the
+            list of unmasked :class:`~_canary.core.jobspec.JobSpec` in the tag).
+
+        Raises:
+            NotASelection: If *tag* is not a selection.
+        """
+        specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
+        metadata = self.db.get_selection_metadata(tag)
+        created_on = metadata.pop("created_on", None)
+        return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
 
     def info(self) -> dict[str, Any]:
         """Returns summary information about the workspace.
@@ -776,119 +750,20 @@ class Workspace:
                 included_files.add(rel_text)
         return dest
 
-    def collect(
-        self,
-        scanpaths: dict[str, list[str]],
-        on_options: list[str] | None = None,
-        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
-    ) -> list["JobSpec"]:
-        """Collect specs from *scanpaths* into this workspace (see :func:`collect_specs`)."""
-        return collect_specs(self.root, self.db, scanpaths, on_options, parsing_policy)
-
-    def select(
-        self,
-        tag: str,
-        prefixes: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-    ) -> list["JobSpec"]:
-        """Select specs from the database, save as *tag* (see :meth:`SpecSelector.select`)."""
-        return self._selector.select(tag, prefixes, keyword_exprs, parameter_expr, owners, regex)
-
-    def select_from_specs(
-        self,
-        resolved: list["JobSpec"],
-        prefixes: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-        extra_rules: list["rules.Rule"] | None = None,
-    ) -> list["JobSpec"]:
-        """Filter *resolved* specs (see :meth:`SpecSelector.select_from_specs`)."""
-        return self._selector.select_from_specs(
-            resolved, prefixes, keyword_exprs, parameter_expr, owners, regex, extra_rules
-        )
-
-    def select_from_tag(
-        self,
-        tag: str,
-        source_tag: str,
-        prefixes: list[str] | None = None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-    ) -> list["JobSpec"]:
-        """Create *tag* by filtering *source_tag* (see :meth:`SpecSelector.select_from_tag`)."""
-        return self._selector.select_from_tag(
-            tag, source_tag, prefixes, keyword_exprs, parameter_expr, owners, regex
-        )
-
-    def create_selection(
-        self,
-        tag: str | None,
-        scanpaths: dict[str, list[str]],
-        on_options: list[str] | None = None,
-        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-    ) -> list["JobSpec"]:
-        """Collects generators from paths and creates a tagged selection.
-
-        Args:
-            tag: Tag name (randomly generated if None).
-            scanpaths: Paths to scan for generators.
-            on_options: Options to filter tests by.
-            keyword_exprs: Filter by keywords.
-            parameter_expr: Filter by parameters.
-            owners: Filter by owners.
-            regex: Filter by regex.
-
-        Returns:
-            The created selection of JobSpecs.
-        """
-        specs = self.collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
-        return self._selector.create_selection(
-            tag,
-            specs,
-            scanpaths,
-            on_options=on_options,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-        )
-
-    def apply_selection_rules(
-        self,
-        specs: list["JobSpec"],
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: list[str] | None = None,
-        regex: str | None = None,
-        ids: list[str] | None = None,
-    ) -> None:
-        """Filter *specs* in place (see :meth:`SpecSelector.apply_selection_rules`)."""
-        return self._selector.apply_selection_rules(
-            specs, keyword_exprs, parameter_expr, owners, regex, ids
-        )
-
     def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
         """Load jobs with their latest results (see :meth:`JobReconstructor.load_jobs`)."""
         return self._reconstructor.load_jobs(ids)
 
     def is_tag(self, tag: str) -> bool:
-        """Return True if *tag* is a selection tag (see :meth:`SpecSelector.is_tag`)."""
-        return self._selector.is_tag(tag)
+        """Check if string is valid selection tag.
 
-    def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
-        """Build jobs for *specs* in *session* (see :meth:`JobReconstructor.construct_jobs`)."""
-        return self._reconstructor.construct_jobs(specs, session)
+        Args:
+            tag: The string to check.
+
+        Returns:
+            True if it is a selection tag, False otherwise.
+        """
+        return self.db.is_selection(tag)
 
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locate a Job or JobSpec (see :meth:`JobReconstructor.find`)."""
@@ -905,10 +780,6 @@ class Workspace:
     def find_specids(self, ids: list[str]) -> list[str | None]:
         """Resolve partial IDs or names to spec IDs (see :meth:`JobReconstructor.find_specids`)."""
         return self._reconstructor.find_specids(ids)
-
-    def testcase_done_callback(self, event: "ExecutionEvent") -> None:
-        """Queue a job result for database persistence (see SessionRunner)."""
-        self._runner.testcase_done_callback(event)
 
 
 def load_job_from_file(arg: Path | str | None) -> Job:

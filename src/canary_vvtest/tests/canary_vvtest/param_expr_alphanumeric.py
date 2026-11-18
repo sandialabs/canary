@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -35,8 +36,8 @@ def test_alphanumeric_parameter_value_selected_exactly(tmp_path):
     workspace = Workspace.create(tmp_path)
     f = HERE / "param_expr_alphanumeric.vvt"
 
-    specs = workspace.collect({str(f.parent): [f.name]})
-    selected = workspace.select_from_specs(specs, parameter_expr="dim=2D")
+    specs = Engine(workspace).collect({str(f.parent): [f.name]})
+    selected = Engine(workspace).select_from_specs(specs, parameter_expr="dim=2D")
     selected = [spec for spec in selected if not spec.mask]
 
     assert len(selected) == 4

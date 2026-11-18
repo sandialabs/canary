@@ -17,6 +17,7 @@ from typing import Any
 import canary
 from _canary import app
 from _canary.app.run import RunOptions
+from _canary.workspace.workspace import Workspace
 
 PYT_BODY = """\
 import sys
@@ -46,7 +47,7 @@ def test_run_scanpaths_creates_workspace_and_executes(tmp_path, monkeypatch):
     assert rc == 0
     # The run must have created the workspace and persisted the spec it ran.
     with canary.config.override():
-        reopened = app.open_workspace(tmp_path)
+        reopened = Workspace.load(tmp_path)
         assert {s.family for s in reopened.db.load_specs()} == {"a"}
 
 
@@ -74,11 +75,10 @@ def test_wipe_requires_scanpaths(tmp_path, monkeypatch):
             raise AssertionError("wipe with a non-scanpaths request must raise")
 
 
-def test_results_are_readable_through_facade_after_a_run(tmp_path, monkeypatch):
-    """After a run, app.get_results/get_result_history expose the persisted results.
+def test_results_are_readable_through_the_workspace_after_a_run(tmp_path, monkeypatch):
+    """After a run, the workspace database exposes the persisted results and history.
 
-    This is the read seam the status command depends on instead of touching
-    ``workspace.db`` directly.
+    This is the read seam the status command renders from.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "a.pyt").write_text(PYT_BODY)
@@ -87,12 +87,12 @@ def test_results_are_readable_through_facade_after_a_run(tmp_path, monkeypatch):
         rc = app.run(_Request(kind="scanpaths", value={str(tmp_path): []}))
         assert rc == 0
 
-        results = app.get_results()
+        results = Workspace.load().db.get_results()
         assert len(results) == 1
         (spec_id, record) = next(iter(results.items()))
         assert record["spec_name"] == "a"
         assert record["status"].is_success()
 
-        history = app.get_result_history(spec_id)
+        history = Workspace.load().db.get_result_history(spec_id)
         assert len(history) >= 1
         assert history[-1]["id"] == spec_id

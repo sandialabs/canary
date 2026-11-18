@@ -355,9 +355,9 @@ Workspace Lifecycle
 
 1. **Creation**: ``Workspace.create()`` or ``canary init``
 2. **Configuration**: Edit ``config.yaml`` as needed
-3. **Job discovery**: ``ws.collect()`` or ``canary collect``
-4. **Selection**: ``ws.select()`` or ``canary select``
-5. **Execution**: ``ws.run()`` or ``canary run``
+3. **Job discovery**: ``Engine(ws).collect()`` or ``canary collect``
+4. **Selection**: ``Engine(ws).select()`` or ``canary select``
+5. **Execution**: ``Engine(ws).run()`` or ``canary run``
 6. **Query**: ``ws.db`` operations or ``canary status``
 7. **Reporting**: Reporter plugins or ``canary report``
 8. **Cleanup**: ``Workspace.remove()``

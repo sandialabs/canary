@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Tests for the application facade (``_canary.app``).
+"""Workspace create/load round trip, and ``_canary.app`` staying off the eager import path.
 
-The facade must delegate to the workspace implementation without adding
-behavior and stay off the eager ``import canary``
-path so test subprocesses keep paying nothing for it until first use.
+Interfaces open workspaces with :meth:`Workspace.load`/:meth:`Workspace.create`
+directly; ``canary.app`` must stay off the eager ``import canary`` path so test
+subprocesses keep paying nothing for it until first use.
 """
 
 import sys
@@ -14,8 +14,8 @@ import sys
 import pytest
 
 import _canary.workspace.workspace as _workspace_module
-from _canary import app
 from _canary.workspace.workspace import NotAWorkspaceError
+from _canary.workspace.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)
@@ -30,8 +30,8 @@ def test_create_then_open_round_trips_to_same_root(tmp_path, monkeypatch):
     root = tmp_path / "proj"
     root.mkdir()
 
-    created = app.create_workspace(root)
-    opened = app.open_workspace(root)
+    created = Workspace.create(root)
+    opened = Workspace.load(root)
 
     assert opened.root == created.root
 
@@ -39,7 +39,7 @@ def test_create_then_open_round_trips_to_same_root(tmp_path, monkeypatch):
 def test_open_missing_workspace_raises(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(NotAWorkspaceError):
-        app.open_workspace(tmp_path)
+        Workspace.load(tmp_path)
 
 
 def test_app_is_not_on_the_eager_import_path():

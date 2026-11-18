@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
     from ..execution.runtest import Runner
-    from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -39,7 +38,6 @@ class JunitReportRequest:
     into this renderer request.
     """
 
-    workspace: "Workspace"
     jobs: list["Job"]
     output: Path
 
@@ -56,9 +54,8 @@ def canary_runtests_report(runner: "Runner") -> None:
         return
 
     reporter = JunitReporter()
-    ws = runner.workspace
     junit_request = JunitReportRequest(
-        workspace=ws, jobs=runner.jobs, output=ws.reports_dir / JunitReporter.default_output
+        jobs=runner.jobs, output=runner.context.reports_dir / JunitReporter.default_output
     )
 
     reporter.write(junit_request)
@@ -101,7 +98,7 @@ class JunitReportCommand(CanaryReporter):
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
         output = Path(args.output).absolute()
-        request = JunitReportRequest(workspace=workspace, jobs=jobs, output=output)
+        request = JunitReportRequest(jobs=jobs, output=output)
         JunitReporter().write(request)
 
 

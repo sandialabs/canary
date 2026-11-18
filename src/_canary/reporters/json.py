@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
     from ..execution.runtest import Runner
-    from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -36,7 +35,6 @@ class JsonReportRequest:
     into this renderer request.
     """
 
-    workspace: "Workspace"
     jobs: list["Job"]
     output: Path
 
@@ -52,9 +50,8 @@ def canary_runtests_report(runner: "Runner") -> None:
     if not enabled("json"):
         return
     reporter = JsonReporter()
-    ws = runner.workspace
     json_request = JsonReportRequest(
-        workspace=ws, jobs=runner.jobs, output=ws.reports_dir / JsonReporter.default_output
+        jobs=runner.jobs, output=runner.context.reports_dir / JsonReporter.default_output
     )
     reporter.write(json_request)
 
@@ -96,7 +93,7 @@ class JsonReportCommand(CanaryReporter):
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
         output = Path(args.output).absolute()
-        request = JsonReportRequest(workspace=workspace, jobs=jobs, output=output)
+        request = JsonReportRequest(jobs=jobs, output=output)
         JsonReporter().write(request)
 
 

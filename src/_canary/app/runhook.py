@@ -18,7 +18,6 @@ from ..select import RuntimeSelector
 from ..util import logging
 from ..workspace.session import Session
 from ..workspace.workspace import Workspace
-from .facade import open_workspace
 from .query_helpers import resolve_session_dir
 from .rebaseline import _jobs_from_result_rows
 from .rebaseline import filter_jobs_by_keywords
@@ -36,7 +35,7 @@ class RunHookOptions:
 
 def run_hook(hook_name: str, request: Any, options: RunHookOptions | None = None) -> int:
     options = options or RunHookOptions()
-    workspace = open_workspace(start=options.work_tree)
+    workspace = Workspace.load(start=options.work_tree)
 
     if hook_name == "canary_runtest_finish":
         return _run_runtest_finish(workspace, hook_name, request, options)

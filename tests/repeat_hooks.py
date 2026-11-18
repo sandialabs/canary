@@ -21,6 +21,7 @@ import argparse
 from pathlib import Path
 
 import canary
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
 
@@ -33,7 +34,7 @@ def write(path: Path, text: str) -> None:
 def create_workspace(root: Path) -> tuple[Workspace, list[canary.JobSpec]]:
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
         return workspace, specs
 
 
@@ -46,7 +47,7 @@ def run_specs(
 ):
     with working_dir(workspace.root), canary.config.override() as cfg:
         cfg.options = argparse.Namespace(**(options or {}))
-        return workspace.run(specs, only=only)
+        return Engine(workspace).run(specs, only=only)
 
 
 def jobs_by_name(workspace: Workspace) -> dict[str, canary.Job]:

@@ -18,11 +18,7 @@ from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
-from .facade import get_job_log
-from .facade import get_result_history
-from .facade import get_results
-from .facade import get_specs
-from .facade import get_workspace_info
+from ..workspace.workspace import Workspace
 
 __all__ = [
     "JobView",
@@ -126,7 +122,7 @@ def _job_view(result: dict[str, Any]) -> JobView:
 
 def job_history(spec_id: str) -> list[JobView]:
     """Return every historical result for *spec_id* as :class:`JobView`, oldest first."""
-    return [_job_view(r) for r in get_result_history(spec_id)]
+    return [_job_view(r) for r in Workspace.load().db.get_result_history(spec_id)]
 
 
 def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> list[JobView]:
@@ -136,8 +132,9 @@ def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> 
     have been loaded/discovered but never run are still returned as NOTRUN rows
     so interfaces can select and launch them.
     """
-    specs = get_specs(ids, include_upstreams=include_upstreams)
-    results = get_results(ids, include_upstreams=include_upstreams)
+    db = Workspace.load().db
+    specs = db.load_specs(ids, include_upstreams=include_upstreams)
+    results = db.get_results(ids, include_upstreams=include_upstreams)
 
     views: list[JobView] = []
     for spec in specs:
@@ -152,13 +149,29 @@ def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> 
 
 
 def job_log(spec_id: str, *, stream: str = "stdout") -> str:
-    """Return a job's captured *stream* output as text (empty if none).
+    """Return the captured output of a job's execution as text.
 
-    A thin pass-through to the application facade so interfaces read job output
-    through the same ``canary.app`` surface as everything else, never touching
-    the workspace layout directly.
+    Resolves the job for *spec_id* in the current workspace and reads the file
+    for the requested *stream* (``"stdout"`` or ``"stderr"``) from the job's
+    execution directory.  Returns an empty string when the job has not produced
+    that stream (e.g. it never ran, or wrote no stderr), so callers -- an
+    interface showing a not-yet-run job -- do not have to special-case a missing
+    file.
+
+    Raises:
+        ValueError: If *spec_id* matches no job in the workspace.
     """
-    return get_job_log(spec_id, stream=stream)
+    job = Workspace.load().find(job=spec_id)
+    if stream == "stderr":
+        relpath = job.stderr
+    else:
+        relpath = job.stdout
+    if relpath is None:
+        return ""
+    path = job.workspace.joinpath(relpath)
+    if not path.exists():
+        return ""
+    return path.read_text()
 
 
 class WorkspaceSummary(TypedDict):
@@ -174,7 +187,7 @@ class WorkspaceSummary(TypedDict):
 
 def workspace_summary() -> WorkspaceSummary:
     """Return a render-ready :class:`WorkspaceSummary` for the current workspace."""
-    info = get_workspace_info()
+    info = Workspace.load().info()
     return WorkspaceSummary(
         root=str(info.get("root", "")),
         session_count=int(info.get("session_count", 0)),

@@ -996,14 +996,19 @@
         "_canary.generation.generate.Generator"
       ],
       "workspace": [
-        "_canary.session.workspace.Workspace",
-        "_canary.session.workspace.Session",
+        "_canary.workspace.workspace.Workspace",
+        "_canary.workspace.session.Session",
         "_canary.persistence.database.WorkspaceDatabase"
       ],
+      "engine": [
+        "_canary.engine.engine.Engine",
+        "_canary.execution.context.ExecutionContext"
+      ],
       "application": [
-        "canary.app.open_workspace",
-        "canary.app.create_workspace",
-        "canary.app.collect",
+        "canary.app.run",
+        "canary.app.select",
+        "canary.app.exec_job",
+        "canary.app.list_jobs",
         "_canary.events.get_event_bus"
       ],
       "resources": [

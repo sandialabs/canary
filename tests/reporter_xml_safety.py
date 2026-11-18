@@ -7,6 +7,7 @@ import xml.dom.minidom as xdom
 
 import pytest
 
+from _canary.engine.engine import Engine
 from _canary.reporters.junit import JunitReporter
 from _canary.reporters.junit import JunitReportRequest
 from _canary.util import xmlsafe
@@ -54,19 +55,17 @@ def failing_workspace(tmp_path_factory):
             "    sys.exit(1)\n"
         )
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
         with config.override():
             setattr(config.options, "report", None)
-            workspace.run(specs, only="all")
+            Engine(workspace).run(specs, only="all")
     return root, workspace
 
 
 def test_junit_report_with_hostile_output_is_well_formed(failing_workspace):
     root, workspace = failing_workspace
     output = root / "junit.xml"
-    JunitReporter().write(
-        JunitReportRequest(workspace=workspace, jobs=workspace.load_jobs(), output=output)
-    )
+    JunitReporter().write(JunitReportRequest(jobs=workspace.load_jobs(), output=output))
     doc = xdom.parse(str(output))  # previously: ValueError or "not well-formed"
     out = "".join(
         getattr(n, "data", "")

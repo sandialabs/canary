@@ -134,7 +134,7 @@ def make_row(
 
 
 def patch_results(status_api, monkeypatch, rows):
-    monkeypatch.setattr(status_api.app, "get_results", lambda: rows)
+    monkeypatch.setattr(status_api, "raw_results", lambda: rows)
 
 
 def test_jobs_returns_json_serializable_entries(monkeypatch):

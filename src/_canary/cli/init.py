@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .. import app
 from ..plugins.hookspec import hookimpl
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 
 logger = logging.get_logger(__name__)
@@ -37,5 +37,5 @@ class Init(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        app.create_workspace(Path(args.path).absolute(), force=args.w)
+        Workspace.create(Path(args.path).absolute(), force=args.w)
         return 0

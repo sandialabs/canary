@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..core.job import Job
     from ..execution.runtest import Runner
-    from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
@@ -31,7 +30,6 @@ MANIFEST = "manifest.json"
 
 @dataclasses.dataclass
 class MarkdownReportRequest:
-    workspace: "Workspace"
     jobs: list["Job"]
     output_dir: Path
 
@@ -78,13 +76,12 @@ def canary_runtests_report(runner: "Runner") -> None:
     if not enabled("markdown"):
         return
 
-    ws = runner.workspace
     reporter = MarkdownReporter()
     markdown_request = MarkdownReportRequest(
-        workspace=ws, jobs=runner.jobs, output_dir=ws.reports_dir / "markdown"
+        jobs=runner.jobs, output_dir=runner.context.reports_dir / "markdown"
     )
     entrypoint = reporter.write(markdown_request)
-    link = link_summary(runner.workspace.root.parent / "Canary.md", entrypoint)
+    link = link_summary(runner.context.root.parent / "Canary.md", entrypoint)
     rel = os.path.relpath(link, config.invocation_dir)
     logger.info(f"Markdown report written to {rel}")
 
@@ -115,7 +112,7 @@ class MarkdownReportCommand(CanaryReporter):
         workspace = Workspace.load()
         jobs = workspace.load_jobs()
         output_dir = Path(args.output_dir).absolute()
-        request = MarkdownReportRequest(workspace=workspace, jobs=jobs, output_dir=output_dir)
+        request = MarkdownReportRequest(jobs=jobs, output_dir=output_dir)
         MarkdownReporter().write(request)
 
 

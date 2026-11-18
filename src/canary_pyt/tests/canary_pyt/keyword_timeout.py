@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -37,7 +38,7 @@ def test_keyword_timeout_config_applied_during_collection(tmp_path):
     workspace = Workspace.create(tmp_path)
     f = HERE / "keyword_timeout.pyt"
 
-    specs = workspace.collect({str(f.parent): [f.name]})
+    specs = Engine(workspace).collect({str(f.parent): [f.name]})
     specs = [spec for spec in specs if not spec.mask]
 
     assert len(specs) == 1

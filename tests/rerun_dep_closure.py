@@ -20,6 +20,7 @@ from _canary.core.job import JobPhase
 from _canary.core.jobspec import JobSpec
 from _canary.core.jobspec import SpecDependency
 from _canary.core.status import Status
+from _canary.engine.jobs import construct_jobs
 from _canary.workspace.workspace import Workspace
 
 
@@ -86,7 +87,7 @@ if __name__ == "__main__":
 def store_initial_results(ws: Workspace, specs: dict[str, JobSpec]) -> None:
     """Simulate: c passes, b fails, a is blocked."""
     session_dir = ws.sessions_dir / "initial"
-    jobs = ws.construct_jobs([specs["c"], specs["b"], specs["a"]], session_dir)
+    jobs = construct_jobs(ws, [specs["c"], specs["b"], specs["a"]], session_dir)
 
     now = time.time()
 
@@ -146,7 +147,7 @@ def test_rerun_constructed_jobs_carry_prior_upstream_result(tmp_path):
     store_initial_results(ws, specs)
 
     selected = rerun.compute_rerun_closure(ws.db, roots=[specs["b"].id])
-    jobs = ws.construct_jobs(selected, ws.sessions_dir / "rerun")
+    jobs = construct_jobs(ws, selected, ws.sessions_dir / "rerun")
     by_name = {job.name: job for job in jobs}
 
     assert set(by_name) == {"a", "b", "c"}

@@ -38,6 +38,8 @@ class DistributedPoolExecutor:
             raise ValueError("env batch id inconsistent with cli batch id")
 
     def run(self, args: argparse.Namespace) -> int:
+        from _canary.engine.engine import Engine
+
         n = len(self.jobs)
         workspace = canary.Workspace.load()
         f = workspace.logs_dir / f"canary.{self.batch[:7]}.log"
@@ -50,7 +52,7 @@ class DistributedPoolExecutor:
                 spec.mask = canary.Mask(True, reason=f"Job not in batch {self.batch}")
         view_cfg = canary.config.get("workspace:view")
         view_t = canary.ViewSettings(**view_cfg) if view_cfg else canary.ViewSettings.default()
-        session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
+        session = Engine(workspace).run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
     @staticmethod

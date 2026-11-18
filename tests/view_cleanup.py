@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import canary
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.view import ResultsView
 from _canary.view import ViewManifest
@@ -39,8 +40,8 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(root): []})
+        session = Engine(workspace).run(specs, only="all")
 
         assert session.returncode == 0
 
@@ -69,8 +70,8 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(root): []})
+        session = Engine(workspace).run(specs, only="all")
 
         assert session.returncode == 0
 
@@ -149,8 +150,8 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(root): []})
+        session = Engine(workspace).run(specs, only="all")
 
         assert session.returncode == 0
         job = session.jobs[0]

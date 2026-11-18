@@ -4,49 +4,185 @@
 """
 Session preparation and execution.
 
-:class:`SessionRunner` splits running a session into two phases:
+:class:`Engine` splits running a session into two phases:
 
-* :meth:`SessionRunner.prepare` -- specs -> Jobs, runtime selection, session-directory
+* :meth:`Engine.prepare` -- specs -> Jobs, runtime selection, session-directory
   retargeting, and the :class:`~_canary.workspace.session.Session` manifest.
-* :meth:`SessionRunner.execute` -- result listener, live view, the run itself, and
+* :meth:`Engine.execute` -- result listener, live view, the run itself, and
   finalization (persist final state, reconcile, hooks, ``refs/latest``).
 
-``Workspace.run()`` is ``execute(prepare(...))``.
+``Engine.run()`` is ``execute(prepare(...))``.  The engine also collects and selects specs
+(:mod:`~_canary.engine.collection`, :mod:`~_canary.engine.selection`).
 """
 
 import datetime
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Literal
 
 from .. import config
 from .. import select
 from ..core import rules
 from ..core.job import Job
+from ..error import StopExecution
+from ..error import notests_exit_status
+from ..execution.context import ExecutionContext
+from ..execution.runtest import Runner
+from ..execution.runtest import canary_runtests
 from ..persistence.listener import ResultListener
 from ..util import logging
 from ..util.filesystem import atomic_write
 from ..view import ViewManager
 from ..view import ViewSettings
-from .reconstruction import JobReconstructor
-from .session import Session
+from ..workspace.session import Session
+from .collection import collect_specs
+from .jobs import construct_jobs
+from .jobs import refresh_masked_jobs
+from .selection import SpecSelector
 
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
-    from ..execution.queue_executor import ExecutionEvent
-    from .workspace import Workspace
+    from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
 
 _SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
 
 
-class SessionRunner:
+class Engine:
     """Prepare and execute test sessions for a :class:`Workspace`."""
 
-    def __init__(self, workspace: "Workspace", reconstructor: JobReconstructor) -> None:
+    def __init__(self, workspace: "Workspace") -> None:
         self.workspace = workspace
-        self.reconstructor = reconstructor
+        self.selector = SpecSelector(workspace.root, workspace.db)
+
+    def collect(
+        self,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
+    ) -> list["JobSpec"]:
+        """Collect specs from *scanpaths* into this workspace (see :func:`collect_specs`)."""
+        return collect_specs(
+            self.workspace.root, self.workspace.db, scanpaths, on_options, parsing_policy
+        )
+
+    def select(
+        self,
+        tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Select specs from the database, save as *tag* (see :meth:`SpecSelector.select`)."""
+        return self.selector.select(tag, prefixes, keyword_exprs, parameter_expr, owners, regex)
+
+    def select_from_specs(
+        self,
+        resolved: list["JobSpec"],
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+        extra_rules: list["rules.Rule"] | None = None,
+    ) -> list["JobSpec"]:
+        """Filter *resolved* specs (see :meth:`SpecSelector.select_from_specs`)."""
+        return self.selector.select_from_specs(
+            resolved, prefixes, keyword_exprs, parameter_expr, owners, regex, extra_rules
+        )
+
+    def select_from_tag(
+        self,
+        tag: str,
+        source_tag: str,
+        prefixes: list[str] | None = None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Create *tag* by filtering *source_tag* (see :meth:`SpecSelector.select_from_tag`)."""
+        return self.selector.select_from_tag(
+            tag, source_tag, prefixes, keyword_exprs, parameter_expr, owners, regex
+        )
+
+    def create_selection(
+        self,
+        tag: str | None,
+        scanpaths: dict[str, list[str]],
+        on_options: list[str] | None = None,
+        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+    ) -> list["JobSpec"]:
+        """Collects generators from paths and creates a tagged selection.
+
+        Args:
+            tag: Tag name (randomly generated if None).
+            scanpaths: Paths to scan for generators.
+            on_options: Options to filter tests by.
+            keyword_exprs: Filter by keywords.
+            parameter_expr: Filter by parameters.
+            owners: Filter by owners.
+            regex: Filter by regex.
+
+        Returns:
+            The created selection of JobSpecs.
+        """
+        specs = self.collect(scanpaths, on_options=on_options, parsing_policy=parsing_policy)
+        return self.selector.create_selection(
+            tag,
+            specs,
+            scanpaths,
+            on_options=on_options,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+        )
+
+    def apply_selection_rules(
+        self,
+        specs: list["JobSpec"],
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: list[str] | None = None,
+        regex: str | None = None,
+        ids: list[str] | None = None,
+    ) -> None:
+        """Filter *specs* in place (see :meth:`SpecSelector.apply_selection_rules`)."""
+        return self.selector.apply_selection_rules(
+            specs, keyword_exprs, parameter_expr, owners, regex, ids
+        )
+
+    def run(
+        self,
+        specs: list["JobSpec"],
+        session: str | None = None,
+        inplace: bool = False,
+        view_t: ViewSettings | None = None,
+        only: str = "not_pass",
+    ) -> Session:
+        """Executes a set of job specifications in a new or existing session.
+
+        Args:
+            specs: List of job specs to run.
+            session: Optional existing session name to reuse.
+            inplace: If True, run jobs in their existing result directories.
+            view_t: View settings.
+            only: Rerun strategy (e.g., 'not_pass').
+
+        Returns:
+            The resulting Session object.
+        """
+        s = self.prepare(specs, session=session, inplace=inplace, only=only)
+        return self.execute(s, view_t=view_t)
 
     def prepare(
         self,
@@ -79,7 +215,7 @@ class SessionRunner:
         now = datetime.datetime.now()
         session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
         session_dir = ws.sessions_dir / session_name
-        jobs = self._make_jobs(specs, session_dir)
+        jobs = self.build_jobs(specs, session_dir)
         self._select(jobs, only=only)
         ready = self._retarget(jobs, session_dir, inplace=inplace, reused=reuse_session)
 
@@ -97,8 +233,8 @@ class SessionRunner:
 
         # We need to take great care to only write results into the database from the parent
         # process.  On the parent process, create a results listener that looks for results in
-        # the spool.  As test jobs finish, the testcase_done_callback is called and the results
-        # put into the spool.  When the listener detects the results, it will write them to the
+        # the spool.  As test jobs finish, the context's ``record`` callback puts the results
+        # into the spool.  When the listener detects the results, it will write them to the
         # database.  This way, the database is only receiving results from a single writer.
         # Otherwise, results can be written from many writers originating from many different
         # processes (eg, a canary instance launched inside a HPC scheduler)
@@ -110,13 +246,18 @@ class SessionRunner:
         if view_t is None:
             last = ws.latest_view()
             view_t = last.settings if last is not None else ViewSettings.default()
-        view_manager = ViewManager(workspace=ws, session=s, settings=view_t)
-        ws.view_manager = view_manager
+        view_manager = ViewManager(
+            root=ws.root.parent,
+            cache_dir=ws.cache_dir,
+            settings=view_t,
+            jobs=s.jobs,
+            load_jobs=ws.load_jobs,
+        )
         try:
-            view_manager.start()
-            s.run(workspace=ws)
+            if live_view := view_manager.start():
+                ws.register_view(live_view)
+            self._run_session(s, self._context(view_manager), parent=is_parent)
         finally:
-            ws.view_manager = None
             if listener is not None:
                 listener.stop_and_join()
                 # Persist the authoritative final in-memory state of every job.
@@ -142,9 +283,9 @@ class SessionRunner:
             self.register_latest_session(s)
         return s
 
-    def _make_jobs(self, specs: list["JobSpec"], session_dir: Path) -> list[Job]:
+    def build_jobs(self, specs: list["JobSpec"], session_dir: Path) -> list[Job]:
         """Construct jobs for *specs*; nested processes refresh masked jobs from lock files."""
-        jobs = self.reconstructor.construct_jobs(specs, session_dir)
+        jobs = construct_jobs(self.workspace, specs, session_dir)
         if self.workspace.canary_level != 0:
             refresh_masked_jobs(jobs)
         return jobs
@@ -198,33 +339,52 @@ class SessionRunner:
         link = os.path.relpath(str(session.prefix), str(file.parent))
         atomic_write(file, str(link))
 
-    def testcase_done_callback(self, event: "ExecutionEvent") -> None:
-        """Callback to queue job results for database persistence.
+    def _run_session(self, session: Session, context: ExecutionContext, *, parent: bool) -> None:
+        """Run the runnable jobs of *session* through the ``canary_runtests`` hooks."""
+        session.prefix.mkdir(parents=True, exist_ok=True)
+        ready = [job for job in session.jobs if job.is_runnable()]
+        runner = Runner(ready, session.name, context=context)
 
-        Results are spooled to the database not only when a job finishes but
-        also when it is submitted or starts running, so that ``canary status``
-        (which reads the results database) reflects in-progress jobs mid-run.
-        :meth:`~_canary.persistence.database.WorkspaceDatabase.put_results` is
-        order-independent, so each transition replaces the previous row for
-        that job only if it is newer.
+        if not ready:
+            exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
+            raise StopExecution("no jobs to run", exit_code=exit_code)
 
-        Args:
-            event: The execution event.
-        """
-        if event.name not in ("job_submitted", "job_started", "job_finished"):
-            return
-        if event.slot is None:
-            return
-        job = event.slot.job
-        if not isinstance(job, Job):
-            return
+        parent_session = parent
+        starting_dir = os.getcwd()
+        try:
+            session.started_on = datetime.datetime.now()
+            if parent_session:
+                session.save()
+            os.chdir(str(session.prefix))
+            canary_runtests(runner=runner)
+        except Exception:
+            logger.exception("session run failed")
+            session.returncode = 1
+        finally:
+            session.finished_on = datetime.datetime.now()
+            os.chdir(starting_dir)
+            session.returncode = runner.returncode
+            if parent_session:
+                session.save()
+
+    def _context(self, view_manager: ViewManager) -> ExecutionContext:
+        """Return the context a backend runs a session with (see :class:`ExecutionContext`)."""
         ws = self.workspace
-        ws.db.queue.put(job)
-        if ws.view_manager is not None:
+
+        def record(job: Job) -> None:
+            ws.db.queue.put(job)
             try:
-                ws.view_manager.sync(job)
+                view_manager.sync(job)
             except Exception:
                 logger.exception(f"Failed to update live view for job {job.id}")
+
+        return ExecutionContext(
+            root=ws.root,
+            sessions_dir=ws.sessions_dir,
+            cache_dir=ws.cache_dir,
+            reports_dir=ws.reports_dir,
+            record=record,
+        )
 
 
 def replace_session_dir_variables(job: Job, *, old: Path, new: Path) -> None:
@@ -245,26 +405,3 @@ def replace_session_dir_variables(job: Job, *, old: Path, new: Path) -> None:
             variables[key] = new_s
         elif value.startswith(old_s + os.pathsep):
             variables[key] = new_s + value[len(old_s) :]
-
-
-def refresh_masked_jobs(jobs: list[Job]) -> None:
-    """Reload state of masked jobs from lock files.
-
-    Nested canary processes (for example, ``canary hpc exec`` running inside
-    a scheduler allocation) load upstream results from the workspace
-    database, which only the top-level process writes, and it writes them
-    asynchronously.  The lock file is written directly by whichever process
-    ran the job, so it is the most current record of a job that this
-    process will not run itself.  Jobs without a lock file are left as
-    constructed.
-
-    Args:
-        jobs: Jobs constructed for this run.  Only masked jobs are refreshed.
-    """
-    for job in jobs:
-        if not job.mask or not job.lockfile.exists():
-            continue
-        try:
-            job.refresh()
-        except Exception:
-            logger.debug("Failed to refresh job %s from its lock file", job.id[:7], exc_info=True)

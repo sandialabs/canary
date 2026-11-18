@@ -10,7 +10,6 @@ tagged selections in the database.
 
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import Any
 
 from .. import select
 from ..core import rules
@@ -244,36 +243,6 @@ class SpecSelector:
             selector.add_rule(rules.IDsRule(ids))
         if selector.rules:
             selector.run()
-
-    def is_tag(self, tag: str) -> bool:
-        """Check if string is valid selection tag.
-
-        Args:
-            tag: The string to check.
-
-        Returns:
-            True if it is a selection tag, False otherwise.
-        """
-        return self.db.is_selection(tag)
-
-    def tag_info(self, tag: str) -> dict[str, Any]:
-        """Return metadata and the (unmasked) specs for selection *tag*.
-
-        Args:
-            tag: The selection tag to describe.
-
-        Returns:
-            A dict with ``tag``, ``created_on`` (popped from metadata),
-            ``metadata`` (the remaining selection metadata), and ``specs`` (the
-            list of unmasked :class:`~_canary.core.jobspec.JobSpec` in the tag).
-
-        Raises:
-            NotASelection: If *tag* is not a selection.
-        """
-        specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
-        metadata = self.db.get_selection_metadata(tag)
-        created_on = metadata.pop("created_on", None)
-        return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
 
 
 def _filter_rules(

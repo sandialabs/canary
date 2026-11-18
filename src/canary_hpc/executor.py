@@ -42,6 +42,8 @@ class CanaryHPCExecutor:
             raise ValueError("env batch id inconsistent with cli batch id")
 
     def run(self, args: argparse.Namespace) -> int:
+        from _canary.engine.engine import Engine
+
         n = len(self.jobs)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         workspace = canary.Workspace.load(start=self.workspace)
@@ -52,7 +54,7 @@ class CanaryHPCExecutor:
         self.modify_specs(specs)
         view_cfg = canary.config.get("workspace:view")
         view_t = canary.ViewSettings(**view_cfg) if view_cfg else canary.ViewSettings.default()
-        session = workspace.run(specs, session=self.session, view_t=view_t, only="all")
+        session = Engine(workspace).run(specs, session=self.session, view_t=view_t, only="all")
         return session.returncode
 
     def modify_specs(self, specs: list[canary.JobSpec]) -> None:

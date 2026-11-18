@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Any
+from typing import Callable
 from typing import Sequence
 from typing import TypedDict
 
@@ -505,7 +506,7 @@ class CanaryHPCConductor:
         fmt = "[bold]Generated[/] %d batches %s from %d jobs"
         logger.info(fmt, len(batch_specs), key, len(runner.jobs))
         _log_batch_summary(batch_specs)
-        root = runner.workspace.sessions_dir / runner.session / "hpc.batches"
+        root = runner.context.sessions_dir / runner.session / "hpc.batches"
         logger.debug("Batch workspace root: %s", root)
         write_meta(
             root,
@@ -543,18 +544,20 @@ class CanaryHPCConductor:
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
         with HPCResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:
-            ex.add_listener(self._make_batch_result_listener(runner.workspace))
+            ex.add_listener(self._make_batch_result_listener(runner.context.record))
             ex.run(backend=self.backend.name)
 
         return True
 
-    def _make_batch_result_listener(self, workspace: "canary.Workspace"):
-        """Build an executor listener that spools batch child-job results to the DB.
+    def _make_batch_result_listener(self, record: Callable[["canary.Job"], None]):
+        """Build an executor listener that records batch child-job results.
 
         The shared executor works with :class:`TestBatch` objects, so the
-        default per-job ``testcase_done_callback`` cannot be used directly.  When
-        a batch finishes, this listener reloads each child
-        :class:`~_canary.core.job.Job` from its ``testcase.lock`` and spools it to
+        default per-job listener cannot be used directly.  When a batch
+        finishes, this listener reloads each child
+        :class:`~_canary.core.job.Job` from its ``testcase.lock`` and passes it
+        to ``record`` (:attr:`ExecutionContext.record
+        <_canary.execution.context.ExecutionContext.record>`), which spools it to
         the results database and live view.
 
         In-progress child state is not published from here.  The ``canary hpc
@@ -576,12 +579,7 @@ class CanaryHPCConductor:
                         job.refresh()
                     except Exception:
                         logger.debug("Failed to refresh job %s", job.id[:7], exc_info=True)
-                    workspace.db.queue.put(job)
-                    if workspace.view_manager is not None:
-                        try:
-                            workspace.view_manager.sync(job)
-                        except Exception:
-                            logger.exception("Failed to update live view for job %s", job.id)
+                    record(job)
             except Exception:
                 logger.exception("Failed to spool results for batch %s", batch.id[:7])
 

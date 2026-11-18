@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -35,8 +36,8 @@ def test_asset_linked_under_original_and_renamed_destination(tmp_path):
     workspace = Workspace.create(tmp_path)
     f = HERE / "asset_linking.vvt"
 
-    specs = workspace.collect({str(f.parent): [f.name]})
-    session = workspace.run(specs, only="all")
+    specs = Engine(workspace).collect({str(f.parent): [f.name]})
+    session = Engine(workspace).run(specs, only="all")
 
     assert session.returncode == 0
     assert {job.name for job in session.jobs} == {"just_link", "link_rename"}

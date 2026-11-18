@@ -22,8 +22,9 @@ import datetime
 from typing import TYPE_CHECKING
 from typing import Callable
 
+from ..engine.jobs import construct_jobs
 from ..execution.runtest import JobExecutor
-from .facade import open_workspace
+from ..workspace.workspace import Workspace
 
 if TYPE_CHECKING:
     from ..core.job import Job
@@ -56,13 +57,13 @@ def exec_job(
         RuntimeError: If the resolved job is not ready to run (e.g. an upstream
             dependency has not completed).
     """
-    workspace = open_workspace()
+    workspace = Workspace.load()
     session_name = session or _default_session_name()
     session_dir = workspace.sessions_dir / session_name
 
     spec = workspace.find_jobspec(spec_id)
     specs = workspace.db.load_specs(ids=[spec.id], include_upstreams=True)
-    jobs = workspace.construct_jobs(specs, session_dir)
+    jobs = construct_jobs(workspace, specs, session_dir)
     job: Job = next(j for j in jobs if j.id == spec.id)
 
     job.status.reset()

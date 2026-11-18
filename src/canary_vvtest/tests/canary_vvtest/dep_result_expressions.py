@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -36,8 +37,8 @@ def isolated_config(tmp_path, monkeypatch):
 
 def collect_and_run(workspace_root: Path, vvt_file: Path):
     workspace = Workspace.create(workspace_root)
-    specs = workspace.collect({str(vvt_file.parent): [vvt_file.name]})
-    session = workspace.run(specs, only="all")
+    specs = Engine(workspace).collect({str(vvt_file.parent): [vvt_file.name]})
+    session = Engine(workspace).run(specs, only="all")
     return session
 
 

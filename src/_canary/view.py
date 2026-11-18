@@ -27,8 +27,8 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Any
+from typing import Callable
 from typing import Generator
 from typing import Literal
 from typing import cast
@@ -37,10 +37,6 @@ from . import config
 from .core.job import Job
 from .util import logging
 from .util.filesystem import force_remove
-
-if TYPE_CHECKING:
-    from .workspace.session import Session
-    from .workspace.workspace import Workspace
 
 ViewWhen = Literal["always", "never", "on_success", "on_failure"]
 ViewOnly = Literal["all", "failed", "not_pass", "passed"]
@@ -494,11 +490,24 @@ class ViewManager:
     The view is updated incrementally as jobs finish.  Updates are protected
     by a workspace-level file lock so multiple Canary processes can safely
     update the same view, e.g. re-entrant HPC batch runs.
+
+    It never calls back into the workspace: the caller registers the views
+    :meth:`start` and :meth:`finish` return (``Workspace.register_view``).
+
+    Attributes:
+        root: Directory the view is created in (the workspace anchor).
+        cache_dir: Workspace cache directory; holds the view lock file.
+        settings: View settings.
+        jobs: The session's jobs; the fallback set for a deferred view.
+        load_jobs: Returns the workspace's latest jobs; the last-resort fallback
+            for a deferred view.
     """
 
-    workspace: "Workspace"
+    root: Path
+    cache_dir: Path
     settings: ViewSettings
-    session: "Session | None" = None
+    jobs: list[Job] = dataclasses.field(default_factory=list)
+    load_jobs: Callable[[], list[Job]] | None = None
 
     view: ResultsView | None = dataclasses.field(init=False, default=None)
     enabled: bool = dataclasses.field(init=False, default=False)
@@ -510,7 +519,7 @@ class ViewManager:
     @property
     def lock_file(self) -> Path:
         """Path to the exclusive advisory lock file used to serialise view updates."""
-        return (self.workspace.cache_dir / "view.lock").resolve()
+        return (self.cache_dir / "view.lock").resolve()
 
     @contextmanager
     def locked(self) -> Generator[None, None, None]:
@@ -523,30 +532,34 @@ class ViewManager:
             finally:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
-    def start(self) -> None:
+    def start(self) -> ResultsView | None:
         """Initialise the view manager at the start of a session.
 
         Creates the view directory (for ``always`` mode) or records that updates
         are deferred until session end.  Idempotent — safe to call multiple times.
+
+        Returns:
+            The live view created now, which the caller should register so the
+            latest view settings are remembered; ``None`` if the view is
+            disabled, deferred, or already started.
         """
         if self.started:
-            return
+            return None
         self.started = True
         if self.settings.always_disabled():
             self.enabled = False
-            return
+            return None
         self.enabled = True
-        self.view = ResultsView(root=self.workspace.root.parent, settings=self.settings)
+        self.view = ResultsView(root=self.root, settings=self.settings)
         if self.settings.deferred_until_finish():
             logger.info(f"Deferring view update at {self.view.dir} until session finish")
-            return
+            return None
         with self.locked():
             logger.info(f"[bold]Updating[/] live view at {self.view.dir}")
             self.view.make(exist_ok=True)
             manifest = self.view.load_manifest()
             self.view.save_manifest(manifest)
-            # Preserve existing behavior: latest view settings are remembered.
-            self.workspace.register_view(self.view)
+        return self.view
 
     def finish(self) -> ResultsView | None:
         """Finalise the view at session end.
@@ -567,10 +580,10 @@ class ViewManager:
         if self.settings.deferred_until_finish():
             jobs = list(self._finished_jobs.values())
             # Fallback for cases where sync callbacks did not populate _finished_jobs.
-            if not jobs and self.session is not None:
-                jobs = list(self.session.jobs)
             if not jobs:
-                jobs = self.workspace.load_jobs()
+                jobs = list(self.jobs)
+            if not jobs and self.load_jobs is not None:
+                jobs = self.load_jobs()
             if not self.settings.is_enabled(jobs):
                 logger.info(
                     f"View at {self.view.dir} not created because "
@@ -581,7 +594,6 @@ class ViewManager:
                 try:
                     logger.info(f"Creating deferred view at {self.view.dir}")
                     self.view.update(jobs)
-                    self.workspace.register_view(self.view)
                 except json.JSONDecodeError:
                     logger.exception(
                         f"{self.view.manifest_file}: corrupt view manifest; "
@@ -624,15 +636,17 @@ class ViewManager:
             if changed:
                 self.view.save_manifest(manifest)
 
-    def rebuild(self) -> ResultsView | None:
-        """Rebuild the view from the latest results in the workspace.
+    def rebuild(self, jobs: list[Job], old_view: ResultsView | None) -> ResultsView | None:
+        """Rebuild the view from *jobs* (the workspace's latest results).
 
         The entire rebuild is protected by the same view lock used for live
         updates, so live syncs cannot interleave with a rebuild.
+
+        Args:
+            jobs: The jobs to put in the view.
+            old_view: The currently registered view, replaced by the rebuild.
         """
-        jobs = self.workspace.load_jobs()
         with self.locked():
-            old_view = self.workspace.latest_view()
             old_dir: Path | None = None
             bak_dir: Path | None = None
             if old_view is not None and old_view.exists():
@@ -646,7 +660,7 @@ class ViewManager:
                 if self.settings.always_disabled():
                     made_new = False
                     return None
-                view = ResultsView(root=self.workspace.root.parent, settings=self.settings)
+                view = ResultsView(root=self.root, settings=self.settings)
                 # There should not normally be an existing view at this path after
                 # the backup rename. Keep this for robustness, e.g. changed view
                 # name or stale partial directory.

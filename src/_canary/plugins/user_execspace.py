@@ -147,7 +147,7 @@ def canary_runtests_start(runner: "Runner") -> None:
     if _state is not None:
         raise RuntimeError("--exec-prefix: a redirected session is already active")
     prefix = resolve_prefix(str(raw))
-    root = session_exec_root(prefix, runner.workspace.root, runner.session)
+    root = session_exec_root(prefix, runner.context.root, runner.session)
     for job in runner.jobs:
         host_dir = Path(job.workspace.dir).absolute()
         if _is_relative_to(root, host_dir) or _is_relative_to(host_dir, root):
@@ -168,7 +168,7 @@ def canary_runtests_start(runner: "Runner") -> None:
     saved = os.environ.get("CANARY_CACHE_DIR")
     set_cache_env = saved is None and not config.get("run:cache:dir")
     if set_cache_env:
-        os.environ["CANARY_CACHE_DIR"] = str(Path(runner.workspace.root) / "cache")
+        os.environ["CANARY_CACHE_DIR"] = str(runner.context.cache_dir)
 
     redirects: list[_Redirect] = []
     for job in runner.jobs:
@@ -218,12 +218,10 @@ def _restore(redirect: _Redirect, runner: "Runner") -> None:
             job.save()
         except Exception:
             logger.debug(f"Failed to save {job.display_name()} after copy-back", exc_info=True)
-    view_manager = getattr(runner.workspace, "view_manager", None)
-    if view_manager is not None:
-        try:
-            view_manager.sync(job)
-        except Exception:
-            logger.debug(f"Failed to update view for {job.display_name()}", exc_info=True)
+    try:
+        runner.context.record(job)
+    except Exception:
+        logger.debug(f"Failed to record {job.display_name()}", exc_info=True)
 
 
 def copy_back(src: Path, dst: Path, *, exec_root: Path) -> bool:

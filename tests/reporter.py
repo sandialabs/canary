@@ -10,6 +10,7 @@ import pytest
 
 from _canary.core.job import Job
 from _canary.core.status import Status
+from _canary.engine.engine import Engine
 from _canary.reporters.html import HTMLReporter
 from _canary.reporters.html import HTMLReportRequest
 from _canary.reporters.json import JsonReporter
@@ -45,10 +46,10 @@ if __name__ == "__main__":
                 )
 
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
         with config.override():
             setattr(config.options, "report", None)
-            session = workspace.run(specs, only="all")
+            session = Engine(workspace).run(specs, only="all")
 
         ns = SimpleNamespace(
             tmp_path=root,
@@ -89,7 +90,7 @@ def test_junit_report(setup):
     jobs = latest_jobs(setup.workspace)
     output = setup.tmp_path / "junit.xml"
 
-    JunitReporter().write(JunitReportRequest(workspace=setup.workspace, jobs=jobs, output=output))
+    JunitReporter().write(JunitReportRequest(jobs=jobs, output=output))
 
     assert output.exists()
 
@@ -98,7 +99,7 @@ def test_junit_report_custom_output(setup):
     jobs = latest_jobs(setup.workspace)
     output = setup.tmp_path / "junit-create.xml"
 
-    JunitReporter().write(JunitReportRequest(workspace=setup.workspace, jobs=jobs, output=output))
+    JunitReporter().write(JunitReportRequest(jobs=jobs, output=output))
 
     assert output.exists()
 
@@ -107,7 +108,7 @@ def test_json_report(setup):
     jobs = latest_jobs(setup.workspace)
     output = setup.tmp_path / "canary.json"
 
-    JsonReporter().write(JsonReportRequest(workspace=setup.workspace, jobs=jobs, output=output))
+    JsonReporter().write(JsonReportRequest(jobs=jobs, output=output))
 
     assert output.exists()
 
@@ -116,7 +117,7 @@ def test_json_report_custom_output(setup):
     jobs = latest_jobs(setup.workspace)
     output = setup.tmp_path / "canary-create.json"
 
-    JsonReporter().write(JsonReportRequest(workspace=setup.workspace, jobs=jobs, output=output))
+    JsonReporter().write(JsonReportRequest(jobs=jobs, output=output))
 
     assert output.exists()
 
@@ -125,9 +126,7 @@ def test_html_report(setup):
     jobs = latest_jobs(setup.workspace)
     output_dir = setup.tmp_path / "HTML"
 
-    HTMLReporter().write(
-        HTMLReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir)
-    )
+    HTMLReporter().write(HTMLReportRequest(jobs=jobs, output_dir=output_dir))
 
     assert (output_dir / "index.html").exists()
     assert (output_dir / "Total.html").exists()
@@ -138,9 +137,7 @@ def test_html_report_custom_output_dir(setup):
     jobs = latest_jobs(setup.workspace)
     output_dir = setup.tmp_path / "MYHTML"
 
-    HTMLReporter().write(
-        HTMLReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir)
-    )
+    HTMLReporter().write(HTMLReportRequest(jobs=jobs, output_dir=output_dir))
 
     assert (output_dir / "index.html").exists()
     assert (output_dir / "Total.html").exists()
@@ -152,7 +149,7 @@ def test_html_report_updates_in_place(setup):
     output_dir = setup.tmp_path / "UPDATE_HTML"
 
     reporter = HTMLReporter()
-    reporter.write(HTMLReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir))
+    reporter.write(HTMLReportRequest(jobs=jobs, output_dir=output_dir))
 
     manifest_path = output_dir / "manifest.json"
     before = load_manifest(manifest_path)
@@ -160,9 +157,7 @@ def test_html_report_updates_in_place(setup):
 
     updated = jobs[0]
     updated.status = Status.FAILED(reason="synthetic failure for report update test")
-    reporter.write(
-        HTMLReportRequest(workspace=setup.workspace, jobs=[updated], output_dir=output_dir)
-    )
+    reporter.write(HTMLReportRequest(jobs=[updated], output_dir=output_dir))
 
     after = load_manifest(manifest_path)
     assert len(after) == len(before)
@@ -178,9 +173,7 @@ def test_markdown_report(setup):
     jobs = latest_jobs(setup.workspace)
     output_dir = setup.tmp_path / "MARKDOWN"
 
-    MarkdownReporter().write(
-        MarkdownReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir)
-    )
+    MarkdownReporter().write(MarkdownReportRequest(jobs=jobs, output_dir=output_dir))
 
     assert (output_dir / "index.md").exists()
     assert (output_dir / "Total.md").exists()
@@ -191,9 +184,7 @@ def test_markdown_report_custom_output_dir(setup):
     jobs = latest_jobs(setup.workspace)
     output_dir = setup.tmp_path / "MYMARKDOWN"
 
-    MarkdownReporter().write(
-        MarkdownReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir)
-    )
+    MarkdownReporter().write(MarkdownReportRequest(jobs=jobs, output_dir=output_dir))
 
     assert (output_dir / "index.md").exists()
     assert (output_dir / "Total.md").exists()
@@ -205,9 +196,7 @@ def test_markdown_report_updates_in_place(setup):
     output_dir = setup.tmp_path / "UPDATE_MARKDOWN"
 
     reporter = MarkdownReporter()
-    reporter.write(
-        MarkdownReportRequest(workspace=setup.workspace, jobs=jobs, output_dir=output_dir)
-    )
+    reporter.write(MarkdownReportRequest(jobs=jobs, output_dir=output_dir))
 
     manifest_path = output_dir / "manifest.json"
     before = load_manifest(manifest_path)
@@ -215,9 +204,7 @@ def test_markdown_report_updates_in_place(setup):
 
     updated = jobs[0]
     updated.status = Status.FAILED(reason="synthetic failure for report update test")
-    reporter.write(
-        MarkdownReportRequest(workspace=setup.workspace, jobs=[updated], output_dir=output_dir)
-    )
+    reporter.write(MarkdownReportRequest(jobs=[updated], output_dir=output_dir))
 
     after = load_manifest(manifest_path)
     assert len(after) == len(before)

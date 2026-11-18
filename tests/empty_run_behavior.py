@@ -18,6 +18,7 @@ import canary
 from _canary.core.execspace import ExecutionSpace
 from _canary.core.job import Job
 from _canary.core.jobspec import JobSpec
+from _canary.engine.engine import Engine
 from _canary.error import StopExecution
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
@@ -60,7 +61,7 @@ def test_workspace_run_empty_specs_raises_notests(tmp_path):
         workspace = Workspace.create(root)
 
         with pytest.raises(StopExecution) as exc:
-            workspace.run([], only="all")
+            Engine(workspace).run([], only="all")
 
         assert exc.value.exit_code == 7
 
@@ -81,10 +82,10 @@ def test():
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
 
         with pytest.raises(StopExecution) as exc:
-            workspace.run(specs, only="all")
+            Engine(workspace).run(specs, only="all")
 
         assert exc.value.exit_code == 7
 
@@ -112,13 +113,13 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
 
         # Seed a prior SUCCESS without running jobs.
         _seed_passed_job(workspace, specs[0])
 
         with pytest.raises(StopExecution) as exc:
-            workspace.run(specs, only="changed")
+            Engine(workspace).run(specs, only="changed")
 
         assert exc.value.exit_code == 7
 
@@ -145,12 +146,12 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
+        specs = Engine(workspace).collect({str(root): []})
 
         # Seed a prior SUCCESS without running jobs.
         _seed_passed_job(workspace, specs[0])
 
         with pytest.raises(StopExecution) as exc:
-            workspace.run(specs, only="not_pass")
+            Engine(workspace).run(specs, only="not_pass")
 
         assert exc.value.exit_code == 7

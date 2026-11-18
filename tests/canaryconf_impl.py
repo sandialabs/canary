@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from _canary.core.jobspec import JobSpec
+from _canary.engine.engine import Engine
 from _canary.plugins.canaryconf_impl import CANARYCONF_FILENAME
 from _canary.plugins.canaryconf_impl import CONFTEST_KEYWORD
 from _canary.plugins.canaryconf_impl import ROLE_TO_FUNCTION
@@ -502,8 +503,8 @@ def xtest_setup_teardown_run_in_process(tmp_path):
     with working_dir(root):
         with canary.config.override():
             workspace = Workspace.create(root)
-            specs = workspace.collect({str(root): []})
-            workspace.run(specs, only="all")
+            specs = Engine(workspace).collect({str(root): []})
+            Engine(workspace).run(specs, only="all")
 
         jobs = workspace.load_jobs()
 

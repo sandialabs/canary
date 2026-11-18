@@ -9,26 +9,14 @@ A Session represents a specific execution run of a set of jobs within a workspac
 
 import dataclasses
 import datetime
-import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Any
 
 from .. import config
 from ..core.job import Job
 from ..core.job import Measurements
-from ..error import StopExecution
-from ..error import notests_exit_status
-from ..execution.runtest import Runner
-from ..execution.runtest import canary_runtests
 from ..util import json_helper as json
-from ..util import logging
-
-if TYPE_CHECKING:
-    from .workspace import Workspace
-
-logger = logging.get_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -104,30 +92,3 @@ class Session:
     @property
     def cases(self) -> list["Job"]:
         return self.jobs
-
-    def run(self, workspace: "Workspace") -> None:
-        self.prefix.mkdir(parents=True, exist_ok=True)
-        ready = [job for job in self.jobs if job.is_runnable()]
-        runner = Runner(ready, self.name, workspace=workspace)
-
-        if not ready:
-            exit_code = 0 if config.getoption("empty_ok") else notests_exit_status
-            raise StopExecution("no jobs to run", exit_code=exit_code)
-
-        parent_session = workspace.canary_level == 0
-        starting_dir = os.getcwd()
-        try:
-            self.started_on = datetime.datetime.now()
-            if parent_session:
-                self.save()
-            os.chdir(str(self.prefix))
-            canary_runtests(runner=runner)
-        except Exception:
-            logger.exception("session run failed")
-            self.returncode = 1
-        finally:
-            self.finished_on = datetime.datetime.now()
-            os.chdir(starting_dir)
-            self.returncode = runner.returncode
-            if parent_session:
-                self.save()

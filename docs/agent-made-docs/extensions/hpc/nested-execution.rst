@@ -113,7 +113,7 @@ The nested executor handles batch execution:
    - Provides resources to jobs
 
 4. **Execution**:
-   - Calls ``workspace.run(..., only="all")``
+   - Calls ``Engine(workspace).run(..., only="all")``
    - Executes only jobs in batch
    - Respects batch constraints
 
@@ -121,20 +121,17 @@ The nested executor handles batch execution:
 
 .. code-block:: python
 
-   # From executor.py
-   class CanaryHPCExecutor:
-       def __call__(self, batch, queue, **kwargs):
-           # Load batch workspace
-           workspace = ExecutionSpace.from_path(batch.workspace)
+   # Simplified from canary_hpc/executor.py (``canary hpc exec``)
+   def run(self, args):
+       workspace = canary.Workspace.load(start=self.workspace)
 
-           # Load configuration
-           config = load_config(workspace)
+       # Load the batch's specs; jobs outside the batch are masked
+       specs = workspace.db.load_specs(ids=self.jobs, include_upstreams=True)
+       self.modify_specs(specs)
 
-           # Select jobs in batch
-           jobs = select_batch_jobs(batch, workspace)
-
-           # Execute jobs
-           workspace.run(jobs, only="all", queue=queue)
+       # Execute the batch in the parent's session
+       session = Engine(workspace).run(specs, session=self.session, only="all")
+       return session.returncode
 
 Job Selection in Nested Execution
 ----------------------------------

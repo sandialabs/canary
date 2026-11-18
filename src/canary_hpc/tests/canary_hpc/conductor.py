@@ -500,25 +500,6 @@ class FakeBatch:
         return iter(self.jobs)
 
 
-class FakeDBQueue:
-    def __init__(self) -> None:
-        self.items: list[Any] = []
-
-    def put(self, item: Any) -> None:
-        self.items.append(item)
-
-
-class FakeDB:
-    def __init__(self) -> None:
-        self.queue = FakeDBQueue()
-
-
-class FakeResultsWorkspace:
-    def __init__(self) -> None:
-        self.db = FakeDB()
-        self.view_manager = None
-
-
 @dataclasses.dataclass
 class FakeSlot:
     job: FakeBatch
@@ -526,28 +507,28 @@ class FakeSlot:
 
 def make_batch_listener():
     conductor = fake_conductor(counts={"cpus": 4})
-    workspace = FakeResultsWorkspace()
+    recorded: list[Any] = []
     children = [FakeChildJob("a"), FakeChildJob("b")]
-    listener = conductor._make_batch_result_listener(workspace)  # type: ignore[arg-type]
-    return listener, workspace, children
+    listener = conductor._make_batch_result_listener(recorded.append)
+    return listener, recorded, children
 
 
 @pytest.mark.parametrize("event", ["job_submitted", "job_started", "job_updated"])
 def test_batch_result_listener_ignores_in_progress_batch_events(event: str) -> None:
-    listener, workspace, children = make_batch_listener()
+    listener, recorded, children = make_batch_listener()
 
     listener(ExecutionEvent(name=event, slot=FakeSlot(job=FakeBatch(children))))
 
-    assert workspace.db.queue.items == []
+    assert recorded == []
     assert all(child.refreshed == 0 for child in children)
 
 
 def test_batch_result_listener_refreshes_and_spools_children_on_finish() -> None:
-    listener, workspace, children = make_batch_listener()
+    listener, recorded, children = make_batch_listener()
 
     listener(ExecutionEvent(name="job_finished", slot=FakeSlot(job=FakeBatch(children))))
 
-    assert workspace.db.queue.items == children
+    assert recorded == children
     assert all(child.refreshed == 1 for child in children)
 
 

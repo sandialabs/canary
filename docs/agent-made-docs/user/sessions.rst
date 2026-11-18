@@ -243,19 +243,20 @@ Canary supports session reuse for incremental execution:
 
 .. code-block:: python
 
-   from _canary.workspace import Workspace
+   from _canary.engine.engine import Engine
+   from _canary.workspace.workspace import Workspace
 
-   ws = Workspace.load()
+   engine = Engine(Workspace.load())
 
    # Rerun a specific session with new strategy
-   session = ws.run(specs, session="previous_session_name", only="failed")
+   session = engine.run(specs, session="previous_session_name", only="failed")
 
 **In-Place Execution:**
 
 .. code-block:: python
 
    # Reuse existing job directories (careful: can cause conflicts)
-   session = ws.run(specs, session="existing_session", inplace=True)
+   session = engine.run(specs, session="existing_session", inplace=True)
 
 Session Management Commands
 ---------------------------

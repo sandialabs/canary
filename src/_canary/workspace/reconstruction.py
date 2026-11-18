@@ -2,10 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 """
-Job reconstruction and loading.
+Job loading: the read side of the results database.
 
-This module handles converting JobSpecs to Job objects and loading jobs
-from the database with their results and dependencies resolved.
+Loads jobs from the database with their results and dependencies resolved, and
+finds jobs and specs by ID or pattern.  Building the jobs of a new session lives
+in :mod:`_canary.engine.jobs`.
 """
 
 import fnmatch
@@ -27,13 +28,11 @@ logger = logging.get_logger(__name__)
 
 
 class JobReconstructor:
-    """Builds Job objects from JobSpecs and reconstructs from database.
+    """Reconstructs Job objects from the database.
 
     This class handles:
-    1. Building Job objects from specs with dependency resolution
-    2. Loading jobs from database with latest results
-    3. Job lookup/finding by ID or pattern
-    4. Refreshing masked jobs from lock files
+    1. Loading jobs from database with latest results
+    2. Job lookup/finding by ID or pattern
     """
 
     def __init__(self, workspace_root: Path, sessions_dir: Path, db: "WorkspaceDatabase"):
@@ -47,34 +46,6 @@ class JobReconstructor:
         self.root = workspace_root
         self.sessions_dir = sessions_dir
         self.db = db
-
-    def construct_jobs(self, specs: list["JobSpec"], session: Path) -> list["Job"]:
-        """Create Job objects from specs, link to latest results if available.
-
-        Args:
-            specs: List of JobSpecs to convert to Jobs.
-            session: Session path for new job execution.
-
-        Returns:
-            List of Job objects in dependency order.
-        """
-        from ..core.jobspec_graph import make_spec_graph
-
-        lookup: dict[str, Job] = {}
-        jobs: list[Job] = []
-        latest = self.db.get_results([spec.id for spec in specs])
-        graph = make_spec_graph(specs)
-        for spec in graph.topo_order():
-            deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-            job: Job
-            if spec.id in latest:
-                job = self._job_from_result(spec, deps, latest[spec.id])
-            else:
-                space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-            lookup[spec.id] = job
-            jobs.append(job)
-        return jobs
 
     def load_jobs(self, ids: list[str] | None = None) -> list[Job]:
         """Load jobs from database with latest results.
@@ -94,26 +65,10 @@ class JobReconstructor:
         for spec in graph.topo_order():
             if mine := latest.get(spec.id):
                 deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-                lookup[spec.id] = self._job_from_result(spec, deps, mine)
+                lookup[spec.id] = job_from_result(self.sessions_dir, spec, deps, mine)
         if ids:
             return [job for job in lookup.values() if job.id in ids]
         return list(lookup.values())
-
-    def _job_from_result(
-        self, spec: "JobSpec", deps: list[Dependency], result: dict[str, Any]
-    ) -> Job:
-        """Rebuild a Job in the session that produced *result*, restored to that state."""
-        space = ExecutionSpace(
-            root=self.sessions_dir / result["session"],
-            path=Path(result["workspace"]),
-            session=result["session"],
-        )
-        job = Job(spec=spec, workspace=space, dependencies=deps)
-        job.status = result["status"]
-        job.state = result["state"]
-        job.timekeeper = result["timekeeper"]
-        job.measurements = result["measurements"]
-        return job
 
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locate a Job or JobSpec in the workspace.
@@ -212,3 +167,20 @@ class JobReconstructor:
             else:
                 found.append(None)
         return found
+
+
+def job_from_result(
+    sessions_dir: Path, spec: "JobSpec", deps: list[Dependency], result: dict[str, Any]
+) -> Job:
+    """Rebuild a Job in the session that produced *result*, restored to that state."""
+    space = ExecutionSpace(
+        root=sessions_dir / result["session"],
+        path=Path(result["workspace"]),
+        session=result["session"],
+    )
+    job = Job(spec=spec, workspace=space, dependencies=deps)
+    job.status = result["status"]
+    job.state = result["state"]
+    job.timekeeper = result["timekeeper"]
+    job.measurements = result["measurements"]
+    return job

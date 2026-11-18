@@ -18,7 +18,7 @@ from typing import Any
 from typing import Callable
 from typing import Literal
 
-from _canary import app
+from _canary.workspace.workspace import Workspace
 
 _FAILED_OUTCOMES = {"FAILED", "ERROR", "BROKEN"}
 SortBy = Literal["name", "duration", "status", "session"]
@@ -258,13 +258,13 @@ def slowest(
 
 
 def raw_results() -> dict[str, Any]:
-    """Return the raw result mapping from the application layer."""
+    """Return the latest result record for each spec in the current workspace."""
 
-    return app.get_results()
+    return Workspace.load().db.get_results()
 
 
 def _entries(*, full_ids: bool) -> list[dict[str, Any]]:
-    return [_row_to_entry(row, full_ids=full_ids) for row in app.get_results().values()]
+    return [_row_to_entry(row, full_ids=full_ids) for row in raw_results().values()]
 
 
 def _filter_entries(

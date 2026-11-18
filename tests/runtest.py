@@ -16,6 +16,7 @@ from _canary.core.timekeeper import Timekeeper
 from _canary.execution.runtest import Runner
 from _canary.execution.runtest import _record_finish_failure
 from _canary.execution.runtest import reconcile_unfinished_jobs
+from _canary.execution.runtest import record_job_event
 
 
 class DummyJob(BaseJob):
@@ -73,7 +74,7 @@ class DummyJob(BaseJob):
 
 
 def _runner(jobs: list[DummyJob]) -> Runner:
-    return Runner(jobs=jobs, session="s", workspace=SimpleNamespace())  # type: ignore[arg-type]
+    return Runner(jobs=jobs, session="s", context=SimpleNamespace())  # type: ignore[arg-type]
 
 
 def test_reconcile_marks_pending_job_cancelled():
@@ -187,3 +188,24 @@ def test_record_finish_failure_preserves_status_and_writes_output(tmp_path):
     output = written[0]
     assert "canary_runtest_finish hook failed" in output
     assert "RuntimeError: boom in finish" in output
+
+
+def test_record_job_event_records_lifecycle_events_of_jobs_only():
+    from _canary.core.job import Job
+
+    recorded: list[Any] = []
+    context = SimpleNamespace(record=recorded.append)
+    job = Job.__new__(Job)  # only the type matters to the listener
+
+    def event(name: str, payload: Any) -> Any:
+        return SimpleNamespace(
+            name=name, slot=None if payload is None else SimpleNamespace(job=payload)
+        )
+
+    for name in ("job_submitted", "job_started", "job_finished"):
+        record_job_event(context, event(name, job))  # type: ignore[arg-type]
+    record_job_event(context, event("job_updated", job))  # type: ignore[arg-type]
+    record_job_event(context, event("job_finished", None))  # type: ignore[arg-type]
+    record_job_event(context, event("job_finished", DummyJob()))  # type: ignore[arg-type]
+
+    assert recorded == [job, job, job]

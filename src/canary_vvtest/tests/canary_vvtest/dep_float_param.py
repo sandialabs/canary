@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 
@@ -31,7 +32,7 @@ def isolated_config(tmp_path, monkeypatch):
 def collect_specs(workspace_root: Path, file: Path):
     workspace = Workspace.create(workspace_root)
     file = file.absolute()
-    specs = workspace.collect({str(file.parent): [file.name]})
+    specs = Engine(workspace).collect({str(file.parent): [file.name]})
     return [spec for spec in specs if not spec.mask]
 
 

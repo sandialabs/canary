@@ -181,19 +181,18 @@ class FakeConfig:
         return default
 
 
-class FakeRunnerWorkspace:
+class FakeContext:
     def __init__(self, tmp_path):
         self.cache_dir = tmp_path / "cache"
         self.root = tmp_path / ".canary"
-
-        self.db = SimpleNamespace(queue=SimpleNamespace(put=lambda job: None))
+        self.record = lambda job: None
 
 
 class FakeRunner:
     def __init__(self, jobs, tmp_path):
         self.jobs = jobs
         self.session = "session1"
-        self.workspace = FakeRunnerWorkspace(tmp_path)
+        self.context = FakeContext(tmp_path)
 
 
 def test_ready_jobs_only_returns_ready(monkeypatch, tmp_path):
@@ -257,7 +256,7 @@ def test_finalize_blocked_jobs_queues_parent_side(monkeypatch, tmp_path):
     queued = []
 
     runner = FakeRunner([blocked], tmp_path)
-    runner.workspace.db.queue.put = lambda job: queued.append(job)
+    runner.context.record = lambda job: queued.append(job)
 
     xtor = ex.FluxDirectExecutor(cast(Any, runner))
 

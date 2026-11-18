@@ -24,6 +24,7 @@ from typing import Any
 from typing import Literal
 
 from .. import rerun
+from ..engine.engine import Engine
 from ..util import logging
 from ..util.string import pluralize
 from ..view import ViewSettings
@@ -114,7 +115,7 @@ def _open_or_create_workspace(work_tree: str, wipe: bool, kind: str) -> Workspac
 def _resolve_specs(workspace: Workspace, kind: str, value: Any, options: RunOptions):
     """Resolve a request into the spec set to run, applying selection filters."""
     if kind == "scanpaths":
-        return workspace.create_selection(
+        return Engine(workspace).create_selection(
             tag=options.tag,
             scanpaths=value,
             on_options=options.on_options,
@@ -141,7 +142,7 @@ def _resolve_specs(workspace: Workspace, kind: str, value: Any, options: RunOpti
     else:
         raise ValueError(f"Unknown run request kind: {kind!r}")
 
-    workspace.apply_selection_rules(
+    Engine(workspace).apply_selection_rules(
         specs,
         keyword_exprs=options.keyword_exprs,
         parameter_expr=options.parameter_expr,
@@ -175,5 +176,5 @@ def run(request: Any, options: RunOptions | None = None) -> int:
     specs = _resolve_specs(workspace, kind, request.value, options)
     inplace = kind == "viewpaths"
     only = resolve_only(options.only, kind)
-    session = workspace.run(specs, inplace=inplace, only=only, view_t=options.view)
+    session = Engine(workspace).run(specs, inplace=inplace, only=only, view_t=options.view)
     return session.returncode

@@ -32,6 +32,7 @@ from _canary.cli.log import Log
 from _canary.cli.query import Query
 from _canary.cli.status import Status
 from _canary.cli.tree import Tree
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.util.query_data import query_json
 from _canary.util.query_data import skill_to_markdown
@@ -109,8 +110,8 @@ if __name__ == "__main__":
 
         with canary.config.override():
             workspace = Workspace.create(d)
-            specs = workspace.collect({str(d): []})
-            session = workspace.run(specs, only="all")
+            specs = Engine(workspace).collect({str(d): []})
+            session = Engine(workspace).run(specs, only="all")
 
         jobs = workspace.load_jobs()
         f_a1_job = next(job for job in jobs if job.name == "f.a=1")
@@ -565,8 +566,8 @@ if __name__ == '__main__':
         )
 
         workspace = Workspace.create(tmp_path)
-        specs = workspace.collect({str(tmp_path): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(tmp_path): []})
+        session = Engine(workspace).run(specs, only="all")
         assert session.returncode != 0
 
         calls: list[tuple[str, str]] = []
@@ -607,8 +608,8 @@ if __name__ == '__main__':
         )
 
         workspace = Workspace.create(tmp_path)
-        specs = workspace.collect({str(tmp_path): []})
-        workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(tmp_path): []})
+        Engine(workspace).run(specs, only="all")
 
         jobs = _resolve_hook_jobs(
             workspace,
@@ -649,8 +650,8 @@ if __name__ == '__main__':
         )
 
         workspace = Workspace.create(tmp_path)
-        specs = workspace.collect({str(tmp_path): []})
-        workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(tmp_path): []})
+        Engine(workspace).run(specs, only="all")
 
         calls: list[str] = []
 
@@ -689,8 +690,8 @@ if __name__ == '__main__':
         )
 
         workspace = Workspace.create(tmp_path)
-        specs = workspace.collect({str(tmp_path): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(tmp_path): []})
+        session = Engine(workspace).run(specs, only="all")
         session.add_measurement("persisted", 7)
         session.save()
 
@@ -1850,8 +1851,8 @@ def batch_setup(tmp_path_factory):
             conductor = CanaryHPCConductor(backend="shell")
             cfg.pluginmanager.register(conductor, "canary_hpc_batch_setup")
             workspace = Workspace.create(d, force=True)
-            specs = workspace.create_selection("default", {str(d): []})
-            workspace.run(specs)
+            specs = Engine(workspace).create_selection("default", {str(d): []})
+            Engine(workspace).run(specs)
 
     # Discover batch dirs and session name
     session_dirs = sorted((d / ".canary" / "sessions").glob("*"))
@@ -3088,10 +3089,10 @@ if __name__ == "__main__":
             )
         with canary.config.override():
             workspace = Workspace.create(d)
-            specs = workspace.collect({str(d): []})
-            first = workspace.run(specs, only="all")
+            specs = Engine(workspace).collect({str(d): []})
+            first = Engine(workspace).run(specs, only="all")
             time.sleep(0.01)
-            second = workspace.run(specs, only="all")
+            second = Engine(workspace).run(specs, only="all")
         job = workspace.load_jobs()[0]
     return SimpleNamespace(
         root=d, job_id=job.id, first=first.name, second=second.name, workspace=workspace

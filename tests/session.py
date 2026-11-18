@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from typing import cast
 
-from _canary.workspace.workspace import Session
+from _canary.workspace.session import Session
 
 
 class DummyJob:

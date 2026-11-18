@@ -13,6 +13,7 @@ import canary
 from _canary import app
 from _canary.cli.run import ReadPathsFromFile
 from _canary.core.rules import parse_case_selector
+from _canary.engine.engine import Engine
 from _canary.scanpaths import case_selectors
 from _canary.scanpaths import split_case_selector
 from _canary.workspace.workspace import Workspace
@@ -62,7 +63,7 @@ def suite(tmp_path, monkeypatch):
 def select(root, scanpaths):
     with canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.create_selection(tag=None, scanpaths=scanpaths)
+        specs = Engine(workspace).create_selection(tag=None, scanpaths=scanpaths)
     return sorted(spec.name for spec in specs)
 
 

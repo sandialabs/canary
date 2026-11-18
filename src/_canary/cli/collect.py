@@ -7,11 +7,12 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from .. import app
+from ..engine.engine import Engine
 from ..generation.collect import Collector
 from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 from .run import ScanPathSpec
 
@@ -48,5 +49,5 @@ class Collect(CanarySubcommand):
         """Collect test cases from ``args.scanpaths`` into the current workspace."""
         if getattr(args, "request", None) is not None:
             args.scanpaths = args.request.value
-        app.collect(args.scanpaths, on_options=args.on_options)
+        Engine(Workspace.load()).collect(args.scanpaths, on_options=args.on_options)
         return 0

@@ -53,6 +53,7 @@ The canonical agent loop using Canary:
    .. code-block:: python
 
       from canary import Workspace
+      from _canary.engine.engine import Engine
 
       # Load existing workspace
       workspace = Workspace.load()
@@ -65,7 +66,8 @@ The canonical agent loop using Canary:
    .. code-block:: python
 
       # Select jobs based on criteria
-      specs = workspace.collect(scanpaths={".": ["*.pyt"]})
+      engine = Engine(workspace)
+      specs = engine.collect(scanpaths={".": ["*.pyt"]})
       selected = [spec for spec in specs if "regression" in spec.keywords]
 
 3. **Run Workflow**:
@@ -73,7 +75,7 @@ The canonical agent loop using Canary:
    .. code-block:: python
 
       # Execute selected jobs
-      session = workspace.run(specs=selected, tag="agent-run-1")
+      session = engine.run(selected)
 
 4. **Inspect Status and Query Data**:
 
@@ -94,8 +96,7 @@ The canonical agent loop using Canary:
       # Implement decision logic
       if any(r["status"]["category"] == "FAIL" for r in results.values()):
           # Rerun failed jobs
-          failed_jobs = [k for k, v in results.items() if v["status"]["category"] == "FAIL"]
-          workspace.run(job_ids=failed_jobs)
+          engine.run(selected, only="failed")
       else:
           # All jobs passed, proceed to next phase
           proceed_to_next_phase()
@@ -256,8 +257,9 @@ Agent Workflow Examples
            iteration += 1
 
            # Run parameterized tests
-           specs = workspace.collect(scanpaths={".": ["optimization_*.pyt"]})
-           session = workspace.run(specs=specs, tag=f"opt-{iteration}")
+           engine = Engine(workspace)
+           specs = engine.collect(scanpaths={".": ["optimization_*.pyt"]})
+           session = engine.run(specs, only="all")
 
            # Query results
            results = workspace.db.get_results()
@@ -292,7 +294,8 @@ Agent Workflow Examples
        baseline_results = load_baseline()
 
        # Run current tests
-       workspace.run(specs=workspace.collect(), tag="regression-run")
+       engine = Engine(workspace)
+       engine.run(engine.collect(scanpaths={".": []}), only="all")
        current_results = workspace.db.get_results()
 
        # Compare results
@@ -323,8 +326,9 @@ Agent Workflow Examples
        workspace.clean()
 
        # Collect and run tests
-       specs = workspace.collect(scanpaths={"tests/": ["*.pyt"]})
-       session = workspace.run(specs=specs, tag="ci-run")
+       engine = Engine(workspace)
+       specs = engine.collect(scanpaths={"tests/": ["*.pyt"]})
+       session = engine.run(specs, only="all")
 
        # Generate reports
        junit_report = workspace.report("junit")

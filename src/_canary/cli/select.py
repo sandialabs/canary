@@ -9,6 +9,7 @@ from .. import app
 from ..plugins.hookspec import hookimpl
 from ..select import Selector
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -49,9 +50,9 @@ class Select(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         if args.delete_tag:
-            app.delete_selection(args.tag)
+            Workspace.load().db.delete_selection(args.tag)
         elif args.move_tag:
-            app.rename_selection(args.move_tag, args.tag)
+            Workspace.load().db.rename_selection(args.move_tag, args.tag)
         elif args.from_tag:
             app.select(
                 args.tag,
@@ -63,7 +64,7 @@ class Select(CanarySubcommand):
                 regex=args.regex_filter,
             )
         else:
-            if app.is_selection(args.tag):
+            if Workspace.load().is_tag(args.tag):
                 raise ValueError(logging.colorize(f"Selection {args.tag!r} already exists"))
             app.select(
                 args.tag,

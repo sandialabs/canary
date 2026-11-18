@@ -339,6 +339,7 @@ def flux_exec(args: argparse.Namespace) -> int:
 
     from _canary import config
     from _canary.core.job import Job
+    from _canary.engine.jobs import construct_jobs
     from _canary.workspace.workspace import Workspace
 
     workspace = Workspace.load()
@@ -346,7 +347,7 @@ def flux_exec(args: argparse.Namespace) -> int:
 
     spec = workspace.find_jobspec(args.spec)
     specs = workspace.db.load_specs(ids=[spec.id], include_upstreams=True)
-    jobs = workspace.construct_jobs(specs, session_dir)
+    jobs = construct_jobs(workspace, specs, session_dir)
 
     job: Job = next(j for j in jobs if j.id == spec.id)
 

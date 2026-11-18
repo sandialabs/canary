@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 HERE = Path(__file__).parent
@@ -36,7 +37,7 @@ def test_include_directive_with_per_testname_parameterize(tmp_path):
     workspace = Workspace.create(tmp_path)
     f = HERE / "include_parameterize.vvt"
 
-    specs = workspace.collect({str(f.parent): [f.name]})
+    specs = Engine(workspace).collect({str(f.parent): [f.name]})
     specs = [spec for spec in specs if not spec.mask]
 
     assert {spec.name for spec in specs} == {

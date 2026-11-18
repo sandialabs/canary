@@ -15,8 +15,8 @@ import rich.console
 import rich.table
 import yaml
 
-from .. import app
 from ..plugins.hookspec import hookimpl
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -61,7 +61,7 @@ class Info(CanarySubcommand):
 
     def print_tag_info_json(self, tag: str) -> None:
         """Emit JSON with spec count, creation date, and metadata for *tag* to stdout."""
-        info = app.get_tag_info(tag)
+        info = Workspace.load().tag_info(tag)
         specs = info["specs"]
         out = {
             "tag": tag,
@@ -75,7 +75,7 @@ class Info(CanarySubcommand):
 
     def print_tag_info(self, tag: str) -> None:
         """Print a rich table of tag metadata and the specs it contains."""
-        info = app.get_tag_info(tag)
+        info = Workspace.load().tag_info(tag)
         specs = info["specs"]
         selection = dict(info["metadata"])
         fh = io.StringIO()
@@ -98,7 +98,7 @@ class Info(CanarySubcommand):
 
     def print_workspace_info_json(self) -> None:
         """Emit JSON with root, version, spec count, test roots, sessions, and tags to stdout."""
-        info = app.get_workspace_info()
+        info = Workspace.load().info()
         unique_test_roots = sorted({spec.file_root.as_posix() for spec in info["specs"]})
         out = {
             "root": info["root"],
@@ -114,7 +114,7 @@ class Info(CanarySubcommand):
 
     def print_workspace_info(self) -> None:
         """Print a rich summary table of the current workspace."""
-        info = app.get_workspace_info()
+        info = Workspace.load().info()
         unique_test_roots = {spec.file_root.as_posix() for spec in info["specs"]}
         table = rich.table.Table(show_header=False)
         table.add_row("Workspace", info["root"])

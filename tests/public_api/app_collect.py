@@ -2,17 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""The ``app.collect`` application operation.
+"""Collection through the Engine.
 
-``canary collect`` delegates entirely to :func:`_canary.app.collect`; this pins
-that the operation opens the current workspace, discovers specs under the given
-scan paths, persists them, and returns the resolved specs -- the same contract
-``canary collect`` depends on.
+``canary collect`` runs :meth:`Engine.collect <_canary.engine.engine.Engine.collect>`
+on the current workspace; this pins that it discovers specs under the given scan
+paths, persists them, and returns the resolved specs, and that it needs an
+existing workspace.
 """
 
 import canary
-from _canary import app
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import NotAWorkspaceError
+from _canary.workspace.workspace import Workspace
 
 PYT_BODY = """\
 import sys
@@ -29,14 +30,14 @@ def test_collect_returns_and_persists_resolved_specs(tmp_path, monkeypatch):
     (tmp_path / "b.pyt").write_text(PYT_BODY)
 
     with canary.config.override():
-        app.create_workspace(tmp_path)
-        specs = app.collect({str(tmp_path): []})
+        Workspace.create(tmp_path)
+        specs = Engine(Workspace.load()).collect({str(tmp_path): []})
 
         assert {s.family for s in specs} == {"a", "b"}
 
         # The operation must persist, not merely resolve: a freshly opened
         # workspace sees the same specs.
-        reopened = app.open_workspace(tmp_path)
+        reopened = Workspace.load(tmp_path)
         assert {s.family for s in reopened.db.load_specs()} == {"a", "b"}
 
 
@@ -44,7 +45,7 @@ def test_collect_without_workspace_raises(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with canary.config.override():
         try:
-            app.collect({str(tmp_path): []})
+            Engine(Workspace.load()).collect({str(tmp_path): []})
         except NotAWorkspaceError:
             pass
         else:
@@ -57,8 +58,8 @@ def test_collect_permissive_keeps_invalid_import_file_as_masked_spec(tmp_path, m
     bad.write_text("import does_not_exist\n")
 
     with canary.config.override():
-        app.create_workspace(tmp_path)
-        specs = app.collect({str(tmp_path): []}, parsing_policy="permissive")
+        Workspace.create(tmp_path)
+        specs = Engine(Workspace.load()).collect({str(tmp_path): []}, parsing_policy="permissive")
 
     assert len(specs) == 1
     spec = specs[0]

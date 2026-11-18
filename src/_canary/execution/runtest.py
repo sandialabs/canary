@@ -39,6 +39,7 @@ the ``canary_runtests`` hook.  The default implementation is registered with
 
 import dataclasses
 import datetime
+import functools
 import io
 import os
 import sys
@@ -55,6 +56,7 @@ from typing import Generator
 import rich
 
 from .. import config
+from ..core.job import Job
 from ..events import get_event_bus
 from ..history import HistoryStore
 from ..plugins.hookspec import hookimpl
@@ -66,8 +68,8 @@ from .queue import ResourceQueue
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..core.job import Job
-    from ..workspace.workspace import Workspace
+    from .context import ExecutionContext
+    from .queue_executor import ExecutionEvent
 
 
 logger = logging.get_logger(__name__)
@@ -78,7 +80,7 @@ global_lock = threading.Lock()
 class Runner:
     jobs: list["Job"]
     session: str
-    workspace: "Workspace"
+    context: "ExecutionContext"
     _returncode: int = -20
     start: float = dataclasses.field(default=-1.0, init=False)
     finish: float = dataclasses.field(default=-1.0, init=False)
@@ -199,7 +201,7 @@ def default_runtests(runner: Runner) -> bool:
 
     try:
         rpool = config.resource_manager.get_pool()
-        store = HistoryStore.open(start=runner.workspace.root)
+        store = HistoryStore.open(start=runner.context.root)
         queue = ResourceQueue(lock=global_lock, resource_pool=rpool, store=store)
         queue.put(*runner.jobs)  # type: ignore
     except Exception:
@@ -210,9 +212,29 @@ def default_runtests(runner: Runner) -> bool:
     with ResourceQueueExecutor(
         queue, executor, max_workers=max_workers, event_bus=get_event_bus()
     ) as ex:
-        ex.add_listener(runner.workspace.testcase_done_callback)
+        ex.add_listener(functools.partial(record_job_event, runner.context))
         ex.run()
     return True
+
+
+def record_job_event(context: "ExecutionContext", event: "ExecutionEvent") -> None:
+    """Executor listener: record a job's result when it is submitted, starts, or finishes.
+
+    Results are spooled to the database not only when a job finishes but
+    also when it is submitted or starts running, so that ``canary status``
+    (which reads the results database) reflects in-progress jobs mid-run.
+    :meth:`~_canary.persistence.database.WorkspaceDatabase.put_results` is
+    order-independent, so each transition replaces the previous row for
+    that job only if it is newer.
+    """
+    if event.name not in ("job_submitted", "job_started", "job_finished"):
+        return
+    if event.slot is None:
+        return
+    job = event.slot.job
+    if not isinstance(job, Job):
+        return
+    context.record(job)
 
 
 class JobExecutor:

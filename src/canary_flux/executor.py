@@ -34,7 +34,7 @@ import canary
 class RunnerLike(Protocol):
     jobs: list[canary.Job]
     session: str
-    workspace: Any
+    context: Any
 
 
 @dataclass
@@ -313,7 +313,7 @@ class FluxDirectExecutor:
             if self.live_reporting()
             else EventReporter(self)
         )
-        self.add_listener(self._sync_view_on_finish)
+        self.add_listener(self._record_on_finish)
         backend_name = canary.config.getoption("flux_backend") or "flux"
         backend = hpc_connect.get_backend(backend_name)
         submitter = backend.submission_manager()
@@ -344,7 +344,7 @@ class FluxDirectExecutor:
 
         finally:
             self._cancel_remaining()
-            self.remove_listener(self._sync_view_on_finish)
+            self.remove_listener(self._record_on_finish)
 
         return 0
 
@@ -415,7 +415,7 @@ class FluxDirectExecutor:
         return submitted_any
 
     def _submit_workspace(self, job: canary.Job) -> Path:
-        root = self.runner.workspace.cache_dir / "canary-flux" / self.runner.session / "jobs"
+        root = self.runner.context.cache_dir / "canary-flux" / self.runner.session / "jobs"
         return root / job.id
 
     def _can_submit_more(self) -> bool:
@@ -453,7 +453,7 @@ class FluxDirectExecutor:
     def _canary_flux_exec_command(self, job: canary.Job) -> str:
         import shlex
 
-        workspace_anchor = self.runner.workspace.root.parent
+        workspace_anchor = self.runner.context.root.parent
 
         args = [sys.executable, "-m", "canary", "-C", str(workspace_anchor)]
 
@@ -539,7 +539,7 @@ class FluxDirectExecutor:
 
         # Parent must persist this because no child flux exec ran.
         try:
-            self.runner.workspace.db.queue.put(job)
+            self.runner.context.record(job)
         except Exception:
             logger.debug("Failed to queue submission-failed job %s", job.id[:7], exc_info=True)
 
@@ -633,7 +633,7 @@ class FluxDirectExecutor:
 
             # Parent must persist blocked jobs because no child will run them.
             try:
-                self.runner.workspace.db.queue.put(job)
+                self.runner.context.record(job)
             except Exception:
                 logger.debug("Failed to queue blocked job %s", job.id[:7], exc_info=True)
 
@@ -671,7 +671,7 @@ class FluxDirectExecutor:
                 logger.debug("Failed to save stuck job %s", job.id[:7], exc_info=True)
 
             try:
-                self.runner.workspace.db.queue.put(job)
+                self.runner.context.record(job)
             except Exception:
                 logger.debug("Failed to queue stuck job %s", job.id[:7], exc_info=True)
 
@@ -735,9 +735,9 @@ class FluxDirectExecutor:
         except Exception:
             logger.debug("Failed to save finished job %s", job.id[:7], exc_info=True)
 
-        # Do NOT queue normal executed jobs here if child `canary flux exec` already
-        # did workspace.db.queue.put(job). Parent-side queueing here would duplicate
-        # result writes.
+        # The child `canary flux exec` already spooled this job's results;
+        # _record_on_finish records the refreshed copy again (and syncs the live
+        # view).  put_results never lets an older record replace a newer one.
         self.notify_listeners(ExecutionEvent(name="job_finished", slot=slot))
 
     def _record_flux_timing(
@@ -889,20 +889,16 @@ class FluxDirectExecutor:
 
         return None
 
-    def _sync_view_on_finish(self, event: ExecutionEvent) -> None:
+    def _record_on_finish(self, event: ExecutionEvent) -> None:
         if event.name != "job_finished" or event.slot is None:
-            return
-
-        view_manager = getattr(self.runner.workspace, "view_manager", None)
-        if view_manager is None:
             return
 
         job = inner_job(event.slot.job)
 
         try:
-            view_manager.sync(job)
+            self.runner.context.record(job)
         except Exception:
-            logger.exception("Failed to sync Flux job %s to results view", job.id[:7])
+            logger.exception("Failed to record Flux job %s", job.id[:7])
 
 
 def duration(start: float, stop: float) -> float:

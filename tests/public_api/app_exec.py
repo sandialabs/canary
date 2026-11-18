@@ -18,6 +18,7 @@ import pytest
 
 import canary
 from _canary import app
+from _canary.workspace.workspace import Workspace
 
 PYT_BODY = """\
 import sys
@@ -39,7 +40,7 @@ def _seed_workspace_with_one_spec(tmp_path):
     (tmp_path / "a.pyt").write_text(PYT_BODY)
     with canary.config.override():
         assert app.run(_Request(kind="scanpaths", value={str(tmp_path): []})) == 0
-        (spec_id,) = app.get_results().keys()
+        (spec_id,) = Workspace.load().db.get_results().keys()
     return spec_id
 
 
@@ -52,7 +53,7 @@ def test_exec_job_runs_single_spec_and_persists_result(tmp_path, monkeypatch):
         assert job.status.is_success()
 
         # The freshly-run result must be persisted, not just held in memory.
-        (record,) = app.get_results().values()
+        (record,) = Workspace.load().db.get_results().values()
         assert record["status"].is_success()
 
 

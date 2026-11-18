@@ -15,13 +15,13 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from .. import app
 from ..app.failure_analysis import collect_failure_groups
 from ..core.job import JobState
 from ..core.status import Status as _Status
 from ..plugins.hookspec import hookimpl
 from ..util import glyphs
 from ..util import logging
+from ..workspace.workspace import Workspace
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -158,7 +158,7 @@ class Status(CanarySubcommand):
         if args.specs:
             self.print_spec_status_history(args.specs, args)
             return 0
-        results = app.get_results()
+        results = Workspace.load().db.get_results()
 
         if getattr(args, "output_json", False):
             self.print_json(results, args)
@@ -311,7 +311,7 @@ class Status(CanarySubcommand):
         for col in ["Name", "ID", "Session", "Exit Code", "Duration", "Status", "Details"]:
             table.add_column(col)
         for id in ids:
-            results = app.get_result_history(id)
+            results = Workspace.load().db.get_result_history(id)
             for entry in results:
                 row: list[str] = []
                 row.append(entry["spec_name"])
@@ -481,7 +481,7 @@ def _build_failure_summary(rows: list[dict]) -> str:
     Groups failures by ``(outcome, reason)`` and shows the job names in each
     group.  Includes hint lines for the next actions an analyst should take.
     """
-    workspace = app.open_workspace()
+    workspace = Workspace.load()
     groups = collect_failure_groups(workspace, rows)
     total = len(rows)
     noun = "job" if total == 1 else "jobs"

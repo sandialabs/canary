@@ -7,6 +7,7 @@ import importlib.resources
 from pathlib import Path
 
 import _canary.config as config
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
 from canary_hpc.conductor import CanaryHPCConductor
@@ -25,9 +26,9 @@ def test_repo_bfilter(tmpdir):
             conductor = CanaryHPCConductor(backend="shell")
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
             workspace = Workspace.create("tests", force=True)
-            specs = workspace.create_selection(
+            specs = Engine(workspace).create_selection(
                 "default", {str(examples / "basic"): [], str(examples / "vvt"): []}
             )
-            workspace.run(specs)
+            Engine(workspace).run(specs)
             files = glob.glob("tests/.canary/sessions/**/submit.sh", recursive=True)
             assert len(files) == 2

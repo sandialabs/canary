@@ -241,15 +241,9 @@ class ExplorerModel:
 
         try:
             if kind == "scanpaths":
-                from ..workspace.workspace import NotAWorkspaceError
-                from ..workspace.workspace import Workspace
+                from ..app.selection import create_selection
 
-                try:
-                    workspace = Workspace.load()
-                except NotAWorkspaceError:
-                    workspace = Workspace.create()
-
-                specs = workspace.create_selection(tag=None, scanpaths=request.value)
+                specs = create_selection(None, request.value, create_workspace=True)
                 self.refresh()
                 n = len(specs)
                 msg = f"loaded {n} job"

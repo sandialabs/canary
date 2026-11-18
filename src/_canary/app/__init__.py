@@ -2,30 +2,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Canary application layer.
+"""Canary application layer: the use cases every interface shares.
 
-A single in-process entry point for opening a Canary
-:class:`~_canary.workspace.workspace.Workspace`, intended to be shared by every interface
-(CLI, and future TUI/GUI/VS Code) so business logic lives here rather than in
-any one interface.
-
-This module is a facade: it delegates to the existing implementation
-(:class:`~_canary.workspace.workspace.Workspace`) and adds no behavior of its own.
+Interfaces (CLI, TUI, the Python API) turn user input into a request; the
+functions here decide what that request means -- which specs to run, the rerun
+strategy, which jobs to rebaseline, how to project results for display -- and
+drive the :class:`~_canary.engine.engine.Engine` or read the
+:class:`~_canary.workspace.workspace.Workspace`.  A function belongs here only
+if it decides or combines something; plain reads go straight to ``Workspace``.
 """
 
 from .exec_ import exec_job
-from .facade import archive_workspace
-from .facade import collect
-from .facade import create_workspace
-from .facade import delete_selection
-from .facade import get_result_history
-from .facade import get_results
-from .facade import get_tag_info
-from .facade import get_workspace_info
-from .facade import is_selection
-from .facade import open_workspace
-from .facade import rename_selection
-from .facade import select
 from .pathspec import classify_pathspec
 from .queries import JobView
 from .queries import WorkspaceSummary
@@ -41,12 +28,10 @@ from .run_subprocess import RunHandle
 from .run_subprocess import run_in_subprocess
 from .runhook import RunHookOptions
 from .runhook import run_hook
+from .selection import create_selection
+from .selection import select
 
 __all__ = [
-    "collect",
-    "create_workspace",
-    "archive_workspace",
-    "open_workspace",
     "run",
     "RunOptions",
     "run_hook",
@@ -57,13 +42,7 @@ __all__ = [
     "exec_job",
     "classify_pathspec",
     "select",
-    "delete_selection",
-    "rename_selection",
-    "is_selection",
-    "get_workspace_info",
-    "get_tag_info",
-    "get_results",
-    "get_result_history",
+    "create_selection",
     "list_jobs",
     "job_history",
     "job_log",

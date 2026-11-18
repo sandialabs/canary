@@ -11,6 +11,7 @@ import pytest
 import _canary.workspace.workspace as _workspace_module
 from _canary.cli.archive import Archive
 from _canary.cli.rm import RemoveWorkspace
+from _canary.engine.engine import Engine
 from _canary.util.filesystem import working_dir
 from _canary.view import ResultsView
 from _canary.view import ViewSettings
@@ -219,7 +220,7 @@ def test_session_lock_records_root_at_creation(tmp_path):
     session_dir = ws.sessions_dir / "s1"
     session_dir.mkdir(parents=True)
 
-    from _canary.workspace.workspace import Session
+    from _canary.workspace.session import Session
 
     session = Session(name="s1", jobs=[], prefix=session_dir)
     data = session.to_lock_data()
@@ -438,7 +439,7 @@ def test_register_latest_session_recreates_missing_refs_dir(tmp_path):
     assert not ws.refs_dir.exists()
 
     session = types.SimpleNamespace(prefix=ws.sessions_dir / "sess-1")
-    ws._runner.register_latest_session(session)  # type: ignore[arg-type]
+    Engine(ws).register_latest_session(session)  # type: ignore[arg-type]
 
     assert ws.refs_dir.exists()
     latest = ws.refs_dir / "latest"
@@ -576,9 +577,9 @@ def test_register_latest_session_uses_atomic_write(tmp_path, monkeypatch):
     def fake_atomic_write(path: Path, text: str) -> None:
         calls.append((path, text))
 
-    monkeypatch.setattr("_canary.workspace.runner.atomic_write", fake_atomic_write)
+    monkeypatch.setattr("_canary.engine.engine.atomic_write", fake_atomic_write)
 
-    ws._runner.register_latest_session(session)  # type: ignore[arg-type]
+    Engine(ws).register_latest_session(session)  # type: ignore[arg-type]
 
     assert calls == [
         (ws.refs_dir / "latest", os.path.relpath(str(session.prefix), str(ws.refs_dir)))
@@ -1019,16 +1020,16 @@ def test_archive_command_passes_only_and_exclude(tmp_path, monkeypatch):
     ws = Workspace.create(root)
     called = {}
 
-    monkeypatch.setattr("_canary.cli.archive.app.open_workspace", lambda: ws)
+    monkeypatch.setattr("_canary.cli.archive.Workspace.load", lambda: ws)
 
-    def fake_archive_workspace(dest, *, only="all", exclude=None, start=None):
+    def fake_archive(dest, *, only="all", exclude=None):
         called["dest"] = dest
         called["only"] = only
         called["exclude"] = exclude
         dest.write_text("archive\n")
         return dest
 
-    monkeypatch.setattr("_canary.cli.archive.app.archive_workspace", fake_archive_workspace)
+    monkeypatch.setattr(ws, "archive", fake_archive)
 
     archive = tmp_path / "filtered.tar.gz"
     rc = Archive().execute(argparse.Namespace(dest=str(archive), only="failed", exclude=["*.exo*"]))

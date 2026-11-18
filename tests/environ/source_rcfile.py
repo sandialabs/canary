@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 import canary
+from _canary.engine.engine import Engine
 from _canary.util import shell
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
@@ -26,8 +27,8 @@ def run_dir(root: Path) -> None:
     """Collect and run all .pyt files under root; assert returncode 0."""
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect({str(root): []})
-        session = workspace.run(specs, only="all")
+        specs = Engine(workspace).collect({str(root): []})
+        session = Engine(workspace).run(specs, only="all")
     assert session.returncode == 0, (
         (root / "TestResults" / "file" / "canary-out.txt").read_text()
         if (root / "TestResults" / "file" / "canary-out.txt").exists()

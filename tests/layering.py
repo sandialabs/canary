@@ -6,11 +6,12 @@
 
 Higher layers may import lower ones, never the reverse::
 
-    cli, tui, api, reporters  ->  app  ->  controller  ->  execution, view, workspace
-                                                        ->  persistence  ->  core, util
+    cli, tui, api, reporters  ->  app  ->  engine  ->  execution, workspace
+                                                    ->  view, persistence  ->  core, util
 
-``execution``, ``view`` and ``workspace`` are siblings that must not import each
-other.  ``config`` may import only ``workspace.locator`` (plus ``util`` and the free
+``execution`` and ``workspace`` are siblings that must not import each other.
+``view`` sits below ``workspace``: the Workspace registers and rebuilds views, and
+``view`` never calls back into it.  ``config`` may import only ``workspace.locator`` (plus ``util`` and the free
 packages).  ``events`` may import only ``core`` and ``util``.  Free packages
 (``events``, ``config``, ``plugins``, ``error``, ``version``, ``third_party``) may be
 imported from anywhere.
@@ -41,11 +42,11 @@ RANK = {
     "main": 6,
     "<root>": 6,
     "app": 5,
-    "controller": 4,
+    "engine": 4,
     "execution": 3,
-    "view": 3,
     "workspace": 3,
     "persistence": 2,
+    "view": 2,
     "generation": 2,
     "select": 2,
     "scanpaths": 2,
@@ -161,24 +162,24 @@ def find_violations() -> dict[tuple[str, str], str]:
     return found
 
 
+# The workspace refactor removed every violation in its scope.  These remain outside it
+# (plan section 6) and each has a reason:
 KNOWN_VIOLATIONS: dict[tuple[str, str], str] = {
+    # The parser lists the CLI subcommands (known_commands) and types them.
     ("_canary.config.argparsing", "_canary.cli"): "function",
     ("_canary.config.argparsing", "_canary.cli.base"): "type",
+    # Config is the process-wide holder of the ResourceManager (config.resource_manager).
     ("_canary.config.config", "_canary.resource_pool.manager"): "module",
+    # Jobs and rules state their resource needs as resource_pool.NodeRequests, and the
+    # launcher hook's return type; moving those types into core is a separate change.
     ("_canary.core.job", "_canary.execution.launcher"): "type",
     ("_canary.core.job", "_canary.resource_pool.rpool"): "function",
-    ("_canary.core.rules", "_canary.rerun"): "function",
     ("_canary.core.rules", "_canary.resource_pool.rpool"): "type",
-    ("_canary.execution.runtest", "_canary.workspace.workspace"): "type",
+    # RerunRule applies a rerun strategy, defined once in rerun.py for both callers.
+    ("_canary.core.rules", "_canary.rerun"): "function",
+    # Test helpers that generate and collect random test files.
     ("_canary.util.testing", "_canary.generation.collect"): "function",
     ("_canary.util.testing", "_canary.generation.generate"): "function",
-    ("_canary.view", "_canary.workspace.session"): "type",
-    ("_canary.view", "_canary.workspace.workspace"): "type",
-    ("_canary.workspace.runner", "_canary.execution.queue_executor"): "type",
-    ("_canary.workspace.runner", "_canary.view"): "module",
-    ("_canary.workspace.session", "_canary.execution.runtest"): "module",
-    ("_canary.workspace.workspace", "_canary.execution.queue_executor"): "type",
-    ("_canary.workspace.workspace", "_canary.view"): "module",
 }
 
 
@@ -196,6 +197,22 @@ def test_known_violations_still_occur():
     assert not gone, "remove fixed entries from KNOWN_VIOLATIONS:\n" + "\n".join(
         f"    {k!r}: {v!r}," for k, v in sorted(gone.items())
     )
+
+
+EDGES = {"cli", "tui", "api", "reporters", "agent", "main", "<root>"}
+
+
+def test_edges_use_the_engine_class_not_its_internals():
+    """Interfaces call ``app`` or ``Engine``, never ``engine.collection``/``selection``/``jobs``."""
+    found = set()
+    for path in sorted(ROOT.rglob("*.py")):
+        importer = _module_name(path)
+        if _package(importer) not in EDGES:
+            continue
+        for imported, _ in _imports(path):
+            if _package(imported) == "engine" and imported != "_canary.engine.engine":
+                found.add((importer, imported))
+    assert not found, sorted(found)
 
 
 def test_locator_imports_only_util():

@@ -105,7 +105,7 @@ class DistributedPoolConductor:
         fmt = "[bold]Generated[/] %d batches from %d jobs"
         logger.info(fmt % (len(batch_specs), len(runner.jobs)))
 
-        root = runner.workspace.sessions_dir / runner.session / "dist.batches"
+        root = runner.context.sessions_dir / runner.session / "dist.batches"
         batches: dict[str, TestBatch] = {}
         graph: dict[str, list[str]] = {}
         specmap: dict[str, BatchSpec] = {}

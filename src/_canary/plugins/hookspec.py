@@ -548,6 +548,12 @@ def canary_runtests_start(runner: "Runner") -> bool:
 def canary_runtests(runner: "Runner") -> None:
     """Runs the tests.
 
+    A backend runs ``runner.jobs`` for session ``runner.session``.  It reaches the
+    workspace only through ``runner.context``
+    (:class:`~_canary.execution.context.ExecutionContext`): the workspace paths,
+    and ``record(job)``, which spools a job's result to the database and syncs
+    the live view.  Call ``record`` whenever a job's state changes.
+
     Args:
         runner: The runner to run.
 

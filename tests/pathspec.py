@@ -12,6 +12,7 @@ import canary
 from _canary import app
 from _canary.cli.run import PathSpec
 from _canary.cli.run import ReadPathsFromFile
+from _canary.engine.engine import Engine
 from _canary.generation.collect import recursedirs_type
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
@@ -89,7 +90,7 @@ if __name__ == "__main__":
 
     with working_dir(root), canary.config.override():
         workspace = Workspace.create(root)
-        specs = workspace.collect(scanpaths)
+        specs = Engine(workspace).collect(scanpaths)
 
     collected_names = {s.family for s in specs}
 
@@ -127,7 +128,7 @@ if __name__ == "__main__":
         workspace = Workspace.create(root)
         request = app.classify_pathspec([str(root / "some" / "**" / "foo")]).finalize()
         assert request is not None
-        specs = workspace.collect(request.value)
+        specs = Engine(workspace).collect(request.value)
 
     assert sorted(spec.family for spec in specs) == ["alpha", "beta"]
     assert {str(spec.file_root) for spec in specs} == {str(root / "some")}

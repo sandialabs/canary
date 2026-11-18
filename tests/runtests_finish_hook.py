@@ -15,7 +15,7 @@ from _canary.plugins import hookspec
 
 
 def _runner() -> Runner:
-    return Runner(jobs=[], session="s", workspace=SimpleNamespace())  # type: ignore[arg-type]
+    return Runner(jobs=[], session="s", context=SimpleNamespace())  # type: ignore[arg-type]
 
 
 class _Recorder:

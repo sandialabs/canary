@@ -119,7 +119,7 @@ def test_masked_upstream_in_progress_masks_dependent(tmp_path):
 def test_refresh_masked_jobs_loads_upstream_state_from_lockfile(tmp_path):
     from _canary.core.job import JobPhase
     from _canary.core.jobspec import Mask
-    from _canary.workspace.runner import refresh_masked_jobs
+    from _canary.engine.jobs import refresh_masked_jobs
 
     upstream, dependent = make_dependent_pair(tmp_path)
 
@@ -148,7 +148,7 @@ def test_refresh_masked_jobs_loads_upstream_state_from_lockfile(tmp_path):
 def test_refresh_masked_jobs_ignores_unmasked_and_missing_lockfiles(tmp_path):
     from _canary.core.job import JobPhase
     from _canary.core.jobspec import Mask
-    from _canary.workspace.runner import refresh_masked_jobs
+    from _canary.engine.jobs import refresh_masked_jobs
 
     upstream, dependent = make_dependent_pair(tmp_path)
     upstream.mask = Mask.masked(reason="not in this run")

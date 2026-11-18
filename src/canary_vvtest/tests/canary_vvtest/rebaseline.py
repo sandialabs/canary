@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 import _canary.config
+from _canary.engine.engine import Engine
 from _canary.workspace.workspace import Workspace
 
 
@@ -36,8 +37,8 @@ def _run_and_rebaseline(tmp_path: Path, filename: str, body: str) -> None:
     (tmp_path / filename).write_text(body)
 
     workspace = Workspace.create(tmp_path)
-    specs = workspace.collect({str(tmp_path): [filename]})
-    session = workspace.run(specs, only="all")
+    specs = Engine(workspace).collect({str(tmp_path): [filename]})
+    session = Engine(workspace).run(specs, only="all")
     assert session.returncode == 0
     assert all(job.status.is_success() for job in session.jobs)
 

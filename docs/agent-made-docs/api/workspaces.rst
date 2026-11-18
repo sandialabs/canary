@@ -24,6 +24,27 @@ Workspace Management
    :undoc-members:
    :show-inheritance:
 
+Engine
+------
+
+The engine collects, selects and runs; the workspace above holds only data and read
+queries.
+
+.. autoclass:: _canary.engine.engine.Engine
+   :members:
+   :member-order: bysource
+   :show-inheritance:
+
+Execution Context
+-----------------
+
+What a ``canary_runtests`` backend receives as ``runner.context``: the workspace
+paths and ``record(job)``.  Backends never see the workspace itself.
+
+.. autoclass:: _canary.execution.context.ExecutionContext
+   :members:
+   :member-order: bysource
+
 Execution Space
 ---------------
 

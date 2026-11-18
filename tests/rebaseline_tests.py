@@ -326,7 +326,7 @@ def test_rebaseline_applies_keyword_filter_before_loading_jobs(monkeypatch, tmp_
     workspace._relative_to_view = "suite"
     workspace.db._view_selected = ["id-a", "id-b"]
 
-    monkeypatch.setattr(rebaseline_mod, "open_workspace", lambda: workspace)
+    monkeypatch.setattr(rebaseline_mod.Workspace, "load", lambda *a, **k: workspace)
     monkeypatch.setattr(
         rebaseline_mod.config,
         "pluginmanager",
@@ -378,7 +378,7 @@ def _patch_rebaseline_app(monkeypatch, workspace):
     """Route app.rebaseline at *workspace* and record hook calls instead of running them."""
     calls: list[str] = []
     hook = SimpleNamespace(canary_runtest_rebaseline=lambda case: calls.append(case.id))
-    monkeypatch.setattr(rebaseline_mod, "open_workspace", lambda: workspace)
+    monkeypatch.setattr(rebaseline_mod.Workspace, "load", lambda *a, **k: workspace)
     monkeypatch.setattr(
         rebaseline_mod, "config", SimpleNamespace(pluginmanager=SimpleNamespace(hook=hook))
     )
