@@ -5,10 +5,12 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -60,7 +62,8 @@ def test_stop_sentinel_stops_the_server_and_removes_its_files(tmp_path, running)
     assert server.stop(tmp_path, timeout=5) is True
     thread.join(5)
     assert not thread.is_alive()
-    assert sorted(p.name for p in server.server_dir(tmp_path).iterdir()) == []
+    left = {p.name for p in server.server_dir(tmp_path).iterdir()}
+    assert not left & {"server.json", "server.lock", "stop"}
 
 
 def test_stop_without_a_server_reports_false(tmp_path):
@@ -91,21 +94,49 @@ def test_same_host_dead_pid_is_not_alive():
     assert not info.is_alive()
 
 
-def test_cli_start_status_stop(tmp_path):
+def test_cli_start_blocks_until_stop(tmp_path):
     def canary(*args):
         return subprocess.run(
             [sys.executable, "-m", "canary", *args], cwd=tmp_path, capture_output=True, text=True
         )
 
     assert canary("init", ".").returncode == 0
+    proc = start_server_process(tmp_path)
     try:
-        assert canary("server", "start").returncode == 0
         status = canary("server", "status", "--json")
         assert status.returncode == 0 and json.loads(status.stdout)["alive"] is True
-        assert (
-            "already running" in canary("server", "start").stderr + canary("server", "start").stdout
-        )
+        second = canary("server", "start")
+        assert second.returncode != 0 and "already running" in second.stderr + second.stdout
     finally:
         assert canary("server", "stop").returncode == 0
+    assert proc.wait(15) == 0
     status = canary("server", "status", "--json")
-    assert status.returncode == 1 and json.loads(status.stdout) == {"alive": False}
+    assert status.returncode == 1 and json.loads(status.stdout)["alive"] is False
+
+
+def test_sighup_stops_the_server_cleanly(tmp_path):
+    subprocess.run([sys.executable, "-m", "canary", "init", "."], cwd=tmp_path, check=True)
+    proc = start_server_process(tmp_path)
+    proc.send_signal(signal.SIGHUP)
+    assert proc.wait(15) == 0
+    assert not (server.server_dir(tmp_path / ".canary") / "server.lock").exists()
+
+
+def start_server_process(cwd, timeout=15.0):
+    """``canary server start &``: start the blocking server in the background and wait for it."""
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "canary", "server", "start"],
+        cwd=cwd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    root = Path(cwd) / ".canary"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        info = server.read_info(root)
+        if info is not None and info.pid == proc.pid and info.is_alive():
+            return proc
+        assert proc.poll() is None, "server exited during startup"
+        time.sleep(0.05)
+    proc.kill()
+    raise AssertionError("server did not start")

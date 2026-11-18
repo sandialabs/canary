@@ -10,7 +10,6 @@ The server's files live in ``<workspace root>/var/server/``:
   ``HEARTBEAT_INTERVAL`` seconds.  A server whose heartbeat is older than
   ``STALE_AFTER`` seconds (or whose pid is gone, on the same host) is dead.
 * ``stop`` -- sentinel: any process that sees the workspace asks the server to stop.
-* ``server.log`` -- output of a server started in the background.
 
 Everything is a file on the workspace's filesystem, so a client on another machine
 sees the same state.
@@ -36,6 +35,10 @@ logger = logging.get_logger(__name__)
 
 HEARTBEAT_INTERVAL = 2.0
 STALE_AFTER = 5 * HEARTBEAT_INTERVAL
+#: How often the loop looks for work, cancellation and a finished child.
+TICK = 0.2
+#: Seconds between SIGINT, SIGTERM and SIGKILL when interrupting a request.
+INTERRUPT_GRACE = 10.0
 
 
 class ServerRunningError(Exception):
@@ -84,17 +87,21 @@ class Server:
     """The server process for one workspace.
 
     :meth:`run` owns the workspace's server files until it returns: it takes the
-    lock, writes the heartbeat, and stops on SIGTERM/SIGINT, on the ``stop`` sentinel,
-    or on :meth:`request_stop`.
+    lock, writes the heartbeat, runs requests one at a time (each in a child
+    ``canary`` process), and stops on SIGTERM/SIGINT/SIGHUP, on the ``stop`` sentinel, or
+    on :meth:`request_stop`.  Stopping interrupts the running request; queued requests
+    stay queued for the next server.
     """
 
     def __init__(self, workspace_root: Path) -> None:
+        self.workspace_root = Path(workspace_root)
         self.dir = server_dir(workspace_root)
         self.lock = self.dir / "server.lock"
         self.info_file = self.dir / "server.json"
         self.stop_file = self.dir / "stop"
         self._stop = threading.Event()
         self.info: ServerInfo | None = None
+        self._running: _Running | None = None
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -107,12 +114,20 @@ class Server:
             logger.info(
                 f"[bold]Canary server[/] running for {self.dir.parent.parent} (pid {os.getpid()})"
             )
-            while not self._stop.is_set():
-                self._heartbeat()
-                if self.stop_file.exists():
-                    break
-                self._stop.wait(HEARTBEAT_INTERVAL)
+            self._recover()
+            last_heartbeat = 0.0
+            while not self._stop.is_set() and not self.stop_file.exists():
+                if time.time() - last_heartbeat >= HEARTBEAT_INTERVAL:
+                    self._heartbeat()
+                    last_heartbeat = time.time()
+                if self._running is not None:
+                    self._check_running()
+                else:
+                    self._start_next()
+                self._stop.wait(TICK)
         finally:
+            if self._running is not None:
+                self._interrupt(self._running, reason="server stopped")
             self._release()
             self._restore_signal_handlers(previous)
             logger.info("[bold]Canary server[/] stopped")
@@ -142,6 +157,131 @@ class Server:
         now = time.time()
         self.info = ServerInfo(os.getpid(), socket.gethostname(), now, now, version.__version__)
 
+    # ------------------------------------------------------------------ requests
+
+    def _recover(self) -> None:
+        """Settle requests a dead server left claimed: running ones failed, others requeued."""
+        from . import requests
+
+        queue = requests.inbox(self.workspace_root)
+        for path in sorted(queue.claimed.iterdir()):
+            try:
+                directory = requests.request_dir(self.workspace_root, queue.load(path)["id"])
+            except (ValueError, KeyError, OSError):
+                queue.fail(path, reason="unreadable request")
+                continue
+            if requests.read_status(directory).get("state") == "running":
+                requests.write_status(
+                    directory,
+                    state="failed",
+                    finished=time.time(),
+                    reason="the server exited while the request was running",
+                )
+                queue.ack(path)
+            else:
+                queue.release(path)
+
+    def _start_next(self) -> None:
+        from . import requests
+
+        queue = requests.inbox(self.workspace_root)
+        claimed = queue.claim(limit=1)
+        if not claimed:
+            return
+        path = claimed[0]
+        try:
+            directory = requests.request_dir(self.workspace_root, queue.load(path)["id"])
+            request = requests.read_request(directory)
+        except (ValueError, KeyError, OSError) as exc:
+            queue.fail(path, reason=f"unreadable request: {exc}")
+            return
+        status = requests.read_status(directory)
+        if status.get("state") != "queued" or (directory / "cancel").exists():
+            if status.get("state") not in requests.TERMINAL_STATES:
+                requests.write_status(
+                    directory, state="cancelled", finished=time.time(), reason="cancelled"
+                )
+            queue.ack(path)
+            return
+        cwd = request["cwd"]
+        if not os.path.isdir(cwd):
+            requests.write_status(
+                directory,
+                state="failed",
+                finished=time.time(),
+                reason=f"working directory {cwd} does not exist on {socket.gethostname()}",
+            )
+            queue.ack(path)
+            return
+        env = dict(os.environ)
+        env.update(request.get("env") or {})
+        env["CANARY_LEVEL"] = "0"
+        env["CANARY_SERVER_REQUEST"] = request["id"]
+        cmd = [sys.executable, "-m", "canary", *request.get("options", []), request["command"]]
+        cmd += request.get("args", [])
+        with open(directory / "stdout", "a") as out, open(directory / "stderr", "a") as err:
+            proc = subprocess.Popen(  # nosec B603
+                cmd,
+                cwd=cwd,
+                env=env,
+                stdout=out,
+                stderr=err,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        requests.write_status(directory, state="running", pid=proc.pid, started=time.time())
+        logger.info(f"[bold]Running[/] request {request['id']}: canary {request['command']}")
+        self._running = _Running(
+            proc=proc, path=path, directory=directory, request_id=request["id"]
+        )
+
+    def _check_running(self) -> None:
+        from . import requests
+
+        running = self._running
+        assert running is not None
+        if (running.directory / "cancel").exists() and running.proc.poll() is None:
+            self._interrupt(running, reason="cancelled")
+            return
+        code = running.proc.poll()
+        if code is None:
+            return
+        requests.write_status(
+            running.directory, state="done", returncode=code, finished=time.time()
+        )
+        requests.inbox(self.workspace_root).ack(running.path)
+        logger.info(f"[bold]Finished[/] request {running.request_id} (exit code {code})")
+        self._running = None
+
+    def _interrupt(self, running: "_Running", *, reason: str) -> None:
+        """Stop the request's child (SIGINT, then SIGTERM, then SIGKILL) and record it."""
+        from . import requests
+
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+            if running.proc.poll() is not None:
+                break
+            try:
+                os.killpg(running.proc.pid, sig)
+            except ProcessLookupError:
+                break
+            try:
+                running.proc.wait(INTERRUPT_GRACE)
+            except subprocess.TimeoutExpired:
+                continue
+        state = "cancelled" if reason == "cancelled" else "failed"
+        requests.write_status(
+            running.directory,
+            state=state,
+            returncode=running.proc.poll(),
+            finished=time.time(),
+            reason=reason,
+        )
+        requests.inbox(self.workspace_root).ack(running.path)
+        logger.info(f"[bold]Stopped[/] request {running.request_id} ({reason})")
+        self._running = None
+
+    # ------------------------------------------------------------------ files
+
     def _heartbeat(self) -> None:
         assert self.info is not None
         self.info.heartbeat = time.time()
@@ -155,7 +295,10 @@ class Server:
         if threading.current_thread() is not threading.main_thread():
             return {}
         handler = lambda signum, frame: self.request_stop()
-        return {sig: signal.signal(sig, handler) for sig in (signal.SIGTERM, signal.SIGINT)}
+        return {
+            sig: signal.signal(sig, handler)
+            for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        }
 
     @staticmethod
     def _restore_signal_handlers(previous: dict[int, Any]) -> None:
@@ -163,39 +306,17 @@ class Server:
             signal.signal(sig, handler)
 
 
-def start_in_background(workspace_root: Path, *, timeout: float = 15.0) -> ServerInfo:
-    """Start a detached server for the workspace and wait until it is up."""
-    info = read_info(workspace_root)
-    if info is not None and info.is_alive():
-        raise ServerRunningError(
-            f"a server is already running for this workspace (pid {info.pid} on {info.host})"
-        )
-    directory = server_dir(workspace_root)
-    directory.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, "-m", "canary", "--canary-dir", str(workspace_root)]
-    cmd += ["server", "start", "--foreground"]
-    with open(directory / "server.log", "a") as log:
-        proc = subprocess.Popen(  # nosec B603
-            cmd,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        info = read_info(workspace_root)
-        if info is not None and info.pid == proc.pid and info.is_alive():
-            return info
-        if proc.poll() is not None:
-            raise RuntimeError(
-                f"server exited with code {proc.returncode}; see {directory / 'server.log'}"
-            )
-        time.sleep(0.1)
-    raise RuntimeError(f"server did not start within {timeout} s; see {directory / 'server.log'}")
+@dataclasses.dataclass
+class _Running:
+    """The request the server is running."""
+
+    proc: subprocess.Popen
+    path: Path
+    directory: Path
+    request_id: str
 
 
-def stop(workspace_root: Path, *, timeout: float = 15.0) -> bool:
+def stop(workspace_root: Path, *, timeout: float = 3 * INTERRUPT_GRACE + 15.0) -> bool:
     """Ask the workspace's server to stop and wait for it; return False if none was running."""
     info = read_info(workspace_root)
     directory = server_dir(workspace_root)
