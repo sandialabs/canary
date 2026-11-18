@@ -38,6 +38,7 @@ class Session:
     prefix: Path
     measurements: Measurements = dataclasses.field(default_factory=Measurements)
     job_ids: list[str] = dataclasses.field(default_factory=list)
+    reused: bool = False  # True if this session reuses an existing session directory
 
     returncode: int = dataclasses.field(init=False, default=-1)
     started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)

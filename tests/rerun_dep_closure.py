@@ -78,7 +78,7 @@ if __name__ == "__main__":
     )
 
     ws = Workspace.create(tmp_path)
-    ws.store_specs([c, b, a])
+    ws.db.put_specs([c, b, a])
 
     return ws, {"a": a, "b": b, "c": c}
 

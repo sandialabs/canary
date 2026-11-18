@@ -540,7 +540,6 @@ class CanaryHPCConductor:
             canary.config.pluginmanager.hook.canary_hpc_batch_setup(batch=batch)
         queue = ResourceQueue(global_lock, resource_pool=self.rpool)
         queue.put(*batches.values())  # type: ignore
-        queue.update_costs()
         executor = BatchExecutor()
         max_workers = canary.config.getoption("workers") or 10
         with HPCResourceQueueExecutor(queue, executor, max_workers=max_workers) as ex:

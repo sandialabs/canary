@@ -438,7 +438,7 @@ def test_register_latest_session_recreates_missing_refs_dir(tmp_path):
     assert not ws.refs_dir.exists()
 
     session = types.SimpleNamespace(prefix=ws.sessions_dir / "sess-1")
-    ws.register_latest_session(session)  # type: ignore[arg-type]
+    ws._runner.register_latest_session(session)  # type: ignore[arg-type]
 
     assert ws.refs_dir.exists()
     latest = ws.refs_dir / "latest"
@@ -576,9 +576,9 @@ def test_register_latest_session_uses_atomic_write(tmp_path, monkeypatch):
     def fake_atomic_write(path: Path, text: str) -> None:
         calls.append((path, text))
 
-    monkeypatch.setattr("_canary.workspace.workspace.atomic_write", fake_atomic_write)
+    monkeypatch.setattr("_canary.workspace.runner.atomic_write", fake_atomic_write)
 
-    ws.register_latest_session(session)  # type: ignore[arg-type]
+    ws._runner.register_latest_session(session)  # type: ignore[arg-type]
 
     assert calls == [
         (ws.refs_dir / "latest", os.path.relpath(str(session.prefix), str(ws.refs_dir)))

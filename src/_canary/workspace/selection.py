@@ -11,7 +11,6 @@ tagged selections in the database.
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Literal
 
 from .. import select
 from ..core import rules
@@ -22,7 +21,6 @@ from ..util.names import unique_random_name
 if TYPE_CHECKING:
     from ..core.jobspec import JobSpec
     from ..persistence.database import WorkspaceDatabase
-    from .collection import SpecCollector
 
 logger = logging.get_logger(__name__)
 
@@ -112,14 +110,8 @@ class SpecSelector:
             The filtered list of JobSpecs.
         """
         selector = select.Selector(resolved, self.root)
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
+        for rule in _filter_rules(keyword_exprs, parameter_expr, owners, regex):
+            selector.add_rule(rule)
         if prefixes:
             selector.add_rule(rules.PrefixRule(prefixes=prefixes))
         for rule in extra_rules or ():
@@ -137,7 +129,11 @@ class SpecSelector:
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Create selection by filtering specs in source_tag.
+        """Create selection *tag* by filtering the specs already in *source_tag*.
+
+        Unlike :meth:`select`, which draws from every spec in the workspace, this
+        starts from the specs stored under *source_tag* and applies the given
+        filters before saving the result as *tag*.
 
         Args:
             tag: The name of the selection tag to create.
@@ -174,23 +170,21 @@ class SpecSelector:
     def create_selection(
         self,
         tag: str | None,
+        resolved: list["JobSpec"],
         scanpaths: dict[str, list[str]],
-        collector: "SpecCollector",
         on_options: list[str] | None = None,
-        parsing_policy: Literal["pedantic", "permissive"] = "pedantic",
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: list[str] | None = None,
         regex: str | None = None,
     ) -> list["JobSpec"]:
-        """Collect generators, filter, and create tagged selection.
+        """Filter specs collected from *scanpaths* and save them as a tagged selection.
 
         Args:
             tag: Tag name (randomly generated if None).
-            scanpaths: Paths to scan for generators.
-            collector: SpecCollector instance for collecting specs.
-            on_options: Options to filter tests by.
-            parsing_policy: How to handle parsing errors.
+            resolved: Specs collected from *scanpaths*.
+            scanpaths: The scan paths (``file::case`` selectors become a case rule).
+            on_options: Options the specs were collected with (recorded in metadata).
             keyword_exprs: Filter by keywords.
             parameter_expr: Filter by parameters.
             owners: Filter by owners.
@@ -199,9 +193,6 @@ class SpecSelector:
         Returns:
             The created selection of JobSpecs.
         """
-        resolved = collector.collect(
-            scanpaths, on_options=on_options, parsing_policy=parsing_policy
-        )
         case_rule: rules.CaseRule | None = None
         if cases := case_selectors(scanpaths):
             case_rule = rules.CaseRule.from_specs(resolved, cases)
@@ -247,33 +238,12 @@ class SpecSelector:
             ids: Filter by specific IDs.
         """
         selector = select.Selector(specs, self.root)
-        if keyword_exprs:
-            selector.add_rule(rules.KeywordRule(keyword_exprs))
-        if parameter_expr:
-            selector.add_rule(rules.ParameterRule(parameter_expr))
-        if owners:
-            selector.add_rule(rules.OwnersRule(owners))
-        if regex:
-            selector.add_rule(rules.RegexRule(regex))
+        for rule in _filter_rules(keyword_exprs, parameter_expr, owners, regex):
+            selector.add_rule(rule)
         if ids:
             selector.add_rule(rules.IDsRule(ids))
         if selector.rules:
             selector.run()
-
-    def remove_tag(self, tag: str) -> bool:
-        """Delete selection tag from database.
-
-        Args:
-            tag: The tag name to remove.
-
-        Returns:
-            True if the tag was removed, False if it didn't exist.
-        """
-        if not self.db.is_selection(tag):
-            logger.error(f"{tag!r} is not a tag")
-            return False
-        self.db.delete_selection(tag)
-        return True
 
     def is_tag(self, tag: str) -> bool:
         """Check if string is valid selection tag.
@@ -286,29 +256,40 @@ class SpecSelector:
         """
         return self.db.is_selection(tag)
 
-    def get_selection(self, tag: str | None) -> list["JobSpec"]:
-        """Retrieve specs associated with tag.
-
-        Args:
-            tag: The tag name, or None/:all: for all specs.
-
-        Returns:
-            A list of JobSpecs.
-        """
-        if tag is None or tag == ":all:":
-            return self.db.load_specs()
-        return self.db.load_specs_by_tagname(tag)
-
     def tag_info(self, tag: str) -> dict[str, Any]:
-        """Return metadata and specs for selection tag.
+        """Return metadata and the (unmasked) specs for selection *tag*.
 
         Args:
             tag: The selection tag to describe.
 
         Returns:
-            Dict with tag, created_on, metadata, and specs.
+            A dict with ``tag``, ``created_on`` (popped from metadata),
+            ``metadata`` (the remaining selection metadata), and ``specs`` (the
+            list of unmasked :class:`~_canary.core.jobspec.JobSpec` in the tag).
+
+        Raises:
+            NotASelection: If *tag* is not a selection.
         """
         specs = [spec for spec in self.db.load_specs_by_tagname(tag) if not spec.mask]
         metadata = self.db.get_selection_metadata(tag)
         created_on = metadata.pop("created_on", None)
         return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
+
+
+def _filter_rules(
+    keyword_exprs: list[str] | None,
+    parameter_expr: str | None,
+    owners: list[str] | None,
+    regex: str | None,
+) -> list["rules.Rule"]:
+    """Selection rules for the common keyword/parameter/owner/regex filters."""
+    found: list[rules.Rule] = []
+    if keyword_exprs:
+        found.append(rules.KeywordRule(keyword_exprs))
+    if parameter_expr:
+        found.append(rules.ParameterRule(parameter_expr))
+    if owners:
+        found.append(rules.OwnersRule(owners))
+    if regex:
+        found.append(rules.RegexRule(regex))
+    return found

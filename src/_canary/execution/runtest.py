@@ -202,7 +202,6 @@ def default_runtests(runner: Runner) -> bool:
         store = HistoryStore.open(start=runner.workspace.root)
         queue = ResourceQueue(lock=global_lock, resource_pool=rpool, store=store)
         queue.put(*runner.jobs)  # type: ignore
-        queue.update_costs()
     except Exception:
         logger.exception("Unable to create resource queue")
         raise

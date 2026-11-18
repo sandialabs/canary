@@ -31,6 +31,7 @@ from _canary.core.rules import RerunRule
 from _canary.execution.testexec import ExecutionSpace
 from _canary.select import RuntimeSelector
 from _canary.util.filesystem import working_dir
+from _canary.workspace.runner import replace_session_dir_variables
 from _canary.workspace.workspace import Workspace
 
 # ---------------------------------------------------------------------------
@@ -420,7 +421,7 @@ if __name__ == "__main__":
 
     job.workspace.root = session_dir
     job.workspace.session = session_dir.name
-    Workspace._replace_session_dir_variables(job, old=old_exec_dir, new=job.workspace.dir)
+    replace_session_dir_variables(job, old=old_exec_dir, new=job.workspace.dir)
 
     assert str(job.variables["PYTHONPATH"]).startswith(str(job.workspace.dir))
     assert not str(job.variables["PYTHONPATH"]).startswith(str(old_exec_dir))

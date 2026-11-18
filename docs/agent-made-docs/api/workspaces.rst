@@ -12,13 +12,13 @@ Workspace and session management APIs.
 Workspace Management
 --------------------
 
-.. autoclass:: _canary.workspace.Workspace
+.. autoclass:: _canary.workspace.workspace.Workspace
    :members:
    :member-order: bysource
    :undoc-members:
    :show-inheritance:
 
-.. autoclass:: _canary.workspace.Session
+.. autoclass:: _canary.workspace.session.Session
    :members:
    :member-order: bysource
    :undoc-members:
@@ -27,7 +27,7 @@ Workspace Management
 Execution Space
 ---------------
 
-.. autoclass:: _canary.testexec.ExecutionSpace
+.. autoclass:: _canary.execution.testexec.ExecutionSpace
    :members:
    :member-order: bysource
    :undoc-members:
@@ -36,7 +36,7 @@ Execution Space
 Persistence
 -----------
 
-.. autoclass:: _canary.database.WorkspaceDatabase
+.. autoclass:: _canary.persistence.database.WorkspaceDatabase
    :members:
    :member-order: bysource
    :undoc-members:
@@ -45,7 +45,7 @@ Persistence
    .. note::
       This class is primarily persistence infrastructure and is included for
       completeness. Most extension authors will interact with the higher-level
-      :py:class:`_canary.workspace.Workspace` and :py:class:`_canary.workspace.Session` APIs.
+      :py:class:`_canary.workspace.workspace.Workspace` and :py:class:`_canary.workspace.session.Session` APIs.
 
 See Also
 --------

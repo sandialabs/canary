@@ -62,10 +62,10 @@ def test_workspace_run_uses_session_timeout_from_config_when_cli_timeout_missing
 
         ws.construct_jobs = lambda specs, session_dir: jobs  # type: ignore[method-assign]
 
-        import _canary.workspace.workspace as workspace_mod
+        import _canary.workspace.runner as runner_mod
 
-        original_selector = workspace_mod.select.RuntimeSelector
-        workspace_mod.select.RuntimeSelector = DummySelector  # type: ignore[assignment]
+        original_selector = runner_mod.select.RuntimeSelector
+        runner_mod.select.RuntimeSelector = DummySelector  # type: ignore[assignment]
         try:
             try:
                 ws.run(specs=[], view_t=None)
@@ -73,7 +73,7 @@ def test_workspace_run_uses_session_timeout_from_config_when_cli_timeout_missing
                 # The rest of the run path is not under test here.
                 pass
         finally:
-            workspace_mod.select.RuntimeSelector = original_selector  # type: ignore[assignment]
+            runner_mod.select.RuntimeSelector = original_selector  # type: ignore[assignment]
 
     session_rules = [rule for rule in captured if isinstance(rule, SessionTimeoutRule)]
     assert len(session_rules) == 1

@@ -5,7 +5,7 @@
 """Results listener thread for asynchronous database writes.
 
 The :class:`ResultListener` drains the workspace result spool
-(:class:`~_canary.persistence.database.ResultSpool`) and writes records to the SQLite
+(``WorkspaceDatabase.queue``, an :class:`~_canary.util.fsqueue.FSQueue`) and writes records to the SQLite
 database in batches.  It runs in a background thread, decoupling worker processes from
 direct database access.
 
@@ -50,7 +50,7 @@ class ResultListener(threading.Thread):
         from .database import WorkspaceDatabase
 
         self.db = WorkspaceDatabase.load(db_root)
-        self.queue = self.db.queue.fsqueue
+        self.queue = self.db.queue
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._last_maintenance = float("-inf")

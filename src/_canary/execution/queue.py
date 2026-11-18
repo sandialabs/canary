@@ -88,11 +88,6 @@ class ResourceQueue:
     def __len__(self):
         return len(self._heap)
 
-    def update_costs(self) -> None:
-        """Cost every job added since the last costing."""
-        with self.lock:
-            self._update_costs_locked()
-
     def _update_costs_locked(self) -> None:
         """Cost the uncosted slots as one new cohort.  Caller must hold ``self.lock``."""
         if not self._dirty:
@@ -116,9 +111,6 @@ class ResourceQueue:
         cpu_work: float = sum(cpus[j.id] * runtimes[j.id] for j in jobs)
         scale: float = max(cpu_work / width, max(runtimes.values()))
         return [-math.hypot(cpus[j.id] / width, runtimes[j.id] / scale) for j in jobs]
-
-    def put_many(self, jobs: Iterable[BaseJob]) -> None:
-        self.put(*jobs)
 
     def put(self, *jobs: BaseJob) -> None:
         with self.lock:

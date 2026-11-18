@@ -13,9 +13,13 @@ the workspace root.  It stores four main collections:
 * **results** — per-job execution results keyed by ``(spec_id, session)``.
 * **selections** — named tag → spec_id membership sets (used for ``canary tag``).
 
-Results are written asynchronously via :class:`~_canary.persistence.listener.ResultListener`,
-which drains filesystem spool queues and writes in batches, decoupling worker
-processes from direct SQLite access.
+Results are written asynchronously: producers put records on the workspace-wide
+result spool ``.canary/var/spool/`` (an :class:`~_canary.util.fsqueue.FSQueue`) and
+:class:`~_canary.persistence.listener.ResultListener` drains it in batches, decoupling
+worker processes from direct SQLite access.  Several sessions and their listeners may
+share the spool: no consumer recovers live items destructively, and
+:meth:`WorkspaceDatabase.put_results` never lets an older record replace a newer one,
+so delivery order does not matter.
 
 :class:`PartialSpec` is a lightweight projection of the spec + latest-result
 data returned by :meth:`WorkspaceDatabase.get_partial_specs`.  It is used by
@@ -71,14 +75,13 @@ class WorkspaceDatabase:
     Attributes:
         root: Root directory of the workspace.
         path: Absolute path to the SQLite database file.
-        queue: :class:`ResultSpool` used by worker processes to submit results
-            asynchronously.  Results are spooled per session, so concurrent
-            canary sessions in one workspace do not interfere.
+        queue: The shared result spool (:class:`~_canary.util.fsqueue.FSQueue` at
+            ``var/spool``); producers ``queue.put(job)``, the listener drains it.
     """
 
     def __init__(self, root: Path):
         self.root = Path(root)
-        self.queue = ResultSpool(self.root)
+        self.queue = FSQueue(self.root / "var" / "spool")
         self.path = root / "workspace.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection: sqlite3.Connection | None = None
@@ -1085,24 +1088,6 @@ class WorkspaceDatabase:
             if value > 0:
                 return value
         return -1.0
-
-
-class ResultSpool:
-    """Spools result records to the single workspace-wide queue ``.canary/var/spool/``.
-
-    Several canary sessions (and their listeners) may share the spool at once.  This is
-    safe because (1) no consumer performs destructive recovery on live items: stale
-    claims and orphaned tmp files are only recovered once they are far older than any
-    claim->ack or write could take, and (2) :meth:`WorkspaceDatabase.put_results` never
-    lets an older record overwrite a newer one, so the delivery order does not matter.
-    """
-
-    def __init__(self, root: Path) -> None:
-        self.root = Path(root)
-        self.fsqueue = FSQueue(self.root / "var" / "spool")
-
-    def put(self, job: Any) -> None:
-        self.fsqueue.put(job)
 
 
 @dataclasses.dataclass

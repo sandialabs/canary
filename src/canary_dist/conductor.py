@@ -129,7 +129,6 @@ class DistributedPoolConductor:
         try:
             queue = ResourceQueue(global_lock, resource_pool=self.dpool)  # type: ignore
             queue.put(*batches.values())  # type: ignore
-            queue.update_costs()
         except Exception:
             logger.exception("failed")
             raise

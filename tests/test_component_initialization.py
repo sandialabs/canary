@@ -10,7 +10,7 @@ from _canary.workspace.workspace import set_workspace_dir
 
 
 def _exercise_components(ws: Workspace) -> None:
-    ws.store_specs([])  # SpecCollector
+    assert ws.collect({}) == []  # collection
     assert ws.is_tag("no-such-tag") is False  # SpecSelector
     assert ws.load_jobs() == []  # JobReconstructor
 

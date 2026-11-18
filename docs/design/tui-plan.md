@@ -219,7 +219,7 @@ Steps:
 ### 4.2 Files expected to change
 
 - `_canary/app/run.py` -- add `live_console` to `RunOptions`, pass through.
-- `_canary/session/workspace.py` -- `run(..., live_console=...)` pass-through.
+- `_canary/workspace/workspace.py` -- `run(..., live_console=...)` pass-through.
 - `_canary/execution/runtest.py` -- pass the flag into `ResourceQueueExecutor`.
 - `_canary/execution/queue_executor.py` -- honor an explicit `live_reporting`
   argument over the heuristics.

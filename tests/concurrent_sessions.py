@@ -9,14 +9,13 @@ import sys
 import time
 from pathlib import Path
 
-from _canary.persistence.database import ResultSpool
 from _canary.persistence.database import WorkspaceDatabase
 from _canary.persistence.listener import ResultListener
 
 
 def test_results_go_to_the_central_spool(tmp_path: Path) -> None:
-    spool = ResultSpool(tmp_path)
-    spool.put({"a": 1})
+    db = WorkspaceDatabase.create(tmp_path)
+    db.queue.put({"a": 1})
     ready = tmp_path / "var" / "spool" / "ready"
     assert [p.name for p in ready.iterdir()] != []
 
@@ -24,7 +23,7 @@ def test_results_go_to_the_central_spool(tmp_path: Path) -> None:
 def test_listener_startup_leaves_live_items_alone(tmp_path: Path) -> None:
     """Another session's in-flight write and in-progress claim must survive a listener start."""
     db = WorkspaceDatabase.create(tmp_path)
-    fsq = db.queue.fsqueue
+    fsq = db.queue
     partial = fsq.tmp / "partial"
     partial.write_text("{")
     claimed = fsq.claimed / "00000000000000000001~host~1~0"
@@ -40,7 +39,7 @@ def test_listener_startup_leaves_live_items_alone(tmp_path: Path) -> None:
 
 def test_listener_recovers_only_old_items(tmp_path: Path) -> None:
     db = WorkspaceDatabase.create(tmp_path)
-    fsq = db.queue.fsqueue
+    fsq = db.queue
     old = time.time() - 2 * 3600
     orphan = fsq.tmp / "orphan"
     orphan.write_text("{")
@@ -92,8 +91,8 @@ def test_two_listeners_share_the_spool_without_loss(tmp_path: Path) -> None:
     results = db.get_results()
     assert set(results) == {spec.id for spec in specs}
     assert {r["state"].phase.value for r in results.values()} == {"DONE"}
-    assert not any(db.queue.fsqueue.ready.iterdir())
-    assert not any(db.queue.fsqueue.claimed.iterdir())
+    assert not any(db.queue.ready.iterdir())
+    assert not any(db.queue.claimed.iterdir())
 
 
 SLOW = """\

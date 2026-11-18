@@ -424,7 +424,6 @@ def test_resource_queue_defers_exclusive_job_until_busy_set_is_empty() -> None:
 
     q = ResourceQueue(lock=threading.Lock(), resource_pool=cast(Any, FakePool()), jobs=None)
     q.put(cast(BaseJob, waiting))
-    q.update_costs()
     q._busy[running.id] = running
 
     try:

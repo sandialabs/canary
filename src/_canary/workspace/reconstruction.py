@@ -9,7 +9,6 @@ from the database with their results and dependencies resolved.
 """
 
 import fnmatch
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -25,8 +24,6 @@ if TYPE_CHECKING:
     from ..persistence.database import WorkspaceDatabase
 
 logger = logging.get_logger(__name__)
-
-_SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
 
 
 class JobReconstructor:
@@ -71,17 +68,7 @@ class JobReconstructor:
             deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
             job: Job
             if spec.id in latest:
-                mine = latest[spec.id]
-                space = ExecutionSpace(
-                    root=self.sessions_dir / mine["session"],
-                    path=Path(mine["workspace"]),
-                    session=mine["session"],
-                )
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-                job.status = mine["status"]
-                job.state = mine["state"]
-                job.timekeeper = mine["timekeeper"]
-                job.measurements = mine["measurements"]
+                job = self._job_from_result(spec, deps, latest[spec.id])
             else:
                 space = ExecutionSpace(root=session, path=spec.exec_path, session=session.name)
                 job = Job(spec=spec, workspace=space, dependencies=deps)
@@ -107,45 +94,26 @@ class JobReconstructor:
         for spec in graph.topo_order():
             if mine := latest.get(spec.id):
                 deps = [Dependency(job=lookup[d.spec.id], when=d.when) for d in spec.dependencies]
-                space = ExecutionSpace(
-                    root=self.sessions_dir / mine["session"],
-                    path=Path(mine["workspace"]),
-                    session=mine["session"],
-                )
-                job = Job(spec=spec, workspace=space, dependencies=deps)
-                job.status = mine["status"]
-                job.timekeeper = mine["timekeeper"]
-                job.measurements = mine["measurements"]
-                job.state = mine["state"]
-                lookup[spec.id] = job
+                lookup[spec.id] = self._job_from_result(spec, deps, mine)
         if ids:
             return [job for job in lookup.values() if job.id in ids]
         return list(lookup.values())
 
-    @staticmethod
-    def refresh_masked_jobs(jobs: list["Job"]) -> None:
-        """Reload state of masked jobs from lock files.
-
-        Nested canary processes (for example, ``canary hpc exec`` running inside
-        a scheduler allocation) load upstream results from the workspace
-        database, which only the top-level process writes, and it writes them
-        asynchronously.  The lock file is written directly by whichever process
-        ran the job, so it is the most current record of a job that this
-        process will not run itself.  Jobs without a lock file are left as
-        constructed.
-
-        Args:
-            jobs: Jobs constructed for this run.  Only masked jobs are refreshed.
-        """
-        for job in jobs:
-            if not job.mask or not job.lockfile.exists():
-                continue
-            try:
-                job.refresh()
-            except Exception:
-                logger.debug(
-                    "Failed to refresh job %s from its lock file", job.id[:7], exc_info=True
-                )
+    def _job_from_result(
+        self, spec: "JobSpec", deps: list[Dependency], result: dict[str, Any]
+    ) -> Job:
+        """Rebuild a Job in the session that produced *result*, restored to that state."""
+        space = ExecutionSpace(
+            root=self.sessions_dir / result["session"],
+            path=Path(result["workspace"]),
+            session=result["session"],
+        )
+        job = Job(spec=spec, workspace=space, dependencies=deps)
+        job.status = result["status"]
+        job.state = result["state"]
+        job.timekeeper = result["timekeeper"]
+        job.measurements = result["measurements"]
+        return job
 
     def find(self, *, job: str | None = None, spec: str | None = None) -> Any:
         """Locate a Job or JobSpec in the workspace.
@@ -244,23 +212,3 @@ class JobReconstructor:
             else:
                 found.append(None)
         return found
-
-    @staticmethod
-    def replace_session_dir_variables(job: "Job", *, old: Path, new: Path) -> None:
-        """Replace session paths in environment variables.
-
-        Args:
-            job: The job whose variables to update.
-            old: Old session directory path.
-            new: New session directory path.
-        """
-        variables = job.variables
-        old_s, new_s = str(old), str(new)
-        for key in _SESSION_DIR_VARIABLES:
-            value = variables.get(key)
-            if not isinstance(value, str):
-                continue
-            if value == old_s:
-                variables[key] = new_s
-            elif value.startswith(old_s + os.pathsep):
-                variables[key] = new_s + value[len(old_s) :]
