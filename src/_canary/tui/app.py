@@ -34,6 +34,7 @@ from rich.console import Console
 from rich.live import Live
 
 from ..app import queries
+from ..events import get_event_bus
 from .progress import RunProgress
 from .render import TABLE_FRAME_ROWS
 from .render import measure_height
@@ -513,7 +514,7 @@ def run(
     """
     console = console or Console(stderr=True)
     model = ExplorerModel()
-    model.subscribe(queries.get_event_bus())
+    model.subscribe(get_event_bus())
 
     if load_request is not None:
         loaded, message = model.load_request(load_request)

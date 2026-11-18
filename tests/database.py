@@ -287,10 +287,10 @@ def test_select_from_view_escapes_like_wildcards(db: WorkspaceDatabase):
 
 
 def test_get_results_uses_latest_inserted_row_not_lexicographic_session(db: WorkspaceDatabase):
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
     from _canary.core.job import JobPhase
     from _canary.core.jobspec import JobSpec
-    from _canary.execution.testexec import ExecutionSpace
 
     root = db.path.parent
     spec = JobSpec(
@@ -441,10 +441,10 @@ def test_stats_reports_latest_session_outcomes(db: WorkspaceDatabase, make_sessi
 def _versioned_job(
     db: WorkspaceDatabase, *, session: str, submitted: float, phase: str, outcome: str
 ):
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
     from _canary.core.job import JobPhase
     from _canary.core.jobspec import JobSpec
-    from _canary.execution.testexec import ExecutionSpace
 
     root = db.path.parent
     spec = JobSpec(

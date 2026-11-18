@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..core.execspace import ExecutionSpace
 from ..core.status import Outcome
-from ..execution.testexec import ExecutionSpace
 from ..workspace.workspace import Workspace
 
 _TRACEBACK_START_RE = re.compile(r"^Traceback \(most recent call last\):\s*$", re.MULTILINE)

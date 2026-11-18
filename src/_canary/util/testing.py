@@ -110,10 +110,10 @@ def generate_random_jobs(
     Returns:
         List of ``Job`` objects in topological order.
     """
+    from ..core.execspace import ExecutionSpace
     from ..core.job import Dependency
     from ..core.job import Job
     from ..core.jobspec_graph import make_spec_graph
-    from ..execution.testexec import ExecutionSpace
 
     session = root / "session"
     lookup: dict[str, Job] = {}

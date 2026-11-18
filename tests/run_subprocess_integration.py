@@ -8,15 +8,15 @@
 streams its job-lifecycle events back onto the application event bus.  These
 tests prove, over a real workspace, that (1) the child run actually
 re-executes the jobs (the DB reflects the rerun) and (2) the parent observes
-the child's events on ``app.get_event_bus()`` -- the contract the TUI relies on
+the child's events on ``events.get_event_bus()`` -- the contract the TUI relies on
 to update live without a console handoff.
 """
 
 import canary
-from _canary.app import get_event_bus
 from _canary.app import list_jobs
 from _canary.app import run_in_subprocess
 from _canary.app.pathspec import SpecIdsRequest
+from _canary.events import get_event_bus
 from _canary.util.filesystem import working_dir
 from _canary.util.testing import CanaryCommand
 

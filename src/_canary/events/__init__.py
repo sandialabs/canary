@@ -25,6 +25,7 @@ from .bus import EventBus
 from .bus import EventName
 from .bus import JobEvent
 from .bus import Subscriber
+from .bus import get_event_bus
 from .bus import project_job_event
 from .spool import SpoolBus
 from .spool import SpoolListener
@@ -37,5 +38,6 @@ __all__ = [
     "SpoolBus",
     "SpoolListener",
     "Subscriber",
+    "get_event_bus",
     "project_job_event",
 ]

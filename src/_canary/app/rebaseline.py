@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from .. import config
+from ..core.execspace import ExecutionSpace
 from ..core.rules import KeywordRule
-from ..execution.testexec import ExecutionSpace
 from ..util import logging
 from ..workspace.workspace import Workspace
 from .facade import open_workspace

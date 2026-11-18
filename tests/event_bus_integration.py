@@ -14,8 +14,8 @@ the healthy-job progression with the job carried on each event.
 import argparse
 
 import canary
-from _canary import app
 from _canary.events import Event
+from _canary.events import get_event_bus
 from _canary.util.filesystem import working_dir
 from _canary.workspace.workspace import Workspace
 
@@ -32,7 +32,7 @@ def test_run_publishes_job_lifecycle_events_to_bus(tmp_path):
     (tmp_path / "t.pyt").write_text(PYT_BODY)
 
     received: list[Event] = []
-    bus = app.get_event_bus()
+    bus = get_event_bus()
     sub = bus.subscribe(received.append)
     try:
         with working_dir(tmp_path), canary.config.override() as cfg:

@@ -59,10 +59,10 @@ def test_listener_recovers_only_old_items(tmp_path: Path) -> None:
 
 
 def test_two_listeners_share_the_spool_without_loss(tmp_path: Path) -> None:
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
     from _canary.core.job import JobPhase
     from _canary.core.jobspec import JobSpec
-    from _canary.execution.testexec import ExecutionSpace
 
     db = WorkspaceDatabase.create(tmp_path)
     specs = [

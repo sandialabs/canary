@@ -230,7 +230,7 @@ def spec(repo: Path) -> JobSpec:
 
 @pytest.fixture
 def space(tmp_path):
-    from _canary.execution.testexec import ExecutionSpace
+    from _canary.core.execspace import ExecutionSpace
 
     sess = tmp_path / "sessions" / "s1"
     sess.mkdir(parents=True)

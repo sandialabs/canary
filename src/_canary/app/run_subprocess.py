@@ -38,7 +38,7 @@ from typing import Any
 
 from ..events import SpoolBus
 from ..events import SpoolListener
-from .facade import get_event_bus
+from ..events import get_event_bus
 
 if TYPE_CHECKING:
     from .run import RunOptions

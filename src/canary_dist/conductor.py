@@ -15,9 +15,9 @@ import hpc_connect
 
 import canary
 from _canary.cli.run import Run
+from _canary.core.execspace import ExecutionSpace
 from _canary.execution.queue_executor import ResourceQueueExecutor
 from _canary.execution.runtest import Runner
-from _canary.execution.testexec import ExecutionSpace
 from _canary.util.multiprocessing import SimpleQueue
 from canary_hpc.batching import BatchingSpec
 from canary_hpc.batchspec import BatchSpec

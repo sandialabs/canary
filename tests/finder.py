@@ -10,9 +10,9 @@ import pytest
 import _canary.config as config
 import canary
 from _canary import select
+from _canary.core import execspace
 from _canary.core import job as cj
 from _canary.core import rules
-from _canary.execution import testexec
 from _canary.generation import collect
 from _canary.generation.generate import Generator
 from _canary.plugins.hookspec import hookimpl
@@ -185,7 +185,7 @@ def test_cpu_count(tmpdir):
         specs = select_specs(resolved)
         jobs: list[canary.Job] = []
         for spec in specs:
-            space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
+            space = execspace.ExecutionSpace(root=Path(workdir), path=Path("."))
             job = cj.Job(spec=spec, workspace=space)
             jobs.append(job)
         filter_cases(jobs)
@@ -200,7 +200,7 @@ def test_cpu_count(tmpdir):
         specs = select_specs(resolved)
         jobs = []
         for spec in specs:
-            space = testexec.ExecutionSpace(root=Path(workdir), path=Path("."))
+            space = execspace.ExecutionSpace(root=Path(workdir), path=Path("."))
             job = cj.Job(spec=spec, workspace=space)
             jobs.append(job)
         filter_cases(jobs)
@@ -356,9 +356,9 @@ def test_custom_view_name_is_skipped_during_collection(tmpdir):
 
 
 def test_resource_capacity_rule_tolerates_empty_exception_args(tmpdir, monkeypatch):
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
     from _canary.core.jobspec import JobSpec
-    from _canary.execution.testexec import ExecutionSpace
 
     workdir = tmpdir.strpath
     with working_dir(workdir, create=True):

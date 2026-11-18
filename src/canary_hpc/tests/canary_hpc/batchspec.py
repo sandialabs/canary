@@ -8,13 +8,13 @@ from typing import cast
 
 import pytest
 
+from _canary.core.execspace import ExecutionSpace
 from _canary.core.job import Job
 from _canary.core.job import JobPhase
 from _canary.core.job import JobState
 from _canary.core.status import Outcome
 from _canary.core.status import Status
 from _canary.core.timekeeper import Timekeeper
-from _canary.execution.testexec import ExecutionSpace
 from _canary.resource_pool.rpool import NodeRequest
 from canary_hpc.batchexec import HPCConnectBatchRunner
 from canary_hpc.batchexec import HPCConnectRunner

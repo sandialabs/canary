@@ -17,7 +17,7 @@ The feature is implemented entirely with hooks:
     Registers ``--exec-prefix`` on ``canary run``.
 
 ``canary_runtests_start``
-    Redirects each job's :class:`~_canary.execution.testexec.ExecutionSpace` so
+    Redirects each job's :class:`~_canary.core.execspace.ExecutionSpace` so
     that ``job.workspace.dir`` resolves below the prefix.  The redirect happens
     in the process that drives execution, before worker processes are started,
     so workers and the executor (which records results for jobs that time out or

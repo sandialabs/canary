@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from ..core import jobspec
+from ..core.execspace import ExecutionSpace
 from ..core.job import Dependency
 from ..core.job import Job
-from ..execution.testexec import ExecutionSpace
 from ..util import logging
 
 if TYPE_CHECKING:

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
-from .facade import get_event_bus
 from .facade import get_job_log
 from .facade import get_result_history
 from .facade import get_results
@@ -28,7 +27,6 @@ from .facade import get_workspace_info
 __all__ = [
     "JobView",
     "WorkspaceSummary",
-    "get_event_bus",
     "job_history",
     "job_log",
     "list_jobs",

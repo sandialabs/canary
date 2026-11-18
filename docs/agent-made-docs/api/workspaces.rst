@@ -27,7 +27,7 @@ Workspace Management
 Execution Space
 ---------------
 
-.. autoclass:: _canary.execution.testexec.ExecutionSpace
+.. autoclass:: _canary.core.execspace.ExecutionSpace
    :members:
    :member-order: bysource
    :undoc-members:

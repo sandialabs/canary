@@ -16,6 +16,7 @@ import pytest
 from _canary.events import Event
 from _canary.events import EventBus
 from _canary.events import JobEvent
+from _canary.events import get_event_bus
 from _canary.events.bus import JOB_LIFECYCLE_EVENTS
 from _canary.execution.queue_executor import EventTypes
 
@@ -106,3 +107,8 @@ def test_job_event_field_set_matches_job_view_shape():
     # The status/identity/timing fields an interface renders must appear in both.
     for field in ("id", "short_id", "name", "fullname", "phase", "status", "duration"):
         assert field in shared
+
+
+def test_get_event_bus_is_a_process_wide_singleton():
+    assert isinstance(get_event_bus(), EventBus)
+    assert get_event_bus() is get_event_bus()

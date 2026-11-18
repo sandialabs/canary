@@ -39,8 +39,8 @@ from .timekeeper import Timekeeper
 
 if TYPE_CHECKING:
     from ..execution.launcher import Launcher
-    from ..execution.testexec import ExecutionSpace
     from ..resource_pool.rpool import NodeRequest
+    from .execspace import ExecutionSpace
     from .jobspec import JobSpec
     from .jobspec import Mask
 
@@ -916,24 +916,6 @@ class Job(BaseJob):
                 out.write("\nCaptured stderr:\n")
                 out.write(file.read_text(errors="ignore"))
         return out.getvalue()
-
-
-def load_job_from_file(arg: Path | str | None) -> Job:
-    from _canary.workspace.workspace import Workspace
-
-    path = Path(arg or ".").absolute()
-    file = path / "testcase.lock" if path.is_dir() else path
-    lock_data = json.loads(file.read_text())
-    id = lock_data.spec.id
-    workspace = Workspace.load()
-    return workspace.find(job=id)
-
-
-def load_job_from_state(lock_data: "Job") -> "Job":
-    from _canary.workspace.workspace import Workspace
-
-    workspace = Workspace.load()
-    return workspace.find(job=lock_data.spec.id)
 
 
 def split_count(total: int, parts: int) -> list[int]:

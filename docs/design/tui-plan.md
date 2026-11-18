@@ -24,14 +24,13 @@ Relevant modules:
 | `_canary/tui/state.py` | Pure, fully testable UI state machine (`ExplorerState`). No I/O. |
 | `_canary/tui/render.py` | Rich renderers (header/table/detail/footer/log). |
 | `_canary/tui/app.py` | The only I/O module: `ExplorerModel` (bridges queries+run to state) and `run()` (the runner loop, raw-mode key reader, `rich.live.Live`). |
-| `_canary/app/queries.py` | Read surface: `list_jobs`, `job_log`, `workspace_summary`, `status_counts`, `job_history`, `get_event_bus`. |
+| `_canary/app/queries.py` | Read surface: `list_jobs`, `job_log`, `workspace_summary`, `status_counts`, `job_history`. |
 | `_canary/app/run.py` | The run use case: `run(request, options)` -> exit code. |
-| `_canary/events/bus.py` | Process-wide `EventBus`; typed `Event`/`JobEvent`; `project_job_event`. |
-| `_canary/app/facade.py` | Holds the singleton `EventBus` (`get_event_bus`). |
+| `_canary/events/bus.py` | Process-wide `EventBus` (`get_event_bus`); typed `Event`/`JobEvent`; `project_job_event`. |
 
 **Event flow (already wired):** during an in-process run the executor
 (`ResourceQueueExecutor`, `runtest.py:204`) publishes job-lifecycle events to the
-process-wide `EventBus` returned by `app.get_event_bus()`. The TUI's
+process-wide `EventBus` returned by `events.get_event_bus()`. The TUI's
 `ExplorerModel.subscribe()` already listens and flips a thread-safe *dirty* flag
 so the runner refreshes rows from the DB promptly (`tui/app.py:74-94, 248`).
 Events only mark dirty; the DB remains the source of truth for row content.
@@ -276,7 +275,7 @@ straightforward pass-through, so it is paused for a decision:
    - **B. Run the session in a child process** and have the TUI consume events
      over a transport (pipe/socket). Gives true live in-place streaming and
      isolates `os.chdir`/signals, but requires the cross-process event bridge
-     that `facade.get_event_bus` explicitly defers ("Cross-process delivery ...
+     that `events.get_event_bus` explicitly defers ("Cross-process delivery ...
      belongs to a future transport"). Bigger effort.
    - **C. Make `Session.run` not use `os.chdir`** (pass cwd per-job) so the run
      is thread-safe, then run on a background thread with the `Live` display
@@ -397,7 +396,7 @@ behavior and the test-author API unchanged.
     `drain()`s the spool FIFO-by-mtime and republishes each record onto an
     in-process `EventBus`. `start()` / `stop()`.
 - The child run installs a bus subscriber that writes to `SpoolBus`; the parent
-  runs a `SpoolListener` onto `app.get_event_bus()`. No mp.Queue, no feeder
+  runs a `SpoolListener` onto `events.get_event_bus()`. No mp.Queue, no feeder
   deadlock, no sentinels. Return code/errors come from the child *process exit
   code* (already reliable), not an in-band control queue.
 - Spool location: `<workspace>/.canary/tmp/events` (sibling to the DB spool at

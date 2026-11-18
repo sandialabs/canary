@@ -57,8 +57,15 @@ class Encoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 
+# ``__type__`` tags of classes that moved, as written by older versions of Canary.
+_RENAMED_TYPES = {
+    "_canary.execution.testexec::ExecutionSpace": "_canary.core.execspace::ExecutionSpace"
+}
+
+
 def _load_class(class_spec: str) -> Any:
     """Import and return a class given a ``module::QualName`` specifier."""
+    class_spec = _RENAMED_TYPES.get(class_spec, class_spec)
     modulename, qualname = class_spec.split("::")
     module = importlib.import_module(modulename)
     obj = module

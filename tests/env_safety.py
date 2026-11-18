@@ -101,8 +101,8 @@ def test_dist_export_all_skips_secrets(monkeypatch):
 def test_env_json_is_redacted_and_private(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
+    from _canary.core.execspace import ExecutionSpace
     from _canary.execution.launcher import _write_env_json
-    from _canary.execution.testexec import ExecutionSpace
 
     monkeypatch.setenv("GITLAB_TOKEN", "s3cr3t")
     monkeypatch.setenv("SOME_SETTING", "ok")

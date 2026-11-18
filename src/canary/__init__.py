@@ -185,7 +185,7 @@ def get_instance(arg_path: Path | str | None = None) -> TestInstance | MissingTe
 
 
 def get_job(arg_path: Path | str | None = None) -> Job | None:
-    from _canary.core.job import load_job_from_file
+    from _canary.workspace.workspace import load_job_from_file
 
     try:
         job = load_job_from_file(arg_path)

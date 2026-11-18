@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from _canary.core.execspace import ExecutionSpace
 from _canary.core.jobspec import UnsafeParameterError
 from _canary.core.jobspec_ir import JobSpecIR
-from _canary.execution.testexec import ExecutionSpace
 
 
 @pytest.fixture

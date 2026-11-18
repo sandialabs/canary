@@ -30,6 +30,7 @@ from ..util.collections import merge
 from ..util.compression import deserialize
 from ..util.compression import serialize
 from ..util.rich import set_color_when
+from ..workspace import locator
 from .schemas import config_schema
 from .schemas import environment_variable_schema
 from .schemas import plugin_schema
@@ -505,8 +506,6 @@ def read_config_file(file: str | Path) -> dict[str, Any] | None:
 
 
 def get_scope_filename(scope: str) -> Path:
-    from ..workspace.workspace import Workspace
-
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
             return Path(var)
@@ -520,7 +519,7 @@ def get_scope_filename(scope: str) -> Path:
                 return file
         return Path("~/.config/canary.yaml").expanduser()
     elif scope == "local":
-        if path := Workspace.find_workspace():
+        if path := locator.find_workspace():
             return path / "config.yaml"
         raise LocalScopeDoesNotExistError(
             f"not a Canary workspace (or any of its parent directories): {Path.cwd()}"
@@ -592,9 +591,7 @@ def resolve_plugin(name: str | dict[str, str], *, base: str | Path | None) -> st
 
 def workspace_anchor() -> Path | None:
     """Return the workspace anchor (directory containing ``.canary``) or None."""
-    from ..workspace.workspace import Workspace
-
-    return Workspace.find_anchor()
+    return locator.find_anchor()
 
 
 def get_env_scope() -> dict[str, Any]:

@@ -55,6 +55,7 @@ from typing import Generator
 import rich
 
 from .. import config
+from ..events import get_event_bus
 from ..history import HistoryStore
 from ..plugins.hookspec import hookimpl
 from ..util import glyphs
@@ -194,7 +195,6 @@ def default_runtests(runner: Runner) -> bool:
       The session returncode (0 for success)
 
     """
-    from .. import app
     from .queue_executor import ResourceQueueExecutor
 
     try:
@@ -208,7 +208,7 @@ def default_runtests(runner: Runner) -> bool:
     executor = JobExecutor()
     max_workers = config.getoption("workers") or -1
     with ResourceQueueExecutor(
-        queue, executor, max_workers=max_workers, event_bus=app.get_event_bus()
+        queue, executor, max_workers=max_workers, event_bus=get_event_bus()
     ) as ex:
         ex.add_listener(runner.workspace.testcase_done_callback)
         ex.run()

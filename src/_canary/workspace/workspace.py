@@ -911,6 +911,15 @@ class Workspace:
         self._runner.testcase_done_callback(event)
 
 
+def load_job_from_file(arg: Path | str | None) -> Job:
+    path = Path(arg or ".").absolute()
+    file = path / "testcase.lock" if path.is_dir() else path
+    lock_data = json.loads(file.read_text())
+    id = lock_data.spec.id
+    workspace = Workspace.load()
+    return workspace.find(job=id)
+
+
 class WorkspaceExistsError(Exception):
     """Raised when attempting to create a workspace in a directory that already exists."""
 

@@ -1004,7 +1004,7 @@
         "canary.app.open_workspace",
         "canary.app.create_workspace",
         "canary.app.collect",
-        "canary.app.get_event_bus"
+        "_canary.events.get_event_bus"
       ],
       "resources": [
         "_canary.resource_pool.rpool.ResourcePool",

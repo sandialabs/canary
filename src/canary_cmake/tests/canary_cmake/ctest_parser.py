@@ -327,8 +327,8 @@ def test_create_ir_with_environment_modification(tmp_path, monkeypatch):
     """ENVIRONMENT_MODIFICATION used to crash generation (unexpected kwarg 'variables')."""
     from pathlib import Path
 
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
-    from _canary.execution.testexec import ExecutionSpace
 
     ctestfile = tmp_path / "CTestTestfile.cmake"
     ctestfile.write_text("")

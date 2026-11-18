@@ -15,6 +15,7 @@ import os
 import canary
 from _canary import tui
 from _canary.app import queries
+from _canary.events import get_event_bus
 from _canary.util.filesystem import working_dir
 from _canary.util.testing import CanaryCommand
 
@@ -185,7 +186,7 @@ def test_model_refresh_log_follows_a_running_jobs_output(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        model.subscribe(get_event_bus())
         model.refresh()
         model.state.set_viewport_height(5)
 
@@ -217,7 +218,7 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        model.subscribe(get_event_bus())
         model.refresh()
         ids = [j["id"] for j in model.state.jobs]
 
@@ -263,7 +264,7 @@ def test_model_cancel_run_terminates_child_and_clears_state(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        bus = queries.get_event_bus()
+        bus = get_event_bus()
         model.subscribe(bus)
         model.refresh()
 
@@ -303,7 +304,7 @@ def test_model_begin_run_from_input_launches_a_run(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        model.subscribe(get_event_bus())
         model.refresh()
 
         # A typed directory is classified into a scanpaths run and launched.
@@ -335,7 +336,7 @@ def test_model_begin_run_from_input_reports_classification_error(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        model.subscribe(get_event_bus())
         model.refresh()
         started, message = model.begin_run_from_input("no-such-thing-xyz")
         assert started is False
@@ -371,7 +372,7 @@ def test_inplace_rerun_tracks_live_progress(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         model = tui.ExplorerModel()
-        model.subscribe(queries.get_event_bus())
+        model.subscribe(get_event_bus())
         model.refresh()
         ids = [j["id"] for j in model.state.jobs]
 

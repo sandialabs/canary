@@ -5,7 +5,7 @@
 """Tests for the application facade (``_canary.app``).
 
 The facade must delegate to the workspace implementation without adding
-behavior, expose a stable event bus, and stay off the eager ``import canary``
+behavior and stay off the eager ``import canary``
 path so test subprocesses keep paying nothing for it until first use.
 """
 
@@ -15,7 +15,6 @@ import pytest
 
 import _canary.workspace.workspace as _workspace_module
 from _canary import app
-from _canary.events import EventBus
 from _canary.workspace.workspace import NotAWorkspaceError
 
 
@@ -41,11 +40,6 @@ def test_open_missing_workspace_raises(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(NotAWorkspaceError):
         app.open_workspace(tmp_path)
-
-
-def test_event_bus_is_stable_and_typed():
-    assert isinstance(app.get_event_bus(), EventBus)
-    assert app.get_event_bus() is app.get_event_bus()
 
 
 def test_app_is_not_on_the_eager_import_path():

@@ -23,9 +23,9 @@ from _canary.workspace.workspace import set_workspace_dir
 def _make_archivable_job(
     ws: Workspace, session: str, relpath: str, *, status: str, input_name: str = "input.inp"
 ):
+    from _canary.core.execspace import ExecutionSpace
     from _canary.core.job import Job
     from _canary.core.jobspec import JobSpec
-    from _canary.execution.testexec import ExecutionSpace
 
     session_dir = ws.sessions_dir / session
     job_dir = session_dir / relpath

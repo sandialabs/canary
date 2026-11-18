@@ -4,8 +4,8 @@
 
 """Canary application layer.
 
-A single in-process entry point for opening a Canary :class:`~_canary.workspace.workspace.Workspace`
-and observing application events, intended to be shared by every interface
+A single in-process entry point for opening a Canary
+:class:`~_canary.workspace.workspace.Workspace`, intended to be shared by every interface
 (CLI, and future TUI/GUI/VS Code) so business logic lives here rather than in
 any one interface.
 
@@ -18,7 +18,6 @@ from .facade import archive_workspace
 from .facade import collect
 from .facade import create_workspace
 from .facade import delete_selection
-from .facade import get_event_bus
 from .facade import get_result_history
 from .facade import get_results
 from .facade import get_tag_info
@@ -48,7 +47,6 @@ __all__ = [
     "create_workspace",
     "archive_workspace",
     "open_workspace",
-    "get_event_bus",
     "run",
     "RunOptions",
     "run_hook",

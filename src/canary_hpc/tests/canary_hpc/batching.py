@@ -40,14 +40,14 @@ def make_jobs(tmp_path: Path, cpus: int = 1, nodes: int = 1) -> list:
       - each family has 1 aggregate that depends on all 4 leafs
     Total: 25 jobs (20 leaf + 5 aggregates).
     """
+    import _canary.core.execspace
     import _canary.core.job
     import _canary.core.jobspec
-    import _canary.execution.testexec
 
     Dependency = _canary.core.job.Dependency
     Job = _canary.core.job.Job
     JobSpec = _canary.core.jobspec.JobSpec
-    ExecutionSpace = _canary.execution.testexec.ExecutionSpace
+    ExecutionSpace = _canary.core.execspace.ExecutionSpace
 
     ws = ExecutionSpace(tmp_path, Path("session"))
     lookup: dict[str, Job] = {}  # type: ignore[valid-type]
@@ -484,12 +484,12 @@ def test_allocate_partition_counts_equal_partitions_are_balanced() -> None:
 
 def test_gpu_bound_batch_upper_bound_accounts_for_gpus(tmp_path, monkeypatch):
     """8 x 60 s one-GPU jobs on a 1-GPU node serialize: the bound must cover 480 s."""
+    import _canary.core.execspace
     import _canary.core.job
     import _canary.core.jobspec
-    import _canary.execution.testexec
 
     monkeypatch.setattr(batching, "estimate_runtime", lambda job, store=None: 60.0)
-    ws = _canary.execution.testexec.ExecutionSpace(tmp_path, Path("session"))
+    ws = _canary.core.execspace.ExecutionSpace(tmp_path, Path("session"))
     jobs = []
     for i in range(8):
         spec = _canary.core.jobspec.JobSpec(
