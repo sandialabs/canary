@@ -605,3 +605,14 @@ def fetch_execute_examples(args: "argparse.Namespace") -> "int | None":
         raise ValueError(f"A folder named 'examples' already exists at {os.getcwd()}")
     force_copy(path, os.path.basename(path))
     return 0
+
+
+@hookimpl(trylast=True)
+def canary_invoke_command(command: Any, args: argparse.Namespace, argv: list[str]) -> int:
+    """Run *command* in this process (the default; see the hookspec)."""
+    from ..main import invoke_command
+    from ..main import invoke_profiled_command
+
+    if args.canary_profile:
+        return invoke_profiled_command(command, args)
+    return invoke_command(command, args)

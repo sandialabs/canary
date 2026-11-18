@@ -353,6 +353,30 @@ def canary_skills() -> dict[str, Any] | None:
     """
 
 
+@hookspec(firstresult=True)
+def canary_invoke_command(
+    command: "CanarySubcommand", args: argparse.Namespace, argv: list[str]
+) -> int:
+    """Run the parsed *command* and return its exit code.
+
+    ``main()`` calls this once per invocation, after configuration.  The built-in
+    implementation (``trylast``) runs the command in this process, profiled under
+    ``--canary-profile``.  A plugin can run the command somewhere else instead -- for
+    example ``canary_server`` submits it to the workspace's server when ``--server``
+    is given -- by returning the exit code; returning ``None`` falls through to the
+    built-in.
+
+    Args:
+        command: The subcommand selected on the command line.
+        args: The parsed command line.
+        argv: The raw command-line arguments (without the program name).
+
+    Returns:
+        The exit code.
+    """
+    raise NotImplementedError
+
+
 @hookspec
 def canary_finish(config: "CanaryConfig") -> None:
     """Called after a session completes to allow plugins to release resources.

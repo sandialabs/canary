@@ -63,10 +63,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.print_help()
             return -1
         try:
-            if args.canary_profile:
-                return invoke_profiled_command(command, args)
-            else:
-                return invoke_command(command, args)
+            hook = config.pluginmanager.hook
+            return hook.canary_invoke_command(command=command, args=args, argv=m.argv)
         finally:
             config.pluginmanager.hook.canary_finish(config=config)
 

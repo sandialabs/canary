@@ -81,6 +81,7 @@ canary_flux = "canary_flux"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
 canary_pyt = "canary_pyt"
+canary_server = "canary_server"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools]
@@ -143,6 +144,7 @@ testpaths = [
     "src/canary_hpc/tests",
     "src/canary_nvidia/tests",
     "src/canary_pyt/tests",
+    "src/canary_server/tests",
     "src/canary_vvtest/tests",
 ]
 norecursedirs = "mock data generators"
@@ -173,6 +175,7 @@ source = [
     "canary_hpc",
     "canary_nvidia",
     "canary_pyt",
+    "canary_server",
     "canary_vvtest",
 ]
 command_line = """-m pytest --import-mode=importlib
@@ -186,6 +189,7 @@ command_line = """-m pytest --import-mode=importlib
     ./src/canary_hpc/tests
     ./src/canary_nvidia/tests
     ./src/canary_pyt/tests
+    ./src/canary_server/tests
     ./src/canary_vvtest/tests"""
 
 [tool.coverage.html]
@@ -325,6 +329,7 @@ known_first_party = [
     "canary_hpc",
     "canary_nvidia",
     "canary_pyt",
+    "canary_server",
     "canary_vvtest",
 ]
 ignore = ["DEP002", "DEP003", "DEP004"]
