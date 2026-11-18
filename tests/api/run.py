@@ -177,6 +177,8 @@ def test_run_builds_scanpaths_request_and_options(monkeypatch, tmp_path):
         return 7
 
     monkeypatch.setattr(run_api, "_app_run", fake_app_run)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
 
     work_tree = tmp_path / "workspace"
 
@@ -198,7 +200,8 @@ def test_run_builds_scanpaths_request_and_options(monkeypatch, tmp_path):
 
     request = captured["request"]
     assert request.kind == "scanpaths"
-    assert request.value == ["examples"]
+    # Resolved like ``canary run examples``: the root directory with no sub-paths.
+    assert request.value == {str(tmp_path / "examples"): []}
 
     options = captured["options"]
     assert isinstance(options, run_api.RunOptions)
@@ -364,3 +367,26 @@ def test_noniterable_paths_raise_type_error():
 def test_noniterable_string_list_argument_raises_type_error():
     with pytest.raises(TypeError, match="specids must be a string or iterable of strings"):
         run_api.RunRequest.specids(123)
+
+
+def test_run_request_resolves_scanpaths_like_the_cli(tmp_path, monkeypatch):
+    """A list of paths becomes the ``{root: [paths]}`` mapping collection expects."""
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    single = tmp_path / "one.pyt"
+    single.write_text("")
+    seen = {}
+    monkeypatch.setattr(
+        run_api, "_app_run", lambda request, options: seen.setdefault("r", request) and 0
+    )
+
+    run_api.run_request(run_api.RunRequest.scanpaths([suite, single]))
+
+    assert seen["r"].kind == "scanpaths"
+    assert seen["r"].value == {str(suite): [], str(tmp_path): ["one.pyt"]}
+
+
+def test_run_request_rejects_missing_scanpath(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_api, "_app_run", lambda request, options: 0)
+    with pytest.raises(ValueError, match="no such file or directory"):
+        run_api.run_request(run_api.RunRequest.scanpaths(tmp_path / "missing"))

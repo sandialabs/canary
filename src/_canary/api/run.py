@@ -15,6 +15,7 @@ responsible for providing a stable, typed, Python-facing interface.
 import os
 from dataclasses import dataclass
 from os import PathLike
+from types import SimpleNamespace
 from typing import Iterable
 from typing import Literal
 from typing import TypeAlias
@@ -23,6 +24,8 @@ from _canary import config
 from _canary.app.run import RunOptions
 from _canary.app.run import run as _app_run
 from _canary.rerun import StrategyType
+from _canary.scanpaths import merge_scanpaths
+from _canary.scanpaths import scanpath_from_item
 from _canary.view import ViewSettings
 
 Pathish: TypeAlias = str | PathLike[str]
@@ -105,7 +108,7 @@ def run(
 
     Args:
         paths: Path or paths to scan for job definitions.  This is the common
-            ``canary.run("examples/")`` case.
+            ``run("examples/")`` case.
         from_tag: Existing Canary selection tag to run.  This corresponds to a
             request of kind ``"tag"``.
         specids: Spec ID or spec IDs to rerun.
@@ -137,21 +140,17 @@ def run(
     Examples:
         Run job definitions under ``examples/``::
 
-            import canary
+            from _canary.api.run import run
 
-            rc = canary.api.run("examples/")
+            rc = run("examples/")
 
         Run only failed jobs from the default selection::
 
-            import canary
-
-            rc = canary.api.run(only="failed")
+            rc = run(only="failed")
 
         Run a previous named selection::
 
-            import canary
-
-            rc = canary.api.run(from_tag="nightly")
+            rc = run(from_tag="nightly")
     """
 
     req = request or make_request(
@@ -190,7 +189,24 @@ def run_request(request: RunRequest, options: RunOptions | None = None) -> int:
         The session return code.
     """
 
+    if request.kind == "scanpaths" and not isinstance(request.value, dict):
+        resolved = SimpleNamespace(kind="scanpaths", value=_scanpaths(request.value))
+        return _app_run(resolved, options)
     return _app_run(request, options)
+
+
+def _scanpaths(paths: Iterable[str]) -> dict[str, list[str]]:
+    """Resolve path arguments into ``{root: [paths]}`` exactly as ``canary run PATH`` does.
+
+    Relative paths are resolved against the current directory.
+    """
+    scanpaths: dict[str, list[str]] = {}
+    for item in paths:
+        found = scanpath_from_item(item)
+        if found is None:
+            raise ValueError(f"{item}: no such file or directory")
+        merge_scanpaths(scanpaths, found)
+    return scanpaths
 
 
 def make_request(
@@ -204,7 +220,7 @@ def make_request(
 
     Exactly one of ``paths``, ``from_tag``, ``specids``, or ``viewpaths`` may be
     provided.  If none are provided, the configured default run tag is used.  That
-    gives ``canary.api.run()`` the same high-level meaning as a no-argument run:
+    gives ``run()`` the same high-level meaning as a no-argument run:
     run the default saved selection rather than implicitly scanning ``.``.
     """
 

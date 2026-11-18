@@ -338,8 +338,7 @@ def measurements(job_id: str) -> dict[str, Any]:
     """Return the measurement dictionary for a job."""
 
     data = raw_job_lock(job_id)
-    value = data.get("measurements", {})
-    return value if isinstance(value, dict) else {}
+    return _measurement_data(data.get("measurements", {}))
 
 
 def measurement(job_id: str, key: str, default: Any = None) -> Any:
@@ -664,18 +663,25 @@ def _session_name_from_dir(session_dir: Path) -> str:
 
 
 def _measurements_from_row(row: dict[str, Any]) -> dict[str, Any]:
-    value = row.get("measurements", {})
+    return _measurement_data(row.get("measurements", {}))
 
+
+def _measurement_data(value: Any) -> dict[str, Any]:
+    """Return the ``name -> value`` measurements stored in *value*.
+
+    Database rows hold a :class:`~_canary.core.job.Measurements` object and lock
+    files its serialized form (``{"data": {...}, "__type__": ...}``); both keep the
+    values under ``data``.  A plain JSON string or flat dict is also accepted.
+    """
     if isinstance(value, str):
         try:
             value = json.loads(value)
         except ValueError:
             return {}
-
-    if isinstance(value, dict):
-        return value
-
-    return {}
+    value = getattr(value, "data", value)
+    if isinstance(value, dict) and isinstance(value.get("data"), dict):
+        value = value["data"]
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _duration(entry: dict[str, Any]) -> float:

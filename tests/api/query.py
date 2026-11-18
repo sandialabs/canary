@@ -725,3 +725,23 @@ def test_invalid_sort_key_raises(workspace, monkeypatch):
 
     with pytest.raises(ValueError, match="invalid sort key"):
         query_api.jobs(session="s1", sort_by="bogus")
+
+
+def test_measurements_read_the_data_level_of_real_measurement_records(
+    workspace, monkeypatch, tmp_path
+):
+    """Lock files store ``{"data": {...}}`` and DB rows a Measurements object."""
+    from _canary.core.job import Measurements
+
+    patch_workspace(query_api, monkeypatch, workspace)
+    lockfile = tmp_path / "testcase.lock"
+    lock = {"measurements": {"data": {"loss": 0.2}, "__type__": "_canary.core.job::Measurements"}}
+    lockfile.write_text(json.dumps(lock))
+    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+
+    assert query_api.measurements("abc") == {"loss": 0.2}
+    assert query_api.measurement("abc", "loss") == 0.2
+
+    stored = Measurements()
+    stored.add_measurement("loss", 0.4)
+    assert query_api._measurements_from_row({"measurements": stored}) == {"loss": 0.4}
