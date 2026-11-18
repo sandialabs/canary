@@ -19,6 +19,7 @@ import datetime
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Callable
 from typing import Literal
 
 from .. import config
@@ -28,6 +29,7 @@ from ..core.job import Job
 from ..error import StopExecution
 from ..error import notests_exit_status
 from ..execution.context import ExecutionContext
+from ..execution.runtest import JobExecutor
 from ..execution.runtest import Runner
 from ..execution.runtest import canary_runtests
 from ..persistence.listener import ResultListener
@@ -46,6 +48,9 @@ if TYPE_CHECKING:
     from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
+
+#: An observer receives each raw executor event dict, with the job under ``"job"``.
+JobEventObserver = Callable[[dict], None]
 
 _SESSION_DIR_VARIABLES = ("PYTHONPATH", "PATH")
 
@@ -184,6 +189,53 @@ class Engine:
         s = self.prepare(specs, session=session, inplace=inplace, only=only)
         return self.execute(s, view_t=view_t)
 
+    def job_for(self, spec_id: str, *, session: str | None = None) -> Job:
+        """Build the job for *spec_id* (with its upstreams) in *session*, ready to run again.
+
+        Args:
+            spec_id: Spec ID, ID prefix, or matching pattern.
+            session: Session directory name; a new timestamped name by default.
+        """
+        ws = self.workspace
+        session_dir = ws.sessions_dir / (session or _new_session_name())
+        spec = ws.find_jobspec(spec_id)
+        specs = ws.db.load_specs(ids=[spec.id], include_upstreams=True)
+        job = next(j for j in construct_jobs(ws, specs, session_dir) if j.id == spec.id)
+        job.status.reset()
+        job.state.reset()
+        return job
+
+    def exec_job(self, job: Job, *, observer: JobEventObserver | None = None) -> Job:
+        """Run one job directly, outside the session scheduler, and record its result.
+
+        The job runs through :class:`~_canary.execution.runtest.JobExecutor` (the same
+        lifecycle as a scheduled job).  A job that is not ready has its readiness
+        refreshed: if an upstream outcome blocks it, it is recorded as BLOCKED and
+        returned without running.  Results are written to the database by the
+        parent process and spooled for the parent's listener by nested processes.
+
+        Args:
+            job: A job from :meth:`job_for`.
+            observer: Called with each executor event (the event dict plus the job
+                under ``"job"``), for live status rendering.
+
+        Raises:
+            RuntimeError: If the job is not ready and could still run later (an
+                upstream has not finished).
+        """
+        if job.is_ready():
+            JobExecutor()(job, _PhaseTrackingSink(job, observer))
+        else:
+            job.refresh_readiness()
+            if not job.state.is_done():
+                raise RuntimeError(f"{job}: job is not ready to run")
+            job.save()
+        if self.workspace.canary_level == 0:
+            self.workspace.db.put_results(job)
+        else:
+            self.workspace.db.queue.put(job)
+        return job
+
     def prepare(
         self,
         specs: list["JobSpec"],
@@ -212,8 +264,7 @@ class Engine:
         is_parent = ws.canary_level == 0
         if session is not None and not (ws.sessions_dir / session).exists():
             raise ValueError(f"Session {session} not found in {ws.sessions_dir}")
-        now = datetime.datetime.now()
-        session_name = session or now.isoformat(timespec="microseconds").replace(":", "-")
+        session_name = session or _new_session_name()
         session_dir = ws.sessions_dir / session_name
         jobs = self.build_jobs(specs, session_dir)
         self._select(jobs, only=only)
@@ -405,3 +456,40 @@ def replace_session_dir_variables(job: Job, *, old: Path, new: Path) -> None:
             variables[key] = new_s
         elif value.startswith(old_s + os.pathsep):
             variables[key] = new_s + value[len(old_s) :]
+
+
+def _new_session_name() -> str:
+    """Return a filesystem-safe, timestamped session name."""
+    now = datetime.datetime.now()
+    return now.isoformat(timespec="microseconds").replace(":", "-")
+
+
+class _PhaseTrackingSink:
+    """Advance a job's lifecycle from executor events, forwarding each to an observer.
+
+    :class:`~_canary.execution.runtest.JobExecutor` drives a job by ``put``-ing event
+    dicts onto a queue-like sink.  In the session scheduler that sink advances
+    the job's phase via an :class:`ExecutionSlot`; ``exec`` has no slot, so this
+    sink applies the same ``on_submit``/``on_stage``/``on_start``/``on_stop``
+    transitions.  Each event is then forwarded to the caller's *observer* (if
+    any), with the running job added under ``"job"``, so the observer can render
+    without owning the transition logic or needing a separate job reference.
+    """
+
+    def __init__(self, job: "Job", observer: JobEventObserver | None) -> None:
+        self._job = job
+        self._observer = observer
+
+    def put(self, event: dict) -> None:
+        name = event.get("event")
+        at = event.get("timestamp")
+        if name == "job_submitted":
+            self._job.on_submit(at=at)
+        elif name == "job_staged":
+            self._job.on_stage(at=at)
+        elif name == "job_started":
+            self._job.on_start(at=at)
+        elif name == "job_stopped":
+            self._job.on_stop(at=at)
+        if self._observer is not None:
+            self._observer({**event, "job": self._job})

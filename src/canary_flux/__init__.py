@@ -332,65 +332,26 @@ def flux_exec(args: argparse.Namespace) -> int:
     """
     Execute one Canary job inside the active Flux allocation.
 
-    This is modeled after `canary exec`, but writes the completed Job to the
-    workspace database FSQueue instead of directly to SQLite.
+    This is ``canary exec`` with Flux resources: the Engine builds the job, runs it
+    through the normal job lifecycle, and, because this process is nested below
+    the parent scheduler, spools the result for the parent's listener instead of
+    writing SQLite.
     """
-    import time
-
-    from _canary import config
-    from _canary.core.job import Job
-    from _canary.engine.jobs import construct_jobs
+    from _canary.engine.engine import Engine
     from _canary.workspace.workspace import Workspace
 
-    workspace = Workspace.load()
-    session_dir = workspace.sessions_dir / args.session
+    engine = Engine(Workspace.load())
+    job = engine.job_for(args.spec, session=args.session)
 
-    spec = workspace.find_jobspec(args.spec)
-    specs = workspace.db.load_specs(ids=[spec.id], include_upstreams=True)
-    jobs = construct_jobs(workspace, specs, session_dir)
-
-    job: Job = next(j for j in jobs if j.id == spec.id)
-
-    # This execution is authoritative for this job.
-    job.status.reset()
-    job.state.reset()
-
-    # The parent scheduler only submits ready jobs, but keep the guard.
+    # The parent scheduler only submits ready jobs, but keep the guard: a job an
+    # upstream outcome blocks is recorded as BLOCKED without running.
     if not job.is_ready():
-        job.refresh_readiness()
-        if job.state.is_done():
-            job.save()
-            workspace.db.queue.put(job)
-            return 0
-        raise RuntimeError(f"{job}: job is not ready to run")
+        engine.exec_job(job)
+        return 0
 
     # Fill Canary's view of resources from Flux environment before setup/run.
     assign_flux_resources(job)
-
-    pm = config.pluginmanager.hook
-
-    try:
-        job.timekeeper.reset()
-        job.on_submit(at=time.time())
-        logger.debug("canary_runteststart: begin [%s]", job.id[:7])
-        pm.canary_runteststart(case=job)
-        logger.debug("canary_runteststart: end   [%s]", job.id[:7])
-        logger.debug("canary_runtest: begin [%s]", job.id[:7])
-        pm.canary_runtest(case=job)
-        logger.debug("canary_runtest: end   [%s]", job.id[:7])
-    finally:
-        try:
-            logger.debug("canary_runtest_finish: begin [%s]", job.id[:7])
-            pm.canary_runtest_finish(case=job)
-            logger.debug("canary_runtest_finish: end   [%s]", job.id[:7])
-        except Exception:
-            logger.error("canary_runtest_finish hook failed for %s", job.id[:7], exc_info=True)
-        finally:
-            job.on_finish(at=time.time())
-            job.save()
-
-            # Key difference from `canary exec`: write to FSQueue, not SQLite.
-            workspace.db.queue.put(job)
+    engine.exec_job(job)
 
     # Return a useful process code. Canary Status already encodes outcome.
     return int(job.status.code if job.status.code is not None else 0)

@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import canary
 from _canary.core.execspace import ExecutionSpace
 from _canary.core.job import Job
@@ -149,3 +151,78 @@ def test_context_exposes_paths_and_record_spools_then_syncs(tmp_path, monkeypatc
     job = seed_result(workspace, specs["a"], outcome="SUCCESS", submitted=time.time())
     context.record(job)
     assert calls == [("spool", job), ("sync", job)]
+
+
+FAILING = """\
+import sys
+
+def test():
+    return 1
+
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+
+DEPENDENT = """\
+import sys
+import canary
+
+canary.directives.depends_on("up")
+
+def test():
+    pass
+
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+
+
+def _dependent_workspace(root: Path, upstream: str) -> tuple[Workspace, dict[str, JobSpec]]:
+    (root / "up.pyt").write_text(upstream)
+    (root / "down.pyt").write_text(DEPENDENT)
+    with working_dir(root), canary.config.override():
+        workspace = Workspace.create(root)
+        specs = Engine(workspace).collect({str(root): []})
+    return workspace, {spec.family: spec for spec in specs}
+
+
+def test_exec_job_runs_one_job_and_writes_the_database(tmp_path):
+    workspace, specs = make_workspace(tmp_path, "a")
+    events: list[str] = []
+    with working_dir(tmp_path), canary.config.override():
+        engine = Engine(workspace)
+        job = engine.exec_job(engine.job_for("a"), observer=lambda e: events.append(e["event"]))
+    assert job.status.outcome.name == "SUCCESS"
+    assert events[:3] == ["job_submitted", "job_staged", "job_started"]
+    assert workspace.db.get_results()[specs["a"].id]["session"] == job.workspace.session
+
+
+def test_exec_job_in_a_nested_process_spools_instead(tmp_path, monkeypatch):
+    workspace, _ = make_workspace(tmp_path, "a")
+    spooled: list[Job] = []
+    monkeypatch.setattr(workspace, "canary_level", 1)
+    monkeypatch.setattr(workspace.db.queue, "put", spooled.append)
+    monkeypatch.setattr(workspace.db, "put_results", lambda *jobs: pytest.fail("wrote SQLite"))
+    with working_dir(tmp_path), canary.config.override():
+        engine = Engine(workspace)
+        job = engine.exec_job(engine.job_for("a", session="nested"))
+    assert spooled == [job]
+    assert job.workspace.session == "nested"
+
+
+def test_exec_job_records_a_job_blocked_by_a_failed_upstream(tmp_path):
+    workspace, specs = _dependent_workspace(tmp_path, FAILING)
+    with working_dir(tmp_path), canary.config.override():
+        engine = Engine(workspace)
+        engine.exec_job(engine.job_for("up"))
+        job = engine.exec_job(engine.job_for("down"))
+    assert job.status.outcome.name == "BLOCKED"
+    assert workspace.db.get_results()[specs["down"].id]["status"].outcome.name == "BLOCKED"
+
+
+def test_exec_job_refuses_a_job_whose_upstream_has_not_run(tmp_path):
+    workspace, _ = _dependent_workspace(tmp_path, PASSING)
+    with working_dir(tmp_path), canary.config.override():
+        engine = Engine(workspace)
+        with pytest.raises(RuntimeError, match="not ready"):
+            engine.exec_job(engine.job_for("down"))
