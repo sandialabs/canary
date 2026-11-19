@@ -50,6 +50,11 @@ def main(argv: list[str] | None = None) -> int:
         config.pluginmanager.hook.canary_addcommand(parser=parser)
         config.pluginmanager.hook.canary_addoption(parser=parser)
         args = cmdline_parse(parser=parser, args=m.argv)
+        if args.banner is None:
+            # --banner/--no-banner before the subcommand wins; otherwise the subcommand's
+            # preference (set_defaults(banner_default=...)), else no banner.  (A subparser's
+            # set_defaults(banner=...) would silently override the global flag.)
+            args.banner = bool(getattr(args, "banner_default", False))
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             sys.stderr.write(shlex.join(a) + "\n")

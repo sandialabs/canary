@@ -421,7 +421,8 @@ def make_argument_parser(**kwargs):
         "--banner",
         dest="banner",
         action=argparse.BooleanOptionalAction,
-        help="Print banner [default: %(default)s]",
+        default=None,
+        help="Print banner [default: on for run, off otherwise]",
     )
     parser.add_argument(
         "-d", "--debug", action="store_true", default=None, help="Debug mode [default: %(default)s]"
@@ -500,8 +501,6 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--cache-dir", help="Store job cache info in the given folder [default: .canary_cache/]"
     )
-    parser.set_defaults(banner=False)
-
     return parser
 
 

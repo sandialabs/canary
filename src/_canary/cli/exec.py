@@ -35,7 +35,7 @@ class Exec(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         """Register the ``spec`` positional ID and optional ``--session`` arguments."""
-        parser.set_defaults(banner=False)
+        parser.set_defaults(banner_default=False)
         parser.add_argument("--session", help="Run the job in this session")
         parser.add_argument("spec", help="Run this spec ID")
 

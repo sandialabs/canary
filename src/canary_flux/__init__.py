@@ -135,7 +135,7 @@ class FluxExec:
 
     @staticmethod
     def setup_parser(parser: "Parser") -> None:
-        parser.set_defaults(banner=False, flux_exec=True, flux_direct_run=False)
+        parser.set_defaults(banner_default=False, flux_exec=True, flux_direct_run=False)
         parser.add_argument("--session", required=True, help="Run the job in this session")
         parser.add_argument("spec", help="Run this spec ID")
 

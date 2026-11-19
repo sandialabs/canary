@@ -51,7 +51,7 @@ class Run(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         """Register all run arguments: paths, wipe, generator/selector options, style, view, etc."""
-        parser.set_defaults(banner=True)
+        parser.set_defaults(banner_default=True)
         parser.add_argument(
             "-w",
             dest="wipe_workspace",
