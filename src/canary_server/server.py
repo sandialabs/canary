@@ -6,9 +6,9 @@
 The server's files live in ``<workspace root>/var/server/``:
 
 * ``server.lock`` -- created exclusively by the running server; held for its lifetime.
-* ``server.json`` -- pid, host, start time, heartbeat and version, rewritten every
-  ``HEARTBEAT_INTERVAL`` seconds.  A server whose heartbeat is older than
-  ``STALE_AFTER`` seconds (or whose pid is gone, on the same host) is dead.
+* ``server.json`` -- pid, host, start time, heartbeat time, a ``beat`` counter and the
+  version, rewritten every ``HEARTBEAT_INTERVAL`` seconds.  See :func:`live_server` for
+  how a reader decides the server is alive (without comparing clocks across hosts).
 * ``stop`` -- sentinel: any process that sees the workspace asks the server to stop.
 
 Everything is a file on the workspace's filesystem, so a client on another machine
@@ -37,6 +37,9 @@ logger = logging.get_logger(__name__)
 
 HEARTBEAT_INTERVAL = 2.0
 STALE_AFTER = 5 * HEARTBEAT_INTERVAL
+#: How long a reader on another host watches ``beat`` for progress before calling the
+#: server dead (a little over two heartbeats).
+OBSERVE_FOR = 2.5 * HEARTBEAT_INTERVAL
 #: How often the loop looks for work, cancellation and a finished child.
 TICK = 0.2
 #: Seconds between SIGINT, SIGTERM and SIGKILL when interrupting a request.
@@ -61,18 +64,11 @@ class ServerInfo:
     started: float
     heartbeat: float
     version: str
+    #: Incremented on every heartbeat; other hosts judge liveness by its progress.
+    beat: int = 0
 
-    def is_alive(self, *, now: float | None = None) -> bool:
-        """True if the heartbeat is fresh and, on this host, the process exists."""
-        now = time.time() if now is None else now
-        if now - self.heartbeat > STALE_AFTER:
-            return False
-        if self.host == socket.gethostname():
-            return _pid_exists(self.pid)
-        return True
-
-    def to_dict(self, *, now: float | None = None) -> dict[str, Any]:
-        return {**dataclasses.asdict(self), "alive": self.is_alive(now=now)}
+    def to_dict(self, *, alive: bool) -> dict[str, Any]:
+        return {**dataclasses.asdict(self), "alive": alive}
 
 
 def read_info(workspace_root: Path) -> ServerInfo | None:
@@ -80,9 +76,36 @@ def read_info(workspace_root: Path) -> ServerInfo | None:
     file = server_dir(workspace_root) / "server.json"
     try:
         data = json.loads(file.read_text())
-        return ServerInfo(**{f.name: data[f.name] for f in dataclasses.fields(ServerInfo)})
+        fields = {f.name for f in dataclasses.fields(ServerInfo)}
+        return ServerInfo(**{k: v for k, v in data.items() if k in fields})
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def live_server(workspace_root: Path, *, observe: float | None = None) -> ServerInfo | None:
+    """The workspace's server if it is alive, else ``None``.
+
+    On the server's own host: its process exists and its heartbeat is fresh (one clock, so
+    comparing times is safe).  On any other host the clocks may disagree by more than the
+    heartbeat interval, so times are never compared: the server is alive if its ``beat``
+    counter advances within *observe* seconds (default ``OBSERVE_FOR``).  That check
+    costs up to a few seconds.
+    """
+    info = read_info(workspace_root)
+    if info is None:
+        return None
+    if info.host == socket.gethostname():
+        fresh = time.time() - info.heartbeat <= STALE_AFTER
+        return info if fresh and _pid_exists(info.pid) else None
+    deadline = time.monotonic() + (OBSERVE_FOR if observe is None else observe)
+    while time.monotonic() < deadline:
+        time.sleep(0.2)
+        now = read_info(workspace_root)
+        if now is None:
+            return None  # it stopped
+        if (now.pid, now.host) != (info.pid, info.host) or now.beat != info.beat:
+            return now  # restarted, or beating
+    return None
 
 
 class Server:
@@ -149,13 +172,17 @@ class Server:
             try:
                 fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
-                info = read_info(self.dir.parent.parent)
-                if info is not None and info.is_alive():
+                root = self.dir.parent.parent
+                if read_info(root) is None:
+                    # A starting server writes server.json right after taking the lock.
+                    deadline = time.monotonic() + STALE_AFTER
+                    while read_info(root) is None and time.monotonic() < deadline:
+                        time.sleep(0.2)
+                info = live_server(root)
+                if info is not None:
                     raise ServerRunningError(
                         f"a server is already running for this workspace (pid {info.pid} on {info.host})"
                     ) from None
-                if info is None and time.time() - _mtime(self.lock) < STALE_AFTER:
-                    raise ServerRunningError("a server is starting for this workspace") from None
                 logger.debug("Removing stale server lock %s", self.lock)
                 self.lock.unlink(missing_ok=True)
                 continue
@@ -167,6 +194,7 @@ class Server:
         self.stop_file.unlink(missing_ok=True)
         now = time.time()
         self.info = ServerInfo(os.getpid(), socket.gethostname(), now, now, version.__version__)
+        self._heartbeat()  # visible at once to clients and to a competing server
 
     # ------------------------------------------------------------------ requests
 
@@ -333,6 +361,7 @@ class Server:
     def _heartbeat(self) -> None:
         assert self.info is not None
         self.info.heartbeat = time.time()
+        self.info.beat += 1
         atomic_write(self.info_file, json.dumps(dataclasses.asdict(self.info), indent=2))
 
     def _release(self) -> None:
@@ -407,10 +436,10 @@ def _tee(pipe: IO[bytes], path: Path, stream: IO[str]) -> threading.Thread:
 
 def stop(workspace_root: Path, *, timeout: float = 3 * INTERRUPT_GRACE + 15.0) -> bool:
     """Ask the workspace's server to stop and wait for it; return False if none was running."""
-    info = read_info(workspace_root)
+    info = live_server(workspace_root)
     directory = server_dir(workspace_root)
-    if info is None or not info.is_alive():
-        if (directory / "server.lock").exists() and info is not None:
+    if info is None:
+        if (directory / "server.lock").exists() and read_info(workspace_root) is not None:
             for name in ("server.json", "server.lock", "stop"):
                 (directory / name).unlink(missing_ok=True)
         return False
@@ -431,10 +460,3 @@ def _pid_exists(pid: int) -> bool:
     except PermissionError:
         return True
     return True
-
-
-def _mtime(path: Path) -> float:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0

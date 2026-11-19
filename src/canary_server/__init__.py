@@ -98,12 +98,13 @@ class ServerCommand(canary.CanarySubcommand):
 
 
 def _status(root, *, as_json: bool) -> int:
-    info = server.read_info(root)
-    alive = info is not None and info.is_alive()
+    live = server.live_server(root)
+    info = live or server.read_info(root)
+    alive = live is not None
     running = requests.running_id(root)
     queued = requests.queued_ids(root)
     if as_json:
-        record = info.to_dict() if info is not None else {"alive": False}
+        record = info.to_dict(alive=alive) if info is not None else {"alive": False}
         print(json.dumps({**record, "running": running, "queued": queued}))
     elif alive:
         assert info is not None
@@ -151,8 +152,7 @@ def _request_text(text: str) -> str:
 
 
 def _require_server(root) -> None:
-    info = server.read_info(root)
-    if info is None or not info.is_alive():
+    if server.live_server(root) is None:
         raise RuntimeError(
             "no canary server is running for this workspace; start one with 'canary server start'"
         )
@@ -220,8 +220,8 @@ def _start_root(args: argparse.Namespace):
                 f"implicitly.  Run from {anchor} or use 'canary rm {anchor}' first."
             )
         if existing is not None:
-            info = server.read_info(existing)
-            if info is not None and info.is_alive():
+            info = server.live_server(existing)
+            if info is not None:
                 raise server.ServerRunningError(
                     f"a server is already running for this workspace (pid {info.pid} on "
                     f"{info.host}); stop it first with 'canary server stop'"
@@ -338,8 +338,8 @@ def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace)
     else:
         return
     root = workspace_at(path)
-    info = server.read_info(root) if root is not None else None
-    if info is not None and info.is_alive():
+    info = server.live_server(root) if root is not None else None
+    if info is not None:
         action = "remove" if command == "rm" else "wipe"
         raise ValueError(
             f"cannot {action} the workspace at {root}: a canary server is running for it "

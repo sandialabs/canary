@@ -43,7 +43,7 @@
       }
     },
     "files": {
-      ".canary/var/server/server.json": "pid, host, started, heartbeat (every 2 s; dead after 10 s), version",
+      ".canary/var/server/server.json": "pid, host, started, heartbeat (every 2 s), beat counter, version. Alive: on the same host, process exists and heartbeat < 10 s old; from another host, beat advances within ~5 s (clocks are never compared).",
       ".canary/var/server/inbox/": "the request queue (FSQueue)",
       ".canary/var/server/requests/<id>/": "request.json, status.json, stdout, stderr, cancel"
     },

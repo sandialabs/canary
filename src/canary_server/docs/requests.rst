@@ -125,7 +125,7 @@ Files
 
    .canary/var/server/
      server.lock          held by the running server
-     server.json          pid, host, start time, heartbeat, version
+     server.json          pid, host, start time, heartbeat, beat counter, version
      stop                 written by `canary server stop`
      inbox/               the queue (ready/, claimed/, failed/, tmp/)
      requests/<id>/
@@ -139,8 +139,11 @@ Files are written atomically (write, then rename), so a reader never sees a part
 Restarts and crashes
 --------------------
 
-The server rewrites ``server.json`` every 2 seconds.  A server whose heartbeat is more than
-10 seconds old, or whose process is gone (checked on the same host), is dead: clients refuse
-to queue new requests for it, and the next ``canary server start`` takes over its lock.  On
+The server rewrites ``server.json`` every 2 seconds, incrementing a ``beat`` counter.  On the
+server's own host it is alive if its process exists and its heartbeat is less than 10 seconds
+old.  On any other host clocks may disagree, so times are never compared: it is alive if
+``beat`` advances within about 5 seconds (so a check from another host can take that long).
+A dead server's requests are refused, and the next ``canary server start`` takes over its
+lock.  On
 start, a request the dead server was running is marked ``failed``; requests it had claimed
 but not started go back in the queue.

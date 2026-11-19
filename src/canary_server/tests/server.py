@@ -54,10 +54,10 @@ def running(tmp_path, monkeypatch):
 
 
 def test_running_server_publishes_a_live_heartbeat(tmp_path, running):
-    info = server.read_info(tmp_path)
-    assert info is not None and info.pid == os.getpid() and info.is_alive()
-    first = info.heartbeat
-    assert _wait_for(lambda: _info(tmp_path).heartbeat > first)
+    info = server.live_server(tmp_path)
+    assert info is not None and info.pid == os.getpid()
+    first = info.beat
+    assert _wait_for(lambda: _info(tmp_path).beat > first)
 
 
 def test_a_second_server_is_refused(tmp_path, running):
@@ -80,13 +80,14 @@ def test_stop_without_a_server_reports_false(tmp_path):
 
 def test_a_dead_servers_lock_is_taken_over(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "HEARTBEAT_INTERVAL", 0.05)
+    monkeypatch.setattr(server, "OBSERVE_FOR", 0.5)
     _tag(tmp_path)
     directory = server.server_dir(tmp_path)
     directory.mkdir(parents=True)
     (directory / "server.lock").write_text("1@elsewhere\n")
     stale = {"pid": 1, "host": "elsewhere", "started": 0.0, "heartbeat": 0.0, "version": "0"}
     (directory / "server.json").write_text(json.dumps(stale))
-    assert not _info(tmp_path).is_alive()
+    assert server.live_server(tmp_path) is None  # another host, beat not advancing
 
     srv = server.Server(tmp_path)
     thread = threading.Thread(target=srv.run, daemon=True)
@@ -109,11 +110,42 @@ def test_server_exits_when_its_workspace_disappears(tmp_path, monkeypatch):
     assert not root.exists()  # nothing was recreated
 
 
-def test_same_host_dead_pid_is_not_alive():
+def _write_info(root, **fields):
+    directory = server.server_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    info = {"pid": 1, "host": "elsewhere", "started": 0.0, "heartbeat": time.time(), "version": "0"}
+    info.update(fields)
+    (directory / "server.json").write_text(json.dumps(info))
+
+
+def test_same_host_dead_pid_is_not_alive(tmp_path):
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
-    info = server.ServerInfo(proc.pid, server.socket.gethostname(), 0.0, time.time(), "0")
-    assert not info.is_alive()
+    _write_info(tmp_path, pid=proc.pid, host=server.socket.gethostname())
+    assert server.live_server(tmp_path) is None
+
+
+def test_another_hosts_server_is_alive_while_it_beats_whatever_the_clocks_say(tmp_path):
+    """Regression: liveness compared the reader's clock with another host's heartbeat."""
+    _write_info(tmp_path, heartbeat=time.time() - 3600.0, beat=1)  # its clock is an hour behind
+    stop = threading.Event()
+
+    def beat():
+        n = 1
+        while not stop.wait(0.1):
+            n += 1
+            _write_info(tmp_path, heartbeat=time.time() - 3600.0, beat=n)
+
+    beater = threading.Thread(target=beat, daemon=True)
+    beater.start()
+    try:
+        assert server.live_server(tmp_path, observe=2.0) is not None
+    finally:
+        stop.set()
+        beater.join(5)
+    # stopped beating: dead, even with a heartbeat time that looks fresh (clock ahead)
+    _write_info(tmp_path, heartbeat=time.time() + 3600.0, beat=7)
+    assert server.live_server(tmp_path, observe=0.6) is None
 
 
 def test_cli_start_blocks_until_stop(tmp_path):
@@ -155,8 +187,8 @@ def start_server_process(cwd, timeout=15.0, *, stdout=None, args=()):
     root = Path(cwd) / ".canary"
     deadline = time.time() + timeout
     while time.time() < deadline:
-        info = server.read_info(root)
-        if info is not None and info.pid == proc.pid and info.is_alive():
+        info = server.live_server(root)
+        if info is not None and info.pid == proc.pid:
             return proc
         assert proc.poll() is None, "server exited during startup"
         time.sleep(0.05)
