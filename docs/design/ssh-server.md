@@ -51,11 +51,11 @@ with two implementations of one small interface:
 
 ```python
 class Transport(Protocol):
-    def submit(self, request: dict) -> str: ...                      # -> id
+    def submit(self, request: dict) -> str: ...  # -> id
     def get(self, request_id: str) -> dict: ...
-    def wait(self, request_id: str, *, quiet: bool) -> int: ...      # streams, -> exit code
+    def wait(self, request_id: str, *, quiet: bool) -> int: ...  # streams, -> exit code
     def cancel(self, request_id: str) -> str: ...
-    def status(self) -> dict: ...                                    # status --json
+    def status(self) -> dict: ...  # status --json
 ```
 
 * `LocalTransport(root)`: today's code, moved behind the interface.
