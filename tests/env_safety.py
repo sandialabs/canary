@@ -23,8 +23,25 @@ from _canary.util import envtransport
         ("AWS_SECRET_ACCESS_KEY", True),
         ("MY_API_KEY", True),
         ("DB_PASSWORD", True),
+        ("PGPASSWORD", True),
+        ("GHTOKEN", True),
+        ("MYSQL_PWD", True),
+        ("DB_PASS", True),
+        ("AWS_ACCESS_KEY_ID", True),
+        ("SSH_KEY", True),
+        ("SIGNING_KEY", True),
+        ("GITHUB_PAT", True),
+        ("MY_JWT", True),
+        ("CI_JOB_JWT_V2", True),
+        ("CI_REGISTRY_PASSWORD", True),
+        ("SSH_AUTH_SOCK", True),
+        ("BEARER", True),
         ("PATH", False),
+        ("MANPATH", False),
         ("HOME", False),
+        ("PWD", False),
+        ("OLDPWD", False),
+        ("KEYTAB_DIR", False),  # "KEYTAB" is not the KEY component
         ("TOKENIZER_THREADS", False),  # "TOKENIZER" is not the TOKEN component
         ("CANARY_LEVEL", False),
     ],
@@ -38,6 +55,22 @@ def test_secret_overrides(monkeypatch):
     monkeypatch.setenv("CANARY_NOT_SECRET_VARS", "GITLAB_TOKEN")
     assert envtransport.is_secret_name("MY_CORP_THING")
     assert not envtransport.is_secret_name("GITLAB_TOKEN")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("http://user:pass@proxy:8080", "http://<redacted>@proxy:8080"),
+        ("https://oauth2:glpat-x@gitlab.com/g/p.git", "https://<redacted>@gitlab.com/g/p.git"),
+        ("https://u:p@ss@host/path", "https://<redacted>@host/path"),  # unescaped @
+        ("https://a:b@one https://c:d@two", "https://<redacted>@one https://<redacted>@two"),
+        ("http://proxy:8080", "http://proxy:8080"),
+        ("git@github.com:org/repo.git", "git@github.com:org/repo.git"),
+        ("me@example.com", "me@example.com"),
+    ],
+)
+def test_redact_value(value, expected):
+    assert envtransport.redact_value(value) == expected
 
 
 HOSTILE = {
@@ -106,6 +139,7 @@ def test_env_json_is_redacted_and_private(tmp_path, monkeypatch):
 
     monkeypatch.setenv("GITLAB_TOKEN", "s3cr3t")
     monkeypatch.setenv("SOME_SETTING", "ok")
+    monkeypatch.setenv("HTTPS_PROXY", "http://user:pw@proxy:3128")
     ws = ExecutionSpace(root=tmp_path, path=Path("job"))
     ws.create()
     _write_env_json(SimpleNamespace(workspace=ws, id="a" * 64))  # type: ignore[arg-type]
@@ -113,6 +147,7 @@ def test_env_json_is_redacted_and_private(tmp_path, monkeypatch):
     data = json.loads(f.read_text())
     assert data["GITLAB_TOKEN"] == envtransport.REDACTED
     assert data["SOME_SETTING"] == "ok"
+    assert data["HTTPS_PROXY"] == "http://<redacted>@proxy:3128"
     if os.name == "posix":
         assert stat.S_IMODE(f.stat().st_mode) == 0o600
 

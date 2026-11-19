@@ -36,35 +36,41 @@ _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 #: Characters that are inert inside a double-quoted shell string.
 _SAFE_VALUE = re.compile(r'^[^"$`\\\x00-\x1f\x7f]*$')
 
-#: Name fragments that indicate a credential.  Matched case-insensitively
-#: against ``_``-separated name components (e.g. GITLAB_TOKEN, AWS_SECRET_ACCESS_KEY).
+#: Name components that indicate a credential.  Matched case-insensitively
+#: against ``_``-separated name components (e.g. GITLAB_TOKEN, AWS_ACCESS_KEY_ID).
 _SECRET_PARTS = frozenset(
     (
         "TOKEN",
         "SECRET",
         "PASSWORD",
         "PASSWD",
+        "PASS",
+        "PWD",
         "PASSPHRASE",
         "CREDENTIAL",
         "CREDENTIALS",
+        "KEY",
         "APIKEY",
+        "PAT",
+        "JWT",
+        "BEARER",
         "PRIVATE",
         "AUTH",
         "COOKIE",
         "SESSION",
     )
 )
-_SECRET_NAMES = frozenset(
-    (
-        "API_KEY",
-        "ACCESS_KEY",
-        "SECRET_KEY",
-        "CI_JOB_JWT",
-        "CI_JOB_JWT_V2",
-        "CI_REGISTRY_PASSWORD",
-        "SSH_AUTH_SOCK",
-    )
-)
+
+#: Suffixes that mark a credential even when fused into a longer component
+#: (PGPASSWORD, GHTOKEN, CLIENTSECRET).  Suffix-only, so TOKENIZER is not a match.
+_SECRET_SUFFIXES = ("TOKEN", "SECRET", "PASSWORD", "PASSWD", "APIKEY")
+
+#: Names that match a secret component but are not credentials.
+_NOT_SECRET_NAMES = frozenset(("PWD",))
+
+#: The userinfo part (``user:password@``) of a URL embedded in a value.  Greedy up
+#: to the last ``@`` before the host, so an unescaped ``@`` in a password is covered.
+_URL_USERINFO = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^/\s]*@")
 
 #: Placeholder written in place of a redacted value.
 REDACTED = "<redacted>"
@@ -91,15 +97,24 @@ def is_secret_name(name: str) -> bool:
     extra = [p.strip() for p in os.getenv("CANARY_SECRET_VARS", "").split(",") if p.strip()]
     if any(fnmatch.fnmatchcase(upper, p.upper()) for p in extra):
         return True
-    if upper in _SECRET_NAMES or upper.endswith(("_API_KEY", "_ACCESS_KEY", "_SECRET_KEY")):
-        return True
-    parts = set(upper.split("_"))
-    return bool(parts & _SECRET_PARTS)
+    if upper in _NOT_SECRET_NAMES:
+        return False
+    parts = upper.split("_")
+    return any(part in _SECRET_PARTS or part.endswith(_SECRET_SUFFIXES) for part in parts)
+
+
+def redact_value(value: str) -> str:
+    """Return *value* with credentials in embedded URLs (``scheme://user:pass@host``) redacted."""
+    return _URL_USERINFO.sub(rf"\1{REDACTED}@", value)
 
 
 def redact(env: Mapping[str, str]) -> dict[str, str]:
-    """Return a copy of *env* with secret-looking values replaced by :data:`REDACTED`."""
-    return {k: (REDACTED if is_secret_name(k) else v) for k, v in env.items()}
+    """Return a copy of *env* with secrets replaced by :data:`REDACTED`.
+
+    Values of secret-looking variables are replaced whole; in all other values,
+    credentials embedded in URLs (e.g. ``HTTPS_PROXY=http://user:pass@proxy``) are.
+    """
+    return {k: (REDACTED if is_secret_name(k) else redact_value(v)) for k, v in env.items()}
 
 
 def pack_environment(env: Mapping[str, str | None]) -> dict[str, str | None]:
