@@ -6,7 +6,8 @@
 ``canary server start`` runs a server for the current workspace in the foreground (use
 ``nohup canary server start &`` to keep one running after the terminal closes); its state lives in
 ``.canary/var/server/`` (see :mod:`canary_server.server`).  ``canary --server run ...``
-(or ``exec``) sends the command to it instead of running it here, and
+(or ``exec``, ``collect``, ``select``, ``hpc run``) sends the command to it instead of
+running it here, and
 ``canary server post JSON`` does the same for a request given as data (see
 :mod:`canary_server.requests`).  Requests run one at a time, each in its own ``canary``
 child process.
@@ -143,7 +144,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
         action="store_true",
         default=False,
         group="canary server",
-        help="Run the command (run, exec) on this workspace's server instead of here",
+        help="Run the command (run, exec, collect, select, hpc run) on this workspace's server",
     )
 
 
@@ -154,13 +155,14 @@ def canary_invoke_command(command, args: argparse.Namespace, argv: list[str]) ->
         return None
     from _canary.workspace.workspace import Workspace
 
-    if command.name not in requests.SERVER_COMMANDS:
+    options, command_args = requests.split_command_line(argv, command.name)
+    if not requests.server_runs(command.name, command_args):
+        shown = " ".join([command.name, *command_args[:1]])
         raise ValueError(
-            f"--server: the server runs {', '.join(requests.SERVER_COMMANDS)}; "
-            f"run 'canary {command.name}' without --server"
+            f"--server: the server runs {requests.server_commands()}; "
+            f"run 'canary {shown}' without --server"
         )
     root = Workspace.load().root
     _require_server(root)
-    options, command_args = requests.split_command_line(argv, command.name)
     request_id = requests.submit(root, requests.make_request(command.name, command_args, options))
     return requests.follow(root, request_id)

@@ -90,6 +90,17 @@ def test_make_request_rejects_commands_the_server_does_not_run():
         requests.make_request("status", [])
 
 
+def test_server_runs_these_commands():
+    runs = requests.server_runs
+    for command in ("run", "exec", "collect", "select"):
+        assert runs(command, ["x"])
+    assert runs("hpc", ["run", "tests"])
+    assert not runs("hpc", ["exec", "batch"]) and not runs("hpc", [])
+    assert not runs("status", [])
+    with pytest.raises(ValueError, match="'hpc exec' runs locally"):
+        requests.make_request("hpc", ["exec", "batch"])
+
+
 def test_make_request_carries_only_the_allowed_environment(monkeypatch):
     monkeypatch.setenv("CANARY_FOO", "1")
     monkeypatch.setenv("CANARY_LEVEL", "3")
@@ -161,6 +172,12 @@ def test_cli_server_flag_and_post(workspace):
         assert "1 pass" in proc.stdout
         assert _canary(workspace, "--server", "run", "failing").returncode != 0
         assert "without --server" in _canary(workspace, "--server", "info").stderr
+        assert "canary hpc help' without" in _canary(workspace, "--server", "hpc", "help").stderr
+
+        assert _canary(workspace, "--server", "collect", "ok").returncode == 0
+        assert _canary(workspace, "--server", "select", "-k", "ok", "picked").returncode == 0
+        tag = _canary(workspace, "info", "--tag", "picked")
+        assert tag.returncode == 0 and "picked" in tag.stdout
 
         posted = _canary(
             workspace,

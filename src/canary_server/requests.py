@@ -34,8 +34,33 @@ from _canary.util.fsqueue import FSQueue
 
 from .server import server_dir
 
-#: Commands the server runs.  ``--server`` with any other command is an error.
-SERVER_COMMANDS = ("run", "exec")
+#: Commands the server runs, and for a command with subcommands, which ones.  ``--server``
+#: with anything else is an error.  ``hpc run`` occupies the server while its batches wait
+#: on the scheduler (requests run one at a time).
+SERVER_COMMANDS: dict[str, tuple[str, ...] | None] = {
+    "run": None,
+    "exec": None,
+    "collect": None,
+    "select": None,
+    "hpc": ("run",),
+}
+
+
+def server_runs(command: str, args: list[str]) -> bool:
+    """True if the server runs ``canary command args``."""
+    if command not in SERVER_COMMANDS:
+        return False
+    subcommands = SERVER_COMMANDS[command]
+    return subcommands is None or (bool(args) and args[0] in subcommands)
+
+
+def server_commands() -> str:
+    """The commands the server runs, for messages: ``run, exec, ..., hpc run``."""
+    return ", ".join(
+        name if subs is None else ", ".join(f"{name} {sub}" for sub in subs)
+        for name, subs in SERVER_COMMANDS.items()
+    )
+
 
 #: Environment variables a request carries to the server (CANARY_* also, minus these).
 ENV_ALLOW = ("PATH", "PYTHONPATH", "LD_LIBRARY_PATH", "VIRTUAL_ENV")
@@ -68,8 +93,9 @@ def make_request(
     *cwd* defaults to the current directory and *env* to the allow-listed part of
     the current environment.
     """
-    if command not in SERVER_COMMANDS:
-        raise ValueError(f"the server runs {', '.join(SERVER_COMMANDS)}; {command!r} runs locally")
+    if not server_runs(command, list(args)):
+        shown = " ".join([command, *args[:1]])
+        raise ValueError(f"the server runs {server_commands()}; {shown!r} runs locally")
     if not all(isinstance(a, str) for a in [*args, *(options or [])]):
         raise ValueError("request args and options must be strings")
     return {
