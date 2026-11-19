@@ -40,19 +40,28 @@ logger = canary.get_logger(__name__)
 #: (environment setup, job startup, result collection, filesystem latency).
 BATCH_WALL_PENALTY: float = 1.25
 
+#: Floor, in seconds, on every automatic scheduler wall limit.  A batch also pays for
+#: allocation, environment setup and starting ``canary hpc exec`` -- seconds to minutes on
+#: a network filesystem -- so a batch of fast jobs (whose history estimates are near zero)
+#: would otherwise get a wall limit, and a 2x backstop, shorter than its own startup.
+MIN_BATCH_WALL: float = 300.0
+
 
 def automatic_wall_limit(jobs: "Sequence[canary.Job]", *, upper_bound: float | None) -> float:
     """Return the scheduler wall limit canary requests for ``jobs`` when none is pinned.
 
     See :meth:`TestBatch.wall_limit`.  ``upper_bound`` is the packer's makespan
-    upper bound; when it is unknown, the jobs are assumed to run one after another.
+    upper bound; when it is unknown, the jobs are assumed to run one after another.  The
+    result is never less than ``MIN_BATCH_WALL``.
     """
     if len(jobs) == 1:
-        return float(jobs[0].timeout)
-    serial_ceiling = float(sum(job.timeout for job in jobs))
-    if upper_bound is None:
-        upper_bound = float(sum(estimate_runtime(job) for job in jobs))
-    return min(BATCH_WALL_PENALTY * float(upper_bound), serial_ceiling)
+        wall = float(jobs[0].timeout)
+    else:
+        serial_ceiling = float(sum(job.timeout for job in jobs))
+        if upper_bound is None:
+            upper_bound = float(sum(estimate_runtime(job) for job in jobs))
+        wall = min(BATCH_WALL_PENALTY * float(upper_bound), serial_ceiling)
+    return max(wall, MIN_BATCH_WALL)
 
 
 @dataclasses.dataclass
@@ -304,6 +313,9 @@ class TestBatch(BaseJob):
           that bound are already conservative, so the timeout multiplier is not
           applied again here.  The result is capped at the time it would take
           to run every job to its hard limit, one after another.
+
+        Either way the automatic limit is at least ``MIN_BATCH_WALL`` (5 minutes): the
+        batch's own startup must fit too.
         """
         if (pinned := self.pinned_wall_limit(submit_args)) is not None:
             return pinned

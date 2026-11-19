@@ -42,7 +42,7 @@
       },
       "timeouts": {
         "queue_timeout": "Maximum time waiting for scheduler start (canary-enforced; no scheduler equivalent). Raise with --timeout queue=T.",
-        "scheduler_wall_limit": "The scheduler time_limit = estimated_runtime × timeout_multiplier is passed to the scheduler. The scheduler is the authority on run-time enforcement and will kill the job at this wall clock.",
+        "scheduler_wall_limit": "Pinned with --submit-arg=--time=..., or computed: single-job batch = the job's timeout; larger batch = 1.25x the packer's makespan bound, capped at the jobs' timeouts run back to back; never less than 5 minutes (MIN_BATCH_WALL) so fast batches can start.",
         "canary_backstop": "2× the scheduler wall limit. Only fires if canary loses contact with the scheduler entirely (e.g. network partition). Almost always defers to the scheduler's own kill to avoid false-FAIL races.",
         "child_completion_check": "Every check_interval seconds (max(30s, min(300s, run_timeout/10))) the polling loop reads child testcase.lock files. If all children are in a terminal state before the scheduler reports done, the batch is treated as complete and a warning is logged. Guards against lost-batch/stuck-NONE scenarios."
       }

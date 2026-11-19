@@ -172,6 +172,7 @@ def test_resource_checkout_timeout_covers_queue_wait_plus_backstop(tmp_path, mon
     monkeypatch.setattr(
         "canary.config.get_timeout_option", lambda name: 600.0 if name == "queue" else None
     )
+    monkeypatch.setattr("canary_hpc.batchspec.MIN_BATCH_WALL", 0.0)  # the formula, unfloored
 
     batch = make_batch(tmp_path, [FakeJob(id="job-1", runtime=40.0)])
 

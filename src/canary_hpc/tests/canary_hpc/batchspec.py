@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+import canary_hpc.batchspec
 from _canary.core.execspace import ExecutionSpace
 from _canary.core.job import Job
 from _canary.core.job import JobPhase
@@ -821,7 +822,8 @@ def test_finalize_status_tolerates_transient_child_lockfile_read_failure(tmp_pat
 # ---------------------------------------------------------------------------
 
 
-def test_wall_limit_single_job_is_the_jobs_hard_limit(tmp_path):
+def test_wall_limit_single_job_is_the_jobs_hard_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(canary_hpc.batchspec, "MIN_BATCH_WALL", 0.0)  # the formula, unfloored
     from _canary import config
 
     job = FakeJob(id="j1", runtime=10.0)
@@ -831,7 +833,8 @@ def test_wall_limit_single_job_is_the_jobs_hard_limit(tmp_path):
         assert batch.wall_limit() == job.timeout == 40.0
 
 
-def test_wall_limit_multi_job_is_penalized_upper_bound(tmp_path):
+def test_wall_limit_multi_job_is_penalized_upper_bound(tmp_path, monkeypatch):
+    monkeypatch.setattr(canary_hpc.batchspec, "MIN_BATCH_WALL", 0.0)  # the formula, unfloored
     from _canary import config
     from canary_hpc.batchspec import BATCH_WALL_PENALTY
 
@@ -843,7 +846,8 @@ def test_wall_limit_multi_job_is_penalized_upper_bound(tmp_path):
         assert batch.wall_limit() == BATCH_WALL_PENALTY * 25.0
 
 
-def test_wall_limit_does_not_apply_timeout_multiplier(tmp_path):
+def test_wall_limit_does_not_apply_timeout_multiplier(tmp_path, monkeypatch):
+    monkeypatch.setattr(canary_hpc.batchspec, "MIN_BATCH_WALL", 0.0)  # the formula, unfloored
     from _canary import config
 
     jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(4)]
@@ -856,7 +860,8 @@ def test_wall_limit_does_not_apply_timeout_multiplier(tmp_path):
         assert batch.total_timeout() == batch.queue_timeout + 1.25 * 25.0
 
 
-def test_wall_limit_is_capped_at_serial_hard_limits(tmp_path):
+def test_wall_limit_is_capped_at_serial_hard_limits(tmp_path, monkeypatch):
+    monkeypatch.setattr(canary_hpc.batchspec, "MIN_BATCH_WALL", 0.0)  # the formula, unfloored
     from _canary import config
 
     jobs = [FakeJob(id=f"j{i}", runtime=10.0) for i in range(2)]  # hard limit 40 s each
@@ -867,7 +872,8 @@ def test_wall_limit_is_capped_at_serial_hard_limits(tmp_path):
         assert batch.wall_limit() == 80.0
 
 
-def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path):
+def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path, monkeypatch):
+    monkeypatch.setattr(canary_hpc.batchspec, "MIN_BATCH_WALL", 0.0)  # the formula, unfloored
     import _canary.history as his
     from _canary import config
 
@@ -877,6 +883,23 @@ def test_wall_limit_without_packer_bound_assumes_serial_execution(tmp_path):
         config.options.hpc_submit_args = []
         # history 10 s -> estimate 12.5 s each; 3 in series; x1.25 penalty
         assert abs(batch.wall_limit() - 1.25 * 3 * 10 * 4 * his.COLD_RUNTIME_FRACTION) < 1e-9
+
+
+def test_automatic_wall_limit_is_at_least_five_minutes(tmp_path):
+    """Regression: a batch of fast jobs got a ~1 s wall limit and a backstop shorter than its startup."""
+    from _canary import config
+    from canary_hpc.batchspec import MIN_BATCH_WALL
+
+    assert MIN_BATCH_WALL == 300.0
+    fast = [FakeJob(id=f"f{i}", runtime=0.1) for i in range(9)]
+    spec = BatchSpec(layout="flat", jobs=cast(list[Job], fast), runtime_upper_bound=1.1)
+    batch = HPCBatch(spec=spec, workspace=ExecutionSpace(root=tmp_path, path=Path("batch")))
+    single = make_batch(tmp_path, [FakeJob(id="s1", runtime=1.0)])  # hard limit 4 s
+    with config.override():
+        config.options.hpc_submit_args = []
+        assert batch.wall_limit() == MIN_BATCH_WALL
+        assert single.wall_limit() == MIN_BATCH_WALL
+        assert batch.wall_limit(submit_args=["--time=1:00"]) == 60.0  # pinned still wins
 
 
 def test_pinned_wall_limit_wins(tmp_path):
