@@ -5,7 +5,7 @@
 
 ``canary server start`` runs a server for the current workspace in the foreground (use
 ``nohup canary server start &`` to keep one running after the terminal closes); its state lives in
-``.canary/var/server/`` (see :mod:`canary_server.server`).  ``canary --server run ...``
+``.canary/var/server/`` (see :mod:`canary_server.server`).  ``canary --connect=WHERE run ...``
 (or ``exec``, ``collect``, ``select``, ``hpc run``) sends the command to it instead of
 running it here, and
 ``canary server post JSON`` does the same for a request given as data (see
@@ -15,6 +15,7 @@ child process.
 
 import argparse
 import json
+import os
 import sys
 
 import canary
@@ -39,7 +40,11 @@ class ServerCommand(canary.CanarySubcommand):
         p.add_argument("--json", action="store_true", help="Emit JSON")
         p = sub.add_parser("post", help="Submit a request given as JSON; print its id")
         p.add_argument(
-            "request", help='JSON such as \'{"command": "run", "args": ["tests"]}\', or - for stdin'
+            "request",
+            help=(
+                'the request: JSON such as \'{"command": "run", "args": ["tests"]}\', '
+                "a file holding it, or - to read stdin"
+            ),
         )
         p.add_argument("--wait", action="store_true", help="Follow the request until it finishes")
         p = sub.add_parser("get", help="Show a request's record as JSON")
@@ -52,9 +57,7 @@ class ServerCommand(canary.CanarySubcommand):
         p.add_argument("id", help="Request id")
 
     def execute(self, args: argparse.Namespace) -> int:
-        from _canary.workspace.workspace import Workspace
-
-        root = Workspace.load().root
+        root = workspace_root(args)
         match args.server_cmd:
             case "start":
                 server.Server(root).run()
@@ -107,7 +110,7 @@ def _status(root, *, as_json: bool) -> int:
 
 
 def _post(root, text: str, *, wait: bool) -> int:
-    data = json.loads(sys.stdin.read() if text == "-" else text)
+    data = json.loads(_request_text(text))
     if not isinstance(data, dict) or "command" not in data:
         raise ValueError('a request is a JSON object with "command" (and usually "args")')
     _require_server(root)
@@ -122,6 +125,22 @@ def _post(root, text: str, *, wait: bool) -> int:
     print(json.dumps({"id": request_id}))
     sys.stdout.flush()
     return requests.follow(root, request_id) if wait else 0
+
+
+def _request_text(text: str) -> str:
+    """The request JSON: *text* itself if it starts with ``{``, stdin for ``-``, else a file.
+
+    (``@FILE`` is not used: canary's parser already expands ``@FILE`` into arguments.)
+    """
+    if text.lstrip().startswith("{"):
+        return text
+    if text == "-":
+        return sys.stdin.read()
+    try:
+        with open(text) as fh:
+            return fh.read()
+    except OSError as exc:
+        raise ValueError(f"canary server post: cannot read {text}: {exc.strerror}") from None
 
 
 def _require_server(root) -> None:
@@ -151,52 +170,123 @@ def canary_skills() -> dict | None:
     return load_query_data("canary_server.data", "skills.json")
 
 
+def workspace_root(args: argparse.Namespace):
+    """The workspace whose server to use: found from ``--connect WHERE``, else from here.
+
+    WHERE is a path (or ``file://`` URL) inside or above a workspace; it is the start of
+    the usual upward workspace search, so ``--connect=.`` works anywhere in the tree.
+    """
+    from _canary.workspace.workspace import Workspace
+
+    where = getattr(args, "connect", None)
+    if where is None:
+        return Workspace.load().root
+    if where.startswith("file://"):
+        where = where[len("file://") :] or "/"
+    elif "://" in where:
+        raise ValueError(f"--connect {where}: only file:// (or a plain path) is supported")
+    return Workspace.load(start=where).root
+
+
 @canary.hookimpl
 def canary_addoption(parser: "canary.Parser") -> None:
     parser.add_argument(
-        "--server",
-        action="store_true",
-        default=False,
+        "--connect",
+        dest="connect",
+        metavar="WHERE",
+        default=None,
         group="canary server",
-        help="Run the command (run, exec, collect, select, hpc run) on this workspace's server",
+        help=(
+            "Queue the command (run, exec, collect, select, hpc run) on the server of the "
+            "workspace found from WHERE (a path or file:// URL; '.' for here) and return"
+        ),
     )
+
+
+@canary.hookimpl(tryfirst=True)
+def canary_cmdline_parse(parser: "canary.Parser", args: list[str]) -> argparse.Namespace | None:
+    """With ``--connect``, parse only the global options; the server parses the command's.
+
+    The command's arguments are interpreted on the server, in its workspace: parsing them
+    here (e.g. classifying a job id against a local workspace that may not exist) would be
+    wrong.  ``canary --connect=WHERE server ...`` is parsed normally (it runs here).
+    """
+    index = _command_index(parser, args)
+    if index is None or args[index] == ServerCommand.name:
+        return None
+    if not any(a == "--connect" or a.startswith("--connect=") for a in args[:index]):
+        return None
+    if any(a in ("-h", "--help") for a in args[index + 1 :]):
+        return None  # help is printed here
+    # Parse the global options with a placeholder command that takes no arguments.
+    ns = parser.parse_args([*args[:index], "info"])
+    ns.command = args[index]
+    ns.connect_args = list(args[index + 1 :])
+    return ns
+
+
+def _command_index(parser: "canary.Parser", args: list[str]) -> int | None:
+    """Index of the subcommand in *args*, skipping global options and their values."""
+    actions = parser._option_string_actions
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if not token.startswith("-") or token == "-":
+            return i if parser.get_command(token) is not None else None
+        name, has_value = token.split("=", 1)[0], "=" in token
+        action = actions.get(name)
+        takes_value = action is not None and action.nargs != 0 and not has_value
+        short_attached = not token.startswith("--") and len(token) > 2  # e.g. -C/x, -pmod
+        i += 2 if takes_value and not short_attached else 1
+    return None
 
 
 @canary.hookimpl
 def canary_invoke_command(command, args: argparse.Namespace, argv: list[str]) -> int | None:
-    """With ``--server``, send the command to the workspace's server and follow it."""
-    if not getattr(args, "server", False):
-        return None
-    from _canary.workspace.workspace import Workspace
+    """With ``--connect``, queue the command on the workspace's server and return.
 
+    The server prints the command's output on its own terminal (and keeps it in the
+    request directory); ``canary server wait ID`` follows it from here.
+    """
+    if getattr(args, "connect", None) is None or command.name == ServerCommand.name:
+        return None  # `canary --connect=WHERE server ...` acts on that server directly
     options, command_args = requests.split_command_line(argv, command.name)
     if not requests.server_runs(command.name, command_args):
         shown = " ".join([command.name, *command_args[:1]])
         raise ValueError(
-            f"--server: the server runs {requests.server_commands()}; "
-            f"run 'canary {shown}' without --server"
+            f"--connect: the server runs {requests.server_commands()}; "
+            f"run 'canary {shown}' without --connect"
         )
-    root = Workspace.load().root
+    root = workspace_root(args)
     _require_server(root)
-    request_id = requests.submit(root, requests.make_request(command.name, command_args, options))
-    return requests.follow(root, request_id)
+    cwd = requests.relative_cwd(requests.client_cwd(), requests.anchor_of(root))
+    request = requests.make_request(command.name, command_args, options, cwd=cwd)
+    request_id = requests.submit(root, request)
+    queue = requests.queued_ids(root)
+    position = queue.index(request_id) + 1 if request_id in queue else None
+    print(f"canary: request {request_id} queued on the server (position {position})")
+    print(f"  follow: canary server wait {request_id}")
+    print(f"  cancel: canary server cancel {request_id}")
+    return 0
 
 
 @canary.hookimpl
 def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace) -> None:
     """Refuse ``canary rm`` and ``canary run -w`` on a workspace a live server owns."""
-    import os
-
     from _canary.workspace.locator import workspace_at
 
     command = getattr(args, "command", None)
+    if getattr(args, "connect", None) is not None and command != ServerCommand.name:
+        args.banner = False  # the command runs on the server; this process only queues it
     if command == "rm":
         path = getattr(args, "rm_path", None) or os.getcwd()
-    elif command == "run" and getattr(args, "wipe_workspace", False):
-        if getattr(args, "server", False):
+    elif command == "run" and getattr(args, "connect", None) is not None:
+        if "-w" in getattr(args, "connect_args", []):
             raise ValueError(
                 "canary run -w cannot go through the server: it would remove the server's workspace"
             )
+        return
+    elif command == "run" and getattr(args, "wipe_workspace", False):
         path = getattr(args, "work_tree", None) or os.getcwd()
     else:
         return

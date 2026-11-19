@@ -4,8 +4,10 @@
 """Requests to a workspace's server: building, submitting, inspecting, following.
 
 A request is a canary command line: ``{"command": "run", "args": [...]}`` plus the
-global ``options`` that preceded the command, the working directory, and an
-allow-listed environment.  Its files live in ``<server dir>/requests/<id>/``:
+global ``options`` that preceded the command, the working directory, and any
+environment variables given explicitly.  The command runs in the *server's* environment
+(as of ``canary server start``: modules, ``PATH``, ...); no client variables are carried
+unless a request names them in ``env``.  Its files live in ``<server dir>/requests/<id>/``:
 
 * ``request.json`` -- the request.
 * ``status.json`` -- ``state`` (queued, running, done, cancelled, failed), ``pid``,
@@ -34,7 +36,7 @@ from _canary.util.fsqueue import FSQueue
 
 from .server import server_dir
 
-#: Commands the server runs, and for a command with subcommands, which ones.  ``--server``
+#: Commands the server runs, and for a command with subcommands, which ones.  ``--connect``
 #: with anything else is an error.  ``hpc run`` occupies the server while its batches wait
 #: on the scheduler (requests run one at a time).
 SERVER_COMMANDS: dict[str, tuple[str, ...] | None] = {
@@ -62,10 +64,6 @@ def server_commands() -> str:
     )
 
 
-#: Environment variables a request carries to the server (CANARY_* also, minus these).
-ENV_ALLOW = ("PATH", "PYTHONPATH", "LD_LIBRARY_PATH", "VIRTUAL_ENV")
-ENV_DENY = ("CANARY_LEVEL", "CANARY_SERVER_REQUEST", "CANARY_LEVEL_OVERRIDE")
-
 TERMINAL_STATES = ("done", "cancelled", "failed")
 CANCELLED_RETURNCODE = 130
 
@@ -90,26 +88,71 @@ def make_request(
 ) -> dict[str, Any]:
     """Return a complete request for ``canary [options] command [args]``.
 
-    *cwd* defaults to the current directory and *env* to the allow-listed part of
-    the current environment.
+    *cwd* is the working directory: relative to the workspace anchor (the directory
+    holding ``.canary``), or absolute; default ``"."``, the anchor.  Use
+    :func:`relative_cwd` to express a client directory that way.  *env* holds variables
+    to set on top of the server's environment; nothing from the client's environment is
+    carried otherwise.
     """
     if not server_runs(command, list(args)):
         shown = " ".join([command, *args[:1]])
         raise ValueError(f"the server runs {server_commands()}; {shown!r} runs locally")
     if not all(isinstance(a, str) for a in [*args, *(options or [])]):
         raise ValueError("request args and options must be strings")
+    env = dict(env or {})
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+        raise ValueError("request env must map variable names to string values")
     return {
         "id": f"{time.strftime('%Y%m%dT%H%M%S')}-{secrets.token_hex(3)}",
         "command": command,
         "args": list(args),
         "options": list(options or []),
-        "cwd": os.path.abspath(cwd or os.getcwd()),
-        "env": dict(env) if env is not None else _allowed_env(os.environ),
+        "cwd": cwd or ".",
+        "env": env,
         "user": getpass.getuser(),
         "host": socket.gethostname(),
         "submitted": time.time(),
         "client_version": version.__version__,
     }
+
+
+def anchor_of(workspace_root: Path) -> Path:
+    """The workspace anchor: the directory holding the workspace root (``.canary``)."""
+    return Path(workspace_root).parent
+
+
+def relative_cwd(cwd: str | Path, anchor: str | Path) -> str:
+    """*cwd* relative to *anchor*, so it survives a share mounted under different paths.
+
+    Machines can mount the same filesystem at different places (``/projects`` here is
+    ``/gpfs/.../dev`` there).  The workspace anchor is what both sides agree on, so the
+    request records the client's directory relative to it.  Paths are compared as given
+    (symlinks kept: they exist on the shared filesystem too); only when that leaves the
+    workspace tree are resolved paths tried instead.
+    """
+    logical = os.path.relpath(os.path.abspath(cwd), os.path.abspath(anchor))
+    if not logical.startswith(".."):
+        return logical
+    real = os.path.relpath(os.path.realpath(cwd), os.path.realpath(anchor))
+    return real if not real.startswith("..") else logical
+
+
+def client_cwd() -> str:
+    """The current directory as the user sees it: ``$PWD`` (symlinks kept) if it is current."""
+    cwd = os.getcwd()
+    pwd = os.environ.get("PWD")
+    try:
+        if pwd and os.path.samefile(pwd, cwd):
+            return pwd
+    except OSError:
+        pass
+    return cwd
+
+
+def resolve_cwd(cwd: str, workspace_root: Path) -> str:
+    """The request's working directory on this machine (relative paths: from the anchor)."""
+    path = cwd if os.path.isabs(cwd) else os.path.join(anchor_of(workspace_root), cwd)
+    return os.path.normpath(path)
 
 
 def submit(workspace_root: Path, request: dict[str, Any]) -> str:
@@ -278,10 +321,10 @@ def follow(
 def split_command_line(argv: list[str], command: str) -> tuple[list[str], list[str]]:
     """Split ``canary [options] command [args]`` into (options, args).
 
-    ``--server`` is dropped (the server runs the command locally) and so is ``-C DIR``
-    (the request carries the resulting working directory instead).  The command is
-    the first token equal to *command*; an option value spelled like the command
-    name before it would be misread.
+    ``--connect WHERE`` is dropped (the server runs the command locally) and so is
+    ``-C DIR`` (the request carries the resulting working directory instead).  The
+    command is the first token equal to *command*; an option value spelled like the
+    command name before it would be misread.
     """
     try:
         index = argv.index(command)
@@ -290,18 +333,12 @@ def split_command_line(argv: list[str], command: str) -> tuple[list[str], list[s
     options: list[str] = []
     before = iter(argv[:index])
     for token in before:
-        if token == "--server":
+        if token.startswith("--connect="):
             continue
-        if token == "-C":
+        if token in ("--connect", "-C"):
             next(before, None)
             continue
         if token.startswith("-C") and not token.startswith("--"):
             continue
         options.append(token)
     return options, argv[index + 1 :]
-
-
-def _allowed_env(environ: os._Environ | dict[str, str]) -> dict[str, str]:
-    env = {k: v for k, v in environ.items() if k in ENV_ALLOW}
-    env.update({k: v for k, v in environ.items() if k.startswith("CANARY_") and k not in ENV_DENY})
-    return env

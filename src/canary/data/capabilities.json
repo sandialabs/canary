@@ -994,6 +994,13 @@
         "status.ok(), status.summary(), status.failed() for outcomes.",
         "query.measurement_table(key=NAME) (latest session; session=None for the latest run of each job), query.measurement(JOBID, NAME), query.raw_session_value('latest', 'measurements.NAME'), query.job_history(JOBID).",
         "_canary.api.run.run(PATH) runs in-process but does not load canaryhooks.py; use the canary run CLI when hooks must fire. A script that calls it needs an if __name__ == '__main__': guard."
+      ],
+      "server": [
+        "A workspace may have a command server (canary server start on the machine that does the work). Check with canary server status --json.",
+        "Agents submit with canary server post '{\"command\": \"run\", \"args\": [...]}' (prints {\"id\": ...}) and follow up with canary server get/wait/cancel ID.",
+        "Humans use canary --connect=WHERE COMMAND ARGS, which queues the request and returns its id; WHERE starts the workspace search ('.' = here).",
+        "Requests run in the server's environment as of server start; nothing from the client's is carried (post an explicit \"env\" to add variables).",
+        "Requests run one at a time. Details: canary query -c ext.server, skill server.canary-server."
       ]
     },
     "apis": {

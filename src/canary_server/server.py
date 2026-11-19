@@ -25,6 +25,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import IO
 from typing import Any
 
 from _canary import version
@@ -213,7 +214,7 @@ class Server:
                 )
             queue.ack(path)
             return
-        cwd = request["cwd"]
+        cwd = requests.resolve_cwd(request["cwd"], self.workspace_root)
         if not os.path.isdir(cwd):
             requests.write_status(
                 directory,
@@ -225,24 +226,45 @@ class Server:
             return
         env = dict(os.environ)
         env.update(request.get("env") or {})
+        env["PWD"] = cwd  # the server's own $PWD is where it started, not the request's cwd
         env["CANARY_LEVEL"] = "0"
         env["CANARY_SERVER_REQUEST"] = request["id"]
-        cmd = [sys.executable, "-m", "canary", *request.get("options", []), request["command"]]
+        # --no-banner: the server already announces each request on its terminal.
+        # --canary-dir: the child works on this server's workspace wherever its cwd is.
+        cmd = [
+            sys.executable,
+            "-m",
+            "canary",
+            "--no-banner",
+            "--canary-dir",
+            str(self.workspace_root),
+        ]
+        cmd += request.get("options", [])
+        cmd.append(request["command"])
         cmd += request.get("args", [])
-        with open(directory / "stdout", "a") as out, open(directory / "stderr", "a") as err:
-            proc = subprocess.Popen(  # nosec B603
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=out,
-                stderr=err,
-                stdin=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        requests.write_status(directory, state="running", pid=proc.pid, started=time.time())
-        logger.info(f"[bold]Running[/] request {request['id']}: canary {request['command']}")
+        proc = subprocess.Popen(  # nosec B603
+            cmd,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        requests.write_status(
+            directory, state="running", pid=proc.pid, started=time.time(), cwd=cwd
+        )
+        shown = " ".join(
+            [*request.get("options", []), request["command"], *request.get("args", [])]
+        )
+        logger.info(f"[bold]Running[/] request {request['id']}: canary {shown}")
+        assert proc.stdout is not None and proc.stderr is not None
+        copiers = [
+            _tee(proc.stdout, directory / "stdout", sys.stdout),
+            _tee(proc.stderr, directory / "stderr", sys.stderr),
+        ]
         self._running = _Running(
-            proc=proc, path=path, directory=directory, request_id=request["id"]
+            proc=proc, path=path, directory=directory, request_id=request["id"], copiers=copiers
         )
 
     def _check_running(self) -> None:
@@ -256,6 +278,7 @@ class Server:
         code = running.proc.poll()
         if code is None:
             return
+        running.finish_output()
         requests.write_status(
             running.directory, state="done", returncode=code, finished=time.time()
         )
@@ -278,6 +301,7 @@ class Server:
                 running.proc.wait(INTERRUPT_GRACE)
             except subprocess.TimeoutExpired:
                 continue
+        running.finish_output()
         state = "cancelled" if reason == "cancelled" else "failed"
         requests.write_status(
             running.directory,
@@ -338,6 +362,47 @@ class _Running:
     path: Path
     directory: Path
     request_id: str
+    copiers: list[threading.Thread] = dataclasses.field(default_factory=list)
+
+    def finish_output(self, timeout: float = 10.0) -> None:
+        """Wait until the child's output has been copied (its pipes have closed)."""
+        for copier in self.copiers:
+            copier.join(timeout)
+
+
+def _tee(pipe: IO[bytes], path: Path, stream: IO[str]) -> threading.Thread:
+    """Copy *pipe* to the file *path* and to the server's *stream* until it closes."""
+
+    def copy() -> None:
+        with pipe:
+            try:
+                out: IO[bytes] | None = open(path, "ab")
+            except OSError:
+                out = None
+            try:
+                for chunk in iter(lambda: os.read(pipe.fileno(), 65536), b""):
+                    if out is not None:
+                        try:
+                            out.write(chunk)
+                            out.flush()
+                        except OSError:
+                            out = None  # the workspace went away; keep the terminal copy
+                    try:
+                        buffer = getattr(stream, "buffer", None)
+                        if buffer is not None:
+                            buffer.write(chunk)
+                        else:
+                            stream.write(chunk.decode(errors="replace"))
+                        stream.flush()
+                    except (OSError, ValueError):
+                        pass  # the terminal is gone
+            finally:
+                if out is not None:
+                    out.close()
+
+    thread = threading.Thread(target=copy, daemon=True)
+    thread.start()
+    return thread
 
 
 def stop(workspace_root: Path, *, timeout: float = 3 * INTERRUPT_GRACE + 15.0) -> bool:

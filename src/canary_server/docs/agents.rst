@@ -13,6 +13,8 @@ id, and checks back.
    $ canary server post '{"command": "run", "args": ["--only", "failed", "tests"]}'
    {"id": "20261118T153434-eafc61"}
 
+   $ canary server post request.json          # or a file holding the request (- for stdin)
+
    $ canary server get 20261118T153434-eafc61
    {"id": "20261118T153434-eafc61", "command": "run", "state": "running", "pid": 564544, ...}
 
@@ -20,6 +22,13 @@ id, and checks back.
    8
 
    $ canary server get 20261118T153434-eafc61 --output | tail -3
+
+Requests run in the server's environment (from when it started); nothing from yours is
+carried.  Set variables for one request explicitly:
+``{"command": "run", "args": ["tests"], "env": {"MY_FLAG": "1"}}``.
+
+From outside the workspace tree, add ``--connect=WHERE``
+(``canary --connect=/scratch/ws server post ...``).
 
 Results are in the workspace as for any run: read them with ``canary status --json`` and
 ``canary query`` (these always run locally and never go through the server).
@@ -30,5 +39,5 @@ Practical notes:
   already passed runs nothing (exit code 7).  Pass ``--only all`` to rerun everything.
 * Use ``canary server status --json`` to see whether a server is alive and how long the
   queue is before posting.
-* ``canary --server hpc run`` keeps the server busy until the HPC run finishes (its
+* ``hpc run`` keeps the server busy until the HPC run finishes (its
   batches wait on the scheduler), so other requests wait behind it.

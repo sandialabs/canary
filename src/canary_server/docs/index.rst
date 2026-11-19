@@ -24,13 +24,15 @@ On the machine that should run the jobs, in the workspace:
 
 .. code-block:: console
 
+   $ module load my-app             # requests run in the environment the server starts in
    $ canary server start &          # blocks; background it with the shell
 
 From any terminal or machine that sees the workspace:
 
 .. code-block:: console
 
-   $ canary --server run -k fast tests       # runs on the server; output and exit code here
+   $ canary --connect=. run -k fast tests    # queued on the server; prints the request id
+   $ canary server wait ID                   # follow it here (the server's terminal shows it too)
    $ canary server status                    # the server, its running request, the queue
    $ canary server stop
 
@@ -62,4 +64,4 @@ See Also
 
 - :doc:`/user/basics.workspace`: Canary workspaces
 - :doc:`/extensions/plugins`: Canary plugin system
-- :doc:`/extensions/exts/canary_hpc/index`: ``canary_hpc``, which ``canary --server hpc run`` drives
+- :doc:`/extensions/exts/canary_hpc/index`: ``canary_hpc``, which ``canary --connect=WHERE hpc run`` drives

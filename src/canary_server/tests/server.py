@@ -144,13 +144,13 @@ def test_sighup_stops_the_server_cleanly(tmp_path):
     assert not (server.server_dir(tmp_path / ".canary") / "server.lock").exists()
 
 
-def start_server_process(cwd, timeout=15.0):
+def start_server_process(cwd, timeout=15.0, *, stdout=None):
     """``canary server start &``: start the blocking server in the background and wait for it."""
     proc = subprocess.Popen(
         [sys.executable, "-m", "canary", "server", "start"],
         cwd=cwd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=stdout if stdout is not None else subprocess.DEVNULL,
+        stderr=subprocess.STDOUT if stdout is not None else subprocess.DEVNULL,
     )
     root = Path(cwd) / ".canary"
     deadline = time.time() + timeout
