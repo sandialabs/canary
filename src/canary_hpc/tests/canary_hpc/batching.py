@@ -259,6 +259,21 @@ def test_partition_jobs_flat_nodes_any(tmp_path):
     assert all(partition.key.startswith("layout=flat,nodes=any") for partition in partitions)
 
 
+@pytest.mark.parametrize("layout, nodes", [("flat", "any"), ("flat", "same"), ("atomic", "any")])
+def test_partition_jobs_ignores_dependencies_outside_the_batch(tmp_path, layout, nodes):
+    """A rerun batches a failed aggregate whose (passed) upstreams are not rerun."""
+    aggregates = [job for job in make_jobs(tmp_path) if job.dependencies]
+    assert aggregates and all(
+        dep.job not in aggregates for j in aggregates for dep in j.dependencies
+    )
+
+    partitions = batching.partition_jobs(
+        jobs=aggregates, layout=layout, nodes=nodes, cpus_per_node=64
+    )
+
+    assert sorted(j.id for p in partitions for j in p.jobs) == sorted(j.id for j in aggregates)
+
+
 def test_partition_jobs_flat_nodes_same(tmp_path):
     jobs = make_jobs(tmp_path)
 

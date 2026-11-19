@@ -722,10 +722,15 @@ def _partition_resource_capacity(
 
 
 def _topological_job_levels(jobs: list["canary.Job"]) -> list[list["canary.Job"]]:
-    """Return global topological ready levels for jobs."""
+    """Return global topological ready levels for jobs.
+
+    Dependencies outside *jobs* are ignored: on a rerun (``--only not_pass``) a job's
+    upstreams may have finished in an earlier session and are not batched again.  The
+    batch reloads them from their lock files when it runs.
+    """
     from _canary.core.job_graph import make_job_graph
 
-    graph = make_job_graph(jobs)
+    graph = make_job_graph(jobs, require_closed=False)
     return [list(level) for level in graph.levels]
 
 

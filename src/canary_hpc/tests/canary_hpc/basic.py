@@ -472,3 +472,56 @@ def test_batched_hostile_environment_value_is_not_executed(tmpdir):
         for name in ("INJECTED", "INJECTED2", "INJECTED3"):
             hits = glob_files_in_session(name) + ([name] if os.path.exists(name) else [])
             assert not hits, f"command injection via batch environment: {hits}"
+
+
+LEAF = """\
+import sys
+def test():
+    return 0
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+
+FAILING_AGGREGATE = """\
+import sys
+import canary
+canary.directives.depends_on("leaf_a")
+canary.directives.depends_on("leaf_b")
+def test():
+    return 1
+if __name__ == "__main__":
+    sys.exit(test())
+"""
+
+
+def test_rerun_batches_a_failed_aggregate_without_its_passed_upstreams(tmpdir):
+    """Regression: the rerun raised "dependency ... is not present in graph"."""
+    from _canary.workspace.workspace import Workspace
+
+    with working_dir(tmpdir.strpath, create=True):
+        for name in ("leaf_a", "leaf_b"):
+            with open(f"{name}.pyt", "w") as fh:
+                fh.write(LEAF)
+        with open("agg.pyt", "w") as fh:
+            fh.write(FAILING_AGGREGATE)
+
+        hpc = CanaryCommand("hpc")
+        hpc("run", "-w", "--batch-spec=count=2", "--scheduler=shell", ".", debug=True)
+        first = {r["spec_name"]: r for r in Workspace.load().db.get_results().values()}
+        assert first["agg"]["status"].outcome.name == "FAILED"
+
+        cp = hpc(
+            "run",
+            "--batch-spec=count=2",
+            "--scheduler=shell",
+            ".",
+            debug=True,
+            capture_output=True,
+            text=True,
+        )
+        output = cp.stdout + cp.stderr
+        assert "not present in graph" not in output
+        rerun = {r["spec_name"]: r for r in Workspace.load().db.get_results().values()}
+        assert rerun["agg"]["status"].outcome.name == "FAILED"  # ran again, not CANCELLED
+        assert rerun["agg"]["session"] != first["agg"]["session"]
+        assert rerun["leaf_a"]["session"] == first["leaf_a"]["session"]  # not rerun
