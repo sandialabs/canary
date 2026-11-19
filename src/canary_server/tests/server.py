@@ -32,10 +32,18 @@ def _info(root) -> server.ServerInfo:
     return info
 
 
+def _tag(root):
+    """Make *root* look like a workspace root (the server stops when its tag is gone)."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "WORKSPACE.TAG").write_text("")
+    return root
+
+
 @pytest.fixture
 def running(tmp_path, monkeypatch):
     """A server running in a thread for workspace root *tmp_path*."""
     monkeypatch.setattr(server, "HEARTBEAT_INTERVAL", 0.05)
+    _tag(tmp_path)
     srv = server.Server(tmp_path)
     thread = threading.Thread(target=srv.run, daemon=True)
     thread.start()
@@ -72,6 +80,7 @@ def test_stop_without_a_server_reports_false(tmp_path):
 
 def test_a_dead_servers_lock_is_taken_over(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "HEARTBEAT_INTERVAL", 0.05)
+    _tag(tmp_path)
     directory = server.server_dir(tmp_path)
     directory.mkdir(parents=True)
     (directory / "server.lock").write_text("1@elsewhere\n")
@@ -85,6 +94,19 @@ def test_a_dead_servers_lock_is_taken_over(tmp_path, monkeypatch):
     assert _wait_for(lambda: getattr(server.read_info(tmp_path), "pid", None) == os.getpid())
     srv.request_stop()
     thread.join(5)
+
+
+def test_server_exits_when_its_workspace_disappears(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "HEARTBEAT_INTERVAL", 0.05)
+    monkeypatch.setattr(server, "TICK", 0.05)
+    root = _tag(tmp_path / "ws")
+    thread = threading.Thread(target=server.Server(root).run, daemon=True)
+    thread.start()
+    assert _wait_for(lambda: server.read_info(root) is not None)
+    root.rename(tmp_path / "moved")  # what canary rm / run -w do first
+    thread.join(10)
+    assert not thread.is_alive()
+    assert not root.exists()  # nothing was recreated
 
 
 def test_same_host_dead_pid_is_not_alive():

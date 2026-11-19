@@ -5,6 +5,7 @@
 
 import io
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -191,6 +192,50 @@ def test_cli_server_flag_and_post(workspace):
     finally:
         assert _canary(workspace, "server", "stop").returncode == 0
     assert srv.wait(30) == 0
+
+
+def test_removing_the_workspace_kills_the_running_request(serving, workspace):
+    request_id = _submit(serving, workspace, "slow")
+    _wait_until_running(serving, request_id)
+    pid = requests.get(serving, request_id)["pid"]
+    serving.rename(workspace / "moved")
+    deadline = time.time() + 15
+    while time.time() < deadline and _pid_alive(pid):
+        time.sleep(0.05)
+    assert not _pid_alive(pid)
+    assert not serving.exists()
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_rm_and_wipe_are_refused_while_a_server_runs(serving, workspace):
+    for args in (("rm",), ("run", "-w", "ok")):
+        proc = _canary(workspace, *args)
+        assert proc.returncode != 0 and "canary server stop" in proc.stderr, args
+    proc = _canary(workspace, "--server", "run", "-w", "ok")
+    assert proc.returncode != 0 and "cannot go through the server" in proc.stderr
+    assert (serving / "WORKSPACE.TAG").exists()
+
+
+def test_rm_works_once_the_server_stops(workspace, monkeypatch):
+    root = workspace / ".canary"
+    monkeypatch.setattr(server, "TICK", 0.05)
+    srv = server.Server(root)
+    thread = threading.Thread(target=srv.run, daemon=True)
+    thread.start()
+    deadline = time.time() + 10
+    while server.read_info(root) is None and time.time() < deadline:
+        time.sleep(0.05)
+    srv.request_stop()
+    thread.join(10)
+    assert _canary(workspace, "rm").returncode == 0
+    assert not root.exists()
 
 
 def test_cli_refuses_requests_without_a_server(workspace):

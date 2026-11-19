@@ -166,3 +166,31 @@ def canary_invoke_command(command, args: argparse.Namespace, argv: list[str]) ->
     _require_server(root)
     request_id = requests.submit(root, requests.make_request(command.name, command_args, options))
     return requests.follow(root, request_id)
+
+
+@canary.hookimpl
+def canary_cmdline_modifyargs(parser: "canary.Parser", args: argparse.Namespace) -> None:
+    """Refuse ``canary rm`` and ``canary run -w`` on a workspace a live server owns."""
+    import os
+
+    from _canary.workspace.locator import workspace_at
+
+    command = getattr(args, "command", None)
+    if command == "rm":
+        path = getattr(args, "rm_path", None) or os.getcwd()
+    elif command == "run" and getattr(args, "wipe_workspace", False):
+        if getattr(args, "server", False):
+            raise ValueError(
+                "canary run -w cannot go through the server: it would remove the server's workspace"
+            )
+        path = getattr(args, "work_tree", None) or os.getcwd()
+    else:
+        return
+    root = workspace_at(path)
+    info = server.read_info(root) if root is not None else None
+    if info is not None and info.is_alive():
+        action = "remove" if command == "rm" else "wipe"
+        raise ValueError(
+            f"cannot {action} the workspace at {root}: a canary server is running for it "
+            f"(pid {info.pid} on {info.host}); stop it first with 'canary server stop'"
+        )

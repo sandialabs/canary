@@ -30,6 +30,7 @@ from typing import Any
 from _canary import version
 from _canary.util import logging
 from _canary.util.filesystem import atomic_write
+from _canary.workspace.locator import workspace_tag
 
 logger = logging.get_logger(__name__)
 
@@ -90,7 +91,9 @@ class Server:
     lock, writes the heartbeat, runs requests one at a time (each in a child
     ``canary`` process), and stops on SIGTERM/SIGINT/SIGHUP, on the ``stop`` sentinel, or
     on :meth:`request_stop`.  Stopping interrupts the running request; queued requests
-    stay queued for the next server.
+    stay queued for the next server.  If the workspace itself disappears (``canary rm``,
+    ``run -w`` or a manual delete), the server kills the running child and exits without
+    writing anything, so it never recreates the workspace's directories.
     """
 
     def __init__(self, workspace_root: Path) -> None:
@@ -117,8 +120,15 @@ class Server:
             self._recover()
             last_heartbeat = 0.0
             while not self._stop.is_set() and not self.stop_file.exists():
+                if not self._workspace_exists():
+                    self._workspace_gone()
+                    return
                 if time.time() - last_heartbeat >= HEARTBEAT_INTERVAL:
-                    self._heartbeat()
+                    try:
+                        self._heartbeat()
+                    except FileNotFoundError:
+                        self._workspace_gone()
+                        return
                     last_heartbeat = time.time()
                 if self._running is not None:
                     self._check_running()
@@ -126,7 +136,7 @@ class Server:
                     self._start_next()
                 self._stop.wait(TICK)
         finally:
-            if self._running is not None:
+            if self._running is not None and self._workspace_exists():
                 self._interrupt(self._running, reason="server stopped")
             self._release()
             self._restore_signal_handlers(previous)
@@ -279,6 +289,20 @@ class Server:
         requests.inbox(self.workspace_root).ack(running.path)
         logger.info(f"[bold]Stopped[/] request {running.request_id} ({reason})")
         self._running = None
+
+    def _workspace_exists(self) -> bool:
+        return (self.workspace_root / workspace_tag).exists()
+
+    def _workspace_gone(self) -> None:
+        """The workspace was removed: kill the running child and record nothing."""
+        logger.warning(f"Workspace {self.workspace_root} no longer exists; stopping the server")
+        if self._running is not None:
+            try:
+                os.killpg(self._running.proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            self._running.proc.wait()
+            self._running = None
 
     # ------------------------------------------------------------------ files
 
