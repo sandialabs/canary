@@ -32,8 +32,14 @@ class ServerCommand(canary.CanarySubcommand):
 
     def setup_parser(self, parser: "canary.Parser") -> None:
         sub = parser.add_subparsers(dest="server_cmd", metavar="", title="subcommands")
-        sub.add_parser(
+        p = sub.add_parser(
             "start", help="Run the server for this workspace (blocks; background it with the shell)"
+        )
+        p.add_argument(
+            "-w",
+            dest="wipe",
+            action="store_true",
+            help="Remove the workspace here (if any) and start with a fresh one",
         )
         sub.add_parser("stop", help="Stop the server (interrupts the running request)")
         p = sub.add_parser("status", help="Show the server, its running request, and the queue")
@@ -57,11 +63,11 @@ class ServerCommand(canary.CanarySubcommand):
         p.add_argument("id", help="Request id")
 
     def execute(self, args: argparse.Namespace) -> int:
+        if args.server_cmd == "start":
+            server.Server(_start_root(args)).run()
+            return 0
         root = workspace_root(args)
         match args.server_cmd:
-            case "start":
-                server.Server(root).run()
-                return 0
             case "stop":
                 if server.stop(root):
                     logger.info("[bold]Stopped[/] canary server")
@@ -178,14 +184,54 @@ def workspace_root(args: argparse.Namespace):
     """
     from _canary.workspace.workspace import Workspace
 
+    where = _where(args)
+    return Workspace.load(start=where).root if where is not None else Workspace.load().root
+
+
+def _where(args: argparse.Namespace) -> str | None:
+    """``--connect``'s WHERE as a path (``file://`` stripped), or ``None``."""
     where = getattr(args, "connect", None)
     if where is None:
-        return Workspace.load().root
+        return None
     if where.startswith("file://"):
-        where = where[len("file://") :] or "/"
-    elif "://" in where:
+        return where[len("file://") :] or "/"
+    if "://" in where:
         raise ValueError(f"--connect {where}: only file:// (or a plain path) is supported")
-    return Workspace.load(start=where).root
+    return where
+
+
+def _start_root(args: argparse.Namespace):
+    """The workspace ``server start`` serves, created (or, with ``-w``, recreated) if needed.
+
+    Like ``canary run``: the workspace found from here is used, or one is created here;
+    ``-w`` removes only the workspace located exactly here (never an enclosing one) and
+    creates a fresh one -- but never one a live server owns.
+    """
+    from _canary.workspace.workspace import NotAWorkspaceError
+    from _canary.workspace.workspace import Workspace
+
+    where = _where(args) or os.getcwd()
+    if getattr(args, "wipe", False):
+        existing = Workspace.workspace_at(where)
+        if existing is None and (anchor := Workspace.find_anchor(start=where)) is not None:
+            raise ValueError(
+                f"-w: {where} is inside the workspace at {anchor}, which will not be wiped "
+                f"implicitly.  Run from {anchor} or use 'canary rm {anchor}' first."
+            )
+        if existing is not None:
+            info = server.read_info(existing)
+            if info is not None and info.is_alive():
+                raise server.ServerRunningError(
+                    f"a server is already running for this workspace (pid {info.pid} on "
+                    f"{info.host}); stop it first with 'canary server stop'"
+                )
+        Workspace.detach(where)
+        return Workspace.create(path=where).root
+    try:
+        return Workspace.load(start=where).root
+    except NotAWorkspaceError:
+        logger.info(f"[bold]Creating[/] a canary workspace in {os.path.abspath(where)}")
+        return Workspace.create(path=where).root
 
 
 @canary.hookimpl

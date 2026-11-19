@@ -18,8 +18,11 @@ if given, else the one found from the current directory (or ``-C DIR``, ``--cana
 Running the server
 ------------------
 
-``canary server start``
-   Runs the server in the foreground until it is stopped, printing each request as it
+``canary server start [-w]``
+   Serves the workspace found from the current directory (or ``--connect=WHERE``), creating
+   one here if there is none, as ``canary run`` does.  ``-w`` removes the workspace located
+   exactly here and starts with a fresh one (never an enclosing workspace, and never one a
+   live server owns).  Runs the server in the foreground until it is stopped, printing each request as it
    starts and finishes, with the request's output in between.  To run it in the background, use the shell, redirecting its output if you
    like: ``canary server start > server.log 2>&1 &``.  To keep it running after the
    terminal closes, use ``nohup`` (or ``tmux``, ``screen``, or a batch job).  A second

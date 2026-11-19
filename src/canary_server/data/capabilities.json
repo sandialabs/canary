@@ -9,7 +9,7 @@
       "agents": "canary server post '{\"command\": \"run\", \"args\": [...]}' prints {\"id\": ...}; then canary server get/wait/cancel ID"
     },
     "commands": {
-      "start": "Run the server for the current workspace in the foreground, printing each request and its output on the terminal. A second server for the same workspace is refused.",
+      "start": "Run the server for the workspace found from here (created here if none, like canary run), in the foreground, printing each request and its output. -w removes the workspace located exactly here and starts fresh (refused for an enclosing workspace or one a live server owns). A second server for the same workspace is refused.",
       "stop": "Ask the server to stop (works from any machine); interrupts the running request, keeps queued ones.",
       "status": "Server alive?, the running request, the queue. --json for machine-readable output. Exit code 0 if alive.",
       "--connect": "Global option --connect=WHERE: queue the command on the server of the workspace found from WHERE (a path inside/above the workspace or a file:// URL; '.' = here), print the request id, return at once. Unlike -C it keeps the caller's working directory, so relative paths mean what they mean where typed. The server prints the output on its terminal and keeps it with the request; follow with canary server wait ID. The server subcommands accept --connect too.",

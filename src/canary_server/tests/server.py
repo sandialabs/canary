@@ -144,10 +144,10 @@ def test_sighup_stops_the_server_cleanly(tmp_path):
     assert not (server.server_dir(tmp_path / ".canary") / "server.lock").exists()
 
 
-def start_server_process(cwd, timeout=15.0, *, stdout=None):
+def start_server_process(cwd, timeout=15.0, *, stdout=None, args=()):
     """``canary server start &``: start the blocking server in the background and wait for it."""
     proc = subprocess.Popen(
-        [sys.executable, "-m", "canary", "server", "start"],
+        [sys.executable, "-m", "canary", "server", "start", *args],
         cwd=cwd,
         stdout=stdout if stdout is not None else subprocess.DEVNULL,
         stderr=subprocess.STDOUT if stdout is not None else subprocess.DEVNULL,
@@ -162,3 +162,30 @@ def start_server_process(cwd, timeout=15.0, *, stdout=None):
         time.sleep(0.05)
     proc.kill()
     raise AssertionError("server did not start")
+
+
+def test_start_creates_a_workspace_and_w_recreates_it(tmp_path):
+    def canary(*args, cwd=tmp_path):
+        return subprocess.run(
+            [sys.executable, "-m", "canary", *args], cwd=cwd, capture_output=True, text=True
+        )
+
+    proc = start_server_process(tmp_path)  # no workspace yet: one is created here
+    (tmp_path / ".canary" / "marker").touch()
+    try:
+        refused = canary("server", "start", "-w")  # never wipes a live server's workspace
+        assert refused.returncode != 0 and "stop it first" in refused.stderr + refused.stdout
+        assert (tmp_path / ".canary" / "marker").exists()
+    finally:
+        assert canary("server", "stop").returncode == 0
+    assert proc.wait(15) == 0
+
+    proc = start_server_process(tmp_path, args=["-w"])  # fresh workspace
+    try:
+        assert not (tmp_path / ".canary" / "marker").exists()
+        (tmp_path / "sub").mkdir()
+        inner = canary("server", "start", "-w", cwd=tmp_path / "sub")
+        assert inner.returncode != 0 and "will not be wiped" in inner.stderr + inner.stdout
+    finally:
+        assert canary("server", "stop").returncode == 0
+    assert proc.wait(15) == 0
