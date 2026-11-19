@@ -156,8 +156,10 @@ Command Examples
                               help="Session to report on")
 
        def execute(self, args):
-           workspace = canary.Workspace.load()
-           session = workspace.load_session(args.session)
+           from _canary.api import query
+
+           # name, argv, start/finish times, returncode and outcome counts (a dict)
+           session = query.session(args.session)
 
            if args.format == "json":
                data = generate_json_report(session)
@@ -216,9 +218,11 @@ Command Integration
 
 .. code-block:: python
 
+   from _canary.api import query
+
    workspace = canary.Workspace.load()
-   session = workspace.load_session("latest")
-   jobs = workspace.load_jobs()
+   jobs = workspace.load_jobs()              # latest result of each job
+   session = query.session("latest")         # session metadata and counts (a dict)
 
 **Configuration Access**:
 

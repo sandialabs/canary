@@ -86,15 +86,14 @@ Access execution data in reporters:
 
    def create(self, output=None):
        workspace = canary.Workspace.load()
-       session = workspace.load_session("latest")
-       jobs = workspace.load_jobs()
+       jobs = workspace.load_jobs()  # latest result of each job
 
        # Process job data
        for job in jobs:
            name = job.spec.name
            status = job.status
-           duration = job.timekeeper.duration()
-           measurements = job.measurements
+           duration = job.timekeeper.total()
+           measurements = job.measurements.data
 
 Artifacts and Measurements
 --------------------------
@@ -109,10 +108,10 @@ Access test artifacts and measurements:
 
        for job in jobs:
            # Access artifacts
-           artifacts = job.artifacts
+           artifacts = job.spec.artifacts
 
-           # Access measurements
-           metrics = job.measurements
+           # Access measurements (a dict of name -> value)
+           metrics = job.measurements.data
            custom_metric = metrics.get("custom_metric", 0)
 
 CDash/GitLab Integration
@@ -183,8 +182,8 @@ Reporter Examples
                "jobs": [{
                    "name": job.spec.name,
                    "status": job.status.category.value,
-                   "duration": job.timekeeper.duration(),
-                   "measurements": job.measurements
+                   "duration": job.timekeeper.total(),
+                   "measurements": job.measurements.data
                } for job in jobs]
            }
 

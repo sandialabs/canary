@@ -515,10 +515,10 @@ Hook Examples
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_finish(job):
-       duration = job.timekeeper.duration()
+   def canary_runtest_finish(case):
+       duration = case.timekeeper.total()
        if duration > 60.0:
-           job.add_measurement("long_running", True)
+           case.add_measurement("long_running", True)
 
 **Resource Monitoring Hook**:
 

@@ -29,6 +29,20 @@ Two public APIs are used to attach measurements:
 Values should be JSON-serializable.  Scalars are common, but lists and mapping
 values are also fine when a measurement naturally has structure.
 
+Add measurements from hooks, which run in the process that owns the job.  Calling
+``add_measurement`` inside the test process (for example on ``canary.get_job()``) does
+not persist: the parent process writes the job's final record.  Have the test write
+its values to a file in its working directory and record them in
+``canary_runtest_finish``, as in the examples below.
+
+Hook arguments are matched by name: the job hooks take ``case``, the session hooks
+``session``.
+
+Canary also records some measurements for every job: ``command_line``, ``duration``,
+``cpu_percent``, ``memory_rss_mb``, ``memory_vms_mb``, ``num_threads``, ``samples``
+(resource-usage samples taken while the job ran) and ``inputs`` (the files staged into
+the job's directory).
+
 Adding Measurements
 -------------------
 
@@ -46,9 +60,9 @@ Adding Measurements
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_finish(job):
-       job.add_measurement("max_memory", get_max_memory())
-       job.add_measurement("peak_cpu", get_peak_cpu())
+   def canary_runtest_finish(case):
+       case.add_measurement("max_memory", get_max_memory())
+       case.add_measurement("peak_cpu", get_peak_cpu())
 
 Measurement Hooks
 -----------------
@@ -145,39 +159,48 @@ single job:
 Querying Measurements
 ---------------------
 
-Query measurements with ``canary query``:
+Job measurements live under ``measurements.data``; session measurements directly under
+``measurements``:
 
 .. code-block:: console
 
    $ canary query -s latest measurements.campaign
    "optimization-run-1"
 
-   $ canary query -j JOB_ID measurements.max_memory
+   $ canary query -j JOB_ID measurements.data.max_memory
    1024
+
+   $ canary query -j JOB_ID measurements.data        # every measurement of the job
 
    $ canary query session latest measurements.jobs_with_accuracy
    12
 
+Across jobs, with SQL against the results table:
+
+.. code-block:: console
+
+   $ canary query db "SELECT spec_name, json_extract(measurements, '$.data.accuracy') AS accuracy
+                      FROM results WHERE accuracy IS NOT NULL"
+
 Using Measurements for Agents
 -----------------------------
 
-Agents use measurements for decision making:
+Agents read measurements through the Python query API (plain dicts and lists, for
+the workspace in the current directory):
 
 .. code-block:: python
 
-   def agent_decision_loop():
-       workspace = canary.Workspace.load()
-       results = workspace.db.get_results()
+   from _canary.api import query
 
-       for job_id, result in results.items():
-           measurements = result["measurements"]
+   for row in query.measurement_table(key="accuracy"):  # latest session; session=None for all
+       if row["value"] > 0.95:
+           mark_as_success(row["id"])
+       else:
+           schedule_for_review(row["id"])
 
-           if measurements.get("accuracy", 0) > 0.95:
-               mark_as_success(job_id)
-           elif measurements.get("loss", float('inf')) < 0.05:
-               schedule_for_review(job_id)
-           else:
-               rerun_with_different_params(job_id)
+   query.measurement("JOB_ID", "loss")       # one value
+   query.measurements("JOB_ID")              # every measurement of one job
+   query.raw_session_value("latest", "measurements.campaign")
 
 Measurement Best Practices
 --------------------------
@@ -208,24 +231,24 @@ Measurement Examples
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_finish(job):
+   def canary_runtest_finish(case):
        # Performance metrics
-       job.add_measurement("duration", job.timekeeper.duration())
-       job.add_measurement("cpu_utilization", get_cpu_utilization())
-       job.add_measurement("memory_usage", get_memory_usage())
+       case.add_measurement("wall_seconds", case.timekeeper.total())
+       case.add_measurement("cpu_utilization", get_cpu_utilization())
+       case.add_measurement("memory_usage", get_memory_usage())
 
 **Custom Metrics**:
 
 .. code-block:: python
 
    @canary.hookimpl
-   def canary_runtest_finish(job):
+   def canary_runtest_finish(case):
        # Domain-specific metrics
-       if job.spec.name.startswith("ml_"):
-           accuracy = parse_accuracy_from_output(job)
-           loss = parse_loss_from_output(job)
-           job.add_measurement("accuracy", accuracy)
-           job.add_measurement("loss", loss)
+       if case.spec.family.startswith("ml_"):
+           accuracy = parse_accuracy_from_output(case)
+           loss = parse_loss_from_output(case)
+           case.add_measurement("accuracy", accuracy)
+           case.add_measurement("loss", loss)
 
 **Resource Tracking**:
 
@@ -248,12 +271,14 @@ Measurement Integration
 
    @canary.hookimpl
    def canary_addoption(parser):
-       parser.add_argument("--track-metrics", action="store_true")
+       # command="run": canary run --track-metrics (omit for a global option,
+       # given before the subcommand: canary --track-metrics run ...)
+       parser.add_argument("--track-metrics", action="store_true", command="run")
 
    @canary.hookimpl
-   def canary_runtest_finish(job):
+   def canary_runtest_finish(case):
        if canary.config.getoption("track_metrics"):
-           job.add_measurement("custom_metric", calculate_metric())
+           case.add_measurement("custom_metric", calculate_metric())
 
 **Environment Integration**:
 
@@ -278,13 +303,13 @@ stable source exists.
 
    # Good: Structured measurement
    @canary.hookimpl
-    def canary_runtest_finish(job):
-        job.add_measurement("test_result", parse_result_file("result.json"))
+   def canary_runtest_finish(case):
+       case.add_measurement("test_result", parse_result_file("result.json"))
 
    # Bad: Log scraping
    @canary.hookimpl
-   def canary_runtest_finish(job):
-       with open(job.stdout) as f:
+   def canary_runtest_finish(case):
+       with open(case.workspace.joinpath(case.stdout)) as f:
            for line in f:
                if "RESULT:" in line:
                    # Parse from log
@@ -295,10 +320,19 @@ Measurement Troubleshooting
 
 **Measurements Not Found**:
 
-- Verify measurement addition timing
-- Check hook execution order
-- Ensure proper measurement names
-- Inspect one job directly with ``canary query job JOB_ID measurements``
+.. code-block:: console
+
+   $ canary query -j JOB_ID measurements.data.loss
+   ERROR: "No such key: 'loss'. Available keys: command_line, cpu_percent, ..."
+
+- Is the hook module loaded (``canaryhooks.py`` in the directory ``canary`` runs from,
+  or ``canary -p MODULE run ...``)?
+- Does the hook take an argument named ``case`` (or ``session``)?
+- Was the measurement added in a hook rather than inside the test process?
+- Was the run started with the ``canary run`` command?  The in-process
+  ``_canary.api.run.run`` does not load ``canaryhooks.py``.
+- Session measurements have no ``data`` level: ``measurements.NAME``.
+- Inspect one job directly with ``canary query job JOB_ID measurements``.
 
 **Query Failures**:
 
