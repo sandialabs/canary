@@ -35,6 +35,7 @@ class ServerCommand(canary.CanarySubcommand):
         p = sub.add_parser(
             "start", help="Run the server for this workspace (blocks; background it with the shell)"
         )
+        p.set_defaults(banner_default=True)  # the server's terminal is long-lived: greet it
         p.add_argument(
             "-w",
             dest="wipe",

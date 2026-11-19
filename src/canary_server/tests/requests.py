@@ -307,7 +307,8 @@ def test_connect_returns_at_once_and_the_server_terminal_shows_the_output(worksp
         assert _canary(workspace, "server", "stop").returncode == 0
     terminal = srv.communicate(timeout=30)[0].decode()
     assert request_id in terminal and "1 pass" in terminal
-    assert "version:" not in terminal  # the server announces requests; the child has no banner
+    # one banner: the server's own (server start greets its terminal); the child prints none
+    assert terminal.count("version:") == 1
 
 
 ENV_PROBE = (
