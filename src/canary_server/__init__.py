@@ -138,6 +138,20 @@ def canary_addcommand(parser: "canary.Parser") -> None:
 
 
 @canary.hookimpl
+def canary_capabilities() -> dict | None:
+    from _canary.util.query_data import load_query_data
+
+    return load_query_data("canary_server.data", "capabilities.json")
+
+
+@canary.hookimpl
+def canary_skills() -> dict | None:
+    from _canary.util.query_data import load_query_data
+
+    return load_query_data("canary_server.data", "skills.json")
+
+
+@canary.hookimpl
 def canary_addoption(parser: "canary.Parser") -> None:
     parser.add_argument(
         "--server",

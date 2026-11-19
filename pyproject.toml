@@ -99,6 +99,7 @@ canary_gitlab = ["data/*.json"]
 canary_hpc = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_nvidia = ["docs/**", "docs/.canary-ext-docs"]
 canary_pyt = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
+canary_server = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_vvtest = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 
 [tool.ruff]

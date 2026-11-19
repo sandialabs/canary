@@ -1,0 +1,64 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "server",
+  "capabilities": {
+    "overview": {
+      "summary": "canary_server runs a command server for a workspace. Start it once on the machine that should do the work; send canary commands to it from anywhere the workspace is visible. Requests run one at a time, each as a child `canary` process, exactly as the command would run locally. Communication is through files in .canary/var/server/ (no sockets).",
+      "start": "canary server start   (blocks and logs to the terminal; background it with the shell, e.g. `nohup canary server start > server.log 2>&1 &`)",
+      "submit": "canary --server COMMAND ARGS   (run, exec, collect, select, hpc run)",
+      "agents": "canary server post '{\"command\": \"run\", \"args\": [...]}' prints {\"id\": ...}; then canary server get/wait/cancel ID"
+    },
+    "commands": {
+      "start": "Run the server for the current workspace in the foreground, logging each request to the terminal. A second server for the same workspace is refused.",
+      "stop": "Ask the server to stop (works from any machine); interrupts the running request, keeps queued ones.",
+      "status": "Server alive?, the running request, the queue. --json for machine-readable output. Exit code 0 if alive.",
+      "--server": "Global flag: run the command on the server, stream its output, exit with its code. Ctrl-C cancels the request.",
+      "post": "Submit a request given as JSON (or - for stdin); print {\"id\": ...}; --wait to follow.",
+      "get": "A request's record as JSON: command, args, state, position, returncode, times, stdout/stderr paths. --output prints the output.",
+      "wait": "Follow a request until it finishes and exit with its code; --quiet hides the output.",
+      "cancel": "Cancel a queued request or interrupt a running one."
+    },
+    "request": {
+      "required": [
+        "command"
+      ],
+      "fields": {
+        "command": "run | exec | collect | select | hpc (hpc only with args[0] == 'run')",
+        "args": "Arguments after the command (list of strings).",
+        "options": "Global options before the command, e.g. [\"-p\", \"myplugin\"].",
+        "cwd": "Working directory (default: current); must be valid on the server's machine.",
+        "env": "Environment overlaid on the server's (default: client's PATH, PYTHONPATH, LD_LIBRARY_PATH, VIRTUAL_ENV, CANARY_*)."
+      },
+      "states": [
+        "queued",
+        "running",
+        "done",
+        "cancelled",
+        "failed"
+      ],
+      "exit_codes": {
+        "done": "the command's exit code",
+        "cancelled": 130,
+        "failed": 1
+      }
+    },
+    "files": {
+      ".canary/var/server/server.json": "pid, host, started, heartbeat (every 2 s; dead after 10 s), version",
+      ".canary/var/server/inbox/": "the request queue (FSQueue)",
+      ".canary/var/server/requests/<id>/": "request.json, status.json, stdout, stderr, cancel"
+    },
+    "behavior": {
+      "ordering": "Requests run one at a time, in arrival order; each gets the whole resource pool.",
+      "reads": "status, query, log, info never go through the server; read the workspace directly.",
+      "protected": "canary rm and canary run -w are refused while a server runs for the workspace; if the workspace disappears the server exits.",
+      "recovery": "On restart, a request the dead server was running is marked failed; claimed-but-unstarted requests are requeued."
+    },
+    "limitations": [
+      "One request at a time: hpc run holds the server while its batches wait on the scheduler.",
+      "Requires a shared filesystem; paths must mean the same thing on the server's machine.",
+      "Access control is the workspace directory's permissions.",
+      "No live status table: output is streamed as text.",
+      "In-process _canary.api.run.run does not go through the server."
+    ]
+  }
+}
