@@ -14,12 +14,8 @@ authors = [
     { name = "Others (See AUTHORS)" },
 ]
 # The version is a plain, static string of the form YY.M.D (year minus 2000).
-# It is maintained by `canary pre-commit` (see README) rather than derived from
-# git at build time, so builds from a source tree with `.git` stripped (e.g.
-# Spack) still produce the correct version.  Runtime code (_canary.version)
-# reads this via importlib.metadata for installed packages and augments it with
-# a git label only for editable/source checkouts.
-version = "26.11.19"
+# It is maintained by `canary pre-commit`
+version = "26.11.20"
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 6 - Mature",
@@ -40,7 +36,7 @@ classifiers = [
 ]
 dependencies = [
     # hpc-connect @ git+https://github.com/sandialabs/hpc-connect.git",
-    "hpc-connect>=26.11.4",
+    "hpc-connect>=26.11.16",
     "pluggy>=1.5",
     "psutil>=5.9",
     "pyyaml>=6.0",
