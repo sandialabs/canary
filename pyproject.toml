@@ -95,6 +95,7 @@ canary_cdash = ["data/*.json", "docs/**", "docs/.canary-ext-docs", "validators/*
 canary_cmake = ["Canary.cmake", "data/*.json", "docs/**", "docs/.canary-ext-docs", "tests/**/CTestTestfile.cmake"]
 canary_dist = ["data/*.json"]
 canary_flux = ["docs/**", "docs/.canary-ext-docs"]
+canary_git = ["docs/**", "docs/.canary-ext-docs"]
 canary_gitlab = ["data/*.json"]
 canary_hpc = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_nvidia = ["docs/**", "docs/.canary-ext-docs"]
@@ -141,6 +142,7 @@ testpaths = [
     "src/canary_cmake/tests",
     "src/canary_dist/tests",
     "src/canary_flux/tests",
+    "src/canary_git/tests",
     "src/canary_gitlab/tests",
     "src/canary_hpc/tests",
     "src/canary_nvidia/tests",
@@ -172,6 +174,7 @@ source = [
     "canary_cmake",
     "canary_dist",
     "canary_flux",
+    "canary_git",
     "canary_gitlab",
     "canary_hpc",
     "canary_nvidia",
@@ -186,6 +189,7 @@ command_line = """-m pytest --import-mode=importlib
     ./src/canary_cmake/tests
     ./src/canary_dist/tests
     ./src/canary_flux/tests
+    ./src/canary_git/tests
     ./src/canary_gitlab/tests
     ./src/canary_hpc/tests
     ./src/canary_nvidia/tests
@@ -326,6 +330,7 @@ known_first_party = [
     "canary_cmake",
     "canary_dist",
     "canary_flux",
+    "canary_git",
     "canary_gitlab",
     "canary_hpc",
     "canary_nvidia",

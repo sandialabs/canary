@@ -250,6 +250,8 @@ def make_api_docs(prefix: str):
 
     maker.add_package("canary_amd", os.path.join(canary, "../canary_amd"), skip_dirs=["tests"])
 
+    maker.add_package("canary_git", os.path.join(canary, "../canary_git"), skip_dirs=["tests"])
+
     maker.add_package(
         "canary_dist",
         os.path.join(canary, "../canary_dist"),

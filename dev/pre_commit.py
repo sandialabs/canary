@@ -351,6 +351,7 @@ class Check(CanarySubcommand):
                 "src/canary_cmake",
                 "src/canary_dist",
                 "src/canary_flux",
+                "src/canary_git",
                 "src/canary_gitlab",
                 "src/canary_hpc",
                 "src/canary_nvidia",
@@ -921,6 +922,10 @@ def update_pyproject_version(root: Path, version: str) -> None:
     logger.info(f"[bold]Updated[/] pyproject.toml version: {old_version} -> {version}")
 
 
+#: In-tree plugins that are not entry points; their tests must be listed explicitly.
+OPT_IN_PLUGINS = ("canary_amd", "canary_git", "canary_nvidia")
+
+
 def discover_test_paths(root: Path) -> tuple[str, ...]:
     """Return pytest paths for Canary core plus registered Canary extensions."""
     import importlib.metadata as importlib_metadata
@@ -958,6 +963,10 @@ def discover_test_paths(root: Path) -> tuple[str, ...]:
         for path in entry_point_test_candidates(root, module):
             if path.is_dir():
                 add(path)
+
+    # In-tree extensions that are opt-in (``-p NAME``) and so have no entry point.
+    for module in OPT_IN_PLUGINS:
+        add(root / "src" / module / "tests")
 
     # Out-of-tree extensions: use importlib.resources + .canary-ext-tests marker.
     for ep in importlib_metadata.entry_points(group=project_name):
