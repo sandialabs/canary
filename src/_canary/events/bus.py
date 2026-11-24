@@ -72,7 +72,7 @@ class Event:
 class JobEvent(TypedDict):
     """A flat, primitives-only projection of a job at the moment an event fired.
 
-    Field set intentionally mirrors :class:`_canary.app.queries.JobView` so an
+    Field set intentionally mirrors :class:`_canary.tui.views.JobView` so an
     interface can update a table row directly from an event without a follow-up
     query.  Every value is a ``str``/``float``/``int``; no ``_canary`` type
     leaks onto the bus.

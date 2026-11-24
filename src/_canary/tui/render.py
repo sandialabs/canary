@@ -23,10 +23,10 @@ from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from ..app.queries import JobView
     from ..app.queries import WorkspaceSummary
     from .progress import RunProgressView
     from .state import ExplorerState
+    from .views import JobView
 
 _HELP = (
     "[dim]j/k move · enter log · x mark · r rerun · : run · b rebaseline · e edit · c clear · "

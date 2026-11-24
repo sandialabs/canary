@@ -1,0 +1,51 @@
+{
+  "schema_version": "2.0.0",
+  "namespace": "server",
+  "capabilities": {
+    "overview": {
+      "summary": "canary server runs a request server for a workspace. The operator starts it once on the machine that should do the work; callers need nothing installed (a POSIX shell is enough): they drop typed requests into .canary/var/server/inbox/ and read requests/<id>/result.json. Routes are HTTP-style (/canary/run, /canary/status, ...); an HTTP binding is planned with the same routes and documents.",
+      "start": "canary server start   (blocks; e.g. `nohup canary server start > server.log 2>&1 &`)",
+      "submit": "write inbox/<id>.json.tmp, then mv it to inbox/<id>.json; body {\"path\": ROUTE, \"request\": {...}, \"cwd\": \".\", \"env\": {}}",
+      "result": "requests/<id>/result.json (written once, last): state done|rejected|cancelled|failed, status_code 200|400/404/409|499|500, data, error",
+      "carl": "<workspace>/.canary/share/carl (installed at server start; POSIX sh): carl POST file://<workspace>/canary/<endpoint> -d JSON submits, waits and prints result.json; GET .../requests/ID, GET .../server, POST .../requests/ID/cancel; -H 'Idempotency-Key: ID', -f, -m SECONDS, --cwd, --env; exit 7 = no server."
+    },
+    "commands": {
+      "start": "Serve the workspace found from here (created if none), in the foreground. -w starts with a fresh workspace (never one a live server owns). A second server is refused.",
+      "stop": "Ask the server to stop (from any machine); the running work and reads in progress end failed, queued work stays queued."
+    },
+    "envelope": {
+      "version": "1 (optional)",
+      "path": "The route (required).",
+      "request": "The route's body; unknown fields -> 400. See /canary/schema.",
+      "cwd": "Relative to the anchor (dir holding .canary), no '..', must exist; default '.'. Paths in the body are relative to it.",
+      "env": "Variables (strings) set on top of the server's environment.",
+      "id": "Not a key: the file name is the id (^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$). user is the file's owner; times are the server's."
+    },
+    "routes": {
+      "work": "/canary/run, /canary/hpc/run, /canary/collect, /canary/select, /canary/rebaseline: one at a time, in arrival order, each in its own process; data.exit_code",
+      "read": "/canary/status, /canary/query/{sessions,session,jobs,job,failures,db}, /canary/schema: concurrently (server:read_workers), limited to server:read_timeout s"
+    },
+    "files": {
+      "server.json": "public: version, state, started, heartbeat, beat, canary_version, running, queued. Alive if beat changes between reads (clocks are never compared).",
+      "inbox/": "submit here (mode 0775: who can write it can submit); *.tmp is ignored",
+      "requests/<id>/": "status.json (queued/running/final), stdout, stderr, result.json; touch cancel to cancel",
+      "rejected/": "inbox files with a bad name or a taken id, with <name>.reason",
+      "share/carl": "the curl-like client, rewritten at every server start"
+    },
+    "behavior": {
+      "environment": "Work runs in the server's environment as of `canary server start`; only the envelope's env is added.",
+      "workspace_targeting": "Every request works on the server's workspace: run with only=failed and no pathspec reruns its failures; job ids are its jobs.",
+      "protected": "canary rm and canary run -w are refused while the workspace is in use (a server, or any canary run/collect/select/rebaseline, holds a shared flock on .canary/in-use; it is released when the holder exits, even by SIGKILL). If the workspace disappears the server exits.",
+      "recovery": "On restart, work a dead server was running ends failed; queued work and inbox files dropped while it was down run in order.",
+      "retention": "At start, finished requests and rejected/ entries older than server:retain_days (7) are removed.",
+      "allowed_roots": "Paths in a request body (pathspec, roots, from_root, rebaseline targets) must resolve inside the workspace or under server:allowed_roots (name -> path), else 403. Results show the absolute record paths (file_root, exec_dir) relative to the workspace, as name:path under an allowed root, or as \u2026/name; file_path and exec_path are relative and shown as they are."
+    },
+    "limitations": [
+      "One work request at a time: hpc run holds the lane while its batches wait on the scheduler.",
+      "Fixed environment: changing modules means restarting the server.",
+      "Requires a shared filesystem until the HTTP binding exists.",
+      "Access control is inbox/'s permissions; requests run as the server's user.",
+      "A read busy outside SQLite cannot be stopped at its time limit (it gets its failed result; its thread runs on)."
+    ]
+  }
+}

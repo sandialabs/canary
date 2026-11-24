@@ -71,5 +71,6 @@ canary usage
 
    usage.cmake
    usage.hpc
+   usage.server
    usage.vvtest
    usage.gitlab

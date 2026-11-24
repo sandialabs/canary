@@ -356,7 +356,6 @@ class Check(CanarySubcommand):
                 "src/canary_hpc",
                 "src/canary_nvidia",
                 "src/canary_pyt",
-                "src/canary_server",
                 "src/canary_vvtest",
                 "dev",
                 "README.md",

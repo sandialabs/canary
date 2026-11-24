@@ -10,22 +10,17 @@ from typing import Any
 from typing import Optional
 from typing import Sequence
 
-from .. import config
 from .. import rerun
 from ..app.pathspec import RequestBuilder
-from ..app.pathspec import RequestNode
 from ..app.pathspec import ScanPathsRequest
-from ..app.pathspec import TagRequest
 from ..app.pathspec import classify_pathspec
-from ..app.run import RunOptions
-from ..app.run import run as app_run
+from ..app.run import run_from_options
 from ..generation.generate import Generator
 from ..plugins.hookspec import hookimpl
 from ..scanpaths import TestPathsFileError
 from ..scanpaths import read_testpaths_file
 from ..select import Selector
 from ..util.rich import bold
-from ..view import ViewSettings
 from .base import CanarySubcommand
 from .common import add_resource_arguments
 
@@ -137,29 +132,7 @@ class Run(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         """Build the run request and options from *args* and delegate to ``app.run``."""
-        request: RequestNode
-        if req := getattr(args, "request", None):
-            request = req
-        else:
-            request = TagRequest(value=config.get("run:default_tag"))
-        if isinstance(request, TagRequest) and not request.value:
-            request = TagRequest(value=config.get("run:default_tag"))
-
-        view = ViewSettings(**args.view) if args.view else None
-        options = RunOptions(
-            tag=args.tag,
-            on_options=args.on_options,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            owners=args.owners,
-            regex=args.regex_filter,
-            only=args.only,
-            view=view,
-            parsing_policy=args.parsing_policy or "pedantic",
-            wipe_workspace=bool(args.wipe_workspace),
-            work_tree=args.work_tree,
-        )
-        return app_run(request, options)
+        return run_from_options(args)
 
 
 def setdefault(obj, attr, default):

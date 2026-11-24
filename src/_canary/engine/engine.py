@@ -16,6 +16,7 @@ Session preparation and execution.
 """
 
 import datetime
+import functools
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,6 +38,7 @@ from ..util import logging
 from ..util.filesystem import atomic_write
 from ..view import ViewManager
 from ..view import ViewSettings
+from ..workspace import inuse
 from ..workspace.session import Session
 from .collection import collect_specs
 from .jobs import construct_jobs
@@ -48,6 +50,18 @@ if TYPE_CHECKING:
     from ..workspace.workspace import Workspace
 
 logger = logging.get_logger(__name__)
+
+
+def _in_use(method: Callable) -> Callable:
+    """Hold the workspace's shared in-use lock while *method* runs (see :mod:`inuse`)."""
+
+    @functools.wraps(method)
+    def wrapper(self: "Engine", *args, **kwargs):
+        with inuse.using(self.workspace.root):
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
 
 #: An observer receives each raw executor event dict, with the job under ``"job"``.
 JobEventObserver = Callable[[dict], None]
@@ -62,6 +76,7 @@ class Engine:
         self.workspace = workspace
         self.selector = SpecSelector(workspace.root, workspace.db)
 
+    @_in_use
     def collect(
         self,
         scanpaths: dict[str, list[str]],
@@ -73,6 +88,7 @@ class Engine:
             self.workspace.root, self.workspace.db, scanpaths, on_options, parsing_policy
         )
 
+    @_in_use
     def select(
         self,
         tag: str,
@@ -85,6 +101,7 @@ class Engine:
         """Select specs from the database, save as *tag* (see :meth:`SpecSelector.select`)."""
         return self.selector.select(tag, prefixes, keyword_exprs, parameter_expr, owners, regex)
 
+    @_in_use
     def select_from_specs(
         self,
         resolved: list["JobSpec"],
@@ -100,6 +117,7 @@ class Engine:
             resolved, prefixes, keyword_exprs, parameter_expr, owners, regex, extra_rules
         )
 
+    @_in_use
     def select_from_tag(
         self,
         tag: str,
@@ -115,6 +133,7 @@ class Engine:
             tag, source_tag, prefixes, keyword_exprs, parameter_expr, owners, regex
         )
 
+    @_in_use
     def create_selection(
         self,
         tag: str | None,
@@ -152,6 +171,7 @@ class Engine:
             regex=regex,
         )
 
+    @_in_use
     def apply_selection_rules(
         self,
         specs: list["JobSpec"],
@@ -166,6 +186,7 @@ class Engine:
             specs, keyword_exprs, parameter_expr, owners, regex, ids
         )
 
+    @_in_use
     def run(
         self,
         specs: list["JobSpec"],
@@ -205,6 +226,7 @@ class Engine:
         job.state.reset()
         return job
 
+    @_in_use
     def exec_job(self, job: Job, *, observer: JobEventObserver | None = None) -> Job:
         """Run one job directly, outside the session scheduler, and record its result.
 
@@ -236,6 +258,7 @@ class Engine:
             self.workspace.db.queue.put(job)
         return job
 
+    @_in_use
     def prepare(
         self,
         specs: list["JobSpec"],
@@ -276,6 +299,7 @@ class Engine:
             s.save()
         return s
 
+    @_in_use
     def execute(self, session: Session, *, view_t: ViewSettings | None = None) -> Session:
         """Run a Session returned by :meth:`prepare` and finalize its results."""
         ws = self.workspace

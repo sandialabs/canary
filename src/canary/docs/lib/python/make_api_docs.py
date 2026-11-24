@@ -223,7 +223,7 @@ def make_api_docs(prefix: str):
             "_canary.reporters.reporter": ["type"],
         },
         no_index_modules=[
-            "_canary.api.run",
+            "_canary.app.run_request",
             "_canary.app.pathspec",
             "_canary.app.run",
             "_canary.cli.status",

@@ -8,48 +8,54 @@ from pathlib import Path
 
 import pytest
 
-import _canary.api.run as run_api
+import _canary.app.run_request as run_api
 
 
-def test_run_request_scanpaths_accepts_string():
-    request = run_api.RunRequest.scanpaths("examples")
+def test_run_request_scanpaths_accepts_string(tmp_path, monkeypatch):
+    (tmp_path / "examples").mkdir()
+    monkeypatch.chdir(tmp_path)
+    request = run_api.scanpaths_request("examples")
 
     assert request.kind == "scanpaths"
-    assert request.value == ["examples"]
+    # Resolved when built, as ``canary run examples`` resolves it.
+    assert request.value == {str(tmp_path / "examples"): []}
 
 
 def test_run_request_scanpaths_accepts_pathlike(tmp_path):
     path = tmp_path / "examples"
+    path.mkdir()
 
-    request = run_api.RunRequest.scanpaths(path)
+    request = run_api.scanpaths_request(path)
 
     assert request.kind == "scanpaths"
-    assert request.value == [str(path)]
+    assert request.value == {str(path): []}
 
 
 def test_run_request_scanpaths_accepts_iterable(tmp_path):
     paths = [tmp_path / "a", tmp_path / "b"]
+    for path in paths:
+        path.mkdir()
 
-    request = run_api.RunRequest.scanpaths(paths)
+    request = run_api.scanpaths_request(paths)
 
     assert request.kind == "scanpaths"
-    assert request.value == [str(paths[0]), str(paths[1])]
+    assert request.value == {str(paths[0]): [], str(paths[1]): []}
 
 
 def test_run_request_scanpaths_rejects_empty_iterable():
     with pytest.raises(ValueError, match="paths must contain at least one path"):
-        run_api.RunRequest.scanpaths([])
+        run_api.scanpaths_request([])
 
 
 def test_run_request_viewpaths_accepts_string():
-    request = run_api.RunRequest.viewpaths("suite/test")
+    request = run_api.viewpaths_request("suite/test")
 
     assert request.kind == "viewpaths"
     assert request.value == ["suite/test"]
 
 
 def test_run_request_viewpaths_accepts_iterable():
-    request = run_api.RunRequest.viewpaths(["suite/a", "suite/b"])
+    request = run_api.viewpaths_request(["suite/a", "suite/b"])
 
     assert request.kind == "viewpaths"
     assert request.value == ["suite/a", "suite/b"]
@@ -57,18 +63,18 @@ def test_run_request_viewpaths_accepts_iterable():
 
 def test_run_request_viewpaths_rejects_empty_iterable():
     with pytest.raises(ValueError, match="viewpaths must contain at least one prefix"):
-        run_api.RunRequest.viewpaths([])
+        run_api.viewpaths_request([])
 
 
 def test_run_request_specids_accepts_string():
-    request = run_api.RunRequest.specids("abcdef123456")
+    request = run_api.specids_request("abcdef123456")
 
     assert request.kind == "specids"
     assert request.value == ["abcdef123456"]
 
 
 def test_run_request_specids_accepts_iterable():
-    request = run_api.RunRequest.specids(["abc", "def"])
+    request = run_api.specids_request(["abc", "def"])
 
     assert request.kind == "specids"
     assert request.value == ["abc", "def"]
@@ -76,11 +82,11 @@ def test_run_request_specids_accepts_iterable():
 
 def test_run_request_specids_rejects_empty_iterable():
     with pytest.raises(ValueError, match="specids must contain at least one spec ID"):
-        run_api.RunRequest.specids([])
+        run_api.specids_request([])
 
 
 def test_run_request_tag_accepts_nonempty_name():
-    request = run_api.RunRequest.tag("nightly")
+    request = run_api.tag_request("nightly")
 
     assert request.kind == "tag"
     assert request.value == "nightly"
@@ -88,14 +94,17 @@ def test_run_request_tag_accepts_nonempty_name():
 
 def test_run_request_tag_rejects_empty_name():
     with pytest.raises(ValueError, match="tag name must be non-empty"):
-        run_api.RunRequest.tag("")
+        run_api.tag_request("")
 
 
-def test_make_request_from_paths():
+def test_make_request_from_paths(tmp_path, monkeypatch):
+    (tmp_path / "examples").mkdir()
+    (tmp_path / "tests").mkdir()
+    monkeypatch.chdir(tmp_path)
     request = run_api.make_request(paths=["examples", "tests"])
 
     assert request.kind == "scanpaths"
-    assert request.value == ["examples", "tests"]
+    assert request.value == {str(tmp_path / "examples"): [], str(tmp_path / "tests"): []}
 
 
 def test_make_request_from_tag():
@@ -158,7 +167,7 @@ def test_run_request_delegates_to_app_run(monkeypatch):
 
     monkeypatch.setattr(run_api, "_app_run", fake_app_run)
 
-    request = run_api.RunRequest.specids(["abc123"])
+    request = run_api.specids_request(["abc123"])
     options = run_api.RunOptions(only="all")
 
     rc = run_api.run_request(request, options)
@@ -280,7 +289,7 @@ def test_run_uses_explicit_request(monkeypatch):
 
     monkeypatch.setattr(run_api, "_app_run", fake_app_run)
 
-    request = run_api.RunRequest.tag("nightly")
+    request = run_api.tag_request("nightly")
 
     rc = run_api.run(request=request, keyword_exprs="not slow", owners=["alice", "bob"])
 
@@ -361,12 +370,12 @@ def test_none_options_remain_none(monkeypatch):
 
 def test_noniterable_paths_raise_type_error():
     with pytest.raises(TypeError, match="paths must be a path or iterable of paths"):
-        run_api.RunRequest.scanpaths(123)
+        run_api.scanpaths_request(123)
 
 
 def test_noniterable_string_list_argument_raises_type_error():
     with pytest.raises(TypeError, match="specids must be a string or iterable of strings"):
-        run_api.RunRequest.specids(123)
+        run_api.specids_request(123)
 
 
 def test_run_request_resolves_scanpaths_like_the_cli(tmp_path, monkeypatch):
@@ -380,7 +389,7 @@ def test_run_request_resolves_scanpaths_like_the_cli(tmp_path, monkeypatch):
         run_api, "_app_run", lambda request, options: seen.setdefault("r", request) and 0
     )
 
-    run_api.run_request(run_api.RunRequest.scanpaths([suite, single]))
+    run_api.run_request(run_api.scanpaths_request([suite, single]))
 
     assert seen["r"].kind == "scanpaths"
     assert seen["r"].value == {str(suite): [], str(tmp_path): ["one.pyt"]}
@@ -389,4 +398,4 @@ def test_run_request_resolves_scanpaths_like_the_cli(tmp_path, monkeypatch):
 def test_run_request_rejects_missing_scanpath(tmp_path, monkeypatch):
     monkeypatch.setattr(run_api, "_app_run", lambda request, options: 0)
     with pytest.raises(ValueError, match="no such file or directory"):
-        run_api.run_request(run_api.RunRequest.scanpaths(tmp_path / "missing"))
+        run_api.run_request(run_api.scanpaths_request(tmp_path / "missing"))

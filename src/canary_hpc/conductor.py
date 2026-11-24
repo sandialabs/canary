@@ -20,7 +20,7 @@ from typing import TypedDict
 import hpc_connect
 
 import canary
-from _canary.cli.run import Run
+from _canary.app.run import run_from_options
 from _canary.core.execspace import ExecutionSpace
 from _canary.execution.runtest import Runner
 from _canary.history import HistoryStore
@@ -386,7 +386,7 @@ class CanaryHPCConductor:
         args.exec_prefix = None
         setattr(canary.config.options, "hpc_exec_prefix", exec_prefix)
         setattr(canary.config.options, "exec_prefix", None)
-        return Run().execute(args)
+        return run_from_options(args)
 
     def backend_count_per_node(self, rtype: str) -> int:
         """Return homogeneous backend resource count per node.

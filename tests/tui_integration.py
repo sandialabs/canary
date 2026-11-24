@@ -16,6 +16,7 @@ import canary
 from _canary import tui
 from _canary.app import queries
 from _canary.events import get_event_bus
+from _canary.tui import views
 from _canary.util.filesystem import working_dir
 from _canary.util.testing import CanaryCommand
 
@@ -45,7 +46,7 @@ def _make_workspace(tmp_path):
 def test_list_jobs_projects_results(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
-        jobs = queries.list_jobs()
+        jobs = views.list_job_views()
 
     assert {j["name"] for j in jobs} == {"basic.x=1", "basic.x=2"}
     for j in jobs:
@@ -67,7 +68,7 @@ def test_job_view_file_path_is_absolute_and_exists(tmp_path):
     _make_workspace(tmp_path)
     # Query from a *different* CWD to prove the path is not CWD-relative.
     with working_dir(str(tmp_path / ".canary")), canary.config.override():
-        jobs = queries.list_jobs()
+        jobs = views.list_job_views()
 
     for j in jobs:
         p = j["file_path"]
@@ -80,8 +81,8 @@ def test_workspace_summary_and_counts(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
         summary = queries.workspace_summary()
-        jobs = queries.list_jobs()
-        counts = queries.status_counts(jobs)
+        jobs = views.list_job_views()
+        counts = views.status_counts(jobs)
 
     assert summary["spec_count"] == 2
     assert summary["session_count"] >= 1
@@ -91,7 +92,7 @@ def test_workspace_summary_and_counts(tmp_path):
 def test_job_history_returns_views(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
-        jobs = queries.list_jobs()
+        jobs = views.list_job_views()
         history = queries.job_history(jobs[0]["id"])
 
     assert history
@@ -119,7 +120,7 @@ def test_tui_run_once_is_noninteractive_and_returns_zero(tmp_path):
 
 
 def test_public_app_exposes_query_surface():
-    for name in ("list_jobs", "job_history", "workspace_summary", "status_counts"):
+    for name in ("list_jobs", "job_history", "workspace_summary"):
         assert hasattr(canary.app, name)
 
 
@@ -153,7 +154,7 @@ def test_model_unsubscribe_stops_marking_dirty():
 def test_job_log_query_returns_captured_output(tmp_path):
     _make_workspace(tmp_path)
     with working_dir(str(tmp_path)), canary.config.override():
-        jobs = queries.list_jobs()
+        jobs = views.list_job_views()
         text = queries.job_log(jobs[0]["id"])
     # The pyt body runs cleanly; the captured stdout log exists and is a string.
     assert isinstance(text, str)
@@ -238,7 +239,7 @@ def test_model_rerun_reexecutes_marked_jobs(tmp_path):
             time.sleep(0.05)
         assert model.run_active is False
 
-        after = {j["id"]: j["status"] for j in queries.list_jobs()}
+        after = {j["id"]: j["status"] for j in views.list_job_views()}
         model.unsubscribe()
     assert all(after[i] == "PASS" for i in ids)
 
@@ -326,7 +327,7 @@ def test_model_begin_run_from_input_launches_a_run(tmp_path):
                 break
             time.sleep(0.05)
         assert model.run_active is False
-        after = {j["name"]: j["status"] for j in queries.list_jobs()}
+        after = {j["name"]: j["status"] for j in views.list_job_views()}
         model.unsubscribe()
     assert after == {"basic.x=1": "PASS", "basic.x=2": "PASS"}
 
@@ -361,7 +362,7 @@ def test_tui_discovers_and_runs_paths_on_launch(tmp_path):
         request = ScanPathsRequest(value={str(tmp_path): []})
         rc = tui.run(once=True, load_request=request)
         assert rc == 0
-        jobs = {j["name"]: j["status"] for j in queries.list_jobs()}
+        jobs = {j["name"]: j["status"] for j in views.list_job_views()}
     assert jobs == {"basic.x=1": "PASS", "basic.x=2": "PASS"}
 
 
@@ -450,3 +451,22 @@ def test_edit_is_noop_when_editor_not_found(tmp_path, monkeypatch):
     target.write_text("original\n")
 
     assert tui.ExplorerModel().edit_file(str(target)) is False
+
+
+def test_list_jobs_reads_only_the_database(tmp_path, monkeypatch):
+    """The TUI and /canary/status listing must stay fast: no lock file is read."""
+    from _canary.app import query_helpers
+    from _canary.workspace.session import Session
+
+    _make_workspace(tmp_path)
+
+    def no_file(*args, **kwargs):
+        raise AssertionError("a listing read a lock file")
+
+    monkeypatch.setattr(query_helpers, "_batch_locks", no_file)
+    monkeypatch.setattr(Session, "load_lock_data", no_file)
+    with working_dir(str(tmp_path)), canary.config.override():
+        records = queries.list_jobs()
+        rows = views.list_job_views()
+    assert {r["status"]["category"] for r in records} == {"PASS"}
+    assert {r["status"] for r in rows} == {"PASS"}

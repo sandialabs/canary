@@ -1,6 +1,11 @@
 # `--connect=ssh://...`: implementation ideas
 
-**Status**: not started, ideas only (2026-11-18).  Builds on the file-based server on `main`
+**Status**: superseded (2026-11-23). This design assumed the `--connect` client would remain;
+the server refactor removes client code entirely. See
+`.agent/canary/server-refactor/PLAN.md` for the new typed-endpoint design that will eventually
+support HTTP transport.
+
+**Original status**: not started, ideas only (2026-11-18).  Builds on the file-based server on `main`
 (`64e8494c`); see `PLAN.md` in this directory for the server itself.
 
 ## Goal

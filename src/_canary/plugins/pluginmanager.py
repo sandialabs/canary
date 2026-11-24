@@ -66,6 +66,7 @@ class CanaryPluginManager(pluggy.PluginManager):
             warnings.warn(f"Failed to load developer plugin from {dev_dir!r}: {exc}", stacklevel=2)
 
     def register_builtins(self):
+        from .. import api
         from .. import cli
         from .. import reporters
         from .. import select
@@ -93,6 +94,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.register(canaryconf_impl, "builtin.canaryconf_impl")
         self.register(select, "builtin.select")
         self.register(user_execspace, "builtin.user_execspace")
+        self.register(api, "builtin.api")
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

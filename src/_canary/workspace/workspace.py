@@ -49,6 +49,7 @@ from ..util.filesystem import write_directory_tag
 from ..view import ResultsView
 from ..view import ViewManager
 from ..view import ViewSettings
+from . import inuse
 from . import locator
 from .locator import NotAWorkspaceError
 from .locator import workspace_path
@@ -296,12 +297,13 @@ class Workspace:
             return None
         detached: list[Path] = []
         try:
-            _, detached_view = Workspace._detach_owned_view(workspace)
-            if detached_view is not None:
-                detached.append(detached_view)
-            detached_workspace = Workspace._workspace_tombstone_for(workspace)
-            workspace.rename(detached_workspace)
-            detached.append(detached_workspace)
+            with inuse.removing(workspace):  # refuses while a canary command or server uses it
+                _, detached_view = Workspace._detach_owned_view(workspace)
+                if detached_view is not None:
+                    detached.append(detached_view)
+                detached_workspace = Workspace._workspace_tombstone_for(workspace)
+                workspace.rename(detached_workspace)
+                detached.append(detached_workspace)
         except Exception:
             pm.done("error")
             raise
@@ -326,12 +328,13 @@ class Workspace:
             pm.done("no workspace found")
             return None
         try:
-            _, detached_view = Workspace._detach_owned_view(workspace)
-            if detached_view is not None:
-                detached.append(detached_view)
-            detached_workspace = Workspace._workspace_tombstone_for(workspace)
-            workspace.rename(detached_workspace)
-            detached.append(detached_workspace)
+            with inuse.removing(workspace):  # refuses while a canary command or server uses it
+                _, detached_view = Workspace._detach_owned_view(workspace)
+                if detached_view is not None:
+                    detached.append(detached_view)
+                detached_workspace = Workspace._workspace_tombstone_for(workspace)
+                workspace.rename(detached_workspace)
+                detached.append(detached_workspace)
         except Exception:
             pm.done("error")
             raise
@@ -519,21 +522,24 @@ class Workspace:
         created_on = metadata.pop("created_on", None)
         return {"tag": tag, "created_on": created_on, "metadata": metadata, "specs": specs}
 
+    def latest_session(self) -> str | None:
+        """The name of the latest session (``refs/latest``), or ``None`` if none has run."""
+        file = self.refs_dir / "latest"
+        if not file.exists():
+            return None
+        # A session's name holds a '.' (fractional seconds): it is the name, not the stem.
+        return (self.refs_dir / file.read_text().strip()).name
+
     def info(self) -> dict[str, Any]:
         """Returns summary information about the workspace.
 
         Returns:
             A dictionary containing root, session count, latest session, and version.
         """
-        latest_session: str | None = None
-        if (self.refs_dir / "latest").exists():
-            link = (self.refs_dir / "latest").read_text().strip()
-            path = self.refs_dir / link
-            latest_session = path.stem
         info = {
             "root": str(self.root),
             "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
-            "latest_session": latest_session,
+            "latest_session": self.latest_session(),
             "tags": self.db.tags,
             "specs": self.db.load_specs(),
             "version": version.__version__,

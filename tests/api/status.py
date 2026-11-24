@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import _canary.api.status as status_api
+import _canary.app.status as status_api
 
 
 @dataclass
@@ -69,7 +69,7 @@ class FakeStatus:
 
 class FakeState:
     def __init__(self, *, phase: str = "done", running: bool = False, done: bool = True):
-        self.phase = SimpleNamespace(value=phase)
+        self.phase = SimpleNamespace(value=phase, name=phase)
         self._running = running
         self._done = done
 
@@ -87,15 +87,18 @@ class FakeTimekeeper:
         submitted: float = 10.0,
         staged: float = 11.0,
         started: float = 12.0,
-        stopped: float = 17.5,
-        finished: float = 18.0,
+        stopped: float | None = None,
+        finished: float | None = None,
         duration: float | None = None,
     ):
+        # Consistent like a real timekeeper: a given duration is the running phase.
+        if stopped is None:
+            stopped = started + duration if duration is not None else 17.5
         self._submitted = submitted
         self._staged = staged
         self._started = started
         self._stopped = stopped
-        self._finished = finished
+        self._finished = finished if finished is not None else stopped + 0.5
         self._duration = duration
 
     def duration(self):
@@ -117,7 +120,9 @@ def make_row(
         "id": id,
         "spec_name": name,
         "spec_fullname": f"suite/{name}",
+        "file_root": "",
         "file_path": "suite/test.pyt",
+        "workspace": name,
         "session": session,
         "status": status,
         "state": state or FakeState(),
@@ -133,11 +138,20 @@ def make_row(
     }
 
 
+@pytest.fixture(autouse=True)
+def workspace(tmp_path, monkeypatch):
+    """Entries are job records, which need the workspace (their paths are relative to it)."""
+    from _canary.workspace.workspace import Workspace
+
+    monkeypatch.chdir(tmp_path)
+    return Workspace.create(tmp_path)
+
+
 def patch_results(status_api, monkeypatch, rows):
     monkeypatch.setattr(status_api, "raw_results", lambda: rows)
 
 
-def test_jobs_returns_json_serializable_entries(monkeypatch):
+def test_jobs_returns_json_serializable_entries(monkeypatch, workspace):
     long_id = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
     rows = {
         long_id: make_row(
@@ -156,10 +170,16 @@ def test_jobs_returns_json_serializable_entries(monkeypatch):
             "full_id": long_id,
             "name": "pass_test",
             "fullname": "suite/pass_test",
+            "file_root": "",
             "file_path": "suite/test.pyt",
+            "exec_path": "pass_test",
+            "exec_dir": str(workspace.root / "sessions" / "session-1" / "pass_test"),
             "session": "session-1",
             "exit_code": 0,
             "phase": "done",
+            "started_at": 12.0,
+            "stopped_at": 17.5,
+            "last_activity": None,
             "running": False,
             "done": True,
             "not_run": False,
@@ -197,8 +217,8 @@ def test_jobs_supports_timekeeper_object(monkeypatch):
     out = status_api.jobs()
 
     assert out[0]["duration"] == 22.0
-    assert out[0]["timings"]["running"] == 5.5
-    assert out[0]["timings"]["total"] == 8.0
+    assert out[0]["timings"]["running"] == 22.0
+    assert out[0]["timings"]["total"] == 24.5  # submitted 10.0 -> finished 34.5
 
 
 def test_jobs_sorts_by_name_by_default(monkeypatch):
@@ -615,3 +635,25 @@ def test_raw_results_returns_application_results(monkeypatch):
     patch_results(status_api, monkeypatch, raw)
 
     assert status_api.raw_results() is raw
+
+
+def test_status_entries_come_from_the_database_alone(monkeypatch, workspace):
+    """Status views must stay fast: no session lock, no batch lock, no job is rebuilt."""
+    from _canary.app import query_helpers
+    from _canary.workspace.session import Session
+
+    def no_file(*args, **kwargs):
+        raise AssertionError("a status listing read a lock file")
+
+    monkeypatch.setattr(query_helpers, "_batch_locks", no_file)
+    monkeypatch.setattr(Session, "load_lock_data", no_file)
+    rows = {
+        "a" * 64: make_row(
+            id="a" * 64, name="one", status=FakeStatus(category="PASS", outcome="PASSED")
+        )
+    }
+    patch_results(status_api, monkeypatch, rows)
+
+    entry = status_api.jobs()[0]
+    assert entry["last_activity"] is None
+    assert entry["exec_dir"] == str(workspace.root / "sessions" / "session-1" / "one")

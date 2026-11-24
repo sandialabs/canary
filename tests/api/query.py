@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import _canary.api.query as query_api
+import _canary.app.query as query_api
 
 
 class FakeDB:
@@ -99,7 +99,7 @@ def patch_converter(query_api, monkeypatch):
             "last_activity": None,
         }
 
-    monkeypatch.setattr(query_api._query_cmd, "_row_to_job_entry", convert)
+    monkeypatch.setattr(query_api, "row_to_job_entry", convert)
 
 
 def patch_session_resolver(query_api, monkeypatch):
@@ -111,7 +111,7 @@ def patch_session_resolver(query_api, monkeypatch):
             return workspace.sessions_dir / "latest"
         return workspace.sessions_dir / session
 
-    monkeypatch.setattr(query_api._query_cmd, "_resolve_session_dir", resolve)
+    monkeypatch.setattr(query_api, "resolve_session_dir", resolve)
 
 
 def write_session(workspace, name, **data):
@@ -285,9 +285,7 @@ def test_failures_aggregates_groups(workspace, monkeypatch):
     ]
 
     monkeypatch.setattr(
-        query_api._query_cmd,
-        "_db_results_for_session",
-        lambda _ws, _session: workspace.db.session_rows["s1"],
+        query_api, "db_results_for_session", lambda _ws, _session: workspace.db.session_rows["s1"]
     )
 
     groups = query_api.failures(session="s1")
@@ -304,9 +302,7 @@ def test_compare_sessions_reports_fixed_new_and_signature_change(workspace, monk
     patch_session_resolver(query_api, monkeypatch)
 
     monkeypatch.setattr(
-        query_api._query_cmd,
-        "_db_results_for_session",
-        lambda _ws, session: workspace.db.session_rows[session],
+        query_api, "db_results_for_session", lambda _ws, session: workspace.db.session_rows[session]
     )
 
     write_session(workspace, "base")
@@ -377,12 +373,12 @@ def test_compare_sessions_reports_fixed_new_and_signature_change(workspace, monk
     ]
 
     monkeypatch.setattr(
-        __import__("_canary.cli.query", fromlist=["failure_signature_for_row"]),
+        __import__("_canary.app.query_helpers", fromlist=["failure_signature_for_row"]),
         "failure_signature_for_row",
         lambda _ws, row, **kwargs: {"signature_normalized": row["status"].reason},
     )
 
-    from _canary.cli.query import _build_compare_row
+    from _canary.app.query_helpers import build_compare_row as _build_compare_row
 
     fixed = _build_compare_row(
         workspace,
@@ -592,7 +588,7 @@ def test_measurements_and_measurement_read_job_lock(workspace, monkeypatch, tmp_
     lockfile = jobdir / "testcase.lock"
     lockfile.write_text(json.dumps({"measurements": {"runtime": 3.5, "iters": 12}}))
 
-    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+    monkeypatch.setattr(query_api, "job_lockfile", lambda ws, jobid: lockfile)
 
     assert query_api.measurements("abc") == {"runtime": 3.5, "iters": 12}
     assert query_api.measurement("abc", "runtime") == 3.5
@@ -608,7 +604,7 @@ def test_environment_reads_env_json(workspace, monkeypatch, tmp_path):
     lockfile.write_text("{}")
     (jobdir / "env.json").write_text(json.dumps({"CUDA_VISIBLE_DEVICES": "0", "PATH": "/bin"}))
 
-    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+    monkeypatch.setattr(query_api, "job_lockfile", lambda ws, jobid: lockfile)
 
     assert query_api.environment("abc") == {"CUDA_VISIBLE_DEVICES": "0", "PATH": "/bin"}
     assert query_api.environment("abc", "CUDA_VISIBLE_DEVICES") == "0"
@@ -623,7 +619,7 @@ def test_environment_missing_env_json_raises(workspace, monkeypatch, tmp_path):
     lockfile = jobdir / "testcase.lock"
     lockfile.write_text("{}")
 
-    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+    monkeypatch.setattr(query_api, "job_lockfile", lambda ws, jobid: lockfile)
 
     with pytest.raises(FileNotFoundError):
         query_api.environment("abc")
@@ -638,7 +634,7 @@ def test_cache_reads_cache_file(workspace, monkeypatch, tmp_path):
     job = SimpleNamespace(id="abc")
     workspace._jobs["abc"] = job
 
-    monkeypatch.setattr(query_api._query_cmd, "_find_cache_path", lambda found: cache_file)
+    monkeypatch.setattr(query_api, "find_cache_path", lambda found: cache_file)
 
     assert query_api.cache("abc") == {"hits": 3}
 
@@ -649,7 +645,7 @@ def test_cache_missing_raises(workspace, monkeypatch):
     job = SimpleNamespace(id="abc")
     workspace._jobs["abc"] = job
 
-    monkeypatch.setattr(query_api._query_cmd, "_find_cache_path", lambda found: None)
+    monkeypatch.setattr(query_api, "find_cache_path", lambda found: None)
 
     with pytest.raises(FileNotFoundError, match="No cache entry"):
         query_api.cache("abc")
@@ -669,7 +665,7 @@ def test_raw_job_lock_value_and_keys(workspace, monkeypatch, tmp_path):
         )
     )
 
-    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+    monkeypatch.setattr(query_api, "job_lockfile", lambda ws, jobid: lockfile)
 
     assert query_api.raw_job_lock("abc")["name"] == "case_a"
     assert query_api.raw_job_value("abc", "measurements.runtime") == 1.2
@@ -737,7 +733,7 @@ def test_measurements_read_the_data_level_of_real_measurement_records(
     lockfile = tmp_path / "testcase.lock"
     lock = {"measurements": {"data": {"loss": 0.2}, "__type__": "_canary.core.job::Measurements"}}
     lockfile.write_text(json.dumps(lock))
-    monkeypatch.setattr(query_api._query_cmd, "_job_lockfile", lambda ws, jobid: lockfile)
+    monkeypatch.setattr(query_api, "job_lockfile", lambda ws, jobid: lockfile)
 
     assert query_api.measurements("abc") == {"loss": 0.2}
     assert query_api.measurement("abc", "loss") == 0.2

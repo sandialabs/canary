@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from ..engine.engine import Engine
@@ -31,14 +32,15 @@ def select(
     Draws candidate specs from every spec in the workspace, or from the specs of
     *from_tag* when given, applies the filters, stores the result under *tag*,
     and returns the selected specs.  Callers that must reject an existing *tag*
-    should check :func:`is_selection` first.
+    should check :func:`is_selection` first.  *prefixes* are paths, relative to
+    the current directory or absolute (spec files are recorded absolute).
 
     Raises:
         ~_canary.workspace.workspace.NotAWorkspaceError: If no workspace exists.
     """
     engine = Engine(Workspace.load())
     filters: dict = dict(
-        prefixes=prefixes,
+        prefixes=[os.path.abspath(p) for p in prefixes] if prefixes else prefixes,
         keyword_exprs=keyword_exprs,
         parameter_expr=parameter_expr,
         owners=owners,

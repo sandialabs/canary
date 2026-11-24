@@ -61,7 +61,7 @@ def test_run_in_subprocess_reruns_and_streams_events(tmp_path):
         # The parent observed the child's job lifecycle on its own bus.
         assert any(name.startswith("job_") for name in seen), seen
         # And the rerun landed in the database.
-        after = {j["id"]: j["status"] for j in list_jobs()}
+        after = {j["id"]: j["status"]["category"] for j in list_jobs()}
     assert all(after[i] == "PASS" for i in ids)
 
 

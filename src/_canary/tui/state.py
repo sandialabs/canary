@@ -5,7 +5,7 @@
 """Pure UI state for the Canary explorer TUI.
 
 This module holds no I/O: it is a small, fully testable state machine over a
-list of :class:`~_canary.app.queries.JobView` rows.  The runner
+list of :class:`~_canary.tui.views.JobView` rows.  The runner
 (:mod:`_canary.tui.app`) feeds it fresh rows from the application query surface
 and translates key presses into method calls; the renderer
 (:mod:`_canary.tui.render`) reads it to draw a frame.
@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from typing import Literal
 
 if TYPE_CHECKING:
-    from ..app.queries import JobView
+    from .views import JobView
 
 
 @dataclass

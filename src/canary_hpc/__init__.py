@@ -18,6 +18,7 @@ from _canary.plugins.user_execspace import add_exec_prefix_option
 from _canary.util.query_data import load_query_data
 from _canary.util.rich import bold
 
+from . import app
 from .argparsing import CANARY_HPC_ALLOW_HYPERTHREADING_ENV
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import env_flag
@@ -240,12 +241,7 @@ Slurm timeout types:\n\n
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.hpc_cmd == "run":
-            hpc_backend = getattr(args, "hpc_backend", None)
-            if hpc_backend is None:
-                raise ValueError("canary hpc run requires --backend")
-            conductor = CanaryHPCConductor(backend=hpc_backend)
-            conductor.register(canary.config.pluginmanager)
-            return conductor.run(args)
+            return app.run(args)
         elif args.hpc_cmd == "info":
             backend: hpc_connect.Backend = hpc_connect.get_backend(
                 args.hpc_backend, **backend_options()
@@ -369,7 +365,7 @@ def fill_hpc_resource_pool(b: str) -> dict[str, Any]:
 
 def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: str) -> "Path":
     """Return the directory for a specific batch, resolving session if needed."""
-    from _canary.cli.query import _resolve_session_dir
+    from _canary.app.query_helpers import resolve_session_dir as _resolve_session_dir
 
     if session_arg is None:
         # Search all sessions for this batch ID prefix.
@@ -391,7 +387,7 @@ def _resolve_batch_dir(workspace: "Any", session_arg: "str | None", batch_id: st
 
 def _exec_query_batch(args: "argparse.Namespace") -> int:
     """Implement ``canary query batch <BATCHID> [path]``."""
-    from _canary.cli.query import _clean
+    from _canary.app.query_helpers import clean as _clean
     from _canary.util.query_data import list_json_object_paths
     from _canary.util.query_data import print_json
     from _canary.util.query_data import print_query_paths
@@ -447,8 +443,8 @@ def _exec_query_batches(args: "argparse.Namespace") -> int:
     """Implement ``canary query batches [--session S] [--where EXPR] [--progress]``."""
     import datetime
 
-    from _canary.cli.query import _parse_where
-    from _canary.cli.query import _resolve_session_dir
+    from _canary.app.query_helpers import parse_where as _parse_where
+    from _canary.app.query_helpers import resolve_session_dir as _resolve_session_dir
     from _canary.util.query_data import print_json
     from _canary.workspace.workspace import Workspace
 
@@ -661,3 +657,11 @@ def default_runner(batch: "TestBatch", backend: hpc_connect.Backend) -> "HPCConn
     from .batchexec import HPCConnectBatchRunner
 
     return HPCConnectBatchRunner(backend)
+
+
+@canary.hookimpl(specname="canary_addendpoint")
+def hpc_endpoints(registry) -> None:
+    """``/canary/hpc/run`` (imported here so plain ``canary`` commands never load pydantic)."""
+    from .endpoint import hpc_run
+
+    registry.register("/canary/hpc/run", hpc_run, lane="work")

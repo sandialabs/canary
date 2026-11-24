@@ -2029,7 +2029,7 @@ def test_query_batch_via_query_command(batch_setup, capsys):
 
 
 def test_parse_where_string_equality():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("status.category==PASS")
     assert pred({"status": {"category": "PASS"}}) is True
@@ -2037,7 +2037,7 @@ def test_parse_where_string_equality():
 
 
 def test_parse_where_string_inequality():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("status.outcome!=FAILED")
     assert pred({"status": {"outcome": "SUCCESS"}}) is True
@@ -2045,7 +2045,7 @@ def test_parse_where_string_inequality():
 
 
 def test_parse_where_numeric_greater_than():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.queue_wait>3600")
     assert pred({"timings": {"queue_wait": 5348.0}}) is True
@@ -2054,7 +2054,7 @@ def test_parse_where_numeric_greater_than():
 
 
 def test_parse_where_numeric_greater_than_or_equal():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.queue_wait>=3600")
     assert pred({"timings": {"queue_wait": 3600.0}}) is True
@@ -2063,7 +2063,7 @@ def test_parse_where_numeric_greater_than_or_equal():
 
 
 def test_parse_where_numeric_less_than():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.running<60")
     assert pred({"timings": {"running": 45.5}}) is True
@@ -2071,7 +2071,7 @@ def test_parse_where_numeric_less_than():
 
 
 def test_parse_where_numeric_less_than_or_equal():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.running<=60")
     assert pred({"timings": {"running": 60.0}}) is True
@@ -2080,7 +2080,7 @@ def test_parse_where_numeric_less_than_or_equal():
 
 def test_parse_where_none_value_ordered_returns_false():
     """None timing values (batch not yet finished) should never pass ordered predicates."""
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     for op in (">", "<", ">=", "<="):
         pred = _parse_where(f"timings.queue_wait{op}3600")
@@ -2090,21 +2090,21 @@ def test_parse_where_none_value_ordered_returns_false():
 
 
 def test_parse_where_none_value_equality_returns_false():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.queue_wait==3600")
     assert pred({"timings": {"queue_wait": None}}) is False
 
 
 def test_parse_where_none_value_inequality_returns_true():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     pred = _parse_where("timings.queue_wait!=3600")
     assert pred({"timings": {"queue_wait": None}}) is True
 
 
 def test_parse_where_invalid_expression_raises():
-    from _canary.cli.query import _parse_where
+    from _canary.app.query_helpers import parse_where as _parse_where
 
     with pytest.raises(ValueError, match="Invalid --where expression"):
         _parse_where("not_valid_expression")
@@ -2426,8 +2426,8 @@ def test_query_compare_detects_fixed_and_regressions(setup, capsys):
             "measurements": {},
             "state": JobState(phase=JobPhase.DONE),
         }
-        original_rows_for_named_session = query_mod._rows_for_named_session
-        query_mod._rows_for_named_session = lambda _ws, session: (
+        original_rows_for_named_session = query_mod.rows_for_named_session
+        query_mod.rows_for_named_session = lambda _ws, session: (
             [base_row] if session == "base" else [new_row, extra_row]
         )
         args = argparse.Namespace(
@@ -2441,7 +2441,7 @@ def test_query_compare_detects_fixed_and_regressions(setup, capsys):
             terse=False,
         )
         rc = _exec_compare(args)
-        query_mod._rows_for_named_session = original_rows_for_named_session
+        query_mod.rows_for_named_session = original_rows_for_named_session
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data["base"] == "base"
@@ -2484,8 +2484,8 @@ def test_query_compare_digest(setup, capsys):
             "measurements": {},
             "state": JobState(phase=JobPhase.DONE),
         }
-        original_rows_for_named_session = query_mod._rows_for_named_session
-        query_mod._rows_for_named_session = lambda _ws, session: (
+        original_rows_for_named_session = query_mod.rows_for_named_session
+        query_mod.rows_for_named_session = lambda _ws, session: (
             [row_a] if session == "base" else [row_b]
         )
         args = argparse.Namespace(
@@ -2499,7 +2499,7 @@ def test_query_compare_digest(setup, capsys):
             terse=False,
         )
         rc = _exec_compare(args)
-        query_mod._rows_for_named_session = original_rows_for_named_session
+        query_mod.rows_for_named_session = original_rows_for_named_session
     assert rc == 0
     lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert len(lines) > 0
@@ -2670,7 +2670,7 @@ def test_query_jobs_terse_outputs_single_line(setup, capsys):
 
 def test_batch_timings_fallback_no_batch_dir(setup):
     """_batch_timings_for_job returns all -1.0 when there is no batches/ directory."""
-    from _canary.cli.query import _batch_timings_for_job
+    from _canary.app.query_helpers import batch_timings_for_job as _batch_timings_for_job
     from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
@@ -2692,7 +2692,7 @@ def test_batch_timings_fallback_with_batch_lock(setup, tmp_path):
     """_batch_timings_for_job returns batch-level timings when a matching batch.lock exists."""
     import json as _json
 
-    from _canary.cli.query import _batch_timings_for_job
+    from _canary.app.query_helpers import batch_timings_for_job as _batch_timings_for_job
     from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
@@ -2838,7 +2838,9 @@ def test_query_jobs_last_activity_from_batch_lock(setup, tmp_path, capsys):
 
 def test_batch_last_activity_no_batch_dir(setup):
     """_batch_last_activity_for_job returns None when no batches/ dir exists."""
-    from _canary.cli.query import _batch_last_activity_for_job
+    from _canary.app.query_helpers import (
+        batch_last_activity_for_job as _batch_last_activity_for_job,
+    )
     from _canary.workspace.workspace import Workspace
 
     with working_dir(setup.results_path), canary.config.override():
@@ -2884,8 +2886,8 @@ def test_watch_loop_exits_when_terminal(setup, capsys):
         from _canary.workspace.workspace import Workspace
 
         workspace = Workspace.load()
-        from _canary.cli.query import _db_results_for_session
-        from _canary.cli.query import _row_to_job_entry
+        from _canary.app.query_helpers import db_results_for_session as _db_results_for_session
+        from _canary.app.query_helpers import row_to_job_entry as _row_to_job_entry
 
         session_dir = workspace.sessions_dir / setup.session.name
         rows = _db_results_for_session(workspace, setup.session.name)
@@ -2907,8 +2909,8 @@ def test_watch_loop_terse_emits_ndjson(setup, capsys):
 
     def fetch():
         workspace = Workspace.load()
-        from _canary.cli.query import _db_results_for_session
-        from _canary.cli.query import _row_to_job_entry
+        from _canary.app.query_helpers import db_results_for_session as _db_results_for_session
+        from _canary.app.query_helpers import row_to_job_entry as _row_to_job_entry
 
         rows = _db_results_for_session(workspace, setup.session.name)
         out = [_row_to_job_entry(workspace, row) for row in rows]
@@ -2932,8 +2934,8 @@ def test_watch_loop_digest_mode(setup, capsys):
 
     def fetch():
         workspace = Workspace.load()
-        from _canary.cli.query import _db_results_for_session
-        from _canary.cli.query import _row_to_job_entry
+        from _canary.app.query_helpers import db_results_for_session as _db_results_for_session
+        from _canary.app.query_helpers import row_to_job_entry as _row_to_job_entry
 
         rows = _db_results_for_session(workspace, setup.session.name)
         out = [_row_to_job_entry(workspace, row) for row in rows]

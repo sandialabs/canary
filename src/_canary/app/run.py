@@ -20,9 +20,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 
+if TYPE_CHECKING:
+    import argparse
+
+from .. import config
 from .. import rerun
 from ..engine.engine import Engine
 from ..util import logging
@@ -30,6 +35,8 @@ from ..util.string import pluralize
 from ..view import ViewSettings
 from ..workspace.workspace import NotAWorkspaceError
 from ..workspace.workspace import Workspace
+from .pathspec import RequestNode
+from .pathspec import TagRequest
 
 logger = logging.get_logger(__name__)
 
@@ -178,3 +185,35 @@ def run(request: Any, options: RunOptions | None = None) -> int:
     only = resolve_only(options.only, kind)
     session = Engine(workspace).run(specs, inplace=inplace, only=only, view_t=options.view)
     return session.returncode
+
+
+def run_from_options(args: "argparse.Namespace") -> int:
+    """Run what the options object *args* asks for (see ``Config.getoption``).
+
+    *args* is the namespace every interface fills: ``canary run`` from its command line,
+    the API from a request.  Builds the run request and :class:`RunOptions` from it and
+    calls :func:`run`.
+    """
+    request: RequestNode
+    if req := getattr(args, "request", None):
+        request = req
+    else:
+        request = TagRequest(value=config.get("run:default_tag"))
+    if isinstance(request, TagRequest) and not request.value:
+        request = TagRequest(value=config.get("run:default_tag"))
+
+    view = ViewSettings(**args.view) if args.view else None
+    options = RunOptions(
+        tag=args.tag,
+        on_options=args.on_options,
+        keyword_exprs=args.keyword_exprs,
+        parameter_expr=args.parameter_expr,
+        owners=args.owners,
+        regex=args.regex_filter,
+        only=args.only,
+        view=view,
+        parsing_policy=args.parsing_policy or "pedantic",
+        wipe_workspace=bool(args.wipe_workspace),
+        work_tree=args.work_tree,
+    )
+    return run(request, options)

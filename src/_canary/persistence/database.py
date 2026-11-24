@@ -95,6 +95,11 @@ class WorkspaceDatabase:
         assert self._connection is not None
         return self._connection
 
+    def interrupt(self) -> None:
+        """Abort the statement running on this connection, if any (safe from any thread)."""
+        if self._connection is not None:
+            self._connection.interrupt()
+
     def close(self) -> None:
         """Close the SQLite connection if it is open."""
         if self._connection is not None:
@@ -763,7 +768,9 @@ class WorkspaceDatabase:
             "outcomes": {outcome: count for outcome, count in outcome_rows},
         }
 
-    def select(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+    def select(
+        self, sql: str, params: tuple[Any, ...] = (), *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a read-only ``SELECT`` statement and return rows as dicts.
 
         Only ``SELECT`` statements are permitted; any other statement raises
@@ -773,6 +780,7 @@ class WorkspaceDatabase:
         Args:
             sql: A single ``SELECT`` statement.
             params: Optional bound parameters for the statement.
+            limit: Return at most this many rows (the rest are never fetched).
 
         Raises:
             ValueError: If *sql* is not a ``SELECT`` statement.
@@ -782,7 +790,8 @@ class WorkspaceDatabase:
             raise ValueError("only SELECT statements are permitted")
         cursor = self.connection.execute(sql, params)
         columns = [c[0] for c in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        rows = cursor.fetchall() if limit is None else cursor.fetchmany(limit)
+        return [dict(zip(columns, row)) for row in rows]
 
     def _reconstruct_results(self, row: tuple[Any, ...]) -> dict[str, Any]:
         """Convert a raw ``results`` table row into a structured result dict.

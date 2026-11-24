@@ -271,8 +271,8 @@
         "safety": "canary parses canaryconf.py with ast at generation time to detect the functions; user code is NOT executed during generation."
       },
       "scheduling_model": {
-        "setup_edge": "Every governed test gains a dependency on the setup job with condition on_success — the test will not run (is BLOCKED) if setup fails.",
-        "teardown_edge": "The teardown job depends on every governed test with condition always — teardown runs once all governed tests finish, whatever their outcome.",
+        "setup_edge": "Every governed test gains a dependency on the setup job with condition on_success \u2014 the test will not run (is BLOCKED) if setup fails.",
+        "teardown_edge": "The teardown job depends on every governed test with condition always \u2014 teardown runs once all governed tests finish, whatever their outcome.",
         "shared": "One setup job and one teardown job are created per canaryconf.py, shared by all governed tests (not one pair per test).",
         "scope": "A canaryconf.py in a subdirectory governs only that subtree. A canaryconf.py in an ancestor directory is inherited by tests in descendant directories."
       },
@@ -289,9 +289,9 @@
       },
       "example": "# tests/integration/canaryconf.py\nimport canary\n\ndef canary_setup(ctx):\n    # runs before every test in tests/integration/ and below\n    ctx  # TestInstance for the setup job\n    # ... prepare shared inputs, start a service, stage data ...\n\ndef canary_teardown(ctx):\n    # runs after all governed tests finish (even on failure)\n    # ... tear down the service, clean shared state ...\n",
       "common_mistakes": [
-        "Expecting one setup/teardown pair per test — there is one shared pair per canaryconf.py.",
-        "Expecting teardown to be skipped when a governed test fails — teardown uses an always edge and still runs.",
-        "Putting per-test fixture logic in canaryconf.py — it is directory-scoped and shared, not per-test.",
+        "Expecting one setup/teardown pair per test \u2014 there is one shared pair per canaryconf.py.",
+        "Expecting teardown to be skipped when a governed test fails \u2014 teardown uses an always edge and still runs.",
+        "Putting per-test fixture logic in canaryconf.py \u2014 it is directory-scoped and shared, not per-test.",
         "Forgetting that a canaryconf.py governs the whole subtree beneath it, not just its own directory."
       ]
     },
@@ -325,7 +325,7 @@
             "--list": "List immediate child keys at the selected path."
           },
           "env_query": {
-            "summary": "Every job workspace contains an env.json snapshot of the exact environment the test subprocess inherited. Use 'env' as the path argument to query it — works identically to the 'measurements' path.",
+            "summary": "Every job workspace contains an env.json snapshot of the exact environment the test subprocess inherited. Use 'env' as the path argument to query it \u2014 works identically to the 'measurements' path.",
             "written_by": "SubprocessLauncher.context in _canary/launcher.py, immediately after job.set_runtime_env() injects the job's variables into os.environ and before the subprocess starts. Written for all backends: local, HPC child process, Flux.",
             "contents": "Plain {VAR: value} JSON object. Includes all inherited env vars plus CANARY_* vars, PATH/PYTHONPATH with workspace prepended, resource vars (CANARY_CPU_IDS etc.), and any spec-declared environment keys.",
             "note": "Kept as a sidecar file (not inlined into testcase.lock) so the lock file stays compact and grep-based access remains fast."
@@ -349,7 +349,7 @@
           "flags": {
             "SESSION": "Session name, prefix, or \"latest\".",
             "path": "JSON path expression (only without --expand-jobs).",
-            "--expand-jobs": "Join session job_ids to DB result rows; emit JSON array with id, name, exec_dir, file_path, status, timings, session.",
+            "--expand-jobs": "Join session job_ids to DB result rows; emit JSON array with id, name, file_root, file_path, exec_path, exec_dir, status, timings, session.",
             "--digest": "Print a compact one-line-per-job summary: name CATEGORY (implies --expand-jobs). Combine with --where to filter.",
             "--where": "Filter predicate for --expand-jobs and --digest. String: status.outcome==FAILED or status.category==FAIL. Numeric: timings.running>60. Operators: == != > < >= <=. None values: ordered ops return False, != returns True.",
             "--clean": "Strip __type__ wrappers.",
@@ -404,9 +404,12 @@
             "id",
             "name",
             "fullname",
+            "file_root",
             "file_path",
+            "exec_path",
             "exec_dir",
             "session",
+            "phase",
             "exit_code",
             "status (category, outcome, reason)",
             "timings (pending, setup, running, teardown, total)",
@@ -417,7 +420,7 @@
             "logs (workspace log files with path, size, mtime)"
           ],
           "timings_note": "For local worker jobs, timings reflect the fine-grained per-phase lifecycle. For HPC one-job-per-batch Slurm jobs (where the child job's own timekeeper has no phase data), timings fall back to the owning batch.lock: pending=queue_wait, running=batch_compute_wall, total=batch_total_wall. setup and teardown are -1.0 in this case.",
-          "started_stopped_note": "started_at and stopped_at are absolute unix epoch floats. For local workers they come from timekeeper._started/_stopped. For HPC batch jobs they fall back to the batch Slurm start/stop times. Use these for overlap and concurrency analysis — e.g. to find jobs that were running simultaneously, filter where started_at <= T <= stopped_at for a given epoch T.",
+          "started_stopped_note": "started_at and stopped_at are absolute unix epoch floats. For local workers they come from timekeeper._started/_stopped. For HPC batch jobs they fall back to the batch Slurm start/stop times. Use these for overlap and concurrency analysis \u2014 e.g. to find jobs that were running simultaneously, filter where started_at <= T <= stopped_at for a given epoch T.",
           "refinement_a_note": "Default cross-session behaviour returns the LATEST run of each distinct job (keyed by spec_id). Each record carries a session provenance field. Use --session S to scope to one session (equivalent to session --expand-jobs).",
           "refinement_b_note": "Use canary query job JOBID --all-runs for the per-job full run history across sessions.",
           "examples": [
@@ -432,7 +435,10 @@
             "canary query jobs --watch=30",
             "canary query jobs --session latest --watch"
           ],
-          "last_activity_note": "last_activity is a unix epoch float from the owning batch.lock, updated by the HPC polling loop each check_interval (30-300 s) from the mtime of the batch stdout file. It advances as long as the job is writing output and stops advancing if the job hangs. null for local-worker jobs (no owning batch) or when the batch has not yet started writing. NON-GOAL: this is I/O liveness, NOT simulation progress — canary does not parse application output."
+          "last_activity_note": "last_activity is a unix epoch float from the owning batch.lock, updated by the HPC polling loop each check_interval (30-300 s) from the mtime of the batch stdout file. It advances as long as the job is writing output and stops advancing if the job hangs. null for local-worker jobs (no owning batch) or when the batch has not yet started writing. NON-GOAL: this is I/O liveness, NOT simulation progress \u2014 canary does not parse application output.",
+          "notes": [
+            "Paths are canary's own: file_root is the generator's absolute root, file_path the generator's path relative to it (the session directory and the view use the same relative layout), exec_path the job's directory relative to the session directory (default: file_path's directory plus the job name), exec_dir that directory, absolute. A CMake test's process runs in the build's binary directory (its ctest_exec_dir attribute); exec_dir still holds its canary logs."
+          ]
         },
         "failures": {
           "summary": "Group failed and diffed jobs by normalized log-derived failure signature.",
@@ -512,12 +518,12 @@
             "SELECT ...": "Execute a read-only SQL SELECT and return JSON rows."
           },
           "tables": {
-            "specs": "(spec_id, data) — full serialised JobSpec blobs.",
-            "specs_meta": "(spec_id, source, view) — fast path lookup.",
-            "spec_deps": "(spec_id, dep_id) — dependency edges.",
+            "specs": "(spec_id, data) \u2014 full serialised JobSpec blobs.",
+            "specs_meta": "(spec_id, source, view) \u2014 fast path lookup.",
+            "spec_deps": "(spec_id, dep_id) \u2014 dependency edges.",
             "results": "(spec_id, spec_name, spec_fullname, file_root, file_path, session, workspace, job_state, status_category, status_outcome, status_reason, status_code, timekeeper, measurements)",
-            "selections": "(tag, spec_id) — named tag sets.",
-            "selection_meta": "(tag, data) — tag creation metadata."
+            "selections": "(tag, spec_id) \u2014 named tag sets.",
+            "selection_meta": "(tag, data) \u2014 tag creation metadata."
           },
           "examples": [
             "canary query db stats",
@@ -598,9 +604,9 @@
         },
         "hookimpl_semantics": {
           "firstresult_hooks": "When firstresult=True, only the first non-None return value is used. YOUR implementation REPLACES the built-in. Use this only when you intend to fully replace default behavior.",
-          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runteststart and canary_runtest_finish are firstresult=False — every implementation runs, so just return None. The built-in default runs first (tryfirst); use @canary.hookimpl(trylast=True) if you must run after all other implementations.",
-          "trylast": "@canary.hookimpl(trylast=True) — your impl runs after all others (safe for additive post-processing).",
-          "tryfirst": "@canary.hookimpl(tryfirst=True) — your impl runs before all others."
+          "additive_hooks": "When firstresult=False (no decorator arg), ALL implementations run. YOUR implementation RUNS ALONGSIDE the built-in. canary_runteststart and canary_runtest_finish are firstresult=False \u2014 every implementation runs, so just return None. The built-in default runs first (tryfirst); use @canary.hookimpl(trylast=True) if you must run after all other implementations.",
+          "trylast": "@canary.hookimpl(trylast=True) \u2014 your impl runs after all others (safe for additive post-processing).",
+          "tryfirst": "@canary.hookimpl(tryfirst=True) \u2014 your impl runs before all others."
         },
         "canary_runtest_finish_recipe": {
           "firstresult": false,
@@ -682,7 +688,7 @@
       },
       "generation": {
         "canary_collectstart": "Register job generator classes with the collector.",
-        "canary_generate_modifyitems": "Inspect or mutate generated JobSpecs before they are stored or run. The builtin canaryconf_impl plugin uses this hook to inject directory-scoped setup/teardown jobs from canaryconf.py — see the directory_fixtures capability.",
+        "canary_generate_modifyitems": "Inspect or mutate generated JobSpecs before they are stored or run. The builtin canaryconf_impl plugin uses this hook to inject directory-scoped setup/teardown jobs from canaryconf.py \u2014 see the directory_fixtures capability.",
         "canary_generate_report": "Report generation results."
       },
       "execution": {
@@ -879,7 +885,7 @@
         ]
       },
       "status": {
-        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (≤20 jobs). Use --all to force full table; --failed for failures-only.",
+        "purpose": "Print test result summary. Use --json for machine-readable output. Always prints a one-line summary. Auto-expands to full table for small runs (\u226420 jobs). Use --all to force full table; --failed for failures-only.",
         "typical": [
           "canary status",
           "canary status --all",
@@ -902,7 +908,7 @@
         },
         "behavior": {
           "summary_line": "Always printed. Format: 'N jobs: X passed, Y failed, Z timeout'. Green on all-pass.",
-          "small_run_auto_expand": "When total jobs ≤ 20 (and --failed not set), the full table is shown automatically.",
+          "small_run_auto_expand": "When total jobs \u2264 20 (and --failed not set), the full table is shown automatically.",
           "large_run_default": "When total jobs > 20, only non-pass jobs are shown (equivalent to -r dftns).",
           "never_empty": "Output is never empty. When everything passes, only the summary line is printed."
         },
@@ -922,11 +928,11 @@
           "reason": "str or null"
         },
         "timings_object": {
-          "pending": "submitted→staged",
-          "setup": "staged→started",
-          "running": "started→stopped",
-          "teardown": "stopped→finished",
-          "total": "submitted→finished"
+          "pending": "submitted\u2192staged",
+          "setup": "staged\u2192started",
+          "running": "started\u2192stopped",
+          "teardown": "stopped\u2192finished",
+          "total": "submitted\u2192finished"
         }
       },
       "info": {
@@ -996,11 +1002,11 @@
         "_canary.api.run.run(PATH) runs in-process but does not load canaryhooks.py; use the canary run CLI when hooks must fire. A script that calls it needs an if __name__ == '__main__': guard."
       ],
       "server": [
-        "A workspace may have a command server (canary server start on the machine that does the work). Check with canary server status --json.",
-        "Agents submit with canary server post '{\"command\": \"run\", \"args\": [...]}' (prints {\"id\": ...}) and follow up with canary server get/wait/cancel ID.",
-        "Humans use canary --connect=WHERE COMMAND ARGS, which queues the request and returns its id; WHERE starts the workspace search ('.' = here).",
-        "Requests run in the server's environment as of server start; nothing from the client's is carried (post an explicit \"env\" to add variables).",
-        "Requests run one at a time. Details: canary query -c ext.server, skill server.canary-server."
+        "A workspace may have a request server (canary server start on the machine that does the work). It is running while .canary/var/server/server.json exists and its beat changes.",
+        "Callers need no canary: .canary/share/carl POST file://<workspace>/canary/run -d '{...}' submits, waits and prints the result (state, status_code, data.exit_code); without carl, write inbox/<id>.json.tmp, rename it to <id>.json, and wait for requests/<id>/result.json.",
+        "Work requests run one at a time; reads (/canary/status, /canary/query/*) answer at once. /canary/schema describes every request body; see ext.server for the protocol.",
+        "Requests run in the server's environment as of server start; nothing from the caller's is carried (an envelope's \"env\" adds variables).",
+        "Details: canary query -c ext.server, skill server.canary-server."
       ]
     },
     "apis": {

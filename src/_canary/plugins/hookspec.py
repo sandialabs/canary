@@ -11,6 +11,7 @@ from typing import Type
 import pluggy
 
 if TYPE_CHECKING:
+    from ..api.dispatch import EndpointRegistry
     from ..cli.base import CanarySubcommand
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
@@ -103,6 +104,30 @@ def canary_addcommand(parser: "Parser") -> None:
        def canary_addcommand(parser: canary.Parser):
            parser.add_command(MyCommand())
 
+    """
+
+
+@hookspec
+def canary_addendpoint(registry: "EndpointRegistry") -> None:
+    """Register API endpoints, as :func:`canary_addcommand` registers commands.
+
+    Called whenever a server (the request server today, HTTP later) or a worker builds
+    its routes.  Register each endpoint with
+    ``registry.register(path, func, lane="read" | "work")``.  *func* takes
+    ``(request, ctx)``: its ``request`` annotation, a pydantic model, is the body;
+    ``ctx`` is a :class:`~_canary.api.dispatch.Context`.  A *read* returns the result's
+    data and must not write; a *work* endpoint runs in its own process, one at a time.
+
+    Import handler modules inside the implementation, so ordinary commands stay fast::
+
+        @hookimpl(specname="canary_addendpoint")
+        def my_endpoints(registry):
+            from .endpoints import report
+
+            registry.register("/myplugin/report", report)
+
+    .. note::
+        This hook is incompatible with ``hookwrapper=True``.
     """
 
 
@@ -351,30 +376,6 @@ def canary_skills() -> dict[str, Any] | None:
 
     Return ``None`` if the plugin does not contribute skills.
     """
-
-
-@hookspec(firstresult=True)
-def canary_invoke_command(
-    command: "CanarySubcommand", args: argparse.Namespace, argv: list[str]
-) -> int:
-    """Run the parsed *command* and return its exit code.
-
-    ``main()`` calls this once per invocation, after configuration.  The built-in
-    implementation (``trylast``) runs the command in this process, profiled under
-    ``--canary-profile``.  A plugin can run the command somewhere else instead -- for
-    example ``canary_server`` submits it to the workspace's server when ``--server``
-    is given -- by returning the exit code; returning ``None`` falls through to the
-    built-in.
-
-    Args:
-        command: The subcommand selected on the command line.
-        args: The parsed command line.
-        argv: The raw command-line arguments (without the program name).
-
-    Returns:
-        The exit code.
-    """
-    raise NotImplementedError
 
 
 @hookspec

@@ -156,7 +156,7 @@ Command Examples
                               help="Session to report on")
 
        def execute(self, args):
-           from _canary.api import query
+           from _canary.app import query
 
            # name, argv, start/finish times, returncode and outcome counts (a dict)
            session = query.session(args.session)
@@ -218,7 +218,7 @@ Command Integration
 
 .. code-block:: python
 
-   from _canary.api import query
+   from _canary.app import query
 
    workspace = canary.Workspace.load()
    jobs = workspace.load_jobs()              # latest result of each job

@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Application read-model queries for interfaces (TUI/GUI/CLI).
+"""Application read-model queries for interfaces (TUI/GUI/CLI/API).
 
-These functions project the workspace's persisted result records into plain,
-render-ready dictionaries (:data:`JobView`) so that an interface never has to
-touch the database, reconstruct domain objects, or know Canary's internal
-types.  This keeps the business logic in the application layer and the
+These functions project the workspace's persisted results into the one job record
+(:data:`JobRecord`) so that an interface never has to touch the database, reconstruct
+domain objects, or know Canary's internal types; an interface derives its own display
+fields from it (the TUI's :class:`~_canary.tui.views.JobView`).  This keeps the business logic in the application layer and the
 interfaces as thin adapters (see the redesign's interface architecture: CLI,
 TUI, GUI, and REST all sit on the same ``canary.app`` surface).
 """
@@ -19,133 +19,89 @@ from typing import Any
 from typing import TypedDict
 
 from ..workspace.workspace import Workspace
+from .query_helpers import row_to_job_entry
+from .query_helpers import spec_to_job_entry
 
 __all__ = [
-    "JobView",
+    "JobRecord",
     "WorkspaceSummary",
     "job_history",
     "job_log",
     "list_jobs",
-    "status_counts",
+    "session_jobs",
     "workspace_summary",
 ]
 
 
-class JobView(TypedDict):
-    """A flat, render-ready projection of a job's latest result.
+JobRecord = dict[str, Any]
+"""The one job record every interface shows (see :func:`.query_helpers.row_to_job_entry`).
 
-    Every value is a primitive (``str``/``float``/``int``) so interfaces can
-    display it directly without importing any ``_canary`` type.
+``id``, ``name``, ``fullname``, ``file_path`` and ``exec_dir`` (relative to the workspace's
+anchor when under it), ``session``, ``phase``, ``exit_code``, ``status`` (``category``,
+``outcome``, ``reason``), ``timings``, ``duration``, ``started_at``, ``stopped_at`` and
+``last_activity``.  A collected spec with no result yet has category ``NOTRUN``, an empty
+``session`` and no timings.
+"""
+
+
+def job_history(spec_id: str, start: Path | str | None = None) -> list[JobRecord]:
+    """Every result recorded for *spec_id*, oldest first.
+
+    Args:
+        spec_id: The spec ID (or a prefix) to get history for
+        start: Optional workspace root or start path for workspace search
     """
+    ws = Workspace.load(start) if start else Workspace.load()
+    cache: dict = {}
+    return [row_to_job_entry(ws, r, cache) for r in ws.db.get_result_history(spec_id)]
 
-    id: str
-    short_id: str
-    name: str
-    fullname: str
-    file_path: str
-    """Absolute path to the test's source file (``file_root/file_path``).
 
-    Stored split in the DB (a scan root plus a path relative to it), but joined
-    here so interfaces get a path they can open or display directly, independent
-    of the process's current working directory.
+def session_jobs(session: str, start: Path | str | None = None) -> list[JobRecord]:
+    """Every result recorded in *session*, ordered by name.
+
+    Args:
+        session: The session's name
+        start: Optional workspace root or start path for workspace search
     """
-    phase: str
-    status: str
-    status_label: str
-    status_markup: str
-    status_glyph: str
-    category: str
-    outcome: str
-    reason: str
-    duration: float
-    session: str
+    ws = Workspace.load(start) if start else Workspace.load()
+    cache: dict = {}
+    return [row_to_job_entry(ws, r, cache) for r in ws.db.get_results_for_session(session)]
 
 
-def _spec_view(spec: Any) -> JobView:
-    """Convert a loaded-but-unrun JobSpec into a renderable JobView."""
-    return JobView(
-        id=spec.id,
-        short_id=spec.id[:8],
-        name=spec.name,
-        fullname=spec.fullname,
-        file_path=str(spec.file),
-        phase="",
-        status="NOTRUN",
-        status_label="NOTRUN",
-        status_markup="[dim]NOTRUN[/]",
-        status_glyph="○",
-        category="NOTRUN",
-        outcome="",
-        reason="not run yet",
-        duration=0.0,
-        session="",
-    )
+def list_jobs(
+    ids: list[str] | None = None,
+    include_upstreams: bool = False,
+    start: Path | str | None = None,
+    *,
+    details: bool = False,
+) -> list[JobRecord]:
+    """The latest result of every collected spec (or of *ids*), ordered by name.
 
+    Specs that were collected but never ran are included (category ``NOTRUN``) so
+    interfaces can select and launch them.
 
-def _job_view(result: dict[str, Any]) -> JobView:
-    """Convert one ``get_results`` record into a :class:`JobView`."""
-    status = result["status"]
-    state = result["state"]
-    timekeeper = result["timekeeper"]
-    try:
-        duration = float(timekeeper.total())
-    except Exception:
-        duration = 0.0
-    if duration < 0:
-        duration = 0.0
-    category = getattr(status.category, "value", "") or ""
-    outcome = getattr(getattr(status, "outcome", None), "name", "") or ""
-    spec_id = result["id"]
-    # ``file_path`` is stored relative to ``file_root``; join them so the view
-    # carries an absolute path openable regardless of the caller's CWD.
-    file_root = result.get("file_root") or ""
-    rel_path = result.get("file_path") or ""
-    abs_path = str(Path(file_root) / rel_path) if file_root else str(rel_path)
-    return JobView(
-        id=spec_id,
-        short_id=spec_id[:8],
-        name=result["spec_name"],
-        fullname=result["spec_fullname"],
-        file_path=abs_path,
-        phase=state.phase.name,
-        status=category,
-        status_label=status.display_name(),
-        status_markup=status.display_name(style="rich"),
-        status_glyph=status.glyph(),
-        category=category,
-        outcome=outcome,
-        reason=status.reason or "",
-        duration=duration,
-        session=str(result["session"]),
-    )
-
-
-def job_history(spec_id: str) -> list[JobView]:
-    """Return every historical result for *spec_id* as :class:`JobView`, oldest first."""
-    return [_job_view(r) for r in Workspace.load().db.get_result_history(spec_id)]
-
-
-def list_jobs(ids: list[str] | None = None, include_upstreams: bool = False) -> list[JobView]:
-    """Return renderable rows for loaded specs in the current workspace.
-
-    Specs that have a latest result are projected from that result. Specs that
-    have been loaded/discovered but never run are still returned as NOTRUN rows
-    so interfaces can select and launch them.
+    Args:
+        ids: Optional list of spec IDs to filter to
+        include_upstreams: Whether to include upstream dependencies
+        start: Optional workspace root or start path for workspace search
+        details: Read each HPC session's batch locks for batch timings and
+            ``last_activity`` (``canary query``'s detail).  Off by default: the
+            listing then comes from the database alone, fast enough for status views.
     """
-    db = Workspace.load().db
+    ws = Workspace.load(start) if start else Workspace.load()
+    db = ws.db
     specs = db.load_specs(ids, include_upstreams=include_upstreams)
     results = db.get_results(ids, include_upstreams=include_upstreams)
-
-    views: list[JobView] = []
+    cache: dict = {}
+    records: list[JobRecord] = []
     for spec in specs:
         result = results.get(spec.id)
         if result is not None:
-            views.append(_job_view(result))
+            records.append(row_to_job_entry(ws, result, cache, details=details))
         else:
-            views.append(_spec_view(spec))
-
-    views.sort(key=lambda v: (v["name"], v["short_id"]))
-    return views
+            records.append(spec_to_job_entry(ws, spec))
+    records.sort(key=lambda r: (r["name"], r["id"]))
+    return records
 
 
 def job_log(spec_id: str, *, stream: str = "stdout") -> str:
@@ -196,12 +152,3 @@ def workspace_summary() -> WorkspaceSummary:
         tags=list(info.get("tags", []) or []),
         version=str(info.get("version", "")),
     )
-
-
-def status_counts(views: list[JobView]) -> dict[str, int]:
-    """Tally :class:`JobView` rows by status category (for a summary line)."""
-    counts: dict[str, int] = {}
-    for v in views:
-        key = v["status"] or "UNKNOWN"
-        counts[key] = counts.get(key, 0) + 1
-    return counts

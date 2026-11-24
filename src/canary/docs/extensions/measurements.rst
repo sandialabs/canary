@@ -190,7 +190,7 @@ the workspace in the current directory):
 
 .. code-block:: python
 
-   from _canary.api import query
+   from _canary.app import query
 
    for row in query.measurement_table(key="accuracy"):  # latest session; session=None for all
        if row["value"] > 0.95:
@@ -330,7 +330,7 @@ Measurement Troubleshooting
 - Does the hook take an argument named ``case`` (or ``session``)?
 - Was the measurement added in a hook rather than inside the test process?
 - Was the run started with the ``canary run`` command?  The in-process
-  ``_canary.api.run.run`` does not load ``canaryhooks.py``.
+  ``_canary.app.run_request.run`` does not load ``canaryhooks.py``.
 - Session measurements have no ``data`` level: ``measurements.NAME``.
 - Inspect one job directly with ``canary query job JOB_ID measurements``.
 

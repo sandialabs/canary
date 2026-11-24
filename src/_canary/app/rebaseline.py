@@ -22,6 +22,7 @@ from .. import config
 from ..core.execspace import ExecutionSpace
 from ..core.rules import KeywordRule
 from ..util import logging
+from ..workspace import inuse
 from ..workspace.workspace import Workspace
 
 if TYPE_CHECKING:
@@ -30,7 +31,11 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def rebaseline(target: str | Sequence[str] = ".", keyword_exprs: list[str] | None = None) -> int:
+def rebaseline(
+    target: str | Sequence[str] = ".",
+    keyword_exprs: list[str] | None = None,
+    start: Path | str | None = None,
+) -> int:
     """Rebaseline the jobs selected by *target*, filtered by *keyword_exprs*.
 
     Opens the current workspace, resolves every target into jobs, applies the
@@ -44,6 +49,7 @@ def rebaseline(target: str | Sequence[str] = ".", keyword_exprs: list[str] | Non
             id/name, or a sequence of them.  An empty sequence selects nothing.
         keyword_exprs: Optional keyword expressions restricting which jobs are
             rebaselined.
+        start: Optional workspace root or start path for workspace search
 
     Returns:
         The number of jobs rebaselined.
@@ -53,16 +59,17 @@ def rebaseline(target: str | Sequence[str] = ".", keyword_exprs: list[str] | Non
         # An explicitly empty selection means "nothing", never "everything".
         logger.warning("No jobs selected for rebaseline")
         return 0
-    workspace = Workspace.load()
+    workspace = Workspace.load(start) if start else Workspace.load()
     jobs = resolve_rebaseline_targets(workspace, targets, keyword_exprs=keyword_exprs)
 
     if not jobs:
         logger.warning("No jobs selected for rebaseline")
         return 0
 
-    for job in jobs:
-        logger.info(f"[bold]Rebaselining[/] {job.display_name(style='rich', resolve=True)}")
-        config.pluginmanager.hook.canary_runtest_rebaseline(case=job)
+    with inuse.using(workspace.root):
+        for job in jobs:
+            logger.info(f"[bold]Rebaselining[/] {job.display_name(style='rich', resolve=True)}")
+            config.pluginmanager.hook.canary_runtest_rebaseline(case=job)
 
     logger.info(f"[bold]Rebaselined[/] {len(jobs)} job(s)")
     return len(jobs)

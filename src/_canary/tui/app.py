@@ -35,6 +35,7 @@ from rich.live import Live
 
 from ..app import queries
 from ..events import get_event_bus
+from . import views
 from .progress import RunProgress
 from .render import TABLE_FRAME_ROWS
 from .render import measure_height
@@ -47,11 +48,11 @@ from .render import render_run_progress
 from .state import ExplorerState
 
 if TYPE_CHECKING:
-    from ..app.queries import JobView
     from ..app.queries import WorkspaceSummary
     from ..app.run_subprocess import RunHandle
     from ..events import Event
     from ..events import EventBus
+    from .views import JobView
 
 
 class ExplorerModel:
@@ -111,7 +112,7 @@ class ExplorerModel:
 
     # These thin wrappers exist so tests can subclass/patch the data source.
     def fetch_jobs(self) -> "list[JobView]":
-        return queries.list_jobs()
+        return views.list_job_views()
 
     def fetch_summary(self) -> "WorkspaceSummary":
         return queries.workspace_summary()
@@ -153,7 +154,7 @@ class ExplorerModel:
         return st.update_log(text)
 
     def counts(self) -> dict[str, int]:
-        return queries.status_counts(self.state.jobs)
+        return views.status_counts(self.state.jobs)
 
     def start_rerun(self, spec_ids: list[str]) -> "RunHandle":
         """Start an in-place rerun of *spec_ids* in a child process.

@@ -15,7 +15,7 @@ authors = [
 ]
 # The version is a plain, static string of the form YY.M.D (year minus 2000).
 # It is maintained by `canary pre-commit`
-version = "26.11.20"
+version = "26.11.24"
 requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 6 - Mature",
@@ -39,6 +39,7 @@ dependencies = [
     "hpc-connect>=26.11.16",
     "pluggy>=1.5",
     "psutil>=5.9",
+    "pydantic>=2",
     "pyyaml>=6.0",
     "schema>=0.7.5",
     "rich>=13.0",
@@ -77,14 +78,13 @@ canary_flux = "canary_flux"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
 canary_pyt = "canary_pyt"
-canary_server = "canary_server"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.package-data]
-_canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg"]
+_canary = ["py.typed", "reporters/templates/html/style.css", "reporters/templates/html/canary.svg", "service/fs/carl.sh"]
 canary = ["py.typed", "docs/**", "data/*.json", "data/agent/*.md.in"]
 canary_amd = ["docs/**", "docs/.canary-ext-docs"]
 canary_cdash = ["data/*.json", "docs/**", "docs/.canary-ext-docs", "validators/*.xsd"]
@@ -96,7 +96,6 @@ canary_gitlab = ["data/*.json"]
 canary_hpc = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_nvidia = ["docs/**", "docs/.canary-ext-docs"]
 canary_pyt = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
-canary_server = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 canary_vvtest = ["data/*.json", "docs/**", "docs/.canary-ext-docs"]
 
 [tool.ruff]
@@ -143,7 +142,6 @@ testpaths = [
     "src/canary_hpc/tests",
     "src/canary_nvidia/tests",
     "src/canary_pyt/tests",
-    "src/canary_server/tests",
     "src/canary_vvtest/tests",
 ]
 norecursedirs = "mock data generators"
@@ -175,7 +173,6 @@ source = [
     "canary_hpc",
     "canary_nvidia",
     "canary_pyt",
-    "canary_server",
     "canary_vvtest",
 ]
 command_line = """-m pytest --import-mode=importlib
@@ -190,7 +187,6 @@ command_line = """-m pytest --import-mode=importlib
     ./src/canary_hpc/tests
     ./src/canary_nvidia/tests
     ./src/canary_pyt/tests
-    ./src/canary_server/tests
     ./src/canary_vvtest/tests"""
 
 [tool.coverage.html]
@@ -331,7 +327,6 @@ known_first_party = [
     "canary_hpc",
     "canary_nvidia",
     "canary_pyt",
-    "canary_server",
     "canary_vvtest",
 ]
 ignore = ["DEP002", "DEP003", "DEP004"]

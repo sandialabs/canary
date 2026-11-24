@@ -75,3 +75,22 @@ def test_delete_selection_removes_tag(tmp_path, monkeypatch):
         Workspace.load().db.delete_selection("temp")
 
         assert not Workspace.load().is_tag("temp")
+
+
+def test_select_from_root_accepts_paths_relative_to_the_cwd(tmp_path, monkeypatch):
+    """Regression: a relative root never matched, since spec files are absolute."""
+    monkeypatch.chdir(tmp_path)
+    with canary.config.override():
+        (tmp_path / "x").mkdir()
+        (tmp_path / "y").mkdir()
+        (tmp_path / "x" / "a.pyt").write_text(PYT_BODY)
+        (tmp_path / "y" / "b.pyt").write_text(PYT_BODY)
+        Workspace.create(tmp_path)
+        Engine(Workspace.load()).collect({str(tmp_path): []})
+
+        relative = app.select("rel", prefixes=["x"])
+        absolute = app.select("abs", prefixes=[str(tmp_path / "x")])
+
+        assert {s.family for s in relative} == {s.family for s in absolute} == {"a"}
+        monkeypatch.chdir(tmp_path / "x")
+        assert {s.family for s in app.select("here", prefixes=["."])} == {"a"}

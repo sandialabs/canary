@@ -6,7 +6,7 @@
 
 Higher layers may import lower ones, never the reverse::
 
-    cli, tui, api, reporters  ->  app  ->  engine  ->  execution, workspace
+    cli, tui, api, service, reporters  ->  app  ->  engine  ->  execution, workspace
                                                     ->  view, persistence  ->  core, util
 
 ``execution`` and ``workspace`` are siblings that must not import each other.
@@ -37,6 +37,7 @@ RANK = {
     "cli": 6,
     "tui": 6,
     "api": 6,
+    "service": 6,
     "reporters": 6,
     "agent": 6,
     "main": 6,

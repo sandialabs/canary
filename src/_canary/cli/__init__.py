@@ -36,6 +36,7 @@ from . import run
 from . import runhook
 from . import select
 from . import selection
+from . import server
 from . import status
 from . import tree
 from . import tui
@@ -66,6 +67,7 @@ plugins = [
     runhook,
     select,
     selection,
+    server,
     status,
     tree,
     tui,

@@ -101,7 +101,7 @@ def test_canonical_names_cover_every_executor_event():
 
 def test_job_event_field_set_matches_job_view_shape():
     """JobEvent mirrors JobView so an interface can update a row without a re-query."""
-    from _canary.app.queries import JobView
+    from _canary.tui.views import JobView
 
     shared = set(JobEvent.__annotations__) & set(JobView.__annotations__)
     # The status/identity/timing fields an interface renders must appear in both.
