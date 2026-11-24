@@ -191,19 +191,15 @@ class WorkspaceDatabase:
             sql = "CREATE INDEX IF NOT EXISTS ix_spec_deps_dep_id ON spec_deps (dep_id)"
             conn.execute(sql)
 
-            sql = """CREATE TABLE IF NOT EXISTS selections (
-              tag TEXT,
-              spec_id TEXT,
-              PRIMARY KEY (tag, spec_id),
-              FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
-            )"""
-            conn.execute(sql)
+            conn.execute(SELECTIONS_DDL.format(name="selections"))
 
             sql = """CREATE TABLE IF NOT EXISTS selection_meta (
               tag TEXT PRIMARY KEY,
               data TEXT
             )"""
             conn.execute(sql)
+            # Must precede the trigger DDL below: the rebuild drops the triggers on selections.
+            _migrate_selections_self_fk(conn)
 
             conn.execute(
                 """
@@ -1191,6 +1187,13 @@ class NotASelection(Exception):
 #: versioning was introduced); such databases are migrated in place on open.
 SCHEMA_VERSION = 1
 
+SELECTIONS_DDL = """CREATE TABLE IF NOT EXISTS {name} (
+  tag TEXT,
+  spec_id TEXT,
+  PRIMARY KEY (tag, spec_id),
+  FOREIGN KEY (spec_id) REFERENCES specs(spec_id) ON DELETE CASCADE
+)"""
+
 #: Current column layout of the ``results`` table.
 RESULTS_COLUMNS = (
     "spec_id",
@@ -1497,3 +1500,32 @@ def _migrate_status_category_cancel_to_aborted(conn: sqlite3.Connection) -> None
         return
     logger.info("DB migration: results.status_category 'CANCEL' -> 'ABORTED'")
     conn.execute("UPDATE results SET status_category = 'ABORTED' WHERE status_category = 'CANCEL'")
+
+
+def _migrate_selections_self_fk(conn: sqlite3.Connection) -> None:
+    """One-time migration: rebuild ``selections`` without its malformed self-referential FK.
+
+    Databases created between 8093dda2 and 87f0d30a declare
+    ``FOREIGN KEY (tag) REFERENCES selections(spec_id)``.  ``spec_id`` is not unique, so
+    once foreign keys are enforced every write to ``selections`` fails with
+    ``foreign key mismatch - "selections" referencing "selections"``.  Those databases also
+    lack the ``spec_id -> specs`` constraint, so rows naming unknown specs are dropped.
+    The old table is only read and dropped, never written, so this works with
+    ``foreign_keys=ON``.  Dropping the table drops its triggers; the caller recreates them.
+    Safe to call on already-migrated databases (no-op without a self-referential FK).
+    """
+    fks = conn.execute("PRAGMA foreign_key_list(selections)").fetchall()
+    if not any(fk[2] == "selections" for fk in fks):
+        return
+    logger.info("DB migration: rebuilding selections without self-referential foreign key")
+    conn.execute("DROP TABLE IF EXISTS selections_new")
+    conn.execute(SELECTIONS_DDL.format(name="selections_new"))
+    conn.execute(
+        "INSERT INTO selections_new (tag, spec_id) SELECT tag, spec_id FROM selections "
+        "WHERE spec_id IN (SELECT spec_id FROM specs)"
+    )
+    conn.execute("DROP TABLE selections")
+    conn.execute("ALTER TABLE selections_new RENAME TO selections")
+    conn.execute(
+        "DELETE FROM selection_meta WHERE tag NOT IN (SELECT DISTINCT tag FROM selections)"
+    )

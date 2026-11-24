@@ -5,6 +5,7 @@
 
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -212,3 +213,45 @@ def test_failed_migration_leaves_database_untouched(tmp_path: Path, monkeypatch)
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "results_new" not in tables
     conn.close()
+
+
+def test_selections_self_fk_is_migrated(tmp_path: Path):
+    # Schema written by 8093dda2..87f0d30a: a self-referential FK on a non-unique column.
+    conn = sqlite3.connect(tmp_path / "workspace.sqlite3")
+    conn.execute("CREATE TABLE specs (spec_id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+    conn.execute(
+        "CREATE TABLE selections (tag TEXT, spec_id TEXT, PRIMARY KEY (tag, spec_id), "
+        "FOREIGN KEY (tag) REFERENCES selections(spec_id) ON DELETE CASCADE)"
+    )
+    conn.execute("CREATE TABLE selection_meta (tag TEXT PRIMARY KEY, data TEXT)")
+    conn.execute("INSERT INTO specs VALUES ('s1', '{}'), ('s2', '{}')")
+    conn.execute("INSERT INTO selections VALUES ('t1', 's1'), ('t1', 'gone'), ('t2', 'gone')")
+    conn.execute("INSERT INTO selection_meta VALUES ('t1', '{}'), ('t2', '{}')")
+    conn.commit()
+    conn.close()
+
+    db = WorkspaceDatabase.load(tmp_path)
+    try:
+        db.connect()
+        fks = db.connection.execute("PRAGMA foreign_key_list(selections)").fetchall()
+        assert [(fk[2], fk[3], fk[4]) for fk in fks] == [("specs", "spec_id", "spec_id")]
+        assert db.connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        # Rows naming unknown specs are dropped, along with metadata of emptied tags.
+        assert db.tags == ["t1"]
+        assert db.connection.execute("SELECT tag FROM selection_meta").fetchall() == [("t1",)]
+        triggers = {
+            r[0]
+            for r in db.connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")
+        }
+        assert triggers == {"trg_selection_meta_delete", "trg_selection_meta_rename"}
+        # Previously: foreign key mismatch - "selections" referencing "selections".
+        db.put_selection("t1", [SimpleNamespace(id="s1"), SimpleNamespace(id="s2")])  # ty: ignore[invalid-argument-type]
+        assert db.is_selection("t1")
+        db.delete_selection("t1")
+        assert db.tags == []
+        assert db.connection.execute("SELECT COUNT(*) FROM selection_meta").fetchone()[0] == 0
+    finally:
+        db.close()
+    db = WorkspaceDatabase.load(tmp_path)
+    db.connect()
+    db.close()
