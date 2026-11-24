@@ -89,6 +89,17 @@ def test_job(get):
     job_id = next(v["id"] for v in _done(get("/canary/status")) if v["name"] == "ok")
     assert _done(get("/canary/query/job", job_id=job_id))["status"]["category"] == "PASS"
     assert get("/canary/query/job", job_id="0" * 12).status_code == 404
+    assert _done(get("/canary/query/job", job_id="ok"))["id"] == job_id  # by name
+    assert _done(get("/canary/query/job", job_id=job_id[:8]))["id"] == job_id
+    for wildcard in ("%", "_"):  # no SQL LIKE patterns: these match no job
+        assert get("/canary/query/job", job_id=wildcard).status_code == 404
+    assert get("/canary/query/job", job_id="").status_code == 400
+
+
+def test_status_of_named_jobs(get):
+    assert [v["name"] for v in _done(get("/canary/status", spec_ids=["ok"]))] == ["ok"]
+    assert get("/canary/status", spec_ids=["nope"]).status_code == 404
+    assert get("/canary/status", spec_ids=[]).status_code == 400  # omit it for every job
 
 
 def test_unknown_sessions_are_404(get):
@@ -111,6 +122,12 @@ def test_db_selects_capped_and_refuses_anything_else(get, monkeypatch):
     assert get("/canary/query/db", sql="DELETE FROM results").status_code == 400
     assert get("/canary/query/db", sql="SELECT nonsense FROM nowhere").status_code == 400
     assert len(_done(get("/canary/query/db", sql="SELECT * FROM results"))["rows"]) == 1
+
+
+def test_db_publishes_absolute_paths(root, get):
+    data = _done(get("/canary/query/db", sql="SELECT file_root, workspace FROM results"))
+    assert {row["file_root"] for row in data["rows"]} == {"ok", "failing"}
+    assert str(root.parent) not in json.dumps(data)
 
 
 def test_schema_describes_every_endpoint(get):

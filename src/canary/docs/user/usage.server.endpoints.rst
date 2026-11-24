@@ -26,7 +26,9 @@ These run one at a time (see :doc:`usage.server.requests`).  ``data.exit_code`` 
 ``/canary/hpc/run``
    Run tests through a scheduler, as ``canary hpc run`` does.  The ``/canary/run`` fields,
    plus ``backend`` (required, e.g. ``"slurm"``), ``batch_spec``, ``batch_workers``,
-   ``submit_args``, ``allow_hyperthreading``, ``batch_exact_estimate``, ``exec_prefix``.
+   ``submit_args``, ``allow_hyperthreading``, ``batch_exact_estimate``.  Requests cannot
+   choose an execution prefix: the server's ``CANARY_EXEC_PREFIX``, if set when it
+   started, applies to every run.
 
 ``/canary/collect``
    Find and generate the test cases under ``roots`` (required) with ``on_options``.
@@ -61,6 +63,8 @@ relative to the workspace, as ``name:path`` under an allowed root, or as ``…/n
    The latest record of every job, or of ``spec_ids``, read from the database alone (HPC
    batch timings and ``last_activity`` are left out; ``/canary/query/jobs`` has them).
    A job that was collected but never ran has category ``NOTRUN`` and an empty ``session``.
+   ``spec_ids`` takes ID prefixes or names; omit it for every job (an empty list is
+   ``400``).  An unknown job: ``404``; an ambiguous prefix: ``400``.
 
 ``/canary/query/sessions``
    Every session's name, oldest first.
@@ -73,8 +77,9 @@ relative to the workspace, as ``name:path`` under an allowed root, or as ``…/n
    The latest result of every job; with ``session_id``, only those from that session.
 
 ``/canary/query/job``
-   ``job_id`` (required; a prefix will do) in ``session_id`` (default ``"latest"``): its job
-   record.  No result there: ``404``.
+   ``job_id`` (required; a unique prefix or the job's name) in ``session_id`` (default
+   ``"latest"``): its job record.  An unknown job, or no result there: ``404``; an
+   ambiguous prefix: ``400``.
 
 ``/canary/query/failures``
    The jobs of ``session_id`` (default ``"latest"``) whose category is ``FAIL`` or
@@ -83,7 +88,8 @@ relative to the workspace, as ``name:path`` under an allowed root, or as ``…/n
 ``/canary/query/db``
    One read-only SQL ``SELECT`` (``sql``) on the workspace database:
    ``{"rows": [...], "truncated": bool}``, at most 10 000 rows.  Anything but a single
-   ``SELECT``, or bad SQL: ``400``.
+   ``SELECT``, or bad SQL: ``400``.  A column holding an absolute path is shown as a job
+   record's paths are; paths inside JSON columns (``specs.data``) are returned as stored.
 
 ``/canary/schema``
    ``{"envelope": ..., "result": ..., "endpoints": {route: {"lane": ..., "request": ...}}}``.

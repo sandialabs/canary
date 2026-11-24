@@ -80,9 +80,6 @@ class HPCRunRequest(BaseModel):
     batch_exact_estimate: Annotated[bool, Dest("hpc_batch_exact_estimate")] = Field(
         default=False, description="Run exact scheduling simulation"
     )
-    exec_prefix: Annotated[str | None, Dest("exec_prefix")] = Field(
-        default=None, description="Execute below this path"
-    )
 
 
 def hpc_run(request: HPCRunRequest, ctx: Context) -> dict[str, Any]:

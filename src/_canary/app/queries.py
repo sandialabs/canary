@@ -48,10 +48,14 @@ def job_history(spec_id: str, start: Path | str | None = None) -> list[JobRecord
     """Every result recorded for *spec_id*, oldest first.
 
     Args:
-        spec_id: The spec ID (or a prefix) to get history for
+        spec_id: The spec ID (a unique prefix, or a name) to get history for
         start: Optional workspace root or start path for workspace search
+
+    Raises:
+        ValueError: If *spec_id* matches no spec or is an ambiguous prefix.
     """
     ws = Workspace.load(start) if start else Workspace.load()
+    spec_id = ws.find_jobspec(spec_id).id
     cache: dict = {}
     return [row_to_job_entry(ws, r, cache) for r in ws.db.get_result_history(spec_id)]
 

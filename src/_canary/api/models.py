@@ -141,7 +141,9 @@ class StatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     spec_ids: list[str] | None = Field(
-        default=None, description="Filter to these specific spec IDs"
+        default=None,
+        min_length=1,
+        description="Only these jobs (ID prefixes or names); omit the field for every job",
     )
 
 
@@ -150,7 +152,7 @@ class QueryJobRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    job_id: str = Field(..., description="Job ID to query")
+    job_id: str = Field(..., min_length=1, description="Job ID (a unique prefix) or name")
     session_id: str = Field(default="latest", description="Session name, or 'latest'")
 
 

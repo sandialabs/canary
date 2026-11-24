@@ -145,7 +145,6 @@ FULL = {
         "submit_args": ["--partition=debug"],
         "allow_hyperthreading": True,
         "batch_exact_estimate": True,
-        "exec_prefix": "srun",
     },
 }
 SEPARATE: dict[str, list[dict]] = {}

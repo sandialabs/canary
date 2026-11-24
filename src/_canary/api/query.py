@@ -21,6 +21,7 @@ from .models import QueryJobRequest
 from .models import QueryJobsRequest
 from .models import QuerySessionRequest
 from .models import QuerySessionsRequest
+from .roots import public_path
 from .roots import publish
 
 #: Most rows /canary/query/db returns.
@@ -42,10 +43,24 @@ def _session(session_id: str, ctx: Context) -> str:
     return session_id
 
 
+def resolve_job_id(job_id: str, ctx: Context) -> str:
+    """The full spec ID of *job_id* (an ID prefix or a name); 400 if ambiguous, 404 if unknown."""
+    try:
+        spec_id = ctx.workspace.db.resolve_spec_id(job_id)
+    except ValueError as exc:
+        raise RequestError(400, str(exc)) from None
+    if spec_id is not None:
+        return spec_id
+    try:
+        return ctx.workspace.find_jobspec(job_id).id
+    except ValueError as exc:
+        raise RequestError(404, str(exc)) from None
+
+
 def job(request: QueryJobRequest, ctx: Context) -> JobRecord:
     """The job's result in the session."""
     session = _session(request.session_id, ctx)
-    views = job_history(request.job_id, start=ctx.workspace_root)
+    views = job_history(resolve_job_id(request.job_id, ctx), start=ctx.workspace_root)
     found = [v for v in views if v["session"] == session]
     if not found:
         raise RequestError(404, f"no result for job {request.job_id!r} in session {session}")
@@ -88,12 +103,21 @@ def failures(request: QueryFailuresRequest, ctx: Context) -> list[JobRecord]:
 
 
 def db(request: QueryDBRequest, ctx: Context) -> dict[str, Any]:
-    """The rows of one ``SELECT`` (at most ``MAX_ROWS``; ``truncated`` says if there were more)."""
+    """The rows of one ``SELECT`` (at most ``MAX_ROWS``; ``truncated`` says if there were more).
+
+    A column holding an absolute path (``file_root``, ``workspace``, ...) is published as a
+    job record's paths are; paths inside JSON columns (``specs.data``) are returned as
+    stored.
+    """
     try:
         rows = ctx.workspace.db.select(request.sql, limit=MAX_ROWS + 1)
     except (ValueError, sqlite3.Error) as exc:
         raise RequestError(400, str(exc)) from None
-    return {"rows": rows[:MAX_ROWS], "truncated": len(rows) > MAX_ROWS}
+    published = [
+        {k: public_path(v, ctx) if isinstance(v, str) else v for k, v in row.items()}
+        for row in rows[:MAX_ROWS]
+    ]
+    return {"rows": published, "truncated": len(rows) > MAX_ROWS}
 
 
 def register(registry: EndpointRegistry) -> None:
