@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ..util import logging
 from ..util.filesystem import atomic_write
 from ..util.fsqueue import FSQueue
 
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from .models import Result
     from .models import State
 
+
+logger = logging.get_logger(__name__)
 
 TERMINAL_STATES = ("done", "rejected", "cancelled", "failed")
 
@@ -66,6 +69,21 @@ def write_result(directory: Path, result: "Result") -> None:
     if file.exists():
         raise RuntimeError(f"request {result.id} already has a result")
     atomic_write(file, result.model_dump_json(indent=2))
+    logger.info(access_line(result))
+
+
+def access_line(result: "Result") -> str:
+    """The server log's one line for *result*: what came back, not the request's output."""
+    started = result.started if result.started is not None else result.submitted
+    line = (
+        f"[bold]{result.status_code}[/] {result.path} {result.id} ({result.user}) "
+        f"{result.state} in {result.finished - started:.1f}s"
+    )
+    if isinstance(result.data, dict) and "exit_code" in result.data:
+        line += f", exit code {result.data['exit_code']}"
+    if result.error:
+        line += f": {result.error}"
+    return line
 
 
 #: The status code of each final state of a work request.

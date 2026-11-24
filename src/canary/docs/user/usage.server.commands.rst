@@ -12,8 +12,11 @@ they use the files described in :doc:`usage.server.requests`.
    Serves the workspace found from the current directory, creating one here if there is
    none, as ``canary run`` does.  ``-w`` removes the workspace located exactly here and
    starts with a fresh one (never an enclosing workspace, and never one a live server
-   owns).  Runs in the foreground until stopped, printing each request as it starts and
-   finishes, with work requests' output in between.  Background it with the shell
+   owns).  Runs in the foreground until stopped, logging one line as each request is
+   queued or starts, and one when it finishes: the status code, route, id, user, state,
+   duration, a work request's exit code and any error -- what the caller gets back.  A
+   work request's output is not shown; it goes to ``requests/<id>/stdout`` and
+   ``stderr`` (``tail -f`` them to watch a run).  Background it with the shell
    (``canary server start > server.log 2>&1 &``); to keep it running after the terminal
    closes, use ``nohup``, ``tmux``, ``screen`` or a batch job.  A second server for the
    same workspace is refused.  At start it installs ``.canary/share/carl``, the curl-like

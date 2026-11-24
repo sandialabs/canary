@@ -286,3 +286,18 @@ def test_queued_work_runs_on_the_server_in_order(root, monkeypatch):
     finally:
         srv.request_stop()
         thread.join(30)
+
+
+def test_the_server_logs_each_result_in_one_line():
+    from _canary.api.requests import access_line
+
+    work = Result(
+        id="r1", path="/canary/run", status_code=200, state="done", data={"exit_code": 14},
+        cwd=".", user="u", submitted=1.0, started=2.0, finished=5.5,
+    )  # fmt: skip
+    assert access_line(work) == "[bold]200[/] /canary/run r1 (u) done in 3.5s, exit code 14"
+    bad = Result(
+        id="r2", path="/canary/nope", status_code=404, state="rejected", error="no endpoint",
+        cwd=".", user="u", submitted=1.0, finished=1.0,
+    )  # fmt: skip
+    assert access_line(bad) == "[bold]404[/] /canary/nope r2 (u) rejected in 0.0s: no endpoint"

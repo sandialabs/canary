@@ -66,18 +66,18 @@ def test_the_user_is_the_files_owner_and_cannot_be_supplied(root, serving):
 
 
 def test_result_json_is_written_after_all_output(root, serving, monkeypatch):
-    original = server._tee
+    original = server._copy
 
-    def slow_tee(pipe, path, stream):  # the copy lags the child by a second
+    def slow_copy(pipe, path):  # the copy lags the child by a second
         def later():
             time.sleep(1.0)
-            original(pipe, path, stream).join()
+            original(pipe, path).join()
 
         thread = threading.Thread(target=later, daemon=True)
         thread.start()
         return thread
 
-    monkeypatch.setattr(server, "_tee", slow_tee)
+    monkeypatch.setattr(server, "_copy", slow_copy)
     drop(root, "out", run(["ok"]))
     wait_result(root, "out")
     stdout = request_dir(root, "out") / "stdout"

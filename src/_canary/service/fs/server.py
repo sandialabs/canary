@@ -330,8 +330,8 @@ class Server:
         logger.info(f"[bold]Running[/] request {request['id']}: {shown}")
         assert proc.stdout is not None and proc.stderr is not None
         copiers = [
-            _tee(proc.stdout, directory / "stdout", sys.stdout),
-            _tee(proc.stderr, directory / "stderr", sys.stderr),
+            _copy(proc.stdout, directory / "stdout"),
+            _copy(proc.stderr, directory / "stderr"),
         ]
         self._running = _Running(
             proc=proc, path=path, directory=directory, request_id=request["id"], copiers=copiers
@@ -351,7 +351,6 @@ class Server:
         running.finish_output()
         requests.finish(running.directory, "done", returncode=code)
         requests.work_queue(self.workspace_root).ack(running.path)
-        logger.info(f"[bold]Finished[/] request {running.request_id} (exit code {code})")
         self._running = None
 
     def _interrupt(self, running: "_Running", *, reason: str) -> None:
@@ -373,7 +372,6 @@ class Server:
         state = "cancelled" if reason == "cancelled" else "failed"
         requests.finish(running.directory, state, returncode=running.proc.poll(), reason=reason)
         requests.work_queue(self.workspace_root).ack(running.path)
-        logger.info(f"[bold]Stopped[/] request {running.request_id} ({reason})")
         self._running = None
 
     def _workspace_exists(self) -> bool:
@@ -454,8 +452,8 @@ class _Running:
             copier.join(timeout)
 
 
-def _tee(pipe: IO[bytes], path: Path, stream: IO[str]) -> threading.Thread:
-    """Copy *pipe* to the file *path* and to the server's *stream* until it closes."""
+def _copy(pipe: IO[bytes], path: Path) -> threading.Thread:
+    """Copy *pipe* to the file *path* until it closes (never to the server's terminal)."""
 
     def copy() -> None:
         with pipe:
@@ -470,16 +468,7 @@ def _tee(pipe: IO[bytes], path: Path, stream: IO[str]) -> threading.Thread:
                             out.write(chunk)
                             out.flush()
                         except OSError:
-                            out = None  # the workspace went away; keep the terminal copy
-                    try:
-                        buffer = getattr(stream, "buffer", None)
-                        if buffer is not None:
-                            buffer.write(chunk)
-                        else:
-                            stream.write(chunk.decode(errors="replace"))
-                        stream.flush()
-                    except (OSError, ValueError):
-                        pass  # the terminal is gone
+                            out = None  # the workspace went away; keep draining the pipe
             finally:
                 if out is not None:
                     out.close()

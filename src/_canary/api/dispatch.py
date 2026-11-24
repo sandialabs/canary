@@ -337,8 +337,7 @@ class ReadLane:
             started=read.started,
             finished=time.time(),
         )
-        if self._settle(read, result):
-            logger.info(f"[bold]Stopped[/] read {read.ctx.id} ({reason})")
+        self._settle(read, result)
 
     def _settle(self, read: "_Read", result: Result) -> bool:
         """Write *read*'s result unless it already has one; True if this call wrote it."""
