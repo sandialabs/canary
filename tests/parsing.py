@@ -270,6 +270,16 @@ def test_agent_bootstrap_args_parse():
     assert args.append is True
 
 
+def test_server_start_skills_args_parse():
+    parser = make_cli_parser()
+
+    args = parser.parse_args(["server", "start"])
+    assert args.skills == []
+
+    args = parser.parse_args(["server", "start", "--claude", "--skills", "opencode", "--generic"])
+    assert args.skills == ["claude", "opencode", "generic"]
+
+
 def test_runhook_canary_runtest_finish_args_parse():
     parser = make_cli_parser()
 

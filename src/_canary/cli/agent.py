@@ -5,6 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from ..agent import TARGETS
 from ..agent import write_agent_bootstrap
 from ..plugins.hookspec import hookimpl
 from .base import CanarySubcommand
@@ -24,7 +25,7 @@ class Agent(CanarySubcommand):
         bootstrap.add_argument(
             "target",
             nargs="?",
-            choices=("generic", "opencode", "claude"),
+            choices=TARGETS,
             default="generic",
             help="Bootstrap target layout (default: generic)",
         )

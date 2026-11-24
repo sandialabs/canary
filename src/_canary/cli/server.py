@@ -12,8 +12,10 @@
 
 import argparse
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..agent import TARGETS as BOOTSTRAP_TARGETS
 from ..plugins.hookspec import hookimpl
 from ..service.fs import server
 from ..util import logging
@@ -42,11 +44,32 @@ class ServerCommand(CanarySubcommand):
             action="store_true",
             help="Remove the workspace here (if any) and start with a fresh one",
         )
+        p.add_argument(
+            "--skills",
+            dest="skills",
+            action="append",
+            choices=BOOTSTRAP_TARGETS,
+            default=[],
+            metavar="TARGET",
+            help="Install the agent bootstrap files for TARGET (one of %(choices)s) beside the "
+            "workspace, as 'canary agent bootstrap TARGET --force' does (repeatable)",
+        )
+        for target in BOOTSTRAP_TARGETS:
+            p.add_argument(
+                f"--{target}",
+                dest="skills",
+                action="append_const",
+                const=target,
+                help=f"Same as --skills {target}",
+            )
         sub.add_parser("stop", help="Stop the server (interrupts the running request)")
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.server_cmd == "start":
-            server.Server(_start_root(args)).run()
+            root = _start_root(args)
+            for target in dict.fromkeys(args.skills):
+                _install_agent_files(target, root.parent)
+            server.Server(root).run()
             return 0
         if args.server_cmd == "stop":
             from ..workspace.workspace import Workspace
@@ -123,3 +146,17 @@ def _start_root(args: argparse.Namespace):
     except NotAWorkspaceError:
         logger.info(f"[bold]Creating[/] a canary workspace in {os.path.abspath(where)}")
         return Workspace.create(path=where).root
+
+
+def _install_agent_files(target: str, where: Path) -> None:
+    """Write *target*'s agent bootstrap files in *where*, overwriting managed files.
+
+    ``--force`` is implied, except for an existing ``CLAUDE.md``: its Canary block is
+    refreshed (``--append``) rather than the whole file replaced.
+    """
+    from ..agent import write_agent_bootstrap
+    from ..util.filesystem import working_dir
+
+    with working_dir(where):
+        write_agent_bootstrap(target, force=True, append=True)
+    logger.info(f"[bold]Installed[/] {target} agent bootstrap files in {where}")

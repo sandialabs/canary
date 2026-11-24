@@ -11,6 +11,9 @@ from .common import can_refresh_managed_file
 from .common import generic_bootstrap_files
 from .opencode import opencode_bootstrap_files
 
+#: The layouts ``canary agent bootstrap`` and ``canary server start --skills`` write.
+TARGETS = ("generic", "opencode", "claude")
+
 
 def write_agent_bootstrap(
     target: str, *, brief: bool = False, force: bool = False, append: bool = False

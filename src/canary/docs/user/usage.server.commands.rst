@@ -8,7 +8,7 @@ Commands and Configuration
 ``canary server`` has two commands, both for the operator.  Callers never run canary:
 they use the files described in :doc:`usage.server.requests`.
 
-``canary server start [-w]``
+``canary server start [-w] [--skills TARGET ...]``
    Serves the workspace found from the current directory, creating one here if there is
    none, as ``canary run`` does.  ``-w`` removes the workspace located exactly here and
    starts with a fresh one (never an enclosing workspace, and never one a live server
@@ -18,6 +18,14 @@ they use the files described in :doc:`usage.server.requests`.
    closes, use ``nohup``, ``tmux``, ``screen`` or a batch job.  A second server for the
    same workspace is refused.  At start it installs ``.canary/share/carl``, the curl-like
    client callers can run with only ``sh`` (see :doc:`usage.server.agents`).
+
+   ``--skills TARGET`` (repeatable; ``generic``, ``opencode`` or ``claude``, or the
+   shorthands ``--generic``, ``--opencode`` and ``--claude``) also installs that target's
+   agent bootstrap files (see :doc:`/user/usage.agent`) in the directory holding
+   ``.canary``, so agents working there find the ``canary-server`` skill:
+   ``canary server start --claude --opencode``.  Canary's managed files are overwritten,
+   as ``canary agent bootstrap --force`` does, except an existing ``CLAUDE.md``, whose
+   Canary block is refreshed (``--append``) and the rest kept.
 
 ``canary server stop``
    Asks the server to stop, from any machine that sees the workspace, and waits for it.

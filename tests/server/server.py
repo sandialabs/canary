@@ -201,3 +201,27 @@ def test_start_creates_a_workspace_and_w_recreates_it(tmp_path):
     finally:
         assert canary("server", "stop").returncode == 0
     assert proc.wait(15) == 0
+
+
+def test_start_installs_agent_bootstrap_files_beside_the_workspace(tmp_path):
+    def canary(*args, cwd=tmp_path):
+        return subprocess.run(
+            [sys.executable, "-m", "canary", *args], cwd=cwd, capture_output=True, text=True
+        )
+
+    assert canary("init", ".").returncode == 0
+    (tmp_path / "CLAUDE.md").write_text("# My project\n")
+    stale = tmp_path / ".opencode" / "skills" / "canary-server" / "SKILL.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("not canary's\n")  # a conflict: --force is implied
+    proc = start_server_process(tmp_path, args=["--claude", "--skills", "opencode"])
+    try:
+        claude_md = (tmp_path / "CLAUDE.md").read_text()
+        assert claude_md.startswith("# My project\n")  # refreshed, not replaced
+        assert "<!-- BEGIN CANARY GUIDANCE -->" in claude_md
+        assert (tmp_path / ".claude" / "skills" / "canary-server" / "SKILL.md").is_file()
+        assert "name: canary-server" in stale.read_text()
+        assert (tmp_path / ".agent" / "canary" / "BOOTSTRAP.md").is_file()
+    finally:
+        assert canary("server", "stop").returncode == 0
+    assert proc.wait(15) == 0

@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+from .bootstrap import TARGETS
 from .bootstrap import write_agent_bootstrap
 from .common import render_bootstrap_markdown
 
-__all__ = ["render_bootstrap_markdown", "write_agent_bootstrap"]
+__all__ = ["TARGETS", "render_bootstrap_markdown", "write_agent_bootstrap"]
