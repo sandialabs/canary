@@ -208,6 +208,9 @@ class Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: Literal[1] = 1
+    method: Literal["GET", "POST", "PUT"] = Field(
+        default="POST", description="GET only reads: a work route refuses it (405)"
+    )
     path: str = Field(..., description="Endpoint route, e.g. '/canary/run'")
     request: dict[str, Any] = Field(default_factory=dict, description="The endpoint's body")
     cwd: str = Field(default=".", description="Working directory, relative to the anchor")

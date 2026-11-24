@@ -1004,7 +1004,7 @@
       "server": [
         "A workspace may have a request server (canary server start on the machine that does the work). It is running while .canary/var/server/server.json exists and its beat changes.",
         "Callers need no canary: .canary/share/carl POST file://<workspace>/canary/run -d '{...}' submits, waits and prints the result (state, status_code, data.exit_code); without carl, write inbox/<id>.json.tmp, rename it to <id>.json, and wait for requests/<id>/result.json.",
-        "Work requests run one at a time; reads (/canary/status, /canary/query/*) answer at once. /canary/schema describes every request body; see ext.server for the protocol.",
+        "Work requests run one at a time; reads (/canary/status, /canary/query/*) answer at once. /canary/help lists every route and its fields, /canary/schema every body's JSON schema; see ext.server for the protocol.",
         "Requests run in the server's environment as of server start; nothing from the caller's is carried (an envelope's \"env\" adds variables).",
         "Details: canary query -c ext.server, skill server.canary-server."
       ]

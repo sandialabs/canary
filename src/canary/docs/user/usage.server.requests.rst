@@ -34,6 +34,9 @@ files and takes ``inbox/*.json`` oldest first, every fraction of a second.
 
 ``version``
    ``1`` (optional).
+``method``
+   ``"POST"`` (default), ``"PUT"`` (the same) or ``"GET"``.  ``GET`` only reads: a work
+   route (``/canary/run``, ...) refuses it with ``405``, so a ``GET`` never starts work.
 ``path``
    The route (required); see :doc:`usage.server.endpoints`.
 ``request``
@@ -86,8 +89,9 @@ The result document
 ``done``       200              It ran.  ``data`` is the endpoint's answer; for work,
                                 ``data.exit_code`` is the work's exit code
 ``rejected``   400, 403, 404,   An invalid envelope or body, a path outside the workspace
-               409              and the allowed roots, an unknown route, or a conflict found
-                                while running (e.g. a selection that already exists)
+               405, 409         and the allowed roots, an unknown route, ``GET`` on a work
+                                route, or a conflict found while running (e.g. a selection
+                                that already exists)
 ``cancelled``  499              The ``cancel`` sentinel
 ``failed``     500              A server error, the read time limit, the server stopping, or
                                 the server dying while the request ran
@@ -119,7 +123,7 @@ Work: ``/canary/run``, ``/canary/hpc/run``, ``/canary/collect``, ``/canary/selec
    gets the whole machine.  ``hpc run`` holds the lane while its batches wait on the
    scheduler.
 
-Reads: ``/canary/status``, ``/canary/query/*``, ``/canary/schema``
+Reads: ``/canary/status``, ``/canary/query/*``, ``/canary/help``, ``/canary/schema``
    Run at once, beside the work lane, in up to ``server:read_workers`` threads (extras
    wait, ``queued``).  A read that runs longer than ``server:read_timeout`` seconds is
    stopped and ``failed``.  Reads never write to the workspace.

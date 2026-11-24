@@ -199,7 +199,9 @@ def accept(
         return reject(400, f"invalid envelope: {_errors(exc)}")
     endpoint = registry.get(env.path)
     if endpoint is None:
-        return reject(404, f"no endpoint {env.path}")
+        return reject(404, f"no endpoint {env.path} (/canary/help lists every route)")
+    if env.method == "GET" and endpoint.lane == "work":
+        return reject(405, f"{env.path} is work: submit it with POST")
     try:
         ctx.cwd = _check_cwd(env.cwd, ctx.anchor)
         body = endpoint.model.model_validate(env.request)

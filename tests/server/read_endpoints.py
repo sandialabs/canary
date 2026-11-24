@@ -137,3 +137,17 @@ def test_schema_describes_every_endpoint(get):
     assert data["endpoints"]["/canary/status"]["lane"] == "read"
     assert set(data) == {"envelope", "result", "endpoints"}
     json.dumps(data)
+
+
+def test_help_describes_every_registered_endpoint(get):
+    from _canary.api.dispatch import build_registry
+
+    data = _done(get("/canary/help"))
+    assert set(data["endpoints"]) == {e.path for e in build_registry()}
+    run = data["endpoints"]["/canary/run"]
+    assert run["lane"] == "work" and run["summary"].startswith("Run tests")
+    assert run["fields"]["pathspec"].startswith("list[str], default [] -- ")
+    job = data["endpoints"]["/canary/query/job"]
+    assert job["fields"]["job_id"].startswith("str, required -- ")
+    assert data["endpoints"]["/canary/hpc/run"]["lane"] == "work"  # a plugin's endpoint
+    assert data["endpoints"]["/canary/query/sessions"]["fields"] == {}

@@ -56,7 +56,8 @@ Practical notes:
 * Check the server is alive before relying on it: ``server.json`` exists and its
   ``beat`` changes within a few seconds.  Requests dropped while no server runs wait in
   ``inbox/``.
-* Look before you leap: ``/canary/schema`` describes every body.
+* Look before you leap: ``/canary/help`` lists every route, what it does and its fields;
+  ``/canary/schema`` has each body's JSON schema.
 * Read ``data.exit_code`` for work, not only ``state``: a run whose tests fail is still
   ``done``.  ``7`` means nothing ran (e.g. rerunning tests that passed without
   ``only: "all"``).

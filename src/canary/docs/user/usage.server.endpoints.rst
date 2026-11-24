@@ -91,5 +91,11 @@ relative to the workspace, as ``name:path`` under an allowed root, or as ``…/n
    ``SELECT``, or bad SQL: ``400``.  A column holding an absolute path is shown as a job
    record's paths are; paths inside JSON columns (``specs.data``) are returned as stored.
 
+``/canary/help``
+   Every route the server has registered (core and plugins): ``{"usage": ...,
+   "endpoints": {route: {"lane": ..., "summary": ..., "fields": {name: "TYPE, default
+   VALUE -- description"}}}}``, generated from the registry, so it always matches the
+   server.
+
 ``/canary/schema``
    ``{"envelope": ..., "result": ..., "endpoints": {route: {"lane": ..., "request": ...}}}``.

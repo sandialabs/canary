@@ -16,14 +16,14 @@
     "envelope": {
       "version": "1 (optional)",
       "path": "The route (required).",
-      "request": "The route's body; unknown fields -> 400. See /canary/schema.",
+      "request": "The route's body; unknown fields -> 400. See /canary/help (or /canary/schema).",
       "cwd": "Relative to the anchor (dir holding .canary), no '..', must exist; default '.'. Paths in the body are relative to it.",
       "env": "Variables (strings) set on top of the server's environment.",
       "id": "Not a key: the file name is the id (^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$). user is the file's owner; times are the server's."
     },
     "routes": {
       "work": "/canary/run, /canary/hpc/run, /canary/collect, /canary/select, /canary/rebaseline: one at a time, in arrival order, each in its own process; data.exit_code",
-      "read": "/canary/status, /canary/query/{sessions,session,jobs,job,failures,db}, /canary/schema: concurrently (server:read_workers), limited to server:read_timeout s"
+      "read": "/canary/status, /canary/query/{sessions,session,jobs,job,failures,db}, /canary/help, /canary/schema: concurrently (server:read_workers), limited to server:read_timeout s"
     },
     "files": {
       "server.json": "public: version, state, started, heartbeat, beat, canary_version, running, queued. Alive if beat changes between reads (clocks are never compared).",

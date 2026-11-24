@@ -41,7 +41,8 @@ def test_the_server_installs_an_executable_carl(root, serving):
     script = root / "share" / "carl"
     assert script.is_file() and os.access(script, os.X_OK)
     help_ = subprocess.run([str(script), "--help"], capture_output=True, text=True, env=CLEAN_ENV)
-    assert help_.returncode == 0 and "usage: carl" in help_.stderr
+    assert help_.returncode == 0 and "usage: carl" in help_.stdout
+    assert "/canary/help" in help_.stdout  # where to find every route
 
 
 def test_post_a_run_waits_and_prints_the_result(root, carl):
@@ -81,6 +82,19 @@ def test_reads_and_gets(root, carl):
     assert code == 0 and json.loads(out)["state"] == "running"
     code, _, err = carl("GET", _url(root, "/requests/nope"))
     assert code == 22 and "no request nope" in err
+
+
+def test_get_submits_reads_and_work_refuses_it(root, carl):
+    code, out, _ = carl("GET", _url(root, "/canary/help"), "-s")
+    assert code == 0 and out.endswith("}\n")  # the prompt starts on its own line
+    assert "/canary/run" in json.loads(out)["data"]["endpoints"]
+    code, out, _ = carl("GET", _url(root, "/canary/run"), "-s", "-d", '{"pathspec": ["ok"]}')
+    result = json.loads(out)
+    assert (result["status_code"], result["state"]) == (405, "rejected"), result
+    code, _, err = carl("GET", _url(root, "/help"), "-s")  # routes are under /canary/
+    assert code == 2 and "/canary/ROUTE" in err
+    code, out, _ = carl("POST", _url(root, "/help"), "-s")
+    assert "/canary/help lists every route" in json.loads(out)["error"]
 
 
 def test_fail_turns_an_error_result_into_exit_22(root, carl):

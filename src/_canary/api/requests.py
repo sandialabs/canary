@@ -68,7 +68,7 @@ def write_result(directory: Path, result: "Result") -> None:
     file = directory / "result.json"
     if file.exists():
         raise RuntimeError(f"request {result.id} already has a result")
-    atomic_write(file, result.model_dump_json(indent=2))
+    atomic_write(file, result.model_dump_json(indent=2) + "\n")
     logger.info(access_line(result))
 
 
