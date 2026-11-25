@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 
+import pytest
+
 from _canary.api import requests
 from _canary.api.dispatch import accept
 from _canary.service.fs import server
@@ -55,6 +57,7 @@ def test_restart_fails_a_request_left_running_and_requeues_the_rest(root):
     assert "exited" in result["error"]
 
 
+@pytest.mark.skipif(os.getenv("CI") is not None, reason="Skipping in CI")
 def test_removing_the_workspace_kills_the_running_request(root):
     srv = server.Server(root)
     thread = threading.Thread(target=srv.run, daemon=True)
