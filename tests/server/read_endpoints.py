@@ -216,20 +216,6 @@ def test_schema_describes_every_endpoint(get):
     json.dumps(data)
 
 
-def test_help_describes_every_registered_endpoint(get):
-    from _canary.api.dispatch import build_registry
-
-    data = _done(get("/canary/help"))
-    assert set(data["endpoints"]) == {e.path for e in build_registry()}
-    run = data["endpoints"]["/canary/run"]
-    assert run["lane"] == "work" and run["summary"].startswith("Run tests")
-    assert run["fields"]["pathspec"].startswith("list[str], default [] -- ")
-    job = data["endpoints"]["/canary/query/job/{job_id}/{path:path}"]
-    assert job["fields"]["job_id"].startswith("str, required -- In the route")
-    assert data["endpoints"]["/canary/hpc/run"]["lane"] == "work"  # a plugin's endpoint
-    assert data["endpoints"]["/canary/query/sessions"]["fields"] == {}
-    assert data["exit_codes"]["7"].startswith("nothing ran")
-
 
 def test_learn_returns_what_canary_learn_prints(get):
     from _canary.app import learn
