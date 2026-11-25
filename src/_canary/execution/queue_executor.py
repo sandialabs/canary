@@ -517,11 +517,12 @@ class ResourceQueueExecutor:
 
         common_kwargs: dict[str, Any] = {}
 
-        # Start persistent workers once (use global default context)
+        # Workers are always spawned.  Their queues must come from the same context: a
+        # queue made in the default context fails to pickle when the default is fork.
         ctx = mp.get_context("spawn")
         for wid in range(self.max_workers):
             parent_conn, child_conn = Pipe(duplex=False)
-            task_q = mp.Queue(-1)
+            task_q = mp.Queue(-1, ctx=ctx)
             proc = ctx.Process(  # type: ignore
                 target=_MainWorker(
                     worker_id=wid,
@@ -579,7 +580,7 @@ class ResourceQueueExecutor:
         self.busy_workers.clear()
 
     def _start_mp_logging(self) -> None:
-        self._store["logging_queue"] = logging_queue = mp.Queue(-1)
+        self._store["logging_queue"] = logging_queue = mp.Queue(-1, ctx=mp.get_context("spawn"))
         root = logging.get_logger("root")
         handlers: list[logging.builtin_logging.Handler] = []
         # The listener's stream handler must stay at INFO or above even when
@@ -990,7 +991,7 @@ class ResourceQueueExecutor:
 
         ctx = mp.get_context("spawn")
         parent_conn, child_conn = Pipe(duplex=False)
-        task_q = mp.Queue(-1)
+        task_q = mp.Queue(-1, ctx=ctx)
         proc = ctx.Process(  # type: ignore
             target=_MainWorker(
                 worker_id=wid,

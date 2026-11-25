@@ -476,3 +476,22 @@ def test_executor_marks_pending_jobs_blocked_when_busy_with_no_inflight() -> Non
     assert blocked.status.outcome.name == "BLOCKED"
     assert blocked.saved
     assert "could not be scheduled" in (blocked.status.reason or "")
+
+
+def test_workers_start_when_default_start_method_is_fork() -> None:
+    # Python's default start method is fork on Linux before 3.14.  The server's work
+    # process once ran with it, and every queued job was cancelled because the spawned
+    # workers could not receive their fork-context queues.
+    import subprocess
+    import sys
+
+    code = """
+import multiprocessing
+from typing import Any, cast
+from _canary.execution.queue_executor import ResourceQueueExecutor
+multiprocessing.set_start_method("fork", force=True)
+with ResourceQueueExecutor(cast(Any, None), executor=print, max_workers=1):
+    pass
+"""
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr

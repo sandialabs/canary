@@ -27,6 +27,7 @@ REJECTED, FAILED = 2, 1
 def main(argv: list[str] | None = None) -> int:
     root, request_id = argv if argv is not None else sys.argv[1:]
     from _canary import config
+    from _canary.util import multiprocessing
     from _canary.util.filesystem import atomic_write
     from _canary.workspace.workspace import set_workspace_dir
 
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     # dropped first so the processes a run starts (its tests) never see it.
     if snapshot := os.environ.pop(server.CONFIG_ENV, None):
         config.load_snapshot(json.loads(Path(snapshot).read_text()))
+    multiprocessing.initialize()  # the start method console_main sets; Python's default varies
     workspace_root = Path(root)
     set_workspace_dir(workspace_root)  # every Workspace.load() here is the server's
     directory = requests.request_dir(workspace_root, request_id)
