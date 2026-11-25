@@ -30,21 +30,21 @@ class WorkspaceInUseError(ValueError):
 
 
 @contextlib.contextmanager
-def using(workspace_root: str | Path) -> Generator[None]:
+def using(workspace_root: str | Path) -> Generator[None, None, None]:
     """Hold the workspace's shared in-use lock while the body runs."""
     with _flock(workspace_root, exclusive=False):
         yield
 
 
 @contextlib.contextmanager
-def removing(workspace_root: str | Path) -> Generator[None]:
+def removing(workspace_root: str | Path) -> Generator[None, None, None]:
     """Hold the exclusive lock while the body removes the workspace, or refuse at once."""
     with _flock(workspace_root, exclusive=True):
         yield
 
 
 @contextlib.contextmanager
-def _flock(workspace_root: str | Path, *, exclusive: bool) -> Generator[None]:
+def _flock(workspace_root: str | Path, *, exclusive: bool) -> Generator[None, None, None]:
     try:
         import fcntl
     except ImportError:
