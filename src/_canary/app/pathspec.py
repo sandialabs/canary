@@ -218,6 +218,13 @@ def _classify_item(
         builder.errors.append(str(e))
         return
 
+    if os.path.isabs(item):  # no test id starts with a separator: it is a missing path
+        builder.errors.append(
+            f"{item}: no such file or directory (an absolute path names a file on the "
+            "machine running canary; through a server, give paths relative to the workspace)"
+        )
+        return
+
     possible_specs.append(item)
 
 

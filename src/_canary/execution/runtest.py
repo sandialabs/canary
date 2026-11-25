@@ -104,10 +104,28 @@ class Runner:
         return self.jobs
 
 
+def user_hook_modules() -> list[tuple[str, str]]:
+    """``(name, file)`` of the hook modules this run loaded from the user.
+
+    ``canaryhooks.py``, ``-p`` and ``CANARY_PLUGINS`` modules: every plugin but canary's
+    own and those installed as packages (entry points).
+    """
+    pm = config.pluginmanager
+    installed = {id(plugin) for plugin, _ in pm.list_plugin_distinfo()}
+    found: list[tuple[str, str]] = []
+    for name, plugin in pm.list_name_plugin():
+        if name.startswith(("builtin.", "command.")) or id(plugin) in installed:
+            continue
+        found.append((name, getattr(plugin, "__file__", None) or name))
+    return sorted(found)
+
+
 def canary_runtests(runner: Runner, listeners: list[Callable[..., None]] | None = None) -> None:
     pm = config.pluginmanager.hook
     try:
         logger.info(f"[bold]Starting[/] session {runner.session}")
+        for name, file in user_hook_modules():
+            logger.info(f"Using hooks from {file} ({name})")
         pm.canary_runtests_start(runner=runner)
         with runner.timeit():
             pm.canary_runtests(runner=runner)
@@ -307,9 +325,9 @@ class JobExecutor:
                     pm.canary_runtest_finish(case=job)
                 logger.debug("canary_runtest_finish: end   [%s]", job.id[:7])
             except Exception as e:
-                # A finish/teardown hook failure must not change the job's
-                # outcome: the job keeps the status produced by canary_runtest.
-                # Record the failure to the job's output file for diagnosis.
+                # A finish/teardown hook failure is not the test's: a job that passed
+                # still passes (PASS_WITH_ERRORS), and any other keeps its outcome.
+                # Either way the reason says what failed (see _record_finish_failure).
                 _record_finish_failure(job, e)
                 return
 
@@ -331,13 +349,21 @@ class JobExecutor:
 
 
 def _record_finish_failure(job: "Job", exc: Exception) -> None:
-    """Record a ``canary_runtest_finish`` hook failure to the job's output file.
+    """Record a ``canary_runtest_finish`` hook failure in the job's status and output file.
 
-    The job's outcome is deliberately left unchanged; only a diagnostic record
-    is appended so the failing finish/teardown hook can be traced.
+    The hook is not the test: a job that succeeded becomes ``PASS_WITH_ERRORS`` (still a
+    pass) with the failure as its reason; any other outcome stays, and the failure is
+    added to its reason.  The traceback is appended to the job's output file.
     """
     detail = f"{exc.__class__.__name__}: {exc}"
     logger.error("canary_runtest_finish hook failed for %s: %s", job.id[:7], detail, exc_info=True)
+    what = f"canary_runtest_finish hook failed: {detail}"
+    status = job.status
+    if status.outcome.name == "SUCCESS":
+        job.set_status(outcome="PASS_WITH_ERRORS", reason=what, code=status.code)
+    else:
+        reason = f"{status.reason}; {what}" if status.reason else what
+        job.set_status(outcome=status.outcome.name, reason=reason, code=status.code)
     tb = traceback.format_exc()
     try:
         with job.workspace.openfile(job.stdout, "a") as fh:

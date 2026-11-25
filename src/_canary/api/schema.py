@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
+from ..util.returncode import EXIT_CODES
 from .dispatch import Context
 from .dispatch import EndpointRegistry
 from .dispatch import build_registry
@@ -38,6 +39,7 @@ def endpoint_help(request: HelpRequest, ctx: Context) -> dict[str, Any]:
             "at a time, in arrival order; reads answer at once.  "
             "Unknown fields are rejected (400). /canary/schema has each body's JSON schema."
         ),
+        "exit_codes": EXIT_CODES,
         "endpoints": {
             e.path: {
                 "lane": e.lane,

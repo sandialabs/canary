@@ -147,26 +147,52 @@ class StatusRequest(BaseModel):
     )
 
 
+#: The description of a route's trailing ``{path:path}``.
+PATH_INTO = "In the route: keys into the document, by '/' (e.g. measurements/loss); none for all"
+
+
 class QueryJobRequest(BaseModel):
-    """Request for /canary/query/job: one job's result in a session."""
+    """Request for /canary/query/job/{job_id}[/{path}]: one run of a job, or part of it."""
 
     model_config = ConfigDict(extra="forbid")
 
-    job_id: str = Field(..., min_length=1, description="Job ID (a unique prefix) or name")
-    session_id: str = Field(default="latest", description="Session name, or 'latest'")
+    job_id: str = Field(..., min_length=1, description="In the route: job ID (a prefix) or name")
+    path: str = Field(default="", description=PATH_INTO)
+    session_id: str | None = Field(
+        default=None,
+        description="The job's run in this session (or 'latest'); default its latest run",
+    )
+
+
+class QueryJobLogRequest(BaseModel):
+    """Request for /canary/query/job/{job_id}/log: what a run of a job printed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str = Field(..., min_length=1, description="In the route: job ID (a prefix) or name")
+    session_id: str | None = Field(
+        default=None,
+        description="The job's run in this session (or 'latest'); default its latest run",
+    )
+    stream: Literal["stdout", "stderr"] = Field(
+        default="stdout", description="stdout (canary-out.txt; it holds stderr too unless split)"
+    )
+    tail: int | None = Field(default=None, ge=1, description="Only the last this many lines")
 
 
 class QuerySessionRequest(BaseModel):
-    """Request for /canary/query/session: a session's outcome counts (and its jobs)."""
+    """Request for /canary/query/session/{session_id}[/{path}]: a session, or part of it."""
 
     model_config = ConfigDict(extra="forbid")
 
-    session_id: str = Field(default="latest", description="Session name, or 'latest'")
-    expand_jobs: bool = Field(default=False, description="Include every job's result")
+    session_id: str = Field(
+        ..., min_length=1, description="In the route: session name, or 'latest'"
+    )
+    path: str = Field(default="", description=PATH_INTO)
 
 
 class QuerySessionsRequest(BaseModel):
-    """Request for /canary/query/sessions: every session's name, oldest first."""
+    """Request for /canary/query/sessions: every session's summary, oldest first."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -187,6 +213,17 @@ class QueryFailuresRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: str = Field(default="latest", description="Session name, or 'latest'")
+    log_tail: int | None = Field(
+        default=None, ge=1, description="Add each job's last this many lines of output (log_tail)"
+    )
+
+
+class LocationRequest(BaseModel):
+    """Request for /canary/location/{job_id}: where a job's files are."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str = Field(..., min_length=1, description="In the route: job ID (a prefix) or name")
 
 
 class QueryDBRequest(BaseModel):
@@ -194,7 +231,43 @@ class QueryDBRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sql: str = Field(..., description="A single SELECT statement")
+    sql: str = Field(..., description="A single SELECT statement; ? marks a parameter")
+    params: list[str | int | float | bool | None] = Field(
+        default_factory=list, description="The values of the statement's ? parameters, in order"
+    )
+    parse_json: bool = Field(
+        default=False,
+        description="Return JSON text columns (measurements, timekeeper, specs.data) as objects",
+    )
+
+
+class QueryDBSchemaRequest(BaseModel):
+    """Request for /canary/query/db/schema[/{path}]: the database's tables and columns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(
+        default="", description=PATH_INTO.replace("measurements/loss", "results/columns")
+    )
+
+
+class QueryDBStatsRequest(BaseModel):
+    """Request for /canary/query/db/stats (no fields)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LearnRequest(BaseModel):
+    """Request for /canary/learn/capabilities and /canary/learn/skills."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(
+        default=".",
+        description="Query path, as for canary learn: 'ext.pyt.parameters', "
+        "'pyt.canary-pyt-authoring'; '.' for everything",
+    )
+    list_keys: bool = Field(default=False, description="The keys below topic, not its data")
 
 
 # ==============================================================================

@@ -22,7 +22,7 @@ _TEMPLATE_TOKEN_RE = re.compile(r"@@[A-Z0-9_]+@@")
 
 
 def curated_skill_entries() -> list[tuple[str, dict[str, Any]]]:
-    from ..cli.learn import build_skills_tree
+    from ..app.learn import build_skills_tree
 
     data = build_skills_tree()
     return sorted(iter_skill_objects(data), key=lambda item: item[0])

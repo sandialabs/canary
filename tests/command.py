@@ -16,17 +16,17 @@ import canary
 from _canary import config as config_mod
 from _canary.agent import render_bootstrap_markdown
 from _canary.agent import write_agent_bootstrap
-from _canary.cli import learn as learn_mod
+from _canary.app import learn as learn_mod
+from _canary.app.learn import build_capabilities_tree
+from _canary.app.learn import build_skills_tree
+from _canary.app.learn import list_capability_paths
+from _canary.app.learn import list_skill_paths
 from _canary.cli.config import show_config
 from _canary.cli.describe import Describe
 from _canary.cli.find import Find
 from _canary.cli.learn import CAPABILITY_HELP_QUERY
 from _canary.cli.learn import SKILL_HELP_QUERY
 from _canary.cli.learn import Learn
-from _canary.cli.learn import build_capabilities_tree
-from _canary.cli.learn import build_skills_tree
-from _canary.cli.learn import list_capability_paths
-from _canary.cli.learn import list_skill_paths
 from _canary.cli.location import Location
 from _canary.cli.log import Log
 from _canary.cli.query import Query
@@ -774,6 +774,17 @@ def test_query_job_nested_field(setup, capsys):
     assert "outcome" in data
 
 
+def test_query_job_measurements_are_by_name(setup, capsys):
+    with working_dir(setup.results_path), canary.config.override():
+        assert run_query(jobid=setup.f_a1_id, query=".measurements") == 0
+        by_name = json.loads(capsys.readouterr().out)
+        assert run_query(jobid=setup.f_a1_id, query="measurements.command_line") == 0
+        command_line = json.loads(capsys.readouterr().out)
+
+    assert "data" not in by_name and "__type__" not in by_name
+    assert command_line == by_name["command_line"]
+
+
 def test_query_job_list_keys(setup, capsys):
     with working_dir(setup.results_path), canary.config.override():
         rc = run_query(jobid=setup.f_a1_id, query=".", list_keys=True)
@@ -1039,6 +1050,16 @@ def test_query_json_existing_dot_semantics_are_preserved():
     assert query_json(data, "measurements") == {"data": {"max_stress": 12.5}}
     assert query_json(data, ".measurements.data.max_stress") == 12.5
     assert query_json(data, ".items[0].name") == "a"
+
+
+def test_prefixed_measurement_names_resolve_in_cli_and_route_paths():
+    from _canary.app.queries import lookup
+
+    data = {"measurements": {"myproject::loss": 0.5, "mymod::stats": {"max": 3}}}
+    assert query_json(data, "measurements.myproject::loss") == 0.5
+    assert query_json(data, ".measurements.mymod::stats.max") == 3
+    assert lookup(data, "measurements/myproject::loss") == 0.5
+    assert lookup(data, "measurements/mymod::stats/max") == 3
 
 
 def test_query_json_supports_quoted_keys():
@@ -2550,7 +2571,7 @@ def test_query_job_missing_inputs(setup, capsys):
         workspace = Workspace.load()
         job = next(job for job in workspace.load_jobs() if job.name == "f.a=1")
         lock_data = json.loads(job.lockfile.read_text())
-        inputs = lock_data["measurements"]["data"].get("inputs", [])
+        inputs = lock_data["measurements"].get("inputs", [])
         if inputs:
             inputs[0]["exists_now"] = False
             job.lockfile.write_text(json.dumps(lock_data))
@@ -3146,3 +3167,22 @@ def test_query_job_session_without_result_raises(two_session_setup, tmp_path):
             _query_job(ns, session=bogus.name)
     finally:
         bogus.rmdir()
+
+
+def test_query_failures_lists_jobs_that_passed_with_errors(tmp_path):
+    """As /canary/query/failures does: a pass whose finish hook failed needs attention."""
+    import subprocess
+    import sys
+
+    (tmp_path / "t.pyt").write_text('import sys\nif __name__ == "__main__":\n    sys.exit(0)\n')
+    (tmp_path / "canaryhooks.py").write_text(
+        "import canary\n\n\n@canary.hookimpl\ndef canary_runtest_finish(case):\n"
+        "    raise RuntimeError('boom in my hook')\n"
+    )
+    run = subprocess.run([sys.executable, "-m", "canary", "run", "-w", "."], cwd=tmp_path)
+    assert run.returncode == 0  # it passed
+    query = [sys.executable, "-m", "canary", "query", "failures"]
+    out = subprocess.run(query, cwd=tmp_path, capture_output=True, text=True, check=True).stdout
+    (group,) = json.loads(out)
+    assert group["outcomes"] == {"PASS_WITH_ERRORS": 1}
+    assert "boom in my hook" in group["signature"]

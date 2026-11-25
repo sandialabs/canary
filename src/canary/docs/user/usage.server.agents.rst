@@ -58,9 +58,18 @@ Practical notes:
   ``inbox/``.
 * Look before you leap: ``/canary/help`` lists every route, what it does and its fields;
   ``/canary/schema`` has each body's JSON schema.
+* The skills say ``canary query -c TOPIC`` and ``canary learn skills SKILL``; without
+  canary, ``/canary/learn/capabilities`` and ``/canary/learn/skills`` (``{"topic":
+  ...}``) return the same data.  The ``canary-server`` skill maps the other commands to
+  routes.
 * Read ``data.exit_code`` for work, not only ``state``: a run whose tests fail is still
   ``done``.  ``7`` means nothing ran (e.g. rerunning tests that passed without
-  ``only: "all"``).
+  ``only: "all"``).  Any other non-zero code is a sum of bits, one per kind of job
+  that did not pass: 2 diffed, 4 timed out, 8 failed, 16 cancelled, 32 did not finish, 64
+  another status; 1 and 3 mean canary itself failed.  ``/canary/help`` lists them as
+  ``exit_codes``.
 * ``cwd`` and paths in the body are relative to the anchor: they mean the same on every
-  machine, wherever each mounts the share.
+  machine, wherever each mounts the share.  Never send an absolute path: the server
+  resolves it on its own machine, where the workspace may be mounted elsewhere (a missing
+  one is ``400 ... no such file or directory``).
 * Reads (status, queries) answer while work runs; work requests wait their turn.

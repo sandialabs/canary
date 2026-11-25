@@ -35,6 +35,7 @@ This repository uses Canary as its workflow and execution layer.
 - Use `canary query -c TOPIC` for compact capability retrieval.
 - Use `canary query --skills SKILL` for direct skill lookup.
 - Use `canary query --skills . --list` to enumerate the installed skill set in this environment.
+- Without canary installed (a workspace request server, `.canary/share/carl`), get the same data from the server: `carl GET file://$WS/canary/learn/capabilities -d '{"topic": "TOPIC"}'` and `.../canary/learn/skills -d '{"topic": "SKILL"}'` (add `"list_keys": true` for `--list`). The `canary-server` skill maps the other commands to routes.
 
 ## Avoid
 

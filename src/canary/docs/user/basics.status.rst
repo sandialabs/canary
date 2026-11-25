@@ -146,6 +146,13 @@ Internally, ``canary`` represents each status using two levels:
    * - ``PASS``
      - ``XDIFF``
      - Job diffed as expected (marked :ref:`xdiff <directive-xdiff>`)
+   * - ``PASS``
+     - ``PASS_WITH_ERRORS``
+     - Job passed, but something after it failed (a ``canary_runtest_finish`` hook
+       raised); the reason says what.  Like ``XFAIL`` and ``XDIFF`` it counts as a pass
+       (exit code 0), but ``canary query failures`` (and the API's ``/canary/query/failures``)
+       list it.  A job that did not pass keeps its outcome and
+       gets the hook's error added to its reason.
    * - ``FAIL``
      - ``FAILED``
      - Job exited with a nonzero code

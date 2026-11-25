@@ -29,6 +29,8 @@ class Session:
     reused: bool = False  # True if this session reuses an existing session directory
 
     returncode: int = dataclasses.field(init=False, default=-1)
+    #: Why the session stopped before its jobs finished (an exception canary raised), if it did.
+    error: str | None = dataclasses.field(init=False, default=None)
     started_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
     finished_on: datetime.datetime = dataclasses.field(init=False, default=datetime.datetime.min)
 
@@ -71,6 +73,7 @@ class Session:
             "root_at_creation": str(self.prefix.parent.parent.parent),
             "job_ids": [job.id for job in self.jobs],
             "returncode": self.returncode,
+            "error": self.error,
             "started_on": self.started_on.isoformat(),
             "finished_on": self.finished_on.isoformat(),
             "argv": list(sys.argv),

@@ -445,7 +445,7 @@ class TestConvenienceConstructors:
 
 class TestGetCategory:
     def test_pass_outcomes(self):
-        for o in (Outcome.SUCCESS, Outcome.XFAIL, Outcome.XDIFF):
+        for o in (Outcome.SUCCESS, Outcome.XFAIL, Outcome.XDIFF, Outcome.PASS_WITH_ERRORS):
             assert get_category(o) == Category.PASS
 
     def test_fail_outcomes(self):
@@ -477,6 +477,7 @@ class TestGetPossibleOutcomes:
             Outcome.SUCCESS,
             Outcome.XFAIL,
             Outcome.XDIFF,
+            Outcome.PASS_WITH_ERRORS,
         }
 
     def test_fail(self):

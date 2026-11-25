@@ -367,3 +367,34 @@ def test_job_save_uses_atomic_tmp_cleanup(spec: JobSpec, space):
 
     loaded = json.loads(job.lockfile.read_text())
     assert loaded.id == job.id
+
+
+def test_measurements_are_stored_by_name_and_old_locks_still_load():
+    import json
+
+    from _canary.core.job import Measurements
+    from _canary.util import json_helper
+
+    m = Measurements(data={"loss": 0.5, "data": [1, 2]})  # "data" is just a name now
+    stored = json_helper.loads(json_helper.dumps(m))
+    assert stored == m
+    raw = json.loads(json_helper.dumps(m))
+    assert {k for k in raw if k != "__type__"} == {"loss", "data"}
+    old = '{"data": {"loss": 0.5}, "__type__": "_canary.core.job::Measurements"}'
+    assert json_helper.loads(old) == Measurements(data={"loss": 0.5})
+
+
+def test_the_first_value_of_a_measurement_is_kept():
+    from _canary.core.job import Job
+    from _canary.core.job import MeasurementExists
+
+    job = Job.__new__(Job)  # only its measurements are used
+    job.measurements = Measurements()
+    job.display_name = lambda **kwargs: "j"  # type: ignore[method-assign]
+    job.add_measurement("duration", 1.0)  # e.g. canary's
+    with pytest.raises(MeasurementExists, match="already recorded this run"):
+        job.add_measurement("duration", 2.0)  # e.g. a hook's
+    assert job.measurements.data == {"duration": 1.0}
+    job.add_measurement("duration", 3.0, replace=True)  # updating one's own
+    job.add_measurement("loss", 0.5)
+    assert job.measurements.data == {"duration": 3.0, "loss": 0.5}

@@ -19,8 +19,8 @@ from _canary.api.argv import Dest
 from _canary.api.dispatch import Context
 from _canary.api.models import Only
 from _canary.api.work import check_run_paths
-from _canary.api.work import exit_code
 from _canary.api.work import options_for
+from _canary.api.work import run_result
 
 from . import app
 
@@ -83,7 +83,10 @@ class HPCRunRequest(BaseModel):
 
 
 def hpc_run(request: HPCRunRequest, ctx: Context) -> dict[str, Any]:
-    """Run tests through an HPC scheduler, as ``canary hpc run`` does: ``{"exit_code": N}``."""
+    """Run tests through an HPC scheduler, as ``canary hpc run`` does: ``{"exit_code": N}``.
+
+    ``session_error`` is there too if canary crashed in the session (see ``run_result``).
+    """
     options = options_for(request, "hpc", "run")
     check_run_paths(options, ctx)
-    return {"exit_code": exit_code(lambda: app.run(options))}
+    return run_result(ctx, lambda: app.run(options))

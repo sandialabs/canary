@@ -85,6 +85,7 @@ class Serving:
         self.thread = threading.Thread(target=self.srv.run, daemon=True)
         self.thread.start()
         wait_for(lambda: (server_dir(self.root) / "server.json").exists(), 10)
+        wait_for(lambda: (self.root / "share" / "carl").exists(), 10)  # installed just after
         return self
 
     def stop(self):

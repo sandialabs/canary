@@ -27,7 +27,7 @@ GIT_TIMEOUT = 10
 @canary.hookimpl(trylast=True)
 def canary_runteststart(case: "canary.Job") -> None:
     if info := git_info(Path(case.file)):
-        case.add_measurement("git", info)
+        case.add_measurement("git", info, replace=True)
 
 
 def git_info(file: Path) -> dict[str, Any] | None:

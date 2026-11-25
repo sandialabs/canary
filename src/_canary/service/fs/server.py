@@ -80,6 +80,8 @@ class ServerInfo:
     version: str
     #: Incremented on every heartbeat; other hosts judge liveness by its progress.
     beat: int = 0
+    #: Which code the server runs (:func:`source_build`): changes with any edit to canary.
+    build: str = ""
 
     def to_dict(self, *, alive: bool) -> dict[str, Any]:
         return {**dataclasses.asdict(self), "alive": alive}
@@ -93,6 +95,7 @@ class ServerInfo:
             "heartbeat": self.heartbeat,
             "beat": self.beat,
             "canary_version": self.version,
+            "build": self.build,
             "running": running,
             "queued": queued,
         }
@@ -111,6 +114,7 @@ def read_info(workspace_root: Path) -> ServerInfo | None:
             heartbeat=data["heartbeat"],
             version=data["canary_version"],
             beat=data.get("beat", 0),
+            build=data.get("build", ""),
         )
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -257,7 +261,9 @@ class Server:
             raise ServerRunningError(f"could not take the server lock {self.lock}")
         self.stop_file.unlink(missing_ok=True)
         now = time.time()
-        self.info = ServerInfo(os.getpid(), socket.gethostname(), now, now, version.__version__)
+        self.info = ServerInfo(
+            os.getpid(), socket.gethostname(), now, now, version.__version__, build=source_build()
+        )
         self._heartbeat()  # visible at once to clients and to a competing server
 
     # ------------------------------------------------------------------ requests
@@ -476,6 +482,25 @@ def _copy(pipe: IO[bytes], path: Path) -> threading.Thread:
     thread = threading.Thread(target=copy, daemon=True)
     thread.start()
     return thread
+
+
+def source_build() -> str:
+    """A short hash of canary's and its plugins' source files (path, size, modification time).
+
+    ``canary_version`` changes only with a commit; this changes with any edit too, so a
+    caller can tell which code a server runs.
+    """
+    import hashlib
+
+    import _canary
+
+    base = Path(_canary.__file__).parent.parent
+    digest = hashlib.sha1(usedforsecurity=False)
+    for package in sorted(p for p in base.glob("*canary*") if p.is_dir()):
+        for file in sorted(package.rglob("*.py")):
+            stat = file.stat()
+            digest.update(f"{file.relative_to(base)}:{stat.st_size}:{stat.st_mtime_ns}\n".encode())
+    return digest.hexdigest()[:12]
 
 
 def install_carl(workspace_root: Path) -> Path:

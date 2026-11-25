@@ -123,6 +123,7 @@ def collect_failure_groups(
             Outcome.ERROR.name,
             Outcome.BROKEN.name,
             Outcome.DIFFED.name,
+            Outcome.PASS_WITH_ERRORS.name,  # passed, but a finish hook failed
         }:
             if not include_pass_with_errors or not is_pass:
                 continue
@@ -254,7 +255,11 @@ def analyze_job_failure(
         )
         if analysis is None:
             continue
-        if row["status"].category.value == "PASS" and not include_pass_with_errors:
+        status = row["status"]
+        passed_cleanly = (
+            status.category.value == "PASS" and status.outcome != Outcome.PASS_WITH_ERRORS
+        )
+        if passed_cleanly and not include_pass_with_errors:
             continue
         analysis["log"] = name
         return analysis

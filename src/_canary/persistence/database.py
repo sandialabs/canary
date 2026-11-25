@@ -734,6 +734,21 @@ class WorkspaceDatabase:
         ).fetchall()
         return {name: ddl for name, ddl in rows}
 
+    def get_columns(self) -> dict[str, list[dict[str, Any]]]:
+        """Return a mapping of table name → its columns (``name``, ``type``, ``notnull``, ``pk``)."""
+        tables = self.connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        columns: dict[str, list[dict[str, Any]]] = {}
+        for (table,) in tables:
+            rows = self.connection.execute(
+                'SELECT name, type, "notnull", pk FROM pragma_table_info(?)', (table,)
+            ).fetchall()
+            columns[table] = [
+                {"name": n, "type": t, "notnull": bool(nn), "pk": pk} for n, t, nn, pk in rows
+            ]
+        return columns
+
     def get_stats(self) -> dict[str, Any]:
         """Return summary statistics about the workspace database.
 

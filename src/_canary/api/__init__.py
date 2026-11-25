@@ -18,10 +18,11 @@ from ..plugins.hookspec import hookimpl
 
 @hookimpl(specname="canary_addendpoint")
 def core_endpoints(registry) -> None:
+    from . import learn
     from . import query
     from . import schema
     from . import status
     from . import work
 
-    for module in (query, schema, status, work):
+    for module in (learn, query, schema, status, work):
         module.register(registry)

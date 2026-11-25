@@ -432,13 +432,14 @@ class Engine:
                 session.save()
             os.chdir(str(session.prefix))
             canary_runtests(runner=runner)
-        except Exception:
+        except Exception as exc:
             logger.exception("session run failed")
-            session.returncode = 1
+            session.error = f"{type(exc).__name__}: {exc}"
         finally:
             session.finished_on = datetime.datetime.now()
             os.chdir(starting_dir)
-            session.returncode = runner.returncode
+            # A crash leaves its jobs unfinished (their bits say so); it is never a pass.
+            session.returncode = runner.returncode or (1 if session.error else 0)
             if parent_session:
                 session.save()
 

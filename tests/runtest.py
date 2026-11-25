@@ -156,8 +156,8 @@ def test_reconcile_mixed_batch_on_interrupt():
     assert all(j.state.is_done() for j in (done, pending, running))
 
 
-def test_record_finish_failure_preserves_status_and_writes_output(tmp_path):
-    """A failing finish hook is recorded to the job output, not the job status."""
+def test_record_finish_failure_keeps_a_pass_and_writes_output(tmp_path):
+    """A failing finish hook is not the test's failure: a pass stays one, with the reason."""
 
     written: list[str] = []
 
@@ -179,15 +179,37 @@ def test_record_finish_failure_preserves_status_and_writes_output(tmp_path):
     except RuntimeError as e:
         _record_finish_failure(job, e)
 
-    # Status is untouched: the job keeps its canary_runtest outcome.
-    assert job.status.outcome.name == "SUCCESS"
+    # Still a pass, but not a clean one: the reason says what failed.
+    assert job.status.outcome.name == "PASS_WITH_ERRORS"
     assert job.status.category.value == "PASS"
+    assert job.status.reason == "canary_runtest_finish hook failed: RuntimeError: boom in finish"
 
     # The failure and its traceback are recorded to the job's output file.
     assert written, "expected the failure to be written to the job output file"
     output = written[0]
     assert "canary_runtest_finish hook failed" in output
     assert "RuntimeError: boom in finish" in output
+
+
+def test_record_finish_failure_keeps_any_other_outcome_and_adds_to_its_reason(tmp_path):
+    @contextmanager
+    def openfile(name, mode="r"):
+        with open(tmp_path / name, mode, encoding="utf-8") as fh:
+            yield fh
+
+    job = DummyJob()
+    job.status.set(outcome="FAILED", reason="Test exited with exit code = 1", code=1)
+    job.stdout = "canary-out.txt"
+    job.workspace = SimpleNamespace(openfile=openfile)
+    try:
+        raise RuntimeError("boom in finish")
+    except RuntimeError as e:
+        _record_finish_failure(job, e)
+    assert (job.status.outcome.name, job.status.code) == ("FAILED", 1)
+    assert job.status.reason == (
+        "Test exited with exit code = 1; canary_runtest_finish hook failed: "
+        "RuntimeError: boom in finish"
+    )
 
 
 def test_record_job_event_records_lifecycle_events_of_jobs_only():

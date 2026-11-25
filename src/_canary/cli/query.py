@@ -72,7 +72,6 @@ from ..app.query_helpers import apply_with_fields
 from ..app.query_helpers import build_compare_row
 from ..app.query_helpers import clean
 from ..app.query_helpers import compare_digest
-from ..app.query_helpers import db_outcome_counts_for_session
 from ..app.query_helpers import db_results_for_session
 from ..app.query_helpers import find_cache_path
 from ..app.query_helpers import job_blockers
@@ -82,6 +81,8 @@ from ..app.query_helpers import parse_where
 from ..app.query_helpers import resolve_session_dir as _resolve_session_dir
 from ..app.query_helpers import row_to_job_entry
 from ..app.query_helpers import rows_for_named_session
+from ..app.query_helpers import session_summary
+from ..core.job import unnest_measurements
 from ..plugins.hookspec import hookimpl
 from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
@@ -122,7 +123,7 @@ class Query(CanarySubcommand):
         "Examples:\n\n"
         "[pad]canary query -c overview\n\n"
         "[pad]canary query --skills core.canary-orientation\n\n"
-        "[pad]canary query -j abc1234 measurements.data\n\n"
+        "[pad]canary query -j abc1234 measurements\n\n"
         "[pad]canary query -s latest measurements\n\n"
         "[pad]canary query job abc1234\n\n"
         "[pad]canary query job abc1234 status.outcome\n\n"
@@ -438,7 +439,10 @@ class Query(CanarySubcommand):
         p_failures.add_argument(
             "--include-pass-with-errors",
             action="store_true",
-            help="Also include PASS jobs whose logs contain a traceback or command error",
+            help=(
+                "Also include other PASS jobs whose logs contain a traceback or command error "
+                "(PASS_WITH_ERRORS jobs, whose finish hook failed, are always included)"
+            ),
         )
         p_failures.add_argument("--terse", action="store_true", help="Compact single-line JSON")
 
@@ -620,7 +624,7 @@ def _exec_job(args: argparse.Namespace) -> int:
     if getattr(args, "missing_inputs", False):
         lockfile = job_lockfile(workspace, args.jobid, session=session)
         data = json.loads(lockfile.read_text())
-        inputs = data.get("measurements", {}).get("data", {}).get("inputs", [])
+        inputs = unnest_measurements(data.get("measurements") or {}).get("inputs", [])
         missing = [item for item in inputs if not item.get("exists_now")]
         print_json(missing, terse=args.terse)
         return 0
@@ -653,6 +657,9 @@ def _exec_job(args: argparse.Namespace) -> int:
     if session is None:
         _warn_if_superseded(workspace, args.jobid)
     data = json.loads(lockfile.read_text())
+    # By name, also from an older lock (which stored them under "data").
+    if isinstance(measurements := data.get("measurements"), dict):
+        data["measurements"] = unnest_measurements(measurements)
 
     # Merge env.json as a top-level "env" key so that path expressions like
     # "env" and "env.CUDA_VISIBLE_DEVICES" work identically to "measurements"
@@ -710,7 +717,7 @@ def _exec_session(args: argparse.Namespace) -> int:
         for row in rows:
             job = workspace.find_job(row["id"])
             lock_data = json.loads(job.lockfile.read_text())
-            inputs = lock_data.get("measurements", {}).get("data", {}).get("inputs", [])
+            inputs = unnest_measurements(lock_data.get("measurements") or {}).get("inputs", [])
             missing.extend(item for item in inputs if not item.get("exists_now"))
         result = missing
     if args.clean:
@@ -764,28 +771,8 @@ def _exec_sessions(args: argparse.Namespace) -> int:
 
     out: list[dict[str, Any]] = []
     for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
-            continue
-        lockfile = session_dir / "session.lock"
-        if not lockfile.exists():
-            continue
-        session_data = json.loads(lockfile.read_text())
-        session_name = session_data.get("name", session_dir.name)
-
-        counts = db_outcome_counts_for_session(workspace, session_name)
-        total = sum(counts.values())
-
-        entry: dict[str, Any] = {
-            "name": session_name,
-            "started_on": session_data.get("started_on"),
-            "finished_on": session_data.get("finished_on"),
-            "returncode": session_data.get("returncode"),
-            "argv": session_data.get("argv", []),
-            "job_count": total,
-            "outcomes": counts,
-        }
-
-        if predicate and not predicate(entry):
+        entry = session_summary(workspace, session_dir)
+        if entry is None or (predicate and not predicate(entry)):
             continue
         out.append(entry)
 

@@ -114,7 +114,7 @@
         ],
         "status_model": {
           "category": "Broad category such as PASS, FAIL, SKIP, CANCEL, or NONE.",
-          "outcome": "Specific outcome such as SUCCESS, FAILED, DIFFED, TIMEOUT, SKIPPED, BLOCKED, ERROR, BROKEN, XFAIL, XDIFF, CANCELLED, or INTERRUPTED.",
+          "outcome": "Specific outcome such as SUCCESS, FAILED, DIFFED, TIMEOUT, SKIPPED, BLOCKED, ERROR, BROKEN, XFAIL, XDIFF, PASS_WITH_ERRORS (passed, but a canary_runtest_finish hook raised: see the reason), CANCELLED, or INTERRUPTED.",
           "reason": "Human-readable reason, usually populated for non-success outcomes.",
           "code": "Exit code or framework-assigned code."
         },
@@ -171,8 +171,9 @@
       "measurement_api": {
         "method": "Job.add_measurement(name, value)",
         "storage": "Serialized into testcase.lock and result records.",
-        "query_example": "canary query -j JOBID measurements.data.<name>",
-        "where_to_call": "Call it from a hook such as canary_runtest_finish(case), which runs in the process that owns the job. Calling it inside the test process (e.g. on canary.get_job()) is lost: the parent writes the job's final record."
+        "query_example": "canary query -j JOBID measurements.<name>",
+        "where_to_call": "Call it from a hook such as canary_runtest_finish(case), which runs in the process that owns the job. Calling it inside the test process is lost: the parent writes the job's final record.",
+        "first_value_wins": "Canary, its plugins and hooks all record through add_measurement, into one flat namespace per job. The default plugins record duration, samples, inputs, command_line, cpu_percent, memory_rss_mb, memory_vms_mb and num_threads without a prefix; prefix yours (myplugin::name; '::' keeps query paths working). The first value recorded under a name in a run is kept; recording it again raises MeasurementExists (a ValueError) unless replace=True (to update your own)."
       },
       "readiness": {
         "is_ready": "True when all dependencies are done and satisfied.",
@@ -501,7 +502,7 @@
           "summary": "Canary records the workspace root at session creation and can remap host-style paths when a workspace is inspected from a different mount point.",
           "fields": {
             "session.lock.root_at_creation": "Absolute workspace anchor path recorded when the session was created.",
-            "measurements.data.inputs": "Per-job staged input inventory captured during setup. Each entry includes source, dest, kind, exists_now, size, and sha256."
+            "measurements.inputs": "Per-job staged input inventory captured during setup. Each entry includes source, dest, kind, exists_now, size, and sha256."
           },
           "commands": [
             "canary location ID --json",
@@ -623,7 +624,7 @@
           },
           "example": "import canary\n@canary.hookimpl(trylast=True)\ndef canary_runtest_finish(case):\n    # cwd is the job's working directory\n    import pathlib\n    out = pathlib.Path('result.dat')\n    if out.exists():\n        value = float(out.read_text().strip())\n        case.add_measurement('my_metric', value)\n    return None  # let built-in run"
         },
-        "query_measurements": "canary query job JOBID measurements.data.<name>"
+        "query_measurements": "canary query job JOBID measurements.<name>"
       },
       "query_data": {
         "canary_capabilities": "Return an extension capability document inserted under capabilities.ext.<extension>.",
@@ -781,6 +782,7 @@
         "BROKEN",
         "XFAIL",
         "XDIFF",
+        "PASS_WITH_ERRORS",
         "CANCELLED",
         "INTERRUPTED",
         "NONE"
@@ -974,14 +976,14 @@
         "Write or modify job definitions; record measurements in a canaryhooks.py canary_runtest_finish(case) hook.",
         "Run canary run PATH (or TAG, or JOBID). The exit code is 0 only if every job passed.",
         "Inspect non-passing jobs with canary status --json (--all for every job).",
-        "Query structured data: canary query -j JOBID measurements.data.NAME, canary query -s latest measurements.NAME.",
+        "Query structured data: canary query -j JOBID measurements.NAME, canary query -s latest measurements.NAME.",
         "Decide the next action and rerun with canary run --only failed PATH, or canary run JOBID."
       ],
       "recommended_queries": [
         "canary query -c overview",
         "canary query -c hooks.post",
         "canary status --json",
-        "canary query -j JOBID measurements.data",
+        "canary query -j JOBID measurements",
         "canary query -s latest measurements",
         "canary query jobs --where status.category==FAIL --digest",
         "canary query compare BASE_SESSION NEW_SESSION --digest"

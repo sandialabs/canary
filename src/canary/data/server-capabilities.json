@@ -26,7 +26,7 @@
       "read": "/canary/status, /canary/query/{sessions,session,jobs,job,failures,db}, /canary/help, /canary/schema: concurrently (server:read_workers), limited to server:read_timeout s"
     },
     "files": {
-      "server.json": "public: version, state, started, heartbeat, beat, canary_version, running, queued. Alive if beat changes between reads (clocks are never compared).",
+      "server.json": "public: version, state, started, heartbeat, beat, canary_version, build (a hash of canary's source files: changes with any edit), running, queued. Alive if beat changes between reads (clocks are never compared).",
       "inbox/": "submit here (mode 0775: who can write it can submit); *.tmp is ignored",
       "requests/<id>/": "status.json (queued/running/final), stdout, stderr, result.json; touch cancel to cancel",
       "rejected/": "inbox files with a bad name or a taken id, with <name>.reason",

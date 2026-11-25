@@ -11,7 +11,10 @@ commands do through ``canary_addcommand``)::
         registry.register("/canary/status", status)
         registry.register("/canary/select", select, lane="work")
 
-The request model comes from the handler's ``request`` annotation.  A *read* handler runs
+The request model comes from the handler's ``request`` annotation.  A route may hold
+parameters, as FastAPI routes do: ``{name}`` matches one segment and ``{name:path}`` (last)
+the rest of the path.  Each fills the model's field of that name, so
+``/canary/query/job/{job_id}`` takes ``job_id`` from the route and nothing from the body.  A *read* handler runs
 in the server (:class:`ReadLane`); a *work* handler runs in a worker child, one at a time
 (:mod:`_canary.service.fs.worker`).  Either returns the result's ``data``.  Handlers are
 plain synchronous functions of a validated model and a :class:`Context`, and never know
@@ -77,6 +80,8 @@ class Context:
     submitted: float
     #: The endpoints of the server that received the request.
     registry: "EndpointRegistry | None" = None
+    #: The route requested (an endpoint's path with its parameters filled in).
+    path: str = ""
 
     @property
     def anchor(self) -> Path:
@@ -108,6 +113,30 @@ class Endpoint:
     lane: Lane
     model: type[BaseModel]
     func: Callable[[Any, Context], Any]
+    #: Matches the routes of a path with parameters; ``None`` for a fixed path.
+    pattern: "re.Pattern[str] | None" = dataclasses.field(default=None, compare=False)
+
+
+#: A route parameter: ``{name}`` (one segment) or ``{name:path}`` (the rest).
+ROUTE_PARAM = re.compile(r"\{(\w+)(:path)?\}")
+
+
+def _route_pattern(path: str, model: type[BaseModel]) -> "re.Pattern[str] | None":
+    """The regular expression matching *path*'s routes, or ``None`` if it has no parameters."""
+    params = list(ROUTE_PARAM.finditer(path))
+    if not params:
+        return None
+    regex, end = "", 0
+    for m in params:
+        name, rest = m.group(1), m.group(2)
+        if name not in model.model_fields:
+            raise ValueError(f"{path}: {{{name}}} is not a field of {model.__name__}")
+        if rest and m.end() != len(path):
+            raise ValueError(f"{path}: {{{name}:path}} must end the route")
+        regex += re.escape(path[end : m.start()])
+        regex += f"(?P<{name}>.+)" if rest else f"(?P<{name}>[^/]+)"
+        end = m.end()
+    return re.compile(regex + re.escape(path[end:]))
 
 
 class EndpointRegistry:
@@ -128,10 +157,26 @@ class EndpointRegistry:
                 f"endpoint {path} is already registered "
                 f"(by {other.func.__module__}; again by {func.__module__})"
             )
-        self._endpoints[path] = Endpoint(path, lane, model, func)
+        self._endpoints[path] = Endpoint(path, lane, model, func, _route_pattern(path, model))
 
     def get(self, path: str) -> Endpoint | None:
+        """The endpoint registered as *path* (a route with parameters stays unfilled)."""
         return self._endpoints.get(path)
+
+    def match(self, route: str) -> tuple[Endpoint, dict[str, str]] | None:
+        """The endpoint serving *route*, and the route parameters it fills.
+
+        A fixed path wins, then a route of single-segment parameters, then one ending in
+        ``{name:path}``: ``/canary/query/job/{job_id}/log`` before ``.../{path:path}``.
+        """
+        if (endpoint := self._endpoints.get(route)) is not None and endpoint.pattern is None:
+            return endpoint, {}
+        templates = [e for e in self._endpoints.values() if e.pattern is not None]
+        templates.sort(key=lambda e: ":path}" in e.path)
+        for endpoint in templates:
+            if endpoint.pattern is not None and (m := endpoint.pattern.fullmatch(route)):
+                return endpoint, m.groupdict()
+        return None
 
     def __iter__(self) -> typing.Iterator[Endpoint]:
         return iter(sorted(self._endpoints.values(), key=lambda e: e.path))
@@ -178,6 +223,7 @@ def accept(
             bad_json = f"invalid JSON: {exc}"
     path = envelope.get("path", "") if isinstance(envelope, dict) else ""
     path = path if isinstance(path, str) else ""
+    ctx.path = path
 
     directory = requests.request_dir(workspace_root, request_id)
     directory.parent.mkdir(parents=True, exist_ok=True)
@@ -197,14 +243,17 @@ def accept(
         env = Envelope.model_validate(envelope)
     except ValidationError as exc:
         return reject(400, f"invalid envelope: {_errors(exc)}")
-    endpoint = registry.get(env.path)
-    if endpoint is None:
+    found = registry.match(env.path)
+    if found is None:
         return reject(404, f"no endpoint {env.path} (/canary/help lists every route)")
+    endpoint, params = found
     if env.method == "GET" and endpoint.lane == "work":
         return reject(405, f"{env.path} is work: submit it with POST")
+    if given := sorted(set(params) & set(env.request)):
+        return reject(400, f"{env.path}: {', '.join(given)} is given by the route, not the body")
     try:
         ctx.cwd = _check_cwd(env.cwd, ctx.anchor)
-        body = endpoint.model.model_validate(env.request)
+        body = endpoint.model.model_validate({**env.request, **params})
     except RequestError as exc:
         return reject(exc.status_code, str(exc))
     except ValidationError as exc:
@@ -250,11 +299,11 @@ def execute(endpoint: Endpoint, body: BaseModel, ctx: Context) -> Result:
     except RequestError as exc:
         status_code, state, error = exc.status_code, "rejected", str(exc)
     except Exception as exc:
-        logger.exception(f"{endpoint.path} failed for request {ctx.id}")
+        logger.exception(f"{ctx.path or endpoint.path} failed for request {ctx.id}")
         status_code, state, error = 500, "failed", f"{type(exc).__name__}: {exc}"
     return Result(
         id=ctx.id,
-        path=endpoint.path,
+        path=ctx.path or endpoint.path,
         status_code=status_code,
         state=state,
         data=data,
@@ -329,7 +378,7 @@ class ReadLane:
         read.ctx.interrupt()
         result = Result(
             id=read.ctx.id,
-            path=read.endpoint.path,
+            path=read.ctx.path or read.endpoint.path,
             status_code=status_code,
             state=state,
             error=reason,

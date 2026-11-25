@@ -32,6 +32,7 @@ def locate(
     show_input: bool = False,
     show_source_dir: bool = False,
     show_log: bool = False,
+    start: Path | str | None = None,
 ) -> list[dict[str, str]]:
     """Return ``{"id", "path"}`` for each of *testspecs* in the current workspace.
 
@@ -39,9 +40,9 @@ def locate(
     with *show_log* its first log file; with *show_input* / *show_source_dir* the
     spec's input file or its directory.  Paths recorded under the workspace root
     at session creation are remapped to the current root (the workspace may have
-    moved).
+    moved).  *start* is the workspace root or a path in it (default: the current directory).
     """
-    workspace = Workspace.load()
+    workspace = Workspace.load(start) if start else Workspace.load()
     root_at_creation = None
     latest = workspace.refs_dir / "latest"
     if latest.exists():

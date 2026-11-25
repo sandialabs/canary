@@ -29,9 +29,19 @@ Two public APIs are used to attach measurements:
 Values should be JSON-serializable.  Scalars are common, but lists and mapping
 values are also fine when a measurement naturally has structure.
 
+Canary's default plugins record some measurements of every job (``command_line``,
+``duration``, ``inputs``, ``cpu_percent``, ...), and other plugins and hooks add their
+own, all through ``add_measurement`` into one flat namespace.  The first value recorded under a name in a run is kept: recording the name again raises
+``MeasurementExists`` (a ``ValueError``), unless ``replace=True`` (to update a value you
+recorded yourself).  Give yours your own names (``solve_time``, not ``duration``); plugins
+should prefix theirs (``myplugin::name``; ``::`` rather than ``.``, so that
+``canary query job ID measurements.myplugin::name`` still works).  The default plugins
+record ``duration``, ``samples``, ``inputs``, ``command_line``, ``cpu_percent``,
+``memory_rss_mb``, ``memory_vms_mb`` and ``num_threads``, unprefixed.
+``canary query job JOB_ID measurements`` shows what a job has.
+
 Add measurements from hooks, which run in the process that owns the job.  Calling
-``add_measurement`` inside the test process (for example on ``canary.get_job()``) does
-not persist: the parent process writes the job's final record.  Have the test write
+``add_measurement`` inside the test process does not persist: the parent process writes the job's final record.  Have the test write
 its values to a file in its working directory and record them in
 ``canary_runtest_finish``, as in the examples below.
 
@@ -159,18 +169,17 @@ single job:
 Querying Measurements
 ---------------------
 
-Job measurements live under ``measurements.data``; session measurements directly under
-``measurements``:
+A job's and a session's measurements are under ``measurements``, by name:
 
 .. code-block:: console
 
    $ canary query -s latest measurements.campaign
    "optimization-run-1"
 
-   $ canary query -j JOB_ID measurements.data.max_memory
+   $ canary query -j JOB_ID measurements.max_memory
    1024
 
-   $ canary query -j JOB_ID measurements.data        # every measurement of the job
+   $ canary query -j JOB_ID measurements        # every measurement of the job
 
    $ canary query session latest measurements.jobs_with_accuracy
    12
@@ -179,7 +188,7 @@ Across jobs, with SQL against the results table:
 
 .. code-block:: console
 
-   $ canary query db "SELECT spec_name, json_extract(measurements, '$.data.accuracy') AS accuracy
+   $ canary query db "SELECT spec_name, json_extract(measurements, '$.accuracy') AS accuracy
                       FROM results WHERE accuracy IS NOT NULL"
 
 Using Measurements for Agents
@@ -322,16 +331,16 @@ Measurement Troubleshooting
 
 .. code-block:: console
 
-   $ canary query -j JOB_ID measurements.data.loss
+   $ canary query -j JOB_ID measurements.loss
    ERROR: "No such key: 'loss'. Available keys: command_line, cpu_percent, ..."
 
 - Is the hook module loaded (``canaryhooks.py`` in the directory ``canary`` runs from,
-  or ``canary -p MODULE run ...``)?
+  or ``canary -p MODULE run ...``)?  The session log says ``Using hooks from FILE`` for
+  each one.
 - Does the hook take an argument named ``case`` (or ``session``)?
 - Was the measurement added in a hook rather than inside the test process?
 - Was the run started with the ``canary run`` command?  The in-process
   ``_canary.app.run_request.run`` does not load ``canaryhooks.py``.
-- Session measurements have no ``data`` level: ``measurements.NAME``.
 - Inspect one job directly with ``canary query job JOB_ID measurements``.
 
 **Query Failures**:

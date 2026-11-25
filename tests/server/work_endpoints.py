@@ -107,6 +107,82 @@ def test_run_reports_canarys_exit_codes(root, serving):
     assert wait_result(root, "r3")["data"]["exit_code"] not in (0, 7)
 
 
+CRASH_PLUGIN = """\
+import canary
+
+
+@canary.hookimpl
+def canary_runtests_start(runner):
+    raise RuntimeError("injected crash")
+"""
+
+
+def test_a_session_canary_crashed_in_says_why(root, tmp_path_factory, monkeypatch):
+    """Not just cancelled jobs: the result's data, and the session, carry the exception."""
+    plugins = tmp_path_factory.mktemp("plugins")
+    (plugins / "crash_plugin.py").write_text(CRASH_PLUGIN)
+    monkeypatch.setenv("PYTHONPATH", str(plugins))
+    srv = start_server_process(root.parent, options=["-p", "crash_plugin"])
+    try:
+        drop(root, "r", run(["ok"]))
+        result = wait_result(root, "r")
+        session = _do(root, "q", "/canary/query/session/latest")
+    finally:
+        stop = [sys.executable, "-m", "canary", "server", "stop"]
+        assert subprocess.run(stop, cwd=root.parent).returncode == 0
+        srv.wait(30)
+    assert result["state"] == "done", result
+    assert result["data"]["session_error"] == "RuntimeError: injected crash"
+    assert result["data"]["exit_code"] not in (0, 7)
+    assert session["data"]["error"] == "RuntimeError: injected crash"
+    stderr = (root / "var" / "server" / "requests" / "r" / "stderr").read_text()
+    assert "Using hooks from" in stderr and "crash_plugin" in stderr  # the -p plugin
+
+
+SESSION_HOOKS = """\
+from pathlib import Path
+
+import canary
+
+
+@canary.hookimpl
+def canary_runtests_start(runner):
+    (Path(__file__).parent / "session-hook-ran").touch()
+"""
+
+
+def test_run_loads_the_canaryhooks_of_its_cwd(root, serving):
+    """Session hooks too (they run in the worker, not only in the jobs' processes)."""
+    (root.parent / "ok" / "canaryhooks.py").write_text(SESSION_HOOKS)
+    drop(root, "r", {**run(["."]), "cwd": "ok"})
+    assert wait_result(root, "r")["data"]["exit_code"] == 0
+    assert (root.parent / "ok" / "session-hook-ran").exists()
+    stderr = (root / "var" / "server" / "requests" / "r" / "stderr").read_text()
+    assert "ok/canaryhooks.py (canaryhooks)" in stderr
+
+
+def test_a_finish_hook_that_raises_shows_in_the_jobs_status(root, serving):
+    """The job still passes (its test did), but not cleanly, and the reason says why."""
+    hooks = "import canary\n\n\n@canary.hookimpl\ndef canary_runtest_finish(case):\n"
+    hooks += "    raise RuntimeError('boom in my hook')\n"
+    (root.parent / "ok" / "canaryhooks.py").write_text(hooks)
+    drop(root, "r", {**run(["."]), "cwd": "ok"})
+    assert wait_result(root, "r")["data"] == {"exit_code": 0, "pass_with_errors": 1}
+    status = _do(root, "q", "/canary/query/job/ok/status")["data"]
+    assert (status["category"], status["outcome"]) == ("PASS", "PASS_WITH_ERRORS")
+    assert "RuntimeError: boom in my hook" in status["reason"]
+    failures = _do(root, "f", "/canary/query/failures", log_tail=5)["data"]
+    assert [f["name"] for f in failures] == ["ok"]  # it needs attention, though it passed
+
+
+def test_a_canaryhooks_that_does_not_import_fails_the_run(root, serving):
+    (root.parent / "ok" / "canaryhooks.py").write_text("import no_such_module\n")
+    drop(root, "r", {**run(["."]), "cwd": "ok"})
+    result = wait_result(root, "r")
+    assert (result["state"], result["status_code"]) == ("failed", 500), result
+    assert "canaryhooks" in result["error"] and "no_such_module" in result["error"]
+
+
 def test_run_values_an_option_refuses_are_rejected(root, serving):
     drop(root, "bad", run(["ok"], timeout="session=not-a-time"))
     result = wait_result(root, "bad")

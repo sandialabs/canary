@@ -128,6 +128,8 @@ class Outcome(IntEnum):
         SUCCESS: Job passed cleanly (exit 0).
         XDIFF: Expected diff — diff result that was anticipated (counts as PASS).
         XFAIL: Expected failure — fail result that was anticipated (counts as PASS).
+        PASS_WITH_ERRORS: The job passed, but something after it failed, e.g. a
+            ``canary_runtest_finish`` hook raised; the reason says what (PASS category).
         DIFFED: Output differed from baseline (FAIL category).
         FAILED: Explicit test failure (non-zero exit, FAIL category).
         ERROR: Framework-level error running the job (FAIL category).
@@ -145,6 +147,7 @@ class Outcome(IntEnum):
     SUCCESS = 0
     XDIFF = 10
     XFAIL = 11
+    PASS_WITH_ERRORS = 12
     DIFFED = 64
     FAILED = 65
     ERROR = 66
@@ -194,6 +197,7 @@ class Outcome(IntEnum):
         return {
             Outcome.XFAIL: "✓",
             Outcome.XDIFF: "✓",
+            Outcome.PASS_WITH_ERRORS: "⚠",
             Outcome.DIFFED: "✗",
             Outcome.FAILED: "✗",
             Outcome.ERROR: "⚠",
@@ -450,6 +454,13 @@ class Status:
         return self
 
     @classmethod
+    def PASS_WITH_ERRORS(cls, reason: str | None = None, code: int = 0):
+        """Create a ``Status`` with outcome ``PASS_WITH_ERRORS`` (passed; *reason* is what failed)."""
+        self = cls()
+        self.set(outcome=Outcome.PASS_WITH_ERRORS, reason=reason, code=code)
+        return self
+
+    @classmethod
     def XDIFF(cls):
         """Create a ``Status`` with outcome ``XDIFF`` (expected diff)."""
         self = cls()
@@ -532,7 +543,7 @@ def get_category(arg: Outcome) -> "Category":
     Returns:
         The matching ``Category``.  Returns ``Category.NONE`` for ``Outcome.NONE``.
     """
-    if arg in (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL):
+    if arg in (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL, Outcome.PASS_WITH_ERRORS):
         return Category.PASS
     elif arg in (
         Outcome.DIFFED,
@@ -562,7 +573,7 @@ def get_possible_outcomes(arg: Category) -> tuple["Outcome", ...]:
         returns ``(Outcome.NONE,)``.
     """
     if arg == Category.PASS:
-        return (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL)
+        return (Outcome.SUCCESS, Outcome.XDIFF, Outcome.XFAIL, Outcome.PASS_WITH_ERRORS)
     elif arg == Category.FAIL:
         return (
             Outcome.DIFFED,

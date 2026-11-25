@@ -150,16 +150,31 @@ class JobState:
         return self.phase == JobPhase.DONE
 
 
+class MeasurementExists(ValueError):
+    """A job's measurement of that name was recorded already this run."""
+
+
+def unnest_measurements(stored: dict[str, Any]) -> dict[str, Any]:
+    """A job's measurements by name, from a lock file or result row of any canary version.
+
+    Older versions stored them under ``data`` (``{"data": {...}}``); every version tags
+    them with ``__type__``, which is dropped.
+    """
+    if set(stored) - {"__type__"} == {"data"} and isinstance(stored["data"], dict):
+        stored = stored["data"]
+    return {k: v for k, v in stored.items() if k != "__type__"}
+
+
 @dataclasses.dataclass
 class Measurements:
     data: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def __serialize__(self) -> dict[str, Any]:
-        return {"data": self.data}
+        return dict(self.data)  # stored by name, as a session's are
 
     @classmethod
     def __deserialize__(cls, d: dict) -> "Measurements":
-        return cls(**d)
+        return cls(data=unnest_measurements(d))
 
     def add_measurement(self, name: str, value: Any) -> None:
         self.data[name] = value
@@ -313,7 +328,21 @@ class BaseJob(ABC):
     def result_label(self) -> str:
         return self.status.outcome.label
 
-    def add_measurement(self, name: str, value: Any) -> None:
+    def add_measurement(self, name: str, value: Any, *, replace: bool = False) -> None:
+        """Record *value* as the job's measurement *name*.
+
+        Canary, its plugins and hooks all record through here, so the first value recorded
+        under a name in a run is kept: a second raises, unless *replace* (to update one's
+        own).  Plugins should prefix their names (``myplugin::name``) to stay out of the way.
+
+        Raises:
+            MeasurementExists: if *name* was recorded already this run (and not *replace*).
+        """
+        if not replace and name in self.measurements.data:
+            raise MeasurementExists(
+                f"{self.display_name()}: measurement {name!r} was already recorded this run; "
+                "give yours another name, or pass replace=True to update your own"
+            )
         self.measurements.add_measurement(name, value)
 
 
@@ -656,6 +685,7 @@ class Job(BaseJob):
 
     def setup(self) -> None:
         self.timekeeper.stage()
+        self.measurements.reset()  # a run starts with none (a rerun in place, too)
         self.workspace.remove(missing_ok=True)
         self.create_workspace()
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
@@ -708,7 +738,7 @@ class Job(BaseJob):
                     continue
                 target = snapshot_dir / src.name
                 target.write_bytes(src.read_bytes())
-        self.add_measurement("inputs", input_inventory)
+        self.add_measurement("inputs", input_inventory, replace=True)
 
     def run(self) -> None:
         from .status import Outcome

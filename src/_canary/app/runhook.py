@@ -134,6 +134,7 @@ def _load_stored_session(workspace: Workspace, session: str) -> Session:
     stored.job_ids = job_ids or [job.id for job in loaded]
     stored.measurements = Measurements(lock_data.get("measurements", {}))
     stored.returncode = lock_data.get("returncode", stored.returncode)
+    stored.error = lock_data.get("error")
     stored.started_on = _parse_datetime(lock_data.get("started_on"))
     stored.finished_on = _parse_datetime(lock_data.get("finished_on"))
     return stored

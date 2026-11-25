@@ -4,18 +4,15 @@
 
 import argparse
 from typing import TYPE_CHECKING
-from typing import Any
 
-from .. import config
-from ..config.schemas import capabilities_provider_schema
-from ..config.schemas import skills_provider_schema
+from ..app import learn
+from ..app.learn import build_capabilities_tree
+from ..app.learn import build_skills_tree
+from ..app.learn import list_capability_paths
+from ..app.learn import list_skill_paths
 from ..plugins.hookspec import hookimpl
-from ..util.query_data import display_query_prefix
-from ..util.query_data import iter_skill_objects
-from ..util.query_data import list_json_object_paths
 from ..util.query_data import print_json
 from ..util.query_data import print_query_paths
-from ..util.query_data import query_json
 from .base import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -101,15 +98,11 @@ def execute_capabilities_query(query: str, *, terse: bool = False, list_keys: bo
             print_capability_query_help()
             return 0
 
-    data = build_capabilities_tree()
-    selected_data, resolved_query = resolve_capabilities_query(data, query)
-
+    result = learn.capabilities(query, list_keys=list_keys)
     if list_keys:
-        print_query_paths(list_capability_paths(selected_data, resolved_query))
-        return 0
-
-    result = query_json(selected_data, resolved_query)
-    print_json(result, terse=terse)
+        print_query_paths(result)
+    else:
+        print_json(result, terse=terse)
     return 0
 
 
@@ -121,61 +114,12 @@ def execute_skills_query(query: str, *, terse: bool = False, list_keys: bool = F
             print_skill_query_help()
             return 0
 
-    data = build_skills_tree()
-    resolved_query = resolve_skills_query(data, query)
-
+    result = learn.skills(query, list_keys=list_keys)
     if list_keys:
-        print_query_paths(list_skill_paths(data, resolved_query))
-        return 0
-
-    result = query_json(data, resolved_query)
-
-    print_json(result, terse=terse)
+        print_query_paths(result)
+    else:
+        print_json(result, terse=terse)
     return 0
-
-
-def resolve_capabilities_query(data: dict[str, Any], query: str) -> tuple[dict[str, Any], str]:
-    if query in ("", "."):
-        return data, "."
-
-    if query == "ext":
-        return extension_capabilities_tree(data), "."
-
-    if query.startswith("ext."):
-        return extension_capabilities_tree(data), query[4:]
-
-    if query_targets_namespace(data, query):
-        return data, query
-
-    return data, f"core.{query}"
-
-
-def resolve_skills_query(data: dict[str, Any], query: str) -> str:
-    if query in ("", "."):
-        return "."
-
-    if query_targets_namespace(data, query):
-        return query
-
-    return f"core.{query}"
-
-
-def extension_capabilities_tree(data: dict[str, Any]) -> dict[str, Any]:
-    return {namespace: payload for namespace, payload in data.items() if namespace != "core"}
-
-
-def query_targets_namespace(data: dict[str, Any], query: str) -> bool:
-    if query.startswith("."):
-        query = query[1:]
-
-    if not query:
-        return False
-
-    if query.startswith("["):
-        return False
-
-    namespace = query.split(".", 1)[0]
-    return namespace in data
 
 
 # -------------------------------------------------------------------------
@@ -280,121 +224,6 @@ Tips:
   Each provider contributes skills under its namespace, such as 'core', 'pyt', or 'hpc'.
 """
     )
-
-
-# -------------------------------------------------------------------------
-# Capability / skill provider aggregation
-# -------------------------------------------------------------------------
-
-
-def build_capabilities_tree() -> dict[str, Any]:
-    """Build the runtime aggregate capabilities tree.
-
-    Every provider contributes a document with a namespace. The aggregate shape is::
-
-        {
-          "core": {...},
-          "pyt": {...},
-          "vvtest": {...}
-        }
-
-    Providers may be backed by static JSON, dynamic Python dictionaries,
-    introspection, or future external systems.
-
-    """
-    tree: dict[str, Any] = {}
-    payloads = config.pluginmanager.hook.canary_capabilities()
-
-    for payload in payloads:
-        if payload is None:
-            continue
-
-        namespace, capabilities = normalize_capabilities_provider(payload)
-
-        if namespace in tree:
-            raise ValueError(f"Duplicate Canary capabilities namespace: {namespace}")
-
-        tree[namespace] = capabilities
-
-    return tree
-
-
-def build_skills_tree() -> dict[str, Any]:
-    """Build the runtime aggregate skills tree.
-
-    Every provider contributes a document with a namespace. The aggregate shape is::
-
-        {
-          "core": {...},
-          "pyt": {...},
-          "vvtest": {...}
-        }
-
-    Providers may be backed by static JSON, dynamic Python dictionaries,
-    introspection, or future external systems.
-
-    """
-    tree: dict[str, Any] = {}
-    payloads = config.pluginmanager.hook.canary_skills()
-
-    for payload in payloads:
-        if payload is None:
-            continue
-
-        namespace, skills = normalize_skills_provider(payload)
-
-        if namespace in tree:
-            raise ValueError(f"Duplicate Canary skills namespace: {namespace}")
-
-        tree[namespace] = skills
-
-    return tree
-
-
-def normalize_capabilities_provider(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Validate and normalize one capabilities provider payload."""
-    document = capabilities_provider_schema.validate(payload)
-    namespace = document["namespace"]
-    capabilities = document["capabilities"]
-
-    if not isinstance(capabilities, dict):
-        raise TypeError(f"Capabilities payload for namespace {namespace!r} must be an object")
-
-    return namespace, capabilities
-
-
-def normalize_skills_provider(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Validate and normalize one skills provider payload."""
-    document = skills_provider_schema.validate(payload)
-    namespace = document["namespace"]
-    skills = document["skills"]
-
-    if not isinstance(skills, dict):
-        raise TypeError(f"Skills payload for namespace {namespace!r} must be an object")
-
-    return namespace, skills
-
-
-# -------------------------------------------------------------------------
-# Listing helpers
-# -------------------------------------------------------------------------
-
-
-def list_capability_paths(data: Any, query: str) -> list[str]:
-    """List immediate queryable child object paths below a capabilities query point."""
-    return list_json_object_paths(data, query)
-
-
-def list_skill_paths(data: Any, query: str) -> list[str]:
-    """List terminal skill object paths below a skill query point."""
-    selected = query_json(data, query)
-    prefix = display_query_prefix(query)
-
-    rows: list[str] = []
-    for path, _skill in iter_skill_objects(selected, prefix=prefix):
-        rows.append(path)
-
-    return sorted(rows)
 
 
 @hookimpl

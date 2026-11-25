@@ -31,6 +31,7 @@ from _canary.error import StopExecution
 from _canary.scanpaths import merge_scanpaths
 from _canary.scanpaths import scanpath_from_item
 from _canary.util import logging
+from _canary.workspace.session import Session
 
 from .argv import defaults
 from .argv import to_options
@@ -61,7 +62,8 @@ def options_for(request: BaseModel, *command: str) -> argparse.Namespace:
 
     The namespace starts from every option's default (plugins' too), takes the request's
     fields through their parser actions, then goes through what ``canary`` does after
-    parsing: the ``canary_cmdline_modifyargs`` hook and ``config.set_main_options``.
+    parsing: the ``canary_cmdline_modifyargs`` hook, ``config.set_main_options`` and loading
+    the session's plugins (the request's ``canaryhooks.py``).
     ``config.getoption`` then answers as it would for the equivalent command line.  A
     value an action refuses is the caller's mistake (``400``).
     """
@@ -73,6 +75,10 @@ def options_for(request: BaseModel, *command: str) -> argparse.Namespace:
         raise RequestError(400, str(exc)) from None
     config.pluginmanager.hook.canary_cmdline_modifyargs(parser=p, args=ns)
     config.set_main_options(ns)
+    # As canary's start-up does: load the request's ``canaryhooks.py`` (its cwd) here, so
+    # its session hooks run and an import error fails the request instead of being skipped.
+    for spec in config.session_plugins:
+        config.pluginmanager.consider_plugin_spec(spec)
     return ns
 
 
@@ -97,6 +103,26 @@ def exit_code(session: Callable[[], int]) -> int:
         raise RequestError(400, str(exc)) from None
 
 
+def run_result(ctx: Context, session: Callable[[], int]) -> dict[str, Any]:
+    """Run *session*: ``{"exit_code": N}``, with what the exit code does not show.
+
+    ``session_error`` if canary crashed in it (its jobs are left cancelled or unfinished;
+    the session's ``session.lock`` says why), and ``pass_with_errors``, the number of jobs
+    that passed but whose finish hook failed (they pass, so the exit code omits them).
+    """
+    before = ctx.workspace.latest_session()
+    data: dict[str, Any] = {"exit_code": exit_code(session)}
+    latest = ctx.workspace.latest_session()
+    if latest is not None and latest != before:
+        lock = Session.load_lock_data(ctx.workspace.sessions_dir / latest)
+        if error := lock.get("error"):
+            data["session_error"] = error
+        counts = ctx.workspace.db.get_outcome_counts_for_session(latest)
+        if n := counts.get("PASS_WITH_ERRORS"):
+            data["pass_with_errors"] = n
+    return data
+
+
 def check_run_paths(options: argparse.Namespace, ctx: Context) -> None:
     """Refuse a run whose pathspec scans outside the workspace and the allowed roots."""
     request = getattr(options, "request", None)
@@ -105,10 +131,10 @@ def check_run_paths(options: argparse.Namespace, ctx: Context) -> None:
 
 
 def run(request: RunRequest, ctx: Context) -> dict[str, Any]:
-    """Run tests, as ``canary run`` does: ``{"exit_code": N}``."""
+    """Run tests, as ``canary run`` does: ``{"exit_code": N}`` (see :func:`run_result`)."""
     options = options_for(request, "run")
     check_run_paths(options, ctx)
-    return {"exit_code": exit_code(lambda: run_from_options(options))}
+    return run_result(ctx, lambda: run_from_options(options))
 
 
 def _listed(value: str | None) -> list[str] | None:

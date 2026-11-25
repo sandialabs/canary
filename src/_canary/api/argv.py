@@ -81,7 +81,9 @@ def to_options(model: BaseModel, parser: argparse.ArgumentParser, ns: argparse.N
         value = getattr(model, field_name)
         try:
             _apply(action, parser, ns, value)
-        except (argparse.ArgumentError, ValueError) as exc:
+        except argparse.ArgumentError as exc:  # its str() leads with the CLI's metavar
+            raise ValueError(f"{field_name}: {exc.message}") from None
+        except ValueError as exc:
             raise ValueError(f"{field_name}: {exc}") from None
 
 

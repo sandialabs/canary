@@ -17,7 +17,10 @@ Everything a caller uses is under the server directory, ``<anchor>/.canary/var/s
 ============================== ======================================================
 
 Everything else there (``server.lock``, ``queue/``, ``accepting/``) is the server's own.
-No document a caller reads holds an absolute path of the server's, a pid or a host name.
+No document a caller reads holds the server's pid or host name.  Job records show their
+paths relative to the workspace; fuller documents (a job's ``spec``, ``variables``,
+``env``) may hold the server's absolute paths, which mean nothing to a caller elsewhere.
+Paths a caller sends must be relative, for the same reason.
 
 Submitting
 ----------
@@ -108,9 +111,12 @@ The server
 .. code-block:: json
 
    {"version": 1, "state": "running", "started": 1795490900.0, "heartbeat": 1795490933.0,
-    "beat": 17, "canary_version": "26.11.18", "running": 1, "queued": 2}
+    "beat": 17, "canary_version": "26.11.18", "build": "90996cbc0b5a", "running": 1,
+    "queued": 2}
 
-It is rewritten every 2 s.  A caller on another machine judges liveness by ``beat``
+``build`` is a hash of canary's source files: unlike ``canary_version``, which changes
+only with a commit, it changes with any edit, so a caller can tell which code runs.  It is
+rewritten every 2 s.  A caller on another machine judges liveness by ``beat``
 changing between two reads a few seconds apart, never by comparing ``heartbeat`` with its
 own clock.  Requests dropped while no server runs wait in ``inbox/`` and are taken, in
 order, when one starts.
@@ -123,7 +129,7 @@ Work: ``/canary/run``, ``/canary/hpc/run``, ``/canary/collect``, ``/canary/selec
    gets the whole machine.  ``hpc run`` holds the lane while its batches wait on the
    scheduler.
 
-Reads: ``/canary/status``, ``/canary/query/*``, ``/canary/help``, ``/canary/schema``
+Reads: ``/canary/status``, ``/canary/query/*``, ``/canary/learn/*``, ``/canary/help``, ``/canary/schema``
    Run at once, beside the work lane, in up to ``server:read_workers`` threads (extras
    wait, ``queued``).  A read that runs longer than ``server:read_timeout`` seconds is
    stopped and ``failed``.  Reads never write to the workspace.

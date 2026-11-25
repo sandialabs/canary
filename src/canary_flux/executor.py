@@ -491,7 +491,7 @@ class FluxDirectExecutor:
         self.submitted[job.id] = slot
         self.queue.mark_submitted(flux_job)
         try:
-            job.add_measurement("flux_jobspec_submitted_at", jobspec_submitted_at)
+            job.add_measurement("flux_jobspec_submitted_at", jobspec_submitted_at, replace=True)
             job.save()
         except Exception:
             logger.debug("Failed to save submitted job %s", job.id[:7], exc_info=True)
@@ -512,7 +512,7 @@ class FluxDirectExecutor:
         self.running[job.id] = slot
         self.queue.mark_started(flux_job)
         try:
-            job.add_measurement("flux_job_started_at", now)
+            job.add_measurement("flux_job_started_at", now, replace=True)
             job.save()
         except Exception:
             logger.debug("Failed to save Flux-started job %s", job_id[:7], exc_info=True)
@@ -838,7 +838,7 @@ class FluxDirectExecutor:
         flux_job.flux_jobid = flux_jobid
 
         try:
-            job.add_measurement("flux_jobid", flux_jobid)
+            job.add_measurement("flux_jobid", flux_jobid, replace=True)
             job.save()
         except Exception:
             logger.debug("Failed to save Flux jobid for %s", job_id[:7], exc_info=True)

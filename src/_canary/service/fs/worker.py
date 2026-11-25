@@ -47,11 +47,18 @@ def main(argv: list[str] | None = None) -> int:
     directory = requests.request_dir(workspace_root, request_id)
     record = requests.read_request(directory)
     registry = build_registry()
-    endpoint = registry.get(record["path"])
-    assert endpoint is not None and endpoint.lane == "work", record["path"]
+    found = registry.match(record["path"])
+    assert found is not None and found[0].lane == "work", record["path"]
+    endpoint = found[0]  # the route's parameters are in the stored body already
     body = endpoint.model.model_validate(record["request"])
     ctx = Context(
-        workspace_root, request_id, record["user"], record["cwd"], record["submitted"], registry
+        workspace_root,
+        request_id,
+        record["user"],
+        record["cwd"],
+        record["submitted"],
+        registry,
+        path=record["path"],
     )
 
     def report(**outcome: Any) -> None:

@@ -79,7 +79,7 @@ class SubprocessLauncher(Launcher):
                 args.extend(a)
             if not args:
                 raise RuntimeError(f"{job}: not command defined")
-            job.add_measurement("command_line", shlex.join(args))
+            job.add_measurement("command_line", shlex.join(args), replace=True)
             stdout: TextIO = open(job.stdout, "a")
             stderr: StdErrorT = subprocess.STDOUT if job.stderr is None else open(job.stderr, "a")
             mp = MeasuredProcess(
@@ -158,7 +158,7 @@ class PythonFunctionLauncher(Launcher):
             raise RuntimeError(f"{job}: canary_conftest missing source_file")
         func_name = ROLE_TO_FUNCTION[role]
 
-        job.add_measurement("command_line", f"{source_file}::{func_name}(ctx)")
+        job.add_measurement("command_line", f"{source_file}::{func_name}(ctx)", replace=True)
 
         with self._context(job):
             module = self._import_source(Path(source_file))
@@ -182,7 +182,7 @@ class PythonFunctionLauncher(Launcher):
                 if stderr is not stdout and not isinstance(stderr, int):
                     stderr.close()
                 stdout.close()
-            job.add_measurement("duration", time.time() - start)
+            job.add_measurement("duration", time.time() - start, replace=True)
             logger.debug(f"Finished {job.display_name()} (rc={rc})")
             return rc
 

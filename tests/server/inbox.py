@@ -114,6 +114,7 @@ def test_public_documents_hold_no_path_pid_or_host(root, serving):
         "heartbeat",
         "beat",
         "canary_version",
+        "build",
         "running",
         "queued",
     }

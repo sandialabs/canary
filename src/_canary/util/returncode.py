@@ -20,6 +20,19 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+#: What canary's exit codes mean (``canary run`` and the work a server runs).
+EXIT_CODES: dict[str, str] = {
+    "0": "every job passed (or was skipped)",
+    "7": "nothing ran: no job was selected (e.g. rerunning jobs that passed)",
+    "2|4|8|16|32|64": (
+        "a sum of bits, one per kind of job that did not pass: 2 diffed, 4 timed out, "
+        "8 failed, 16 cancelled (e.g. never started), 32 did not finish, 64 another status"
+    ),
+    "1, 3": "canary itself failed before or while running jobs: read stderr",
+    "2 or 130": "also a usage error or an interrupt (Ctrl-C): read stderr",
+}
+
+
 def compute_returncode(jobs: Sequence["BaseJob"], permissive: bool = False) -> int:
     """Compute a composite process exit code from the statuses of ``jobs``.
 

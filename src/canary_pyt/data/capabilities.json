@@ -18,16 +18,20 @@
         "Place canary_pyt or canary directives at module scope.",
         "Place executable test logic in functions.",
         "Guard runtime execution with if __name__ == '__main__'.",
+        "Read the running job (its parameters, name, working directory) from canary.get_instance(), a read-only snapshot. canary.get_job() is for extensions and hooks, not test bodies.",
         "Exit with 0 for success or raise/use Canary failure helpers for structured outcomes."
       ],
       "minimal_example": [
         "import sys",
         "import canary",
+        "import canary_pyt",
         "",
-        "canary.directives.keywords('smoke')",
+        "canary_pyt.directives.keywords('smoke')",
+        "canary_pyt.directives.parameterize('a,b', [(1, 2), (3, 4)])",
         "",
         "def test() -> int:",
-        "    return 0",
+        "    p = canary.get_instance().parameters  # p['a'] or p.a",
+        "    return 0 if p['a'] < p['b'] else 1",
         "",
         "if __name__ == '__main__':",
         "    sys.exit(test())"
@@ -87,8 +91,58 @@
         "skipif": "Skip jobs conditionally with a reason.",
         "xfail": "Mark expected nonzero exit.",
         "xdiff": "Mark expected diff outcome.",
-        "generate_composite_base_case": "Create an analysis/composite job depending on parameterized jobs.",
-        "analyze": "Alias for generate_composite_base_case."
+        "aggregate": "Add one job that depends on all of this file's parameterized jobs and reruns the file with flag (or runs script); see ext.pyt.dependencies.depends_on_or_aggregate.",
+        "generate_composite_base_case": "Alias for aggregate.",
+        "analyze": "Alias for aggregate."
+      },
+      "when": "Most directives take when=...: an expression over testname, platforms, options and parameters, as a string (when=\"platforms='not darwin'\") or a dict (when={'parameters': 'breakfast=spam', 'options': 'extended'}). ext.pyt docs: conditional activation.",
+      "signatures": {
+        "testname": "testname(arg: str)",
+        "keywords": "keywords(*args: str, when: WhenType | None = None)",
+        "owners": "owners(*args: str)",
+        "timeout": "timeout(arg: str | float | int, *, when: WhenType | None = None)",
+        "parameterize": "parameterize(names: str | Sequence[str], values: Sequence[Sequence[Any] | Any], *, when: WhenType | None = None, type: ParameterSpace = list_parameter_space, samples: int = 10, random_seed: float = 1234.0)",
+        "cpus": "cpus(arg: int, *, when: WhenType | None = None)",
+        "gpus": "gpus(arg: int, *, when: WhenType | None = None)",
+        "nodes": "nodes(arg: int, *, when: WhenType | None = None)",
+        "depends_on": "depends_on(*arg: str | dict[str, Any] | DependencySelector, when: WhenType | None = None, **kwargs)",
+        "copy": "copy(*files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None)",
+        "link": "link(*files: str, src: str | None = None, dst: str | None = None, when: WhenType | None = None)",
+        "sources": "sources(*args: str, when: WhenType | None = None)",
+        "artifact": "artifact(file: str, *, when: WhenType | None = None, save_on: str = 'always')",
+        "baseline": "baseline(*, src: str | None = None, dst: str | None = None, when: WhenType | None = None, flag: str | None = None)",
+        "exclusive": "exclusive(*, when: WhenType | None = None)",
+        "load_module": "load_module(name: str, *, use: str | None = None, when: WhenType | None = None)",
+        "source": "source(name: str, *, when: WhenType | None = None)",
+        "set_id": "set_id(id: str, *, when: WhenType | None = None)",
+        "set_attribute": "set_attribute(*, when: WhenType | None = None, **attributes: Any)",
+        "setup": "setup(func: Callable[..., Any]) -> Callable[..., Any]",
+        "teardown": "teardown(func: Callable[..., Any]) -> Callable[..., Any]",
+        "enable": "enable(*args: bool, when: WhenType | None = None)",
+        "skipif": "skipif(arg: bool, *, reason: str)",
+        "xfail": "xfail(*, code: int = -1, when: WhenType | None = None)",
+        "xdiff": "xdiff(*, when: WhenType | None = None)",
+        "aggregate": "aggregate(*, when: WhenType | None = None, flag: str | None = None, script: str | None = None)"
+      },
+      "examples": {
+        "depends_on": [
+          "canary_pyt.directives.depends_on('setup')                     # one job, by name",
+          "canary_pyt.directives.depends_on('solve.n=*')                 # a pattern, matched after parameter expansion",
+          "canary_pyt.directives.depends_on({'job': 'solve.n=*', 'when': 'on_success', 'expects': 3})",
+          "canary_pyt.directives.depends_on({'job': 'build', 'when': 'always'})  # run whatever build's result"
+        ],
+        "copy": [
+          "canary_pyt.directives.copy('input.yaml', 'mesh.exo')          # into the job's working directory",
+          "canary_pyt.directives.copy(src='inputs/big.yaml', dst='input.yaml')  # under another name"
+        ],
+        "artifact": [
+          "canary_pyt.directives.artifact('result.json')                 # kept by reporters (e.g. CDash) always",
+          "canary_pyt.directives.artifact('debug.log', save_on='failure')  # success | failure | always"
+        ],
+        "skipif": [
+          "canary_pyt.directives.skipif(shutil.which('mpirun') is None, reason='needs mpirun')",
+          "canary_pyt.directives.skipif(sys.platform == 'darwin', reason='not on macOS')"
+        ]
       }
     },
     "parameters": {
@@ -106,8 +160,10 @@
       "common_mistakes": [
         "Using cpus() when named variants such as cpus=8 are desired; use parameterize('cpus', ...) instead.",
         "Duplicating a key between parameters and meta_parameters.",
-        "Expecting top-level runtime code to be ignored during scan unless it is guarded."
-      ]
+        "Expecting top-level runtime code to be ignored during scan unless it is guarded.",
+        "Reading parameters from canary.get_job(); use canary.get_instance().parameters."
+      ],
+      "runtime_access": "In the test body, canary.get_instance().parameters holds this job's values (item or attribute access: p['a'], p.a). Resource parameters (cpus, gpus, nodes) are included when set."
     },
     "dependencies": {
       "summary": "depends_on() supports strings, dictionaries, lists, and DependencySelector objects.",
@@ -115,7 +171,26 @@
         "job": "Dependency name, ID, or pattern.",
         "when": "Dependency condition such as on_success, on_failure, always, or an outcome expression.",
         "expects": "Expected match count: '+', '?', '*', or a positive integer."
-      }
+      },
+      "patterns": "A pattern matches job names after parameter expansion: 'solve.n=*' matches solve.n=10, solve.n=20, ...",
+      "runtime_access": "In the test body, canary.get_instance().dependencies holds a read-only snapshot of each upstream job: name, id, parameters, working_directory (where its files are), status (.category: PASS, FAIL, ...), keywords, timeout and its own dependencies. Read an upstream job's outputs from os.path.join(dep.working_directory, NAME).",
+      "depends_on_or_aggregate": "depends_on(...) makes this file's jobs depend on jobs from any file, chosen by name pattern, with when (on_success, always, ...) and expects (a count). aggregate(flag='--analyze') (aliases analyze, generate_composite_base_case) adds one job to this file, named after it, that depends on all of the file's parameterized jobs and reruns the file with the flag (or runs script=...); its parameters hold each parameter's values across the jobs as a tuple (n == (10, 20, 40)): one entry per job, duplicates included, entry i belonging to dependencies[i]. Use aggregate for one file's sweep, depends_on to join files.",
+      "example": [
+        "# convergence.pyt: runs after every solve.n=* job passed",
+        "import json, os, sys",
+        "import canary, canary_pyt",
+        "",
+        "canary_pyt.directives.depends_on({'job': 'solve.n=*', 'when': 'on_success', 'expects': 3})",
+        "",
+        "def test() -> int:",
+        "    for dep in canary.get_instance().dependencies:",
+        "        with open(os.path.join(dep.working_directory, 'result.json')) as fh:",
+        "            print(dep.name, dep.parameters['n'], json.load(fh))",
+        "    return 0",
+        "",
+        "if __name__ == '__main__':",
+        "    sys.exit(test())"
+      ]
     }
   }
 }

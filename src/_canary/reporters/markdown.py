@@ -248,7 +248,7 @@ class MarkdownReporter:
 
         if outcome == "NONE":
             return "Not Run"
-        if outcome in {"SUCCESS", "XFAIL", "XDIFF"}:
+        if outcome in {"SUCCESS", "XFAIL", "XDIFF", "PASS_WITH_ERRORS"}:
             return "Pass"
         if outcome == "TIMEOUT":
             return "Timeout"

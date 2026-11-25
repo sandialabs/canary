@@ -150,7 +150,7 @@ def artifact(file: str, *, when: WhenType | None = None, save_on: str = "always"
     .. code-block:: python
 
        import canary_pyt
-       canary_pyt.directives.artifacts("file.txt", when="platforms='not darwin'", save_on="success")
+       canary_pyt.directives.artifact("file.txt", when="platforms='not darwin'", save_on="success")
     """
 
 
@@ -375,9 +375,9 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        canary_pyt.directives.depends_on("baz")
 
        def test():
-           self = canary.testinstance
+           self = canary.get_instance()
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.working directory}")
+           print(f"baz's results can be found in {baz.working_directory}")
 
     ``.vvt``:
 
@@ -388,8 +388,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        import vvtest_util as vvt
 
        def test():
-           working directory = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {working directory}")
+           working_directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working_directory}")
 
     -------
 
@@ -404,9 +404,9 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        canary_pyt.directives.depends_on({"job": "baz", "when": "always"})
 
        def test():
-           self = canary.testinstance
+           self = canary.get_instance()
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.working directory}")
+           print(f"baz's results can be found in {baz.working_directory}")
 
     ``.vvt``:
 
@@ -417,8 +417,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        import vvtest_util as vvt
 
        def test():
-           working directory = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {working directory}")
+           working_directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working_directory}")
 
     -------
 
@@ -433,9 +433,9 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        canary_pyt.directives.depends_on("baz.cpus=1")
 
        def test():
-           self = canary.testinstance
+           self = canary.get_instance()
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.working directory}")
+           print(f"baz's results can be found in {baz.working_directory}")
 
     ``.vvt``:
 
@@ -446,8 +446,8 @@ def depends_on(*arg: DependencyType, when: WhenType | None = None, **kwargs) -> 
        import vvtest_util as vvt
 
        def test():
-           working directory = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {working directory}")
+           working_directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working_directory}")
 
     """
 
@@ -583,7 +583,7 @@ def aggregate(
        # VVT: parameterize : a,b = 1,2 3,4
 
     will run an analysis job after jobs ``[a=1,b=3]`` and ``[a=2,b=4]`` have run
-    to completion.  The ``canary.testinstance`` and ``vvtest_util`` modules
+    to completion.  ``canary.get_instance()`` and the ``vvtest_util`` module
     will contain information regarding the previously run jobs so that a
     collective analysis can be performed.
 
@@ -610,7 +610,7 @@ def aggregate(
            parser = argparse.ArgumentParser()
            parser.add_argument("--base", action="store_true")
            args = parser.parse_args()
-           if args.analyze:
+           if args.base:
                return base()
            return test()
 

@@ -28,6 +28,9 @@ from .. import config
 from .dispatch import Context
 from .dispatch import RequestError
 
+#: The measurement listing the files a job was given (``source`` is an absolute path).
+INPUTS = "inputs"
+
 #: The version-control forms of a scan root (``git@path``, ``repo@path``).
 VC_PREFIXES = ("git@", "repo@")
 
@@ -87,13 +90,25 @@ def public_path(path: str | None, ctx: Context) -> str | None:
 
 
 def publish(records: Any, ctx: Context) -> Any:
-    """*records* (one job record or a list) with ``file_root``/``exec_dir`` made public."""
+    """*records* (one job record or a list) with their paths made public.
+
+    The paths are ``file_root``, ``exec_dir`` and the ``source`` of each of canary's
+    ``inputs`` measurements (the files a job was given).
+    """
     if isinstance(records, list):
         return [publish(r, ctx) for r in records]
     if isinstance(records, dict) and "file_root" in records:
-        return {
+        published = {
             **records,
             "file_root": public_path(records.get("file_root"), ctx),
             "exec_dir": public_path(records.get("exec_dir"), ctx),
         }
+        measurements = records.get("measurements")
+        if isinstance(measurements, dict) and isinstance(measurements.get(INPUTS), list):
+            inputs = [
+                {**i, "source": public_path(i.get("source"), ctx)} if isinstance(i, dict) else i
+                for i in measurements[INPUTS]
+            ]
+            published["measurements"] = {**measurements, INPUTS: inputs}
+        return published
     return records

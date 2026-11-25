@@ -175,3 +175,18 @@ class _Request:
 
 def _scanpaths_request(tmp_path):
     return _Request({str(tmp_path): []})
+
+
+def test_missing_absolute_path_is_reported_as_a_path(tmp_path, monkeypatch):
+    # "/" starts no test id: a missing absolute path (e.g. the client's view of a
+    # workspace the server mounts elsewhere) is a missing path, not an unknown id.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "a.pyt").write_text(PYT_BODY)
+
+    with canary.config.override():
+        app.run(_scanpaths_request(tmp_path))
+        missing = str(tmp_path / "elsewhere" / "tests")
+        builder = app.classify_pathspec([missing])
+
+    assert builder.errors and builder.errors[0].startswith(f"{missing}: no such file or directory")
+    assert not any("not a valid test identifier" in e for e in builder.errors)

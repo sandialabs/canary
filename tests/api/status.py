@@ -180,6 +180,7 @@ def test_jobs_returns_json_serializable_entries(monkeypatch, workspace):
             "started_at": 12.0,
             "stopped_at": 17.5,
             "last_activity": None,
+            "measurements": {},
             "running": False,
             "done": True,
             "not_run": False,

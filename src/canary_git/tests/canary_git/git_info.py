@@ -42,7 +42,7 @@ class FakeJob:
         self.file = file
         self.measurements: dict = {}
 
-    def add_measurement(self, name, value) -> None:
+    def add_measurement(self, name, value, *, replace=False) -> None:
         self.measurements[name] = value
 
 

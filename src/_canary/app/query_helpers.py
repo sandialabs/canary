@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 """Workspace result helpers shared by ``canary query``, the app's query functions and plugins."""
 
+import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -399,6 +400,7 @@ def spec_to_job_entry(workspace: Workspace, spec: Any) -> dict[str, Any]:
         "started_at": None,
         "stopped_at": None,
         "last_activity": None,
+        "measurements": {},
     }
 
 
@@ -531,6 +533,41 @@ def row_to_job_entry(
         "started_at": started_at,
         "stopped_at": stopped_at,
         "last_activity": last_activity,
+        "measurements": _measurements(row.get("measurements")),
+    }
+
+
+def _measurements(measurements: Any) -> dict[str, Any]:
+    """A result row's measurements as plain data (``{}`` if it has none)."""
+    data = getattr(measurements, "data", measurements)
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def session_summary(workspace: Workspace, session_dir: Path) -> dict[str, Any] | None:
+    """One line of ``canary query sessions``: *session_dir*'s run and outcome counts.
+
+    ``None`` if *session_dir* is not a session (no ``session.lock``).
+    """
+    if not session_dir.is_dir():
+        return None
+    lockfile = session_dir / "session.lock"
+    if not lockfile.exists():
+        return None
+    session_data = json.loads(lockfile.read_text())
+    session_name = session_data.get("name", session_dir.name)
+
+    counts = db_outcome_counts_for_session(workspace, session_name)
+    total = sum(counts.values())
+
+    return {
+        "name": session_name,
+        "started_on": session_data.get("started_on"),
+        "finished_on": session_data.get("finished_on"),
+        "returncode": session_data.get("returncode"),
+        "error": session_data.get("error"),
+        "argv": session_data.get("argv", []),
+        "job_count": total,
+        "outcomes": counts,
     }
 
 

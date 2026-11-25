@@ -60,6 +60,11 @@ def test_running_server_publishes_a_live_heartbeat(tmp_path, running):
     assert _wait_for(lambda: _info(tmp_path).beat > first)
 
 
+def test_server_json_says_which_build_runs(tmp_path, running):
+    doc = json.loads((server.server_dir(tmp_path) / "server.json").read_text())
+    assert doc["build"] == server.source_build() and len(doc["build"]) == 12
+
+
 def test_a_second_server_is_refused(tmp_path, running):
     with pytest.raises(server.ServerRunningError, match="already running"):
         server.Server(tmp_path).run()
@@ -102,6 +107,7 @@ def test_server_exits_when_its_workspace_disappears(tmp_path, monkeypatch):
     thread = threading.Thread(target=server.Server(root).run, daemon=True)
     thread.start()
     assert _wait_for(lambda: server.read_info(root) is not None)
+    assert _wait_for(lambda: (root / "share" / "carl").exists())  # done starting up
     root.rename(tmp_path / "moved")  # what canary rm / run -w do first
     thread.join(10)
     assert not thread.is_alive()
