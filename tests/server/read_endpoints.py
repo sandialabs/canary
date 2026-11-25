@@ -216,7 +216,6 @@ def test_schema_describes_every_endpoint(get):
     json.dumps(data)
 
 
-
 def test_learn_returns_what_canary_learn_prints(get):
     from _canary.app import learn
 
